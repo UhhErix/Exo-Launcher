@@ -184,7 +184,7 @@ function AntiCheatPanel({
         <AntiCheat size={14} />
       </div>
       <p className="exo-macros-notice">
-        Macros show for every game. Games with kernel or online anti-cheat never auto-enable software macros and require explicit confirmation.
+        Online, competitive anti-cheat, and unknown games allow Tier 1 onboard hardware macros only (no Tier 2 software macros). Offline and single-player games keep Tier 2 with a one-time note.
       </p>
       {policies.length === 0 ? (
         <p className="exo-macros-notice">No installed games scanned yet.</p>
@@ -193,21 +193,25 @@ function AntiCheatPanel({
           <div className="exo-macros-row-copy">
             <span className="exo-macros-row-title">{gp.title}</span>
             <span className="exo-macros-row-desc">
-              {gp.requiresConfirmation
-                ? `${gp.antiCheatLabel ?? 'Anti-cheat'} · ban risk with injected input`
-                : 'No anti-cheat detected'}
+              {!gp.softwareAllowed
+                ? `${gp.antiCheatLabel ?? 'Online / unknown'} · hardware onboard only`
+                : gp.confirmed
+                  ? 'Offline · Tier 2 software macros enabled'
+                  : 'Offline · Tier 2 software macros (one-time note)'}
             </span>
           </div>
-          {gp.requiresConfirmation ? (
+          {!gp.softwareAllowed ? (
+            <span className="exo-macros-badge is-ac">Hardware only</span>
+          ) : gp.requiresConfirmation ? (
             <button
               type="button"
-              className={cn('exo-set-btn is-compact', gp.confirmed ? 'is-danger' : '')}
-              onClick={() => onToggleConfirm(gp.gameId, !gp.confirmed)}
+              className="exo-set-btn is-compact"
+              onClick={() => onToggleConfirm(gp.gameId, true)}
             >
-              {gp.confirmed ? 'Revoke' : 'Confirm'}
+              Got it
             </button>
           ) : (
-            <span className="exo-macros-badge is-onboard">Ready</span>
+            <span className="exo-macros-badge is-onboard">Tier 1 + 2</span>
           )}
         </div>
       ))}
@@ -334,8 +338,8 @@ function TimelineEditor({
             value={binding.delivery}
             onChange={e => onUpdate(cur => ({ ...cur, delivery: e.target.value === 'onboard' ? 'onboard' : 'software' }))}
           >
-            <option value="onboard">Onboard memory (hardware-level, no AC risk)</option>
-            <option value="software">Software (universal, requires AC confirmation)</option>
+            <option value="onboard">Tier 1 onboard hardware memory (allowed everywhere)</option>
+            <option value="software">Tier 2 software sidecar (offline &amp; single-player only)</option>
           </select>
         </label>
 

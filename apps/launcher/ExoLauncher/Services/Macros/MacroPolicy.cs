@@ -4,18 +4,22 @@ namespace ExoLauncher.Services.Macros;
 
 internal static class MacroPolicy
 {
-    private static readonly string[] KernelOrOnlineAntiCheats =
+    internal const string TierOnboardOnly = "onboard-only";
+    internal const string TierSoftwareAndOnboard = "software-and-onboard";
+    internal const string OfflineOneTimeNote = "Offline / single-player game: Tier 2 software macros are allowed. Keep software macros off in online or competitive games.";
+
+    private static readonly string[] OnlineOrCompetitiveAntiCheats =
     [
         "Vanguard",
+        "Ricochet",
+        "Valve Anti-Cheat",
+        "FACEIT",
         "Easy Anti-Cheat",
         "BattlEye",
         "Anti-Cheat Expert",
-        "FACEIT",
-        "Ricochet",
-        "EA AntiCheat",
-        "Valve Anti-Cheat",
-        "Warden",
         "Hyperion",
+        "EA AntiCheat",
+        "Warden",
         "nProtect GameGuard",
         "XIGNCODE",
         "PunkBuster",
@@ -23,7 +27,10 @@ internal static class MacroPolicy
 
     internal static MacroGamePolicy Evaluate(GameEntry game, AntiCheatCheck.Answer answer, IReadOnlyList<MacroGameConsent> consents)
     {
-        var isProtected = answer.AssumeProtected || AntiCheatCheck.IsRiot(game);
+        var isOnlineOrProtected = answer.AssumeProtected
+            || answer.Kind != AntiCheatCheck.Kind.None
+            || AntiCheatCheck.IsRiot(game);
+
         var names = new List<string>(answer.Names);
         if (AntiCheatCheck.IsRiot(game) && !names.Any(n => n.Contains("Vanguard", StringComparison.OrdinalIgnoreCase)))
         {
@@ -39,41 +46,55 @@ internal static class MacroPolicy
             _ => "unknown",
         };
 
-        var confirmed = isProtected
-            && label is not null
-            && consents.Any(c =>
-                string.Equals(c.GameId, game.Id, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(c.AntiCheatLabel, label, StringComparison.Ordinal));
-
-        string? warning = null;
-        if (isProtected)
+        if (isOnlineOrProtected)
         {
-            var named = names.Count > 0 ? string.Join(", ", names) : (label ?? "anti-cheat");
-            warning = $"Uses {named}. Software macros and injected input can break this game's rules and risk a ban. Exo never auto-enables software macros here; confirm explicitly per game, or use onboard device memory remaps (hardware-level, no software risk).";
+            var reason = kind == "unknown"
+                ? "Anti-cheat or online status is unknown, so Exo treats this game as online."
+                : $"Uses {(names.Count > 0 ? string.Join(", ", names) : (label ?? "online anti-cheat"))}.";
+
+            return new MacroGamePolicy
+            {
+                GameId = game.Id,
+                Title = game.Title,
+                AntiCheatKind = kind,
+                AntiCheatNames = names,
+                AntiCheatLabel = label ?? "unknown (treated as online)",
+                SoftwareAllowed = false,
+                AllowedTier = TierOnboardOnly,
+                RequiresConfirmation = false,
+                Confirmed = false,
+                AutoEnableAllowed = false,
+                SoftwareWarning = $"{reason} Tier 2 software macros are disabled (no override). Only Tier 1 onboard hardware device macros are allowed.",
+            };
         }
+
+        var noteAcknowledged = consents.Any(c =>
+            string.Equals(c.GameId, game.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(c.AntiCheatLabel, "offline-note", StringComparison.Ordinal));
 
         return new MacroGamePolicy
         {
             GameId = game.Id,
             Title = game.Title,
-            AntiCheatKind = kind,
-            AntiCheatNames = names,
-            AntiCheatLabel = label,
-            RequiresConfirmation = isProtected,
-            Confirmed = confirmed,
-            AutoEnableAllowed = !isProtected,
-            SoftwareWarning = warning,
+            AntiCheatKind = "none",
+            AntiCheatNames = [],
+            AntiCheatLabel = null,
+            SoftwareAllowed = true,
+            AllowedTier = TierSoftwareAndOnboard,
+            RequiresConfirmation = !noteAcknowledged,
+            Confirmed = noteAcknowledged,
+            AutoEnableAllowed = true,
+            SoftwareWarning = OfflineOneTimeNote,
         };
     }
 
-    internal static bool IsKnownKernelOrOnline(string name) =>
-        KernelOrOnlineAntiCheats.Any(ac => name.Contains(ac, StringComparison.OrdinalIgnoreCase));
+    internal static bool IsKnownOnlineOrCompetitive(string name) =>
+        OnlineOrCompetitiveAntiCheats.Any(ac => name.Contains(ac, StringComparison.OrdinalIgnoreCase));
 
     internal static bool CanRunSoftwareMacros(MacroGamePolicy? policy, bool manualActivation)
     {
-        if (policy is null || !policy.RequiresConfirmation) return true;
-        if (!manualActivation && !policy.AutoEnableAllowed) return false;
-        return policy.Confirmed;
+        if (policy is null) return false;
+        return policy.SoftwareAllowed;
     }
 
     internal static bool IsBindingHardwareSafe(MacroBinding binding) =>

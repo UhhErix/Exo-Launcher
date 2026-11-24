@@ -111,11 +111,13 @@ internal sealed record MacroGamePolicy
     public string AntiCheatKind { get; init; } = "none";
     public IReadOnlyList<string> AntiCheatNames { get; init; } = [];
     public string? AntiCheatLabel { get; init; }
+    public bool SoftwareAllowed { get; init; }
+    public string AllowedTier { get; init; } = "onboard-only";
     public bool RequiresConfirmation { get; init; }
     public bool Confirmed { get; init; }
     public bool AutoEnableAllowed { get; init; }
     public string? SoftwareWarning { get; init; }
-    public string OnboardNote { get; init; } = "Onboard device memory remaps run in hardware with no software injection risk.";
+    public string OnboardNote { get; init; } = "Tier 1 onboard device memory macros run in hardware with no software injection.";
 }
 
 internal sealed record MacroDeviceCapability

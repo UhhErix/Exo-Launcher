@@ -124,6 +124,10 @@ pub struct MacroGamePolicy {
     #[serde(default)]
     pub anti_cheat_label: Option<String>,
     #[serde(default)]
+    pub software_allowed: bool,
+    #[serde(default)]
+    pub allowed_tier: String,
+    #[serde(default)]
     pub requires_confirmation: bool,
     #[serde(default)]
     pub confirmed: bool,

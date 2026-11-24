@@ -229,19 +229,17 @@ fn anticheat_panel(policies: &[MacroGamePolicy]) -> El {
     for gp in policies.iter().take(6) {
         let gid = gp.game_id.clone();
         let confirmed = gp.confirmed;
-        let requires = gp.requires_confirmation;
-        let subtitle = if requires {
+        let software_allowed = gp.software_allowed;
+        let needs_note = gp.requires_confirmation && software_allowed && !confirmed;
+        let subtitle = if !software_allowed {
             format!(
-                "{} · {}",
-                gp.anti_cheat_label.as_deref().unwrap_or("Anti-cheat"),
-                if confirmed {
-                    "Confirmed (manual only)"
-                } else {
-                    "Requires confirmation"
-                }
+                "{} · hardware onboard only",
+                gp.anti_cheat_label.as_deref().unwrap_or("Online / unknown")
             )
+        } else if confirmed {
+            "Offline · Tier 1 + Tier 2 enabled".to_string()
         } else {
-            "Clean · auto-enable allowed".to_string()
+            "Offline · Tier 2 available (one-time note)".to_string()
         };
 
         let mut action_row = row().w_full().justify_between().center_y().gap(8.0).child(
@@ -253,7 +251,7 @@ fn anticheat_panel(policies: &[MacroGamePolicy]) -> El {
                 .child(
                     text(subtitle)
                         .font(type_small())
-                        .color(if requires && !confirmed {
+                        .color(if !software_allowed {
                             warn()
                         } else {
                             fg_muted()
@@ -261,18 +259,22 @@ fn anticheat_panel(policies: &[MacroGamePolicy]) -> El {
                 ),
         );
 
-        if requires {
-            let btn_key = format!("macros-confirm-{}", gp.game_id);
-            let label = if confirmed { "Revoke" } else { "Confirm" }.to_string();
-            action_row = action_row.child(action_pill(btn_key, label, confirmed).on_press(
-                move |s: &mut AppState| {
-                    if let Some(ref mut ms) = s.pc.macros_state
-                        && let Some(policy) = ms.game_policies.iter_mut().find(|x| x.game_id == gid)
-                    {
-                        policy.confirmed = !policy.confirmed;
-                    }
-                },
-            ));
+        if !software_allowed {
+            action_row = action_row.child(text("Hardware only").font(type_small()).color(warn()));
+        } else if needs_note {
+            let btn_key = format!("macros-ack-{}", gp.game_id);
+            action_row =
+                action_row.child(action_pill(btn_key, "Got it".to_string(), false).on_press(
+                    move |s: &mut AppState| {
+                        if let Some(ref mut ms) = s.pc.macros_state
+                            && let Some(policy) =
+                                ms.game_policies.iter_mut().find(|x| x.game_id == gid)
+                        {
+                            policy.confirmed = true;
+                            policy.requires_confirmation = false;
+                        }
+                    },
+                ));
         } else {
             action_row = action_row.child(icon_check(14.0, good()));
         }
@@ -294,7 +296,7 @@ fn anticheat_panel(policies: &[MacroGamePolicy]) -> El {
                 .child(icon_shield(14.0, warn())),
         )
         .child(
-            text("Shown for every game. Kernel and online anti-cheat games never auto-enable software macros.")
+            text("Online, competitive anti-cheat, and unknown games allow Tier 1 onboard hardware macros only. Offline single-player games keep Tier 2 with a one-time note.")
                 .font(type_small())
                 .color(fg_muted()),
         )
@@ -519,13 +521,6 @@ mod tests {
             .count();
         assert!(blurs <= 4, "Macros exceeded MAX_BACKDROP_BLURS=4: {blurs}");
 
-        let (cx, cy) = rt
-            .find("macros-confirm-riot:valorant")
-            .expect("confirm button for VALORANT");
-        rt.pointer_down(cx, cy);
-        rt.pointer_up(cx, cy);
-        rt.frame(1.0 / 60.0);
-
         let val_policy = rt
             .state
             .pc
@@ -536,7 +531,28 @@ mod tests {
             .iter()
             .find(|g| g.game_id == "riot:valorant")
             .unwrap();
-        assert!(val_policy.confirmed);
-        assert!(!val_policy.auto_enable_allowed);
+        assert!(!val_policy.software_allowed);
+        assert_eq!(val_policy.allowed_tier, "onboard-only");
+        assert!(rt.find("macros-ack-riot:valorant").is_none());
+
+        let (ax, ay) = rt
+            .find("macros-ack-steam:413150")
+            .expect("one-time note button for offline Stardew Valley");
+        rt.pointer_down(ax, ay);
+        rt.pointer_up(ax, ay);
+        rt.frame(1.0 / 60.0);
+
+        let offline_policy = rt
+            .state
+            .pc
+            .macros_state
+            .as_ref()
+            .unwrap()
+            .game_policies
+            .iter()
+            .find(|g| g.game_id == "steam:413150")
+            .unwrap();
+        assert!(offline_policy.software_allowed);
+        assert!(offline_policy.confirmed);
     }
 }

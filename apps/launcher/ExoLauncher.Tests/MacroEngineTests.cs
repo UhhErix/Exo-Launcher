@@ -288,47 +288,70 @@ public sealed class MacroEngineTests
     }
 
     [Fact]
-    public void AntiCheatPolicy_NeverAutoEnablesAndRequiresExactConfirmation()
+    public void AntiCheatPolicy_BlocksTier2SoftwareMacrosForOnlineCompetitiveAndUnknown_AllowsOfflineWithOneTimeNote()
     {
-        var riotGame = new GameEntry { Id = "riot:valorant", Title = "VALORANT", Store = StoreKind.Riot, Installed = true };
-        var eacGame = new GameEntry { Id = "steam:1172470", Title = "Apex Legends", Store = StoreKind.Steam, Installed = true };
-        var cleanGame = new GameEntry { Id = "steam:413150", Title = "Stardew Valley", Store = StoreKind.Steam, Installed = true };
-
-        var riotAnswer = new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Riot Vanguard"], "store");
-        var eacAnswer = new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Easy Anti-Cheat"], "files");
-        var cleanAnswer = AntiCheatCheck.Answer.Clean;
-
-        var riotPolicy = MacroPolicy.Evaluate(riotGame, riotAnswer, []);
-        var eacPolicy = MacroPolicy.Evaluate(eacGame, eacAnswer, []);
-        var cleanPolicy = MacroPolicy.Evaluate(cleanGame, cleanAnswer, []);
-
-        Assert.True(riotPolicy.RequiresConfirmation);
-        Assert.False(riotPolicy.AutoEnableAllowed);
-        Assert.False(riotPolicy.Confirmed);
-        Assert.Contains("risk a ban", riotPolicy.SoftwareWarning);
-        Assert.False(MacroPolicy.CanRunSoftwareMacros(riotPolicy, manualActivation: false));
-        Assert.False(MacroPolicy.CanRunSoftwareMacros(riotPolicy, manualActivation: true));
-
-        Assert.True(eacPolicy.RequiresConfirmation);
-        Assert.False(eacPolicy.AutoEnableAllowed);
-
-        var consents = new List<MacroGameConsent>
+        var cases = new (GameEntry Game, AntiCheatCheck.Answer Answer)[]
         {
-            new() { GameId = eacGame.Id, AntiCheatLabel = eacAnswer.Label!, ConfirmedAt = "2026-11-24T00:00:00Z" },
+            (new GameEntry { Id = "riot:valorant", Title = "VALORANT", Store = StoreKind.Riot, Installed = true },
+                new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Riot Vanguard"], "store")),
+            (new GameEntry { Id = "steam:1938090", Title = "Call of Duty", Store = StoreKind.Steam, Installed = true },
+                new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Ricochet"], "files")),
+            (new GameEntry { Id = "steam:730", Title = "Counter-Strike 2", Store = StoreKind.Steam, Installed = true },
+                new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Valve Anti-Cheat", "FACEIT"], "steam")),
+            (new GameEntry { Id = "steam:1172470", Title = "Apex Legends", Store = StoreKind.Steam, Installed = true },
+                new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Easy Anti-Cheat"], "files")),
+            (new GameEntry { Id = "steam:359550", Title = "Rainbow Six Siege", Store = StoreKind.Steam, Installed = true },
+                new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["BattlEye"], "files")),
+            (new GameEntry { Id = "epic:wuwa", Title = "Wuthering Waves", Store = StoreKind.Epic, Installed = true },
+                new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Anti-Cheat Expert"], "files")),
+            (new GameEntry { Id = "roblox:client", Title = "Roblox", Store = StoreKind.Roblox, Installed = true },
+                new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Hyperion"], "store")),
+            (new GameEntry { Id = "steam:999999", Title = "Unchecked Steam Game", Store = StoreKind.Steam, Installed = true },
+                new AntiCheatCheck.Answer(AntiCheatCheck.Kind.PossiblyVac, [AntiCheatCheck.PossiblyVacName], "steam")),
+            (new GameEntry { Id = "local:mystery", Title = "Unknown Install", Store = StoreKind.Local, Installed = true },
+                new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Unknown, [], AntiCheatCheck.Unreadable)),
         };
-        var eacConfirmed = MacroPolicy.Evaluate(eacGame, eacAnswer, consents);
-        Assert.True(eacConfirmed.Confirmed);
-        Assert.False(eacConfirmed.AutoEnableAllowed);
-        Assert.False(MacroPolicy.CanRunSoftwareMacros(eacConfirmed, manualActivation: false));
-        Assert.True(MacroPolicy.CanRunSoftwareMacros(eacConfirmed, manualActivation: true));
 
-        var changedAcAnswer = new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["BattlEye", "Easy Anti-Cheat"], "files");
-        var eacStale = MacroPolicy.Evaluate(eacGame, changedAcAnswer, consents);
-        Assert.False(eacStale.Confirmed);
+        foreach (var (game, answer) in cases)
+        {
+            var staleConsent = new List<MacroGameConsent>
+            {
+                new() { GameId = game.Id, AntiCheatLabel = answer.Label ?? "any", ConfirmedAt = "2026-11-24T00:00:00Z" },
+            };
 
-        Assert.False(cleanPolicy.RequiresConfirmation);
-        Assert.True(cleanPolicy.AutoEnableAllowed);
-        Assert.True(MacroPolicy.CanRunSoftwareMacros(cleanPolicy, manualActivation: false));
+            var policy = MacroPolicy.Evaluate(game, answer, staleConsent);
+
+            Assert.False(policy.SoftwareAllowed, $"{game.Title} must disallow Tier 2 software macros");
+            Assert.Equal(MacroPolicy.TierOnboardOnly, policy.AllowedTier);
+            Assert.False(policy.RequiresConfirmation);
+            Assert.False(policy.Confirmed);
+            Assert.False(policy.AutoEnableAllowed);
+            Assert.False(MacroPolicy.CanRunSoftwareMacros(policy, manualActivation: false));
+            Assert.False(MacroPolicy.CanRunSoftwareMacros(policy, manualActivation: true));
+            Assert.Contains("onboard hardware", policy.SoftwareWarning, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hardware", policy.OnboardNote, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var offlineGame = new GameEntry { Id = "steam:413150", Title = "Stardew Valley", Store = StoreKind.Steam, Installed = true };
+        var offlineBeforeNote = MacroPolicy.Evaluate(offlineGame, AntiCheatCheck.Answer.Clean, []);
+        Assert.True(offlineBeforeNote.SoftwareAllowed);
+        Assert.Equal(MacroPolicy.TierSoftwareAndOnboard, offlineBeforeNote.AllowedTier);
+        Assert.True(offlineBeforeNote.AutoEnableAllowed);
+        Assert.True(offlineBeforeNote.RequiresConfirmation);
+        Assert.False(offlineBeforeNote.Confirmed);
+        Assert.True(MacroPolicy.CanRunSoftwareMacros(offlineBeforeNote, manualActivation: false));
+        Assert.Equal(MacroPolicy.OfflineOneTimeNote, offlineBeforeNote.SoftwareWarning);
+
+        var ack = new List<MacroGameConsent>
+        {
+            new() { GameId = offlineGame.Id, AntiCheatLabel = "offline-note", ConfirmedAt = "2026-11-24T00:00:00Z" },
+        };
+        var offlineAfterNote = MacroPolicy.Evaluate(offlineGame, AntiCheatCheck.Answer.Clean, ack);
+        Assert.True(offlineAfterNote.SoftwareAllowed);
+        Assert.False(offlineAfterNote.RequiresConfirmation);
+        Assert.True(offlineAfterNote.Confirmed);
+
+        Assert.False(MacroPolicy.CanRunSoftwareMacros(null, manualActivation: true));
     }
 
     [Fact]

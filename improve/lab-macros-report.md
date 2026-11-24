@@ -59,7 +59,7 @@ Universal Macros preserves that boundary cleanly:
 | Route | Signing & Distribution | Stability & Maintenance | Latency | UIPI (Elevated Games) | Anti-Cheat Treatment | Verdict |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Onboard Device Memory** (`@openmouse/protocol`, `WootingKeyboard.cs`, `ControllerLab`) | No driver needed (standard HID) | High; reuses Exo's tested HID protocols; survives with Exo closed | **0 ms host overhead** (firmware-native) | **Bypasses UIPI** (real USB HID) | **No software injection risk** (standard peripheral firmware; game ToS still applies to automation) | **Tier 1 (Default wherever supported)** |
-| **User-mode `SendInput` (in sidecar)** | No kernel driver; EV code-sign + `uiAccess="true"` in `Program Files` for elevated windows | Very high; zero BSOD risk; zero reboot | **< 0.1 ms** syscall + **0.6 µs** median scheduler error | Blocked (`ERROR_ACCESS_DENIED = 5`) unless sidecar has `uiAccess="true"` or matching elevation | Sets `LLKHF_INJECTED` / `LLMHF_INJECTED`; transparent; **high ban risk** in Vanguard/EAC/BattlEye/ACE/FACEIT/Ricochet | **Tier 2 (3.x universal software route, gated by AC confirmation)** |
+| **User-mode `SendInput` (in sidecar)** | No kernel driver; EV code-sign + `uiAccess="true"` in `Program Files` for elevated windows | Very high; zero BSOD risk; zero reboot | **< 0.1 ms** syscall + **0.6 µs** median scheduler error | Blocked (`ERROR_ACCESS_DENIED = 5`) unless sidecar has `uiAccess="true"` or matching elevation | Sets `LLKHF_INJECTED` / `LLMHF_INJECTED`; transparent; **instant-ban risk** in Vanguard/Ricochet/VAC/FACEIT/EAC/BattlEye/ACE/Hyperion | **Tier 2 (3.x offline & single-player games only, with one-time note; hard-disabled in online/AC/unknown games)** |
 | **Windows VHF (`vhf.sys`) + UMDF2/KMDF Virtual Gamepad** | Microsoft in-box `vhf.sys`; custom source driver requires EV cert + Microsoft Partner Center WHQL attestation | High (official MS Virtual HID Framework, e.g. Sunshine/`libvirtualhid` pattern); UMDF2 isolates crashes from kernel | **~0.2–0.5 ms** IOCTL -> `VhfReadReportSubmit` | Bypasses UIPI (kernel HID device) | Cleanly signed, no kernel filter hooks, **still visible** in device tree (`vhf.sys` parent) — flagged by strict ACs if used for KBM-to-pad aim assist | **v4 Optional Add-On** (consent-gated install like Exo Capture; MIT/open-source friendly) |
 | **Nefarius VirtualPad** (ViGEmBus successor) | WHQL-signed commercial runtime | Actively maintained; Xbox 360 + DualSense emulation | **~0.2–0.5 ms** | Bypasses UIPI | Proprietary/commercial license (incompatible with Exo's MIT distribution); flagged by EA AC / Vanguard / FACEIT | **Optional detection only** if user already installed it; do not bundle |
 | **ViGEmBus (`v1.22.0`)** | Legacy signed binary | **Officially retired & archived Nov 2023** (trademark conflict); unmaintained | ~0.3–0.5 ms | Bypasses UIPI | Frequently blocked/flagged by EA AC, FACEIT, Vanguard | **Do not adopt** |
@@ -107,29 +107,32 @@ Measured directly on this Windows 11 x64 host (`Microsoft Windows NT 10.0.26300.
 
 ---
 
-## 7. Anti-Cheat & Fairness Policy (No-Block Policy)
+## 7. Anti-Cheat & Fairness Policy (Owner Clarified Rule — 2026-11-24)
 
-Exo **shows macros for every game** (never hides the UI or silently strips features) while enforcing strict honesty and safety using `Services/AntiCheatCheck.cs`:
+Because software-injected input or mods in competitive titles like Call of Duty (Ricochet) and VALORANT (Vanguard) carry an instant-ban risk, Exo enforces a **hard tier boundary** backed by `Services/AntiCheatCheck.cs` (`MacroPolicy.cs`):
 
 - **Never touch or work around anti-cheat.** No stealth hooks, no `LLKHF_INJECTED` stripping, no anti-detection modes, no kernel bypasses.
-- **Explicit separation of delivery modes:**
-  - **Onboard Device Memory (`delivery: "onboard"`):** Hardware-level remaps stored on the mouse/keyboard/Edge pad itself. Carries **no software injection risk** and works with Exo closed. Flagged clearly in both UIs.
-  - **Software Macros (`delivery: "software"`):** Flagged on every anti-cheat game with an explicit ban-risk warning, requires **explicit per-game confirmation** bound to that game's exact `AntiCheatCheck.Answer.Label` (automatically invalidated if the game adds/changes anti-cheat), and **never auto-enables** when a protected game launches.
+- **Online, competitive anti-cheat, and unknown games -> Tier 1 onboard hardware ONLY:**
+  - **Tier 2 software macros (`SendInput` sidecar) are completely disabled — not even behind a confirmation or override.**
+  - **Only Tier 1 onboard device memory macros (`delivery: "onboard"`) are allowed**, explicitly labelled in both UIs as **hardware**.
+  - **Unknown / unreadable installs (`Kind.Unknown`) and `PossiblyVac` titles are treated as online** -> Tier 1 onboard hardware only.
+- **Offline & single-player games (`Kind.None` and not Riot) -> Tier 1 + Tier 2 allowed:**
+  - Keep **Tier 2 software macros** with a **one-time note** (`OfflineOneTimeNote`), plus full Tier 1 onboard hardware support.
 
 ### Anti-Cheat Matrix
 
-| Anti-Cheat | Example Titles | Software `SendInput` Risk | Virtual Controller Driver Risk | Onboard Hardware Remap | Exo Policy (`MacroPolicy.cs`) |
+| Anti-Cheat / Category | Example Titles | Tier 2 Software (`SendInput`) | Virtual Controller Driver | Tier 1 Onboard Hardware | Exo Policy (`MacroPolicy.cs`) |
 | --- | --- | --- | --- | --- | --- |
-| **Riot Vanguard** | VALORANT, League of Legends | **Very High** (ring-0 input stack check; HWID ban risk) | **Very High** (blocks/flags virtual pads & Interception) | Hardware-level (no software risk; gameplay automation still subject to Riot ToS) | Show macros; warn ban risk; **never auto-enable**; require explicit confirmation |
-| **Easy Anti-Cheat (EAC)** | Apex Legends, Fortnite, Rust, Elden Ring | **High** (monitors `LLKHF_INJECTED` + behavioral timing heuristics) | **Moderate–High** (flags unsigned/known mapper drivers) | Hardware-level (no software risk) | Show macros; warn ban risk; **never auto-enable**; require explicit confirmation |
-| **BattlEye** | Rainbow Six Siege, Tarkov, DayZ, PUBG | **High** (kernel input & timing telemetry) | **Moderate–High** (blocks Interception; scrutinizes virtual HID) | Hardware-level (no software risk) | Show macros; warn ban risk; **never auto-enable**; require explicit confirmation |
-| **Anti-Cheat Expert (ACE)** | Delta Force, Arena Breakout | **Very High** (aggressive kernel & virtual device blocking) | **Very High** | Hardware-level (no software risk) | Show macros; warn ban risk; **never auto-enable**; require explicit confirmation |
-| **FACEIT Anti-Cheat** | CS2 (FACEIT) | **Very High** (blocks software injection & virtual drivers) | **Very High** (hard-blocks Interception/ViGEm) | Hardware-level (no software risk) | Show macros; warn ban risk; **never auto-enable**; require explicit confirmation |
-| **Ricochet** | Call of Duty, Warzone | **High** (kernel + ML behavioral anti-recoil clustering; shadowban/HWID ban) | **High** (actively blocks reWASD / virtual pad aim-assist spoofing) | Hardware-level (no software risk; ToS still applies) | Show macros; warn ban risk; **never auto-enable**; require explicit confirmation |
-| **EA AntiCheat (Javelin)** | EA FC, Battlefield | **High** (explicit virtual controller & Interception launch blocks) | **Very High** | Hardware-level (no software risk) | Show macros; warn ban risk; **never auto-enable**; require explicit confirmation |
-| **VAC / Possibly VAC** | CS2 (Valve), TF2, Dota 2 | **Moderate** (behavioral / trust factor; automation against rules) | **Low–Moderate** (Steam Input preferred) | Hardware-level (no software risk) | Show macros; warn ban risk; **never auto-enable**; require explicit confirmation |
-| **Unknown / Unreadable Install** | Protected/unlisted installs | **Treated as Protected** (`AntiCheatCheck.AssumeProtected`) | **Treated as Protected** | Hardware-level (no software risk) | Show macros; warn ban risk; **never auto-enable**; require explicit confirmation |
-| **Clean / Single-Player** | Stardew Valley, Cyberpunk 2077, Baldur's Gate 3 | **None** | **None** | Hardware-level | Auto-enable allowed; no confirmation gate |
+| **Riot Vanguard** | VALORANT, League of Legends | **Disabled (no override)** | **Disabled** | **Allowed (labelled hardware)** | `onboard-only`, `softwareAllowed: false` |
+| **Ricochet** | Call of Duty, Warzone | **Disabled (no override)** | **Disabled** | **Allowed (labelled hardware)** | `onboard-only`, `softwareAllowed: false` |
+| **VAC / CS2 & FACEIT** | Counter-Strike 2, TF2, Dota 2 | **Disabled (no override)** | **Disabled** | **Allowed (labelled hardware)** | `onboard-only`, `softwareAllowed: false` |
+| **Easy Anti-Cheat (EAC)** | Apex Legends, Fortnite, Rust (online MP) | **Disabled (no override)** | **Disabled** | **Allowed (labelled hardware)** | `onboard-only`, `softwareAllowed: false` |
+| **BattlEye** | Rainbow Six Siege, Tarkov, DayZ, PUBG | **Disabled (no override)** | **Disabled** | **Allowed (labelled hardware)** | `onboard-only`, `softwareAllowed: false` |
+| **Always-Online ACE** | Wuthering Waves (WuWa), Delta Force, Arena Breakout | **Disabled (no override)** | **Disabled** | **Allowed (labelled hardware)** | `onboard-only`, `softwareAllowed: false` |
+| **Hyperion** | Roblox | **Disabled (no override)** | **Disabled** | **Allowed (labelled hardware)** | `onboard-only`, `softwareAllowed: false` |
+| **EA AntiCheat / Warden / Other Online AC** | EA FC, Battlefield, WoW | **Disabled (no override)** | **Disabled** | **Allowed (labelled hardware)** | `onboard-only`, `softwareAllowed: false` |
+| **Unknown / Unreadable / Possibly VAC** | Any install Exo cannot verify as offline/clean | **Disabled (treated as online)** | **Disabled** | **Allowed (labelled hardware)** | `onboard-only`, `softwareAllowed: false` |
+| **Offline & Single-Player (Clean)** | Stardew Valley, Cyberpunk 2077, Baldur's Gate 3 | **Allowed (one-time note)** | **v4 optional add-on** | **Allowed (labelled hardware)** | `software-and-onboard`, `softwareAllowed: true` |
 
 ---
 
@@ -137,9 +140,9 @@ Exo **shows macros for every game** (never hides the UI or silently strips featu
 
 ### Ships in 3.x (Zero Kernel Driver Burden, Immediate Value)
 1. **Host `MacroService` + `MacroProfileSwitcher` + `MacroScheduler` + `host-v1.json` RPC** (prototype complete on `lab/lab-macros`).
-2. **React Macros UI in `Devices › Macros`** (profiles, layers, chords, timeline editor, exact recorder, onboard-vs-software delivery badges, anti-cheat no-block policy & explicit confirmation).
-3. **Onboard Memory Compilation (Zero-Software Path):** Compile 1:1 remaps and simple device macros directly to Wooting (`WootingKeyboard.cs`), Exo Mouse (`@openmouse/protocol`), and DualSense Edge (`ControllerLab`) profiles using the debounced, cooldown-protected `MacroProfileSwitcher` (and backport the debounce + cooldown guard to `mouse/src/Profiles.tsx`).
-4. **Opt-in Out-of-Process `ExoMacros.Service.exe` (SendInput + Raw Input + GameInput):** Separate signed sidecar binary (`uiAccess="true"` in `Program Files`) for keyboard/mouse/text/app-launch software macros; never installed or started unless the user turns on Software Macros.
+2. **React Macros UI in `Devices › Macros`** (profiles, layers, chords, timeline editor, exact recorder, Tier 1 hardware vs Tier 2 software badges, hard online/AC block with no override, offline one-time note).
+3. **Tier 1 Onboard Memory Compilation (Zero-Software Path):** Compile 1:1 remaps and device macros directly to Wooting (`WootingKeyboard.cs`), Exo Mouse (`@openmouse/protocol`), and DualSense Edge (`ControllerLab`) profiles using the debounced, cooldown-protected `MacroProfileSwitcher`. *(Note: the existing mouse profile write-loop is already addressed separately by the `mouse-write-loop` hotfix `ctx_67711086e33b`; no backport to `mouse/src/Profiles.tsx` is needed from this lab.)*
+4. **Opt-in Out-of-Process `ExoMacros.Service.exe` (Tier 2 `SendInput` + Raw Input + GameInput):** Separate signed sidecar binary (`uiAccess="true"` in `Program Files`) for **offline and single-player games** and desktop apps; automatically disabled whenever an online, competitive anti-cheat, or unknown game is active.
 
 ### Ships in v4 (Native UI + Virtual Controller Add-On)
 1. **Native Rune UI Macros Room (`native-ui/crates/exo-ui/src/macros.rs`):** Full interactive timeline, drag-reorder, live device picker, and live latency histogram in Rune (`wgpu` DX12).

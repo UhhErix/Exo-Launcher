@@ -3271,6 +3271,8 @@ export type MacroGamePolicy = {
   antiCheatKind: 'none' | 'found' | 'possiblyVac' | 'unknown'
   antiCheatNames: string[]
   antiCheatLabel?: string | null
+  softwareAllowed: boolean
+  allowedTier: 'onboard-only' | 'software-and-onboard'
   requiresConfirmation: boolean
   confirmed: boolean
   autoEnableAllowed: boolean

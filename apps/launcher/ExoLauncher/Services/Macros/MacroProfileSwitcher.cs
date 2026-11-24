@@ -158,7 +158,7 @@ internal sealed class MacroProfileSwitcher
         if (!string.IsNullOrEmpty(targetGame) && hasSoftwareBindings && !canAutoEnableSoftwareForGame(targetGame))
         {
             softwareAllowed = false;
-            blockedReason = "Software macros require explicit per-game confirmation for anti-cheat games and never auto-enable.";
+            blockedReason = "Tier 2 software macros are disabled for online, competitive anti-cheat, and unknown games. Only Tier 1 onboard hardware macros are allowed.";
         }
 
         var nextHash = ComputeOnboardHash(targetProfile);

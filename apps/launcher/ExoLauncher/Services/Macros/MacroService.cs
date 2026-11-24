@@ -143,7 +143,7 @@ internal sealed class MacroService
         var policies = BuildGamePolicies(doc.Consents);
         var blockedPolicy = profile.GameIds
             .Select(gid => policies.FirstOrDefault(p => string.Equals(p.GameId, gid, StringComparison.OrdinalIgnoreCase)))
-            .FirstOrDefault(p => p is not null && p.RequiresConfirmation && !p.Confirmed);
+            .FirstOrDefault(p => p is not null && !p.SoftwareAllowed);
 
         var hasSoftware = profile.Bindings.Any(b => b.Enabled && b.Delivery == MacroDelivery.Software);
         var paused = blockedPolicy is not null && hasSoftware;
@@ -182,29 +182,29 @@ internal sealed class MacroService
         if (game is null) return (false, "Game not found in library.", null);
 
         var answer = AntiCheatCheck.Cached(game);
+        var precheck = MacroPolicy.Evaluate(game, answer, []);
+        if (!precheck.SoftwareAllowed)
+        {
+            return (false, "Tier 2 software macros are disabled for online, competitive anti-cheat, and unknown games. Only Tier 1 onboard hardware device macros are allowed.", precheck);
+        }
+
         MacroGamePolicy evaluated;
 
         lock (_gate)
         {
             var doc = EnsureLoadedLocked();
             doc.Consents.RemoveAll(c => string.Equals(c.GameId, game.Id, StringComparison.OrdinalIgnoreCase));
-            var label = answer.Label ?? (AntiCheatCheck.IsRiot(game) ? "Riot Vanguard" : null);
-            if (confirmed && label is not null)
+            if (confirmed)
             {
                 doc.Consents.Add(new MacroGameConsent
                 {
                     GameId = game.Id,
-                    AntiCheatLabel = label,
+                    AntiCheatLabel = "offline-note",
                     ConfirmedAt = DateTime.UtcNow.ToString("O"),
                 });
             }
             PersistLocked(doc);
             evaluated = MacroPolicy.Evaluate(game, answer, doc.Consents);
-            if (string.Equals(_activeGameId, game.Id, StringComparison.OrdinalIgnoreCase))
-            {
-                _softwarePausedForAntiCheat = evaluated.RequiresConfirmation && !evaluated.Confirmed;
-                _pauseReason = _softwarePausedForAntiCheat ? evaluated.SoftwareWarning : null;
-            }
         }
 
         EmitChanged("consentChanged");
