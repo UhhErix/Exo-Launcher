@@ -372,6 +372,87 @@ let coreStage: 'none' | 'restart' | 'set' = params.get('core') === 'set' ? 'set'
 let coreMeasured = false
 let coreRecorded = false
 let coreSpread = false
+let diagMeasured = false
+let diagEtw = false
+const diagApplied = new Set<string>()
+
+function mockDiag(measure: boolean, withEtw: boolean) {
+  if (measure) diagMeasured = true
+  if (withEtw) diagEtw = true
+  return {
+    ok: true,
+    message: null,
+    running: false,
+    jitter: !diagMeasured ? null : {
+      pollingRateHz: 8000, nominalMs: 0.125, totalReports: 79410, checkedGaps: 78100,
+      medianMs: 0.125, spreadMs: 0.018, p95Ms: 0.155, p99Ms: 0.245, p999Ms: 0.62, longestMs: 1.48,
+      lateCount: 94, droppedCount: 18, bunchedCount: 142, stabilityScore: 79,
+      onScreenRefresh: false, mouseCpu: 0, cause: 'both',
+      causeDetail: 'Both uneven USB delivery and high PC DPC/ISR load (nvlddmkm.sys, up to 640 µs) showed up during the test.',
+      histogram: [
+        { id: 'bunched', label: 'Bunched', rangeMs: '< 0.06 ms', count: 142, percent: 0.2, kind: 'warn' },
+        { id: 'early', label: 'Early', rangeMs: '0.06–0.11 ms', count: 1120, percent: 1.4, kind: 'ok' },
+        { id: 'nominal', label: 'On time', rangeMs: '0.11–0.14 ms', count: 75210, percent: 96.3, kind: 'ok' },
+        { id: 'slight', label: 'Slight jitter', rangeMs: '0.14–0.19 ms', count: 1534, percent: 2.0, kind: 'warn' },
+        { id: 'late', label: 'Late', rangeMs: '0.19–0.25 ms', count: 62, percent: 0.1, kind: 'bad' },
+        { id: 'very_late', label: 'Very late', rangeMs: '0.25–0.50 ms', count: 24, percent: 0.0, kind: 'bad' },
+        { id: 'dropout', label: 'Dropout', rangeMs: '>= 0.50 ms', count: 8, percent: 0.0, kind: 'bad' },
+      ],
+    },
+    usb: {
+      controllers: [
+        {
+          name: 'AMD USB 3.10 eXtensible Host Controller', vendorName: 'AMD', pciLocation: 'PCI bus 11, dev 0, fn 3',
+          placement: 'cpu', interruptMode: 'msi', msiSupported: true, freeCpuPorts: 2,
+          rootHub: { name: 'USB Root Hub (USB 3.0)', isRoot: true, portNumber: null, portCount: 4, selectiveSuspendEnabled: false, devices: [], hubs: [] },
+        },
+        {
+          name: 'AMD B550 Chipset USB 3.10 Host Controller', vendorName: 'AMD', pciLocation: 'PCI bus 2, dev 0, fn 0',
+          placement: 'chipset', interruptMode: 'line', msiSupported: true, freeCpuPorts: 2,
+          rootHub: {
+            name: 'USB Root Hub (USB 3.0)', isRoot: true, portNumber: null, portCount: 6, selectiveSuspendEnabled: true, devices: [],
+            hubs: [{
+              name: 'Generic SuperSpeed USB Hub', isRoot: false, portNumber: 2, portCount: 4, selectiveSuspendEnabled: true,
+              devices: [
+                { name: 'Finalmouse Starlight X', kind: 'mouse', portNumber: 1, speedCode: 2, speedLabel: 'High (480 Mbps)', bIntervalUs: 125, pollingHz: 8000, highRate: true, highRateReason: '8 kHz mouse', sharesHubWithHighRate: true, sharedWith: ['Logitech Brio Webcam'], isMouse: true },
+                { name: 'Logitech Brio Webcam', kind: null, portNumber: 2, speedCode: 3, speedLabel: 'SuperSpeed (5 Gbps)', bIntervalUs: null, pollingHz: null, highRate: true, highRateReason: 'Webcam / video', sharesHubWithHighRate: true, sharedWith: ['Finalmouse Starlight X'], isMouse: false },
+              ],
+              hubs: [],
+            }],
+          },
+        },
+      ],
+      advice: ["Move your 8 kHz mouse to a port on the CPU's USB controller, not the hub with Logitech Brio Webcam."],
+      mouseOnCpu: false, mouseOnHub: true, mouseSharesHighRateHub: true,
+    },
+    etw: !diagEtw ? null : {
+      at: new Date().toISOString(), seconds: 10, totalIsrs: 86420, totalDpcs: 41200,
+      totalIsrUs: 194200, totalDpcUs: 682400, maxIsrUs: 142, maxDpcUs: 640, eventsLost: 0, mouseControllerCore: 0,
+      cores: [
+        { core: 0, isrCount: 79200, isrTotalUs: 168000, isrMaxUs: 142, dpcCount: 24100, dpcTotalUs: 418000, dpcMaxUs: 640, isMouseCore: true },
+        { core: 2, isrCount: 3100, isrTotalUs: 9200, isrMaxUs: 38, dpcCount: 8400, dpcTotalUs: 142000, dpcMaxUs: 210, isMouseCore: false },
+      ],
+      topDrivers: [
+        { driver: 'nvlddmkm.sys', dpcCount: 9120, dpcTotalUs: 298400, dpcMaxUs: 640, isrCount: 1840, isrTotalUs: 21000, isrMaxUs: 95, topCore: 0, cores: [0, 2] },
+        { driver: 'usbxhci.sys', dpcCount: 14200, dpcTotalUs: 192100, dpcMaxUs: 165, isrCount: 78100, isrTotalUs: 152400, isrMaxUs: 142, topCore: 0, cores: [0] },
+      ],
+    },
+    etwProblem: null,
+    fixes: !diagMeasured ? [] : [
+      { id: 'affinity', title: 'xHCI interrupt affinity', summary: "Move your mouse's USB controller off CPU 0 to quiet non-zero CPU 6.", actionLabel: 'Pin to CPU 6', honestyNote: 'Measure again after — there may be no change.', needsRestart: true, needsAdmin: true, status: diagApplied.has('affinity') ? 'restart' : 'available', canApply: !diagApplied.has('affinity'), canUndo: diagApplied.has('affinity'), detail: null, before: null, after: null, improved: null },
+      { id: 'msi', title: 'USB controller MSI mode', summary: 'AMD B550 Chipset USB 3.10 Host Controller supports MSI but is currently using line-based interrupts.', actionLabel: 'Enable MSI mode', honestyNote: 'Measure again after — there may be no change.', needsRestart: true, needsAdmin: true, status: diagApplied.has('msi') ? 'restart' : 'available', canApply: !diagApplied.has('msi'), canUndo: diagApplied.has('msi'), detail: null, before: null, after: null, improved: null },
+      { id: 'usb_suspend', title: 'USB selective suspend off', summary: "Disable USB selective suspend on your mouse's hub to prevent idle wake-up hitches while gaming.", actionLabel: 'Disable on mouse hub', honestyNote: 'Measure again after — there may be no change.', needsRestart: false, needsAdmin: true, status: diagApplied.has('usb_suspend') ? 'applied' : 'available', canApply: !diagApplied.has('usb_suspend'), canUndo: diagApplied.has('usb_suspend'), detail: null, before: null, after: null, improved: null },
+    ],
+  }
+}
+
+function mockDiagFix(p?: { id?: unknown; action?: unknown }) {
+  const id = String(p?.id ?? '')
+  const action = String(p?.action ?? '')
+  if (action === 'apply') diagApplied.add(id)
+  if (action === 'undo') diagApplied.delete(id)
+  return mockDiag(false, false)
+}
 
 function mockCore(action: unknown) {
   if (action === 'measure') coreMeasured = true
@@ -418,9 +499,12 @@ function answerHost() {
     const result = m.method === 'exo.profiles.read' ? { ok: true, data: PROFILES }
       : m.method === 'exo.games' ? { ok: true, games: GAMES }
         : m.method === 'exo.mouseCore' ? mockCore(action)
-          : { ok: true }
+          : m.method === 'exo.mouseDiag.status' ? mockDiag(false, false)
+            : m.method === 'exo.mouseDiag.measure' ? mockDiag(true, Boolean((m.params as { withEtw?: unknown } | undefined)?.withEtw))
+              : m.method === 'exo.mouseDiag.fix' ? mockDiagFix(m.params as { id?: unknown; action?: unknown } | undefined)
+                : { ok: true }
     // The core's measure takes the host's 10 s; Windows' prompt behind its change, a moment.
-    const wait = action === 'measure' || action === 'drivers' ? 10_000 : action ? 900 : 40
+    const wait = action === 'measure' || action === 'drivers' || m.method === 'exo.mouseDiag.measure' ? 1200 : action ? 900 : 40
     window.setTimeout(() => window.dispatchEvent(new MessageEvent('message', { data: { exo: 'mouse', id: m.id, result }, source: window })), wait)
   }) as typeof window.postMessage
 }

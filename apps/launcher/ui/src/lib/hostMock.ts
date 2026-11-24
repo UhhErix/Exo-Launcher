@@ -1276,6 +1276,98 @@ let mockMouseStage: 'none' | 'restart' | 'set' = typeof location !== 'undefined'
 let mockMouseTested = false
 
 let mockMouseRecorded = false
+let mockDiagMeasured = false
+let mockDiagEtw = false
+const mockDiagApplied = new Set<string>()
+
+function mockMouseDiagState() {
+  const usb = {
+    controllers: [
+      {
+        name: 'AMD USB 3.10 eXtensible Host Controller',
+        vendorName: 'AMD',
+        pciLocation: 'PCI bus 11, dev 0, fn 3',
+        placement: 'cpu',
+        interruptMode: 'msi',
+        msiSupported: true,
+        freeCpuPorts: 2,
+        rootHub: { name: 'USB Root Hub (USB 3.0)', isRoot: true, portNumber: null, portCount: 4, selectiveSuspendEnabled: false, devices: [], hubs: [] },
+      },
+      {
+        name: 'AMD B550 Chipset USB 3.10 Host Controller',
+        vendorName: 'AMD',
+        pciLocation: 'PCI bus 2, dev 0, fn 0',
+        placement: 'chipset',
+        interruptMode: 'line',
+        msiSupported: true,
+        freeCpuPorts: 2,
+        rootHub: {
+          name: 'USB Root Hub (USB 3.0)',
+          isRoot: true,
+          portNumber: null,
+          portCount: 6,
+          selectiveSuspendEnabled: true,
+          devices: [],
+          hubs: [
+            {
+              name: 'Generic SuperSpeed USB Hub',
+              isRoot: false,
+              portNumber: 2,
+              portCount: 4,
+              selectiveSuspendEnabled: true,
+              devices: [
+                { name: 'Finalmouse Starlight X', kind: 'mouse', portNumber: 1, speedCode: 2, speedLabel: 'High (480 Mbps)', bIntervalUs: 125, pollingHz: 8000, highRate: true, highRateReason: '8 kHz mouse', sharesHubWithHighRate: true, sharedWith: ['Logitech Brio Webcam'], isMouse: true },
+                { name: 'Logitech Brio Webcam', kind: null, portNumber: 2, speedCode: 3, speedLabel: 'SuperSpeed (5 Gbps)', bIntervalUs: null, pollingHz: null, highRate: true, highRateReason: 'Webcam / video', sharesHubWithHighRate: true, sharedWith: ['Finalmouse Starlight X'], isMouse: false },
+              ],
+              hubs: [],
+            },
+          ],
+        },
+      },
+    ],
+    advice: ['Move your 8 kHz mouse to a port on the CPU\'s USB controller, not the hub with Logitech Brio Webcam.'],
+    mouseOnCpu: false,
+    mouseOnHub: true,
+    mouseSharesHighRateHub: true,
+  }
+  const jitter = !mockDiagMeasured ? null : {
+    pollingRateHz: 8000, nominalMs: 0.125, totalReports: 79410, checkedGaps: 78100,
+    medianMs: 0.125, spreadMs: 0.018, p95Ms: 0.155, p99Ms: 0.245, p999Ms: 0.62, longestMs: 1.48,
+    lateCount: 94, droppedCount: 18, bunchedCount: 142, stabilityScore: 79,
+    onScreenRefresh: false, mouseCpu: 0, cause: 'both',
+    causeDetail: 'Both uneven USB delivery and high PC DPC/ISR load (nvlddmkm.sys, up to 640 µs) showed up during the test.',
+    histogram: [
+      { id: 'bunched', label: 'Bunched', rangeMs: '< 0.06 ms', count: 142, percent: 0.2, kind: 'warn' },
+      { id: 'early', label: 'Early', rangeMs: '0.06–0.11 ms', count: 1120, percent: 1.4, kind: 'ok' },
+      { id: 'nominal', label: 'On time', rangeMs: '0.11–0.14 ms', count: 75210, percent: 96.3, kind: 'ok' },
+      { id: 'slight', label: 'Slight jitter', rangeMs: '0.14–0.19 ms', count: 1534, percent: 2.0, kind: 'warn' },
+      { id: 'late', label: 'Late', rangeMs: '0.19–0.25 ms', count: 62, percent: 0.1, kind: 'bad' },
+      { id: 'very_late', label: 'Very late', rangeMs: '0.25–0.50 ms', count: 24, percent: 0.0, kind: 'bad' },
+      { id: 'dropout', label: 'Dropout', rangeMs: '>= 0.50 ms', count: 8, percent: 0.0, kind: 'bad' },
+    ],
+  }
+  const etw = !mockDiagEtw ? null : {
+    at: new Date().toISOString(), seconds: 10, totalIsrs: 86420, totalDpcs: 41200,
+    totalIsrUs: 194200, totalDpcUs: 682400, maxIsrUs: 142, maxDpcUs: 640, eventsLost: 0, mouseControllerCore: 0,
+    cores: [
+      { core: 0, isrCount: 79200, isrTotalUs: 168000, isrMaxUs: 142, dpcCount: 24100, dpcTotalUs: 418000, dpcMaxUs: 640, isMouseCore: true },
+      { core: 2, isrCount: 3100, isrTotalUs: 9200, isrMaxUs: 38, dpcCount: 8400, dpcTotalUs: 142000, dpcMaxUs: 210, isMouseCore: false },
+      { core: 4, isrCount: 2400, isrTotalUs: 8600, isrMaxUs: 29, dpcCount: 5100, dpcTotalUs: 74000, dpcMaxUs: 120, isMouseCore: false },
+      { core: 6, isrCount: 1720, isrTotalUs: 8400, isrMaxUs: 21, dpcCount: 3600, dpcTotalUs: 48400, dpcMaxUs: 85, isMouseCore: false },
+    ],
+    topDrivers: [
+      { driver: 'nvlddmkm.sys', dpcCount: 9120, dpcTotalUs: 298400, dpcMaxUs: 640, isrCount: 1840, isrTotalUs: 21000, isrMaxUs: 95, topCore: 0, cores: [0, 2] },
+      { driver: 'usbxhci.sys', dpcCount: 14200, dpcTotalUs: 192100, dpcMaxUs: 165, isrCount: 78100, isrTotalUs: 152400, isrMaxUs: 142, topCore: 0, cores: [0] },
+      { driver: 'ndis.sys', dpcCount: 4100, dpcTotalUs: 84300, dpcMaxUs: 210, isrCount: 1200, isrTotalUs: 8400, isrMaxUs: 41, topCore: 2, cores: [2, 0] },
+    ],
+  }
+  const fixes = !mockDiagMeasured ? [] : [
+    { id: 'affinity', title: 'xHCI interrupt affinity', summary: 'Move your mouse\'s USB controller off CPU 0 to quiet non-zero CPU 6.', actionLabel: 'Pin to CPU 6', honestyNote: 'Measure again after — there may be no change.', needsRestart: true, needsAdmin: true, status: mockDiagApplied.has('affinity') ? 'restart' : 'available', canApply: !mockDiagApplied.has('affinity'), canUndo: mockDiagApplied.has('affinity'), detail: mockDiagApplied.has('affinity') ? 'Pinned to CPU 6. Restart Windows, then measure again.' : 'Writes DevicePolicy and AssignmentSetOverride via admin helper. Restart required.', before: null, after: null, improved: null },
+    { id: 'msi', title: 'USB controller MSI mode', summary: 'AMD B550 Chipset USB 3.10 Host Controller supports MSI but is currently using line-based interrupts.', actionLabel: 'Enable MSI mode', honestyNote: 'Measure again after — there may be no change.', needsRestart: true, needsAdmin: true, status: mockDiagApplied.has('msi') ? 'restart' : 'available', canApply: !mockDiagApplied.has('msi'), canUndo: mockDiagApplied.has('msi'), detail: mockDiagApplied.has('msi') ? 'MSI mode enabled. Restart Windows, then measure again.' : 'Sets MSISupported = 1 on the mouse\'s xHCI controller via admin helper. Restart required.', before: null, after: null, improved: null },
+    { id: 'usb_suspend', title: 'USB selective suspend off', summary: 'Disable USB selective suspend on your mouse\'s hub to prevent idle wake-up hitches while gaming.', actionLabel: 'Disable on mouse hub', honestyNote: 'Measure again after — there may be no change.', needsRestart: false, needsAdmin: true, status: mockDiagApplied.has('usb_suspend') ? 'applied' : 'available', canApply: !mockDiagApplied.has('usb_suspend'), canUndo: mockDiagApplied.has('usb_suspend'), detail: mockDiagApplied.has('usb_suspend') ? 'Selective suspend disabled on your mouse\'s USB hub. Measure again to compare.' : 'Turns off hub selective suspend via admin helper and AC USB suspend while gaming.', before: null, after: null, improved: null },
+  ]
+  return { ok: true, message: null, running: false, jitter, usb, etw, etwProblem: null, fixes }
+}
 let mockAfmf3 = false
 async function mockMouseCore(params?: Record<string, unknown>) {
   if (params?.action === 'measure') {
@@ -2175,6 +2267,21 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     return { ok: true, message: null, state: mockAutopilot() }
   },
   'system.mouseCore': mockMouseCore,
+  'mouse.diag.status': () => mockMouseDiagState(),
+  'mouse.diag.measure': async (p) => {
+    await new Promise(resolve => setTimeout(resolve, 1200))
+    mockDiagMeasured = true
+    if (p?.withEtw) mockDiagEtw = true
+    return mockMouseDiagState()
+  },
+  'mouse.diag.cancel': () => ({ ok: true }),
+  'mouse.diag.fix': (p) => {
+    const id = String(p?.id ?? '')
+    const action = String(p?.action ?? '')
+    if (action === 'apply') mockDiagApplied.add(id)
+    if (action === 'undo') mockDiagApplied.delete(id)
+    return mockMouseDiagState()
+  },
   'system.drives': mockDrives,
   'system.drivers': () => ({ ok: true, busy: null, running: false, restart: false, items: [
     { id: 'windows:740c4b6c-bcfa-4f97-ae49-7bcc6933e696', kind: 'windows', name: 'Voice Clarity', maker: 'Microsoft Corporation', version: '10.0.26100.1', date: '2006-06-20', latest: '1.0.4.7057', latestDate: '2026-06-16', how: 'install', page: null, source: 'Windows Update', app: false, skipped: null, advised: null },

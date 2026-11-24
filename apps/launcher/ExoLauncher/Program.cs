@@ -58,6 +58,11 @@ public static class Program
                 Environment.ExitCode = Helpers.LatencyTrace.Run(args);
                 return;
             }
+            if (args.Contains(Helpers.MouseDiagTrace.Flag, StringComparer.OrdinalIgnoreCase))
+            {
+                Environment.ExitCode = Helpers.MouseDiagTrace.Run(args);
+                return;
+            }
             if (args.Contains(Services.WindowsFeatures.Flag, StringComparer.OrdinalIgnoreCase))
             {
                 Environment.ExitCode = Services.WindowsFeatures.Run(args);
