@@ -1,0 +1,119 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <RootNamespace>ExoLauncher</RootNamespace>
+    <AssemblyName>ExoLauncher.Host</AssemblyName>
+    <ApplicationManifest>..\ExoLauncher\app.manifest</ApplicationManifest>
+    <ApplicationIcon Condition="Exists('..\ExoLauncher\Assets\ExoLauncher.ico')">..\ExoLauncher\Assets\ExoLauncher.ico</ApplicationIcon>
+
+    <Platforms>x64</Platforms>
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+
+    <UseWinUI>false</UseWinUI>
+    <UseWindowsForms>false</UseWindowsForms>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WebView2EnableCsWinRTProjection>true</WebView2EnableCsWinRTProjection>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+
+    <PublishSelfContained>true</PublishSelfContained>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+    <PublishReadyToRun Condition="'$(Configuration)' == 'Release' and '$(PublishAot)' != 'true'">true</PublishReadyToRun>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <TieredPGO>false</TieredPGO>
+    <DefineConstants>$(DefineConstants);EXO_HEADLESS_HOST</DefineConstants>
+
+    <Product>Exo Launcher Host</Product>
+    <AssemblyTitle>Exo Launcher Headless Host</AssemblyTitle>
+    <Company>Exo</Company>
+    <Copyright>Copyright (c) 2026 Erix (UhhErix)</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+    <InternalsVisibleTo Include="ExoLauncher.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <PackageReference Include="org.k2fsa.sherpa.onnx.runtime.win-x64" Version="2.0.2" />
+    <PackageDownload Include="Microsoft.ML.OnnxRuntime" Version="[1.31.1]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="..\ExoLauncher\**\*.cs"
+             Exclude="..\ExoLauncher\bin\**;..\ExoLauncher\obj\**;..\ExoLauncher\Program.cs;..\ExoLauncher\App.xaml.cs;..\ExoLauncher\MainWindow*.cs;..\ExoLauncher\FpsOverlay.cs;..\ExoLauncher\AchievementBanner.cs;..\ExoLauncher\Helpers\ChromePreview.cs;..\ExoLauncher\Helpers\EmbeddedClientFrame.cs;..\ExoLauncher\Helpers\ExoConnectedTheme.cs;..\ExoLauncher\Helpers\HangWatchdog.cs;..\ExoLauncher\Helpers\ReportSmokeHooks.cs;..\ExoLauncher\Ui\CaptionDragRegions.cs;..\ExoLauncher\Shell\Scene\Tokens.cs;..\ExoLauncher\Services\WebViewHostTransport.cs;..\ExoLauncher\Services\StoreAuthWindow.cs;..\ExoLauncher\Services\DiscordClient\DiscordNotifier.cs" />
+  </ItemGroup>
+
+  <Target Name="TrimUnusedWebView2UiWrappers" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf' or '%(Filename)' == 'Microsoft.Web.WebView2.WinForms'" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\ExoLauncher\Services\DriverAdvisories.json" LogicalName="DriverAdvisories.json" />
+    <EmbeddedResource Include="..\ExoLauncher\Services\StartupCatalog.json" LogicalName="StartupCatalog.json" />
+    <EmbeddedResource Include="..\tools\installer\Apply-ExoDelta.ps1;..\tools\installer\Complete-ExoUpdate.ps1;..\tools\installer\Verify-Payload.ps1;..\tools\installer\Close-ExoLauncher.ps1;..\tools\installer\Clean-ExoInstall.ps1" LogicalName="installer/%(Filename)%(Extension)" Link="Installer\%(Filename)%(Extension)" />
+    <Content Include="..\ExoLauncher\Assets\**\*" Link="Assets\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\VERSION" Link="VERSION" Condition="Exists('..\VERSION')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <_SteamIpcPub>$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\bin\x64\$(Configuration)\native-publish\</_SteamIpcPub>
+  </PropertyGroup>
+  <ItemGroup>
+    <_SteamIpcInputs Include="$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.cs;$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.csproj;$(MSBuildThisFileDirectory)..\ExoLauncher\Adapters\SteamProgressCounters.cs;$(MSBuildThisFileDirectory)..\Directory.Build.props;$(MSBuildThisFileDirectory)..\global.json;$(MSBuildThisFileDirectory)..\VERSION;$(MSBuildThisFileFullPath)" />
+  </ItemGroup>
+  <Target Name="PrepareSteamIpc" Inputs="@(_SteamIpcInputs)" Outputs="$(_SteamIpcPub)ExoLauncher.SteamIpc.exe" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\ExoLauncher.SteamIpc.csproj&quot; -c $(Configuration) -r win-x64 -p:Platform=x64 --self-contained true -p:PublishAot=true --output &quot;$(_SteamIpcPub).&quot;"
+          EnvironmentVariables="PATH=$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer%3B$([MSBuild]::Escape($(PATH)))" />
+  </Target>
+  <Target Name="BuildSteamIpc" AfterTargets="Build" DependsOnTargets="PrepareSteamIpc" Condition="'$(DesignTimeBuild)' != 'true'">
+    <MakeDir Directories="$(OutDir)steam-ipc" />
+    <Copy SourceFiles="$(_SteamIpcPub)ExoLauncher.SteamIpc.exe" DestinationFolder="$(OutDir)steam-ipc" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="PublishSteamIpc" AfterTargets="Publish" DependsOnTargets="PrepareSteamIpc" Condition="'$(DesignTimeBuild)' != 'true'">
+    <MakeDir Directories="$(PublishDir)steam-ipc" />
+    <Copy SourceFiles="$(_SteamIpcPub)ExoLauncher.SteamIpc.exe" DestinationFolder="$(PublishDir)steam-ipc" SkipUnchangedFiles="true" />
+  </Target>
+
+  <PropertyGroup>
+    <_OnnxRuntime>$(NuGetPackageRoot)microsoft.ml.onnxruntime\1.31.1\runtimes\win-x64\native\onnxruntime.dll</_OnnxRuntime>
+  </PropertyGroup>
+  <Target Name="BuildOnnxRuntime" AfterTargets="CopyFilesToOutputDirectory" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(_OnnxRuntime)')" />
+  </Target>
+  <Target Name="PublishOnnxRuntime" AfterTargets="Publish" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="Exists('$(_OnnxRuntime)')" />
+  </Target>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExoLauncher.Host.Tests" />
+  </ItemGroup>
+
+</Project>
