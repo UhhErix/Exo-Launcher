@@ -7,10 +7,12 @@ license.workspace = true
 [dependencies]
 exo-autopilot = { path = "../exo-autopilot" }
 exo-controller = { path = "../exo-controller" }
+exo-gpu = { path = "../exo-gpu" }
 exo-kit = { path = "../exo-kit" }
 exo-macros = { path = "../exo-macros" }
 exo-power-guard = { path = "../exo-power-guard" }
 exo-rpc = { path = "../exo-rpc" }
+exo-sensors = { path = "../exo-sensors" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 rune.workspace = true
 rune-media.workspace = true
