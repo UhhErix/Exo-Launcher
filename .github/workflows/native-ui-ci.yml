@@ -5,43 +5,83 @@ on:
     paths:
       - 'apps/launcher/native-ui/**'
       - 'apps/launcher/ui/contracts/host-v1.json'
+      - 'apps/launcher/ui/contracts/keyboard-layouts.json'
+      - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
   push:
     branches: [main]
     paths:
       - 'apps/launcher/native-ui/**'
       - 'apps/launcher/ui/contracts/host-v1.json'
+      - 'apps/launcher/ui/contracts/keyboard-layouts.json'
+      - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: native-ui-ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   rune-check:
     name: Native UI (Rune)
     runs-on: windows-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CARGO_INCREMENTAL: '0'
     defaults:
       run:
         working-directory: apps/launcher/native-ui
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher/native-ui
+            apps/launcher/ui/contracts
+            apps/launcher/ExoLauncher/Assets/Fonts
+          persist-credentials: false
+
+      - name: Compute Rust toolchain key
+        id: rust-key
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $info = (rustc -Vv) -join "`n"
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($info)
+          $hash = ([System.Security.Cryptography.SHA256]::HashData($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
+          "toolchain=$($hash.Substring(0, 16))" >> $env:GITHUB_OUTPUT
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            apps/launcher/native-ui/target/
-          key: ${{ runner.os }}-rune-${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            apps/launcher/native-ui/target
+          key: ${{ runner.os }}-rune-${{ steps.rust-key.outputs.toolchain }}-${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-rune-
+            ${{ runner.os }}-rune-${{ steps.rust-key.outputs.toolchain }}-
 
       - name: Cargo test
         run: cargo test --locked
+
+      - name: Prune stale target artifacts before cache save
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'SilentlyContinue'
+          $target = 'target'
+          if (Test-Path $target) {
+            foreach ($dir in @('debug/incremental', 'release/incremental', 'doc', 'package', 'tmp')) {
+              $p = Join-Path $target $dir
+              if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+            }
+            $cutoff = (Get-Date).AddDays(-7)
+            Get-ChildItem -Path $target -Recurse -File | Where-Object {
+              $_.Extension -in @('.pdb') -or ($_.LastWriteTime -lt $cutoff -and $_.DirectoryName -match '(\\deps|\\build|\\.fingerprint)')
+            } | Remove-Item -Force
+          }

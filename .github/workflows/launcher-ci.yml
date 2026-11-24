@@ -1,7 +1,7 @@
 name: Launcher CI
 
-# Every pull request and every push to main: the UI's check (types, host contract, lint, CSS rules, tests) and the .NET
-# tests, on Windows, so auto-merge waits for a green build and not only for CodeQL.
+# Every pull request and every push to main: the UI checks (TS 7.1 native + TS 6, host contract, oxlint/ESLint +
+# landmines, CSS rules, unit tests), comment ratchet, Cloud Worker tests, and Windows .NET tests.
 
 on:
   # Every pull request, with no path filter: `test` is a required check, so a PR that skipped it could never merge.
@@ -10,65 +10,247 @@ on:
     branches: [main]
     paths: ['apps/launcher/**', '.github/workflows/launcher-ci.yml']
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: launcher-ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  ui-and-cloud:
-    name: UI & Cloud Workers
+  ui-check:
+    name: UI check
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: apps/launcher
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/launcher/ui/package-lock.json
+
+      - id: ui-nm-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/launcher/ui/node_modules
+          key: ${{ runner.os }}-node24-ui-nm-${{ hashFiles('apps/launcher/ui/package-lock.json') }}
+
+      - name: Install UI dependencies
+        if: steps.ui-nm-cache.outputs.cache-hit != 'true'
+        run: npm ci --prefix ui --no-audit --no-fund --prefer-offline
+
+      - name: Run UI checks in parallel
+        shell: bash
+        run: |
+          set -euo pipefail
+          logs=$(mktemp -d)
+          names=(typecheck contracts lint lint:tests lint:css css:prune:check test)
+          pids=()
+          for script in "${names[@]}"; do
+            npm run -s "$script" --prefix ui >"$logs/${script//:/_}.log" 2>&1 &
+            pids+=($!)
+          done
+          failed=0
+          for i in "${!names[@]}"; do
+            script="${names[$i]}"
+            logfile="$logs/${script//:/_}.log"
+            if wait "${pids[$i]}"; then
+              echo "::group::${script} (ok)"
+              cat "$logfile"
+              echo "::endgroup::"
+            else
+              echo "::error::UI check '${script}' failed"
+              cat "$logfile"
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+  typecheck-tsc6:
+    name: Typecheck (TS 6)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/launcher
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher/ui
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/launcher/ui/package-lock.json
+
+      - id: ui-nm-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/launcher/ui/node_modules
+          key: ${{ runner.os }}-node24-ui-nm-${{ hashFiles('apps/launcher/ui/package-lock.json') }}
+
+      - name: Install UI dependencies
+        if: steps.ui-nm-cache.outputs.cache-hit != 'true'
+        run: npm ci --prefix ui --no-audit --no-fund --prefer-offline
+
+      - name: TypeScript 6 typecheck
+        run: npm run -s typecheck:tsc6 --prefix ui
+
+  comment-ratchet:
+    name: Comment ratchet
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/launcher
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/launcher/ui/package-lock.json
+
+      - id: ui-nm-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/launcher/ui/node_modules
+          key: ${{ runner.os }}-node24-ui-nm-${{ hashFiles('apps/launcher/ui/package-lock.json') }}
+
+      - name: Install UI dependencies (TypeScript AST scanner)
+        if: steps.ui-nm-cache.outputs.cache-hit != 'true'
+        run: npm ci --prefix ui --no-audit --no-fund --prefer-offline
+
+      - name: Comment ratchet tests and check
+        run: |
+          node --test tools/check-comments.test.mjs
+          node tools/check-comments.mjs
+
+  cloud-workers:
+    name: Cloud Worker tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/launcher
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher/cloud
+            apps/launcher/ExoLauncher/Services
+          persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: |
-            apps/launcher/ui/package-lock.json
             apps/launcher/cloud/updates/package-lock.json
             apps/launcher/cloud/account/package-lock.json
             apps/launcher/cloud/covers/package-lock.json
             apps/launcher/cloud/riot/package-lock.json
 
-      - name: UI check
-        run: |
-          npm ci --prefix ui --no-audit --no-fund
-          npm run -s check --prefix ui
+      - id: cloud-nm-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/launcher/cloud/updates/node_modules
+            apps/launcher/cloud/account/node_modules
+            apps/launcher/cloud/covers/node_modules
+            apps/launcher/cloud/riot/node_modules
+          key: ${{ runner.os }}-node24-cloud-nm-${{ hashFiles('apps/launcher/cloud/*/package-lock.json') }}
 
-      - name: Comment ratchet
+      - name: Run Cloud Worker installs and tests in parallel
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.cloud-nm-cache.outputs.cache-hit }}
         run: |
-          node --test tools/check-comments.test.mjs
-          node tools/check-comments.mjs
+          set -euo pipefail
+          logs=$(mktemp -d)
+          workers=(updates account reports covers riot)
+          pids=()
+          for w in "${workers[@]}"; do
+            (
+              if [ "$w" != "reports" ] && [ "${CACHE_HIT}" != "true" ]; then
+                npm ci --prefix "cloud/$w" --no-audit --no-fund --prefer-offline
+              fi
+              npm test --prefix "cloud/$w"
+            ) >"$logs/$w.log" 2>&1 &
+            pids+=($!)
+          done
+          failed=0
+          for i in "${!workers[@]}"; do
+            w="${workers[$i]}"
+            if wait "${pids[$i]}"; then
+              echo "::group::cloud/${w} (ok)"
+              cat "$logs/$w.log"
+              echo "::endgroup::"
+            else
+              echo "::error::Cloud Worker '${w}' tests failed"
+              cat "$logs/$w.log"
+              failed=1
+            fi
+          done
+          exit "$failed"
 
-      - name: Cloud Worker tests
-        run: |
-          npm ci --prefix cloud/updates --no-audit --no-fund
-          npm test --prefix cloud/updates
-          npm ci --prefix cloud/account --no-audit --no-fund
-          npm test --prefix cloud/account
-          npm test --prefix cloud/reports
-          npm ci --prefix cloud/covers --no-audit --no-fund
-          npm test --prefix cloud/covers
-          npm ci --prefix cloud/riot --no-audit --no-fund
-          npm test --prefix cloud/riot
+  ui-and-cloud:
+    name: UI & Cloud Workers
+    needs: [ui-check, typecheck-tsc6, comment-ratchet, cloud-workers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: All UI, comment ratchet, and Cloud Worker checks passed
+        run: echo "UI check, TS 6 typecheck, Comment ratchet, and Cloud Worker tests succeeded."
 
   test:
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+      DOTNET_NOLOGO: '1'
     defaults:
       run:
         working-directory: apps/launcher
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher
+          persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -82,6 +264,14 @@ jobs:
         with:
           global-json-file: apps/launcher/global.json
 
+      - id: web-nm-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/launcher/ui/node_modules
+            apps/launcher/mouse/node_modules
+          key: ${{ runner.os }}-node24-web-nm-${{ hashFiles('apps/launcher/ui/package-lock.json', 'apps/launcher/mouse/package-lock.json') }}
+
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.nuget/packages
@@ -90,9 +280,10 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: Install the UI and Exo Mouse
+        if: steps.web-nm-cache.outputs.cache-hit != 'true'
         run: |
-          npm ci --prefix ui --no-audit --no-fund
-          npm ci --prefix mouse --no-audit --no-fund
+          npm ci --prefix ui --no-audit --no-fund --prefer-offline
+          npm ci --prefix mouse --no-audit --no-fund --prefer-offline
 
       - name: .NET tests
         run: dotnet test ExoLauncher.Tests/ExoLauncher.Tests.csproj -p:Platform=x64 -nologo

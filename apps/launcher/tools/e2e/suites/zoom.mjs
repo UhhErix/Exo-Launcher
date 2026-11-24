@@ -22,7 +22,7 @@ const logErrors = async (t) => (await t.exo.logSince(t.logMark)).filter(l => l.l
 const tab = (name) => [...document.querySelectorAll('.exo-titlebar button')].find(b => (b.getAttribute('aria-label') || b.textContent || '').trim().replace(/\s*\d+$/, '') === name)
 
 export async function run(t) {
-  const { run, k } = t
+  const { run } = t
   const screens = t.quick ? [2160] : [1440, 2160]
   try {
     for (const screen of screens) {
