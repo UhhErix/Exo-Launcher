@@ -69,6 +69,11 @@ public static class Program
                 Environment.ExitCode = Services.WindowsFeatures.Run(args);
                 return;
             }
+            if (args.Contains(Services.StandbyPurger.Flag, StringComparer.OrdinalIgnoreCase))
+            {
+                Environment.ExitCode = Services.StandbyPurger.RunElevatedCli();
+                return;
+            }
             // Exo's setup, once Exo is installed: Exo's parts fetched and verified, with progress for its window (no window here).
             if (args.Contains("--fetch-components", StringComparer.OrdinalIgnoreCase))
             {

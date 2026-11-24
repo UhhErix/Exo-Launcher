@@ -85,10 +85,10 @@ function StageMarker({ status, label }: { status: AutoTuneStageState['status']; 
   return <span className="exo-at-stage-marker"><span className="exo-at-stage-dot" /></span>
 }
 
-function LiveHeaderStatus({ exoAi, tune }: { exoAi: ExoAiState | null; tune: AutoTune | null }) {
+function LiveHeaderStatus({ exoAi, tune, autopilotOn }: { exoAi: ExoAiState | null; tune: AutoTune | null; autopilotOn: boolean }) {
   const gaming = exoAi?.gaming.active ?? false
   const testing = tune?.parts.some(part => part.state === 'testing') ?? false
-  let text = 'Autopilot active'
+  let text = autopilotOn ? 'Autopilot active' : 'Autopilot paused'
   if (gaming) text = exoAi?.gaming.gameTitle ? `Boosting ${exoAi.gaming.gameTitle}` : 'Boosting game'
   else if (testing) text = 'Calibrating hardware'
 
@@ -354,7 +354,7 @@ export function ExoAiRoom({
         <header className="exo-ai-head">
           <div className="exo-ai-title-row">
             <h1 className="exo-ai-title">Exo AI</h1>
-            <LiveHeaderStatus exoAi={exoAi.state} tune={state.tune} />
+            <LiveHeaderStatus exoAi={exoAi.state} tune={state.tune} autopilotOn={autopilot.state?.on ?? true} />
           </div>
           <div className="exo-ai-head-actions">
             <StorageChip drives={state.drives} list={compressList} onOpen={openStorage} />

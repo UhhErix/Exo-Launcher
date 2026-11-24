@@ -23,6 +23,7 @@ public sealed partial class WebHostBridge
         var settings = Autopilot.Settings;
         var keptOn = AutopilotGameMode.KeptOnBecause(settings, Autopilot.CpuClass);
         var game = Autopilot.Engine.Game;
+        var standbyPurge = StandbyPurger.Status();
         return new
         {
             on = settings.On,
@@ -34,6 +35,7 @@ public sealed partial class WebHostBridge
             gameMode = new { off = Autopilot.GameMode.Held is not null, keptOn = settings.On ? keptOn : null },
             mouseAccel = new { off = Autopilot.MouseAccel.IsOff(), managed = Autopilot.MouseAccel.Held is not null },
             memoryIntegrity = DescribeMemoryIntegrity(SystemTuning.Shared.Read(), SystemTuning.Shared.IntegrityBlocked()),
+            standbyPurge = new { available = standbyPurge.Available, reason = standbyPurge.Reason },
             cpu = CcdText.Value,
             now = game is null ? null : new { game, did = Autopilot.Engine.Did(game) },
             live = AutopilotLive(),
@@ -74,23 +76,27 @@ public sealed partial class WebHostBridge
     /// <summary>Updates per-app demote/suspend lists while keeping Autopilot always active with Exo's best settings.</summary>
     private object AutopilotSet(JsonElement p, bool hasParams)
     {
+        bool? ReadBool(string name) => hasParams && p.TryGetProperty(name, out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? v.GetBoolean()
+            : null;
         List<string>? Names(string name) => hasParams && p.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array
             ? [.. v.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => AutopilotSafety.Bare(item.GetString())).Where(item => item.Length is > 0 and <= 128)]
             : null;
+        var on = ReadBool("on");
+        var gamePriority = ReadString(p, hasParams, "gamePriority");
+        var keepGameMode = ReadBool("keepGameMode");
+        var coreParking = ReadBool("coreParking");
         var demote = Names("alwaysDemote");
         var suspend = Names("suspend");
         _services.Settings.UpdateProfile(s =>
         {
-            var next = Autopilot.LiveSettings(s.Autopilot);
-            if (demote is not null) next.AlwaysDemote = demote;
-            // An app on the safety list is never paused, whatever the page sent.
-            if (suspend is not null) next.Suspend = [.. suspend.Where(name => AutopilotSafety.WhyLeftAlone(name) is null)];
-            s.Autopilot = next.Copy();
+            s.Autopilot = Autopilot.ApplyPatch(s.Autopilot, on, gamePriority, keepGameMode, coreParking, demote, suspend);
         });
+        if (!Autopilot.Settings.On) Autopilot.Engine.Follow(null);
         Autopilot.HandGameMode();
         Autopilot.HandMouseAccel();
         ArmRunStatePoll(RunStateDebounce);
-        AppLog.Info("Autopilot: app rules updated.");
+        AppLog.Info("Autopilot: settings updated.");
         return new { ok = true, message = (string?)null, state = AutopilotState() };
     }
 

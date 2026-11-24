@@ -493,7 +493,7 @@ public sealed class AutopilotEngineTests : IDisposable
     // ---------------------------------------------------------------- always-on & automatic mouse accel
 
     [Fact]
-    public void LiveSettingsAlwaysForcesBestAutopilotDefaultsAndKeepsAppLists()
+    public void LiveSettingsKeepsDefaultsOnlyWhenUnsetAndPreservesUserSettings()
     {
         var liveFromNull = Autopilot.LiveSettings(null);
         Assert.True(liveFromNull.On);
@@ -501,22 +501,75 @@ public sealed class AutopilotEngineTests : IDisposable
         Assert.False(liveFromNull.KeepGameMode);
         Assert.True(liveFromNull.CoreParking);
 
-        var legacy = new AutopilotSettings
+        var stored = new AutopilotSettings
         {
             On = false,
-            GamePriority = "normal",
+            GamePriority = "high",
             KeepGameMode = true,
             CoreParking = false,
             AlwaysDemote = ["OneDrive"],
             Suspend = ["Updater"],
         };
-        var enforced = Autopilot.LiveSettings(legacy);
-        Assert.True(enforced.On);
-        Assert.Equal("above", enforced.GamePriority);
-        Assert.False(enforced.KeepGameMode);
-        Assert.True(enforced.CoreParking);
-        Assert.Equal(["OneDrive"], enforced.AlwaysDemote);
-        Assert.Equal(["Updater"], enforced.Suspend);
+        var preserved = Autopilot.LiveSettings(stored);
+        Assert.False(preserved.On);
+        Assert.Equal("high", preserved.GamePriority);
+        Assert.True(preserved.KeepGameMode);
+        Assert.False(preserved.CoreParking);
+        Assert.Equal(["OneDrive"], preserved.AlwaysDemote);
+        Assert.Equal(["Updater"], preserved.Suspend);
+
+        var normalized = Autopilot.LiveSettings(new AutopilotSettings { GamePriority = "realtime" });
+        Assert.Equal("above", normalized.GamePriority);
+
+        var patched = Autopilot.ApplyPatch(stored, on: true, gamePriority: "normal", keepGameMode: false, coreParking: true, suspend: ["chrome", "audiodg"]);
+        Assert.True(patched.On);
+        Assert.Equal("normal", patched.GamePriority);
+        Assert.False(patched.KeepGameMode);
+        Assert.True(patched.CoreParking);
+        Assert.Equal(["OneDrive"], patched.AlwaysDemote);
+        Assert.Equal(["chrome"], patched.Suspend);
+    }
+
+    [Fact]
+    public void GameGetsPerProcessPowerThrottlingOptOutAndRestoresCleanly()
+    {
+        var pc = Pc();
+        var (engine, _) = Engine(pc, new AutopilotSettings { On = true, GamePriority = "normal" });
+        engine.Follow(TheGame());
+        Assert.Equal(AutopilotRules.Normal, pc.Values[(Knob.Priority, Game)]);
+        Assert.Equal(AutopilotRules.EcoOff, pc.Values[(Knob.Eco, Game)]);
+        Assert.Equal(AutopilotRules.EcoOff, pc.Values[(Knob.Eco, GameChild)]);
+        Assert.True(pc.JournalHadEntryAtEveryWrite);
+
+        pc.FrontPid = 207;
+        engine.Look();
+        engine.Look();
+        Assert.Equal(AutopilotRules.EcoDefault, pc.Values[(Knob.Eco, Game)]);
+
+        pc.FrontPid = Game;
+        engine.Look();
+        Assert.Equal(AutopilotRules.EcoOff, pc.Values[(Knob.Eco, Game)]);
+
+        engine.End();
+        Assert.Equal(AutopilotRules.EcoDefault, pc.Values[(Knob.Eco, Game)]);
+        Assert.Equal(AutopilotRules.EcoDefault, pc.Values[(Knob.Eco, GameChild)]);
+    }
+
+    [Fact]
+    public void TurningAutopilotOffMidSessionEndsAndRestoresOnNextLook()
+    {
+        var pc = Pc();
+        var options = new AutopilotSettings { On = true };
+        var (engine, _) = Engine(pc, options);
+        engine.Follow(TheGame());
+        Assert.Equal(AutopilotRules.AboveNormal, pc.Values[(Knob.Priority, Game)]);
+        Assert.Equal(AutopilotRules.EcoOff, pc.Values[(Knob.Eco, Game)]);
+
+        options.On = false;
+        engine.Look();
+        Assert.Null(engine.Game);
+        Assert.Equal(AutopilotRules.Normal, pc.Values[(Knob.Priority, Game)]);
+        Assert.Equal(AutopilotRules.EcoDefault, pc.Values[(Knob.Eco, Game)]);
     }
 
     private sealed class FakeMouseAccelSystem(int[]? initial) : IMouseAccelSystem
