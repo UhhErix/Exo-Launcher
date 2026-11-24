@@ -26,15 +26,26 @@ public sealed class ExoSqliteTests : IDisposable
         var path = Path.Combine(_folder, "rw.db");
         using var connection = ExoSqlite.OpenReadWrite(path);
 
-        Assert.Equal("wal", ScalarString(connection, "PRAGMA journal_mode;").ToLowerInvariant());
-        Assert.Equal(1L, ScalarInt64(connection, "PRAGMA synchronous;"));
-        Assert.Equal(ExoSqlite.MmapSizeBytes, ScalarInt64(connection, "PRAGMA mmap_size;"));
-        Assert.Equal(ExoSqlite.CacheSizeKib, ScalarInt64(connection, "PRAGMA cache_size;"));
-        Assert.Equal(1L, ScalarInt64(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(ExoSqlite.BusyTimeoutMs, ScalarInt64(connection, "PRAGMA busy_timeout;"));
-        Assert.Equal(ExoSqlite.WalAutoCheckpointPages, ScalarInt64(connection, "PRAGMA wal_autocheckpoint;"));
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA journal_mode;";
+            Assert.Equal("wal", (Convert.ToString(cmd.ExecuteScalar()) ?? "").ToLowerInvariant());
+            cmd.CommandText = "PRAGMA synchronous;";
+            Assert.Equal(1L, Convert.ToInt64(cmd.ExecuteScalar()));
+            cmd.CommandText = "PRAGMA mmap_size;";
+            Assert.Equal(ExoSqlite.MmapSizeBytes, Convert.ToInt64(cmd.ExecuteScalar()));
+            cmd.CommandText = "PRAGMA cache_size;";
+            Assert.Equal(ExoSqlite.CacheSizeKib, Convert.ToInt64(cmd.ExecuteScalar()));
+            cmd.CommandText = "PRAGMA foreign_keys;";
+            Assert.Equal(1L, Convert.ToInt64(cmd.ExecuteScalar()));
+            cmd.CommandText = "PRAGMA busy_timeout;";
+            Assert.Equal(ExoSqlite.BusyTimeoutMs, Convert.ToInt64(cmd.ExecuteScalar()));
+            cmd.CommandText = "PRAGMA wal_autocheckpoint;";
+            Assert.Equal(ExoSqlite.WalAutoCheckpointPages, Convert.ToInt64(cmd.ExecuteScalar()));
+            cmd.CommandText = "CREATE TABLE kv (k INTEGER PRIMARY KEY, v TEXT NOT NULL);";
+            cmd.ExecuteNonQuery();
+        }
 
-        Exec(connection, "CREATE TABLE kv (k INTEGER PRIMARY KEY, v TEXT NOT NULL);");
         using (var tx = connection.BeginTransaction())
         {
             using var ins = connection.CreateCommand();
@@ -51,8 +62,13 @@ public sealed class ExoSqliteTests : IDisposable
             tx.Commit();
         }
 
-        Assert.Equal(500L, ScalarInt64(connection, "SELECT COUNT(*) FROM kv;"));
-        Assert.Equal("val-499", ScalarString(connection, "SELECT v FROM kv WHERE k = 499;"));
+        using (var verify = connection.CreateCommand())
+        {
+            verify.CommandText = "SELECT COUNT(*) FROM kv;";
+            Assert.Equal(500L, Convert.ToInt64(verify.ExecuteScalar()));
+            verify.CommandText = "SELECT v FROM kv WHERE k = 499;";
+            Assert.Equal("val-499", Convert.ToString(verify.ExecuteScalar()));
+        }
     }
 
     [Fact]
@@ -62,13 +78,24 @@ public sealed class ExoSqliteTests : IDisposable
         var copy = Path.Combine(_folder, "copy.db");
         using (var writer = ExoSqlite.OpenReadWrite(source))
         {
-            Exec(writer, "PRAGMA wal_autocheckpoint=0; CREATE TABLE app_id (exe_path TEXT NOT NULL);");
-            Exec(writer, "INSERT INTO app_id (exe_path) VALUES ('C:\\Games\\Sample\\game.exe');");
+            using (var setup = writer.CreateCommand())
+            {
+                setup.CommandText = "PRAGMA wal_autocheckpoint=0; CREATE TABLE app_id (exe_path TEXT NOT NULL); INSERT INTO app_id (exe_path) VALUES ('C:\\Games\\Sample\\game.exe');";
+                setup.ExecuteNonQuery();
+            }
+
             using var readerHold = ExoSqlite.OpenReadOnly(source);
-            Assert.Equal("C:\\Games\\Sample\\game.exe", ScalarString(readerHold, "SELECT exe_path FROM app_id LIMIT 1;"));
-            Assert.Equal(1L, ScalarInt64(readerHold, "PRAGMA query_only;"));
-            Assert.Equal(ExoSqlite.MmapSizeBytes, ScalarInt64(readerHold, "PRAGMA mmap_size;"));
-            Assert.Throws<SqliteException>(() => Exec(readerHold, "INSERT INTO app_id (exe_path) VALUES ('nope');"));
+            using (var read = readerHold.CreateCommand())
+            {
+                read.CommandText = "SELECT exe_path FROM app_id LIMIT 1;";
+                Assert.Equal("C:\\Games\\Sample\\game.exe", Convert.ToString(read.ExecuteScalar()));
+                read.CommandText = "PRAGMA query_only;";
+                Assert.Equal(1L, Convert.ToInt64(read.ExecuteScalar()));
+                read.CommandText = "PRAGMA mmap_size;";
+                Assert.Equal(ExoSqlite.MmapSizeBytes, Convert.ToInt64(read.ExecuteScalar()));
+                read.CommandText = "INSERT INTO app_id (exe_path) VALUES ('nope');";
+                Assert.Throws<SqliteException>(() => read.ExecuteNonQuery());
+            }
 
             File.Copy(source, copy);
             Assert.True(File.Exists(source + "-wal"));
@@ -78,8 +105,11 @@ public sealed class ExoSqliteTests : IDisposable
         using var copyConn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = copy, Pooling = false }.ToString());
         copyConn.Open();
         ExoSqlite.ApplyReadOnlyPragmas(copyConn);
-        Assert.Equal("C:\\Games\\Sample\\game.exe", ScalarString(copyConn, "SELECT exe_path FROM app_id LIMIT 1;"));
-        Assert.Throws<SqliteException>(() => Exec(copyConn, "INSERT INTO app_id (exe_path) VALUES ('blocked');"));
+        using var copyCmd = copyConn.CreateCommand();
+        copyCmd.CommandText = "SELECT exe_path FROM app_id LIMIT 1;";
+        Assert.Equal("C:\\Games\\Sample\\game.exe", Convert.ToString(copyCmd.ExecuteScalar()));
+        copyCmd.CommandText = "INSERT INTO app_id (exe_path) VALUES ('blocked');";
+        Assert.Throws<SqliteException>(() => copyCmd.ExecuteNonQuery());
     }
 
     [Fact]
@@ -89,9 +119,17 @@ public sealed class ExoSqliteTests : IDisposable
         var recovered = Path.Combine(_folder, "recovered.db");
         using (var writer = ExoSqlite.OpenReadWrite(live))
         {
-            Exec(writer, "PRAGMA wal_autocheckpoint=0; CREATE TABLE items (id INTEGER PRIMARY KEY, batch TEXT NOT NULL, payload TEXT NOT NULL);");
+            using (var setup = writer.CreateCommand())
+            {
+                setup.CommandText = "PRAGMA wal_autocheckpoint=0; CREATE TABLE items (id INTEGER PRIMARY KEY, batch TEXT NOT NULL, payload TEXT NOT NULL);";
+                setup.ExecuteNonQuery();
+            }
             using var readerHold = ExoSqlite.OpenReadOnly(live);
-            _ = ScalarInt64(readerHold, "SELECT COUNT(*) FROM items;");
+            using (var holdCmd = readerHold.CreateCommand())
+            {
+                holdCmd.CommandText = "SELECT COUNT(*) FROM items;";
+                _ = Convert.ToInt64(holdCmd.ExecuteScalar());
+            }
 
             InsertBatch(writer, 1, 50, "batch-1");
             InsertBatch(writer, 51, 50, "batch-2");
@@ -110,15 +148,15 @@ public sealed class ExoSqliteTests : IDisposable
         }
 
         using var reopened = ExoSqlite.OpenReadWrite(recovered);
-        Assert.Equal("ok", ScalarString(reopened, "PRAGMA integrity_check;"));
-        Assert.Equal(100L, ScalarInt64(reopened, "SELECT COUNT(*) FROM items;"));
-        Assert.Equal(50L, ScalarInt64(reopened, "SELECT COUNT(*) FROM items WHERE batch = 'batch-1';"));
-        Assert.Equal(50L, ScalarInt64(reopened, "SELECT COUNT(*) FROM items WHERE batch = 'batch-2';"));
+        AssertIntegrityOk(reopened);
+        Assert.Equal(100L, CountAllItems(reopened));
+        Assert.Equal(50L, CountBatchItems(reopened, "batch-1"));
+        Assert.Equal(50L, CountBatchItems(reopened, "batch-2"));
 
         InsertBatch(reopened, 101, 25, "post-recovery");
-        Assert.Equal(125L, ScalarInt64(reopened, "SELECT COUNT(*) FROM items;"));
-        Exec(reopened, "PRAGMA wal_checkpoint(TRUNCATE);");
-        Assert.Equal("ok", ScalarString(reopened, "PRAGMA integrity_check;"));
+        Assert.Equal(125L, CountAllItems(reopened));
+        CheckpointTruncate(reopened);
+        AssertIntegrityOk(reopened);
     }
 
     [Fact]
@@ -127,7 +165,11 @@ public sealed class ExoSqliteTests : IDisposable
         var dbPath = Path.Combine(_folder, "crash.db");
         using (var init = ExoSqlite.OpenReadWrite(dbPath))
         {
-            Exec(init, "CREATE TABLE items (id INTEGER PRIMARY KEY, batch TEXT NOT NULL, payload TEXT NOT NULL);");
+            using (var setup = init.CreateCommand())
+            {
+                setup.CommandText = "CREATE TABLE items (id INTEGER PRIMARY KEY, batch TEXT NOT NULL, payload TEXT NOT NULL);";
+                setup.ExecuteNonQuery();
+            }
             InsertBatch(init, 1, 100, "baseline");
         }
 
@@ -196,16 +238,16 @@ public sealed class ExoSqliteTests : IDisposable
         Assert.Equal(99, process.ExitCode);
 
         using var reopened = ExoSqlite.OpenReadWrite(dbPath);
-        Assert.Equal("ok", ScalarString(reopened, "PRAGMA integrity_check;"));
-        Assert.Equal(100L, ScalarInt64(reopened, "SELECT COUNT(*) FROM items WHERE batch = 'baseline';"));
-        Assert.Equal(100L, ScalarInt64(reopened, "SELECT COUNT(*) FROM items WHERE batch = 'committed-child';"));
-        Assert.Equal(0L, ScalarInt64(reopened, "SELECT COUNT(*) FROM items WHERE batch = 'uncommitted-crash';"));
-        Assert.Equal(200L, ScalarInt64(reopened, "SELECT COUNT(*) FROM items;"));
+        AssertIntegrityOk(reopened);
+        Assert.Equal(100L, CountBatchItems(reopened, "baseline"));
+        Assert.Equal(100L, CountBatchItems(reopened, "committed-child"));
+        Assert.Equal(0L, CountBatchItems(reopened, "uncommitted-crash"));
+        Assert.Equal(200L, CountAllItems(reopened));
 
         InsertBatch(reopened, 501, 20, "after-crash");
-        Assert.Equal(220L, ScalarInt64(reopened, "SELECT COUNT(*) FROM items;"));
-        Exec(reopened, "PRAGMA wal_checkpoint(TRUNCATE);");
-        Assert.Equal("ok", ScalarString(reopened, "PRAGMA integrity_check;"));
+        Assert.Equal(220L, CountAllItems(reopened));
+        CheckpointTruncate(reopened);
+        AssertIntegrityOk(reopened);
     }
 
     private static string LocateSqliteDll()
@@ -237,24 +279,32 @@ public sealed class ExoSqliteTests : IDisposable
         tx.Commit();
     }
 
-    private static void Exec(SqliteConnection connection, string sql)
+    private static void AssertIntegrityOk(SqliteConnection connection)
     {
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = sql;
+        cmd.CommandText = "PRAGMA integrity_check;";
+        Assert.Equal("ok", Convert.ToString(cmd.ExecuteScalar()) ?? "");
+    }
+
+    private static void CheckpointTruncate(SqliteConnection connection)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
         cmd.ExecuteNonQuery();
     }
 
-    private static long ScalarInt64(SqliteConnection connection, string sql)
+    private static long CountAllItems(SqliteConnection connection)
     {
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = sql;
+        cmd.CommandText = "SELECT COUNT(*) FROM items;";
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
-    private static string ScalarString(SqliteConnection connection, string sql)
+    private static long CountBatchItems(SqliteConnection connection, string batch)
     {
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = sql;
-        return Convert.ToString(cmd.ExecuteScalar()) ?? "";
+        cmd.CommandText = "SELECT COUNT(*) FROM items WHERE batch = $batch;";
+        cmd.Parameters.AddWithValue("$batch", batch);
+        return Convert.ToInt64(cmd.ExecuteScalar());
     }
 }

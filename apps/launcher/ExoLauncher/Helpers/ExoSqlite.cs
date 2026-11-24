@@ -6,19 +6,18 @@ internal static class ExoSqlite
 {
     internal const long MmapSizeBytes = 64L * 1024 * 1024;
     internal const int CacheSizeKib = -16384;
+    internal const int SmallCacheSizeKib = -2048;
     internal const int BusyTimeoutMs = 5000;
     internal const int WalAutoCheckpointPages = 1000;
 
-    internal static readonly string ReadWritePragmasSql = $"""
-        PRAGMA journal_mode=WAL;
-        PRAGMA synchronous=NORMAL;
-        PRAGMA busy_timeout={BusyTimeoutMs};
-        PRAGMA mmap_size={MmapSizeBytes};
-        PRAGMA cache_size={CacheSizeKib};
-        PRAGMA temp_store=MEMORY;
-        PRAGMA foreign_keys=ON;
-        PRAGMA wal_autocheckpoint={WalAutoCheckpointPages};
-        """;
+    internal const string ReadWritePragmasSql =
+        "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000; PRAGMA mmap_size=67108864; PRAGMA cache_size=-16384; PRAGMA temp_store=MEMORY; PRAGMA foreign_keys=ON; PRAGMA wal_autocheckpoint=1000;";
+
+    private const string ReadOnlyPragmasDefaultSql =
+        "PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA mmap_size=67108864; PRAGMA cache_size=-16384; PRAGMA temp_store=MEMORY;";
+
+    private const string ReadOnlyPragmasSmallCacheSql =
+        "PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA mmap_size=67108864; PRAGMA cache_size=-2048; PRAGMA temp_store=MEMORY;";
 
     internal static SqliteConnection OpenReadWrite(string databasePath, int defaultTimeoutSeconds = 5)
     {
@@ -76,13 +75,18 @@ internal static class ExoSqlite
     internal static void ApplyReadOnlyPragmas(SqliteConnection connection, int cacheSizeKib = CacheSizeKib)
     {
         using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            PRAGMA query_only=ON;
-            PRAGMA trusted_schema=OFF;
-            PRAGMA mmap_size={MmapSizeBytes};
-            PRAGMA cache_size={cacheSizeKib};
-            PRAGMA temp_store=MEMORY;
-            """;
+        if (cacheSizeKib == SmallCacheSizeKib)
+        {
+            command.CommandText = ReadOnlyPragmasSmallCacheSql;
+        }
+        else if (cacheSizeKib == CacheSizeKib)
+        {
+            command.CommandText = ReadOnlyPragmasDefaultSql;
+        }
+        else
+        {
+            throw new ArgumentOutOfRangeException(nameof(cacheSizeKib));
+        }
         command.ExecuteNonQuery();
     }
 }
