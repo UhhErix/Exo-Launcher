@@ -265,6 +265,32 @@ function useExoAiJump({
   }, [active, jump, vendor, room, onStorage, onMenu])
 }
 
+function AutoTuneActionButton({ complete, running, onRun }: { complete: boolean; running: boolean; onRun: () => void }) {
+  if (complete) {
+    return (
+      <div className="exo-ai-complete-group">
+        <span className="exo-ai-complete">
+          <Check size={15} />
+          Auto Tune complete
+        </span>
+        <button type="button" className="exo-set-btn" disabled={running} onClick={onRun}>
+          Run again
+        </button>
+      </div>
+    )
+  }
+  return (
+    <button type="button" className="exo-at-run" disabled={running} onClick={onRun}>
+      {running ? <Spinner label="Optimizing PC" /> : <Bolt size={15} />}
+      {running ? 'Optimizing PC' : 'Run Auto Tune'}
+    </button>
+  )
+}
+
+function hasPendingSetupHealth(health: PcState['health']): boolean {
+  return health?.items.some(item => !item.applied && !item.current && item.key !== 'power' && item.key !== 'chipset' && !item.key.startsWith('net')) === true
+}
+
 export function ExoAiRoom({
   active,
   jump = null,
@@ -359,32 +385,7 @@ export function ExoAiRoom({
           </div>
           <div className="exo-ai-head-actions">
             <StorageChip drives={state.drives} list={compressList} onOpen={openStorage} />
-            {isComplete ? (
-              <div className="exo-ai-complete-group">
-                <span className="exo-ai-complete">
-                  <Check size={15} />
-                  Auto Tune complete
-                </span>
-                <button
-                  type="button"
-                  className="exo-set-btn"
-                  disabled={pipeline.running}
-                  onClick={() => void pipeline.startPipeline()}
-                >
-                  Run again
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="exo-at-run"
-                disabled={pipeline.running}
-                onClick={() => void pipeline.startPipeline()}
-              >
-                {pipeline.running ? <Spinner label="Optimizing PC" /> : <Bolt size={15} />}
-                {pipeline.running ? 'Optimizing PC' : 'Run Auto Tune'}
-              </button>
-            )}
+            <AutoTuneActionButton complete={isComplete} running={pipeline.running} onRun={() => void pipeline.startPipeline()} />
           </div>
         </header>
 
@@ -427,7 +428,7 @@ export function ExoAiRoom({
 
             <section className="exo-system-panel exo-ai-specs" data-pc-part="overview" aria-label="This PC">
               <ThisPc state={state} chips={null} onMenu={setMenu} />
-              {state.health?.items.some(item => !item.applied && !item.current && item.key !== 'power' && item.key !== 'chipset' && !item.key.startsWith('net')) ? (
+              {hasPendingSetupHealth(state.health) ? (
                 <div className="exo-ai-health-rows">
                   <SetupRows place="needs" active={active} health={state.health} onHealth={setHealth} />
                 </div>
