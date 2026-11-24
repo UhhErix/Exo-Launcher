@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Join-Path ([IO.Path]::GetTempPath()) ('exo-installer-fixture-' + [guid]::NewGuid().ToString('N'))
 $payload = Join-Path $root "O'Brien profile\app.incoming-123"
 [IO.Directory]::CreateDirectory((Join-Path $payload 'wwwroot')) | Out-Null
-$required = @('ExoLauncher.exe', 'ExoLauncher.dll', 'ExoLauncher.deps.json', 'ExoLauncher.runtimeconfig.json', 'wwwroot\index.html')
+$required = @('ExoLauncher.exe', 'ExoLauncher.dll', 'ExoLauncher.deps.json', 'ExoLauncher.runtimeconfig.json', 'exo_apo.dll', 'exo-apo-helper.exe', 'wwwroot\index.html')
 foreach ($relative in $required) { [IO.File]::WriteAllText((Join-Path $payload $relative), 'fixture-' + $relative) }
 & (Join-Path $PSScriptRoot 'installer\New-PayloadManifest.ps1') -PayloadRoot $payload -Version '1.2.3' | Out-Null
 . (Join-Path $PSScriptRoot 'installer\Verify-Payload.ps1') -DefinitionsOnly
@@ -28,6 +28,23 @@ MustReject { Test-ExoPayload $payload } 'missing DLL rejected'
 MustReject { Test-ExoPayload $payload } 'unexpected DLL rejected'
 [IO.File]::Delete((Join-Path $payload 'unexpected.dll'))
 $null = Test-ExoPayload $payload
+$apoFile = Join-Path $payload 'exo_apo.dll'
+$apoOriginal = [IO.File]::ReadAllText($apoFile)
+[IO.File]::WriteAllText($apoFile, $apoOriginal.Replace('fixture', 'tamperd'))
+MustReject { Test-ExoPayload $payload } 'corrupted exo_apo.dll rejected'
+[IO.File]::WriteAllText($apoFile, $apoOriginal)
+[IO.File]::Move($apoFile, (Join-Path $root 'held-apo.dll'))
+MustReject { Test-ExoPayload $payload } 'missing exo_apo.dll rejected'
+[IO.File]::Move((Join-Path $root 'held-apo.dll'), $apoFile)
+$null = Test-ExoPayload $payload
+$installScripts = @(Get-Item (Join-Path $PSScriptRoot 'ExoLauncher.nsi')) + @(Get-ChildItem (Join-Path $PSScriptRoot 'installer') -Filter '*.ps1')
+foreach ($scriptFile in $installScripts) {
+    $scriptText = [IO.File]::ReadAllText($scriptFile.FullName)
+    if ($scriptText -match 'regsvr32|MMDevices\\Audio|DisableProtectedAudioDG|exo-apo-helper\S*\s+register|--explicit-user-consent') {
+        throw "Installer script $($scriptFile.Name) must never register exo_apo.dll during install."
+    }
+}
+$checks.Add('installer scripts never register exo_apo.dll during install')
 $data = Join-Path $root "O'Brien profile"
 $profiles = @(Get-ExoProfileRoots (Join-Path $data 'app') $data)
 foreach ($profile in $profiles) {

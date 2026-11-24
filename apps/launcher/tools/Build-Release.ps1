@@ -75,6 +75,8 @@ cargo build --release --locked --bin exo-ui
 if ($LASTEXITCODE) { throw "Native UI release build failed ($LASTEXITCODE)." }
 cargo build --release --locked -p exo-voice-ml
 if ($LASTEXITCODE) { throw "Exo Voice ML release build failed ($LASTEXITCODE)." }
+cargo build --release --locked -p exo-audio-apo --lib --bin exo-apo-helper
+if ($LASTEXITCODE) { throw "Exo Audio APO release build failed ($LASTEXITCODE)." }
 Pop-Location
 dotnet publish ExoLauncher\ExoLauncher.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained -v q -nologo
 if ($LASTEXITCODE) { throw "dotnet publish failed ($LASTEXITCODE)." }
@@ -109,14 +111,15 @@ Copy-Item (Join-Path $repo 'capture\out\obs') $captureAddon -Recurse -Force
 # What every release must hold. The voice libraries are only copied once they're built, and releases have gone out
 # without them, so a missing part stops the build, and the voice libraries must also load here.
 $voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'exo_voice_ml.dll', 'onnxruntime.dll'
+$nativeAudio = $voice + 'exo_apo.dll'
 if (Test-Path (Join-Path $publish.FullName 'sherpa-onnx-c-api.dll')) { throw 'sherpa-onnx-c-api.dll must not ship; exo_voice_ml.dll replaces it.' }
-$parts = $voice + 'ExoLauncher.exe', 'exo-ui.exe', 'wwwroot\mouse\index.html', 'wwwroot\changelog.gz', 'steam-ipc\ExoLauncher.SteamIpc.exe',
+$parts = $nativeAudio + 'ExoLauncher.exe', 'exo-ui.exe', 'exo-apo-helper.exe', 'wwwroot\mouse\index.html', 'wwwroot\changelog.gz', 'steam-ipc\ExoLauncher.SteamIpc.exe',
     'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe'
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($missing) { throw "The app folder lacks $($missing -join ', ')." }
 $leakedPdbs = @(Get-ChildItem -Recurse -File -Filter '*.pdb' $publish.FullName)
 if ($leakedPdbs.Count -gt 0) { throw "Debug symbols leaked into publish: $(($leakedPdbs | ForEach-Object Name) -join ', ')" }
-$dead = $voice | Where-Object {
+$dead = $nativeAudio | Where-Object {
     $handle = [IntPtr]::Zero
     -not [Runtime.InteropServices.NativeLibrary]::TryLoad((Join-Path $publish.FullName $_), [ref]$handle)
 }
@@ -133,7 +136,9 @@ $symbolCandidates = @(
     (Join-Path $repo 'capture\out\ExoCapture.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_ui.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_shaders_service.pdb'),
-    (Join-Path $repo 'native-ui\target\release\exo_voice_ml.pdb')
+    (Join-Path $repo 'native-ui\target\release\exo_voice_ml.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_apo.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_apo_helper.pdb')
 )
 foreach ($pdb in $symbolCandidates) {
     if (Test-Path $pdb) { Copy-Item $pdb $symbols -Force }
@@ -190,6 +195,11 @@ Remove-Item $engine -Force
 dotnet run --project (Join-Path $repo 'tools\AppFiles\AppFiles.csproj') -c Release -- build --app $publish.FullName `
     --setup (Join-Path $packShell 'ExoSetup.exe') --version $version --installer $installerRevision --out $artifacts
 if ($LASTEXITCODE) { throw "Building files.json and files.pack failed ($LASTEXITCODE)." }
+$deltaManifest = Get-Content (Join-Path $artifacts 'files.json') -Raw | ConvertFrom-Json
+$deltaPaths = @($deltaManifest.files | ForEach-Object { $_.path })
+foreach ($apoAsset in 'exo_apo.dll', 'exo-apo-helper.exe') {
+    if ($deltaPaths -notcontains $apoAsset) { throw "Delta pack manifest files.json lacks $apoAsset." }
+}
 Remove-Item $packShell -Recurse -Force
 
 $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
