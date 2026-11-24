@@ -101,6 +101,27 @@ public sealed class GameSettingsTests
     }
 
     [Fact]
+    public void UnrecognizedCodConfigFileIsNeverModifiedAndReturnsFalse()
+    {
+        var folder = Path.Combine(TestDataDirectory.Root, "mw4-unknown-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "s.1.0.cod26.txt");
+        const string unknownContent = "setcl 12345 \"unknown_format_only\"\r\n";
+        System.IO.File.WriteAllText(path, unknownContent);
+        var profile = GameSettings.ModernWarfare4(new("nvidia", 5, 8)) with
+        {
+            Id = "mw4-unknown-" + Guid.NewGuid().ToString("N"),
+            File = path,
+            PlayerFiles = null,
+            Nvidia = null,
+            Processes = ["exo-no-such-game-process"],
+        };
+
+        Assert.False(GameSettings.Set(profile, null, on: true));
+        Assert.Equal(unknownContent, System.IO.File.ReadAllText(path));
+    }
+
+    [Fact]
     public void EveryDuplicateLineIsChangedAndOneThatCantTakeItIsLeftOut()
     {
         var file = File(Mw4);

@@ -144,7 +144,12 @@ internal sealed class DriverCatalog(IReadOnlyList<IDriverProvider> providers)
         IReadOnlyCollection<string> gpuMakers, string? chipsetMaker)
     {
         var list = new List<DriverItem>(makers);
-        foreach (var offer in offers.GroupBy(o => o.DeviceId ?? o.Id).Select(g => g.OrderByDescending(o => o.Version ?? "", VersionNumber.Order).First()))
+        var deduped = offers
+            .GroupBy(o => o.DeviceId ?? o.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(o => o.Version ?? "", VersionNumber.Order).First())
+            .GroupBy(OfferDedupKey, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(o => o.Version ?? "", VersionNumber.Order).First());
+        foreach (var offer in deduped)
         {
             if (offer.Hidden || Hotfix(offer.Title) || (offer.App && Bloat(offer))) continue;
             if (!Newer(offer.Installed, offer.InstalledDate, offer.Inf, offer.Version, offer.Date)) continue;
@@ -161,6 +166,18 @@ internal sealed class DriverCatalog(IReadOnlyList<IDriverProvider> providers)
         }
         return [.. list.OrderByDescending(i => i.NeedsYou).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)];
     }
+
+    private static string OfferDedupKey(WindowsUpdateDrivers.Offer offer)
+    {
+        var label = NormalizeLabel(offer.Model ?? offer.Name ?? offer.Title);
+        var maker = (offer.Maker ?? "").Trim();
+        return offer.App
+            ? $"app:{maker}:{label}"
+            : $"{offer.Class.Trim()}:{maker}:{label}:{(offer.Version ?? "").Trim()}";
+    }
+
+    private static string NormalizeLabel(string text) =>
+        string.Join(' ', text.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     /// <summary>"NVIDIA" is "NVIDIA Corporation", "AMD" is "Advanced Micro Devices, Inc.", "Intel" is "Intel Corporation".</summary>
     internal static bool SameMaker(string maker, string? other) =>

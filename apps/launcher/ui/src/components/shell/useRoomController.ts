@@ -74,8 +74,10 @@ function useBootPreload(
   useEffect(() => {
     if (!booting || settings?.onboardingComplete !== true || preloaded.current) return
     preloaded.current = new Promise((resolve) => window.setTimeout(() => {
-      setWarming(true)
-      setOpenedRooms((current) => new Set<View>([...current, 'devices', 'settings', ...(musicUsedLately() ? ['music' as const] : [])]))
+      startTransition(() => {
+        setWarming(true)
+        setOpenedRooms((current) => new Set<View>([...current, 'devices', 'settings', ...(musicUsedLately() ? ['music' as const] : [])]))
+      })
       resolve(Promise.race([
         Promise.allSettled([
           import('../DevicesRoom'),
@@ -103,7 +105,7 @@ function useIdleRooms(
     const next = () => {
       const room = order.shift()
       if (!room) return
-      setOpenedRooms((current) => (current.has(room) ? current : new Set<View>([...current, room])))
+      startTransition(() => setOpenedRooms((current) => (current.has(room) ? current : new Set<View>([...current, room]))))
       idle = requestIdleCallback(next, { timeout: 5000 })
     }
     const start = window.setTimeout(() => { idle = requestIdleCallback(next, { timeout: 5000 }) }, 2500)

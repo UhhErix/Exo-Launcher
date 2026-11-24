@@ -4,6 +4,7 @@ import { host, onHostEvent } from '../../lib/host'
 import { report } from '../../lib/report'
 import { onUiPrefs, setUiPref, uiPref } from '../../lib/uiPrefs'
 import { onPerformanceMode, performanceMode, shareDiscordHome, takeDiscordSettings, takePendingOpen, type DiscordChannel, type DiscordChannels, type DiscordDm, type DiscordHome, type DiscordVoiceMember, type OpenTarget } from '../../lib/discord'
+import { isDiscordSnowflake } from '../../lib/discordSnowflake'
 import { Chat } from './Chat'
 import { HomePage } from './HomePage'
 import { CallDock } from './CallDock'
@@ -541,7 +542,7 @@ export function DiscordClient({ active }: { active: boolean }) {
         <div className={stageClass(full)} data-columns={columnsNow(place, people)}>
           <Conversation place={place} open={open} home={home} list={list} voice={voice} active={active} landedOn={landedOn} channelName={channelName} onPick={pick}
             thread={thread} onThread={setThread} voiceChat={voiceChat} />
-          {!atHome && people ? (
+          {!atHome && people && isDiscordSnowflake(place) ? (
             <PeopleColumn>
               <MemberList guildId={place} channelId={peopleChannel(place, listOf, list, open)} />
             </PeopleColumn>

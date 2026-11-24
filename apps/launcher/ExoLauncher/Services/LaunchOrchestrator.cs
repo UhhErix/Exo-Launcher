@@ -394,7 +394,7 @@ public sealed partial class LaunchOrchestrator
                         result.ProcessId,
                         session);
                 }
-                if (FailureReportRules.IsStoreLaunchFailure(result.Ok, session.IsStopRequested, result.NeedsDependencies, result.OfflineStore is not null))
+                if (FailureReportRules.IsStoreLaunchFailure(result.Ok, session.IsStopRequested, result.NeedsDependencies, result.OfflineStore is not null, result.Message))
                     CrashReport.Submit("StoreFailure", "Launch failed: the store reported an error", game.Store.ToString());
                 AppLog.Info(
                     $"Launch result: gameId={game.Id}; ok={result.Ok}; pid={result.ProcessId?.ToString() ?? "—"}; {result.Message}");

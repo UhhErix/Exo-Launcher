@@ -130,7 +130,8 @@ internal static class SteamAccountAchievements
         catch (Exception ex) when (ex is HttpRequestException or SteamAuthException or JsonException ||
                                    ex is TaskCanceledException && !ct.IsCancellationRequested)
         {
-            AppLog.Warn("Steam achievements: the signed-in read was not used (" + ex.GetType().Name + "); the local cache answers.");
+            var reason = ex is SteamAuthException ? "sign-in required" : ex.GetType().Name;
+            AppLog.Warn("Steam achievements: the signed-in read was not used (" + reason + "); the local cache answers.");
             return null;
         }
     }

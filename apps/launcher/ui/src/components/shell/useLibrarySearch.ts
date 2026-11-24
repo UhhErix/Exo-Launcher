@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import type { Game } from '../../lib/host'
-import { filterKey, isEmptyQuery, LIBRARY_TAGS, matchesFilters, matchesQuery, parseLibraryQuery, type LibraryFilter } from '../../lib/librarySearch'
+import { computeFilterFlags, filterKey, isEmptyQuery, LIBRARY_TAGS, matchesFilters, matchesQuery, parseLibraryQuery, type LibraryFilter } from '../../lib/librarySearch'
 import type { FilterOption } from './LibraryHead'
 
 const NO_FILTERS: LibraryFilter[] = []
@@ -14,16 +14,21 @@ const FIRST_MODE = LIBRARY_TAGS.indexOf('single-player')
  * someone on a game here), then each store with a game here, then the genres and modes Steam gives the games here. A row
  * nothing here matches is left out, so no one choice empties the grid by itself.
  */
+const NO_OPTIONS: FilterOption[] = []
+
 function filterOptions(games: Game[], friendsPlaying: ReadonlySet<string> | null): FilterOption[] {
-  const has = (filter: LibraryFilter) => games.some(game => matchesFilters(game, [filter]))
-  const show: LibraryFilter[] = [{ kind: 'installed' }, { kind: 'notInstalled' }, { kind: 'update' }, { kind: 'recent' }, { kind: 'unplayed' }, { kind: 'family' }]
-  const options: FilterOption[] = show.filter(has).map(filter => ({ section: 'Show', filter }))
+  const flags = computeFilterFlags(games)
+  const options: FilterOption[] = []
+  if (flags.installed) options.push({ section: 'Show', filter: { kind: 'installed' } })
+  if (flags.notInstalled) options.push({ section: 'Show', filter: { kind: 'notInstalled' } })
+  if (flags.update) options.push({ section: 'Show', filter: { kind: 'update' } })
+  if (flags.recent) options.push({ section: 'Show', filter: { kind: 'recent' } })
+  if (flags.unplayed) options.push({ section: 'Show', filter: { kind: 'unplayed' } })
+  if (flags.family) options.push({ section: 'Show', filter: { kind: 'family' } })
   options.push({ section: 'Show', filter: { kind: 'friends' }, disabled: !friendsPlaying?.size })
-  const stores = [...new Set(games.flatMap(game => game.stores?.length ? game.stores : [game.store]))].sort()
-  if (stores.length > 1) options.push(...stores.map(store => ({ section: 'Store', filter: { kind: 'store', store } as LibraryFilter })))
-  const tags = new Set(games.flatMap(game => game.tags ?? []))
+  if (flags.stores.length > 1) options.push(...flags.stores.map(store => ({ section: 'Store', filter: { kind: 'store', store } as LibraryFilter })))
   LIBRARY_TAGS.forEach((tag, index) => {
-    if (tags.has(tag)) options.push({ section: index < FIRST_MODE ? 'Genre' : 'Mode', filter: { kind: 'tag', tag } })
+    if (flags.tags.has(tag)) options.push({ section: index < FIRST_MODE ? 'Genre' : 'Mode', filter: { kind: 'tag', tag } })
   })
   return options
 }
@@ -35,7 +40,7 @@ type Shelf = { heading: string; games: Game[]; note: string | null }
  * is every game that matches, Continue's and the folders' too, in the sort's order, in place of the room's shelves.
  * Neither is saved. `browse` is the grid without them (All games, or Hidden games).
  */
-export function useLibrarySearch(games: Game[], browse: Shelf, showHidden: boolean) {
+export function useLibrarySearch(games: Game[], browse: Shelf, showHidden: boolean, needOptions = true) {
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState<LibraryFilter[]>([])
   useEffect(() => {
@@ -58,7 +63,7 @@ export function useLibrarySearch(games: Game[], browse: Shelf, showHidden: boole
   const toggleFilter = useCallback((filter: LibraryFilter) => setFilters(current =>
     current.some(item => filterKey(item) === filterKey(filter)) ? current.filter(item => filterKey(item) !== filterKey(filter)) : [...current, filter]), [])
   const clear = useCallback(() => { setFilters([]); setQuery('') }, [])
-  const options = useMemo(() => filterOptions(games, friendsPlaying), [games, friendsPlaying])
+  const options = useMemo(() => needOptions ? filterOptions(games, friendsPlaying) : NO_OPTIONS, [needOptions, games, friendsPlaying])
   const shelf: Shelf = found ? { heading: 'Results', games: found, note: found.length ? null : 'No games match' } : browse
   return {
     query: showHidden ? '' : query,
