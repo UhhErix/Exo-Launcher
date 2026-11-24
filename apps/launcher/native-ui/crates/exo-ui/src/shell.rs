@@ -808,6 +808,13 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                     s.open_context_menu(ContextMenuTarget::NavTab(room), p.x, p.y);
                 })
                 .child(base);
+            if room == Room::Music {
+                tab = tab.on_hover_change(|s: &mut AppState, inside, _| {
+                    if inside {
+                        s.warm_music();
+                    }
+                });
+            }
             if active {
                 tab = tab.child(
                     row()
@@ -1232,6 +1239,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if s.open_dropdown.is_some() {
         root = root.children(menus::dropdown_overlay(s, budget.overlay));
     }
+    root = root.children(music::mini_volume_popover(s, budget.overlay));
     if s.context_menu.is_some() {
         root = root.children(menus::context_menu_overlay(
             s,

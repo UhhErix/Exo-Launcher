@@ -1853,6 +1853,8 @@ pub enum HostEvent {
     HidInput(crate::device_types::HidInputEvent),
     AppsChanged,
     MusicVolume(crate::events::MusicVolumeEvent),
+    MusicStatus(crate::media_types::MusicStatusEvent),
+    DiscordCallSong(Box<crate::media_types::DiscordCallSong>),
     CaptureState(crate::media_types::CaptureLiveState),
     CaptureSaved(Box<crate::events::CaptureSavedEvent>),
     CaptureReel(Box<crate::events::CaptureReelEvent>),

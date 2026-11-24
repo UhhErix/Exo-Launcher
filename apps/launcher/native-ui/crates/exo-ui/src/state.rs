@@ -1635,12 +1635,12 @@ impl AppState {
         let svc_id = svc.id();
         self.settings
             .ui_prefs
-            .insert("musicService".into(), serde_json::json!(svc_id));
+            .insert("exo.musicWebService".into(), serde_json::json!(svc_id));
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             rpc.call::<_, LauncherSettings>(
                 METHOD_SETTINGS_SET,
-                &json!({ "uiPrefs": { "musicService": svc_id } }),
+                &json!({ "uiPrefs": { "exo.musicWebService": svc_id } }),
                 move |res| {
                     if let Ok(set) = res {
                         handle.update(move |s, _| {
@@ -4960,6 +4960,9 @@ mod library_sort_and_confirm_tests {
                 artwork_data_url: Some(padded_data_url.clone()),
                 position_ms: Some(pos_ms),
                 duration_ms: Some(180_000),
+                position_age_ms: None,
+                rate: None,
+                seq: None,
                 can_play: true,
                 can_pause: true,
                 can_prev: true,
