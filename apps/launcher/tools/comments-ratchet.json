@@ -1259,7 +1259,7 @@
     "cloud/updates/src/announce.js": 33,
     "cloud/updates/src/github.js": 96,
     "cloud/updates/src/watch.js": 87,
-    "cloud/updates/src/worker.js": 91,
+    "cloud/updates/src/worker.js": 90,
     "cloud/updates/test/addon-source.test.mjs": 9,
     "cloud/updates/test/announce.test.mjs": 11,
     "cloud/updates/test/cache-mirror.test.mjs": 17,

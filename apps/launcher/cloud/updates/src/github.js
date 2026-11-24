@@ -32,7 +32,7 @@ const RELEASE_KEY = (tag) => `https://exo-updates.internal/github/launcher/${tag
 /** One copy at a time per file: a fill in progress holds _fill/<key> for at most this long. */
 const FILL_LOCK_SECONDS = 600
 /** GitHub's answers are small; anything larger is refused rather than read. */
-const LIMITS = { release: 1 << 20, sha256: 4096, whatsNew: 64 << 10, whatsNewSource: 2 << 20, changelog: 8 << 20, version: 64, filesJson: 16 << 20 }
+const LIMITS = { release: 1 << 20, sha256: 4096, sig: 4096, whatsNew: 64 << 10, whatsNewSource: 2 << 20, changelog: 8 << 20, version: 64, filesJson: 16 << 20 }
 /** The largest file this copies: an installer, or a release's files.pack. */
 export const MAX_FILE_BYTES = 1 << 30
 /** How long one request to GitHub may take before the mirror's own copy answers instead. */
@@ -45,9 +45,13 @@ export const NAMES = {
   whatsNew: 'whats-new.json',
   filesJson: 'files.json',
   filesPack: 'files.pack',
+  deltaPack: 'delta.exopack',
+  deltaSig: 'delta.exopack.sig',
+  fullPack: 'full.exopack',
+  fullSig: 'full.exopack.sig',
 }
 /** The files a client downloads whole or by range, copied into R2 by fill; the others are small and written by materialize. */
-export const LARGE = new Set(['setup', 'filesPack'])
+export const LARGE = new Set(['setup', 'filesPack', 'deltaPack', 'fullPack'])
 
 const now = () => Date.now()
 const hex = (buffer) => [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, '0')).join('')
@@ -124,6 +128,10 @@ export function assetsOf(release) {
     filesJson: pick(NAMES.filesJson),
     filesPack: pick(NAMES.filesPack),
     packSha256: pick(NAMES.filesPack + '.sha256'),
+    deltaPack: pick(NAMES.deltaPack),
+    deltaSig: pick(NAMES.deltaSig),
+    fullPack: pick(NAMES.fullPack),
+    fullSig: pick(NAMES.fullSig),
   }
 }
 
@@ -341,6 +349,16 @@ export async function materialize(release, env) {
     delta = await deltaFiles(assets, tag)
     if (delta.error) return delta
   }
+  let exoDelta = null
+  if (assets.deltaPack && assets.deltaSig) {
+    exoDelta = await exoPackFiles(assets.deltaPack, assets.deltaSig, NAMES.deltaPack, tag)
+    if (exoDelta.error) return exoDelta
+  }
+  let exoFull = null
+  if (assets.fullPack && assets.fullSig) {
+    exoFull = await exoPackFiles(assets.fullPack, assets.fullSig, NAMES.fullPack, tag)
+    if (exoFull.error) return exoFull
+  }
 
   const sha256Bytes = await putOnce(mirror, prefix + NAMES.sha256, new TextEncoder().encode(`${hash}  ${NAMES.setup}`), 'text/plain; charset=utf-8')
   const notesBytes = await putOnce(mirror, prefix + NAMES.whatsNew, notes, 'application/json; charset=utf-8')
@@ -356,7 +374,37 @@ export async function materialize(release, env) {
     files.filesJson = await check(NAMES.filesJson, listBytes)
     files.filesPack = { name: NAMES.filesPack, size: assets.filesPack.size, sha256: delta.packSha256 }
   }
+  if (exoDelta) {
+    const sigBytes = await putOnce(mirror, prefix + NAMES.deltaSig, exoDelta.sigBytes, 'text/plain; charset=utf-8')
+    if (!sigBytes) return { error: `${tag}'s ${NAMES.deltaSig} could not be written to the mirror` }
+    files.deltaSig = await check(NAMES.deltaSig, sigBytes)
+    files.deltaPack = { name: NAMES.deltaPack, size: assets.deltaPack.size, sha256: exoDelta.packSha256 }
+  }
+  if (exoFull) {
+    const sigBytes = await putOnce(mirror, prefix + NAMES.fullSig, exoFull.sigBytes, 'text/plain; charset=utf-8')
+    if (!sigBytes) return { error: `${tag}'s ${NAMES.fullSig} could not be written to the mirror` }
+    files.fullSig = await check(NAMES.fullSig, sigBytes)
+    files.fullPack = { name: NAMES.fullPack, size: assets.fullPack.size, sha256: exoFull.packSha256 }
+  }
   return { manifest: { schema: 2, app: 'launcher', tag, version, files } }
+}
+
+const ED25519_SIG_HEX = /^[0-9a-f]{128}$/i
+
+async function exoPackFiles(packAsset, sigAsset, label, tag) {
+  if (!packAsset.sha256 || !sigAsset.sha256) return { error: `${tag}'s ${label} or signature has no GitHub digest` }
+  if (packAsset.size <= 0 || packAsset.size > MAX_FILE_BYTES) return { error: `${tag}'s ${label} size is out of range` }
+  const sigBytes = await assetBytes(sigAsset, LIMITS.sig)
+  if (!sigBytes) return { error: `${tag}'s ${label}.sig could not be read` }
+  const validRaw = sigBytes.byteLength === 64
+  let validHex = false
+  if (!validRaw) {
+    try {
+      validHex = ED25519_SIG_HEX.test(text(sigBytes).trim())
+    } catch {}
+  }
+  if (!validRaw && !validHex) return { error: `${tag}'s ${label}.sig is not a valid Ed25519 signature` }
+  return { sigBytes, packSha256: packAsset.sha256 }
 }
 
 /** Backfills files.json + files.pack for an already-promoted release whose setup digest already matches the mirror. */
