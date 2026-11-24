@@ -164,6 +164,9 @@ internal static class ProcessHelper
         "start_protected_game", "start_protected_game64", "eossdk-win64-shipping",
         "crashreportclient", "crashhandler", "crashpad_handler", "unitycrashhandler32",
         "unitycrashhandler64", "unins000", "setup", "updater", "patcher", "launcher",
+        "exolauncher", "exoshaders.service", "exocapture",
+        "chrome", "chromium", "msedge", "msedgewebview2", "firefox", "brave", "opera", "vivaldi", "playwright",
+        "pwsh", "powershell", "node", "dotnet",
     };
 
     [ThreadStatic]
