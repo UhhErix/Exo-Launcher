@@ -24,32 +24,55 @@ internal static class TuneSignIn
         script.AppendLine("$ErrorActionPreference = 'Stop'");
         script.AppendLine($"$d = '{Quote(folder)}'");
         script.AppendLine($"$exo = '{Quote(exo)}'");
-        script.AppendLine("""
+        script.AppendLine(string.Create(CultureInfo.InvariantCulture, $$"""
             function Note([string]$t) { try { Set-Content -LiteralPath "$d\last-run.txt" -Value ((Get-Date -Format 's') + ' ' + $t) -Encoding UTF8 } catch { } }
             if (-not (Test-Path -LiteralPath $exo)) { Note 'skipped: Exo is not in its folder'; exit }
             if (Test-Path -LiteralPath "$d\testing.json") { Note 'skipped: a test was running'; exit }
             if (Test-Path -LiteralPath "$d\held") { Note 'skipped: held until Apply again in Exo'; exit }
-            if (Test-Path -LiteralPath "$d\applying") { Move-Item -LiteralPath "$d\applying" "$d\held" -Force; Note 'held: the last apply was cut off'; exit }
-            $since = (Get-Item -LiteralPath "$d\apply.ps1").LastWriteTime
-            $crash = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 41; StartTime = $since } -MaxEvents 1 -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath "$d\applying") {
+              $ap = (Get-Item -LiteralPath "$d\applying").LastWriteTimeUtc
+              $kp = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 41; StartTime = $ap } -MaxEvents 1 -ErrorAction SilentlyContinue
+              if (-not $kp) { $kp = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'EventLog'; Id = 6008; StartTime = $ap } -MaxEvents 1 -ErrorAction SilentlyContinue }
+              if ($kp -or ((Get-Date).ToUniversalTime() - $ap).TotalMinutes -ge 5) { Move-Item -LiteralPath "$d\applying" "$d\held" -Force; Note 'held: the last apply was cut off'; exit }
+              Remove-Item -LiteralPath "$d\applying" -Force -ErrorAction SilentlyContinue
+            }
+            $since = (Get-Item -LiteralPath "$d\apply.ps1").LastWriteTimeUtc
+            if (Test-Path -LiteralPath "$d\applied-at.txt") {
+              $raw = (Get-Content -LiteralPath "$d\applied-at.txt" -Raw -ErrorAction SilentlyContinue).Trim()
+              $parsed = [DateTimeOffset]::MinValue
+              if ([DateTimeOffset]::TryParse($raw, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) { $since = $parsed.UtcDateTime }
+            }
+            $until = $since.AddMinutes({{TunePersistence.CrashWindowMinutes}})
+            $crash = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 41; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue
             if ($crash) { Set-Content -LiteralPath "$d\held" 'power-loss'; Note 'held: the PC lost power or crashed since the apply'; exit }
-            $fatal = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WHEA-Logger'; Id = 18; StartTime = $since } -MaxEvents 1 -ErrorAction SilentlyContinue
+            $fatal = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WHEA-Logger'; Id = 18; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue
             if ($fatal) { Set-Content -LiteralPath "$d\held" 'whea-fatal'; Note 'held: Windows logged a fatal hardware error since the apply'; exit }
-            """);
+            $bad = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WER-SystemErrorReporting'; Id = 1001; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue
+            """));
+        if (nvidia is not null)
+        {
+            script.AppendLine("""
+                if (-not $bad) { $bad = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Display'; Id = 4101; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue }
+                if (-not $bad) { $bad = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'nvlddmkm'; Id = 13, 14, 153; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue }
+                """);
+        }
+        script.AppendLine("if ($bad) { Set-Content -LiteralPath \"$d\\held\" 'crash'; Note 'held: Windows logged a crash or driver reset since the apply'; exit }");
         script.AppendLine("try {");
         script.AppendLine("Add-Type -TypeDefinition @'");
         script.AppendLine(Native);
         script.AppendLine("'@");
+        script.AppendLine("function Retry([scriptblock]$fn) { for ($n = 0; $n -lt 5; $n++) { try { & $fn; return } catch { if ($n -eq 4) { throw }; Start-Sleep -Seconds 2 } } }");
         script.AppendLine("Set-Content -LiteralPath \"$d\\applying\" ''");
-        if (nvidia is not null) script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"[ExoTune]::Nvidia({nvidia[0]}, {nvidia[1]})"));
-        if (ryzen is not null) script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"[ExoTune]::Ryzen({ryzen[0]}, \"$d\\{ModuleFile}\")"));
+        if (nvidia is not null) script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  Retry {{ [ExoTune]::Nvidia({nvidia[0]}, {nvidia[1]}) }}"));
+        if (ryzen is not null) script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  Retry {{ [ExoTune]::Ryzen({ryzen[0]}, \"$d\\{ModuleFile}\") }}"));
         script.AppendLine("} catch {");
         script.AppendLine("Remove-Item -LiteralPath \"$d\\applying\" -ErrorAction SilentlyContinue");
         script.AppendLine("Note ('error: ' + ($_.Exception.Message -replace '[\\r\\n]+', ' ') + ' (language mode: ' + $ExecutionContext.SessionState.LanguageMode + ')')");
         script.AppendLine("exit");
         script.AppendLine("}");
+        script.AppendLine("Set-Content -LiteralPath \"$d\\applied-at.txt\" ([DateTime]::UtcNow.ToString('O'))");
         script.AppendLine("Start-Sleep -Seconds 120");
-        script.AppendLine("Remove-Item -LiteralPath \"$d\\applying\"");
+        script.AppendLine("Remove-Item -LiteralPath \"$d\\applying\" -Force -ErrorAction SilentlyContinue");
         if (nvidia is null) script.AppendLine("Note 'applied'");
         else script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"try {{ Note (\"applied: driver reads \" + [ExoTune]::NvidiaRead() + \" MHz (wanted {nvidia[0]})\") }} catch {{ Note ('applied, but the read failed: ' + ($_.Exception.Message -replace '[\\r\\n]+', ' ')) }}"));
         return script.ToString();
@@ -68,30 +91,31 @@ internal static class TuneSignIn
           [StructLayout(LayoutKind.Sequential)] struct Offset { public uint V; public int T, P, Mhz, Min, Max; }
           const string N = @"C:\Windows\System32\nvml.dll";
           [DllImport(N)] static extern int nvmlInit_v2();
+          [DllImport(N)] static extern int nvmlShutdown();
           [DllImport(N)] static extern int nvmlDeviceGetHandleByIndex_v2(uint i, out IntPtr d);
           [DllImport(N)] static extern int nvmlDeviceSetClockOffsets(IntPtr d, ref Offset o);
           [DllImport(N)] static extern int nvmlDeviceSetGpuLockedClocks(IntPtr d, uint min, uint max);
           [DllImport(N)] static extern int nvmlDeviceGetClockOffsets(IntPtr d, ref Offset o);
           static void Ok(int r) { if (r != 0) throw new Exception("Answered " + r); }
-          static IntPtr D;
-          static void Open() {
-            if (D != IntPtr.Zero) return;
-            Ok(nvmlInit_v2());
-            IntPtr d;
-            Ok(nvmlDeviceGetHandleByIndex_v2(0, out d));
-            D = d;
-          }
           public static void Nvidia(int mhz, int cap) {
-            Open();
-            if (cap > 0) Ok(nvmlDeviceSetGpuLockedClocks(D, 0, (uint)cap));
-            Offset o = new Offset(); o.V = 24 | (1u << 24); o.Mhz = mhz;
-            Ok(nvmlDeviceSetClockOffsets(D, ref o));
+            Ok(nvmlInit_v2());
+            try {
+              IntPtr d;
+              Ok(nvmlDeviceGetHandleByIndex_v2(0, out d));
+              if (cap > 0) Ok(nvmlDeviceSetGpuLockedClocks(d, 0, (uint)cap));
+              Offset o = new Offset(); o.V = 24 | (1u << 24); o.Mhz = mhz;
+              Ok(nvmlDeviceSetClockOffsets(d, ref o));
+            } finally { nvmlShutdown(); }
           }
           public static int NvidiaRead() {
-            Open();
-            Offset read = new Offset(); read.V = 24 | (1u << 24);
-            Ok(nvmlDeviceGetClockOffsets(D, ref read));
-            return read.Mhz;
+            Ok(nvmlInit_v2());
+            try {
+              IntPtr d;
+              Ok(nvmlDeviceGetHandleByIndex_v2(0, out d));
+              Offset read = new Offset(); read.V = 24 | (1u << 24);
+              Ok(nvmlDeviceGetClockOffsets(d, ref read));
+              return read.Mhz;
+            } finally { nvmlShutdown(); }
           }
           [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
           static extern IntPtr CreateFileW(string n, uint a, uint s, IntPtr sec, uint c, uint f, IntPtr t);
@@ -139,32 +163,46 @@ internal static class TuneSignIn
         """;
 
     /// <summary>Runs as SYSTEM at sign-in and on wake (Power-Troubleshooter 1), no window, never two at once.</summary>
-    internal static string TaskXml(string script) => $$"""
-        <?xml version="1.0" encoding="UTF-16"?>
-        <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-          <RegistrationInfo><Description>Exo's Auto tune: re-applies a value that passed its test. Undo in Exo removes this.</Description></RegistrationInfo>
-          <Triggers>
-            <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
-            <EventTrigger>
-              <Enabled>true</Enabled>
-              <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="System"&gt;&lt;Select Path="System"&gt;*[System[Provider[@Name='Microsoft-Windows-Power-Troubleshooter'] and EventID=1]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>
-            </EventTrigger>
-          </Triggers>
-          <Principals><Principal id="Exo"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
-          <Settings>
-            <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-            <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-            <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-            <ExecutionTimeLimit>PT5M</ExecutionTimeLimit>
-          </Settings>
-          <Actions Context="Exo">
-            <Exec>
-              <Command>%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe</Command>
-              <Arguments>-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{{System.Security.SecurityElement.Escape(script)}}"</Arguments>
-            </Exec>
-          </Actions>
-        </Task>
-        """;
+    internal static string TaskXml(string script, bool includeTdr = true)
+    {
+        var tdrTrigger = includeTdr
+            ? """
+
+                <EventTrigger>
+                  <Enabled>true</Enabled>
+                  <Delay>PT3S</Delay>
+                  <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="System"&gt;&lt;Select Path="System"&gt;*[System[Provider[@Name='Display'] and EventID=4101]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>
+                </EventTrigger>
+              """
+            : "";
+        return $$"""
+            <?xml version="1.0" encoding="UTF-16"?>
+            <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+              <RegistrationInfo><Description>Exo's Auto tune: re-applies a value that passed its test. Undo in Exo removes this.</Description></RegistrationInfo>
+              <Triggers>
+                <LogonTrigger><Enabled>true</Enabled><Delay>PT5S</Delay></LogonTrigger>
+                <EventTrigger>
+                  <Enabled>true</Enabled>
+                  <Delay>PT3S</Delay>
+                  <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="System"&gt;&lt;Select Path="System"&gt;*[System[Provider[@Name='Microsoft-Windows-Power-Troubleshooter'] and EventID=1]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>
+                </EventTrigger>{{tdrTrigger}}
+              </Triggers>
+              <Principals><Principal id="Exo"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
+              <Settings>
+                <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+                <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+                <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+                <ExecutionTimeLimit>PT5M</ExecutionTimeLimit>
+              </Settings>
+              <Actions Context="Exo">
+                <Exec>
+                  <Command>%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe</Command>
+                  <Arguments>-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{{System.Security.SecurityElement.Escape(script)}}"</Arguments>
+                </Exec>
+              </Actions>
+            </Task>
+            """;
+    }
 
     /// <summary>Makes the script and task match the record: what holds is re-applied, and with nothing left both go.</summary>
     internal static void Renew(TuneStore store)
@@ -178,13 +216,14 @@ internal static class TuneSignIn
             Tasks($"/Delete /TN \"{TaskName}\" /F", quiet: true);
             DeletionGate.DeleteFile(script);
             DeletionGate.DeleteFile(Path.Combine(store.Folder, ModuleFile));
+            store.ClearAppliedAt();
             return;
         }
         if (Environment.ProcessPath is not { } exo) return;
         if (ryzen is not null) File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "pawnio", ModuleFile), Path.Combine(store.Folder, ModuleFile), overwrite: true);
         File.WriteAllText(script, Script(nvidia, ryzen, store.Folder, exo), Encoding.UTF8);
         var xml = Path.Combine(store.Folder, "task.xml");
-        File.WriteAllText(xml, TaskXml(script), Encoding.Unicode);
+        File.WriteAllText(xml, TaskXml(script, includeTdr: nvidia is not null), Encoding.Unicode);
         Tasks($"/Create /TN \"{TaskName}\" /XML \"{xml}\" /F", quiet: false);
         DeletionGate.DeleteFile(xml);
     }
@@ -257,8 +296,8 @@ internal static class AutoTuneWorker
         var at = Array.FindIndex(args, arg => arg.Equals(Flag, StringComparison.OrdinalIgnoreCase));
         var action = args.ElementAtOrDefault(at + 1);
         var id = args.ElementAtOrDefault(at + 2) ?? "";
-        var mode = "faster";
-        if (action is not ("start" or "undo") || id is not ("nvidia" or "radeon" or "ryzen")) return 2;
+        var mode = args.ElementAtOrDefault(at + 3) is "cooler" ? "cooler" : "faster";
+        if (action is not ("start" or "undo" or "reapply") || id is not ("nvidia" or "radeon" or "ryzen")) return 2;
         using var one = new Mutex(false, OneWorker, out var first);
         if (!first) return 3;
         Directory.CreateDirectory(Folder);
@@ -273,6 +312,11 @@ internal static class AutoTuneWorker
                 if (action == "undo")
                 {
                     runner.Undo();
+                    return 0;
+                }
+                if (action == "reapply")
+                {
+                    runner.Reapply();
                     return 0;
                 }
                 if (!TuneEvents.Start(gpu: id != "ryzen")) throw new TuneDriverException("Exo couldn't watch Windows' error log, so it didn't test.");
@@ -394,7 +438,13 @@ internal static class AutoTuneService
         var held = Store.Held();
         var alive = WorkerAlive();
         var parts = Parts().Select(id =>
-            TuneView.Of(id, TuneRunner.Seen(id, Store.Part(id), marker, held, alive), id != "ryzen" || TuneRyzen.DriverReady(), CoreCount(id), GameRunningSignal.Running)).ToArray();
+        {
+            var seen = TuneRunner.Seen(id, Store.Part(id), marker, held, alive);
+            if (id == "radeon" && seen.Phase == "done" && seen.Applied > 0 && !alive && !GameRunningSignal.Running
+                && AmdAdlx.AutoTuneOn(seen.Mode == "faster") == false)
+                seen = seen with { Phase = "paused", Note = TunePersistence.PausedNote };
+            return TuneView.Of(id, seen, id != "ryzen" || TuneRyzen.DriverReady(), CoreCount(id), GameRunningSignal.Running);
+        }).ToArray();
         return new { ok = message is null, message, parts };
     }
 
@@ -409,8 +459,20 @@ internal static class AutoTuneService
             "start" => Start(part, "faster"),
             "stop" => Stop(),
             "undo" => Undo(part),
+            "reapply" => Reapply(part),
             _ => null,
         });
+    }
+
+    private static string? Reapply(string part)
+    {
+        if (GameRunningSignal.Running || GameRunning()) return "Close your game first.";
+        if (new PcHealth.NativePower().Battery()) return "Plug your PC in first.";
+        if (part == "ryzen" && !TuneRyzen.DriverReady()) return "PawnIO 2.1 or newer is needed first.";
+        var saved = Store.Part(part);
+        if (saved.Applied <= 0) return "Nothing saved to re-apply.";
+        var mode = saved.Mode is "cooler" ? "cooler" : "faster";
+        return Launch($"{AutoTuneWorker.Flag} reapply {part} {mode}", wait: true);
     }
 
     private static string? Start(string part, string mode)
@@ -504,10 +566,11 @@ internal static class TuneView
     {
         var minutes = Minutes(id, cores);
         var testing = state.Phase == "testing";
+        var paused = state.Phase == "paused" && state.Applied > 0;
         return new
         {
             id,
-            state = !driverReady ? "needs-driver" : testing ? "testing" : state.Applied > 0 ? "tuned" : state.Phase is "crashed" ? "crashed" : "ready",
+            state = !driverReady ? "needs-driver" : testing ? "testing" : paused ? "paused" : state.Applied > 0 ? "tuned" : state.Phase is "crashed" ? "crashed" : "ready",
             modes = false,
             mode = "faster",
             testing = testing ? state.Testing is > 0 ? "Testing " + Say(id, state.Testing.Value) : "Measuring at stock" : null,
@@ -518,7 +581,8 @@ internal static class TuneView
             note = state.Note,
             warning = !driverReady ? NeedsDriver : state.Accepted ? null : Warning(id, minutes),
             minutes,
-            canUndo = state.Applied > 0 || state.Phase == "crashed" || testing,
+            canUndo = state.Applied > 0 || state.Phase is "crashed" or "paused" || testing,
+            canReapply = paused,
             blocked = gameRunning && !testing ? "Close your game first." : null,
         };
     }

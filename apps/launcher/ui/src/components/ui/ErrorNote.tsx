@@ -19,17 +19,19 @@ export function setLogsReader(next: LogsReader): void {
  * happened and the log entries that explain it (AppLog.ReportFor), ready to paste into a report. Where is the room it
  * sits in (the nearest data-log-area: Library, Devices, PC, Discord and so on).
  */
-export function ErrorNote({ message, className, as: Tag = 'p', role = 'alert', children }: {
+export function ErrorNote({ message, detail, className, as: Tag = 'p', role = 'alert', children }: {
   message: string | null | undefined
+  detail?: string | null
   className?: string
   as?: 'p' | 'span' | 'div'
   role?: 'alert' | 'status'
   children?: ReactNode
 }) {
+  const copyText = detail ? `${message ?? ''} (${detail})`.trim() : (message ?? '')
   return (
     <Tag className={cn('exo-error-note', className)} role={role}>
       <span className="exo-error-note-text">{children ?? message}</span>
-      <CopyLogs error={message ?? ''} />
+      <CopyLogs error={copyText} />
     </Tag>
   )
 }

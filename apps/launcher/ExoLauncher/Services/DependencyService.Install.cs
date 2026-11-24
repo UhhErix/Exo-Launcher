@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using ExoLauncher.Helpers;
 
 namespace ExoLauncher.Services;
@@ -19,16 +20,19 @@ namespace ExoLauncher.Services;
 /// </summary>
 public sealed partial class DependencyService
 {
+    internal const string DeferredMessage = "Will install when your game closes";
+
     internal sealed record Progress(string Phase, string? Id, string? Name, int Index, int Count, long Bytes, long? Total, long DoneBytes, long AllBytes);
 
     /// <param name="Outcome">installed, newer (a newer one was already there), restart (installed; Windows needs a restart), failed.</param>
     internal sealed record ItemResult(string Id, string Name, string Outcome, string Message, int? Code, string? Detail = null);
-
     internal sealed record StepOutcome(int Code, string? Detail);
 
     internal sealed record ParsedLine(string Kind, string? Id, int? Code, string? Detail);
 
-    internal sealed record Result(bool Ok, string? Message, IReadOnlyList<ItemResult> Results, bool Declined = false, bool Canceled = false, object[]? Items = null);
+    internal sealed record Result(bool Ok, string? Message, IReadOnlyList<ItemResult> Results, bool Declined = false, bool Canceled = false, object[]? Items = null, bool Deferred = false);
+
+    private sealed record DeferredRequest(IReadOnlyList<string>? Ids, string Mode);
 
     private sealed class Job(CancellationTokenSource cancel)
     {
@@ -37,15 +41,25 @@ public sealed partial class DependencyService
     }
 
     private Job? _job;
+    private DeferredRequest? _deferred;
+
+    internal event Action<Progress>? DeferredProgress;
+    internal event Action<Result>? DeferredCompleted;
 
     internal bool Busy => Volatile.Read(ref _job) is not null;
 
+    internal bool HasDeferred => Volatile.Read(ref _deferred) is not null;
     private const long UnknownSize = 60L * 1024 * 1024;
 
     public object Cancel()
     {
         var job = _job;
-        if (job is null) return new { ok = false, message = "Nothing is installing." };
+        if (job is null)
+        {
+            if (Interlocked.Exchange(ref _deferred, null) is not null)
+                return new { ok = true, message = "Canceled. Nothing was installed." };
+            return new { ok = false, message = "Nothing is installing." };
+        }
         lock (job)
         {
             if (job.Installing) return new { ok = false, message = "Windows is installing them now. That can't be stopped halfway." };
@@ -54,6 +68,25 @@ public sealed partial class DependencyService
         return new { ok = true, message = "Stopping the downloads." };
     }
 
+    internal void OnGameStateChanged()
+    {
+        if (ShouldDeferForGame(_gameRunning()) || Busy) return;
+        var pending = Interlocked.Exchange(ref _deferred, null);
+        if (pending is null) return;
+        AppLog.Info($"Runtimes: game closed; starting deferred {pending.Mode} install.");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await InstallAsync(pending.Ids, pending.Mode, p => DeferredProgress?.Invoke(p), CancellationToken.None).ConfigureAwait(false);
+                DeferredCompleted?.Invoke(result);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                AppLog.Warn("Runtimes: deferred install failed: " + ex.GetType().Name + ": " + ex.Message);
+            }
+        });
+    }
     internal static IReadOnlyList<RuntimeStatus> Plan(IReadOnlyList<RuntimeStatus> statuses, string mode, IReadOnlyCollection<string>? ids,
         IReadOnlySet<string>? needed = null)
     {
@@ -69,17 +102,25 @@ public sealed partial class DependencyService
         return chosen.OrderBy(s => s.Runtime.Order).ToList();
     }
 
-    private sealed record Step(Runtime Runtime, bool Repair, string? Url, string? Sha256, string? Sha512, long Size, string Version)
+    internal sealed record Step(Runtime Runtime, bool Repair, string? Url, string? Sha256, string? Sha512, long Size, string Version)
     {
         internal string? File;
         internal string? RunSha256;
         internal string? Failure;
+        internal string? FailureDetail;
         internal long Bytes;
         internal long? Total;
     }
 
     internal async Task<Result> InstallAsync(IReadOnlyList<string>? ids, string mode, Action<Progress>? progress, CancellationToken ct)
     {
+        mode = mode is "update" or "repair" ? mode : "missing";
+        if (ShouldDeferForGame(_gameRunning()))
+        {
+            Volatile.Write(ref _deferred, new DeferredRequest(ids?.ToArray(), mode));
+            AppLog.Info($"Runtimes: deferred {mode} while a game is running.");
+            return new Result(true, DeferredMessage, [], Deferred: true);
+        }
         if (ids?.Where(id => id.StartsWith(AntiCheatPrefix, StringComparison.Ordinal)).ToList() is { Count: > 0 } antiCheat)
         {
             var repaired = new List<ItemResult>();
@@ -90,7 +131,6 @@ public sealed partial class DependencyService
             var more = await InstallAsync(rest, mode, progress, ct).ConfigureAwait(false);
             return more with { Ok = more.Ok && fine, Results = [.. repaired, .. more.Results] };
         }
-        mode = mode is "update" or "repair" ? mode : "missing";
         using var awake = KeepAwake.Hold("runtime install");
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var job = new Job(cancel);
@@ -141,10 +181,9 @@ public sealed partial class DependencyService
             var results = steps.Select(step => Outcome(step, before, after, outcomes, fatal)).ToList();
             foreach (var result in results)
             {
-                if (result.Outcome == "failed")
-                    AppLog.Warn($"Runtimes: {result.Id} failed{(result.Code is { } code ? $" ({code})" : "")}{(result.Detail is { Length: > 0 } detail ? $": {detail}" : "")}.");
-                else
-                    AppLog.Info($"Runtimes: {result.Id} {result.Outcome}{(result.Code is { } code ? $" ({code})" : "")}.");
+                var line = $"Runtimes: {result.Id} {result.Outcome}{(result.Code is { } code ? $" ({code})" : "")}{(result.Detail is { Length: > 0 } detail ? $": {detail}" : "")}.";
+                if (result.Outcome == "failed") AppLog.Warn(line);
+                else AppLog.Info(line);
             }
             return new Result(results.All(r => r.Outcome != "failed"), null, results, Items: after.Select(s => Shown(s, _needed)).ToArray());
         }
@@ -170,7 +209,7 @@ public sealed partial class DependencyService
     // Direct3D 12's line for the page's rows, when the page has asked it (never asked here: an install from a game's notice).
     private static Snapshot Shows(Snapshot snapshot) => Graphics.IsValueCreated ? WithGraphics(snapshot) : snapshot;
 
-    private static Step ToStep(RuntimeStatus status, bool repair, IReadOnlyDictionary<string, DotnetRelease> dotnet)
+    internal static Step ToStep(RuntimeStatus status, bool repair, IReadOnlyDictionary<string, DotnetRelease> dotnet)
     {
         var r = status.Runtime;
         if (r.Id.StartsWith("dotnet", StringComparison.Ordinal))
@@ -179,7 +218,11 @@ public sealed partial class DependencyService
             var arch = key[(key.IndexOf('-') + 1)..];
             if (dotnet.GetValueOrDefault(key) is { } release && release.Files.TryGetValue(arch, out var file))
                 return new Step(r, repair, file.Url, null, file.Sha512, 0, release.Version);
-            return new Step(r, repair, null, null, null, 0, status.Latest) { Failure = "Microsoft's .NET release list couldn't be read, so Exo can't check its installer. Try again." };
+            return new Step(r, repair, null, null, null, 0, status.Latest)
+            {
+                Failure = "Microsoft's .NET release list couldn't be read, so Exo can't check its installer. Try again.",
+                FailureDetail = $"Release metadata missing for {r.Id} ({status.Latest}).",
+            };
         }
         return new Step(r, repair, r.Url, r.Sha256, null, r.Size, status.Latest);
     }
@@ -217,6 +260,7 @@ public sealed partial class DependencyService
             catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or HttpRequestException or TimeoutException or UnauthorizedAccessException or OperationCanceledException)
             {
                 AppLog.Warn($"Runtimes: {r.Id} wasn't downloaded: {ex.GetType().Name}: {ex.Message}");
+                step.FailureDetail = SanitizeDetail($"{ex.GetType().Name}: {ex.Message}", stage);
                 step.Failure = ex is InvalidDataException data && data.Message.StartsWith(r.Name, StringComparison.Ordinal)
                     ? data.Message : "It couldn't be downloaded. Check the connection and try again.";
             }
@@ -259,8 +303,8 @@ public sealed partial class DependencyService
         script.AppendLine("try { [void][IO.Directory]::CreateDirectory($w, $acl) } catch { Say ('fatal ' + (B64 (ErrText $_.Exception))); throw }");
         script.AppendLine("$msi = Join-Path $env:SystemRoot 'System32\\msiexec.exe'");
         script.AppendLine("$dism = Join-Path $env:SystemRoot 'System32\\dism.exe'");
-        script.AppendLine("function Take([string]$name, [string]$hash) { $script:phase = 'take'; $to = Join-Path $w $name; $src = Join-Path $s $name; for ($try = 1; $try -le 3; $try++) { try { [IO.File]::Copy($src, $to, $true); break } catch { $u = Unwrap $_.Exception; if ($try -lt 3 -and (($u.HResult -band 0xFFFF) -eq 32)) { Start-Sleep -Milliseconds 500 } else { throw } } }; $sha = [Security.Cryptography.SHA256]::Create(); try { for ($try = 1; $try -le 3; $try++) { try { $f = [IO.File]::OpenRead($to); try { $h = [BitConverter]::ToString($sha.ComputeHash($f)).Replace('-', '') } finally { $f.Dispose() }; break } catch { $u = Unwrap $_.Exception; if ($try -lt 3 -and (($u.HResult -band 0xFFFF) -eq 32)) { Start-Sleep -Milliseconds 500 } else { throw } } } } finally { $sha.Dispose() }; if ($h -ne $hash) { throw 'changed' }; $to }");
-        script.AppendLine("function Run([string]$file, [string]$arguments) { $script:phase = 'run'; $i = New-Object Diagnostics.ProcessStartInfo($file, $arguments); $i.UseShellExecute = $false; $i.CreateNoWindow = $true; $i.WorkingDirectory = Split-Path -LiteralPath $file; $p = $null; for ($try = 1; $try -le 3; $try++) { try { $p = [Diagnostics.Process]::Start($i); break } catch { $u = Unwrap $_.Exception; if ($try -lt 3 -and ($u -is [ComponentModel.Win32Exception]) -and $u.NativeErrorCode -eq 32) { Start-Sleep -Milliseconds 500 } else { throw } } }; $p.WaitForExit(); $p.ExitCode }");
+        script.AppendLine("function Take([string]$name, [string]$hash) { $script:phase = 'take'; $src = Join-Path $s $name; if (-not [IO.File]::Exists($src)) { throw (New-Object IO.FileNotFoundException('Staged installer file not found.', $src)) }; $to = Join-Path $w $name; $sha = [Security.Cryptography.SHA256]::Create(); try { $attempt = 0; while ($true) { try { $in = [IO.File]::Open($src, 'Open', 'Read', 'Read'); try { $outF = [IO.File]::Open($to, 'CreateNew', 'Write', 'None'); try { $buf = New-Object byte[] 131072; while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) { $outF.Write($buf, 0, $n); [void]$sha.TransformBlock($buf, 0, $n, $null, 0) }; [void]$sha.TransformFinalBlock($buf, 0, 0) } finally { $outF.Dispose() } } finally { $in.Dispose() }; break } catch [IO.IOException] { if ($attempt -ge 4 -or ($_.Exception.HResult -ne -2147024864 -and $_.Exception.HResult -ne -2147024863)) { throw }; Remove-Item -LiteralPath $to -Force -ErrorAction SilentlyContinue; $attempt++; Start-Sleep -Milliseconds 300; $sha.Dispose(); $sha = [Security.Cryptography.SHA256]::Create() } }; $h = [BitConverter]::ToString($sha.Hash).Replace('-', '') } finally { $sha.Dispose() }; if ($h -ne $hash) { Remove-Item -LiteralPath $to -Force -ErrorAction SilentlyContinue; throw 'changed' }; $to }");
+        script.AppendLine("function Run([string]$file, [string]$arguments) { $script:phase = 'run'; $i = New-Object Diagnostics.ProcessStartInfo($file, $arguments); $i.UseShellExecute = $false; $i.CreateNoWindow = $true; $i.WorkingDirectory = Split-Path -LiteralPath $file; $attempt = 0; while ($true) { try { $p = [Diagnostics.Process]::Start($i); break } catch { $u = Unwrap $_.Exception; $win32 = if ($u -is [ComponentModel.Win32Exception]) { $u.NativeErrorCode } else { 0 }; if ($attempt -ge 4 -or ($win32 -ne 32 -and $win32 -ne 33)) { throw }; $attempt++; Start-Sleep -Milliseconds 300 } }; $p.WaitForExit(); $p.ExitCode }");
         script.AppendLine("function Step([string]$id, [scriptblock]$body) { Say \"start $id\"; $script:phase = 'run'; $tail = ''; try { $code = @(& $body)[-1] } catch { $u = Unwrap $_.Exception; $w32 = if ($u -is [ComponentModel.Win32Exception]) { $u.NativeErrorCode } else { $u.HResult -band 0xFFFF }; $blocked = ($w32 -in 225, 226, 1260, 1261, 4551) -or (($script:phase -eq 'run') -and (($w32 -eq 5) -or ($u -is [UnauthorizedAccessException]))); $code = if (\"$_\" -eq 'changed') { -1001 } elseif ($blocked) { -1004 } elseif ($script:phase -eq 'take') { -1003 } else { -1002 }; $tail = ' ' + (B64 (ErrText $u)) }; Say \"done $id $code$tail\" }");
         script.AppendLine("try {");
         foreach (var (runtime, repair, file, sha256) in steps)
@@ -280,24 +324,42 @@ public sealed partial class DependencyService
         return script.ToString();
     }
 
-    internal static ParsedLine? ParseResultLine(string line)
+    internal static ParsedLine? ParseResultLine(string line, string? stagePath = null)
     {
         var trimmed = line.Trim();
         if (trimmed.Length == 0) return null;
         var parts = trimmed.Split(' ', 4, StringSplitOptions.RemoveEmptyEntries);
         if (parts is ["start", var startId]) return new ParsedLine("start", startId, null, null);
-        if (parts is ["fatal", var fatalB64]) return new ParsedLine("fatal", null, null, DecodeDetail(fatalB64));
+        if (parts is ["fatal", var fatalB64]) return new ParsedLine("fatal", null, null, DecodeDetail(fatalB64, stagePath));
+        if (parts is ["err", var errId, var errB64]) return new ParsedLine("err", errId, null, DecodeDetail(errB64, stagePath));
         if (parts.Length >= 3 && parts[0] == "done" && int.TryParse(parts[2], out var code))
-            return new ParsedLine("done", parts[1], code, parts.Length == 4 ? DecodeDetail(parts[3]) : null);
+            return new ParsedLine("done", parts[1], code, parts.Length == 4 ? DecodeDetail(parts[3], stagePath) : null);
         return null;
     }
 
-    private static string? DecodeDetail(string encoded)
+    internal static void ParseResultLines(IEnumerable<string> lines, IReadOnlySet<string> knownIds, Action<string>? started,
+        Dictionary<string, int> codes, Dictionary<string, string> errors, string? stagePath = null)
+    {
+        foreach (var raw in lines)
+        {
+            var parsed = ParseResultLine(raw, stagePath);
+            if (parsed is { Kind: "start", Id: { } id } && knownIds.Contains(id)) started?.Invoke(id);
+            else if (parsed is { Kind: "err", Id: { } errId, Detail: { Length: > 0 } errDetail } && knownIds.Contains(errId))
+                errors[errId] = errDetail;
+            else if (parsed is { Kind: "done", Id: { } done, Code: { } value })
+            {
+                codes[done] = value;
+                if (parsed.Detail is { Length: > 0 } detail && knownIds.Contains(done)) errors[done] = detail;
+            }
+        }
+    }
+
+    private static string? DecodeDetail(string encoded, string? stagePath = null)
     {
         try
         {
-            var text = Encoding.UTF8.GetString(Convert.FromBase64String(encoded)).Trim();
-            return text.Length > 0 ? text : null;
+            var text = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+            return SanitizeDetail(text, stagePath);
         }
         catch (FormatException) { return null; }
     }
@@ -343,7 +405,7 @@ public sealed partial class DependencyService
             text.Clear().Append(lines[^1]);
             foreach (var line in lines[..^1])
             {
-                var parsed = ParseResultLine(line);
+                var parsed = ParseResultLine(line, stage);
                 if (parsed is { Kind: "start", Id: { } id } && steps.Any(s => s.Runtime.Id == id)) started(id);
                 else if (parsed is { Kind: "done", Id: { } done, Code: { } value }) outcomes[done] = new StepOutcome(value, parsed.Detail);
                 else if (parsed is { Kind: "fatal", Detail: { } detail }) fatal = detail;
@@ -365,10 +427,17 @@ public sealed partial class DependencyService
         return (false, outcomes, fatal);
     }
 
+    internal static ItemResult Outcome(Step step, IReadOnlyList<RuntimeStatus> before, IReadOnlyList<RuntimeStatus> after,
+        Dictionary<string, int> codes, Dictionary<string, string>? errors = null)
+    {
+        var outcomes = codes.ToDictionary(kv => kv.Key, kv => new StepOutcome(kv.Value, errors?.GetValueOrDefault(kv.Key)), StringComparer.Ordinal);
+        return Outcome(step, before, after, outcomes, errors?.GetValueOrDefault(step.Runtime.Id));
+    }
+
     private static ItemResult Outcome(Step step, IReadOnlyList<RuntimeStatus> before, IReadOnlyList<RuntimeStatus> after, Dictionary<string, StepOutcome> outcomes, string? fatal)
     {
         var r = step.Runtime;
-        if (step.Failure is { } failure) return new ItemResult(r.Id, r.Name, "failed", failure, null);
+        if (step.Failure is { } failure) return new ItemResult(r.Id, r.Name, "failed", failure, null, step.FailureDetail);
         var was = before.FirstOrDefault(s => s.Runtime.Id == r.Id)?.State;
         var now = after.FirstOrDefault(s => s.Runtime.Id == r.Id)?.State;
         if (!outcomes.TryGetValue(r.Id, out var outcome))
@@ -380,7 +449,66 @@ public sealed partial class DependencyService
             return new ItemResult(r.Id, r.Name, "installed", step.Repair && was is State.Current ? "Reinstalled." : "Installed.", code);
         if (code == 0) return new ItemResult(r.Id, r.Name, "failed", "Its installer finished, but Windows doesn't list it yet. Restart Windows, then check again.", code);
         if (now is State.Current && was is not State.Current) return new ItemResult(r.Id, r.Name, "installed", "Installed.", code);
-        return new ItemResult(r.Id, r.Name, "failed", Words(code, detail), code, detail);
+        return new ItemResult(r.Id, r.Name, "failed", DescribeFailure(code, detail), code, detail);
+    }
+
+    internal static string? SanitizeDetail(string? raw, string? stagePath = null, string? tempRoot = null, string? userProfile = null, string? userName = null)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var text = Regex.Replace(raw.Trim(), @"[\r\n\t]+", " ");
+        var temp = (tempRoot ?? Path.GetTempPath()).TrimEnd('\\', '/');
+        if (temp.Length > 3) text = text.Replace(temp, "%TEMP%", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(stagePath))
+        {
+            var stageTrim = stagePath.TrimEnd('\\', '/');
+            if (stageTrim.Length > 3) text = text.Replace(stageTrim, @"%TEMP%\ExoLauncherDependencies", StringComparison.OrdinalIgnoreCase);
+        }
+        var profile = (userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)).TrimEnd('\\', '/');
+        var user = userName ?? Environment.UserName;
+        text = AppLog.Personal(AppLog.Redact(text), user, profile);
+        text = Regex.Replace(text, @"[A-Za-z]:\\Users\\[^\\/\s""']+", "%USERPROFILE%", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        text = Regex.Replace(text, @"\s{2,}", " ").Trim();
+        if (text.Length > 300) text = text[..300];
+        return text.Length == 0 ? null : text;
+    }
+
+    internal static string DescribeFailure(int code, string? detail)
+    {
+        if (code is -1002 or -1003 && !string.IsNullOrWhiteSpace(detail))
+        {
+            if (detail.Contains("FileNotFoundException", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("DirectoryNotFoundException", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("win32=2)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("Win32 2)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("win32=3)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("Win32 3)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("cannot find the file", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("could not find", StringComparison.OrdinalIgnoreCase))
+                return "Its installer file is missing. Try again.";
+            if (detail.Contains("win32=32)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("Win32 32)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("win32=33)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("Win32 33)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("being used by another process", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("sharing violation", StringComparison.OrdinalIgnoreCase))
+                return "Blocked by a running app. Close it and try again.";
+            if (detail.Contains("UnauthorizedAccessException", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("win32=5)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("Win32 5)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("win32=225)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("Win32 225)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("win32=1260)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("Win32 1260)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("access is denied", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("access to the path", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("contains a virus", StringComparison.OrdinalIgnoreCase))
+                return "Blocked by Windows or security software.";
+            if (detail.Contains("win32=740)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("Win32 740)", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("requires elevation", StringComparison.OrdinalIgnoreCase))
+                return "Windows permission is needed to start its installer.";
+        }
+        return Words(code);
     }
 
     internal static string Words(int code, string? detail = null) => code switch

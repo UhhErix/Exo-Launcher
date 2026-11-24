@@ -74,6 +74,7 @@ public sealed class AppServices
         Settings.SyncAppVersion(AppVersion);
         // An update kept for after a game is ready again when the game ends (UpdateFlow).
         LeanSignal.Changed += Updater.GameChanged;
+        LeanSignal.Changed += Dependencies.OnGameStateChanged;
 
         // Adapters, Library, and Launcher are created on first access so the
         // shell can paint before any official-client probing runs.
@@ -330,6 +331,7 @@ public sealed class AppServices
     public void Shutdown()
     {
         try { _lifetime.Cancel(); } catch { }
+        LeanSignal.Changed -= Dependencies.OnGameStateChanged;
         Updater.Exiting();
         PlaytimeService.FlushActiveSessions();
         // Compare held as Exo closes: the EQ comes back, as it would when let go.

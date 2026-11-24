@@ -106,6 +106,8 @@ internal sealed unsafe class TuneNvidia : ITunePart, IDisposable
         _cap = max == Success && highest > 0 ? Math.Min(peak, (int)highest) : peak;
     }
 
+    internal void RestoreCap(int cap) => _cap = Math.Max(0, cap);
+
     public void Apply(int depth)
     {
         Limits.Check(depth);
