@@ -7,6 +7,7 @@ import { installProgressLabel, transferPercent } from '../lib/utils'
 import { CoverArt, HeroWash } from './CoverArt'
 import { FrameGenModRow, FrameGenRow } from './game/FrameGenRow'
 import { GamePropertiesPanel } from './game/GameProperties'
+import { GraphicsFeaturesBlock } from './game/GraphicsFeaturesBlock'
 import { GameHeader, GameShared, GameStats, GameStore } from './game/GameSections'
 import { HdrRow } from './game/HdrRow'
 import { ArtworkStrip, GameActions } from './game/ManageStrip'
@@ -231,7 +232,10 @@ export function GamePage({
         </div>
         {installedActions && (
           <div className="exo-game-workspace">
-            <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+            <div className="exo-game-workspace-col">
+              <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+              <GraphicsFeaturesBlock key={'gfx' + details.selectionKey} gameId={selected.id} gameTitle={selected.title} />
+            </div>
             <GamePropertiesPanel
               key={details.selectionKey}
               game={selected}

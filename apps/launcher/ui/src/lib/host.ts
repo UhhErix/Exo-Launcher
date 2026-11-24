@@ -571,6 +571,28 @@ export type DisplayChange = {
 
 /** A game's best settings for this PC (game.settings), by group: on when every value it sets is in place, exo when Exo set some. */
 export type GameSettingsGroup = { id: string; label: string; on: boolean; exo: boolean }
+export type GraphicsFeatureId = 'upscalers' | 'reflex' | 'rayTracing' | 'pathTracing' | 'hiddenSettings'
+export type GraphicsFeatureStatus = 'on' | 'off' | 'inGame'
+export type GraphicsFeatureRow = {
+  id: GraphicsFeatureId
+  name: string
+  state: GraphicsFeatureStatus
+  route: string
+  routeKind: 'config' | 'driver' | 'dll' | 'inGame' | 'info'
+  canToggle: boolean
+  needsAntiCheatConfirm: boolean
+  antiCheatWarning?: string | null
+  closestOption?: string | null
+  details?: string | null
+}
+export type GameGraphicsFeaturesState = {
+  ok: boolean
+  message?: string | null
+  engine?: string | null
+  running?: boolean
+  antiCheat?: string | null
+  features?: GraphicsFeatureRow[]
+}
 export type GameSettingsState = {
   ok: boolean
   message?: string | null
@@ -1488,6 +1510,7 @@ export interface LauncherSettings {
   frameGenEverywhere?: boolean
   /** This PC's graphics card gains from it: a GeForce RTX 20 or 30, a Radeon RX 5000 or newer card, an Intel Arc card. */
   frameGenEverywhereCard?: boolean
+  graphicsFeaturesBestSettings?: boolean
   /** SDR content drawn with gamma 2.2 while a screen is in HDR (default on). */
   hdrSdrGamma?: boolean
   /** DeepFilterNet 3 on the microphone in Exo's own Discord calls (default on). */
@@ -2812,6 +2835,10 @@ export const host = {
   hdrGame: (id: string, mode?: string) => rawCall<HdrGame>('hdr.game', { id, ...(mode ? { mode } : {}) }, 30_000),
   gameSettings: (id: string, change?: { group?: string; all?: boolean; on?: boolean; mode?: string; smoothMotion?: boolean }) =>
     rawCall<GameSettingsState>('game.settings', { id, ...change }, 30_000),
+  gameGraphicsFeatures: (id: string) =>
+    rawCall<GameGraphicsFeaturesState>('game.graphicsFeatures', { id }, 30_000),
+  gameGraphicsFeaturesSet: (id: string, feature: GraphicsFeatureId, on: boolean, acceptAntiCheatRisk = false) =>
+    rawCall<GameGraphicsFeaturesState>('game.graphicsFeatures.set', { id, feature, on, acceptAntiCheatRisk }, 30_000),
   /** What Keep holds, said as one word for the PC and one per game; a game with nothing to say is left out. */
   keepStatus: () => rawCall<KeepStatus>('keep.status', {}, 30_000),
   /** Every screen's refresh rate and output color; set starts a 15 s countdown that keep ends and revert (or the host, when it runs out) undoes. */

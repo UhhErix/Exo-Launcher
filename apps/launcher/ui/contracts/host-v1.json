@@ -194,6 +194,8 @@
     "game.dequeue": "{ ok: boolean; message?: string; queuedGameIds?: string[]; pausedDownloads?: PausedDownload[] }",
     "game.extras": "{ ok: boolean; achievementsUnlocked?: number | null; achievementsTotal?: number | null; driveHeat?: DriveHeat | null; message?: string }",
     "game.get": "{ ok: boolean; game?: Game; message?: string }",
+    "game.graphicsFeatures": "GameGraphicsFeaturesState",
+    "game.graphicsFeatures.set": "GameGraphicsFeaturesState",
     "game.install": "InstallResponse",
     "game.launch": "LaunchResponse",
     "game.openFolder": "{ ok: boolean; message?: string }",

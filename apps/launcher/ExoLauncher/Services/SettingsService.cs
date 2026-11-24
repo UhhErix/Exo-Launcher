@@ -180,6 +180,7 @@ public sealed class SettingsService
         loaded.PreferredGameSources = NormalizePreferredGameSources(loaded.PreferredGameSources);
         loaded.LastPlayed = CopyStrings(loaded.LastPlayed);
         loaded.UpscalerAntiCheatConsent = CopyStrings(loaded.UpscalerAntiCheatConsent);
+        loaded.GraphicsModAntiCheatConsent = CopyStrings(loaded.GraphicsModAntiCheatConsent);
         loaded.HdrGameModes = CopyStrings(loaded.HdrGameModes);
         loaded.NvidiaColor = CopyStrings(loaded.NvidiaColor);
         loaded.SdrGammaBefore = CopyStrings(loaded.SdrGammaBefore);
@@ -518,7 +519,8 @@ public sealed class SettingsService
         bool? discordNoiseSuppression = null,
         bool? discordQuietWhilePlaying = null,
         string? whatsNewSeen = null,
-        bool? frameGenEverywhere = null)
+        bool? frameGenEverywhere = null,
+        bool? graphicsFeaturesBestSettings = null)
     {
         if (whatsNewSeen is not null && (whatsNewSeen.Length is 0 or > 32 || !whatsNewSeen.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-')))
             throw new InvalidDataException("Invalid What's New version.");
@@ -550,6 +552,8 @@ public sealed class SettingsService
                 settings.HdrForGames = hdrForGames.Value;
             if (frameGenEverywhere is not null)
                 settings.FrameGenEverywhere = frameGenEverywhere.Value;
+            if (graphicsFeaturesBestSettings is not null)
+                settings.GraphicsFeaturesBestSettings = graphicsFeaturesBestSettings.Value;
             if (hdrSdrGamma is not null)
                 settings.HdrSdrGamma = hdrSdrGamma.Value;
             if (discordNoiseSuppression is not null)
@@ -668,6 +672,25 @@ public sealed class SettingsService
             else settings.UpscalerAntiCheatConsent[gameId] = antiCheat;
             if (settings.UpscalerAntiCheatConsent.Count > 1_000)
                 throw new InvalidDataException("Too many upscaler consents are saved.");
+        });
+    }
+
+    public string? GraphicsModConsent(string gameId)
+    {
+        lock (_stateGate)
+            return _current.GraphicsModAntiCheatConsent.TryGetValue(gameId, out var antiCheat) ? antiCheat : null;
+    }
+
+    public void SetGraphicsModConsent(string gameId, string? antiCheat)
+    {
+        if (string.IsNullOrWhiteSpace(gameId) || gameId.Length > 512 || gameId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            if (antiCheat is null) settings.GraphicsModAntiCheatConsent.Remove(gameId);
+            else settings.GraphicsModAntiCheatConsent[gameId] = antiCheat;
+            if (settings.GraphicsModAntiCheatConsent.Count > 1_000)
+                throw new InvalidDataException("Too many graphics mod consents are saved.");
         });
     }
 
@@ -1010,6 +1033,8 @@ public sealed class SettingsService
         Recent = source.Recent.ToList(),
         LastPlayed = CopyStrings(source.LastPlayed),
         UpscalerAntiCheatConsent = CopyStrings(source.UpscalerAntiCheatConsent),
+        GraphicsModAntiCheatConsent = CopyStrings(source.GraphicsModAntiCheatConsent),
+        GraphicsFeaturesBestSettings = source.GraphicsFeaturesBestSettings,
         HdrGameModes = CopyStrings(source.HdrGameModes),
         NvidiaColor = CopyStrings(source.NvidiaColor),
         NvidiaGsync = source.NvidiaGsync,
