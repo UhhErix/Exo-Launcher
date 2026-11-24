@@ -276,52 +276,59 @@ export async function run(t) {
     return listed.filter(game => store.get(game.id) === 'riot').map(game => `${game.title} is offered Prepare`)
   })
 
-  await run.check('library', 'frame-gen', "a game's Frame generation line is a reading of what the host found, with nothing to set (Exo decides, Best settings holds its one switch): what runs in the game, Built into the game where the game's own is the one, another mod by name, none where hidden", async (c) => {
+  await run.check('library', 'frame-gen', "a game's Frame generation line is always visible, matches game.frameGen's word, and shows its route menu when routes exist", async (c) => {
     const games = (await t.host('library.get'))?.games?.filter(g => g.installed) ?? []
-    let found = null
-    let hidden = null
+    let active = null
+    let unavailable = null
     for (const game of games) {
-      const state = await t.host('dlss.frameGen', { id: game.id })
-      if (state?.ok && state.state !== 'hidden') found ??= { game, state }
-      else if (state?.ok) hidden ??= { game, state }
-      if (found && hidden) break
+      const state = await t.host('game.frameGen', { id: game.id })
+      if (!state?.ok) continue
+      if (state.routes?.length && state.state !== 'unavailable') active ??= { game, state }
+      else unavailable ??= { game, state }
+      if (active && unavailable) break
     }
-    if (!found) c.skip('no game here gets a Frame generation line on this graphics card')
-    const { game, state } = found
-    c.evidence.game = game.title
-    c.evidence.state = state.state
-    const line = () => {
+    if (!active && !unavailable) c.skip('no installed game answered game.frameGen')
+    const primary = active ?? unavailable
+    c.evidence.game = primary.game.title
+    c.evidence.state = primary.state.state
+    const readLine = () => {
       const s = document.querySelector('.exo-game-room section.exo-game-line[aria-label="Frame generation"]')
-      return s && { word: s.querySelector('.exo-game-line-word')?.textContent.trim() ?? '', controls: s.querySelectorAll('button, [role="switch"]').length, visible: s.checkVisibility() }
+      return s && {
+        word: s.querySelector('.exo-game-line-word')?.textContent.trim() ?? '',
+        controls: s.querySelectorAll('button, [role="switch"]').length,
+        hasRouteMenu: !!s.querySelector('button[aria-label="Frame generation route"]'),
+        visible: s.checkVisibility(),
+      }
     }
+    const waitSettled = () => t.shell.waitFor(() => {
+      const s = document.querySelector('.exo-game-room section.exo-game-line[aria-label="Frame generation"]')
+      const word = s?.querySelector('.exo-game-line-word')?.textContent?.trim() ?? ''
+      return s && word && word !== 'Checking' ? true : null
+    }, { timeoutMs: 8000 })
     const failures = []
-    if (!await openByName(t, game.title)) { await k.closeAll(); return [`Ctrl+K did not open ${game.title}`] }
-    const shown = await t.shell.waitFor(() => document.querySelector('.exo-game-room section.exo-game-line[aria-label="Frame generation"]') ? true : null, { timeoutMs: 8000 }) && await t.shell.eval(`(${line})()`)
+    if (!await openByName(t, primary.game.title)) { await k.closeAll(); return [`Ctrl+K did not open ${primary.game.title}`] }
+    const shown = await waitSettled() && await t.shell.eval(`(${readLine})()`)
     c.evidence.line = shown
-    if (!shown) failures.push(`${game.title}'s sheet has no Frame generation line`)
+    if (!shown) failures.push(`${primary.game.title}'s sheet has no Frame generation line`)
     else {
       await sleep(400)
       await c.shot('frame-gen', t.shell)
       failures.push(...await k.look(c, 'frame-gen'))
       if (!shown.visible) failures.push('the Frame generation line is not visible')
-      if (shown.controls) failures.push(`the Frame generation line has ${shown.controls} controls: it is a reading`)
-      // FrameGenRow.tsx › modWord, what the line says for each state.
-      const want = state.state === 'native' ? 'Built into the game' : state.state === 'mod' ? state.mod ?? 'A mod'
-        : state.state === 'broken' ? 'A game update broke it'
-        : state.state === 'note' || state.note ? state.note ?? ''
-        : state.session === 'failed' ? 'The last session had no frame generation'
-        : state.session === 'off' ? 'Turn on DLSS Frame Generation in the game'
-        : state.state === 'on' ? state.version ?? '' : 'Off'
-      if (shown.word !== want) failures.push(`it reads "${shown.word}" for ${state.state}, not "${want}"`)
+      const wantWord = primary.state.word ?? ''
+      if (wantWord && shown.word !== wantWord) failures.push(`it reads "${shown.word}" for ${primary.state.state}, not "${wantWord}"`)
+      if (primary.state.routes?.length && !shown.hasRouteMenu) failures.push('the Frame generation line is missing its route menu trigger')
     }
     await k.closeAll()
-    if (hidden) {
-      c.evidence.hidden = hidden.game.title
-      if (!await openByName(t, hidden.game.title)) failures.push(`Ctrl+K did not open ${hidden.game.title}`)
+    if (active && unavailable) {
+      c.evidence.secondary = unavailable.game.title
+      if (!await openByName(t, unavailable.game.title)) failures.push(`Ctrl+K did not open ${unavailable.game.title}`)
       else {
-        await sleep(1500)
-        if (await t.shell.eval(`!!document.querySelector('.exo-game-room section.exo-game-line[aria-label="Frame generation"]')`)) {
-          failures.push(`${hidden.game.title} shows Frame generation where the host has none`)
+        const secondaryShown = await waitSettled() && await t.shell.eval(`(${readLine})()`)
+        c.evidence.secondaryLine = secondaryShown
+        if (!secondaryShown || !secondaryShown.visible) failures.push(`${unavailable.game.title} is missing its always-visible Frame generation line`)
+        else if (unavailable.state.word && secondaryShown.word !== unavailable.state.word) {
+          failures.push(`${unavailable.game.title} reads "${secondaryShown.word}", not "${unavailable.state.word}"`)
         }
       }
       await k.closeAll()

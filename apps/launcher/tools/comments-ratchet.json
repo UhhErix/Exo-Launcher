@@ -1829,7 +1829,7 @@
     "tools/e2e/suites/devices.mjs": 9,
     "tools/e2e/suites/discord.mjs": 31,
     "tools/e2e/suites/layout.mjs": 28,
-    "tools/e2e/suites/library.mjs": 35,
+    "tools/e2e/suites/library.mjs": 34,
     "tools/e2e/suites/motion.mjs": 5,
     "tools/e2e/suites/music.mjs": 5,
     "tools/e2e/suites/perf.mjs": 6,
