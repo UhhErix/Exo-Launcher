@@ -826,4 +826,61 @@ public sealed class PowerPlanTests : IDisposable
         Assert.DoesNotContain(laptop, v => v.Name == "Allow wake timers");
         Assert.DoesNotContain(laptop, v => v.Name == "Sleep after");
     }
+
+    [Fact]
+    public async Task ConcurrentSavesAndReadsSerializeCleanlyWithoutLeavingTempFiles()
+    {
+        var windows = new FakePower(PowerPlan.Balanced);
+        var plan = new PowerPlan(windows, StatePath, _ => { });
+        Assert.Null(plan.Apply(ThisPc));
+
+        var tasks = Enumerable.Range(0, 16).Select(i => Task.Run(() =>
+        {
+            for (var n = 0; n < 8; n++)
+            {
+                if ((i + n) % 2 == 0)
+                {
+                    var state = plan.Read();
+                    Assert.NotNull(state);
+                }
+                else
+                {
+                    Assert.Null(plan.Apply(ThisPc));
+                }
+            }
+        }));
+        await Task.WhenAll(tasks);
+
+        var finalState = plan.Read();
+        Assert.NotNull(finalState);
+        Assert.True(finalState!.Exo);
+        Assert.True(finalState.CanUndo);
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
+    }
+
+    [Fact]
+    public async Task TransientExternalFileLockRetriesAndPreservesState()
+    {
+        var windows = new FakePower(PowerPlan.Balanced);
+        var plan = new PowerPlan(windows, StatePath, _ => { });
+        Assert.Null(plan.Apply(ThisPc));
+
+        var locked = new FileStream(StatePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var ct = TestContext.Current.CancellationToken;
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(70, ct);
+            locked.Dispose();
+        }, ct);
+
+        var result = plan.Apply(ThisPc);
+        await release;
+
+        Assert.Null(result);
+        var after = plan.Read();
+        Assert.NotNull(after);
+        Assert.True(after!.Exo);
+        Assert.True(after.CanUndo);
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
+    }
 }

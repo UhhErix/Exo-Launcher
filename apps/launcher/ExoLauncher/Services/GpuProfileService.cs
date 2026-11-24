@@ -181,7 +181,7 @@ internal static class GpuProfileService
         var backup = LoadBackup();
         var variant = NvidiaVariant(screen);
         var (ok, message, writes, values, skipped, free) = Nvidia(variant);
-        var rebar = PcHealth.MainGpu()?.UploadHeap;
+        var rebar = PcHealth.TryMainGpu(TimeSpan.FromSeconds(4))?.UploadHeap;
         if (!ok) return new State(false, message, vendor, AdapterName(vendor), Series(), screen, "none", backup is not null, false, [], Rebar: rebar);
         // The ids this driver does not list, and the ones the record says it refused at a write for the driver installed now.
         var notTaken = skipped.Concat(RefusedForThisDriver().Where(id => writes.ContainsKey(id))).Distinct().Order().ToList();
