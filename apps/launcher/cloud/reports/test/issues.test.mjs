@@ -15,8 +15,8 @@ import { DatabaseSync } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import worker from '../src/worker.js'
 import { limiters } from './limiters.mjs'
-import { fingerprintOf, legacyFingerprintOf, normalizeFrame, signatureOf } from '../src/fingerprint.js'
-import { DAILY, compareVersions, dueNow, safeTitle, withStats } from '../src/issues.js'
+import { VERSION_SKEW, fingerprintOf, isVersionSkew, legacyFingerprintOf, normalizeFrame, signatureOf } from '../src/fingerprint.js'
+import { DAILY, compareVersions, dueNow, kindOf, safeTitle, withStats } from '../src/issues.js'
 import { parseUserReport } from '../src/user-report.js'
 
 const MIGRATIONS = ['0002_telemetry.sql', '0003_crash_index.sql', '0004_crash_days.sql', '0005_alert_days.sql', '0006_github_issues.sql']
@@ -222,6 +222,55 @@ test('a report for an existing legacy plumbing-frame group attaches to it and do
   assert.equal(groups(db)[0].fingerprint, legacy)
   assert.equal(groups(db)[0].count, 2)
   assert.equal(groups(db)[0].newest_version, '3.30.3')
+})
+
+test('HostCallFailed Unknown method reports are classified as version-skew and skipped from alarms and GitHub issues', async () => {
+  const skewReport = {
+    ...crash,
+    errorType: 'HostCallFailed',
+    excerpt: [
+      'Exo Launcher 3.30.3 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC',
+      'Error (rpc): Unknown method: app.info',
+      '',
+      "Exo's log (1 entry):",
+      '[2026-11-24T09:59:58.001Z] WARN: RPC app.info: Unknown method: app.info',
+    ].join('\n'),
+  }
+  const realHostBug = {
+    ...crash,
+    errorType: 'HostCallFailed',
+    excerpt: [
+      'Exo Launcher 3.30.3 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC',
+      'Error (rpc): library.get: NullReferenceException',
+    ].join('\n'),
+  }
+
+  assert.equal(isVersionSkew(skewReport), true)
+  assert.equal(isVersionSkew(realHostBug), false)
+  assert.equal(kindOf(skewReport.errorType, skewReport), VERSION_SKEW)
+  assert.equal(kindOf(realHostBug.errorType, realHostBug), 'crash')
+
+  const withGh = makeEnv()
+  assert.equal((await send(withGh.env, skewReport)).status, 202)
+  assert.equal((await send(withGh.env, skewReport)).status, 202)
+  await worker.scheduled({}, withGh.env)
+  assert.equal(withGh.github.issues.size, 0)
+  assert.equal(withGh.posts.length, 0)
+  const skewGroups = groups(withGh.db)
+  assert.equal(skewGroups.length, 1)
+  assert.equal(skewGroups[0].error_type, VERSION_SKEW)
+  assert.equal(skewGroups[0].count, 2)
+  assert.equal(skewGroups[0].pending, 0)
+  assert.equal(skewGroups[0].issue_number, null)
+  const dayRows = withGh.db.sql.prepare('SELECT error_type, count FROM crash_days').all()
+  assert.deepEqual(dayRows.map((r) => [r.error_type, r.count]), [[VERSION_SKEW, 2]])
+
+  const withoutGh = makeEnv({ token: null })
+  assert.equal((await send(withoutGh.env, skewReport)).status, 202)
+  assert.equal(withoutGh.posts.length, 0)
+  assert.equal((await send(withoutGh.env, realHostBug)).status, 202)
+  assert.equal(withoutGh.posts.length, 1)
+  assert.match(withoutGh.posts[0].content, /HostCallFailed/)
 })
 
 // ---- Create versus update ----

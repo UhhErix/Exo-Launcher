@@ -1,4 +1,5 @@
 import { utcDay } from './telemetry-store.js'
+import { groupTypeOf } from './fingerprint.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 export const ALERT_AT = [1, 10, 100, 1000]
@@ -9,12 +10,13 @@ const DIGEST_ROWS = 30
 export const ALERTS_PER_DAY = 50
 
 export async function countReport(db, report, key, day) {
+  const errorType = groupTypeOf(report)
   await db.prepare(
     'INSERT INTO crash_days (app, version, error_type, day, count, sample_key) VALUES (?, ?, ?, ?, 1, ?) '
     + 'ON CONFLICT (app, version, error_type, day) DO UPDATE SET count = count + 1, sample_key = excluded.sample_key',
-  ).bind(report.app, report.version, report.errorType, day, key).run()
+  ).bind(report.app, report.version, errorType, day, key).run()
   const row = await db.prepare('SELECT SUM(count) AS total FROM crash_days WHERE app = ? AND version = ? AND error_type = ?')
-    .bind(report.app, report.version, report.errorType).first()
+    .bind(report.app, report.version, errorType).first()
   return Number(row?.total ?? 0)
 }
 

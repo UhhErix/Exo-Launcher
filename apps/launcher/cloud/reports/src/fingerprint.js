@@ -1,4 +1,5 @@
 export const TOP_FRAMES = 3
+export const VERSION_SKEW = 'version-skew'
 
 const FRAME = /^\s*at\s+(.+?)\s*$/
 const ERROR_LINE = /^Error \([^)]*\):\s*(.*)$/
@@ -76,16 +77,34 @@ export function legacySignatureOf(report) {
   return { frames, message: normalizeMessage(errorLine) }
 }
 
-async function hashSignature(report, { frames, message }) {
-  const basis = [report.app, report.errorType, ...(frames.length ? frames : [message])].join('\n')
+export function errorMessageOf(report) {
+  const lines = String(report?.excerpt ?? '').split('\n')
+  const errorLine = lines.map((line) => ERROR_LINE.exec(line)?.[1]).find(Boolean)
+    ?? lines.find((line) => report?.errorType && line.includes(report.errorType))
+    ?? ''
+  return errorLine.trim()
+}
+
+export function isVersionSkew(report) {
+  if (report?.errorType !== 'HostCallFailed') return false
+  const message = errorMessageOf(report)
+  return /^Unknown method:/i.test(message) || /^HostCallFailed:\s*Unknown method:/i.test(message)
+}
+
+export function groupTypeOf(report) {
+  return isVersionSkew(report) ? VERSION_SKEW : report.errorType
+}
+
+async function hashSignature(app, errorType, { frames, message }) {
+  const basis = [app, errorType, ...(frames.length ? frames : [message])].join('\n')
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(basis)))
   return [...digest.slice(0, 8)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 export async function fingerprintOf(report) {
-  return hashSignature(report, signatureOf(report))
+  return hashSignature(report.app, groupTypeOf(report), signatureOf(report))
 }
 
 export async function legacyFingerprintOf(report) {
-  return hashSignature(report, legacySignatureOf(report))
+  return hashSignature(report.app, report.errorType, legacySignatureOf(report))
 }

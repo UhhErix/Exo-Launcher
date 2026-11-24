@@ -1,5 +1,5 @@
 import { GitHubError, gitHubOf } from './github.js'
-import { fingerprintOf, legacyFingerprintOf, signatureOf } from './fingerprint.js'
+import { VERSION_SKEW, fingerprintOf, groupTypeOf, isVersionSkew, legacyFingerprintOf, signatureOf } from './fingerprint.js'
 import { utcDay } from './telemetry-store.js'
 import { trimExcerpt } from './triage.js'
 
@@ -38,9 +38,12 @@ export async function claim(db, day, kind) {
 }
 
 export async function recordGroup(db, report, key, day) {
+  const versionSkew = isVersionSkew(report)
+  const errorType = groupTypeOf(report)
+  const pending = versionSkew ? 0 : 1
   let fingerprint = await fingerprintOf(report)
   let before = await groupOf(db, fingerprint)
-  if (!before) {
+  if (!before && !versionSkew) {
     const legacy = await legacyFingerprintOf(report)
     if (legacy !== fingerprint) {
       const existing = await groupOf(db, legacy)
@@ -52,9 +55,9 @@ export async function recordGroup(db, report, key, day) {
   }
   if (!before) {
     const inserted = await db.prepare(
-      'INSERT INTO crash_groups (fingerprint, app, error_type, count, versions, newest_version, first_day, last_day, os_build, sample_key) '
-      + 'VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?) ON CONFLICT (fingerprint) DO NOTHING',
-    ).bind(fingerprint, report.app, report.errorType, JSON.stringify([report.version]), report.version, day, day, report.osBuild, key).run()
+      'INSERT INTO crash_groups (fingerprint, app, error_type, count, versions, newest_version, first_day, last_day, os_build, sample_key, pending) '
+      + 'VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (fingerprint) DO NOTHING',
+    ).bind(fingerprint, report.app, errorType, JSON.stringify([report.version]), report.version, day, day, report.osBuild, key, pending).run()
     if (inserted.meta?.changes === 1) return { group: await groupOf(db, fingerprint), newVersion: true }
     before = await groupOf(db, fingerprint)
   }
@@ -66,16 +69,17 @@ export async function recordGroup(db, report, key, day) {
   }
   const newest = compareVersions(report.version, before.newest_version) > 0 ? report.version : before.newest_version
   await db.prepare(
-    'UPDATE crash_groups SET count = count + 1, versions = ?, newest_version = ?, last_day = ?, pending = 1, '
+    'UPDATE crash_groups SET count = count + 1, versions = ?, newest_version = ?, last_day = ?, pending = ?, '
     + 'sample_key = CASE WHEN issue_number IS NULL THEN ? ELSE sample_key END, os_build = CASE WHEN issue_number IS NULL THEN ? ELSE os_build END '
     + 'WHERE fingerprint = ?',
-  ).bind(JSON.stringify(versions.slice(-VERSIONS_KEPT)), newest, day, key, report.osBuild, fingerprint).run()
+  ).bind(JSON.stringify(versions.slice(-VERSIONS_KEPT)), newest, day, pending, key, report.osBuild, fingerprint).run()
   return { group: await groupOf(db, fingerprint), newVersion }
 }
 
 const groupOf = (db, fingerprint) => db.prepare('SELECT * FROM crash_groups WHERE fingerprint = ?').bind(fingerprint).first()
 
 export function dueNow(group, newVersion) {
+  if (kindOf(group.error_type) === VERSION_SKEW) return false
   if (group.issue_number === null || newVersion) return true
   if (group.count <= THRESHOLDS[0] || reached(group.count) > group.noted_threshold) return true
   return group.count >= group.synced_count * 1.25
@@ -107,7 +111,8 @@ export function withStats(body, group) {
   return marked.test(body ?? '') ? body.replace(marked, block) : `${block}\n\n${body ?? ''}`
 }
 
-export function kindOf(errorType) {
+export function kindOf(errorType, report = null) {
+  if (errorType === VERSION_SKEW || (report && isVersionSkew(report))) return VERSION_SKEW
   return /^(Hang|Freeze)/.test(errorType) ? 'freeze' : 'crash'
 }
 
@@ -163,6 +168,7 @@ async function sampleOf(env, group) {
 }
 
 export async function syncGroup(env, gh, group, day, sample = null) {
+  if (kindOf(group.error_type) === VERSION_SKEW) return 'skipped'
   const db = env.TELEMETRY
   if (group.issue_number === null) return openGroup(env, gh, group, day, sample)
   if (group.issue_number === FILING) return 'capped'
