@@ -106,16 +106,22 @@ fn folder_art_el(
     art.child(flap)
 }
 
-pub fn folder_card(folder: &FolderView, folder_index: usize, s: &AppState, scale: f32) -> El {
+pub fn folder_card(
+    folder: &FolderView,
+    folder_index: usize,
+    card_w: f32,
+    card_h: f32,
+    s: &AppState,
+    scale: f32,
+) -> El {
     let tile_id = folder_tile_id(&folder.id);
     let hover_key = format!("tile-{tile_id}");
     let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str())
         || s.lib.folder_drop_target.as_deref() == Some(folder.id.as_str());
     let is_dragging = s.lib.dragging_folder_id.as_deref() == Some(folder.id.as_str());
-    let focused = s.lib.grid_focused_id.as_deref() == Some(tile_id.as_str());
     let drop_into_active = s.lib.folder_drop_target.as_deref() == Some(folder.id.as_str());
 
-    let art = folder_art_el(folder, s, scale, hovered, ALL_CARD_W, ALL_CARD_H);
+    let art = folder_art_el(folder, s, scale, hovered, card_w, card_h);
 
     let hover_key_cb = hover_key.clone();
     let fid_open = folder.id.clone();
@@ -147,7 +153,7 @@ pub fn folder_card(folder: &FolderView, folder_index: usize, s: &AppState, scale
         .focusable(true)
         .hit()
         .press_scale(PRESS_SCALE)
-        .size(ALL_CARD_W, ALL_CARD_H)
+        .size(card_w, card_h)
         .radius(RADIUS_CARD)
         .continuous_corners()
         .scale(if is_dragging { 0.94 } else { 1.0 })
@@ -179,7 +185,7 @@ pub fn folder_card(folder: &FolderView, folder_index: usize, s: &AppState, scale
                 (!s.lib.selecting).then(|| LibraryDragPayload::Folder(fid_drag.clone()))
             })
             .drag_preview(move |_: &AppState| {
-                el().size(ALL_CARD_W * 0.72, ALL_CARD_H * 0.72)
+                el().size(card_w * 0.72, card_h * 0.72)
                     .radius(RADIUS_CARD)
                     .clip_rounded(RADIUS_CARD)
                     .fill(folder_color_mix_black(preview_color, 0.55))
@@ -245,12 +251,9 @@ pub fn folder_card(folder: &FolderView, folder_index: usize, s: &AppState, scale
                         {
                             s.lib.folder_reorder.start(from_idx);
                         }
-                        s.lib.folder_reorder.hover_point(
-                            folder_index,
-                            ev,
-                            [ALL_CARD_W, ALL_CARD_H],
-                            false,
-                        );
+                        s.lib
+                            .folder_reorder
+                            .hover_point(folder_index, ev, [card_w, card_h], false);
                     }
                     LibraryDragPayload::Game(_) => {
                         s.lib.folder_drop_target = Some(fid_move_folder.clone());
@@ -264,7 +267,7 @@ pub fn folder_card(folder: &FolderView, folder_index: usize, s: &AppState, scale
                 s.lib.folder_drop_target = None;
                 match payload {
                     LibraryDragPayload::Folder(from) => {
-                        let after = tx.drop_point().is_some_and(|p| p.x >= ALL_CARD_W * 0.5);
+                        let after = tx.drop_point().is_some_and(|p| p.x >= card_w * 0.5);
                         s.lib.folder_reorder.cancel();
                         let next =
                             move_folder(&s.settings.library_folders, from, &fid_drop_folder, after);
@@ -286,9 +289,8 @@ pub fn folder_card(folder: &FolderView, folder_index: usize, s: &AppState, scale
             folder_color_swatch(folder.color, 0.95)
         };
         card = card.outline(2.0, 2.0, accent);
-    } else if focused {
-        card = card.outline(2.0, 3.0, FG);
     }
+    card = card.focus_ring(2.0, 3.0, FG);
 
     if let Some(bar) = s.lib.folder_reorder.indicator(folder_index, FG) {
         card = card.child(bar);
