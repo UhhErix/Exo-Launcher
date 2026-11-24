@@ -1119,7 +1119,7 @@ public sealed class SettingsService
         HdrSdrGamma = source.HdrSdrGamma,
         DiscordNoiseSuppression = source.DiscordNoiseSuppression,
         DiscordNoiseSuppressionKind = source.DiscordNoiseSuppressionKind,
-        DiscordVoiceTier = DiscordClient.Voice.VoiceTierPolicy.NormalizeTier(source.DiscordVoiceTier),
+        DiscordVoiceTier = source.DiscordVoiceTier,
         DiscordVoiceIsolation = source.DiscordVoiceIsolation,
         DiscordLoopbackEchoCancellation = source.DiscordLoopbackEchoCancellation,
         DiscordOthersNoiseSuppression = source.DiscordOthersNoiseSuppression,
