@@ -184,7 +184,7 @@ export async function runNativePass({
     stdio: 'ignore',
     windowsHide: true,
   })
-  await sleep(2500)
+  await sleep(3500)
 
   const results = {}
   try {

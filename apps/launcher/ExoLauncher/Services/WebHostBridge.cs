@@ -788,7 +788,7 @@ public sealed partial class WebHostBridge
                 "capture.send" => await CaptureSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "capture.saveImage" => App.MainAppWindow is { } imageWindow
                     ? await Task.Run(() => imageWindow.CaptureSaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(false) : new { ok = false },
-                "friends.badge" => App.MainAppWindow?.FriendsBadge() ?? new { count = 0 },
+                "friends.badge" => App.MainAppWindow?.FriendsBadge() ?? new { count = DiscordClient.DiscordSession.CurrentBadge },
                 "deps.list" => await Task.Run(DepsList).ConfigureAwait(false),
                 "runtimes.list" => await RuntimesListAsync(requestToken).ConfigureAwait(false),
                 "runtimes.install" => await RuntimesInstallAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
@@ -3603,6 +3603,8 @@ public sealed partial class WebHostBridge
 
     /// <summary>capture.state and capture.saved: from Exo Capture, through MainWindow.Capture.</summary>
     internal void PostCaptureEvent(string name, object? data) => PostEvent(name, data);
+
+    internal void PostFriendsBadge(int count) => PostEvent("friends.badge", new { count });
 
     /// <summary>components.failed: one of Exo's parts (<see cref="ExoComponents"/>) failed to fetch twice in a row.</summary>
     private void OnComponentFailed(string feature) => PostEvent("components.failed", new { feature });

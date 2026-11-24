@@ -577,11 +577,15 @@ fn discord_badge_el(count: u32) -> Option<El> {
         el().key("discord-nav-badge")
             .h(16.0)
             .min_w(16.0)
-            .px(5.0)
+            .px(4.5)
             .radius(RADIUS_PILL)
-            .fill(bad())
+            .fill(FG)
             .center()
-            .child(text(label).font(TextStyle::new(10.5, 650.0)).color(FG)),
+            .child(
+                text(label)
+                    .font(TextStyle::new(10.5, 650.0))
+                    .color(PRIMARY_FG),
+            ),
     )
 }
 
@@ -766,7 +770,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let nav_px = if s.chrome.top_bar_width > 0.0 && s.chrome.top_bar_width < 1260.0 {
         10.0
     } else {
-        12.5
+        13.0
     };
     let nav = glass_capsule_opt("nav-capsule", budget.top_bar_nav).children(
         Room::NAV_TABS.into_iter().map(|room| {
@@ -783,7 +787,10 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .gap(6.0)
                 .center_y()
                 .child(room_icon(room, false))
-                .child(text(room.label()).font(type_section()).color(FG))
+                .child(
+                    el().pt(1.0)
+                        .child(text(room.label()).font(type_section()).color(FG)),
+                )
                 .children(badge);
             let mut tab = el()
                 .key(room.key())
@@ -830,7 +837,10 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                         .radius(RADIUS_PILL)
                         .fill(FG)
                         .child(room_icon(room, true))
-                        .child(text(room.label()).font(type_section()).color(PRIMARY_FG))
+                        .child(
+                            el().pt(1.0)
+                                .child(text(room.label()).font(type_section()).color(PRIMARY_FG)),
+                        )
                         .children(badge_active),
                 );
             }

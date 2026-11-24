@@ -1755,7 +1755,9 @@ export const STATES = [
       room: 'Library',
       steps: [
         { type: 'click', selector: '.exo-settings-btn' },
-        { type: 'wait', ms: 700 },
+        { type: 'wait', ms: 600 },
+        { type: 'clickText', selector: '.exo-settings-nav button', text: /^General$/i, optional: true },
+        { type: 'wait', ms: 400 },
       ],
       openSelector: '.exo-settings-layout, [role="dialog"]',
     },

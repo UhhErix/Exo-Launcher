@@ -133,6 +133,7 @@ internal sealed partial class DiscordSession
             session.Rest.Dispose();
         }
         SetState(DiscordToken.HasToken() ? "off" : "signedOut");
+        Volatile.Write(ref _lastBadge, 0);
         BadgeChanged?.Invoke(0);
     }
 
@@ -568,10 +569,18 @@ internal sealed partial class DiscordSession
     /// <summary>The conversation the room shows right now (null: none, or the room is hidden), so it doesn't notify.</summary>
     internal static string? Viewing { get; set; }
 
-    /// <summary>Discord's unread badge for the Discord tab and the taskbar button.</summary>
+    private static int _lastBadge;
+
+    internal static int CurrentBadge => Volatile.Read(ref _lastBadge);
+
     internal static event Action<int>? BadgeChanged;
 
-    internal void PublishBadge() => BadgeChanged?.Invoke(Cache.Badge());
+    internal void PublishBadge()
+    {
+        var count = Cache.Badge();
+        Volatile.Write(ref _lastBadge, count);
+        BadgeChanged?.Invoke(count);
+    }
 
     // Channels read here that Discord hasn't been told of yet.
     private readonly HashSet<string> _outgoingAcks = [];

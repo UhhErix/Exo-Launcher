@@ -2247,11 +2247,37 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
                     SelectOption::new("normal", "Normal"),
                     SelectOption::new("large", "Large"),
                 ],
-                width: 170.0,
+                width: 240.0,
                 align: Align::End,
                 blur,
                 gamepad_focus,
                 on_select: Rc::new(|s: &mut AppState, val: &str, _: &mut Tx| s.set_text_size(val)),
+                on_dismiss: dismiss,
+            })
+        }
+        OpenDropdown::FpsPosition => {
+            let current = s
+                .settings
+                .fps_counter_position
+                .as_deref()
+                .unwrap_or("right")
+                .to_string();
+            select_menu_layers(SelectMenuSpec {
+                id: "dd-fps-position".into(),
+                trigger_key: "set-fps-position".into(),
+                selected: current,
+                options: vec![
+                    SelectOption::new("left", "Top left"),
+                    SelectOption::new("middle", "Top middle"),
+                    SelectOption::new("right", "Top right"),
+                ],
+                width: 240.0,
+                align: Align::End,
+                blur,
+                gamepad_focus,
+                on_select: Rc::new(|s: &mut AppState, val: &str, _: &mut Tx| {
+                    s.set_fps_counter_position(val);
+                }),
                 on_dismiss: dismiss,
             })
         }
@@ -2276,7 +2302,7 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
                 trigger_key: "set-music-service-select".into(),
                 selected: current,
                 options,
-                width: 210.0,
+                width: 240.0,
                 align: Align::End,
                 blur,
                 gamepad_focus,

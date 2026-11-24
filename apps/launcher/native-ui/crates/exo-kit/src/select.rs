@@ -232,8 +232,8 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
                 .checked(is_selected)
                 .focus_selected(is_selected)
                 .w_full()
-                .min_h(36.0)
-                .px(10.0)
+                .min_h(38.0)
+                .px(12.0)
                 .gap(10.0)
                 .center_y()
                 .radius(RADIUS_SMALL)
@@ -244,7 +244,7 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
                 .cursor(if opt.disabled {
                     Cursor::NotAllowed
                 } else {
-                    Cursor::Pointer
+                    Cursor::Default
                 })
                 .fill(TRANSPARENT)
                 .motion(SPRING_QUICK);
@@ -298,17 +298,18 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
             .role("listbox")
             .focus_group()
             .min_w(width)
-            .px(6.0)
-            .py(6.0)
+            .px(8.0)
+            .py(8.0)
             .gap(2.0)
             .radius(RADIUS_CARD)
             .continuous_corners()
             .clip_rounded(RADIUS_CARD)
             .hit()
             .cursor(Cursor::Default)
-            .anchored_fit(trigger_key.clone(), Side::Bottom, align, 6.0)
+            .anchored_fit(trigger_key.clone(), Side::Bottom, align, 4.0)
             .transition(popover_transition_from(origin))
             .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
+            .modal_live(["top-bar", trigger_key.as_str()])
             .focus_return(trigger_key)
             .children(rows),
         ExoGlass::Menu,

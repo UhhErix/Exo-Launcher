@@ -515,6 +515,7 @@ pub struct ContextMenuState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OpenDropdown {
     TextSize,
+    FpsPosition,
     MusicService,
     LibrarySort,
     GameDisplayMode,
@@ -1666,6 +1667,11 @@ impl AppState {
             };
             self.switch_room(back);
         } else {
+            self.pc.settings_section = match self.room {
+                Room::Library => crate::pc_state::SettingsSection::Account,
+                Room::Music => crate::pc_state::SettingsSection::Updates,
+                _ => crate::pc_state::SettingsSection::General,
+            };
             self.switch_room(Room::Settings);
         }
     }

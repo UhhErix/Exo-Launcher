@@ -9,16 +9,25 @@ use crate::settings_stores::{shaders_section, stores_section};
 use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, SelectTrigger, TRANSPARENT, amoled_card, bad, exo_glass, fg_muted, float_line,
+    SPRING_QUICK, SelectTrigger, TRANSPARENT, bad, exo_glass, fg_muted, float_line,
     glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline, hover_fill,
     icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_music, icon_search,
     icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled, select_trigger, slider_track,
     switch_pill, type_body, type_control, type_page, type_section, type_small,
 };
 use rune::{
-    Cursor, El, Phase, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text,
-    text_input,
+    Cursor, El, LiquidGlass, Phase, ScrollSpec, TextStyle, Transition, col, edit_access, el, row,
+    text, text_input,
 };
+
+pub(crate) fn settings_card() -> El {
+    col()
+        .w_full()
+        .radius(RADIUS_CARD)
+        .continuous_corners()
+        .clip_rounded(RADIUS_CARD)
+        .liquid_glass(LiquidGlass::panel())
+}
 
 pub(crate) fn set_btn(key: impl Into<String>, label: impl Into<String>, icon: Option<El>) -> El {
     let label = label.into();
@@ -32,7 +41,7 @@ pub(crate) fn set_btn(key: impl Into<String>, label: impl Into<String>, icon: Op
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(32.0)
-        .px(12.0)
+        .px(14.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
@@ -63,7 +72,7 @@ pub(crate) fn set_primary_btn(
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(32.0)
-        .px(12.0)
+        .px(14.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
@@ -93,18 +102,19 @@ pub(crate) fn set_danger_btn(
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(32.0)
-        .px(12.0)
+        .px(14.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(bad())
-        .hover(bad().alpha(0.90))
-        .press(bad().alpha(0.80))
+        .fill(glass_still_control_fill())
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
     }
-    btn.child(text(label).font(type_control()).color(PRIMARY_FG))
+    btn.child(text(label).font(type_control()).color(bad()))
 }
 
 fn nav_label(sec: SettingsSection) -> &'static str {
@@ -174,7 +184,7 @@ fn set_row(
     wrap.child(
         row()
             .w_full()
-            .min_h(38.0)
+            .min_h(if subtitle.is_some() { 41.0 } else { 38.0 })
             .gap(16.0)
             .justify_between()
             .center_y()
@@ -224,8 +234,7 @@ fn is_highlighted(s: &AppState, id: &str) -> bool {
 fn section_general(s: &AppState) -> El {
     let set = &s.settings;
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
-    let main_card = amoled_card(RADIUS_CARD)
-        .w_full()
+    let main_card = settings_card()
         .child(set_row(
             "Text size",
             None,
@@ -237,6 +246,7 @@ fn section_general(s: &AppState) -> El {
                     "Text size",
                     text_size_label(set.text_size.as_deref().unwrap_or("normal")),
                 )
+                .flat(true)
                 .open(s.open_dropdown == Some(OpenDropdown::TextSize))
                 .gamepad_focus(gamepad_focus),
                 |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::TextSize),
@@ -270,7 +280,7 @@ fn section_general(s: &AppState) -> El {
 
 fn section_library(s: &AppState) -> El {
     let set = &s.settings;
-    let tools_card = amoled_card(RADIUS_CARD).w_full().child(toggle_row(
+    let tools_card = settings_card().child(toggle_row(
         "set-lib-tools",
         "Show tools and soundtracks",
         None,
@@ -322,12 +332,12 @@ fn section_downloads(s: &AppState) -> El {
     let hours_open = s.wp4.download_hours_open;
     let hours_trigger = select_trigger(
         SelectTrigger::new("set-download-hours-select", "Download hours", hours_label)
+            .flat(true)
             .open(hours_open),
         |s: &mut AppState, _| s.wp4.download_hours_open = !s.wp4.download_hours_open,
     );
 
-    let mut card = amoled_card(RADIUS_CARD)
-        .w_full()
+    let mut card = settings_card()
         .child(set_row(
             "Install folder",
             Some(root.unwrap_or("Exo's Games folder")),
@@ -444,8 +454,7 @@ fn section_in_game(s: &AppState) -> El {
             .as_ref()
             .is_some_and(|f| f.state == "signout");
 
-    let ach_card = amoled_card(RADIUS_CARD)
-        .w_full()
+    let ach_card = settings_card()
         .child(toggle_row(
             "set-ach-banners",
             "Show achievement pop-ups",
@@ -478,7 +487,7 @@ fn section_in_game(s: &AppState) -> El {
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(set_row(
             "OBS overlay URL",
-            Some(OBS_OVERLAY_URL),
+            None,
             None,
             is_highlighted(s, "ingame-obs"),
             set_btn("set-obs-copy", if copied { "Copied" } else { "Copy" }, None).on_press_tx(
@@ -489,7 +498,7 @@ fn section_in_game(s: &AppState) -> El {
             ),
         ));
 
-    let mut fps_card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+    let mut fps_card = settings_card().child(set_row(
         "Show FPS counter",
         fps_signout.then_some("Sign out to finish"),
         None,
@@ -500,11 +509,12 @@ fn section_in_game(s: &AppState) -> El {
 
     if fps_on {
         let cur_pos = set.fps_counter_position.as_deref().unwrap_or("right");
-        let (pos_label, next_pos) = match cur_pos {
-            "left" => ("Top left", "middle"),
-            "middle" => ("Top middle", "right"),
-            _ => ("Top right", "left"),
+        let pos_label = match cur_pos {
+            "left" => "Top left",
+            "middle" => "Top middle",
+            _ => "Top right",
         };
+        let gamepad_focus = s.input_mode == InputMode::Gamepad;
         fps_card = fps_card
             .child(el().w_full().h(1.0).fill(hairline()))
             .child(set_row(
@@ -512,8 +522,13 @@ fn section_in_game(s: &AppState) -> El {
                 None,
                 None,
                 false,
-                set_btn("set-fps-position", pos_label, None)
-                    .on_press(move |s: &mut AppState| s.set_fps_counter_position(next_pos)),
+                select_trigger(
+                    SelectTrigger::new("set-fps-position", "Position", pos_label)
+                        .flat(true)
+                        .open(s.open_dropdown == Some(OpenDropdown::FpsPosition))
+                        .gamepad_focus(gamepad_focus),
+                    |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::FpsPosition),
+                ),
             ));
 
         const FPS_ITEMS: &[(&str, &str, &str)] = &[
@@ -590,13 +605,14 @@ fn section_music(s: &AppState) -> El {
         || (pref_svc.is_none()
             && s.media.music_service == crate::media_state::MusicService::YouTube);
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
-    let mut card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+    let mut card = settings_card().child(set_row(
         "Music service",
         None,
         s.wp4.web_prefs_error.as_deref(),
         is_highlighted(s, "music-service"),
         select_trigger(
             SelectTrigger::new("set-music-service-select", "Music service", current)
+                .flat(true)
                 .open(s.open_dropdown == Some(OpenDropdown::MusicService))
                 .gamepad_focus(gamepad_focus),
             |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::MusicService),
@@ -679,7 +695,7 @@ fn section_about(s: &AppState) -> El {
         .filter(|n| n.error)
         .map(|n| n.text.as_str());
 
-    let mut card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+    let mut card = settings_card().child(set_row(
         &upd_title,
         None,
         upd_err,
@@ -818,9 +834,11 @@ pub fn view(s: &AppState) -> El {
         .px(12.0)
         .gap(8.0)
         .center_y()
+        .hit()
         .cursor(Cursor::Text)
         .radius(RADIUS_PILL)
-        .liquid_glass(exo_glass(ExoGlass::Control, false))
+        .fill(TRANSPARENT)
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(icon_search(15.0, fg_muted()))
         .child(
             text_input(&s.pc.settings_query, type_body())
@@ -913,7 +931,7 @@ pub fn view(s: &AppState) -> El {
                     .gap(10.0)
                     .center_y()
                     .radius(RADIUS_SMALL)
-                    .fill(if active { FG.alpha(0.08) } else { TRANSPARENT })
+                    .fill(if active { FG.alpha(0.15) } else { TRANSPARENT })
                     .hover(hover_fill())
                     .press(pressed_fill())
                     .motion(SPRING_QUICK)
@@ -929,7 +947,7 @@ pub fn view(s: &AppState) -> El {
                             .color(if active { FG } else { fg_muted() }),
                     );
                 if active {
-                    item = item.border(1.0, hairline());
+                    item = item.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
                 }
                 item
             }))
@@ -948,7 +966,7 @@ pub fn view(s: &AppState) -> El {
             row().h(scaled(42.0)).px(8.0).center_y().child(
                 text("Settings")
                     .key("settings-sidebar-title")
-                    .font(type_page())
+                    .font(type_page().letter_spacing(-0.02))
                     .color(FG),
             ),
         )
@@ -991,7 +1009,7 @@ pub fn view(s: &AppState) -> El {
                         .child(
                             text(title)
                                 .key("settings-page-title-text")
-                                .font(type_page())
+                                .font(type_page().letter_spacing(-0.02))
                                 .color(FG),
                         ),
                 )
@@ -1293,5 +1311,71 @@ mod tests {
         });
         let picks = s.effective_setup_picks();
         assert_eq!(picks, vec!["game_mode".to_string()]);
+    }
+
+    #[test]
+    fn settings_parity_room_landing_dropdown_cursors_and_slider_pointer() {
+        let mut s = AppState::default();
+        s.room = Room::Library;
+        s.toggle_settings();
+        assert_eq!(s.room, Room::Settings);
+        assert_eq!(s.pc.settings_section, SettingsSection::Account);
+
+        s.toggle_settings();
+        assert_eq!(s.room, Room::Library);
+        s.room = Room::Music;
+        s.toggle_settings();
+        assert_eq!(s.pc.settings_section, SettingsSection::Updates);
+
+        s.toggle_settings();
+        s.room = Room::Store;
+        s.toggle_settings();
+        assert_eq!(s.pc.settings_section, SettingsSection::General);
+
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Settings);
+            s.pc.settings_section = SettingsSection::General;
+            s.toggle_dropdown(crate::state::OpenDropdown::TextSize);
+        });
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let (bx, by) = rt.find("nav-library").expect("nav-library");
+        rt.pointer_move(bx, by);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer);
+
+        let (tx, ty) = rt
+            .find("set-text-size-select")
+            .expect("set-text-size-select");
+        rt.pointer_move(tx, ty);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer);
+
+        let (ox, oy) = rt.find("dd-text-size-opt-normal").expect("dropdown option");
+        rt.pointer_move(ox, oy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Default);
+
+        rt.update(|s, _| {
+            s.close_dropdown();
+            s.pc.settings_section = SettingsSection::Graphics;
+            s.settings.fps_counter = true;
+        });
+        rt.frame(1.0 / 60.0);
+        let (sx, sy) = rt
+            .find("set-ach-volume-slider")
+            .expect("achievement volume slider");
+        rt.pointer_move(sx, sy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer);
+        assert!(rt.presented("set-fps-position").is_some());
     }
 }
