@@ -302,6 +302,7 @@ internal sealed class DuplicationSource : IFrameSource
         while (Environment.TickCount64 < until)
         {
             if (_shared.Latest(out _) is { } frame) return frame.Texture;
+            if (!_shared.HasDuplication) return null;
             Thread.Sleep(10);
         }
         return null;
@@ -338,11 +339,36 @@ internal sealed class Duplicator
     private PointerShape? _pointerShape;
     private byte[] _pointerScratch = [];
 
+    internal const int ErrorAccessLost = unchecked((int)0x887A0026);
+    internal const int ErrorAccessDenied = unchecked((int)0x80070005);
+
+    internal static bool IsTransientAccessError(int hresult) =>
+        hresult == ErrorAccessLost || hresult == ErrorAccessDenied;
+
+    internal static bool HasDesktopImage(long lastPresentTime) => lastPresentTime != 0;
+
+    internal static T RetryAccess<T>(Func<T> open, int maxAttempts = 3, int delayMs = 40, Action<int>? sleep = null)
+    {
+        var wait = sleep ?? Thread.Sleep;
+        for (var attempt = 1; ; attempt++)
+        {
+            try { return open(); }
+            catch (SharpGen.Runtime.SharpGenException ex) when (attempt < maxAttempts && IsTransientAccessError(ex.HResult))
+            {
+                wait(delayMs * attempt);
+            }
+        }
+    }
+
     internal int Width { get; private set; }
     internal int Height { get; private set; }
     internal bool Hdr { get; private set; }
     internal bool HadFrame { get; private set; }
     internal Win32.RECT Desktop { get; private set; }
+    internal bool HasDuplication
+    {
+        get { lock (_gate) return _duplication is not null; }
+    }
 
     private Duplicator(GpuDevice gpu, nint monitor, bool hdr)
     {
@@ -385,6 +411,21 @@ internal sealed class Duplicator
             _gpu = GpuDevice.ForMonitor(_monitor);
             _deviceLost = false;
         }
+        try
+        {
+            _duplication = RetryAccess(OpenOutput);
+        }
+        catch (SharpGen.Runtime.SharpGenException ex)
+        {
+            throw new CaptureException($"capture the screen (0x{ex.HResult:X8})");
+        }
+        var mode = _duplication.Description.ModeDescription;
+        Width = (int)mode.Width;
+        Height = (int)mode.Height;
+    }
+
+    private IDXGIOutputDuplication OpenOutput()
+    {
         using var output = DuplicationSource.OutputOf(_gpu, _monitor, out var description) ?? throw new CaptureException("capture the screen (no output on this graphics card)");
         var c = description.DesktopCoordinates;
         Desktop = new Win32.RECT { Left = c.Left, Top = c.Top, Right = c.Right, Bottom = c.Bottom };
@@ -392,26 +433,23 @@ internal sealed class Duplicator
         var desktopHdr = description.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020;
         Hdr = desktopHdr || (_wantHdr && desktopHdr);
         Format[] formats = Hdr ? [Format.R16G16B16A16_Float] : [Format.B8G8R8A8_UNorm];
-        try { _duplication = Duplicate(output, formats); }
+        try { return Duplicate(output, formats); }
+        catch (SharpGen.Runtime.SharpGenException ex) when (IsTransientAccessError(ex.HResult)) { throw; }
         catch (SharpGen.Runtime.SharpGenException) when (Hdr)
         {
             Hdr = false;
-            try { _duplication = Duplicate(output, [Format.B8G8R8A8_UNorm]); }
+            try { return Duplicate(output, [Format.B8G8R8A8_UNorm]); }
+            catch (SharpGen.Runtime.SharpGenException ex) when (IsTransientAccessError(ex.HResult)) { throw; }
             catch (SharpGen.Runtime.SharpGenException)
             {
-                try { _duplication = output.DuplicateOutput(_gpu.Device); }
-                catch (SharpGen.Runtime.SharpGenException ex) { throw new CaptureException($"capture the screen (0x{ex.HResult:X8})"); }
+                return output.DuplicateOutput(_gpu.Device);
             }
         }
         catch (SharpGen.Runtime.SharpGenException) when (!Hdr)
         {
             // The older call, for a process Windows does not count as per-monitor aware.
-            try { _duplication = output.DuplicateOutput(_gpu.Device); }
-            catch (SharpGen.Runtime.SharpGenException ex) { throw new CaptureException($"capture the screen (0x{ex.HResult:X8})"); }
+            return output.DuplicateOutput(_gpu.Device);
         }
-        var mode = _duplication.Description.ModeDescription;
-        Width = (int)mode.Width;
-        Height = (int)mode.Height;
     }
 
     // IDXGIOutput5::DuplicateOutput1 (vtable slot 26), called directly: the binding's own wrapper crashed here.
@@ -443,7 +481,7 @@ internal sealed class Duplicator
                         {
                             using (resource)
                             {
-                                if (info.LastPresentTime != 0 || _copy is null)
+                                if (HasDesktopImage(info.LastPresentTime))
                                 {
                                     using var texture = resource.QueryInterface<ID3D11Texture2D>();
                                     var desc = texture.Description;
@@ -470,7 +508,7 @@ internal sealed class Duplicator
                     finally { _duplication.ReleaseFrame(); }
                 }
                 else if (GpuDevice.IsDeviceLost(hr.Code)) OnDeviceLost(hr.Code);
-                else if (hr.Code == unchecked((int)0x887A0026)) Reopen(); // DXGI_ERROR_ACCESS_LOST: a mode change or a full-screen switch
+                else if (IsTransientAccessError(hr.Code)) Reopen(); // DXGI_ERROR_ACCESS_LOST: a mode change or a full-screen switch
             }
             catch (SharpGen.Runtime.SharpGenException ex) when (GpuDevice.IsDeviceLost(ex.HResult)) { OnDeviceLost(ex.HResult); }
             catch (SharpGen.Runtime.SharpGenException) { _duplication?.Dispose(); _duplication = null; }
