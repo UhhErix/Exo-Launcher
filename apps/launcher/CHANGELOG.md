@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.29.1 — November 24, 2026
+- **Tabs stay responsive after a game closes.** Fixes window caption drag regions after a fullscreen game exits or display scaling changes so top bar tabs and controls keep responding to clicks. _Checked in code only._
+- **Clearer Discord voice on noisy USB condenser mics.** Stops the voice gate from cutting out mid-sentence on USB condenser microphones with higher background noise, validates Discord member IDs, and fixes accepting and adding friends. _Checked in code only._
+- **Wooting keyboard reliability across every model.** Fixes HID framing, live profile reload, actuation and Rapid Trigger read-back, profile backups, and key map layouts in Devices › Keyboard. _Checked in code only._
+- **Game runtime installs and GPU tuning that stick.** Fixes silent runtime installer failures with verified streamed downloads, clearer per-row errors, and automatic deferral while a game runs; keeps Auto tune and Exo AI fan curves active across restarts and wake from sleep, and pauses tuning safely after a driver reset without losing your saved offsets. _Checked in code only._
+- **Capture stability, AMD driver updates & cleaner PC updates.** Prevents Exo Capture crashes on unsupported GPUs or during graphics driver installs, maps AMD driver exit codes (including code 182) clearly while serializing chipset and GPU updates, and removes duplicate driver offers in PC › Updates. _Checked in code only._
+- **Faster startup, first-run onboarding & store detection.** Runs first-run PC health checks in parallel so cold driver startups no longer time out, fixes large-library startup hangs and Power Plan file-lock races, handles long paths in leftover cleanup and overlapping Network best settings presses, preserves your cached library when a store scan cancels, and detects classic Epic Games Launcher installs alongside more Ubisoft, Rockstar, and Paradox layouts. _Checked in code only._
+
 ## 3.29.0 — November 22, 2026
 - **Interactive guided tour.** Opens once on launch to walk through Library, Search (`Ctrl+K`), Store, Discord, Music, Devices, Exo AI, Apps, and Settings with a live spotlight over each room. Skip anytime with `Skip` or `Escape`, jump to any step with the progress dots, or replay from Settings › About or `Ctrl+K`. _Verified: on screen._
 - **Overhauled Library, Store, Game Page, and Settings.** Replaces legacy Library filter pills with a clean poster HomeDeck and horizontal scroll arrows, opens Game Page details directly from the `⋯` menu, centers `Activate key` as a scrim modal dialog, groups Settings into a cleaner sidebar, and eliminates initial load layout shifts across Library and Music. _Verified: on screen._
