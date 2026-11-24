@@ -16,7 +16,7 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 | Library | 6 | 7 | 6 | 2 | 21 |
 | Game page | 22 | 0 | 0 | 0 | 22 |
 | Store | 16 | 1 | 0 | 0 | 17 |
-| Discord | 9 | 16 | 20 | 0 | 45 |
+| Discord | 25 | 9 | 11 | 0 | 45 |
 | Music | 5 | 7 | 9 | 0 | 21 |
 | Exo AI / PC | 21 | 0 | 0 | 0 | 21 |
 | Apps | 12 | 0 | 0 | 0 | 12 |
@@ -156,30 +156,30 @@ Totals: DONE 16, PARTIAL 1, MISSING 0, BROKEN 0 (of 17).
 
 ## Discord
 
-Totals: DONE 9, PARTIAL 16, MISSING 20, BROKEN 0 (of 45).
+Totals: DONE 25, PARTIAL 9, MISSING 11, BROKEN 0 (of 45).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
 | Sign-in (QR / token) and account switch | components/FriendsRoomRoute.tsx:1 | exo-ui/src/discord.rs:690 | DONE | rpc: discord.signIn, discord.accounts. accounts RPC namespace (add/switch) not called. |
 | DM list, pinned DMs, unread dots, search | components/discord/Messages.tsx:17 | exo-ui/src/discord.rs:1817 | DONE | rpc: discord.home. Message requests + group edit (Messages.tsx) missing. |
-| Create DM / group DM (select friends, 10 limit) | components/discord/Messages.tsx:226 | — | MISSING | rpc: discord.channel.  |
+| Create DM / group DM (select friends, 10 limit) | components/discord/Messages.tsx:226 | exo-ui/src/discord_threads.rs:100 | DONE | WP6: Create DM / group DM modal with friend search and 9-friend (10-member) limit via discord.channel. |
 | Friends tab (Online / All / Pending / Blocked / Add friend) | components/discord/HomePage.tsx:1 | exo-ui/src/discord.rs:2602 | DONE | rpc: discord.friends. Smoke: renders Active now/Online with rich profile cards, search, Add friend. |
 | Server rail (icons, unread pips, folders, reorder) | components/discord/DiscordClient.tsx:1 | exo-ui/src/discord.rs:2195 | DONE | rpc: discord.home, discord.server. Smoke: rail with unread pips renders; folder tiles exist (band_folder_tile); drag reorder absent. |
 | Channel list (categories, text, voice, collapse) | components/discord/Channels.tsx:4 | exo-ui/src/discord.rs:2030 | DONE | rpc: discord.channels. Channel status set/clear (voice) skipped per room-discord report. |
 | Message list (virtualized, jump to present, unread bar) | components/discord/Chat.tsx:13 | exo-ui/src/discord_chat.rs:181 | DONE | rpc: discord.messages.  |
-| Message rendering: markdown, mentions, embeds, attachments | components/discord/Message.tsx:11 | exo-ui/src/discord_md.rs:1 | PARTIAL | No Spotify Jam / gift / invite cards / thread-start rows; images ok; stickers via discord.sticker not called. |
-| Composer: send, reply, edit, typing | components/discord/Composer.tsx:154 | exo-ui/src/discord_chat.rs:31 | PARTIAL | rpc: discord.send, discord.typing, discord.upload. No file drop/upload, spoiler, alt text, upload-as-file, suggestions. |
-| Emoji picker, GIF picker, sticker picker | components/discord/Composer.tsx:5 | — | MISSING | rpc: discord.emojis, discord.gifs, discord.stickers, discord.emojiFavorites, discord.gifFavorites. None of these RPCs called. |
-| Reactions: add, remove, who reacted | components/discord/Message.tsx:414 | exo-ui/src/discord_chat.rs:469 | PARTIAL | rpc: discord.react. discord.reactors never called. |
-| Message menu (reply, edit, pin, copy, delete, report, forward) | components/discord/Message.tsx:1 | exo-ui/src/menus.rs:1173† | PARTIAL | No Forward, Create thread, Report. |
+| Message rendering: markdown, mentions, embeds, attachments | components/discord/Message.tsx:11 | exo-ui/src/discord_chat.rs:1129 | DONE | WP6: Full markdown (bold/italic/underline/strike/code/spoiler/links/mentions/channels/roles/subtext/timestamps), embeds, stickers, forwarded snapshots, thread-start/pin/call/system rows, Spotify Jam / gift / invite link cards. |
+| Composer: send, reply, edit, typing | components/discord/Composer.tsx:154 | exo-ui/src/discord_chat.rs:1870 | DONE | WP6: Multi-line auto_grow composer, drafts per channel, reply @On/@Off, edit, typing, OS file drop + virtual_cols pending strip, spoiler/alt/Modify attachment, upload-as-file, char counter. |
+| Emoji picker, GIF picker, sticker picker | components/discord/Composer.tsx:5 | exo-ui/src/discord_pickers.rs:180 | DONE | WP6: Expression picker with Emoji, GIF (trending + favorites + search), and Sticker tabs via discord.emojis, discord.emojiFavorites, discord.gifs, discord.gifFavorites, discord.stickers. |
+| Reactions: add, remove, who reacted | components/discord/Message.tsx:414 | exo-ui/src/discord_pickers.rs:1542 | DONE | WP6: Normal + super reactions add/remove via discord.react, plus Who Reacted dialog with per-emoji tabs and moderator remove via discord.reactors. |
+| Message menu (reply, edit, pin, copy, delete, report, forward) | components/discord/Message.tsx:1 | exo-ui/src/menus.rs:1183 | DONE | WP6: Complete DiscordMessage context menu: Reply, Edit, Pin/Unpin, Forward, Create thread, Bookmark, Remind me submenu, View/Clear reactions, Mark unread, Copy text/link/ID, Remove embeds, Delete, Report. |
 | Threads and forum channels | components/discord/Forum.tsx:4 | — | MISSING | rpc: discord.thread, discord.threads.  |
-| Polls (create, vote, results) | components/discord/PollCreator.tsx:23 | — | MISSING | rpc: discord.poll. discord.pollVote event not handled. |
-| Message search (filters) | components/discord/SearchBar.tsx:1 | — | MISSING | rpc: discord.search.  |
-| Pins panel | components/discord/ChatHeader.tsx:1 | exo-ui/src/discord_chat.rs:946 | PARTIAL | rpc: discord.pins.  |
-| Inbox (mentions, unreads) | components/discord/Inbox.tsx:16 | exo-ui/src/discord.rs:3458 | PARTIAL | rpc: discord.mentions, discord.forYou. Panel shows only "All caught up."; discord.mentions / forYou never called. |
-| Saved messages | components/discord/MessageTools.tsx:1 | — | MISSING | rpc: discord.saved.  |
+| Polls (create, vote, results) | components/discord/PollCreator.tsx:23 | exo-ui/src/discord_threads.rs:295 | DONE | WP6: Poll creator modal, inline poll card voting/remove-vote/end-poll/results via discord.poll, and real-time discord.pollVote push event registered in events.rs. |
+| Message search (filters) | components/discord/SearchBar.tsx:1 | exo-ui/src/discord_search.rs:242 | DONE | WP6: Search drawer with inline filter chips (from:, in:, has:, mentions:, before:, on:/during:, after:, pinned:, authorType:), quick filters, Newest/Oldest/Relevant sort, pagination, and jump via discord.search. |
+| Pins panel | components/discord/ChatHeader.tsx:1 | exo-ui/src/discord_search.rs:169 | DONE | WP6: Pins drawer with discord.pins fetch, jump-to-message, and unpin. |
+| Inbox (mentions, unreads) | components/discord/Inbox.tsx:16 | exo-ui/src/discord_search.rs:550 | DONE | WP6: Full Inbox panel with For you (discord.forYou), Unreads (message peeks + mark channel/server read), Mentions (discord.mentions + filter toggles + dismiss), Bookmarks, and Reminders. |
+| Saved messages | components/discord/MessageTools.tsx:1 | exo-ui/src/discord_search.rs:550 | DONE | WP6: Saved messages Bookmarks & Reminders tabs in Inbox plus Bookmark and Remind me actions in message menu via discord.saved. |
 | Member list (roles, status, presence) | components/discord/MemberList.tsx:1 | exo-ui/src/discord.rs:1246 | DONE | rpc: discord.members.  |
-| User profile popover/card (roles, mutual, note, badges) | components/discord/profileParts.tsx:1 | exo-ui/src/discord.rs:1419 | PARTIAL | rpc: discord.profile. No roles editor, mutual servers/friends tabs. |
+| User profile popover/card (roles, mutual, note, badges) | components/discord/profileParts.tsx:1 | exo-ui/src/discord_threads.rs:1536 | DONE | WP6: Full DM user profile sidebar + popout & full modal with banner, overlapping avatar, badges, bio, Member since, roles + role editor (discord.admin), connections, mutual friends/servers, and editable note via discord.profile. |
 | User menu (message, call, nickname, timeout, kick/ban, report) | components/discord/UserMenu.tsx:71 | exo-ui/src/menus.rs:1288† | PARTIAL | No change nickname, timeout, transfer ownership, report. |
 | Status menu (online / idle / dnd / invisible / custom) | components/discord/MeMenus.tsx:1 | exo-ui/src/discord.rs:1435 | DONE | rpc: discord.setStatus, discord.status.  |
 | Voice channel join / leave / mute / deafen | components/discord/voice.tsx:31 | exo-ui/src/discord_voice.rs:2 | DONE | rpc: discord.voice.  |
@@ -194,16 +194,16 @@ Totals: DONE 9, PARTIAL 16, MISSING 20, BROKEN 0 (of 45).
 | Server settings (overview, roles, emoji, moderation, automod, onboarding, guide) | components/discord/ServerSettings.tsx:45 | — | MISSING | rpc: discord.admin. 10+ settings pages: settingsRoles, settingsExpressions, settingsModeration, settingsAutomod, settingsOnboarding, settingsGuide, settingsAccess, settingsRoleLinks, settingsPages, ServerSettings. None natively. |
 | Channel settings (overview, permissions, slowmode) | components/discord/ChannelSettings.tsx:34 | — | MISSING | rpc: discord.admin.  |
 | Server pages (events, resources, get started, members) | components/discord/serverPages.tsx:1 | — | MISSING | rpc: discord.admin. events.tsx: create/start/edit/cancel events. |
-| Invite dialog | components/discord/InviteDialog.tsx:30 | — | MISSING | rpc: discord.admin.  |
+| Invite dialog | components/discord/InviteDialog.tsx:30 | exo-ui/src/discord_threads.rs:686 | DONE | WP6: Invite dialog with friend search + send invite, copy invite link, and Edit invite link settings (expiry/max uses/temporary) via discord.channel action invite. |
 | Shop (collectibles, bundles, payment) | components/discord/ShopPage.tsx:124 | exo-ui/src/discord.rs:3434 | PARTIAL | rpc: discord.shop. Placeholder title only. |
 | User settings: Account / Profile | components/discord/settings/AccountPages.tsx:1 | exo-ui/src/discord.rs:3871† | PARTIAL | rpc: discord.account, discord.userSettings. discord.userSettings event not handled. |
 | User settings: Voice and video (devices, volumes, noise suppression, echo, AGC) | components/discord/settings/VoicePage.tsx:19 | — | PARTIAL | rpc: discord.clientSettings. clientSettings noise suppression / echo / AGC not wired (room-discord report). |
 | User settings: Notifications / App / Privacy / Keybinds | components/discord/settings/AppPages.tsx:1 | — | MISSING | rpc: discord.userSettings, discord.account. discord.keybind event not handled (global push-to-talk). |
 | Report message/user/server | components/discord/Report.tsx:2 | — | MISSING | rpc: discord.report.  |
-| Link rows / image & file viewer, fileText, image save | components/discord/extras.tsx:1 | — | MISSING | rpc: discord.image, discord.fileText.  |
+| Link rows / image & file viewer, fileText, image save | components/discord/extras.tsx:1 | exo-ui/src/discord_chat.rs:2417 | DONE | WP6: Rune modal Lightbox gallery (prev/next, zoom, drag-pan, Esc) + Copy/Save/Open original actions (discord.image, shell.openUrl), right-click image menu, discord.fileText inline preview + expand/collapse, virtual_cols multi-image strips. |
 | Colors / font / Streamer mode | components/discord/DiscordClient.tsx:1 | — | MISSING | rpc: discord.colors, discord.font. discord.colors event not handled. |
-| Interactions (slash commands, bot apps, buttons) | components/discord/Composer.tsx:443 | — | MISSING | rpc: discord.apps, discord.interaction. discord.interaction event not handled. |
-| Mentionable autocomplete | components/discord/Composer.tsx:32 | — | MISSING | rpc: discord.mentionable.  |
+| Interactions (slash commands, bot apps, buttons) | components/discord/Composer.tsx:443 | exo-ui/src/discord_pickers.rs:1094 | DONE | WP6: Slash command list + inline CommandForm with option autocomplete, bot message components (buttons/selects), AppModal overlay, ephemeral dismiss via discord.apps & discord.interaction push event. |
+| Mentionable autocomplete | components/discord/Composer.tsx:32 | exo-ui/src/discord_pickers.rs:815 | DONE | WP6: Mentionable autocomplete for @user, @role, @everyone/@here, #channel, and :emoji: with raw token expansion via discord.mentionable. |
 | Top-bar cursor over open menu | components/discord/Chat.tsx:1 | — | PARTIAL | Blocked on a Rune change (room-discord report). |
 
 ## Music
@@ -658,22 +658,22 @@ Owns: discord_chat.rs, discord_chat_state.rs, discord_md.rs (+ new discord_picke
 
 Depends on: Rune fork: file drop onto composer, multi-line text with caret/selection already used? (verify), animated sticker (Lottie) decoder optional. RPC present: discord.emojis/gifs/stickers/thread(s)/poll/search/saved/mentions/forYou/upload.
 
-- `discord-03` [MISSING] Create DM / group DM (select friends, 10 limit)
-- `discord-08` [PARTIAL] Message rendering: markdown, mentions, embeds, attachments
-- `discord-09` [PARTIAL] Composer: send, reply, edit, typing
-- `discord-10` [MISSING] Emoji picker, GIF picker, sticker picker
-- `discord-11` [PARTIAL] Reactions: add, remove, who reacted
-- `discord-12` [PARTIAL] Message menu (reply, edit, pin, copy, delete, report, forward)
-- `discord-14` [MISSING] Polls (create, vote, results)
-- `discord-15` [MISSING] Message search (filters)
-- `discord-16` [PARTIAL] Pins panel
-- `discord-17` [PARTIAL] Inbox (mentions, unreads)
-- `discord-18` [MISSING] Saved messages
-- `discord-20` [PARTIAL] User profile popover/card (roles, mutual, note, badges)
-- `discord-35` [MISSING] Invite dialog
-- `discord-41` [MISSING] Link rows / image & file viewer, fileText, image save
-- `discord-43` [MISSING] Interactions (slash commands, bot apps, buttons)
-- `discord-44` [MISSING] Mentionable autocomplete
+- `discord-03` [DONE] Create DM / group DM (select friends, 10 limit) — `exo-ui/src/discord_threads.rs:100`
+- `discord-08` [DONE] Message rendering: markdown, mentions, embeds, attachments — `exo-ui/src/discord_chat.rs:1129`
+- `discord-09` [DONE] Composer: send, reply, edit, typing — `exo-ui/src/discord_chat.rs:1870`
+- `discord-10` [DONE] Emoji picker, GIF picker, sticker picker — `exo-ui/src/discord_pickers.rs:180`
+- `discord-11` [DONE] Reactions: add, remove, who reacted — `exo-ui/src/discord_pickers.rs:1542`
+- `discord-12` [DONE] Message menu (reply, edit, pin, copy, delete, report, forward) — `exo-ui/src/menus.rs:1183`
+- `discord-14` [DONE] Polls (create, vote, results) — `exo-ui/src/discord_threads.rs:295`
+- `discord-15` [DONE] Message search (filters) — `exo-ui/src/discord_search.rs:242`
+- `discord-16` [DONE] Pins panel — `exo-ui/src/discord_search.rs:169`
+- `discord-17` [DONE] Inbox (mentions, unreads) — `exo-ui/src/discord_search.rs:550`
+- `discord-18` [DONE] Saved messages — `exo-ui/src/discord_search.rs:550`
+- `discord-20` [DONE] User profile popover/card (roles, mutual, note, badges) — `exo-ui/src/discord_threads.rs:1536`
+- `discord-35` [DONE] Invite dialog — `exo-ui/src/discord_threads.rs:686`
+- `discord-41` [DONE] Link rows / image & file viewer, fileText, image save — `exo-ui/src/discord_chat.rs:2417`
+- `discord-43` [DONE] Interactions (slash commands, bot apps, buttons) — `exo-ui/src/discord_pickers.rs:1094`
+- `discord-44` [DONE] Mentionable autocomplete — `exo-ui/src/discord_pickers.rs:815`
 
 #### WP7 Discord voice, calls, servers, user and server settings (L, 20 items)
 

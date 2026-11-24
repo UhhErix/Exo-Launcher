@@ -7,7 +7,10 @@ mod discord;
 mod discord_chat;
 mod discord_chat_state;
 mod discord_md;
+mod discord_pickers;
+mod discord_search;
 mod discord_state;
+mod discord_threads;
 mod discord_voice;
 mod discord_voice_state;
 mod downloads;
@@ -318,7 +321,19 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
     }
     if ev.key == Key::Escape {
+        if s.room == state::Room::Discord && s.dismiss_discord_chat_layer() {
+            return true;
+        }
         return s.dismiss_top_layer();
+    }
+    if ev.key == Key::Up
+        && s.room == state::Room::Discord
+        && s.discord.chat.composer.text.is_empty()
+        && s.discord.chat.editing.is_none()
+        && s.discord.chat.apps.active_command.is_none()
+    {
+        s.begin_edit_last_own_message();
+        return s.discord.chat.editing.is_some();
     }
     false
 }
@@ -1470,16 +1485,50 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 ) {
                     state.discord.unreads = unreads.channels;
                 }
-                if sc == "discord-messages"
-                    && let Some(dm_id) = state.discord.active_dm_id.clone()
-                    && let Ok(rep) = client.call_blocking::<_, exo_rpc::DiscordMessagesReply>(
-                        exo_rpc::METHOD_DISCORD_MESSAGES,
-                        &serde_json::json!({ "channelId": dm_id, "limit": 40 }),
-                        Duration::from_secs(6),
-                    )
-                    && let Some(msgs) = rep.messages
-                {
-                    state.discord.chat.messages_by_channel.insert(dm_id, msgs);
+                if sc == "discord-messages" {
+                    if let Some(def_dm) = state.default_dm_id() {
+                        state.discord.active_dm_id = Some(def_dm);
+                    }
+                    if let Some(dm_id) = state.discord.active_dm_id.clone() {
+                        if let Ok(rep) = client.call_blocking::<_, exo_rpc::DiscordMessagesReply>(
+                            exo_rpc::METHOD_DISCORD_MESSAGES,
+                            &serde_json::json!({ "channelId": dm_id, "limit": 40 }),
+                            Duration::from_secs(6),
+                        ) && let Some(mut msgs) = rep.messages
+                        {
+                            msgs.reverse();
+                            state
+                                .discord
+                                .chat
+                                .messages_by_channel
+                                .insert(dm_id.clone(), msgs);
+                            state.backfill_dm_line(&dm_id);
+                        }
+                        if let Some(uid) = state
+                            .discord
+                            .home
+                            .dms
+                            .iter()
+                            .find(|d| d.id == dm_id)
+                            .and_then(|d| d.user_id.clone())
+                            && let Ok(prof) = client
+                                .call_blocking::<_, exo_rpc::DiscordProfileReply>(
+                                    exo_rpc::METHOD_DISCORD_PROFILE,
+                                    &serde_json::json!({ "userId": uid }),
+                                    Duration::from_secs(5),
+                                )
+                        {
+                            if let Some(ref n) = prof.note {
+                                state.discord.chat.dm_sidebar_note_uid = Some(uid.clone());
+                                state.discord.chat.dm_sidebar_note.text = n.clone();
+                            }
+                            state
+                                .discord
+                                .chat
+                                .dm_profile_cache
+                                .insert(format!("{uid}:"), prof);
+                        }
+                    }
                 }
                 if (sc == "discord-server" || sc == "discord-voice")
                     && let Some(gid) = state.discord.home.guilds.first().map(|g| g.id.clone())
@@ -2155,6 +2204,78 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             .or_else(|| s.discord.home.guilds.first().map(|g| g.id.clone()));
         if let Some(gid) = gid {
             s.open_discord_guild(&gid);
+        }
+    }),
+    ("discord-picker", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.open_expression_picker_for_composer(discord_chat_state::ExpressionTab::Emoji);
+    }),
+    ("discord-pins", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.toggle_discord_pins_drawer();
+    }),
+    ("discord-search", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.toggle_discord_search_drawer();
+    }),
+    ("discord-inbox", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_inbox(discord_chat_state::InboxTab::Unreads);
+    }),
+    ("discord-poll", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.open_poll_creator();
+    }),
+    ("discord-profile", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        let (uid, name, av) = s
+            .discord
+            .home
+            .dms
+            .first()
+            .map(|d| {
+                (
+                    d.user_id.clone().unwrap_or_else(|| "u-ada".into()),
+                    d.name.clone(),
+                    d.avatar.clone(),
+                )
+            })
+            .unwrap_or_else(|| ("u-ada".into(), "Ada".into(), None));
+        s.open_user_profile_dialog(discord_chat_state::ProfileOpenRequest {
+            user_id: &uid,
+            guild_id: None,
+            fallback_name: &name,
+            fallback_username: &name,
+            fallback_avatar: av.as_deref(),
+            full: true,
+            tab: discord_chat_state::ProfileTab::About,
+        });
+    }),
+    ("discord-create-dm", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.open_create_dm_dialog();
+    }),
+    ("discord-invite", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        if let Some(gid) = s.discord.home.guilds.first().map(|g| g.id.clone()) {
+            s.open_discord_guild(&gid);
+            if let Some(cid) = s.active_chat_channel_id() {
+                let gname = s
+                    .discord
+                    .home
+                    .guilds
+                    .iter()
+                    .find(|g| g.id == gid)
+                    .map(|g| g.name.clone())
+                    .unwrap_or_else(|| "Server".into());
+                s.open_invite_dialog(&gname, &cid, Some("general"));
+            }
         }
     }),
     ("discord-voice", |s: &mut AppState| {

@@ -1,4 +1,5 @@
 pub mod base64;
+pub mod discord_chat_types;
 pub mod discord_types;
 pub mod events;
 pub mod game_types;
@@ -10,6 +11,28 @@ pub mod remote_art;
 pub mod settings_types;
 pub mod types;
 
+pub use discord_chat_types::{
+    DiscordAdminReply, DiscordAppChoice, DiscordAppCommand, DiscordAppComponent, DiscordAppFileRef,
+    DiscordAppGalleryItem, DiscordAppInfo, DiscordAppMedia, DiscordAppModal, DiscordAppModalApp,
+    DiscordAppOption, DiscordAppSelectOption, DiscordAppsReply, DiscordBadge,
+    DiscordChannelInviteReply, DiscordColorsReply, DiscordConnection, DiscordDmLineEvent,
+    DiscordEmojiFavoritesReply, DiscordEmojiGuild, DiscordEmojisReply, DiscordFavoriteGif,
+    DiscordFileTextReply, DiscordForYouItem, DiscordForYouReply, DiscordGif,
+    DiscordGifFavoritesReply, DiscordGifsReply, DiscordGiftCard, DiscordGuildEmoji,
+    DiscordImageReply, DiscordInteractionEvent, DiscordInteractionMeta, DiscordInviteCard,
+    DiscordMentionChannel, DiscordMentionRole, DiscordMentionableReply, DiscordMentionsReply,
+    DiscordMessageCall, DiscordMessageSnapshot, DiscordMessageSnapshotInner, DiscordMessageThread,
+    DiscordMutualGuild, DiscordNotifyClearEvent, DiscordNotifyEvent, DiscordOpenEvent,
+    DiscordPlaceRef, DiscordPoll, DiscordPollAnswer, DiscordPollAnswerCount, DiscordPollMedia,
+    DiscordPollResults, DiscordPollVoteEvent, DiscordProfile, DiscordProfileBio,
+    DiscordProfileExtras, DiscordProfileGuildMember, DiscordProfilePresence, DiscordProfileReply,
+    DiscordProfileRole, DiscordProfileUser, DiscordProfileVoice, DiscordReactionCountDetails,
+    DiscordReactorsReply, DiscordReportReply, DiscordRoleChoice, DiscordRolePerson,
+    DiscordRolePersonCan, DiscordSaveData, DiscordSavedMessage, DiscordSavedReply,
+    DiscordServerCardReply, DiscordSticker, DiscordStickerGroup, DiscordStickerItem,
+    DiscordStickersReply, DiscordThreadCreateReply, DiscordThreadCreated, FriendsBadgeReply,
+    SpotifyLinkReply,
+};
 pub use discord_types::{
     DiscordAccountItem, DiscordAccountsReply, DiscordAttachment, DiscordAudioDevice,
     DiscordAudioReply, DiscordChangedEvent, DiscordChannel, DiscordChannels, DiscordDm,
@@ -171,25 +194,42 @@ pub const METHOD_DEVICES_IMAGE: &str = "devices.image";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
 pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
 pub const METHOD_DISCORD_ACK: &str = "discord.ack";
+pub const METHOD_DISCORD_ADMIN: &str = "discord.admin";
+pub const METHOD_DISCORD_APPS: &str = "discord.apps";
 pub const METHOD_DISCORD_AUDIO: &str = "discord.audio";
 pub const METHOD_DISCORD_CAMERA: &str = "discord.camera";
 pub const METHOD_DISCORD_CHANNEL: &str = "discord.channel";
 pub const METHOD_DISCORD_CHANNELS: &str = "discord.channels";
 pub const METHOD_DISCORD_CLIENT_SETTINGS: &str = "discord.clientSettings";
+pub const METHOD_DISCORD_COLORS: &str = "discord.colors";
 pub const METHOD_DISCORD_DELETE: &str = "discord.delete";
 pub const METHOD_DISCORD_EDIT: &str = "discord.edit";
+pub const METHOD_DISCORD_EMOJI_FAVORITES: &str = "discord.emojiFavorites";
+pub const METHOD_DISCORD_EMOJIS: &str = "discord.emojis";
+pub const METHOD_DISCORD_FILE_TEXT: &str = "discord.fileText";
+pub const METHOD_DISCORD_FOR_YOU: &str = "discord.forYou";
 pub const METHOD_DISCORD_FRIEND: &str = "discord.friend";
 pub const METHOD_DISCORD_FRIENDS: &str = "discord.friends";
+pub const METHOD_DISCORD_GIF_FAVORITES: &str = "discord.gifFavorites";
+pub const METHOD_DISCORD_GIFS: &str = "discord.gifs";
 pub const METHOD_DISCORD_GOLIVE: &str = "discord.golive";
 pub const METHOD_DISCORD_HOME: &str = "discord.home";
+pub const METHOD_DISCORD_IMAGE: &str = "discord.image";
 pub const METHOD_DISCORD_MARK_READ: &str = "discord.markRead";
 pub const METHOD_DISCORD_MEMBERS: &str = "discord.members";
+pub const METHOD_DISCORD_MENTIONABLE: &str = "discord.mentionable";
+pub const METHOD_DISCORD_MENTIONS: &str = "discord.mentions";
 pub const METHOD_DISCORD_MESSAGE_ACTION: &str = "discord.messageAction";
 pub const METHOD_DISCORD_MESSAGES: &str = "discord.messages";
 pub const METHOD_DISCORD_MY_VOICE: &str = "discord.myVoice";
 pub const METHOD_DISCORD_PINS: &str = "discord.pins";
+pub const METHOD_DISCORD_POLL: &str = "discord.poll";
+pub const METHOD_DISCORD_PROFILE: &str = "discord.profile";
 pub const METHOD_DISCORD_REACT: &str = "discord.react";
+pub const METHOD_DISCORD_REACTORS: &str = "discord.reactors";
+pub const METHOD_DISCORD_REPORT: &str = "discord.report";
 pub const METHOD_DISCORD_RING: &str = "discord.ring";
+pub const METHOD_DISCORD_SAVED: &str = "discord.saved";
 pub const METHOD_DISCORD_SEARCH: &str = "discord.search";
 pub const METHOD_DISCORD_SEND: &str = "discord.send";
 pub const METHOD_DISCORD_SERVER: &str = "discord.server";
@@ -198,12 +238,18 @@ pub const METHOD_DISCORD_SIGN_IN: &str = "discord.signIn";
 pub const METHOD_DISCORD_SIGN_OUT: &str = "discord.signOut";
 pub const METHOD_DISCORD_SOUNDBOARD: &str = "discord.soundboard";
 pub const METHOD_DISCORD_STATUS: &str = "discord.status";
+pub const METHOD_DISCORD_STICKER: &str = "discord.sticker";
+pub const METHOD_DISCORD_STICKER_DATA: &str = "discord.stickerData";
+pub const METHOD_DISCORD_STICKERS: &str = "discord.stickers";
 pub const METHOD_DISCORD_STREAM: &str = "discord.stream";
+pub const METHOD_DISCORD_THREAD: &str = "discord.thread";
+pub const METHOD_DISCORD_THREADS: &str = "discord.threads";
 pub const METHOD_DISCORD_TYPING: &str = "discord.typing";
 pub const METHOD_DISCORD_UNREADS: &str = "discord.unreads";
 pub const METHOD_DISCORD_UPLOAD: &str = "discord.upload";
 pub const METHOD_DISCORD_VIEW: &str = "discord.view";
 pub const METHOD_DISCORD_VOICE: &str = "discord.voice";
+pub const METHOD_FRIENDS_BADGE: &str = "friends.badge";
 pub const METHOD_EQ: &str = "eq";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
 pub const METHOD_BACKUP_STATUS: &str = "backup.status";
@@ -285,6 +331,7 @@ pub const METHOD_SHELL_BOOTSTRAP: &str = "shell.bootstrap";
 pub const METHOD_SHELL_OPEN_URL: &str = "shell.openUrl";
 pub const METHOD_SHELL_READY: &str = "shell.ready";
 pub const METHOD_SPOTIFY_ACT: &str = "spotify.act";
+pub const METHOD_SPOTIFY_LINK: &str = "spotify.link";
 pub const METHOD_SPOTIFY_START: &str = "spotify.start";
 pub const METHOD_SPOTIFY_VIEW: &str = "spotify.view";
 pub const METHOD_STARTUP_CLEAN: &str = "startup.clean";
@@ -424,25 +471,42 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DEVICES_LIST,
     METHOD_DISCORD_ACCOUNTS,
     METHOD_DISCORD_ACK,
+    METHOD_DISCORD_ADMIN,
+    METHOD_DISCORD_APPS,
     METHOD_DISCORD_AUDIO,
     METHOD_DISCORD_CAMERA,
     METHOD_DISCORD_CHANNEL,
     METHOD_DISCORD_CHANNELS,
     METHOD_DISCORD_CLIENT_SETTINGS,
+    METHOD_DISCORD_COLORS,
     METHOD_DISCORD_DELETE,
     METHOD_DISCORD_EDIT,
+    METHOD_DISCORD_EMOJI_FAVORITES,
+    METHOD_DISCORD_EMOJIS,
+    METHOD_DISCORD_FILE_TEXT,
+    METHOD_DISCORD_FOR_YOU,
     METHOD_DISCORD_FRIEND,
     METHOD_DISCORD_FRIENDS,
+    METHOD_DISCORD_GIF_FAVORITES,
+    METHOD_DISCORD_GIFS,
     METHOD_DISCORD_GOLIVE,
     METHOD_DISCORD_HOME,
+    METHOD_DISCORD_IMAGE,
     METHOD_DISCORD_MARK_READ,
     METHOD_DISCORD_MEMBERS,
+    METHOD_DISCORD_MENTIONABLE,
+    METHOD_DISCORD_MENTIONS,
     METHOD_DISCORD_MESSAGE_ACTION,
     METHOD_DISCORD_MESSAGES,
     METHOD_DISCORD_MY_VOICE,
     METHOD_DISCORD_PINS,
+    METHOD_DISCORD_POLL,
+    METHOD_DISCORD_PROFILE,
     METHOD_DISCORD_REACT,
+    METHOD_DISCORD_REACTORS,
+    METHOD_DISCORD_REPORT,
     METHOD_DISCORD_RING,
+    METHOD_DISCORD_SAVED,
     METHOD_DISCORD_SEARCH,
     METHOD_DISCORD_SEND,
     METHOD_DISCORD_SERVER,
@@ -451,12 +515,18 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DISCORD_SIGN_OUT,
     METHOD_DISCORD_SOUNDBOARD,
     METHOD_DISCORD_STATUS,
+    METHOD_DISCORD_STICKER,
+    METHOD_DISCORD_STICKER_DATA,
+    METHOD_DISCORD_STICKERS,
     METHOD_DISCORD_STREAM,
+    METHOD_DISCORD_THREAD,
+    METHOD_DISCORD_THREADS,
     METHOD_DISCORD_TYPING,
     METHOD_DISCORD_UNREADS,
     METHOD_DISCORD_UPLOAD,
     METHOD_DISCORD_VIEW,
     METHOD_DISCORD_VOICE,
+    METHOD_FRIENDS_BADGE,
     METHOD_EQ,
     METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_STATE,
@@ -538,6 +608,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SHELL_OPEN_URL,
     METHOD_SHELL_READY,
     METHOD_SPOTIFY_ACT,
+    METHOD_SPOTIFY_LINK,
     METHOD_SPOTIFY_START,
     METHOD_SPOTIFY_VIEW,
     METHOD_STARTUP_CLEAN,
@@ -1442,6 +1513,39 @@ fn parse_event(
         "discord.typing" => Ok(serde_json::from_str::<DiscordTypingEvent>(data_raw)
             .map(HostEvent::DiscordTyping)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.pollVote" => Ok(serde_json::from_str::<DiscordPollVoteEvent>(data_raw)
+            .map(HostEvent::DiscordPollVote)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.interaction" => Ok(serde_json::from_str::<DiscordInteractionEvent>(data_raw)
+            .map(|ev| HostEvent::DiscordInteraction(Box::new(ev)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.colors" => {
+            #[derive(Deserialize)]
+            struct ColorsWire<'a> {
+                #[serde(rename = "guildId", borrow)]
+                guild_id: Cow<'a, str>,
+            }
+            Ok(serde_json::from_str::<ColorsWire<'_>>(data_raw)
+                .map(|c| HostEvent::DiscordColors {
+                    guild_id: c.guild_id.into_owned(),
+                })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "discord.open" => Ok(serde_json::from_str::<DiscordOpenEvent>(data_raw)
+            .map(HostEvent::DiscordOpen)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.dmLine" => Ok(serde_json::from_str::<DiscordDmLineEvent>(data_raw)
+            .map(HostEvent::DiscordDmLine)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.notify" => Ok(serde_json::from_str::<DiscordNotifyEvent>(data_raw)
+            .map(|ev| HostEvent::DiscordNotify(Box::new(ev)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.notifyClear" => Ok(serde_json::from_str::<DiscordNotifyClearEvent>(data_raw)
+            .map(HostEvent::DiscordNotifyClear)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "friends.badge" => Ok(serde_json::from_str::<FriendsBadgeReply>(data_raw)
+            .map(|b| HostEvent::FriendsBadge { count: b.count })
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "discord.video" => Ok(serde_json::from_str::<DiscordVideoEvent>(data_raw)
             .map(HostEvent::DiscordVideo)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
@@ -1511,15 +1615,10 @@ fn parse_event(
             .map(HostEvent::ShadersRebuild)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "shell.window" => Ok(raw_fallback(name, data_raw)),
-        "friends.badge" => Ok(raw_fallback(name, data_raw)),
-        "discord.open" => Ok(raw_fallback(name, data_raw)),
         "app.open" => Ok(raw_fallback(name, data_raw)),
         "notes.open" => Ok(raw_fallback(name, data_raw)),
         "anticheat.missing" => Ok(raw_fallback(name, data_raw)),
         "stores.outage" => Ok(raw_fallback(name, data_raw)),
-        "discord.notify" => Ok(raw_fallback(name, data_raw)),
-        "discord.notifyClear" => Ok(raw_fallback(name, data_raw)),
-        "discord.dmLine" => Ok(raw_fallback(name, data_raw)),
         "app.notify" => Ok(raw_fallback(name, data_raw)),
         "app.notifyClear" => Ok(raw_fallback(name, data_raw)),
         "discord.call" => Ok(raw_fallback(name, data_raw)),

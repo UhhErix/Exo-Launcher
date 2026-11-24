@@ -1,4 +1,10 @@
+use crate::discord_chat_types::{
+    DiscordAppComponent, DiscordInteractionMeta, DiscordMessageCall, DiscordMessageSnapshot,
+    DiscordMessageThread, DiscordPlaceRef, DiscordPoll, DiscordReactionCountDetails,
+    DiscordStickerItem,
+};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -552,6 +558,10 @@ pub struct DiscordUnreadChannel {
     #[serde(default)]
     pub parent_id: Option<String>,
     #[serde(default)]
+    pub last_read: Option<String>,
+    #[serde(default)]
+    pub last_message: Option<String>,
+    #[serde(default)]
     pub mentions: i32,
 }
 
@@ -700,6 +710,12 @@ pub struct DiscordAttachment {
     pub height: Option<u32>,
     #[serde(default)]
     pub content_type: Option<String>,
+    #[serde(default)]
+    pub flags: u32,
+    #[serde(default)]
+    pub duration_secs: Option<f64>,
+    #[serde(default)]
+    pub waveform: Option<String>,
 }
 
 impl DiscordAttachment {
@@ -755,6 +771,10 @@ pub struct DiscordEmbedProvider {
 pub struct DiscordEmbedFooter {
     #[serde(default)]
     pub text: Option<String>,
+    #[serde(default)]
+    pub icon_url: Option<String>,
+    #[serde(default)]
+    pub proxy_icon_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -791,6 +811,10 @@ pub struct DiscordEmbed {
     pub image: Option<DiscordEmbedMedia>,
     #[serde(default)]
     pub thumbnail: Option<DiscordEmbedMedia>,
+    #[serde(default)]
+    pub video: Option<DiscordEmbedMedia>,
+    #[serde(default)]
+    pub timestamp: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -799,6 +823,8 @@ pub struct DiscordReactionEmoji {
     pub id: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub animated: bool,
 }
 
 impl DiscordReactionEmoji {
@@ -827,14 +853,24 @@ pub struct DiscordReaction {
     pub me: bool,
     #[serde(default)]
     pub emoji: DiscordReactionEmoji,
+    #[serde(default)]
+    pub count_details: Option<DiscordReactionCountDetails>,
+    #[serde(default)]
+    pub me_burst: bool,
+    #[serde(default)]
+    pub burst_colors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct DiscordMessageRef {
+    #[serde(rename = "type", default)]
+    pub ref_type: Option<i32>,
     #[serde(default)]
     pub message_id: Option<String>,
     #[serde(default)]
     pub channel_id: Option<String>,
+    #[serde(default)]
+    pub guild_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -860,13 +896,35 @@ pub struct DiscordMessage {
     #[serde(default)]
     pub embeds: Vec<DiscordEmbed>,
     #[serde(default)]
+    pub sticker_items: Vec<DiscordStickerItem>,
+    #[serde(default)]
+    pub poll: Option<DiscordPoll>,
+    #[serde(default)]
+    pub call: Option<DiscordMessageCall>,
+    #[serde(default)]
     pub mentions: Vec<DiscordUser>,
     #[serde(default)]
     pub mention_everyone: bool,
     #[serde(default)]
+    pub mention_roles: Vec<String>,
+    #[serde(default)]
     pub referenced_message: Option<Box<DiscordMessage>>,
     #[serde(default)]
     pub message_reference: Option<DiscordMessageRef>,
+    #[serde(default)]
+    pub message_snapshots: Vec<DiscordMessageSnapshot>,
+    #[serde(default)]
+    pub interaction_metadata: Option<DiscordInteractionMeta>,
+    #[serde(default)]
+    pub interaction: Option<DiscordInteractionMeta>,
+    #[serde(default)]
+    pub thread: Option<DiscordMessageThread>,
+    #[serde(default)]
+    pub flags: u32,
+    #[serde(default)]
+    pub components: Vec<DiscordAppComponent>,
+    #[serde(default)]
+    pub application_id: Option<String>,
     #[serde(default)]
     pub reactions: Vec<DiscordReaction>,
     #[serde(default)]
@@ -902,8 +960,55 @@ impl DiscordMessage {
         String::new()
     }
 
+    pub fn time_short_12h(&self) -> String {
+        if let Some(t_pos) = self.timestamp.find('T') {
+            let rest = &self.timestamp[t_pos + 1..];
+            if rest.len() >= 5
+                && let (Ok(h24), Ok(min)) = (rest[0..2].parse::<u32>(), rest[3..5].parse::<u32>())
+            {
+                let suffix = if h24 >= 12 { "PM" } else { "AM" };
+                let h12 = match h24 % 12 {
+                    0 => 12,
+                    n => n,
+                };
+                return format!("{h12}:{min:02} {suffix}");
+            }
+        }
+        String::new()
+    }
+
     pub fn day_key(&self) -> &str {
         self.timestamp.get(..10).unwrap_or("")
+    }
+
+    pub fn day_label(&self) -> String {
+        let dk = self.day_key();
+        if dk.len() == 10
+            && let (Ok(y), Ok(m), Ok(d)) = (
+                dk[0..4].parse::<u32>(),
+                dk[5..7].parse::<u32>(),
+                dk[8..10].parse::<u32>(),
+            )
+        {
+            const MONTHS: [&str; 12] = [
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ];
+            if (1..=12).contains(&m) {
+                return format!("{} {d}, {y}", MONTHS[(m - 1) as usize]);
+            }
+        }
+        dk.to_string()
     }
 }
 
@@ -940,6 +1045,8 @@ pub struct DiscordPinsReply {
     pub message: Option<String>,
     #[serde(default)]
     pub messages: Option<Vec<DiscordMessage>>,
+    #[serde(default)]
+    pub places: HashMap<String, Option<DiscordPlaceRef>>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -959,6 +1066,8 @@ pub struct DiscordSearchReply {
     pub message: Option<String>,
     #[serde(default)]
     pub result: Option<DiscordSearchResult>,
+    #[serde(default)]
+    pub places: HashMap<String, Option<DiscordPlaceRef>>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -998,6 +1107,12 @@ pub struct DiscordReactionEvent {
     pub me: bool,
     #[serde(default)]
     pub emoji: DiscordReactionEmoji,
+    #[serde(default)]
+    pub user_id: Option<String>,
+    #[serde(default)]
+    pub burst: bool,
+    #[serde(default)]
+    pub burst_colors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

@@ -1645,6 +1645,17 @@ pub fn icon_arrow_right(size: f32, color: Color) -> El {
     )
 }
 
+pub fn icon_arrow_up(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[12.0, 19.0], [12.0, 5.0]],
+            &[[6.0, 11.0], [12.0, 5.0], [18.0, 11.0]],
+        ],
+        color,
+    )
+}
+
 pub fn icon_rotate_ccw(size: f32, color: Color) -> El {
     let mut arc = arc_pts(
         12.0,

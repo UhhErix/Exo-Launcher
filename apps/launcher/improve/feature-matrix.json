@@ -8,9 +8,9 @@
     "wooting-native 57db49a"
   ],
   "totals": {
-    "DONE": 139,
-    "PARTIAL": 40,
-    "MISSING": 57,
+    "DONE": 155,
+    "PARTIAL": 33,
+    "MISSING": 48,
     "BROKEN": 2,
     "total": 238
   },
@@ -1174,13 +1174,13 @@
       "id": "discord-03",
       "room": "Discord",
       "feature": "Create DM / group DM (select friends, 10 limit)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/Messages.tsx:226",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_threads.rs:100",
       "rpc": [
         "discord.channel"
       ],
-      "notes": "",
+      "notes": "WP6: Create DM / group DM modal with friend search and 9-friend (10-member) limit via discord.channel.",
       "workPackage": "WP6"
     },
     {
@@ -1240,35 +1240,35 @@
       "id": "discord-08",
       "room": "Discord",
       "feature": "Message rendering: markdown, mentions, embeds, attachments",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/Message.tsx:11",
-      "nativeRef": "exo-ui/src/discord_md.rs:1",
+      "nativeRef": "exo-ui/src/discord_chat.rs:1129",
       "rpc": [],
-      "notes": "No Spotify Jam / gift / invite cards / thread-start rows; images ok; stickers via discord.sticker not called.",
+      "notes": "WP6: Full markdown (bold/italic/underline/strike/code/spoiler/links/mentions/channels/roles/subtext/timestamps), embeds, stickers, forwarded snapshots, thread-start/pin/call/system rows, Spotify Jam / gift / invite link cards.",
       "workPackage": "WP6"
     },
     {
       "id": "discord-09",
       "room": "Discord",
       "feature": "Composer: send, reply, edit, typing",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/Composer.tsx:154",
-      "nativeRef": "exo-ui/src/discord_chat.rs:31",
+      "nativeRef": "exo-ui/src/discord_chat.rs:1870",
       "rpc": [
         "discord.send",
         "discord.typing",
         "discord.upload"
       ],
-      "notes": "No file drop/upload, spoiler, alt text, upload-as-file, suggestions.",
+      "notes": "WP6: Multi-line auto_grow composer, drafts per channel, reply @On/@Off, edit, typing, OS file drop + virtual_cols pending strip, spoiler/alt/Modify attachment, upload-as-file, char counter.",
       "workPackage": "WP6"
     },
     {
       "id": "discord-10",
       "room": "Discord",
       "feature": "Emoji picker, GIF picker, sticker picker",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/Composer.tsx:5",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_pickers.rs:180",
       "rpc": [
         "discord.emojis",
         "discord.gifs",
@@ -1276,31 +1276,31 @@
         "discord.emojiFavorites",
         "discord.gifFavorites"
       ],
-      "notes": "None of these RPCs called.",
+      "notes": "WP6: Expression picker with Emoji, GIF (trending + favorites + search), and Sticker tabs via discord.emojis, discord.emojiFavorites, discord.gifs, discord.gifFavorites, discord.stickers.",
       "workPackage": "WP6"
     },
     {
       "id": "discord-11",
       "room": "Discord",
       "feature": "Reactions: add, remove, who reacted",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/Message.tsx:414",
-      "nativeRef": "exo-ui/src/discord_chat.rs:469",
+      "nativeRef": "exo-ui/src/discord_pickers.rs:1542",
       "rpc": [
         "discord.react"
       ],
-      "notes": "discord.reactors never called.",
+      "notes": "WP6: Normal + super reactions add/remove via discord.react, plus Who Reacted dialog with per-emoji tabs and moderator remove via discord.reactors.",
       "workPackage": "WP6"
     },
     {
       "id": "discord-12",
       "room": "Discord",
       "feature": "Message menu (reply, edit, pin, copy, delete, report, forward)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/Message.tsx:1",
-      "nativeRef": "exo-ui/src/menus.rs:1173†",
+      "nativeRef": "exo-ui/src/menus.rs:1183",
       "rpc": [],
-      "notes": "No Forward, Create thread, Report.",
+      "notes": "WP6: Complete DiscordMessage context menu: Reply, Edit, Pin/Unpin, Forward, Create thread, Bookmark, Remind me submenu, View/Clear reactions, Mark unread, Copy text/link/ID, Remove embeds, Delete, Report.",
       "workPackage": "WP6"
     },
     {
@@ -1321,66 +1321,66 @@
       "id": "discord-14",
       "room": "Discord",
       "feature": "Polls (create, vote, results)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/PollCreator.tsx:23",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_threads.rs:295",
       "rpc": [
         "discord.poll"
       ],
-      "notes": "discord.pollVote event not handled.",
+      "notes": "WP6: Poll creator modal, inline poll card voting/remove-vote/end-poll/results via discord.poll, and real-time discord.pollVote push event registered in events.rs.",
       "workPackage": "WP6"
     },
     {
       "id": "discord-15",
       "room": "Discord",
       "feature": "Message search (filters)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/SearchBar.tsx:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_search.rs:242",
       "rpc": [
         "discord.search"
       ],
-      "notes": "",
+      "notes": "WP6: Search drawer with inline filter chips (from:, in:, has:, mentions:, before:, on:/during:, after:, pinned:, authorType:), quick filters, Newest/Oldest/Relevant sort, pagination, and jump via discord.search.",
       "workPackage": "WP6"
     },
     {
       "id": "discord-16",
       "room": "Discord",
       "feature": "Pins panel",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/ChatHeader.tsx:1",
-      "nativeRef": "exo-ui/src/discord_chat.rs:946",
+      "nativeRef": "exo-ui/src/discord_search.rs:169",
       "rpc": [
         "discord.pins"
       ],
-      "notes": "",
+      "notes": "WP6: Pins drawer with discord.pins fetch, jump-to-message, and unpin.",
       "workPackage": "WP6"
     },
     {
       "id": "discord-17",
       "room": "Discord",
       "feature": "Inbox (mentions, unreads)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/Inbox.tsx:16",
-      "nativeRef": "exo-ui/src/discord.rs:3458",
+      "nativeRef": "exo-ui/src/discord_search.rs:550",
       "rpc": [
         "discord.mentions",
         "discord.forYou"
       ],
-      "notes": "Panel shows only \"All caught up.\"; discord.mentions / forYou never called.",
+      "notes": "WP6: Full Inbox panel with For you (discord.forYou), Unreads (message peeks + mark channel/server read), Mentions (discord.mentions + filter toggles + dismiss), Bookmarks, and Reminders.",
       "workPackage": "WP6"
     },
     {
       "id": "discord-18",
       "room": "Discord",
       "feature": "Saved messages",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/MessageTools.tsx:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_search.rs:550",
       "rpc": [
         "discord.saved"
       ],
-      "notes": "",
+      "notes": "WP6: Saved messages Bookmarks & Reminders tabs in Inbox plus Bookmark and Remind me actions in message menu via discord.saved.",
       "workPackage": "WP6"
     },
     {
@@ -1400,13 +1400,13 @@
       "id": "discord-20",
       "room": "Discord",
       "feature": "User profile popover/card (roles, mutual, note, badges)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/profileParts.tsx:1",
-      "nativeRef": "exo-ui/src/discord.rs:1419",
+      "nativeRef": "exo-ui/src/discord_threads.rs:1536",
       "rpc": [
         "discord.profile"
       ],
-      "notes": "No roles editor, mutual servers/friends tabs.",
+      "notes": "WP6: Full DM user profile sidebar + popout & full modal with banner, overlapping avatar, badges, bio, Member since, roles + role editor (discord.admin), connections, mutual friends/servers, and editable note via discord.profile.",
       "workPackage": "WP6"
     },
     {
@@ -1593,13 +1593,13 @@
       "id": "discord-35",
       "room": "Discord",
       "feature": "Invite dialog",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/InviteDialog.tsx:30",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_threads.rs:686",
       "rpc": [
         "discord.admin"
       ],
-      "notes": "",
+      "notes": "WP6: Invite dialog with friend search + send invite, copy invite link, and Edit invite link settings (expiry/max uses/temporary) via discord.channel action invite.",
       "workPackage": "WP6"
     },
     {
@@ -1673,14 +1673,14 @@
       "id": "discord-41",
       "room": "Discord",
       "feature": "Link rows / image & file viewer, fileText, image save",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/extras.tsx:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_chat.rs:2417",
       "rpc": [
         "discord.image",
         "discord.fileText"
       ],
-      "notes": "",
+      "notes": "WP6: Rune modal Lightbox gallery (prev/next, zoom, drag-pan, Esc) + Copy/Save/Open original actions (discord.image, shell.openUrl), right-click image menu, discord.fileText inline preview + expand/collapse, virtual_cols multi-image strips.",
       "workPackage": "WP6"
     },
     {
@@ -1701,27 +1701,27 @@
       "id": "discord-43",
       "room": "Discord",
       "feature": "Interactions (slash commands, bot apps, buttons)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/Composer.tsx:443",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_pickers.rs:1094",
       "rpc": [
         "discord.apps",
         "discord.interaction"
       ],
-      "notes": "discord.interaction event not handled.",
+      "notes": "WP6: Slash command list + inline CommandForm with option autocomplete, bot message components (buttons/selects), AppModal overlay, ephemeral dismiss via discord.apps & discord.interaction push event.",
       "workPackage": "WP6"
     },
     {
       "id": "discord-44",
       "room": "Discord",
       "feature": "Mentionable autocomplete",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/Composer.tsx:32",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_pickers.rs:815",
       "rpc": [
         "discord.mentionable"
       ],
-      "notes": "",
+      "notes": "WP6: Mentionable autocomplete for @user, @role, @everyone/@here, #channel, and :emoji: with raw token expansion via discord.mentionable.",
       "workPackage": "WP6"
     },
     {

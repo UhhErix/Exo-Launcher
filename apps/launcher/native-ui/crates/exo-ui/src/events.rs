@@ -21,6 +21,14 @@ pub enum HostEventKind {
     DiscordMessage,
     DiscordReaction,
     DiscordTyping,
+    DiscordPollVote,
+    DiscordInteraction,
+    DiscordColors,
+    DiscordOpen,
+    DiscordDmLine,
+    DiscordNotify,
+    DiscordNotifyClear,
+    FriendsBadge,
     DiscordVideo,
     DiscordVideoFrame,
     DiscordGoLive,
@@ -79,6 +87,14 @@ impl HostEventKind {
             HostEvent::DiscordMessage(_) => Self::DiscordMessage,
             HostEvent::DiscordReaction(_) => Self::DiscordReaction,
             HostEvent::DiscordTyping(_) => Self::DiscordTyping,
+            HostEvent::DiscordPollVote(_) => Self::DiscordPollVote,
+            HostEvent::DiscordInteraction(_) => Self::DiscordInteraction,
+            HostEvent::DiscordColors { .. } => Self::DiscordColors,
+            HostEvent::DiscordOpen(_) => Self::DiscordOpen,
+            HostEvent::DiscordDmLine(_) => Self::DiscordDmLine,
+            HostEvent::DiscordNotify(_) => Self::DiscordNotify,
+            HostEvent::DiscordNotifyClear(_) => Self::DiscordNotifyClear,
+            HostEvent::FriendsBadge { .. } => Self::FriendsBadge,
             HostEvent::DiscordVideo(_) => Self::DiscordVideo,
             HostEvent::DiscordVideoFrame(_) => Self::DiscordVideoFrame,
             HostEvent::DiscordGoLive(_) => Self::DiscordGoLive,
@@ -385,6 +401,54 @@ fn register_discord(reg: &mut EventRegistry) {
             return false;
         };
         state.handle_discord_typing(tp)
+    });
+    reg.on(HostEventKind::DiscordPollVote, |state, ev| {
+        let HostEvent::DiscordPollVote(pv) = ev else {
+            return false;
+        };
+        state.handle_discord_poll_vote(pv)
+    });
+    reg.on(HostEventKind::DiscordInteraction, |state, ev| {
+        let HostEvent::DiscordInteraction(ix) = ev else {
+            return false;
+        };
+        state.handle_discord_interaction(*ix)
+    });
+    reg.on(HostEventKind::DiscordColors, |state, ev| {
+        let HostEvent::DiscordColors { guild_id } = ev else {
+            return false;
+        };
+        state.handle_discord_colors(&guild_id)
+    });
+    reg.on(HostEventKind::DiscordOpen, |state, ev| {
+        let HostEvent::DiscordOpen(op) = ev else {
+            return false;
+        };
+        state.handle_discord_open(op)
+    });
+    reg.on(HostEventKind::DiscordDmLine, |state, ev| {
+        let HostEvent::DiscordDmLine(dl) = ev else {
+            return false;
+        };
+        state.handle_discord_dm_line(dl)
+    });
+    reg.on(HostEventKind::DiscordNotify, |state, ev| {
+        let HostEvent::DiscordNotify(nt) = ev else {
+            return false;
+        };
+        state.handle_discord_notify(*nt)
+    });
+    reg.on(HostEventKind::DiscordNotifyClear, |state, ev| {
+        let HostEvent::DiscordNotifyClear(nc) = ev else {
+            return false;
+        };
+        state.handle_discord_notify_clear(nc)
+    });
+    reg.on(HostEventKind::FriendsBadge, |state, ev| {
+        let HostEvent::FriendsBadge { count } = ev else {
+            return false;
+        };
+        state.handle_friends_badge(count)
     });
     reg.on(HostEventKind::DiscordVideo, |state, ev| {
         let HostEvent::DiscordVideo(vid) = ev else {
