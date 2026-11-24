@@ -48,6 +48,20 @@ public static class FailureReportRules
             || message.Contains("free space", StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool IsExpectedUserNotice(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+        var text = message.Trim();
+        if (text.Contains("is running, so the update waits", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (text.StartsWith("Close ", StringComparison.OrdinalIgnoreCase)
+            && text.Contains(" first", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (text.StartsWith("Leave your Discord call first", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
     public static bool IsDiscordGatewayReportable(int? lastCloseCode, bool networkFailure) =>
         !networkFailure && lastCloseCode is not null;
 
