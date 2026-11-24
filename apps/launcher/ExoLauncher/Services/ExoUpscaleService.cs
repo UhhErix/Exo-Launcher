@@ -102,6 +102,37 @@ internal static class ExoUpscaleService
         return null;
     }
 
+    internal static string? FindFgBridgeDllPath()
+    {
+        var baseDir = AppContext.BaseDirectory;
+        string[] direct =
+        [
+            Path.Combine(baseDir, "exo_fg_bridge.dll"),
+            Path.Combine(baseDir, "native-ui", "exo_fg_bridge.dll")
+        ];
+        foreach (var candidate in direct)
+        {
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        var dir = new DirectoryInfo(baseDir);
+        for (var i = 0; i < 8 && dir is not null; i++)
+        {
+            var rel = Path.Combine(dir.FullName, "native-ui", "target", "release", "exo_fg_bridge.dll");
+            if (File.Exists(rel))
+                return rel;
+            var dbg = Path.Combine(dir.FullName, "native-ui", "target", "debug", "exo_fg_bridge.dll");
+            if (File.Exists(dbg))
+                return dbg;
+            dir = dir.Parent;
+        }
+
+        return null;
+    }
+
+    internal static bool IsFgBridgeAvailable() => FindFgBridgeDllPath() is not null;
+
     internal static bool RecoverOrphanedSessionsOnStartup(string stateDir, string backupDir)
     {
         var exe = FindExePath();

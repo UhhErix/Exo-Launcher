@@ -878,6 +878,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-fg-bridge"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "bytemuck",
+ "exo-rpc",
+ "exo-upscale",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
 name = "exo-flow"
 version = "0.1.0"
 dependencies = [

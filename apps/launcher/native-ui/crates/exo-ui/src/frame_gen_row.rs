@@ -27,6 +27,7 @@ pub fn route_short_label(route: Option<&FrameGenRoute>) -> String {
                 "OptiScaler".into()
             }
         }
+        "mod_exo_fg_bridge" => "Exo FG Bridge".into(),
         "mod_dlssg" => "DLSSG SM86".into(),
         "mod_mfg" => "MFG Unlocker".into(),
         "mod_other" => curly(&route.label),

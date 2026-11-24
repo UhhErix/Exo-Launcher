@@ -54,7 +54,8 @@ internal static class FrameGenService
             IntelXessOverride: intelChoice,
             UserSelectedRoute: savedRoute,
             ExoFlowAvailable: exoFlowAvailable,
-            ExoFlowEnabled: exoFlowActive);
+            ExoFlowEnabled: exoFlowActive,
+            ExoFgBridgeAvailable: ExoUpscaleService.IsFgBridgeAvailable());
 
         return FrameGenRouter.Decide(gpu, input);
     }
@@ -97,6 +98,7 @@ internal static class FrameGenService
         if (target is null || !target.Selectable)
         {
             var isModRequest = string.Equals(routeId, FrameGenRouter.RouteModOptiScaler, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(routeId, FrameGenRouter.RouteModExoFgBridge, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(routeId, FrameGenRouter.RouteModDlssg, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(routeId, FrameGenRouter.RouteModMfg, StringComparison.OrdinalIgnoreCase);
             if (isModRequest)
@@ -115,7 +117,7 @@ internal static class FrameGenService
             if (applyError is null)
                 settings.SetFrameGenRoute(game.Id, FrameGenRouter.RouteDriverSmoothMotion);
         }
-        else if (target.Id is FrameGenRouter.RouteModOptiScaler or FrameGenRouter.RouteModDlssg or FrameGenRouter.RouteModMfg)
+        else if (target.Id is FrameGenRouter.RouteModOptiScaler or FrameGenRouter.RouteModExoFgBridge or FrameGenRouter.RouteModDlssg or FrameGenRouter.RouteModMfg)
         {
             var currentAntiCheat = await Task.Run(() => dlss.AntiCheatNow(game, ct), ct).ConfigureAwait(false);
             if (FrameGenAntiCheat.IsDllDisallowed(game, currentAntiCheat))

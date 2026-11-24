@@ -20,6 +20,7 @@ members = [
     "crates/exo-autopilot",
     "crates/exo-upscale",
     "crates/exo-voice-ml",
+    "crates/exo-fg-bridge",
 ]
 
 [workspace.package]
