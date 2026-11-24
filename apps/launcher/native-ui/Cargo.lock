@@ -855,6 +855,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-light"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
 name = "exo-rpc"
 version = "0.1.0"
 dependencies = [
