@@ -62,7 +62,7 @@ fn main() {
                 id,
                 name,
                 p,
-                Some(AntiCheatClass::Offline),
+                Some(AntiCheatClass::OfflineAntiCheat),
                 None,
             ));
         }

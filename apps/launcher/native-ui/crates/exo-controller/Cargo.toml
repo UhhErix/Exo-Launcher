@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+exo-rpc = { path = "../exo-rpc" }
 serde.workspace = true
 
 [target.'cfg(windows)'.dependencies]

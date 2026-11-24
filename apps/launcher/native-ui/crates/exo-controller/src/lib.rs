@@ -110,8 +110,8 @@ impl ControllerHub {
 mod tests {
     use super::*;
     use auto_profiles::{
-        ControllerAntiCheatClass, ControllerRemapMode, GameControllerProfile,
-        LOW_BATTERY_AMBER_HEX, TriggerPreset, resolve_controller_profile,
+        AntiCheatClass, ControllerRemapMode, GameControllerProfile, LOW_BATTERY_AMBER_HEX,
+        TriggerPreset, resolve_controller_profile,
     };
     use sony_calibrate::{
         CalibrationSession, CalibrationStep, EdgeOnboardProfile, parse_edge_slot,
@@ -292,9 +292,9 @@ mod tests {
             remap_mode: ControllerRemapMode::OfflineSoftwareGyroOrRemap,
         };
         for cls in [
-            ControllerAntiCheatClass::CompetitivePvp,
-            ControllerAntiCheatClass::OnlinePveGacha,
-            ControllerAntiCheatClass::Unknown,
+            AntiCheatClass::CompetitivePvpOnline,
+            AntiCheatClass::OnlineNonCompetitivePve,
+            AntiCheatClass::Unknown,
         ] {
             let res = resolve_controller_profile(&profile, cls, Some(10));
             assert!(!res.software_remap_active);
@@ -303,11 +303,8 @@ mod tests {
             assert_eq!(res.settings.light.as_deref(), Some(LOW_BATTERY_AMBER_HEX));
         }
 
-        let offline = resolve_controller_profile(
-            &profile,
-            ControllerAntiCheatClass::OfflineSinglePlayer,
-            Some(80),
-        );
+        let offline =
+            resolve_controller_profile(&profile, AntiCheatClass::OfflineAntiCheat, Some(80));
         assert!(offline.software_remap_active);
         assert!(!offline.low_battery_warning);
         assert!(offline.blocked_reason.is_none());

@@ -9,7 +9,7 @@ Graduates `lab/lab-macros` into v4 native Rust (`apps/launcher/native-ui/`), imp
 ### Spec 12 — Exo Macros Native (`exo-macros` + `exo-macros-worker`)
 - **`crates/exo-macros` (Control Plane — 0 synthetic input or hook imports):**
   - `model.rs`: `MacroDef`, `MacroTrigger` (per-device `device_id`, `chord`, `chord_window_ms`, `layer_id`, `mode: once|repeat|hold|toggle`, `jitter_ms`, `swallow_input`), `MacroAction` (keys, mouse, controller buttons/axes, delay, text, app launch, layer switch, and AC-safe `ExoInternal` IPC commands), plus 4 built-in zero-script Smart Templates.
-  - `policy.rs`: 4-class Anti-Cheat model (`CompetitivePvp`, `OnlinePveGacha`, `OfflineSinglePlayer`, `Unknown` -> treated as `CompetitivePvp`), hard-disabling Tier 2 software macros for all online, competitive, and unknown games (**no confirmation override**), enforcing Tier 1 onboard hardware macros + `ExoInternal` IPC only there, rejecting competitive cheat primitives (recoil-compensation loops & `< 25 ms` rapid-fire click loops), and providing `AntiCheatFocusWatchdog`.
+  - `policy.rs`: Re-exports the single canonical `exo_rpc::anticheat::AntiCheatClass` (`CompetitivePvpOnline`, `OnlineNonCompetitivePve`, `OfflineAntiCheat`, `Unknown` -> `effective()` maps to `CompetitivePvpOnline`), hard-disabling Tier 2 software macros for all online, competitive, PvE, and unknown games (**no confirmation override**), enforcing Tier 1 onboard hardware macros + `ExoInternal` IPC only there, permitting local hints only to tighten (`apply_stricter_hint`, never loosen), rejecting competitive cheat primitives (recoil-compensation loops & `< 25 ms` rapid-fire click loops), and providing `AntiCheatFocusWatchdog`.
   - `chord.rs`: Per-device multi-input chord matcher, `LayerStack` (`Base` / `Hold` / `Toggle`), and `Esc+Pause` emergency panic chord detection.
   - `scheduler.rs`: High-resolution QPC deterministic step scheduler (`PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION` opt-out + `timeBeginPeriod(1)` scoped to active execution + `CreateWaitableTimerExW(HIGH_RESOLUTION)` + `2.0 ms` hybrid spin + `THREAD_PRIORITY_HIGHEST`), `DryRunSink`, and RAII `StuckKeyGuard` (releases all held keys on abort/panic/drop).
   - `switcher.rs`: Debounced (`350 ms`), exit-grace (`1500 ms`), onboard-hash-deduplicated, cooldown-protected (`2000 ms`, max `10 writes/min`) per-game & per-app profile switcher.
@@ -32,8 +32,13 @@ Graduates `lab/lab-macros` into v4 native Rust (`apps/launcher/native-ui/`), imp
   - `steam_conflict.rs`: Automatic Steam Input conflict resolver (parity with `SteamInputConfig.cs`: disables Steam Input `"0"` for native PlayStation games, disables desktop layout `413080`, respects player override `"!"`, reversible VDF patch plan).
   - `auto_profiles.rs`: Per-game onboard Edge slot, adaptive trigger preset (`FpsHairTrigger`, `RacingProgressiveBrake`), `< 15%` low-battery amber lightbar warning, and hard anti-cheat gate disabling software virtual-pad/gyro-to-mouse remap on online/competitive/unknown games.
 
+### Single Source of Truth for `AntiCheatClass` Across Host, RPC, & All Native Crates
+- **C# Host (`ExoLauncher`):** `AntiCheatClass.WireClass(GameEntry, AntiCheatCheck.Answer?)` maps `PerGameTable` + `Classify` (+ zero-I/O `AntiCheatCheck.PeekCached`) onto `antiCheatClass` (`competitivePvpOnline | onlineNonCompetitivePve | offlineAntiCheat | unknown`) in `WebHostBridge.MapGame` (`library.get`, `shell.bootstrap`) and `ui/contracts/host-v1.json` + `ui/src/lib/host.ts`.
+- **Rust Canonical Enum (`crates/exo-rpc/src/anticheat.rs`):** Single `exo_rpc::anticheat::AntiCheatClass` deserialized directly onto `exo_rpc::types::Game::anti_cheat_class` (missing/unknown wire values deserialize to `Unknown`, `effective()` maps `Unknown -> CompetitivePvpOnline`, `strictest()` allows local hints only to tighten).
+- **Shared Consumers:** `exo-macros`, `exo-macros-worker`, `exo-shaders` (replaced private `policy.rs` enum), and `exo-controller` (replaced private `ControllerAntiCheatClass`) all import `exo_rpc::anticheat::AntiCheatClass`; the legacy substring classifier `classify_anti_cheat_name` is deleted.
+
 ### Native Rune UI Integration (`crates/exo-ui`)
-- `src/macros.rs` wired into `Devices` (`pc_devices.rs`, `pc_state.rs`, `main.rs`) showing idle sidecar status (`0 MB RAM · 0 hooks`), live QPC dry-run timing, Controller Hub `GameInput.dll` probe status, Tier 1 hardware vs Exo IPC vs Tier 2 offline delivery labels, and anti-cheat policy enforcement within `MAX_BACKDROP_BLURS <= 4`.
+- `src/macros.rs` wired into `Devices` (`pc_devices.rs`, `pc_state.rs`, `main.rs`) reads real per-game `anti_cheat_class` values live over RPC (`s.games`, zero hard-coded sample games outside `#[cfg(test)]`), shows idle sidecar status (`0 MB RAM · 0 hooks`), live QPC dry-run timing, Controller Hub `GameInput.dll` probe status, Tier 1 hardware vs Exo IPC vs Tier 2 offline delivery labels, and anti-cheat policy enforcement within `MAX_BACKDROP_BLURS <= 4`.
 
 ---
 
@@ -73,10 +78,12 @@ Measured directly via `target\release\exo-macros-worker.exe --self-bench` (3 con
 
 ## 4. Verification Gates Executed
 
+- `dotnet build ExoLauncher\ExoLauncher.csproj -c Release -p:Platform=x64 -v minimal` — **PASS (exit 0, 0 warnings, 0 errors)**
+- `dotnet test ExoLauncher.Tests\ExoLauncher.Tests.csproj -c Release -p:Platform=x64 --no-restore -v minimal` — **PASS (8,455 total: 8,426 succeeded, 0 failed, 29 skipped — includes `AntiCheatClassTests`, `HostV1GoldenTests`, `BannedNativeImportsTests`)**
+- `npm run contracts:write && npm run check` (`apps/launcher/ui`) — **PASS (exit 0: `tsc`, `host-v1.json` 365 methods / 83 events, `oxlint`, `eslint`, `lint:css`, `css:prune:check`, 344/344 non-skipped unit tests)**
 - `cargo fmt --all -- --check` — **PASS (exit 0)**
-- `cargo clippy --workspace --locked -- -D warnings` — **PASS (exit 0, 0 warnings across all 6 crates)**
-- `cargo test -p exo-macros -p exo-macros-worker -p exo-controller -p exo-rpc --locked` — **PASS (`exo-controller`: 5/5, `exo-macros`: 5/5, `exo-macros-worker`: 3/3, `exo-rpc`: 27/27)**
-- `cargo test -p exo-ui --locked macros` — **PASS (1/1, blur cap `<= 4`, zero-idle-worker, online hardware-only, offline note, live dry-run QPC check)**
-- `cargo build --release --locked --bin exo-macros-worker --bin exo-ui` — **PASS (exit 0)**
-- `node apps/launcher/tools/check-comments.mjs` — **PASS (0 prose comments in all new files)**
+- `cargo clippy --workspace --locked -- -D warnings` — **PASS (exit 0, 0 warnings across all 7 workspace crates)**
+- `cargo test -p exo-rpc -p exo-macros -p exo-macros-worker -p exo-controller -p exo-shaders --locked` — **PASS (`exo-controller`: 5/5, `exo-macros`: 5/5, `exo-macros-worker`: 3/3, `exo-rpc`: 29/29 (+1 ignored bench), `exo-shaders`: 14/14)**
+- `cargo test -p exo-ui --locked macros` — **PASS (1/1: RPC library classes including `competitivePvpOnline`, `onlineNonCompetitivePve`, `unknown`, missing field, and `offlineAntiCheat`; blur cap `<= 4`; zero-idle-worker; live dry-run QPC check)**
+- `node apps/launcher/tools/check-comments.mjs` — **PASS (exit 0, 0 prose comments in all new/cleaned files)**
 - Hardware safety: **0 writes to real hardware devices**, **installed Exo never started**, all hardware paths tested via `MockControllerTransport` & `DryRunSink`.

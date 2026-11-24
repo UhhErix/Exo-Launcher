@@ -5,13 +5,15 @@ pub mod policy;
 pub mod scheduler;
 pub mod switcher;
 
+use exo_rpc::anticheat::AntiCheatClass;
 use model::{
     DeviceKind, InputSpec, LayerActivation, MacroAction, MacroDef, MacroDelivery, MacroLayer,
     MacroProfile, MacroStep, MacroTrigger, PlaybackMode,
 };
-use policy::{AntiCheatClass, AntiCheatFocusWatchdog, GameAntiCheatInput, MacroGamePolicy};
+use policy::{AntiCheatFocusWatchdog, GameAntiCheatInput, MacroGamePolicy};
 use scheduler::{DryRunSink, ExecutionReport, LatencySummary, MacroScheduler};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use switcher::ProfileSwitcher;
 
@@ -22,7 +24,7 @@ pub struct MacroDocument {
     pub enabled: bool,
     pub active_profile_id: String,
     pub profiles: Vec<MacroProfile>,
-    pub game_policies: Vec<MacroGamePolicy>,
+    pub offline_note_acked: HashSet<String>,
     pub latency: LatencySummary,
 }
 
@@ -37,12 +39,12 @@ pub struct MacroControlPlane {
 
 impl Default for MacroControlPlane {
     fn default() -> Self {
-        Self::demo()
+        Self::new()
     }
 }
 
 impl MacroControlPlane {
-    pub fn demo() -> Self {
+    pub fn new() -> Self {
         let desktop = MacroProfile {
             id: "desktop".into(),
             name: "Desktop".into(),
@@ -135,37 +137,6 @@ impl MacroControlPlane {
             ],
         };
 
-        let policies = vec![
-            policy::evaluate_game_policy(&GameAntiCheatInput {
-                game_id: "riot:valorant".into(),
-                title: "VALORANT".into(),
-                class: AntiCheatClass::CompetitivePvp,
-                anti_cheat_names: vec!["Riot Vanguard".into()],
-                offline_note_acknowledged: false,
-            }),
-            policy::evaluate_game_policy(&GameAntiCheatInput {
-                game_id: "steam:1938090".into(),
-                title: "Call of Duty".into(),
-                class: AntiCheatClass::CompetitivePvp,
-                anti_cheat_names: vec!["Ricochet".into()],
-                offline_note_acknowledged: false,
-            }),
-            policy::evaluate_game_policy(&GameAntiCheatInput {
-                game_id: "epic:wuwa".into(),
-                title: "Wuthering Waves".into(),
-                class: AntiCheatClass::OnlinePveGacha,
-                anti_cheat_names: vec!["Anti-Cheat Expert".into()],
-                offline_note_acknowledged: false,
-            }),
-            policy::evaluate_game_policy(&GameAntiCheatInput {
-                game_id: "steam:413150".into(),
-                title: "Stardew Valley".into(),
-                class: AntiCheatClass::OfflineSinglePlayer,
-                anti_cheat_names: Vec::new(),
-                offline_note_acknowledged: false,
-            }),
-        ];
-
         let mut switcher = ProfileSwitcher::default();
         switcher.set_initial(&desktop);
 
@@ -175,7 +146,7 @@ impl MacroControlPlane {
                 enabled: true,
                 active_profile_id: desktop.id.clone(),
                 profiles: vec![desktop],
-                game_policies: policies,
+                offline_note_acked: HashSet::new(),
                 latency: LatencySummary {
                     samples: 0,
                     p50_us: 0.0,
@@ -191,6 +162,36 @@ impl MacroControlPlane {
             foreground_game_id: None,
             recording: false,
         }
+    }
+
+    pub fn policy_for_game(
+        &self,
+        game_id: &str,
+        title: &str,
+        class: AntiCheatClass,
+        local_hint: Option<AntiCheatClass>,
+    ) -> MacroGamePolicy {
+        let acked = self
+            .doc
+            .offline_note_acked
+            .contains(&game_id.to_ascii_lowercase());
+        policy::evaluate_game_policy(&GameAntiCheatInput {
+            game_id: game_id.to_string(),
+            title: title.to_string(),
+            class,
+            local_hint,
+            offline_note_acknowledged: acked,
+        })
+    }
+
+    pub fn acknowledge_offline_note(&mut self, game_id: &str, class: AntiCheatClass) -> bool {
+        if !class.allows_software_macros() {
+            return false;
+        }
+        self.doc
+            .offline_note_acked
+            .insert(game_id.to_ascii_lowercase());
+        true
     }
 
     pub fn should_spawn_worker(&self) -> bool {
@@ -228,15 +229,13 @@ impl MacroControlPlane {
         })
     }
 
-    pub fn on_foreground_game(&mut self, game_id: Option<&str>) -> (bool, f64) {
-        self.foreground_game_id = game_id.map(str::to_string);
-        let policy = game_id.and_then(|gid| {
-            self.doc
-                .game_policies
-                .iter()
-                .find(|p| p.game_id.eq_ignore_ascii_case(gid))
-        });
-        self.watchdog.on_foreground_change(policy)
+    pub fn on_foreground_game(
+        &mut self,
+        game: Option<(&str, &str, AntiCheatClass)>,
+    ) -> (bool, f64) {
+        self.foreground_game_id = game.map(|(id, _, _)| id.to_string());
+        let evaluated = game.map(|(id, title, cls)| self.policy_for_game(id, title, cls, None));
+        self.watchdog.on_foreground_change(evaluated.as_ref())
     }
 
     pub fn dry_run(&mut self, profile_id: &str, binding_id: &str) -> Option<ExecutionReport> {
@@ -257,55 +256,25 @@ mod tests {
     use super::*;
     use crate::chord::{ChordMatcher, LayerStack};
     use crate::onboard::{OnboardTarget, compile_onboard_remap};
+    use exo_rpc::types::Game;
     use std::time::{Duration, Instant};
 
+    fn fixture_games() -> Vec<Game> {
+        let raw = r#"[
+            {"id":"riot:valorant","title":"VALORANT","installed":true,"antiCheatClass":"competitivePvpOnline"},
+            {"id":"steam:1938090","title":"Call of Duty","installed":true,"antiCheatClass":"competitivePvpOnline"},
+            {"id":"steam:3513350","title":"Wuthering Waves","installed":true,"antiCheatClass":"onlineNonCompetitivePve"},
+            {"id":"steam:1245620","title":"ELDEN RING","installed":true,"antiCheatClass":"offlineAntiCheat"},
+            {"id":"local:unknown","title":"Unknown Install","installed":true,"antiCheatClass":"unknown"},
+            {"id":"local:missing","title":"Missing Field Game","installed":true}
+        ]"#;
+        serde_json::from_str(raw).expect("fixture games")
+    }
+
     #[test]
-    fn online_competitive_and_unknown_games_get_onboard_hardware_only() {
-        let cases = [
-            (
-                "riot:valorant",
-                "VALORANT",
-                AntiCheatClass::CompetitivePvp,
-                vec!["Riot Vanguard"],
-            ),
-            (
-                "steam:1938090",
-                "Call of Duty",
-                AntiCheatClass::CompetitivePvp,
-                vec!["Ricochet"],
-            ),
-            (
-                "steam:730",
-                "CS2",
-                AntiCheatClass::CompetitivePvp,
-                vec!["Valve Anti-Cheat", "FACEIT"],
-            ),
-            (
-                "steam:1172470",
-                "Apex Legends",
-                AntiCheatClass::CompetitivePvp,
-                vec!["Easy Anti-Cheat"],
-            ),
-            (
-                "steam:359550",
-                "R6 Siege",
-                AntiCheatClass::CompetitivePvp,
-                vec!["BattlEye"],
-            ),
-            (
-                "epic:wuwa",
-                "Wuthering Waves",
-                AntiCheatClass::OnlinePveGacha,
-                vec!["Anti-Cheat Expert"],
-            ),
-            (
-                "roblox:client",
-                "Roblox",
-                AntiCheatClass::CompetitivePvp,
-                vec!["Hyperion"],
-            ),
-            ("local:unknown", "Mystery", AntiCheatClass::Unknown, vec![]),
-        ];
+    fn host_classes_enforce_onboard_only_for_online_pve_and_unknown_and_allow_offline_with_note() {
+        let cp = MacroControlPlane::new();
+        let games = fixture_games();
 
         let sw = MacroDef {
             id: "sw".into(),
@@ -334,33 +303,40 @@ mod tests {
             }],
         };
 
-        for (id, title, class, names) in cases {
-            let p = policy::evaluate_game_policy(&GameAntiCheatInput {
-                game_id: id.into(),
-                title: title.into(),
-                class,
-                anti_cheat_names: names.into_iter().map(str::to_string).collect(),
-                offline_note_acknowledged: true,
-            });
-            assert!(
-                !p.software_macros_allowed,
-                "{title} must block Tier 2 software"
-            );
-            assert!(p.onboard_hardware_allowed);
-            assert!(!policy::can_execute_binding(&sw, Some(&p)));
-            assert!(policy::can_execute_binding(&hw, Some(&p)));
+        for g in &games {
+            let p = cp.policy_for_game(&g.id, &g.title, g.anti_cheat_class, None);
+            if g.id == "steam:1245620" {
+                assert!(p.software_macros_allowed);
+                assert!(p.requires_offline_note);
+                assert!(policy::can_execute_binding(&sw, Some(&p)));
+                assert!(policy::can_execute_binding(&hw, Some(&p)));
+            } else {
+                assert!(
+                    !p.software_macros_allowed,
+                    "{} ({:?}) must be onboard-only",
+                    g.title, g.anti_cheat_class
+                );
+                assert!(p.onboard_hardware_allowed);
+                assert!(!policy::can_execute_binding(&sw, Some(&p)));
+                assert!(policy::can_execute_binding(&hw, Some(&p)));
+            }
         }
 
-        let offline = policy::evaluate_game_policy(&GameAntiCheatInput {
-            game_id: "steam:413150".into(),
-            title: "Stardew Valley".into(),
-            class: AntiCheatClass::OfflineSinglePlayer,
-            anti_cheat_names: Vec::new(),
-            offline_note_acknowledged: false,
-        });
-        assert!(offline.software_macros_allowed);
-        assert!(offline.requires_offline_note);
-        assert!(policy::can_execute_binding(&sw, Some(&offline)));
+        let tightened = cp.policy_for_game(
+            "steam:1245620",
+            "ELDEN RING",
+            AntiCheatClass::OfflineAntiCheat,
+            Some(AntiCheatClass::CompetitivePvpOnline),
+        );
+        assert!(!tightened.software_macros_allowed);
+
+        let cannot_loosen = cp.policy_for_game(
+            "riot:valorant",
+            "VALORANT",
+            AntiCheatClass::CompetitivePvpOnline,
+            Some(AntiCheatClass::OfflineAntiCheat),
+        );
+        assert!(!cannot_loosen.software_macros_allowed);
     }
 
     #[test]
@@ -416,7 +392,7 @@ mod tests {
 
     #[test]
     fn worker_not_spawned_when_only_onboard_or_internal_macros_exist() {
-        let mut cp = MacroControlPlane::demo();
+        let mut cp = MacroControlPlane::new();
         assert!(!cp.should_spawn_worker());
         assert!(!cp.requires_ll_hooks());
 
@@ -425,14 +401,18 @@ mod tests {
         assert!(cp.should_spawn_worker());
         assert!(!cp.requires_ll_hooks());
 
-        let (paused, latency_us) = cp.on_foreground_game(Some("riot:valorant"));
+        let (paused, latency_us) = cp.on_foreground_game(Some((
+            "riot:valorant",
+            "VALORANT",
+            AntiCheatClass::CompetitivePvpOnline,
+        )));
         assert!(paused);
         assert!(latency_us < 10_000.0, "Focus AC pause took {latency_us}us");
         assert!(!cp.should_spawn_worker());
     }
 
     #[test]
-    fn qpc_scheduler_achieves_sub_500us_p99_and_releases_stuck_keys_on_abort() {
+    fn qpc_scheduler_achieves_sub_500us_p50_and_releases_stuck_keys_on_abort() {
         let binding = MacroDef {
             id: "bench".into(),
             name: "10ms timing".into(),
@@ -556,7 +536,7 @@ mod tests {
         );
         assert!(matcher.is_emergency_panic_chord());
 
-        let cp = MacroControlPlane::demo();
+        let cp = MacroControlPlane::new();
         let compiled =
             compile_onboard_remap(&cp.doc.profiles[0].bindings[0], OnboardTarget::OpenMouse)
                 .expect("onboard remap compiles");

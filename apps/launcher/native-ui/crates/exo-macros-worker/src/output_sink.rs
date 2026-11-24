@@ -191,15 +191,15 @@ mod tests {
         let mut sink = GatedOutputSink::new(Arc::clone(&ac_paused), true);
 
         for ac_class in [
-            AntiCheatClass::CompetitivePvp,
-            AntiCheatClass::OnlinePveGacha,
+            AntiCheatClass::CompetitivePvpOnline,
+            AntiCheatClass::OnlineNonCompetitivePve,
             AntiCheatClass::Unknown,
         ] {
             let p = evaluate_game_policy(&GameAntiCheatInput {
                 game_id: "g".into(),
                 title: "Protected".into(),
                 class: ac_class,
-                anti_cheat_names: vec!["Vanguard".into()],
+                local_hint: None,
                 offline_note_acknowledged: true,
             });
             ac_paused.store(!p.software_macros_allowed, Ordering::Release);

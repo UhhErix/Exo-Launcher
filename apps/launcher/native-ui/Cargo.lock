@@ -842,6 +842,7 @@ dependencies = [
 name = "exo-controller"
 version = "0.1.0"
 dependencies = [
+ "exo-rpc",
  "serde",
  "windows-sys 0.61.2",
 ]
@@ -875,6 +876,7 @@ dependencies = [
 name = "exo-macros"
 version = "0.1.0"
 dependencies = [
+ "exo-rpc",
  "serde",
  "serde_json",
  "windows-sys 0.61.2",
@@ -904,6 +906,7 @@ name = "exo-shaders"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "exo-rpc",
  "serde",
  "serde_json",
  "windows",

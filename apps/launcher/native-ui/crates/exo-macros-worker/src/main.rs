@@ -100,7 +100,7 @@ fn main() {
                             game_id: gid,
                             title: String::new(),
                             class: cls,
-                            anti_cheat_names: Vec::new(),
+                            local_hint: None,
                             offline_note_acknowledged: false,
                         });
                         !p.software_macros_allowed

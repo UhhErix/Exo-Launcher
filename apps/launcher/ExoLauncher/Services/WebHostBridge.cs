@@ -3424,6 +3424,7 @@ public sealed partial class WebHostBridge
         buyUrl = Storefront.BuyUrl(g),
         // The Library's search and Filter menu (racing, co-op ...): Steam's own record, already in memory.
         tags = SteamAppTags.For(g),
+        antiCheatClass = AntiCheatClass.WireClass(g, AntiCheatCheck.PeekCached(g)),
         };
     }
 

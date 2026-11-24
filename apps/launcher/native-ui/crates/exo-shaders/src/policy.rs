@@ -1,34 +1,7 @@
+pub use exo_rpc::anticheat::AntiCheatClass;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum AntiCheatClass {
-    CompetitivePvP,
-    OnlinePvE,
-    Offline,
-    Unknown,
-}
-
-impl AntiCheatClass {
-    fn strictness(self) -> u8 {
-        match self {
-            Self::Offline => 0,
-            Self::OnlinePvE => 1,
-            Self::Unknown => 2,
-            Self::CompetitivePvP => 3,
-        }
-    }
-
-    pub fn stricter_of(self, other: Self) -> Self {
-        if other.strictness() > self.strictness() {
-            other
-        } else {
-            self
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,14 +48,16 @@ pub fn evaluate_route(
             reason: "File route requires a tracked restore record before writing.".into(),
         },
         RouteKind::FileRoute => match class {
-            AntiCheatClass::CompetitivePvP | AntiCheatClass::Unknown => RouteDecision::Denied {
-                reason: "Competitive PvP and unknown games disallow game-folder file routes."
-                    .into(),
-            },
-            AntiCheatClass::OnlinePvE => RouteDecision::AllowedWithNote {
+            AntiCheatClass::CompetitivePvpOnline | AntiCheatClass::Unknown => {
+                RouteDecision::Denied {
+                    reason: "Competitive PvP and unknown games disallow game-folder file routes."
+                        .into(),
+                }
+            }
+            AntiCheatClass::OnlineNonCompetitivePve => RouteDecision::AllowedWithNote {
                 note: "Online PvE: game-folder shader cache file route allowed while closed with restore record.".into(),
             },
-            AntiCheatClass::Offline => RouteDecision::AllowedWithNote {
+            AntiCheatClass::OfflineAntiCheat => RouteDecision::AllowedWithNote {
                 note: "Offline game: game-folder shader cache file route allowed while closed with restore record.".into(),
             },
         },
@@ -121,7 +96,7 @@ pub fn resolve_anti_cheat_class(
     found.sort();
     found.dedup();
     let local_floor = if !found.is_empty() {
-        AntiCheatClass::CompetitivePvP
+        AntiCheatClass::CompetitivePvpOnline
     } else if unreadable {
         AntiCheatClass::Unknown
     } else {
@@ -191,8 +166,8 @@ mod tests {
         let root = std::env::temp_dir().join(format!("exo-shaders-eac-{}", std::process::id()));
         let eac = root.join("EasyAntiCheat");
         let _ = fs::create_dir_all(&eac);
-        let det = resolve_anti_cheat_class(Some(AntiCheatClass::Offline), &root);
-        assert_eq!(det.class, AntiCheatClass::CompetitivePvP);
+        let det = resolve_anti_cheat_class(Some(AntiCheatClass::OfflineAntiCheat), &root);
+        assert_eq!(det.class, AntiCheatClass::CompetitivePvpOnline);
         assert!(det.markers.iter().any(|m| m == "EasyAntiCheat"));
         assert!(!evaluate_route(det.class, RouteKind::FileRoute, false, true).is_permitted());
         let _ = fs::remove_dir_all(&root);
@@ -200,12 +175,18 @@ mod tests {
 
     #[test]
     fn file_route_requires_closed_game_and_restore_record() {
-        for class in [AntiCheatClass::Offline, AntiCheatClass::OnlinePvE] {
+        for class in [
+            AntiCheatClass::OfflineAntiCheat,
+            AntiCheatClass::OnlineNonCompetitivePve,
+        ] {
             assert!(evaluate_route(class, RouteKind::FileRoute, false, true).is_permitted());
             assert!(!evaluate_route(class, RouteKind::FileRoute, true, true).is_permitted());
             assert!(!evaluate_route(class, RouteKind::FileRoute, false, false).is_permitted());
         }
-        for class in [AntiCheatClass::CompetitivePvP, AntiCheatClass::Unknown] {
+        for class in [
+            AntiCheatClass::CompetitivePvpOnline,
+            AntiCheatClass::Unknown,
+        ] {
             assert!(!evaluate_route(class, RouteKind::FileRoute, false, true).is_permitted());
             assert!(evaluate_route(class, RouteKind::DriverCacheScan, false, false).is_permitted());
             assert!(evaluate_route(class, RouteKind::OfflinePsoWarm, false, false).is_permitted());

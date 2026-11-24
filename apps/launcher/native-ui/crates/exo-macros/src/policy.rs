@@ -1,4 +1,5 @@
 use crate::model::{MacroAction, MacroDef, MacroDelivery, PlaybackMode};
+pub use exo_rpc::anticheat::AntiCheatClass;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -6,41 +7,15 @@ use std::time::Instant;
 pub const OFFLINE_ONE_TIME_NOTE: &str = "Offline / single-player game: Tier 2 software macros are allowed. Online, competitive anti-cheat, and unknown games allow Tier 1 onboard hardware macros only.";
 pub const HARDWARE_ONBOARD_NOTE: &str = "Tier 1 onboard device hardware macro: stored in peripheral memory, zero software hooks or injection.";
 
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum AntiCheatClass {
-    CompetitivePvp,
-    OnlinePveGacha,
-    OfflineSinglePlayer,
-    #[default]
-    Unknown,
-}
-
-impl AntiCheatClass {
-    pub fn effective(self) -> Self {
-        match self {
-            Self::Unknown => Self::CompetitivePvp,
-            other => other,
-        }
-    }
-
-    pub fn is_online_or_protected(self) -> bool {
-        !matches!(self, Self::OfflineSinglePlayer)
-    }
-
-    pub fn allows_tier2_software_macros(self) -> bool {
-        matches!(self, Self::OfflineSinglePlayer)
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GameAntiCheatInput {
     pub game_id: String,
     pub title: String,
+    #[serde(default)]
     pub class: AntiCheatClass,
     #[serde(default)]
-    pub anti_cheat_names: Vec<String>,
+    pub local_hint: Option<AntiCheatClass>,
     #[serde(default)]
     pub offline_note_acknowledged: bool,
 }
@@ -52,7 +27,6 @@ pub struct MacroGamePolicy {
     pub title: String,
     pub class: AntiCheatClass,
     pub effective_class: AntiCheatClass,
-    pub anti_cheat_names: Vec<String>,
     pub software_macros_allowed: bool,
     pub onboard_hardware_allowed: bool,
     pub exo_internal_ipc_allowed: bool,
@@ -62,64 +36,41 @@ pub struct MacroGamePolicy {
     pub hardware_label: String,
 }
 
-pub fn classify_anti_cheat_name(name: &str) -> AntiCheatClass {
-    let lower = name.to_ascii_lowercase();
-    if lower.contains("vanguard")
-        || lower.contains("ricochet")
-        || lower.contains("valve anti-cheat")
-        || lower.contains("vac")
-        || lower.contains("faceit")
-        || lower.contains("easy anti-cheat")
-        || lower.contains("eac")
-        || lower.contains("battleye")
-        || lower.contains("hyperion")
-        || lower.contains("ea anticheat")
-        || lower.contains("javelin")
-        || lower.contains("warden")
-        || lower.contains("punkbuster")
-    {
-        return AntiCheatClass::CompetitivePvp;
+pub fn apply_stricter_hint(
+    base: AntiCheatClass,
+    local_hint: Option<AntiCheatClass>,
+) -> AntiCheatClass {
+    match local_hint {
+        Some(hint) => base.strictest(hint),
+        None => base,
     }
-    if lower.contains("anti-cheat expert")
-        || lower.contains("ace")
-        || lower.contains("hoYo")
-        || lower.contains("mhyprot")
-        || lower.contains("gameguard")
-        || lower.contains("xigncode")
-    {
-        return AntiCheatClass::OnlinePveGacha;
-    }
-    AntiCheatClass::Unknown
 }
 
 pub fn evaluate_game_policy(input: &GameAntiCheatInput) -> MacroGamePolicy {
-    let effective = input.class.effective();
-    let software_allowed = input.class.allows_tier2_software_macros();
-    let named = if input.anti_cheat_names.is_empty() {
-        match input.class {
-            AntiCheatClass::Unknown => "unknown status (treated as competitive online)".to_string(),
-            AntiCheatClass::CompetitivePvp => "competitive anti-cheat".to_string(),
-            AntiCheatClass::OnlinePveGacha => "online anti-cheat".to_string(),
-            AntiCheatClass::OfflineSinglePlayer => "offline single-player".to_string(),
-        }
-    } else {
-        input.anti_cheat_names.join(", ")
+    let resolved = apply_stricter_hint(input.class, input.local_hint);
+    let effective = resolved.effective();
+    let software_allowed = resolved.allows_software_macros();
+
+    let label = match resolved {
+        AntiCheatClass::CompetitivePvpOnline => "Competitive PvP / online anti-cheat",
+        AntiCheatClass::OnlineNonCompetitivePve => "Online PvE / gacha anti-cheat",
+        AntiCheatClass::Unknown => "Unknown anti-cheat class (treated as competitive online)",
+        AntiCheatClass::OfflineAntiCheat => "Offline / single-player",
     };
 
     let summary = if software_allowed {
         OFFLINE_ONE_TIME_NOTE.to_string()
     } else {
         format!(
-            "{named}: Tier 2 software macros are hard-disabled (no override). Only Tier 1 onboard hardware device macros and Exo internal IPC hotkeys are allowed."
+            "{label}: Tier 2 software macros are hard-disabled (no override). Only Tier 1 onboard hardware device macros and Exo internal IPC hotkeys are allowed."
         )
     };
 
     MacroGamePolicy {
         game_id: input.game_id.clone(),
         title: input.title.clone(),
-        class: input.class,
+        class: resolved,
         effective_class: effective,
-        anti_cheat_names: input.anti_cheat_names.clone(),
         software_macros_allowed: software_allowed,
         onboard_hardware_allowed: true,
         exo_internal_ipc_allowed: true,

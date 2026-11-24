@@ -7,7 +7,7 @@ use exo_kit::{
     type_small, type_title, warn,
 };
 use exo_macros::model::{DeviceKind, MacroAction, MacroDef, MacroDelivery, MacroProfile};
-use exo_macros::policy::MacroGamePolicy;
+use exo_macros::policy::{AntiCheatClass, MacroGamePolicy};
 use rune::{El, ScrollSpec, col, el, row, text};
 
 fn action_pill(key: String, label: String, active: bool) -> El {
@@ -53,6 +53,14 @@ pub fn view(s: &AppState, _scale: f32) -> El {
             .and_then(|id| p.bindings.iter().find(|b| b.id == id))
             .or_else(|| p.bindings.first())
     });
+
+    let library_policies: Vec<MacroGamePolicy> = s
+        .games
+        .iter()
+        .filter(|g| g.installed)
+        .take(8)
+        .map(|g| cp.policy_for_game(&g.id, &g.title, g.anti_cheat_class, None))
+        .collect();
 
     let worker_status = if cp.should_spawn_worker() {
         if cp.requires_ll_hooks() {
@@ -129,7 +137,7 @@ pub fn view(s: &AppState, _scale: f32) -> El {
         .gap(12.0)
         .child(profiles_panel(s, selected_profile))
         .child(controller_hub_panel(s))
-        .child(anticheat_panel(&cp.doc.game_policies));
+        .child(anticheat_panel(&library_policies));
 
     let main_col = col()
         .grow(1.0)
@@ -155,7 +163,7 @@ pub fn view(s: &AppState, _scale: f32) -> El {
         .fill(BG)
         .child(header)
         .child(
-            text("Online, competitive anti-cheat, and unknown games allow Tier 1 onboard hardware macros & Exo IPC only. Offline single-player games keep Tier 2 software macros with a one-time note.")
+            text("Online, competitive anti-cheat, and unknown games allow Tier 1 onboard hardware macros & Exo IPC only. Offline games keep Tier 2 software macros with a one-time note.")
                 .font(type_small())
                 .color(fg_muted()),
         )
@@ -239,21 +247,29 @@ fn controller_hub_panel(s: &AppState) -> El {
 
 fn anticheat_panel(policies: &[MacroGamePolicy]) -> El {
     let mut list = col().w_full().gap(8.0);
+    if policies.is_empty() {
+        list = list.child(
+            text("No installed library games loaded from host yet.")
+                .font(type_small())
+                .color(fg_muted()),
+        );
+    }
     for gp in policies.iter().take(6) {
         let gid = gp.game_id.clone();
+        let class = gp.class;
         let software_allowed = gp.software_macros_allowed;
         let needs_note = gp.requires_offline_note && !gp.offline_note_acknowledged;
-        let subtitle = if !software_allowed {
-            let names = if gp.anti_cheat_names.is_empty() {
-                "Online / unknown".to_string()
-            } else {
-                gp.anti_cheat_names.join(", ")
-            };
-            format!("{names} · hardware onboard only")
-        } else if gp.offline_note_acknowledged {
-            "Offline · Tier 1 + Tier 2 enabled".to_string()
-        } else {
-            "Offline · Tier 2 available (one-time note)".to_string()
+        let subtitle = match class {
+            AntiCheatClass::CompetitivePvpOnline => "Competitive PvP · hardware onboard only",
+            AntiCheatClass::OnlineNonCompetitivePve => "Online PvE · hardware onboard only",
+            AntiCheatClass::Unknown => "Unknown (treated as online) · hardware onboard only",
+            AntiCheatClass::OfflineAntiCheat => {
+                if gp.offline_note_acknowledged {
+                    "Offline · Tier 1 + Tier 2 enabled"
+                } else {
+                    "Offline · Tier 2 available (one-time note)"
+                }
+            }
         };
 
         let mut action_row = row().w_full().justify_between().center_y().gap(8.0).child(
@@ -280,16 +296,7 @@ fn anticheat_panel(policies: &[MacroGamePolicy]) -> El {
             action_row =
                 action_row.child(action_pill(btn_key, "Got it".to_string(), false).on_press(
                     move |s: &mut AppState| {
-                        if let Some(policy) =
-                            s.pc.macros
-                                .doc
-                                .game_policies
-                                .iter_mut()
-                                .find(|x| x.game_id == gid)
-                        {
-                            policy.offline_note_acknowledged = true;
-                            policy.requires_offline_note = false;
-                        }
+                        let _ = s.pc.macros.acknowledge_offline_note(&gid, class);
                     },
                 ));
         } else {
@@ -502,12 +509,23 @@ fn timeline_panel(recording: bool, profile_id: String, binding: &MacroDef) -> El
 mod tests {
     use crate::shell;
     use crate::state::{AppState, Room};
+    use exo_rpc::types::Game;
     use rune::render::KIND_BACKDROP_BLUR;
     use rune::{Env, Runtime};
 
     #[test]
-    fn macros_hub_opens_enforces_blur_cap_zero_idle_worker_and_online_hardware_only() {
+    fn macros_hub_reads_rpc_library_classes_enforces_blur_cap_and_online_hardware_only() {
         let mut state = AppState::default();
+        state.games = serde_json::from_str::<Vec<Game>>(
+            r#"[
+                {"id":"riot:valorant","title":"VALORANT","installed":true,"antiCheatClass":"competitivePvpOnline"},
+                {"id":"steam:3513350","title":"Wuthering Waves","installed":true,"antiCheatClass":"onlineNonCompetitivePve"},
+                {"id":"local:unknown","title":"Unknown Game","installed":true,"antiCheatClass":"unknown"},
+                {"id":"local:missing","title":"Missing Field","installed":true},
+                {"id":"steam:1245620","title":"ELDEN RING","installed":true,"antiCheatClass":"offlineAntiCheat"}
+            ]"#,
+        )
+        .expect("rpc library fixture");
         state.switch_room(Room::Devices);
         assert!(!state.pc.macros.should_spawn_worker());
 
@@ -531,26 +549,25 @@ mod tests {
         assert!(blurs <= 4, "Macros exceeded MAX_BACKDROP_BLURS=4: {blurs}");
 
         assert!(rt.find("macros-ack-riot:valorant").is_none());
-        assert!(rt.find("macros-ack-steam:1938090").is_none());
-        assert!(rt.find("macros-ack-epic:wuwa").is_none());
+        assert!(rt.find("macros-ack-steam:3513350").is_none());
+        assert!(rt.find("macros-ack-local:unknown").is_none());
+        assert!(rt.find("macros-ack-local:missing").is_none());
 
         let (ax, ay) = rt
-            .find("macros-ack-steam:413150")
-            .expect("one-time note for offline Stardew Valley");
+            .find("macros-ack-steam:1245620")
+            .expect("one-time note button for offline ELDEN RING");
         rt.pointer_down(ax, ay);
         rt.pointer_up(ax, ay);
         rt.frame(1.0 / 60.0);
 
-        let offline = rt
-            .state
-            .pc
-            .macros
-            .doc
-            .game_policies
-            .iter()
-            .find(|g| g.game_id == "steam:413150")
-            .unwrap();
-        assert!(offline.offline_note_acknowledged);
+        assert!(
+            rt.state
+                .pc
+                .macros
+                .doc
+                .offline_note_acked
+                .contains("steam:1245620")
+        );
 
         let (tx, ty) = rt.find("macros-test").expect("macros-test button");
         rt.pointer_down(tx, ty);

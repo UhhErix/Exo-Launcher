@@ -1,24 +1,9 @@
 use crate::sony_hid::{DualSenseSettings, MotorStrength};
+pub use exo_rpc::anticheat::AntiCheatClass;
 use serde::{Deserialize, Serialize};
 
 pub const LOW_BATTERY_THRESHOLD_PCT: u8 = 15;
 pub const LOW_BATTERY_AMBER_HEX: &str = "#FF9F1C";
-
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum ControllerAntiCheatClass {
-    CompetitivePvp,
-    OnlinePveGacha,
-    OfflineSinglePlayer,
-    #[default]
-    Unknown,
-}
-
-impl ControllerAntiCheatClass {
-    pub fn allows_software_remap(self) -> bool {
-        matches!(self, Self::OfflineSinglePlayer)
-    }
-}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -62,7 +47,7 @@ pub struct ResolvedControllerAction {
 
 pub fn resolve_controller_profile(
     profile: &GameControllerProfile,
-    ac_class: ControllerAntiCheatClass,
+    ac_class: AntiCheatClass,
     battery_pct: Option<u8>,
 ) -> ResolvedControllerAction {
     let low_battery = battery_pct.is_some_and(|pct| pct < LOW_BATTERY_THRESHOLD_PCT);
@@ -81,7 +66,7 @@ pub fn resolve_controller_profile(
     let (software_remap_active, blocked_reason) = match profile.remap_mode {
         ControllerRemapMode::HardwareOnboard => (false, None),
         ControllerRemapMode::OfflineSoftwareGyroOrRemap => {
-            if ac_class.allows_software_remap() {
+            if ac_class.allows_software_macros() {
                 (true, None)
             } else {
                 (
