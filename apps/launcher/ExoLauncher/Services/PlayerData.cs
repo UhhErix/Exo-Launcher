@@ -372,7 +372,6 @@ internal static class PlayerData
         new("SpecialK.ini", "DlssSwapService,GameGraphicsFeatures", Why.Elsewhere, "Special K's configuration in a game's folder"),
         new("system.xml", "GameSettings", Why.Elsewhere, "a game's system settings XML"),
         new("user_engine_option_save.xml", "GameSettings", Why.Elsewhere, "a game's saved engine options"),
-        new("settings.xml", "LosslessScalingConfig", Why.Elsewhere, "Lossless Scaling's own settings file, updated for per-game AutoScale profiles"),
         new("GameSettings.ini", "GameSettings", Why.Elsewhere, "Rainbow Six Siege's settings file in Ubisoft's profile folder"),
         new("videoconfig.txt", "GameSettings", Why.Elsewhere, "Apex Legends' video config file"),
         new("Overwatch/Settings/Settings_v0.ini", "GameSettings", Why.Elsewhere, "Overwatch 2's settings file"),

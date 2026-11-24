@@ -250,7 +250,6 @@ public sealed class AppServices
         DlssSwapService.RecorderSwitch = (id, on, ct) => ShadersHost.RecorderSetAsync(id, on, ct);
         // Frame generation Exo put into a game: checked as each game starts and ends, and kept on the mod's newest release.
         DlssSwapService.WatchFrameGen(Launcher, Settings, Library);
-        FrameGenService.WatchLaunches(Launcher, Settings);
         // Open Exo when Windows starts: the Run value follows the switch (an update or a moved install puts its path right).
         var startWithWindows = Settings.Current.StartWithWindows;
         _ = Task.Run(() => StartWithWindows.Apply(startWithWindows));

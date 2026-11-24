@@ -20,8 +20,15 @@ pub fn route_short_label(route: Option<&FrameGenRoute>) -> String {
         "native_dlss" => "Built in · DLSS".into(),
         "native_fsr" => "Built in · FSR 3".into(),
         "native_xess" => "Built in · XeSS".into(),
-        "mod_optiscaler" => "OptiScaler".into(),
+        "mod_optiscaler" => {
+            if route.label.contains("OptiScaler FG") {
+                "OptiScaler FG".into()
+            } else {
+                "OptiScaler".into()
+            }
+        }
         "mod_dlssg" => "DLSSG SM86".into(),
+        "mod_mfg" => "MFG Unlocker".into(),
         "mod_other" => curly(&route.label),
         "driver_smooth_motion" => {
             if route.active {
@@ -41,13 +48,6 @@ pub fn route_short_label(route: Option<&FrameGenRoute>) -> String {
             Some(c) if c != "game" => format!("XeSS {c}"),
             _ => "XeSS override".into(),
         },
-        "external_lossless_scaling" => {
-            if route.active {
-                "Lossless Scaling".into()
-            } else {
-                "Lossless Scaling · Off".into()
-            }
-        }
         _ => "Not available".into(),
     }
 }
@@ -91,7 +91,6 @@ fn tier_tag(tier: &str) -> &'static str {
         "native" => "Built in",
         "mod" => "Mod",
         "driver" => "Driver",
-        "external" => "External",
         _ => "",
     }
 }
@@ -402,22 +401,22 @@ mod tests {
             best_route_id: "unavailable".into(),
             selected_route_id: "unavailable".into(),
             state: "unavailable".into(),
-            word: "Off · Anti-Cheat Expert blocks mods".into(),
+            word: "Mods would get you banned".into(),
             good: false,
             bad: false,
-            reason: Some("Off · Anti-Cheat Expert blocks mods".into()),
-            how_to_enable: Some("Install Lossless Scaling on Steam (App 993090).".into()),
+            reason: Some("Mods would get you banned".into()),
+            how_to_enable: Some("Anti-Cheat Expert blocks DLL mods; only built-in or signed driver frame generation can run safely here.".into()),
             routes: vec![sample_route(
                 "unavailable",
                 "unavailable",
                 "unavailable",
                 "Not available",
-                "Off · Anti-Cheat Expert blocks mods",
+                "Mods would get you banned",
             )],
             ..Default::default()
         };
         let (text, _) = summary_for(Some(&unavail));
-        assert_eq!(text, "Off · Anti-Cheat Expert blocks mods");
+        assert_eq!(text, "Mods would get you banned");
     }
 
     #[test]
@@ -479,5 +478,53 @@ mod tests {
                 .presented("gp-fg-opt-driver_smooth_motion")
                 .is_some()
         );
+    }
+
+    #[test]
+    fn route_short_label_covers_mfg_and_optifg() {
+        let mfg = sample_route("mod_mfg", "mod", "mod_mfg", "MFG Unlocker", "MFG Unlocker");
+        assert_eq!(route_short_label(Some(&mfg)), "MFG Unlocker");
+        let optifg = sample_route(
+            "mod_optiscaler",
+            "mod",
+            "mod_optiscaler",
+            "OptiScaler FG",
+            "OptiScaler FG",
+        );
+        assert_eq!(route_short_label(Some(&optifg)), "OptiScaler FG");
+    }
+
+    #[test]
+    fn view_shows_mods_would_get_you_banned_for_online_anti_cheat_unavailable() {
+        let mut state = AppState::with_demo_games();
+        state.game_frame_gen = Some(GameFrameGen {
+            ok: true,
+            best_route_id: "unavailable".into(),
+            selected_route_id: "unavailable".into(),
+            state: "unavailable".into(),
+            word: "Mods would get you banned".into(),
+            good: false,
+            bad: false,
+            reason: Some("Mods would get you banned".into()),
+            how_to_enable: Some("Riot Vanguard blocks DLL mods; only built-in or signed driver frame generation can run safely here.".into()),
+            routes: vec![sample_route(
+                "unavailable",
+                "unavailable",
+                "unavailable",
+                "Not available",
+                "Mods would get you banned",
+            )],
+            ..Default::default()
+        });
+        let mut rt = rune::Runtime::new(
+            state,
+            |s, _| view(s, &s.games[0]),
+            (600.0, 400.0),
+            rune::Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        assert!(rt.presented("gp-fg-row").is_some());
+        assert!(rt.presented("gp-fg-word").is_some());
+        assert!(rt.presented("gp-fg-confirm").is_none());
     }
 }

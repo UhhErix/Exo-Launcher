@@ -109,25 +109,16 @@ export type DlssRunResult = {
 export type FrameGenMod = {
   ok: boolean
   state: 'hidden' | 'native' | 'off' | 'on' | 'broken' | 'mod' | 'note'
-  /** dlss: DLSSG SM86 runs NVIDIA's own frame generation; fsr: OptiScaler runs FSR's. */
-  path?: 'dlss' | 'fsr' | null
-  /** The mod and release in the game: "DLSSG SM86 0.4.1". */
+  path?: 'dlss' | 'mfg' | 'fsr' | 'optifg' | null
+  package?: string | null
   version?: string | null
-  /** The last session, when the mod's log shows it. */
   session?: 'ran' | null
-  /** The other mod in the game; when broken by replaced, the one over Exo's loader, if Exo knows it. */
   mod?: string | null
-  /** The game's anti-cheat: a mod never goes into it, and the line says so. */
   antiCheat?: string | null
-  /** Why Exo took it out, or went back to the release before, by itself; or why it can't go in. */
   note?: string | null
-  /**
-   * Why it is broken. replaced: another mod's file is where Exo's loader was (Exo leaves it and keeps the game off);
-   * changed: another of Exo's files has other bytes (Exo leaves it); removed: Exo's files went (they go back once);
-   * gone: the game no longer ships DLSS Frame Generation. With hidden: unread (Exo couldn't read the game: no install,
-   * a Store app, a folder it can't open), card (no mod adds to this card; the line hides).
-   */
   reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
+  canToggle?: boolean
+  message?: string | null
 }
 
 export type FrameGenRoute = {
@@ -3307,6 +3298,8 @@ export const host = {
     rawCall<{ ok: boolean; message?: string }>('dlss.consent', { id, allow, ...(allow && antiCheat ? { antiCheat } : {}) }),
   /** The game's Frame generation line. */
   dlssFrameGen: (id: string) => rawCall<FrameGenMod>('dlss.frameGen', { id }, 60_000),
+  dlssFrameGenSet: (id: string, enabled: boolean) =>
+    rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled }, 10 * 60_000),
   gameFrameGen: (id: string, change?: { route?: string; xessOverride?: IntelFrameGen }) =>
     rawCall<GameFrameGen>('game.frameGen', { id, ...change }, 60_000),
   gameFrameCap: (id: string, change?: { tier?: string; capFps?: number; backend?: string }) =>

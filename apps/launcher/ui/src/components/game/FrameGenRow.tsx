@@ -46,14 +46,9 @@ export function FrameGenRow({ gameId, initialState }: { gameId: string; initialS
 
   const view = buildFrameGenView(state, error)
 
-  const handleAction = (id: string) => {
-    if (busy) return
-    if (id.startsWith('info:')) return
+  const submitChange = (change: { route?: string; xessOverride?: IntelFrameGen }) => {
     setBusy(true)
     setError(null)
-    const change = id.startsWith('xess:')
-      ? { xessOverride: id.slice(5) as IntelFrameGen }
-      : { route: id.startsWith('route:') ? id.slice(6) : id }
     host.gameFrameGen(gameId, change)
       .then(answer => {
         if (answer.routes.length > 0) {
@@ -69,9 +64,20 @@ export function FrameGenRow({ gameId, initialState }: { gameId: string; initialS
       .finally(() => setBusy(false))
   }
 
+  const handleAction = (id: string) => {
+    if (busy) return
+    if (id.startsWith('info:')) return
+    if (id.startsWith('xess:')) {
+      submitChange({ xessOverride: id.slice(5) as IntelFrameGen })
+      return
+    }
+    const routeId = id.startsWith('route:') ? id.slice(6) : id
+    submitChange({ route: routeId })
+  }
+
   return (
     <GameReading name="Frame generation" word={view.word} waiting={view.waiting}>
-      {view.triggerLabel && (
+      {view.triggerLabel ? (
         <Menu
           label="Frame generation route"
           anchor={anchor}
@@ -83,7 +89,7 @@ export function FrameGenRow({ gameId, initialState }: { gameId: string; initialS
           disabled={busy}
           onAction={handleAction}
         />
-      )}
+      ) : null}
     </GameReading>
   )
 }

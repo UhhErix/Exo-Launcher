@@ -1,21 +1,48 @@
 using System.Text.Json;
 using ExoLauncher.Helpers;
+using ExoLauncher.Models;
 
 namespace ExoLauncher.Services;
 
 public sealed partial class WebHostBridge
 {
-    /// <summary>
-    /// Game sheet > Frame generation (DlssSwapService.FrameGen.cs): what the line shows. Exo puts it in and takes it out
-    /// by itself, from Best settings' switch (DlssSwapService.FrameGenAuto.cs).
-    /// </summary>
+    private static object FrameGenDto(DlssSwapService.FrameGenStatus status, bool ok = true, string? message = null) => new
+    {
+        ok,
+        state = status.State,
+        path = status.Path,
+        package = status.Package,
+        version = status.Version,
+        session = status.Session,
+        mod = status.Mod,
+        antiCheat = status.AntiCheat,
+        note = status.Note,
+        reason = status.Reason,
+        canToggle = status.CanToggle,
+        message,
+    };
+
     private async Task<object> DlssFrameGenAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
         var game = await FindGameAsync(ReadString(p, hasParams, "id"), ct).ConfigureAwait(false);
         if (game is null) return new { ok = false, state = "hidden" };
         var gpu = await Task.Run(() => SystemSpecs.FrameGenGpu, ct).ConfigureAwait(false);
         var status = await Task.Run(() => _dlss.FrameGenState(game, gpu, ct), ct).ConfigureAwait(false);
-        return new { ok = true, state = status.State, path = status.Path, version = status.Version, session = status.Session, mod = status.Mod, antiCheat = status.AntiCheat, note = status.Note, reason = status.Reason };
+        return FrameGenDto(status);
+    }
+
+    private async Task<object> DlssFrameGenSetAsync(JsonElement p, bool hasParams, CancellationToken ct)
+    {
+        var game = await FindGameAsync(ReadString(p, hasParams, "id"), ct).ConfigureAwait(false);
+        if (game is null) return new { ok = false, state = "hidden", message = "Game not found." };
+        var enabled = ReadBool(p, hasParams, "enabled") == true;
+        var acceptRisk = ReadBool(p, hasParams, "acceptRisk") == true;
+        var shownAntiCheat = ReadString(p, hasParams, "antiCheat");
+        var gpu = await Task.Run(() => SystemSpecs.FrameGenGpu, ct).ConfigureAwait(false);
+        var (ok, message) = await Task.Run(() => _dlss.FrameGenSetAsync(game, gpu, enabled, acceptRisk, shownAntiCheat, ct), ct).ConfigureAwait(false);
+        if (ok) _services.Settings.SetFrameGenKeptOff(game.Id, !enabled);
+        var status = await Task.Run(() => _dlss.FrameGenState(game, gpu, ct), ct).ConfigureAwait(false);
+        return FrameGenDto(status, ok, message);
     }
 
     private async Task<object> GameFrameGenAsync(JsonElement p, bool hasParams, CancellationToken ct)
@@ -24,9 +51,11 @@ public sealed partial class WebHostBridge
         if (game is null) return new { ok = false, message = "Game not found." };
         var route = ReadString(p, hasParams, "route");
         var xessOverride = ReadString(p, hasParams, "xessOverride");
+        var acceptRisk = ReadBool(p, hasParams, "acceptRisk") == true;
+        var shownAntiCheat = ReadString(p, hasParams, "antiCheat");
         if (route is not null || xessOverride is not null)
         {
-            var applied = await FrameGenService.ApplyRouteAsync(game, route, xessOverride, _dlss, _services.Settings, ct).ConfigureAwait(false);
+            var applied = await FrameGenService.ApplyRouteAsync(game, route, xessOverride, _dlss, _services.Settings, ct, acceptRisk, shownAntiCheat).ConfigureAwait(false);
             return FormatFrameGenDecision(applied.Ok, applied.Decision, applied.Message);
         }
         var decision = await FrameGenService.ResolveAsync(game, _dlss, _services.Settings, ct).ConfigureAwait(false);
