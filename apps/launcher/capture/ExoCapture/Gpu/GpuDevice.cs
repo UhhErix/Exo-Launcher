@@ -93,6 +93,32 @@ internal sealed class GpuDevice : IDisposable
 
     internal static bool ShouldRetryWithout11_1(int hresult) => hresult == unchecked((int)0x80070057);
 
+    internal static bool IsDeviceLost(int hresult) =>
+        hresult == unchecked((int)0x887A0005) || hresult == unchecked((int)0x887A0007);
+
+    internal static void Invalidate(long? luid = null)
+    {
+        List<GpuDevice> stale = [];
+        lock (DevicesGate)
+        {
+            if (luid is long want)
+            {
+                if (Devices.Remove(want, out var found)) stale.Add(found);
+                if (DefaultLuid == want) DefaultLuid = null;
+            }
+            else
+            {
+                stale.AddRange(Devices.Values);
+                Devices.Clear();
+                DefaultLuid = null;
+            }
+        }
+        foreach (var device in stale)
+        {
+            try { device.Dispose(); } catch { }
+        }
+    }
+
     internal static string FormatCreateFailure(string adapterName, int hresult, DeviceCreationFlags flags, ReadOnlySpan<FeatureLevel> levels) =>
         $"Capture unavailable on this GPU: adapter={adapterName}, hr=0x{hresult:X8}, flags={flags}, levels={string.Join(",", levels.ToArray())}.";
 

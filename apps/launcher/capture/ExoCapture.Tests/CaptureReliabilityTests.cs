@@ -164,4 +164,16 @@ public sealed class CaptureReliabilityTests
         Assert.Null(error);
         Assert.False(logged);
     }
+
+    [Fact]
+    public void DeviceLostHresultsAndErrorDialogSuppressionFlagsAreConfigured()
+    {
+        Assert.True(GpuDevice.IsDeviceLost(unchecked((int)0x887A0005)));
+        Assert.True(GpuDevice.IsDeviceLost(unchecked((int)0x887A0007)));
+        Assert.False(GpuDevice.IsDeviceLost(unchecked((int)0x887A0026)));
+        Assert.False(GpuDevice.IsDeviceLost(0));
+
+        Assert.Equal(0x8003u, ExoCapture.Native.Win32.ErrorModeNoDialogs);
+        Assert.Equal(0x0020u, ExoCapture.Native.Win32.WER_FAULT_REPORTING_NO_UI);
+    }
 }

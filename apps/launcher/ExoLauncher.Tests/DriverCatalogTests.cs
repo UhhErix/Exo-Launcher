@@ -177,6 +177,20 @@ public sealed class DriverCatalogTests
         Assert.False(Assert.Single(DriverCatalog.Merge([], [Offer("d", "MEDIA", "Realtek", "6.0", device: "HDAUDIO\\X")], [], null)).App);
     }
 
+    [Fact]
+    public void DuplicateSoftwareComponentOffersCollapseToSingleRow()
+    {
+        var first = Offer("guid-1", "SoftwareComponent", "Dell Inc.", "5.5.0.0", device: "SWC\\VEN_1028&PID_0001", title: "Dell Inc. - SoftwareComponent - 5.5.0.0") with { Model = "Alienware Command Center Win32 Component" };
+        var second = Offer("guid-2", "SoftwareComponent", "Dell Inc.", "5.5.1.0", device: "SWC\\VEN_1028&PID_0002", title: "Dell Inc. - SoftwareComponent - 5.5.1.0") with { Model = "Alienware Command Center Win32 Component" };
+        var third = Offer("guid-3", "SoftwareComponent", "Dell Inc.", "5.4.0.0", device: null, title: "Dell Inc. - SoftwareComponent - 5.4.0.0") with { Model = "Alienware Command Center  Win32 Component" };
+        var other = Offer("guid-4", "SoftwareComponent", "Realtek", "1.0.0.5", device: "SWC\\VEN_10EC&AID_0001", title: "Realtek - SoftwareComponent - 1.0.0.5") with { Model = "Realtek Audio Console" };
+
+        var merged = DriverCatalog.Merge([], [first, second, third, other], [], null);
+        Assert.Equal(2, merged.Count);
+        var alienware = Assert.Single(merged, i => i.Name.Contains("Alienware", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("5.5.1.0", alienware.Latest);
+    }
+
     [Theory]
     [InlineData("Microsoft Corporation AudioProcessingObject Driver Update (1.0.4.7057)", "1.0.4.7057")]
     [InlineData("Intel - System - 10.1.1.44", "10.1.1.44")]

@@ -150,6 +150,27 @@ public sealed class CrashReportTests
     }
 
     [Fact]
+    public void HandledWarnLogLinesDoNotOverrideAppErrorClassification()
+    {
+        var warns = new[]
+        {
+            "[2026-11-05T19:42:10.1230000Z] WARN Steam achievements: the signed-in read was not used (SteamAuthException); the local cache answers.",
+            "[2026-11-05T19:42:11.1230000Z] WARN Store check: HttpRequestException while refreshing.",
+        };
+        var report = AppLog.ReportFor("None of those are installed for you: choose Every account.", "library", warns, Now, "3.29.0", "10.0.26300.0", UserName, Profile);
+        var payload = CrashReport.Build("None of those are installed for you: choose Every account.", report, "3.29.0", "10.0.26300.0", UserName, Profile, Machine);
+        Assert.Equal("AppError", payload.ErrorType);
+
+        var withError = new[]
+        {
+            "[2026-11-05T19:42:12.1230000Z] ERROR Unhandled: NullReferenceException in worker.",
+        };
+        var errReport = AppLog.ReportFor("Something broke", "library", withError, Now, "3.29.0", "10.0.26300.0", UserName, Profile);
+        var errPayload = CrashReport.Build("Something broke", errReport, "3.29.0", "10.0.26300.0", UserName, Profile, Machine);
+        Assert.Equal("NullReferenceException", errPayload.ErrorType);
+    }
+
+    [Fact]
     public void VersionAndWindowsBuildTakeTheirShape()
     {
         var payload = CrashReport.Build("x", Report("x", "pc"), "3.24.1-beta.2", "10.0.26300.0", UserName, Profile, Machine);

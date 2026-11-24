@@ -454,10 +454,10 @@ public sealed partial class AppUpdateService
         {
             Move(swapping ? UpdateFlow.Step.ApplyFailed : UpdateFlow.Step.DownloadFailed);
             // A file or Windows error names a path under the updates folder: the log has it, the page does not.
-            AppLog.Warn("Update install failed: " + ex.GetType().Name + ": " + ex.Message);
+            AppLog.Warn("Update install failed (" + uri.GetLeftPart(UriPartial.Path) + "): " + ex.GetType().Name + ": " + ex.Message);
             Helpers.Telemetry.Track("update.result", ("from", check.LocalVersion ?? ""), ("to", check.RemoteVersion ?? ""), ("ok", false),
                 ("error_kind", swapping ? "install" : "other"));
-            CrashReport.Submit("UpdateFailure", swapping ? "Update install failed" : FailureReportRules.UpdateDownloadReason(ex), "update");
+            CrashReport.Submit("UpdateFailure", swapping ? "Update install failed" : FailureReportRules.UpdateDownloadReason(ex, uri), "update");
             return new CheckResult
             {
                 UpdateAvailable = true,

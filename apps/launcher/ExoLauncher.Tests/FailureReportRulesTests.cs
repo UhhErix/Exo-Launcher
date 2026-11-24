@@ -46,9 +46,46 @@ public sealed class FailureReportRulesTests
     {
         var withStatus = new HttpRequestException("Response status code does not indicate success.", null, HttpStatusCode.NotFound);
         Assert.Equal("Update download failed (HTTP 404)", FailureReportRules.UpdateDownloadReason(withStatus));
+        Assert.Equal(
+            "Update download failed (HTTP 404) on /v1/launcher/download/v3.29.0/ExoLauncher-Setup.exe",
+            FailureReportRules.UpdateDownloadReason(withStatus, new Uri("https://updates.getexo.app/v1/launcher/download/v3.29.0/ExoLauncher-Setup.exe?token=secret")));
 
         Assert.Equal("Update download failed", FailureReportRules.UpdateDownloadReason(new HttpRequestException("network")));
         Assert.Equal("Update download failed", FailureReportRules.UpdateDownloadReason(new IOException("disk")));
+    }
+
+    [Fact]
+    public void StoreFailuresExcludeExpectedUserOfflineAndAuthMessages()
+    {
+        Assert.False(FailureReportRules.IsStoreLaunchFailure(false, false, false, false, "Riot's launch service did not become ready. Riot Client has been opened; check sign-in and try Play again."));
+        Assert.False(FailureReportRules.IsStoreLaunchFailure(false, false, false, false, "Riot Client did not answer the launch request."));
+        Assert.False(FailureReportRules.IsStoreLaunchFailure(false, false, false, false, "Riot is updating VALORANT (42%)."));
+        Assert.False(FailureReportRules.IsStoreLaunchFailure(false, false, false, false, "VALORANT is not installed in Riot (unknown)."));
+        Assert.True(FailureReportRules.IsStoreLaunchFailure(false, false, false, false, "Riot reports this game cannot launch right now."));
+
+        Assert.False(FailureReportRules.IsStoreInstallFailure(false, "Not enough free space on D:.", false));
+        Assert.False(FailureReportRules.IsStoreInstallFailure(false, "Sign in to Epic Games first.", false));
+        Assert.True(FailureReportRules.IsStoreInstallFailure(false, "Manifest verification failed.", false));
+    }
+
+    [Fact]
+    public void DiscordGatewayReportSkipsNetworkDropsWithoutCloseCode()
+    {
+        Assert.False(FailureReportRules.IsDiscordGatewayReportable(null, networkFailure: true));
+        Assert.False(FailureReportRules.IsDiscordGatewayReportable(null, networkFailure: false));
+        Assert.False(FailureReportRules.IsDiscordGatewayReportable(4000, networkFailure: true));
+        Assert.True(FailureReportRules.IsDiscordGatewayReportable(4000, networkFailure: false));
+    }
+
+    [Fact]
+    public void DiscordRestIsIdAcceptsOnlyNumericSnowflakes()
+    {
+        Assert.True(ExoLauncher.Services.DiscordClient.DiscordRest.IsId("123456789012345678"));
+        Assert.False(ExoLauncher.Services.DiscordClient.DiscordRest.IsId("@me"));
+        Assert.False(ExoLauncher.Services.DiscordClient.DiscordRest.IsId("friends"));
+        Assert.False(ExoLauncher.Services.DiscordClient.DiscordRest.IsId(""));
+        Assert.False(ExoLauncher.Services.DiscordClient.DiscordRest.IsId(null));
+        Assert.False(ExoLauncher.Services.DiscordClient.DiscordRest.IsId("123456789012345678901"));
     }
 
     [Fact]

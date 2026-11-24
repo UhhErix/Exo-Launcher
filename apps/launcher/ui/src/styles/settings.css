@@ -256,6 +256,26 @@ span.exo-error-note {
   font-weight: 500;
 }
 
+.exo-set-item-label.is-truncated {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-set-tip {
+  position: fixed;
+  z-index: 40;
+  max-width: 360px;
+  padding: 6px 10px;
+  border-radius: var(--exo-card-radius);
+  color: var(--color-fg);
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+}
+
 .exo-set-item-detail {
   color: var(--color-muted);
   font-size: calc(13px * var(--exo-scale, 1));

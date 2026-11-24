@@ -329,7 +329,7 @@ function adviceWords(item: DriverEntry) {
 function DeviceRow({ item, step, disabled, onInstall }: { item: DriverEntry; step: DriverStep | undefined; disabled: boolean; onInstall: () => void }) {
   const detail = step?.working ? step.working : step?.ok ? trimStop(step.message) || 'Updated' : problem(item)
   return (
-    <Row label={rowName(item)} detail={detail} error={step && step.ok === false ? trimStop(step.message) || 'Didn’t update' : null}>
+    <Row label={rowName(item)} truncateLabel detail={detail} error={step && step.ok === false ? trimStop(step.message) || 'Didn’t update' : null}>
       {deviceAction(item, step?.working ?? null, disabled, onInstall)}
     </Row>
   )

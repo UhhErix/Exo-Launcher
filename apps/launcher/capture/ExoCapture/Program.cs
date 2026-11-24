@@ -6,6 +6,7 @@ using ExoCapture.Native;
 
 // Exo Capture: started hidden by Exo (Services/CaptureAddon.cs), which speaks to it over stdin and stdout (CONTRACT.md).
 // `ExoCapture.exe --check <file>...` reads clips back through Windows' decoder (the self-test of what it writes).
+Win32.SuppressErrorDialogs();
 Win32.SetProcessDpiAwarenessContext(-4); // per-monitor v2: the snip and desktop duplication see real pixels
 Vortice.MediaFoundation.MediaFactory.MFStartup(true).CheckError();
 AppDomain.CurrentDomain.UnhandledException += (_, e) => Host.Log("Exo Capture could not start: " + e.ExceptionObject);
