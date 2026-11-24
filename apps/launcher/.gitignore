@@ -69,6 +69,9 @@ ExoLauncher/wwwroot/
 # Interactive parity reports (tools/parity/run.mjs)
 /parity-report/
 
+# Parity recorder raw captures (tools/rpc-parity/run.mjs)
+/tools/rpc-parity/out/
+
 # Exo Capture build output
 capture/build/
 capture/out/

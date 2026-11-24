@@ -238,28 +238,20 @@ pub fn register_library_wp2_events(state: &mut AppState) {
         true
     });
     state.register_event(HostEventKind::GameOptimizeHeld, |s, ev| {
-        let HostEvent::GameOptimizeHeld { title } = ev else {
+        let HostEvent::GameOptimizeHeld(go) = ev else {
             return false;
         };
-        if !title.trim().is_empty() {
-            s.lib.optimize_held_titles.insert(title.clone());
-            s.push_notice(
-                format!("{title} is running. Exo will optimize it once it closes."),
-                NoticeTone::Neutral,
-            );
+        if !go.title.trim().is_empty() {
+            s.lib.optimize_held_titles.insert(go.title);
         }
         true
     });
     state.register_event(HostEventKind::GameOptimizedAgain, |s, ev| {
-        let HostEvent::GameOptimizedAgain { title } = ev else {
+        let HostEvent::GameOptimizedAgain(go) = ev else {
             return false;
         };
-        if !title.trim().is_empty() {
-            s.lib.optimize_held_titles.remove(&title);
-            s.push_notice(
-                format!("{title}'s update reset its settings. Exo optimized it again."),
-                NoticeTone::Good,
-            );
+        if !go.title.trim().is_empty() {
+            s.lib.optimize_held_titles.remove(&go.title);
         }
         true
     });
@@ -2764,23 +2756,23 @@ mod tests {
 
         assert!(reg.dispatch(
             &mut s,
-            HostEvent::GameOptimizeHeld {
+            HostEvent::GameOptimizeHeld(exo_rpc::GameOptimizeEvent {
                 title: "Cyberpunk 2077".into(),
-            }
+            })
         ));
         assert!(s.lib.optimize_held_titles.contains("Cyberpunk 2077"));
 
         assert!(reg.dispatch(
             &mut s,
-            HostEvent::GameOptimizedAgain {
+            HostEvent::GameOptimizedAgain(exo_rpc::GameOptimizeEvent {
                 title: "Cyberpunk 2077".into(),
-            }
+            })
         ));
         assert!(!s.lib.optimize_held_titles.contains("Cyberpunk 2077"));
         assert!(
             s.notices
                 .iter()
-                .any(|n| n.text.contains("Exo optimized it again."))
+                .any(|n| n.text.contains("optimized it again"))
         );
     }
 

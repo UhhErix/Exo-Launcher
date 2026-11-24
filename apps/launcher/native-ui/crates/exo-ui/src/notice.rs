@@ -53,15 +53,41 @@ fn toast_card(item: &NoticeItem, allow_blur: bool) -> El {
         })
         .child(icon_close(13.0, fg_muted()));
 
-    content = content
-        .child(
-            text(item.text.clone())
-                .font(type_body())
-                .color(FG)
-                .grow(1.0)
-                .wrap(),
-        )
-        .child(close_btn);
+    content = content.child(
+        text(item.text.clone())
+            .font(type_body())
+            .color(FG)
+            .grow(1.0)
+            .wrap(),
+    );
+
+    if let (Some(label), Some(action)) = (item.action_label.clone(), item.action) {
+        let action_btn = el()
+            .key(format!("notice-action-{id}"))
+            .role("button")
+            .label(label.clone())
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .px(10.0)
+            .py(4.0)
+            .radius(RADIUS_PILL)
+            .fill(hover_fill())
+            .hover(pressed_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press_tx(move |s: &mut AppState, tx| {
+                tx.animated();
+                s.run_notice_action(action);
+                s.dismiss_notice(id);
+            })
+            .child(text(label).font(type_body()).color(FG));
+        content = content.child(action_btn);
+    }
+
+    content = content.child(close_btn);
 
     glass_panel_opt(format!("notice-{id}"), TOAST_WIDTH, allow_blur)
         .role("status")

@@ -14,8 +14,8 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 |---|---:|---:|---:|---:|---:|
 | Shell & Bar | 6 | 10 | 9 | 0 | 25 |
 | Library | 6 | 7 | 6 | 2 | 21 |
-| Game page | 3 | 7 | 9 | 3 | 22 |
-| Store | 5 | 2 | 9 | 1 | 17 |
+| Game page | 22 | 0 | 0 | 0 | 22 |
+| Store | 16 | 1 | 0 | 0 | 17 |
 | Discord | 9 | 16 | 20 | 0 | 45 |
 | Music | 5 | 7 | 9 | 0 | 21 |
 | Exo AI / PC | 0 | 8 | 12 | 1 | 21 |
@@ -24,7 +24,7 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 | Captures | 0 | 4 | 5 | 1 | 10 |
 | Settings | 6 | 5 | 12 | 0 | 23 |
 | Onboarding & Account | 0 | 4 | 6 | 0 | 10 |
-| **Overall** | **47** | **74** | **108** | **9** | **238** |
+| **Overall** | **77** | **66** | **90** | **5** | **238** |
 
 RPC: React calls 345 of 345 contract methods; native references 134. 211 methods React calls are never called natively. Events: React handles 77 of 77; native handles 35; 42 React-handled events are dropped natively.
 
@@ -103,56 +103,56 @@ Totals: DONE 21, PARTIAL 0, MISSING 0, BROKEN 0 (of 21).
 
 ## Game page
 
-Totals: DONE 3, PARTIAL 7, MISSING 9, BROKEN 3 (of 22).
+Totals: DONE 22, PARTIAL 0, MISSING 0, BROKEN 0 (of 22).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Page hero (art, logo, title, meta) | components/GamePage.tsx:50 | exo-ui/src/game_page.rs:562 | DONE | rpc: game.get.  |
-| Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy) | components/game/PrimaryAction.tsx:6 | exo-ui/src/game_page.rs:8 | PARTIAL | rpc: game.launch, game.install, game.update, game.pauseInstall, game.cancelInstall, game.stop. game.dequeue / resumeDownload / progress unused; no Queued, Buy again, entitlement states. |
-| Download / install progress bar + speed + ETA | components/game/PrimaryAction.tsx:16 | exo-ui/src/game_page.rs:154 | PARTIAL | rpc: game.progress. Progress from push events only. |
-| Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen) | components/game/OptimizeLine.tsx:29 | exo-ui/src/game_page.rs:156 | BROKEN | rpc: game.settings, keep.status, dlss.*, gpu.game, hdr.game. game_page.rs:149-190 renders hardcoded text ("Up to date", "Built into the game", Optimize "Applied" for any installed game). No RPC behind it. |
-| Display mode (windowed / fullscreen / borderless) | components/game/GameProperties.tsx:1 | exo-ui/src/state.rs:1068 | BROKEN | rpc: game.settings. state.rs:1263 sets local state + notice only; never persisted or applied. |
-| Frame generation row (DLSS FG / AFMF / Lossless) | components/game/FrameGenRow.tsx:28 | — | MISSING | rpc: dlss.frameGen, gpu.game, gpu.afmf3.  |
-| HDR row | components/game/HdrRow.tsx:23 | — | MISSING | rpc: hdr.game.  |
-| Compress row (CompactOS per game) | components/game/CompressRow.tsx:110 | — | MISSING | rpc: compress.state, compress.act.  |
-| Shader pre-compile row | components/game/ShaderPrecompile.tsx:10 | — | MISSING | rpc: shaders.status, shaders.prepare.cancel, shaders.rebuild. native uses 5 shaders.* methods in PC only. |
-| Properties: General (launch options, language, Steam overlay) | components/game/GameProperties.tsx:2 | exo-ui/src/game_page.rs:129 | PARTIAL | rpc: game.properties, game.properties.set. Cloud saves, Steam Input, anti-cheat choice, size on disk, library folder move missing. |
-| Properties: Installed files (Verify, Browse, Uninstall) | components/game/GameProperties.tsx:42 | exo-ui/src/game_page.rs:453 | DONE | rpc: game.repair, game.uninstall.  |
-| Properties: Betas (switch branch, access code) | components/game/GameProperties.tsx:42 | exo-ui/src/game_page.rs:17 | PARTIAL | rpc: game.properties. Read-only text; cannot switch. |
-| Properties: DLC | components/game/GameProperties.tsx:1 | exo-ui/src/game_page.rs:17 | PARTIAL | Read-only list. |
-| Properties: Artwork (refetch, replace, reset) | components/game/Artwork.tsx:3 | exo-ui/src/game_page.rs:484 | BROKEN | rpc: art.refetch, art.replace, art.reset. game_page.rs:~482 "Refresh" calls refresh_library, not art.*; no Replace/Reset/file picker. |
-| Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent) | components/UpscalerFiles.tsx:6 | — | MISSING | rpc: dlss.consent, dlss.restore, dlss.status, dlss.newer, dlss.downloadNewer, dlss.updateAll. Scene game-props-dlss exists but no real UI. |
-| Properties: Anti-cheat choice | components/game/GameProperties.tsx:66 | — | MISSING | rpc: game.properties.set.  |
-| Properties: Cloud saves / Steam Input | components/game/GameProperties.tsx:66 | — | MISSING | rpc: steamInput.state, game.properties.  |
-| Properties: Move to another library folder / size on disk | components/game/GameProperties.tsx:52 | — | MISSING | rpc: game.properties.set.  |
-| Achievements (list, progress, rarity) + pop-up | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:690 | PARTIAL | rpc: game.extras. game.achievements event not handled; achievement pop-up not shown. |
-| Playtime / last played stats | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:686 | DONE | rpc: game.get. Riot export import (playtime.importRiotExport / setRiotBaseline) missing. |
-| Friends who play | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:202 | PARTIAL |  |
-| Store page link / Buy again | components/game/PrimaryAction.tsx:7 | — | MISSING |  |
+| Page hero (art, logo, title, meta) | components/GamePage.tsx:50 | exo-ui/src/game_page.rs:405 | DONE | rpc: game.get. Includes driveHeat warning, live status pill, non-installed ArtworkStrip. |
+| Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy) | components/game/PrimaryAction.tsx:6 | exo-ui/src/game_page.rs:163 | DONE | rpc: game.launch, game.install, game.update, game.pauseInstall, game.cancelInstall, game.stop, game.dequeue, game.resumeDownload, game.progress, shell.openUrl. |
+| Download / install progress bar + speed + ETA | components/game/PrimaryAction.tsx:16 | exo-ui/src/game_page.rs:315 | DONE | rpc: game.progress + install.progress event; edge progress bar, bytes, speed, ETA. |
+| Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen) | components/game/OptimizeLine.tsx:29 | exo-ui/src/game_perf.rs:187 | DONE | rpc: game.settings, keep.status, dlss.status, dlss.frameGen, gpu.game, hdr.game, hdr.state, shaders.status. Zero fake data. |
+| Display mode (windowed / fullscreen / borderless) | components/game/OptimizeLine.tsx:87 | exo-ui/src/game_perf.rs:354 | DONE | rpc: game.settings (windowMode persisted to host). |
+| Frame generation row (DLSS FG / AFMF / Lossless) | components/game/FrameGenRow.tsx:28 | exo-ui/src/game_perf.rs:260 | DONE | rpc: dlss.frameGen, gpu.game + Smooth Motion switch. |
+| HDR row | components/game/HdrRow.tsx:23 | exo-ui/src/game_perf.rs:277 | DONE | rpc: hdr.game, hdr.state, settings.set (hdrForGames Turn on). |
+| Compress row (CompactOS per game) | components/game/CompressRow.tsx:110 | exo-ui/src/game_props.rs:475 | DONE | rpc: compress.state (auto-sample), compress.act + compress.progress event. |
+| Shader pre-compile row | components/game/ShaderPrecompile.tsx:10 | exo-ui/src/game_perf.rs:232 | DONE | rpc: shaders.status + shaders.changed event + Installed files Rebuild shaders. |
+| Properties: General (launch options, language, Steam overlay) | components/game/GameProperties.tsx:388 | exo-ui/src/game_props.rs:254 | DONE | rpc: game.properties, game.properties.set (fixed steamOverlay on/off). |
+| Properties: Installed files (Verify, Browse, Uninstall) | components/game/GameProperties.tsx:452 | exo-ui/src/game_props.rs:647 | DONE | rpc: game.repair, game.uninstall, game.openFolder. |
+| Properties: Betas (switch branch, access code) | components/game/GameProperties.tsx:561 | exo-ui/src/game_props.rs:956 | DONE | rpc: game.properties, game.properties.set (beta + secure masked betaCode). |
+| Properties: DLC | components/game/GameProperties.tsx:583 | exo-ui/src/game_props.rs:1057 | DONE | rpc: game.properties, game.properties.set (content toggles + confirm + states). |
+| Properties: Artwork (refetch, replace, reset) | components/game/Artwork.tsx:19 | exo-ui/src/game_props.rs:196 | DONE | rpc: art.refetch, art.replace, art.reset. |
+| Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent) | components/game/GameProperties.tsx:504 | exo-ui/src/game_props.rs:869 | DONE | rpc: dlss.consent, dlss.restore, dlss.status. |
+| Properties: Anti-cheat choice | components/game/GameProperties.tsx:428 | exo-ui/src/game_props.rs:424 | DONE | rpc: game.properties.set (antiCheatLaunch + confirm). |
+| Properties: Cloud saves / Steam Input | components/game/GameProperties.tsx:409 | exo-ui/src/game_props.rs:348 | DONE | rpc: game.properties, game.properties.set (cloudSync, throughSteam, storeProperties). |
+| Properties: Move to another library folder / size on disk | components/game/GameProperties.tsx:464 | exo-ui/src/game_props.rs:815 | DONE | rpc: game.properties, game.properties.set (folder + live move progress polling). |
+| Achievements (list, progress, rarity) + pop-up | components/game/GameSections.tsx:122 | exo-ui/src/game_page.rs:517 | DONE | rpc: game.extras + game.achievements event + progress bar (in-game banners are host-side). |
+| Playtime / last played stats | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:505 | DONE | rpc: game.get. Matches React relative last played + omits unknown facts. |
+| Friends who play | components/game/GameSections.tsx:8 | exo-ui/src/game_page.rs:41 | DONE | Matches React GameSections.tsx: GameShared Steam Family badge + multi-source GameStore switcher. |
+| Store page link / Buy again | components/game/PrimaryAction.tsx:25 | exo-ui/src/game_page.rs:233 | DONE | rpc: shell.openUrl (hostedBuyUrl + Buy again / Buy on Steam / GOG / browser). |
 
 ## Store
 
-Totals: DONE 5, PARTIAL 2, MISSING 9, BROKEN 1 (of 17).
+Totals: DONE 16, PARTIAL 1, MISSING 0, BROKEN 0 (of 17).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Store room Discover tab (hero, shelves, tiles) | components/store/StoreRoom.tsx:49 | exo-ui/src/store.rs:463 | DONE | rpc: store.home.  |
-| Store hero hover / pick list | components/store/StoreRoom.tsx:201 | exo-ui/src/store.rs:720 | PARTIAL |  |
-| Wishlist tab | components/store/storeData.ts:265 | exo-ui/src/store.rs:509 | PARTIAL | rpc: store.wishlist. store.changed(wishlist) refreshes; no on-sale count badge on the tab. |
-| Store search (results, empty, loading) | components/store/StoreRoom.tsx:61 | exo-ui/src/store.rs:471 | DONE | rpc: store.search.  |
-| Tile card: price, discount, store logo | components/store/StoreCard.tsx:87 | exo-ui/src/store.rs:89 | DONE |  |
-| Tile card: "Library" button on owned games | components/store/StoreCard.tsx:87 | — | MISSING |  |
-| Check prices / On sale split | components/store/StoreRoom.tsx:385 | — | MISSING | rpc: store.wishlist. storeWishlist("check") never called; store.sale event not handled. |
-| Store game page: offers (open in store) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store.rs:402 | DONE | rpc: store.game.  |
-| Store game page: offer rows (store names, prices, historical low) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store.rs:402 | BROKEN | rpc: store.game. Smoke (store-game): offer rows are labeled "1" and "25" (raw store ids, not store names) and the Historical low line prints a raw ISO timestamp 2026-11-19T20:55:23.0000000+00:00. |
-| Store game page: hero art / header image | components/store/StoreGamePage.tsx:4 | exo-ui/src/store.rs:174 | MISSING | rpc: store.game. Smoke: page opens with a bare title and empty left gutter; no hero, cover or logo. |
-| Store game page: fact chips (price, reviews, Metacritic, Released) | components/store/StoreGamePage.tsx:243 | exo-ui/src/store.rs:174 | DONE |  |
-| Store game page: trailers (HLS player) | components/store/TrailerPlayer.tsx:24 | exo-ui/src/video_decoder.rs:1 | MISSING | video_decoder.rs exists for captures only; video.frame / keyframe events handled for captures. |
-| Store game page: screenshot strip + lightbox | components/store/StoreGamePage.tsx:28 | — | MISSING |  |
-| Store game page: system requirements | components/store/StoreGamePage.tsx:29 | — | MISSING |  |
-| Store game page: tags, About card, More like this | components/store/StoreGamePage.tsx:29 | — | MISSING |  |
-| Store game page: wishlist toggle | components/store/StoreGamePage.tsx:34 | — | MISSING | rpc: store.wishlist.  |
-| Game reviews | components/store/StoreGamePage.tsx:243 | — | MISSING | rpc: store.gameReviews. Chip uses cached score only; no review list. |
+| Store room Discover tab (hero, shelves, tiles) | components/store/StoreRoom.tsx:49 | exo-ui/src/store.rs:957 | DONE | rpc: store.home. Fixed StoreTile::similar_to Vec<String> deserialization and all shelves render. |
+| Store hero hover / pick list | components/store/StoreRoom.tsx:201 | exo-ui/src/store.rs:777 | DONE | 8s auto-rotate with countdown bar, hover pause, reduce-motion pause, active pick click opens game, Steam logo/tags. |
+| Wishlist tab | components/store/storeData.ts:265 | exo-ui/src/store.rs:582 | DONE | rpc: store.wishlist. Loads store.wishlist(get), refreshes on store.changed(wishlist), empty/loading/error states. |
+| Store search (results, empty, loading) | components/store/StoreRoom.tsx:61 | exo-ui/src/store.rs:724 | DONE | rpc: store.search. Debounced 250ms search-as-you-type, clear button, empty/error states. |
+| Tile card: price, discount, store logo | components/store/StoreCard.tsx:87 | exo-ui/src/store.rs:248 | DONE | Steam poster/header fallback, live wishlist bookmark badge, price/discount/was formatting. |
+| Tile card: "Library" button on owned games | components/store/StoreCard.tsx:87 | exo-ui/src/store.rs:348 | DONE | Matches React useOwned; hides price/reviews and opens game directly in Library. |
+| Check prices / On sale split | components/store/StoreRoom.tsx:385 | exo-ui/src/store.rs:610 | DONE | rpc: store.wishlist. Calls store.wishlist(check), splits On sale now vs Not on sale, handles store.sale push toast. |
+| Store game page: offers (open in store) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store_page.rs:1244 | DONE | rpc: store.game, store.open. |
+| Store game page: offer rows (store names, prices, historical low) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store_page.rs:1244 | DONE | rpc: store.game, store.gameOffers, store.open, shell.openUrl. Displays real store names (Steam, Epic Games Store, GOG, Ubisoft), GG.deals link, owned Library primary button; StoreLowest::formatted_date() formats ISO dates cleanly. |
+| Store game page: hero art / header image | components/store/StoreGamePage.tsx:4 | exo-ui/src/store_page.rs:1143 | DONE | rpc: store.game. Fixed 80px Steam logo slot with title fallback, plus 16:9 media stage with header/hero fallback. |
+| Store game page: fact chips (price, reviews, Metacritic, Released) | components/store/StoreGamePage.tsx:243 | exo-ui/src/store_page.rs:1526 | DONE | 10-cell Facts card matching React StoreGamePage. |
+| Store game page: trailers (HLS player) | components/store/TrailerPlayer.tsx:24 | exo-ui/src/store_media.rs:172 | PARTIAL | Wired via rune_media::Player::url with play/pause/mute/scrubber and graceful poster fallback; blocked on HLS playback (video_decoder.rs is Discord WebRTC elementary packets only; desktop Media Foundation IMFSourceResolver in rune-media rejects .m3u8 playlists). |
+| Store game page: screenshot strip + lightbox | components/store/StoreGamePage.tsx:28 | exo-ui/src/store_media.rs:172 | DONE | 16:9 stage + horizontal thumbnail strip (600x338 thumbs) + fullscreen lightbox overlay with prev/next/counter/Esc/arrow keys. |
+| Store game page: system requirements | components/store/StoreGamePage.tsx:29 | exo-ui/src/store_page.rs:1632 | DONE | All 7 hardware rows with This PC comparison marks/tones, Minimum/Recommended rows, and verdict pill. |
+| Store game page: tags, About card, More like this | components/store/StoreGamePage.tsx:29 | exo-ui/src/store_page.rs:1168 | DONE | Single-row tag pills, About card, and More like this horizontal shelf footer. |
+| Store game page: wishlist toggle | components/store/StoreGamePage.tsx:34 | exo-ui/src/store_page.rs:1357 | DONE | rpc: store.wishlist. Optimistic add/remove with green check and error rollback. |
+| Game reviews | components/store/StoreGamePage.tsx:243 | exo-ui/src/store_page.rs:1526 | DONE | rpc: store.gameReviews. Fetches Recent reviews and renders in Facts card alongside all-time Reviews. |
 
 ## Discord
 
@@ -531,25 +531,25 @@ Owns: native-ui/crates/exo-ui/src/game_page.rs (+ new game_props.rs, game_perf.r
 
 Depends on: None for RPC (game.settings, game.properties.set, dlss.*, gpu.game, hdr.game, compress.*, art.*, keep.status, shaders.status all exist). Rune: file picker is host-side (shell), none needed.
 
-- `game-page-02` [PARTIAL] Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy)
-- `game-page-03` [PARTIAL] Download / install progress bar + speed + ETA
-- `game-page-04` [BROKEN] Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen)
-- `game-page-05` [BROKEN] Display mode (windowed / fullscreen / borderless)
-- `game-page-06` [MISSING] Frame generation row (DLSS FG / AFMF / Lossless)
-- `game-page-07` [MISSING] HDR row
-- `game-page-08` [MISSING] Compress row (CompactOS per game)
-- `game-page-09` [MISSING] Shader pre-compile row
-- `game-page-10` [PARTIAL] Properties: General (launch options, language, Steam overlay)
-- `game-page-12` [PARTIAL] Properties: Betas (switch branch, access code)
-- `game-page-13` [PARTIAL] Properties: DLC
-- `game-page-14` [BROKEN] Properties: Artwork (refetch, replace, reset)
-- `game-page-15` [MISSING] Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent)
-- `game-page-16` [MISSING] Properties: Anti-cheat choice
-- `game-page-17` [MISSING] Properties: Cloud saves / Steam Input
-- `game-page-18` [MISSING] Properties: Move to another library folder / size on disk
-- `game-page-19` [PARTIAL] Achievements (list, progress, rarity) + pop-up
-- `game-page-21` [PARTIAL] Friends who play
-- `game-page-22` [MISSING] Store page link / Buy again
+- `game-page-02` [DONE] Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy)
+- `game-page-03` [DONE] Download / install progress bar + speed + ETA
+- `game-page-04` [DONE] Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen)
+- `game-page-05` [DONE] Display mode (windowed / fullscreen / borderless)
+- `game-page-06` [DONE] Frame generation row (DLSS FG / AFMF / Lossless)
+- `game-page-07` [DONE] HDR row
+- `game-page-08` [DONE] Compress row (CompactOS per game)
+- `game-page-09` [DONE] Shader pre-compile row
+- `game-page-10` [DONE] Properties: General (launch options, language, Steam overlay)
+- `game-page-12` [DONE] Properties: Betas (switch branch, access code)
+- `game-page-13` [DONE] Properties: DLC
+- `game-page-14` [DONE] Properties: Artwork (refetch, replace, reset)
+- `game-page-15` [DONE] Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent)
+- `game-page-16` [DONE] Properties: Anti-cheat choice
+- `game-page-17` [DONE] Properties: Cloud saves / Steam Input
+- `game-page-18` [DONE] Properties: Move to another library folder / size on disk
+- `game-page-19` [DONE] Achievements (list, progress, rarity) + pop-up
+- `game-page-21` [DONE] Friends who play
+- `game-page-22` [DONE] Store page link / Buy again
 
 #### WP2 Library: folders, select mode, gifts, shelves, drag and drop (L, 15 items)
 
@@ -639,18 +639,18 @@ Owns: store.rs (+ new store_page.rs, store_media.rs)
 
 Depends on: Trailers need an HLS path: reuse video_decoder.rs (owned by WP10 for captures; coordinate read-only reuse). Rune fork: image lightbox / horizontal strip virtualisation if not present. RPC: store.gameReviews and storeWishlist(check) exist.
 
-- `store-02` [PARTIAL] Store hero hover / pick list
-- `store-03` [PARTIAL] Wishlist tab
-- `store-06` [MISSING] Tile card: "Library" button on owned games
-- `store-07` [MISSING] Check prices / On sale split
-- `store-09` [BROKEN] Store game page: offer rows (store names, prices, historical low)
-- `store-10` [MISSING] Store game page: hero art / header image
-- `store-12` [MISSING] Store game page: trailers (HLS player)
-- `store-13` [MISSING] Store game page: screenshot strip + lightbox
-- `store-14` [MISSING] Store game page: system requirements
-- `store-15` [MISSING] Store game page: tags, About card, More like this
-- `store-16` [MISSING] Store game page: wishlist toggle
-- `store-17` [MISSING] Game reviews
+- `store-02` [DONE] Store hero hover / pick list
+- `store-03` [DONE] Wishlist tab
+- `store-06` [DONE] Tile card: "Library" button on owned games
+- `store-07` [DONE] Check prices / On sale split
+- `store-09` [DONE] Store game page: offer rows (store names, prices, historical low)
+- `store-10` [DONE] Store game page: hero art / header image
+- `store-12` [PARTIAL] Store game page: trailers (HLS player — UI + rune_media::Player::url wired with poster fallback; blocked on desktop MF/video_decoder HLS support)
+- `store-13` [DONE] Store game page: screenshot strip + lightbox
+- `store-14` [DONE] Store game page: system requirements
+- `store-15` [DONE] Store game page: tags, About card, More like this
+- `store-16` [DONE] Store game page: wishlist toggle
+- `store-17` [DONE] Game reviews
 
 #### WP6 Discord chat: composer, pickers, threads, polls, search, inbox, profile (L, 16 items)
 
