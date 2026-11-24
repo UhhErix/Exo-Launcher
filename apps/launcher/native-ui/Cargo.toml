@@ -50,6 +50,9 @@ parley_engine = { git = "https://github.com/UhhErix/rune", rev = "caaa6a71c732fe
 accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "caaa6a71c732fe7f3bc623d60283961f15ac1cdf" }
 accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "caaa6a71c732fe7f3bc623d60283961f15ac1cdf" }
 
+[profile.dev.package."*"]
+opt-level = 2
+
 [profile.release]
 opt-level = "s"
 lto = "thin"
