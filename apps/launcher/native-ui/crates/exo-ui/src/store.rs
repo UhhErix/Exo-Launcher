@@ -1240,6 +1240,7 @@ mod tests {
         let mut state = AppState::with_demo_games();
         state.switch_room(Room::Store);
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
@@ -1249,7 +1250,11 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "Store exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Store exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
+            exo_kit::EXO_MAX_BACKDROP_BLURS
+        );
 
         let (hero_rect, _) = rt
             .presented("store-hero-open")

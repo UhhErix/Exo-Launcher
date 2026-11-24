@@ -3234,6 +3234,7 @@ mod tests {
             (1280.0, 800.0),
             Env::new(true, 1.0),
         );
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.frame(0.0);
 
         let blurs = rt
@@ -3242,8 +3243,9 @@ mod tests {
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
         assert!(
-            (2..=4).contains(&blurs),
-            "expected 2..=4 floating glass surfaces within MAX_BACKDROP_BLURS=4, got {blurs}"
+            (2..=exo_kit::EXO_MAX_BACKDROP_BLURS).contains(&blurs),
+            "expected 2..={} floating glass surfaces within EXO_MAX_BACKDROP_BLURS, got {blurs}",
+            exo_kit::EXO_MAX_BACKDROP_BLURS
         );
         let strokes = rt
             .instances
@@ -3320,6 +3322,7 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert_eq!(rt.state.settings.start_with_windows, !before);
 
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.update(|s, _| s.switch_room(Room::ExoAi));
         rt.frame(2.0 / 60.0);
         assert_eq!(rt.state.pc.pc_tab, pc_state::PcTab::ExoAi);
@@ -3328,7 +3331,11 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "PC room exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "PC room exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
+            exo_kit::EXO_MAX_BACKDROP_BLURS
+        );
 
         let (sx, sy) = rt.find("pc-tab-storage").expect("Storage button");
         rt.pointer_down(sx, sy);
@@ -3548,6 +3555,7 @@ mod tests {
             (1280.0, 800.0),
             Env::new(true, 1.0),
         );
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.frame(0.0);
         assert!(rt.find("music-mini-player").is_some());
         let blurs = rt
@@ -3556,8 +3564,9 @@ mod tests {
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
         assert!(
-            blurs <= 4,
-            "mini-player exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "mini-player exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
+            exo_kit::EXO_MAX_BACKDROP_BLURS
         );
 
         let (mx, my) = rt.find("mini-open-music").expect("Mini player open Music");
@@ -3748,6 +3757,7 @@ mod tests {
             s.open_discord_channel("vc-lounge");
             s.join_discord_voice(Some("g-exo"), "vc-lounge");
         });
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.frame(0.0);
         assert!(rt.find("dc-voice-stage").is_some());
         assert!(rt.find("dc-stream-theater").is_some());
@@ -3757,8 +3767,9 @@ mod tests {
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
         assert!(
-            blurs <= 4,
-            "Discord voice exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Discord voice exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
+            exo_kit::EXO_MAX_BACKDROP_BLURS
         );
 
         let (gx, gy) = rt.find("dc-dock-share").expect("Share screen button");
@@ -4180,6 +4191,7 @@ mod tests {
             let mut state = AppState::default();
             setup(&mut state);
             let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
             rt.poll = Some(poll_state);
             rt.frame(0.0);
             let blur_count = rt
@@ -4188,9 +4200,9 @@ mod tests {
                 .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
                 .count();
             assert!(
-                blur_count <= rune::MAX_BACKDROP_BLURS,
+                blur_count <= exo_kit::EXO_MAX_BACKDROP_BLURS,
                 "{label}: emitted {blur_count} backdrop blurs (cap {})",
-                rune::MAX_BACKDROP_BLURS
+                exo_kit::EXO_MAX_BACKDROP_BLURS
             );
         }
     }

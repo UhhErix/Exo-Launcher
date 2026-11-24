@@ -4500,6 +4500,7 @@ mod tests {
                 (1920.0, 1080.0),
                 Env::new(true, 1.0),
             );
+            vrt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
             vrt.set_system_reduced_motion(reduce_motion);
             let mut vrun = Run::new(vrt, 120.0);
             vrun.idle(0.5);
@@ -4509,8 +4510,8 @@ mod tests {
             });
             vrun.play(0.5);
             assert!(
-                blur_count(&vrun.rt) <= 4,
-                "Discord voice audio panel exceeded MAX_BACKDROP_BLURS=4"
+                blur_count(&vrun.rt) <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+                "Discord voice audio panel exceeded EXO_MAX_BACKDROP_BLURS"
             );
             vrun.act("switch to GoLive panel", |rt| {
                 rt.update(|s, _| s.discord.voice_ui.panel = VoicePanel::GoLive);
