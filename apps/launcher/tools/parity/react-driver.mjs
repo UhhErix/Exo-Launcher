@@ -325,7 +325,7 @@ async function resetReactShell(shell, roomLabel) {
   await shell.call(() => {
     for (const btn of document.querySelectorAll('button')) {
       const label = (btn.getAttribute('aria-label') || btn.textContent || '').trim()
-      if (/^(skip tour|close captures|close search|clear search|clear)$/i.test(label)) {
+      if (/^(skip tour|close captures|close search|clear search|clear|disconnect|leave immersive|exit full screen)$/i.test(label)) {
         btn.click()
       }
     }
@@ -336,8 +336,13 @@ async function resetReactShell(shell, roomLabel) {
     await sleep(120)
   }
   await shell.call(() => {
-    const back = document.querySelector('.exo-sgp-back, .exo-game-back, .exo-settings-back, button[aria-label="Back to Home"]')
-    if (back instanceof HTMLElement) back.click()
+    const sel =
+      '.exo-sgp-back, .exo-game-back, .exo-settings-back, .exo-devices-back button, .exo-music-back, .exo-music-immersive-leave button, button[aria-label="Back to Home"]'
+    for (const back of document.querySelectorAll(sel)) {
+      if (!(back instanceof HTMLElement)) continue
+      const r = back.getBoundingClientRect()
+      if (r.width > 0 && r.height > 0) back.click()
+    }
   }).catch(() => {})
   await sleep(180)
   if (roomLabel) {
@@ -367,6 +372,18 @@ export async function runReactPass({ states, outDir, folder, dataDir, hostExe = 
         for (const step of state.react?.steps || []) {
           if (step.type === 'wait') {
             await sleep(step.ms || 300)
+          } else if (step.type === 'waitFor') {
+            const deadline = Date.now() + (step.timeoutMs || 10000)
+            let found = null
+            while (Date.now() < deadline) {
+              found = await shell.call(findElementCenter, step.selector, null)
+              if (found) break
+              await sleep(250)
+            }
+            if (!found && !step.optional) {
+              stepError = `waitFor target not found: ${step.selector}`
+              break
+            }
           } else if (step.type === 'click') {
             const pt = await shell.call(findElementCenter, step.selector, null)
             if (!pt) {
@@ -454,12 +471,24 @@ export async function runReactPass({ states, outDir, folder, dataDir, hostExe = 
             await shell.s.send('Input.insertText', { text: step.text })
           } else if (step.type === 'scroll') {
             await shell.call(
-              (sel, top) => {
-                const el = document.querySelector(sel)
-                if (el) el.scrollTop = top
+              (sel, top, intoView) => {
+                if (intoView) {
+                  const node = document.querySelector(intoView)
+                  if (node instanceof HTMLElement) {
+                    node.scrollIntoView({ block: 'center', behavior: 'instant' })
+                    return
+                  }
+                }
+                for (const el of document.querySelectorAll(sel)) {
+                  const r = el.getBoundingClientRect()
+                  if (r.width > 0 && r.height > 0 && el.scrollHeight > el.clientHeight) {
+                    el.scrollTop = top
+                  }
+                }
               },
-              step.selector,
+              step.selector || '[data-room-scroll]',
               step.top || 600,
+              step.intoView || null,
             )
           }
         }

@@ -1,7 +1,37 @@
-import { cp, stat } from 'node:fs/promises'
-import { basename, resolve } from 'node:path'
+import { cp, mkdir, stat } from 'node:fs/promises'
+import { basename, join, resolve } from 'node:path'
 
 const SKIPPED = /^app(\.incoming-dev-.*|\.previous-dev-.*)?$/i
+const WEBVIEW_CACHE_SKIP = /(^|[\\/])(Cache|Code Cache|GPUCache|GrShaderCache|ShaderCache|DawnGraphiteCache|DawnWebGPUCache|CacheStorage)([\\/]|$)/i
+
+export async function seedEmbeddedWebViewProfile(dataDir) {
+  const localApp = process.env.LOCALAPPDATA || ''
+  if (!localApp) return false
+  const sharedEb = join(localApp, 'Exo', 'WebView2', 'EBWebView')
+  const embeddedSrc = join(sharedEb, 'WV2Profile_embedded')
+  const info = await stat(embeddedSrc).catch(() => null)
+  if (!info?.isDirectory()) return false
+
+  const localStateSrc = join(sharedEb, 'Local State')
+  const localStateInfo = await stat(localStateSrc).catch(() => null)
+
+  for (const profileFolder of ['webview-debug', 'webview']) {
+    const destEb = join(dataDir, profileFolder, 'EBWebView')
+    const destEmbedded = join(destEb, 'WV2Profile_embedded')
+    const existing = await stat(destEmbedded).catch(() => null)
+    if (existing?.isDirectory()) continue
+    await mkdir(destEb, { recursive: true })
+    if (localStateInfo?.isFile()) {
+      await cp(localStateSrc, join(destEb, 'Local State'), { force: true }).catch(() => {})
+    }
+    await cp(embeddedSrc, destEmbedded, {
+      recursive: true,
+      force: true,
+      filter: (p) => !WEBVIEW_CACHE_SKIP.test(p),
+    }).catch(() => {})
+  }
+  return true
+}
 
 export async function seedDataFrom(seedFrom, dataDir) {
   if (!seedFrom) return false
@@ -17,5 +47,6 @@ export async function seedDataFrom(seedFrom, dataDir) {
       return !(top && SKIPPED.test(top) && basename(path) === top)
     },
   })
+  await seedEmbeddedWebViewProfile(dataDir)
   return true
 }
