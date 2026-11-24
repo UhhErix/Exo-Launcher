@@ -91,7 +91,8 @@ internal sealed partial class NetworkBest
 
         public Tcp? Tcp()
         {
-            if (_tcp is { } cached && DateTimeOffset.UtcNow - cached.At < TimeSpan.FromMinutes(1)) return cached.Value;
+            if (_tcp is { } cached && DateTimeOffset.UtcNow - cached.At < (cached.Value is not null ? TimeSpan.FromMinutes(1) : TimeSpan.FromSeconds(10)))
+                return cached.Value;
             var value = ReadTcp();
             _tcp = (DateTimeOffset.UtcNow, value);
             return value;
@@ -111,7 +112,7 @@ internal sealed partial class NetworkBest
                 });
                 if (process is null) return null;
                 var output = process.StandardOutput.ReadToEndAsync();
-                if (!process.WaitForExit(10_000) || !output.Wait(1000)) return null;
+                if (!process.WaitForExit(4_000) || !output.Wait(1000)) return null;
                 var lines = output.Result.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 return lines.Length == 2 && int.TryParse(lines[0], out var tuning) && int.TryParse(lines[1], out var rss) ? new Tcp(tuning, rss == 1) : null;
             }
