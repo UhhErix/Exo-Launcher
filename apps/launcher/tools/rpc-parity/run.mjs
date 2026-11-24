@@ -57,6 +57,15 @@ async function assertNoGameRunning() {
   if (found) throw new Error(`Refusing to run while a game is running: ${found}`)
 }
 
+function currentAppVersion() {
+  const versionFile = path.join(APP_ROOT, 'VERSION')
+  if (fs.existsSync(versionFile)) {
+    const v = fs.readFileSync(versionFile, 'utf8').trim()
+    if (v) return v
+  }
+  return '99.0.0'
+}
+
 function seedCleanDataDir(dir) {
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
@@ -64,6 +73,7 @@ function seedCleanDataDir(dir) {
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({
     onboardingComplete: true,
     accountAsked: true,
+    whatsNewSeen: currentAppVersion(),
     uiPrefs: { tourSeen: true },
   }, null, 2), 'utf8')
 }
