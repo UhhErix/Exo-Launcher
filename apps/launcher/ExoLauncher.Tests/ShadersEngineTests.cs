@@ -14,29 +14,31 @@ namespace ExoLauncher.Tests;
 /// </summary>
 public sealed partial class ShadersEngineTests
 {
-    /// <summary>The built service: EXO_SHADERS_SERVICE, else shaders\engine\src\ExoShaders.Service's Release or Debug build.</summary>
     private static string Engine()
     {
         if (Environment.GetEnvironmentVariable("EXO_SHADERS_SERVICE") is { Length: > 0 } set) return set;
-        foreach (var config in new[] { "Release", "Debug" })
+        foreach (var profile in new[] { "release", "debug" })
         {
-            var exe = Repo.PathOf("shaders", "engine", "src", "ExoShaders.Service", "bin", config, "net10.0-windows", "win-x64", "ExoShaders.Service.exe");
-            if (File.Exists(exe)) return exe;
+            var rustExe = Repo.PathOf("native-ui", "target", profile, "exo-shaders-service.exe");
+            if (File.Exists(rustExe)) return rustExe;
         }
-        Assert.Skip(@"Exo Shaders' engine isn't built (dotnet build shaders\engine\src\ExoShaders.Service -c Release -p:ExoBuild=true).");
+        Assert.Skip(@"Exo Shaders native engine isn't built (cargo build -p exo-shaders --bin exo-shaders-service --release in native-ui).");
         return "";
     }
 
     [GeneratedRegex("""CallAsync\("([a-zA-Z.]+)"|"(snapshot|ui\.visible|scan|queue\.[a-zA-Z]+|game\.[a-zA-Z]+|recorder\.[a-zA-Z]+|driver\.[a-zA-Z]+|cache\.[a-zA-Z]+|asd\.[a-zA-Z]+|exo\.library|exitWhenIdle|shutdown)""")]
     private static partial Regex HostMethod();
 
-    [GeneratedRegex("""case "([a-zA-Z.]+)":""")]
-    private static partial Regex EngineCase();
+    [GeneratedRegex("\"([a-zA-Z.]+)\"")]
+    private static partial Regex EngineMethod();
 
     [Fact]
     public void Every_method_Exo_sends_is_one_the_engine_answers()
     {
-        var engine = EngineCase().Matches(File.ReadAllText(Repo.PathOf("shaders", "engine", "src", "ExoShaders.Service", "Methods.cs")))
+        var protocolSrc = File.ReadAllText(Repo.PathOf("native-ui", "crates", "exo-shaders", "src", "protocol.rs"));
+        var marker = protocolSrc.IndexOf("SUPPORTED_METHODS", StringComparison.Ordinal);
+        Assert.True(marker >= 0);
+        var engine = EngineMethod().Matches(protocolSrc[marker..])
             .Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
         var host = new[] { "MainWindow.Shaders.cs", Path.Combine("Services", "ShadersAddon.cs"), Path.Combine("Services", "WebHostBridge.Shaders.cs") }
             .SelectMany(file => HostMethod().Matches(File.ReadAllText(Repo.PathOf("ExoLauncher", file))))

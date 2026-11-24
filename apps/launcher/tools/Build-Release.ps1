@@ -82,21 +82,14 @@ if (-not $publish) { throw 'No publish folder.' }
 $noVoice = @('dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll') | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($noVoice) { throw "The app folder lacks Discord voice's $($noVoice -join ', ')." }
 
-# Exo Shaders (GPL-3.0-or-later, shaders\; its source published at getexo.app/source by cloud\updates\addon-source.mjs from
-# the same commit): the engine built from the committed tree (tools\Build-ShadersEngine.ps1 refuses uncommitted changes).
 $shaders = & (Join-Path $repo 'tools\Build-ShadersEngine.ps1')
 $engine = Join-Path $shaders 'engine'
 $addon = Join-Path $publish.FullName 'addons\shaders'
 New-Item -ItemType Directory -Force -Path $addon | Out-Null
 robocopy $engine (Join-Path $addon 'engine') /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "Copying the Shaders engine failed ($LASTEXITCODE)." }
-# The shipped engine must be the Exo build (EXO_BUILD: no request to SCSKiller's or Patreon's servers, no anti-cheat game).
-# Read its Core's constant without loading the file, so the copy stays unlocked.
-$exoBuild = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes((Join-Path $addon 'engine\SCSKiller.Core.dll'))).GetType('SCSKiller.Core.App.ExoBuild').GetField('Enabled').GetRawConstantValue()
-if ($exoBuild -ne $true) { throw "The Exo Shaders engine in $engine is not the Exo build (ExoBuild.Enabled is off)." }
-# The commit of shaders\ this release bundles, named in the output below (addon-source.mjs build --rev publishes it).
 $shadersCommit = (Get-Content (Join-Path $shaders 'commit.txt') -Raw).Trim()
-foreach ($notice in 'LICENSE', 'LICENSE-EXCEPTION.txt', 'THIRD-PARTY-NOTICES.md') {
+foreach ($notice in 'LICENSE', 'THIRD-PARTY-NOTICES.md') {
     $source = Join-Path $shaders $notice
     if (Test-Path $source) { Copy-Item $source (Join-Path $addon $notice) -Force }
 }
