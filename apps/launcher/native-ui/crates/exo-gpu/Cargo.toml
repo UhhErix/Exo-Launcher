@@ -1,0 +1,9 @@
+[package]
+name = "exo-gpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Read-only cross-vendor GPU profile telemetry and opt-in mock-verified undervolt guard sharing exo-sensors"
+
+[dependencies]
+exo-sensors = { path = "../exo-sensors" }

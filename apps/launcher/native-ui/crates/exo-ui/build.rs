@@ -1,4 +1,5 @@
 fn main() {
-    #[cfg(target_env = "msvc")]
-    println!("cargo:rustc-link-arg-bin=exo-ui=/STACK:8388608");
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        println!("cargo:rustc-link-arg-bin=exo-ui=/STACK:8388608");
+    }
 }

@@ -2507,6 +2507,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .child(right_col),
         )
         .child(crate::power_guard::card_view(s))
+        .child(crate::hw_sensors::card_view(s))
 }
 
 pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {

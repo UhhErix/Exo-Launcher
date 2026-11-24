@@ -29,6 +29,7 @@ mod game_props;
 mod gamepad;
 mod gifts;
 mod gpu_tuning;
+mod hw_sensors;
 mod image_cache;
 mod island;
 mod key_modal;
@@ -440,7 +441,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let wp9 = s.pc_wp9_tick(now);
     let music = s.music_tick(now);
     let pg = s.tick_power_guard(now);
-    focus_changed || notices || setup || island || lib || store || wp4 || hb || wp9 || music || pg
+    let hw = s.tick_hw_sensors(now);
+    focus_changed || notices || setup || island || lib || store || wp4 || hb || wp9 || music || pg || hw
 }
 
 #[cfg(windows)]
