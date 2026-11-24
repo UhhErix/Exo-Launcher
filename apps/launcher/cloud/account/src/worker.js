@@ -8,9 +8,10 @@ import {
   attempt, digestMatches, digestOf, emailLookups, freshPasswordOf, issueDeviceToken, itemKeyOf, keyringChecked, knownDevice, newItemKey, newPassword, newRecoveryCode, newSession, normalEmail,
   passwordOf, passwordRight, rehashIfOld, recordByAddress, recordOf, recoveryCodeOf, ringOf, seconds, sessionOf, shownCode, upgradeRecord,
 } from './accounts.js'
-import { hex, random, seal, unseal, utf8 } from './crypto.js'
+import { b64url, hex, random, seal, sha256, unseal, utf8 } from './crypto.js'
 import { Refusal, address, body, done, json, refuse } from './http.js'
 import { limits } from './limits.js'
+import { verifyAssertion, verifyRegistration } from './webauthn.js'
 
 const DEVICE = /^[0-9a-f]{32}$/
 const NAME = /^[a-z][a-z0-9-]{0,31}$/
@@ -28,6 +29,12 @@ const ROUTES = [
   ['POST', /^\/v1\/recovery$/, newCode],
   ['GET', /^\/v1\/sessions$/, getSessions],
   ['DELETE', /^\/v1\/sessions\/([0-9a-f]{32})$/, deleteDeviceSessions],
+  ['GET', /^\/v1\/passkeys$/, getPasskeys],
+  ['POST', /^\/v1\/passkeys\/register\/start$/, passkeyRegisterStart],
+  ['POST', /^\/v1\/passkeys\/register\/finish$/, passkeyRegisterFinish],
+  ['DELETE', /^\/v1\/passkeys\/([A-Za-z0-9_-]{8,256})$/, deletePasskey],
+  ['POST', /^\/v1\/passkeys\/signin\/start$/, passkeySignInStart],
+  ['POST', /^\/v1\/passkeys\/signin\/finish$/, passkeySignInFinish],
   ['PUT', /^\/v1\/sync$/, putItems],
   ['GET', /^\/v1\/sync$/, getItems],
   ['GET', /^\/v1\/export$/, exportItems],
@@ -156,6 +163,8 @@ async function deleteAccount(request, env) {
     env.DB.prepare('DELETE FROM sessions WHERE account = ?').bind(account),
     // The address's counts: 'a|<digest>' and 'p|<digest>|<client digest>' both contain its digest.
     env.DB.prepare('DELETE FROM sign_in_failures WHERE instr(scope, ?) > 0').bind(record.email_mac),
+    env.DB.prepare('DELETE FROM passkeys WHERE account = ?').bind(account),
+    env.DB.prepare('DELETE FROM webauthn_challenges WHERE account = ?').bind(account),
     env.DB.prepare('DELETE FROM devices WHERE account = ?').bind(account),
     env.DB.prepare('DELETE FROM accounts WHERE id = ?').bind(account),
   ])
@@ -419,4 +428,210 @@ function cursorOf(url) {
 async function itemOfRow(key, account, row) {
   const item = { app: row.app, type: row.type, id: row.id }
   return { ...item, version: row.version, updated: row.updated, value: row.value === null ? null : await unseal(key, row.value, aad(account, item)) }
+}
+
+const PASSKEY_MAX = 10
+const PASSKEY_CHALLENGE_TTL = 300
+const PASSKEY_REAUTH_WINDOW = 300
+const PASSKEY_LABEL_MAX = 64
+
+function rpConfig(env) {
+  const rpId = typeof env.WEBAUTHN_RP_ID === 'string' && env.WEBAUTHN_RP_ID ? env.WEBAUTHN_RP_ID : 'accounts.getexo.app'
+  const origin = typeof env.WEBAUTHN_ORIGIN === 'string' && env.WEBAUTHN_ORIGIN ? env.WEBAUTHN_ORIGIN : `https://${rpId}`
+  return { rpId, origin }
+}
+
+async function issueChallenge(db, kind, account) {
+  const now = seconds()
+  const challenge = b64url(random(32))
+  const challengeHash = hex(await sha256(utf8(challenge)))
+  await db.batch([
+    db.prepare('DELETE FROM webauthn_challenges WHERE expires <= ?').bind(now),
+    db.prepare('INSERT INTO webauthn_challenges (challenge_hash, kind, account, expires) VALUES (?, ?, ?, ?)')
+      .bind(challengeHash, kind, account, now + PASSKEY_CHALLENGE_TTL),
+  ])
+  return challenge
+}
+
+async function consumeChallenge(db, challenge, expectedKind, expectedAccount = null) {
+  if (typeof challenge !== 'string' || challenge.length < 32 || challenge.length > 128) refuse(401, 'bad-challenge')
+  const now = seconds()
+  const challengeHash = hex(await sha256(utf8(challenge)))
+  const row = await db.prepare('SELECT kind, account, expires FROM webauthn_challenges WHERE challenge_hash = ?')
+    .bind(challengeHash).first()
+  if (!row) refuse(401, 'bad-challenge')
+  const del = await db.prepare('DELETE FROM webauthn_challenges WHERE challenge_hash = ?').bind(challengeHash).run()
+  if (!del.meta.changes) refuse(401, 'bad-challenge')
+  if (row.expires <= now || row.kind !== expectedKind) refuse(401, 'bad-challenge')
+  if (expectedAccount !== null && row.account !== expectedAccount) refuse(401, 'bad-challenge')
+  return row
+}
+
+async function getPasskeys(request, env) {
+  const { account } = await sessionOf(request, env)
+  const { results } = await env.DB.prepare(
+    'SELECT credential_id, label, created, last_used, sign_count_flagged FROM passkeys WHERE account = ? ORDER BY created DESC'
+  ).bind(account).all()
+  return json({
+    passkeys: results.map(row => ({
+      id: row.credential_id,
+      label: row.label,
+      created: row.created,
+      lastUsed: row.last_used,
+      flagged: Boolean(row.sign_count_flagged),
+    })),
+  })
+}
+
+async function passkeyRegisterStart(request, env) {
+  await throttle(request, env)
+  const { account, device, tokenHash } = await sessionOf(request, env)
+  const record = await recordOf(env.DB, account)
+  const input = await body(request)
+  const sess = await env.DB.prepare('SELECT created FROM sessions WHERE token_hash = ?').bind(tokenHash).first()
+  const hasPassword = typeof input.password === 'string' && input.password.length > 0
+  if (hasPassword) {
+    const pw = passwordOf(input.password, 1)
+    if (!pw) refuse(400, 'bad-request')
+    const proof = await proofOf(env, account, device, input.deviceToken)
+    await attempt(env, { mac: record.email_mac, ip: address(request) }, () => passwordRight(record, pw), 'wrong-password', proof.known, proof.grace)
+  } else if (!sess || seconds() - sess.created > PASSKEY_REAUTH_WINDOW) {
+    refuse(403, 'reauth-required')
+  }
+  const { results: existing } = await env.DB.prepare('SELECT credential_id FROM passkeys WHERE account = ?').bind(account).all()
+  if (existing.length >= PASSKEY_MAX) refuse(409, 'passkey-limit')
+  const { rpId, origin } = rpConfig(env)
+  const challenge = await issueChallenge(env.DB, 'register', account)
+  return json({
+    challenge,
+    rp: { id: rpId, name: 'Exo Account' },
+    origin,
+    user: { id: b64url(utf8(account)) },
+    userVerification: 'required',
+    excludeCredentials: existing.map(r => r.credential_id),
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    timeout: 60000,
+  })
+}
+
+async function passkeyRegisterFinish(request, env) {
+  await throttle(request, env)
+  const { account } = await sessionOf(request, env)
+  const input = await body(request)
+  if (typeof input.challenge !== 'string' || typeof input.clientDataJSON !== 'string' || typeof input.attestationObject !== 'string') {
+    refuse(400, 'bad-request')
+  }
+  const label = typeof input.label === 'string' ? input.label.trim().slice(0, PASSKEY_LABEL_MAX) : 'Windows passkey'
+  const { count } = await env.DB.prepare('SELECT COUNT(*) AS count FROM passkeys WHERE account = ?').bind(account).first()
+  if (count >= PASSKEY_MAX) refuse(409, 'passkey-limit')
+  await consumeChallenge(env.DB, input.challenge, 'register', account)
+  const { rpId, origin } = rpConfig(env)
+  const verified = await verifyRegistration({
+    rpId,
+    expectedOrigin: origin,
+    expectedChallenge: input.challenge,
+    clientDataJSON: input.clientDataJSON,
+    attestationObject: input.attestationObject,
+  })
+  const now = seconds()
+  try {
+    await env.DB.prepare(
+      'INSERT INTO passkeys (credential_id, account, public_key_spki, alg, sign_count, sign_count_flagged, label, created, last_used) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)'
+    ).bind(verified.credentialId, account, verified.publicKeySpki, verified.alg, verified.signCount, label || 'Windows passkey', now, now).run()
+  } catch (error) {
+    if (/UNIQUE constraint failed/.test(error?.message ?? '')) refuse(409, 'passkey-exists')
+    throw error
+  }
+  return json({
+    passkey: { id: verified.credentialId, label: label || 'Windows passkey', created: now, lastUsed: now, flagged: false },
+  }, 201)
+}
+
+async function deletePasskey(request, env, _url, match) {
+  const { account } = await sessionOf(request, env)
+  const record = await recordOf(env.DB, account)
+  const existing = await env.DB.prepare('SELECT credential_id FROM passkeys WHERE credential_id = ? AND account = ?')
+    .bind(match[1], account).first()
+  if (!existing) refuse(404, 'not-found')
+  const { count } = await env.DB.prepare('SELECT COUNT(*) AS count FROM passkeys WHERE account = ?').bind(account).first()
+  const hasPassword = typeof record.password_hash === 'string' && record.password_hash.startsWith('$argon2id$')
+  if (!hasPassword && count <= 1) refuse(409, 'last-sign-in-method')
+  await env.DB.prepare('DELETE FROM passkeys WHERE credential_id = ? AND account = ?').bind(match[1], account).run()
+  return done()
+}
+
+async function passkeySignInStart(request, env) {
+  await throttle(request, env)
+  const input = await body(request)
+  let allowCredentials = []
+  let scopedAccount = null
+  if (typeof input.email === 'string' && input.email.trim().length > 0) {
+    const email = normalEmail(input.email)
+    if (email) {
+      const lookups = await emailLookups(env, email)
+      const record = await recordByAddress(env.DB, lookups)
+      if (record) {
+        scopedAccount = record.id
+        const { results } = await env.DB.prepare('SELECT credential_id FROM passkeys WHERE account = ?').bind(record.id).all()
+        allowCredentials = results.map(r => r.credential_id)
+      }
+    }
+  }
+  const { rpId, origin } = rpConfig(env)
+  const challenge = await issueChallenge(env.DB, 'signin', scopedAccount)
+  return json({
+    challenge,
+    rpId,
+    origin,
+    userVerification: 'required',
+    allowCredentials,
+    timeout: 60000,
+  })
+}
+
+async function passkeySignInFinish(request, env) {
+  await throttle(request, env)
+  const input = await body(request)
+  const device = deviceOf(input)
+  if (
+    !device
+    || typeof input.challenge !== 'string'
+    || typeof input.credentialId !== 'string'
+    || typeof input.clientDataJSON !== 'string'
+    || typeof input.authenticatorData !== 'string'
+    || typeof input.signature !== 'string'
+  ) {
+    refuse(400, 'bad-request')
+  }
+  const chRow = await consumeChallenge(env.DB, input.challenge, 'signin', null)
+  const row = await env.DB.prepare(
+    'SELECT credential_id, account, public_key_spki, alg, sign_count FROM passkeys WHERE credential_id = ?'
+  ).bind(input.credentialId).first()
+  if (!row) refuse(401, 'wrong-credentials')
+  if (chRow.account !== null && row.account !== chRow.account) refuse(401, 'wrong-credentials')
+  const { rpId, origin } = rpConfig(env)
+  const verified = await verifyAssertion({
+    rpId,
+    expectedOrigin: origin,
+    expectedChallenge: input.challenge,
+    storedSpki: row.public_key_spki,
+    storedAlg: row.alg,
+    storedSignCount: row.sign_count,
+    clientDataJSON: input.clientDataJSON,
+    authenticatorData: input.authenticatorData,
+    signature: input.signature,
+  })
+  if (verified.signCountRegression) {
+    await env.DB.prepare('UPDATE passkeys SET sign_count_flagged = 1 WHERE credential_id = ?')
+      .bind(row.credential_id).run()
+    refuse(401, 'passkey-replay')
+  }
+  const now = seconds()
+  await env.DB.prepare('UPDATE passkeys SET sign_count = ?, last_used = ? WHERE credential_id = ?')
+    .bind(verified.signCount, now, row.credential_id).run()
+  return json({
+    token: await newSession(env.DB, row.account, device),
+    account: { id: row.account },
+    deviceToken: await issueDeviceToken(env.DB, row.account, device),
+  })
 }
