@@ -199,19 +199,22 @@ function AutoTuneCineSummary({
   onExit: () => void
   onRunAgain: () => void
 }) {
+  const warnings = stages.filter(stage => stage.status === 'warn')
   return (
     <>
-      <ul className="exo-at-cine-results">
-        {stages.map(stage => (
-          <li key={stage.id} className={stage.status === 'warn' ? 'is-warn' : undefined}>
-            {stage.status === 'warn' ? <Alert size={15} /> : <Check size={15} />}
-            <div className="exo-at-cine-results-copy">
-              <span className="exo-at-cine-results-name">{stage.label}</span>
-              <span className="exo-at-cine-results-detail">{stage.detail}</span>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {warnings.length > 0 ? (
+        <ul className="exo-at-cine-results">
+          {warnings.map(stage => (
+            <li key={stage.id}>
+              <Alert size={15} />
+              <div className="exo-at-cine-results-copy">
+                <span className="exo-at-cine-results-name">{stage.label}</span>
+                <span className="exo-at-cine-results-detail">{stage.detail}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <div className="exo-at-cine-foot">
         {needsRestart ? (
           <AutoTuneRestartChoice onLater={onExit} />

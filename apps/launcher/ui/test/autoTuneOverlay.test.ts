@@ -57,6 +57,7 @@ test('ExoAiRoom and AutoTuneCinema run all 6 safe stages, expose zero Overrides,
   assert.match(cinemaSrc, /useHoldWindow/)
   assert.match(cinemaSrc, /<Progress\b/)
   assert.match(cinemaSrc, /Restart now/)
+  assert.match(cinemaSrc, /stages\.filter\(stage => stage\.status === 'warn'\)/)
   assert.doesNotMatch(cinemaSrc, /exo-at-cine-rail|exo-at-cine-beam|exo-at-cine-sparks/)
 
   assert.doesNotMatch(exoAiSrc, /Overrides|<Popover\b|Checking every 30m|Applied automatically|Watching in background|<details/)
