@@ -1,0 +1,40 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/lab-core",
+    "crates/lab-qjs",
+    "crates/lab-v8",
+    "crates/lab-deno",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+rune = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+exo-kit = { path = "../../native-ui/crates/exo-kit" }
+exo-rpc = { path = "../../native-ui/crates/exo-rpc" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+lightningcss = { version = "1.0.0-alpha.72", default-features = false }
+taffy = "0.16.0"
+rquickjs = { version = "0.14.0", features = ["array-buffer", "classes", "macro"] }
+v8 = "152.2.0"
+deno_core = "0.413.0"
+tokio = { version = "1", features = ["rt"] }
+
+[patch.crates-io]
+wgpu-hal = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+winit = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+sctk-adwaita = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+parley_engine = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"

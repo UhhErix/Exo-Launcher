@@ -1,0 +1,15 @@
+[package]
+name = "lab-deno"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "exo-react-deno"
+path = "src/main.rs"
+
+[dependencies]
+lab-core = { path = "../lab-core" }
+deno_core.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
