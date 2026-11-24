@@ -10,7 +10,7 @@ namespace ExoLauncher.Services;
 internal static class TuneSignIn
 {
     internal const string TaskName = @"Exo\AutoTune";
-    internal const string ScriptFile = "apply.ps1", ModuleFile = "RyzenSMU.bin";
+    internal const string ScriptFile = "apply.ps1", ModuleFile = "RyzenSMU.bin", LastRunFile = "last-run.txt";
 
     /// <summary>
     /// The script: integers only, in a folder only an administrator can write. It applies nothing after a crash in testing,
@@ -23,15 +23,17 @@ internal static class TuneSignIn
         var script = new StringBuilder();
         script.AppendLine("$ErrorActionPreference = 'Stop'");
         script.AppendLine($"$d = '{Quote(folder)}'");
-        script.AppendLine($"if (-not (Test-Path -LiteralPath '{Quote(exo)}')) {{ exit }}");
+        script.AppendLine($"$exo = '{Quote(exo)}'");
         script.AppendLine(string.Create(CultureInfo.InvariantCulture, $$"""
-            if (Test-Path -LiteralPath "$d\testing.json") { exit }
-            if (Test-Path -LiteralPath "$d\held") { exit }
+            function Note([string]$t) { try { Set-Content -LiteralPath "$d\last-run.txt" -Value ((Get-Date -Format 's') + ' ' + $t) -Encoding UTF8 } catch { } }
+            if (-not (Test-Path -LiteralPath $exo)) { Note 'skipped: Exo is not in its folder'; exit }
+            if (Test-Path -LiteralPath "$d\testing.json") { Note 'skipped: a test was running'; exit }
+            if (Test-Path -LiteralPath "$d\held") { Note 'skipped: held until Apply again in Exo'; exit }
             if (Test-Path -LiteralPath "$d\applying") {
               $ap = (Get-Item -LiteralPath "$d\applying").LastWriteTimeUtc
               $kp = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 41; StartTime = $ap } -MaxEvents 1 -ErrorAction SilentlyContinue
               if (-not $kp) { $kp = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'EventLog'; Id = 6008; StartTime = $ap } -MaxEvents 1 -ErrorAction SilentlyContinue }
-              if ($kp -or ((Get-Date).ToUniversalTime() - $ap).TotalMinutes -ge 5) { Move-Item -LiteralPath "$d\applying" "$d\held" -Force; exit }
+              if ($kp -or ((Get-Date).ToUniversalTime() - $ap).TotalMinutes -ge 5) { Move-Item -LiteralPath "$d\applying" "$d\held" -Force; Note 'held: the last apply was cut off'; exit }
               Remove-Item -LiteralPath "$d\applying" -Force -ErrorAction SilentlyContinue
             }
             $since = (Get-Item -LiteralPath "$d\apply.ps1").LastWriteTimeUtc
@@ -41,9 +43,11 @@ internal static class TuneSignIn
               if ([DateTimeOffset]::TryParse($raw, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) { $since = $parsed.UtcDateTime }
             }
             $until = $since.AddMinutes({{TunePersistence.CrashWindowMinutes}})
-            $bad = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 41; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue
-            if (-not $bad) { $bad = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WER-SystemErrorReporting'; Id = 1001; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue }
-            if (-not $bad) { $bad = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WHEA-Logger'; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue }
+            $crash = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 41; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue
+            if ($crash) { Set-Content -LiteralPath "$d\held" 'power-loss'; Note 'held: the PC lost power or crashed since the apply'; exit }
+            $fatal = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WHEA-Logger'; Id = 18; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue
+            if ($fatal) { Set-Content -LiteralPath "$d\held" 'whea-fatal'; Note 'held: Windows logged a fatal hardware error since the apply'; exit }
+            $bad = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WER-SystemErrorReporting'; Id = 1001; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue
             """));
         if (nvidia is not null)
         {
@@ -52,19 +56,25 @@ internal static class TuneSignIn
                 if (-not $bad) { $bad = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'nvlddmkm'; Id = 13, 14, 153; StartTime = $since; EndTime = $until } -MaxEvents 1 -ErrorAction SilentlyContinue }
                 """);
         }
-        script.AppendLine("if ($bad) { Set-Content -LiteralPath \"$d\\held\" 'crash'; exit }");
+        script.AppendLine("if ($bad) { Set-Content -LiteralPath \"$d\\held\" 'crash'; Note 'held: Windows logged a crash or driver reset since the apply'; exit }");
+        script.AppendLine("try {");
         script.AppendLine("Add-Type -TypeDefinition @'");
         script.AppendLine(Native);
         script.AppendLine("'@");
         script.AppendLine("function Retry([scriptblock]$fn) { for ($n = 0; $n -lt 5; $n++) { try { & $fn; return } catch { if ($n -eq 4) { throw }; Start-Sleep -Seconds 2 } } }");
         script.AppendLine("Set-Content -LiteralPath \"$d\\applying\" ''");
-        script.AppendLine("try {");
         if (nvidia is not null) script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  Retry {{ [ExoTune]::Nvidia({nvidia[0]}, {nvidia[1]}) }}"));
         if (ryzen is not null) script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  Retry {{ [ExoTune]::Ryzen({ryzen[0]}, \"$d\\{ModuleFile}\") }}"));
-        script.AppendLine("} catch { Remove-Item -LiteralPath \"$d\\applying\" -Force -ErrorAction SilentlyContinue; throw }");
+        script.AppendLine("} catch {");
+        script.AppendLine("Remove-Item -LiteralPath \"$d\\applying\" -ErrorAction SilentlyContinue");
+        script.AppendLine("Note ('error: ' + ($_.Exception.Message -replace '[\\r\\n]+', ' ') + ' (language mode: ' + $ExecutionContext.SessionState.LanguageMode + ')')");
+        script.AppendLine("exit");
+        script.AppendLine("}");
         script.AppendLine("Set-Content -LiteralPath \"$d\\applied-at.txt\" ([DateTime]::UtcNow.ToString('O'))");
         script.AppendLine("Start-Sleep -Seconds 120");
         script.AppendLine("Remove-Item -LiteralPath \"$d\\applying\" -Force -ErrorAction SilentlyContinue");
+        if (nvidia is null) script.AppendLine("Note 'applied'");
+        else script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"try {{ Note (\"applied: driver reads \" + [ExoTune]::NvidiaRead() + \" MHz (wanted {nvidia[0]})\") }} catch {{ Note ('applied, but the read failed: ' + ($_.Exception.Message -replace '[\\r\\n]+', ' ')) }}"));
         return script.ToString();
     }
 
@@ -85,15 +95,26 @@ internal static class TuneSignIn
           [DllImport(N)] static extern int nvmlDeviceGetHandleByIndex_v2(uint i, out IntPtr d);
           [DllImport(N)] static extern int nvmlDeviceSetClockOffsets(IntPtr d, ref Offset o);
           [DllImport(N)] static extern int nvmlDeviceSetGpuLockedClocks(IntPtr d, uint min, uint max);
+          [DllImport(N)] static extern int nvmlDeviceGetClockOffsets(IntPtr d, ref Offset o);
           static void Ok(int r) { if (r != 0) throw new Exception("Answered " + r); }
           public static void Nvidia(int mhz, int cap) {
-            IntPtr d;
             Ok(nvmlInit_v2());
             try {
+              IntPtr d;
               Ok(nvmlDeviceGetHandleByIndex_v2(0, out d));
               if (cap > 0) Ok(nvmlDeviceSetGpuLockedClocks(d, 0, (uint)cap));
               Offset o = new Offset(); o.V = 24 | (1u << 24); o.Mhz = mhz;
               Ok(nvmlDeviceSetClockOffsets(d, ref o));
+            } finally { nvmlShutdown(); }
+          }
+          public static int NvidiaRead() {
+            Ok(nvmlInit_v2());
+            try {
+              IntPtr d;
+              Ok(nvmlDeviceGetHandleByIndex_v2(0, out d));
+              Offset read = new Offset(); read.V = 24 | (1u << 24);
+              Ok(nvmlDeviceGetClockOffsets(d, ref read));
+              return read.Mhz;
             } finally { nvmlShutdown(); }
           }
           [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -207,10 +228,26 @@ internal static class TuneSignIn
         DeletionGate.DeleteFile(xml);
     }
 
+    internal static string? LastRun(string folder)
+    {
+        try
+        {
+            var path = Path.Combine(folder, LastRunFile);
+            return File.Exists(path) ? File.ReadAllLines(path, Encoding.UTF8).LastOrDefault(line => line.Trim().Length > 0) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private static void Tasks(string arguments, bool quiet)
     {
         using var run = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "schtasks.exe"), arguments) { CreateNoWindow = true, UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true });
-        if (run is null || !run.WaitForExit(TimeSpan.FromSeconds(20)) || (run.ExitCode != 0 && !quiet)) AppLog.Warn("Auto tune: the sign-in task didn't change.");
+        if (run is null || !run.WaitForExit(TimeSpan.FromSeconds(20))) { AppLog.Warn("Auto tune: the sign-in task didn't change (schtasks didn't finish)."); return; }
+        if (run.ExitCode == 0 || quiet) return;
+        var said = (run.StandardError.ReadToEnd() + " " + run.StandardOutput.ReadToEnd()).Trim();
+        AppLog.Warn($"Auto tune: the sign-in task didn't change (schtasks {run.ExitCode}): {said}");
     }
 }
 
@@ -373,8 +410,30 @@ internal static class AutoTuneService
 
     private static readonly TuneStore Store = new(AutoTuneWorker.Folder);
 
+    internal static string AtStart(int? read, int wanted) =>
+        read is { } now ? $"Auto tune: at start the driver reads {now} MHz, applied {wanted}." : $"Auto tune: at start the driver's offset couldn't be read, applied {wanted}.";
+
+    internal static void CheckAtStart()
+    {
+        var part = Store.Part("nvidia");
+        if (part.Applied <= 0 || part.SignIn is not { Length: 2 } values) return;
+        var wanted = values[0];
+        _ = Task.Run(() => AppLog.Info(AtStart(TuneNvidia.ReadOffset(), wanted)));
+    }
+
+    private static string? _loggedSignIn;
+
+    private static void LogSignIn()
+    {
+        var line = TuneSignIn.LastRun(AutoTuneWorker.Folder);
+        if (line is null || line == _loggedSignIn) return;
+        _loggedSignIn = line;
+        AppLog.Info("Auto tune: sign-in task: " + line);
+    }
+
     private static object Answer(string? message)
     {
+        LogSignIn();
         var marker = Store.Marker();
         var held = Store.Held();
         var alive = WorkerAlive();

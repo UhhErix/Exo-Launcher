@@ -17,7 +17,7 @@ internal static partial class WootingKeyboard
         WriteIndented = true,
     };
 
-    internal sealed record ProfileBackupSlot(int Index, string Name, string RawBodyBase64);
+    internal sealed record ProfileBackupSlot(int Index, string Name, string RawBodyBase64, string? RgbCoreBase64 = null);
 
     internal sealed record KeyboardBackupFile(
         int SchemaVersion,
@@ -80,7 +80,7 @@ internal static partial class WootingKeyboard
     {
         var dir = BackupDir;
         if (!Directory.Exists(dir)) return [];
-        var familyPid = card?.ProductId is { } pid ? pid & 0xFFF0 : (int?)null;
+        var familyKey = card?.ProductId is { } pid ? ModelFamilyKey(pid) : (int?)null;
         var list = new List<KeyboardBackupSummary>();
         foreach (var full in Directory.EnumerateFiles(dir))
         {
@@ -91,7 +91,7 @@ internal static partial class WootingKeyboard
                 if (new FileInfo(full).Length > MaxBackupFileBytes) continue;
                 var parsed = DeserializeBackup(File.ReadAllText(full));
                 if (parsed is null) continue;
-                if (familyPid is { } fp && (parsed.ProductId & 0xFFF0) != fp) continue;
+                if (familyKey is { } fk && ModelFamilyKey(parsed.ProductId) != fk) continue;
                 list.Add(new(name, parsed.Model, parsed.ProductId, parsed.Firmware, parsed.CreatedUtc, parsed.Profiles.Count));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -104,11 +104,14 @@ internal static partial class WootingKeyboard
             .ToList();
     }
 
-    internal static KeyboardBackupResult Backup(Peripherals.Peripheral card)
+    internal static KeyboardBackupResult Backup(Peripherals.Peripheral card) =>
+        Backup(card, DefaultTransport);
+
+    internal static KeyboardBackupResult Backup(Peripherals.Peripheral card, IWootingTransport transport)
     {
-        if (card.ProductId is not { } pid || ModelOf(pid) is not { } model)
+        if (card.VendorId is not { } vid || card.ProductId is not { } pid || ModelOf(vid, pid) is not { } model)
             return new(false, "Wooting keyboard not supported for backup.", null, ListBackups(card));
-        if (card.Collections.FirstOrDefault(c => c.Page is 0xFF55 or 0x1337) is not { } config || Peripherals.InterfacePath(config.Id) is not { } path)
+        if (card.Collections.FirstOrDefault(c => c.Page is 0xFF55 or 0x1337) is not { } config || ResolveInterfacePath(config.Id, transport) is not { } path)
             return new(false, "Connect your Wooting keyboard over USB to back up profiles.", null, ListBackups(card));
 
         var multi = config.Page == 0xFF55;
@@ -116,7 +119,7 @@ internal static partial class WootingKeyboard
         {
             try
             {
-                var created = CaptureAndWriteBackupLocked(model.Name, pid, path, multi);
+                var created = CaptureAndWriteBackupLocked(model.Name, pid, path, multi, model.HasRgb, transport);
                 if (created is null)
                     return new(false, "Couldn't read keyboard profiles for backup.", null, ListBackups(card));
                 return new(true, null, created, ListBackups(card));
@@ -129,92 +132,171 @@ internal static partial class WootingKeyboard
         }
     }
 
-    internal static KeyboardRead RestoreBackup(Peripherals.Peripheral card, string fileName)
+    internal static KeyboardRead RestoreBackup(Peripherals.Peripheral card, string fileName) =>
+        RestoreBackup(card, fileName, DefaultTransport);
+
+    internal static KeyboardRead RestoreBackup(Peripherals.Peripheral card, string fileName, IWootingTransport transport)
     {
-        if (card.ProductId is not { } pid || ModelOf(pid) is not { } model)
-            return Read(card) with { Ok = false, Message = "Wooting keyboard not supported for restore." };
+        if (card.VendorId is not { } vid || card.ProductId is not { } pid || ModelOf(vid, pid) is not { } model)
+            return Read(card, transport) with { Ok = false, Message = "Wooting keyboard not supported for restore." };
         if (ResolveBackupPath(fileName) is not { } full || !File.Exists(full))
-            return Read(card) with { Ok = false, Message = "Backup file not found." };
+            return Read(card, transport) with { Ok = false, Message = "Backup file not found." };
 
         KeyboardBackupFile? backup;
         try
         {
             if (new FileInfo(full).Length > MaxBackupFileBytes)
-                return Read(card) with { Ok = false, Message = "Backup file is too large to restore." };
+                return Read(card, transport) with { Ok = false, Message = "Backup file is too large to restore." };
             backup = DeserializeBackup(File.ReadAllText(full));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             AppLog.Warn("Wooting: backup read failed: " + ex.Message);
-            return Read(card) with { Ok = false, Message = "Couldn't read keyboard backup." };
+            return Read(card, transport) with { Ok = false, Message = "Couldn't read keyboard backup." };
         }
         if (backup is null || backup.Profiles.Count == 0)
-            return Read(card) with { Ok = false, Message = "Backup file is empty or damaged." };
-        if ((backup.ProductId & 0xFFF0) != (pid & 0xFFF0))
-            return Read(card) with { Ok = false, Message = $"Backup belongs to {backup.Model}, not {model.Name}." };
+            return Read(card, transport) with { Ok = false, Message = "Backup file is empty or damaged." };
+        return RestoreBackupData(card, backup, transport);
+    }
 
-        if (card.Collections.FirstOrDefault(c => c.Page is 0xFF55 or 0x1337) is not { } config || Peripherals.InterfacePath(config.Id) is not { } path)
-            return Read(card) with { Ok = false, Message = "Keyboard config interface unavailable." };
+    internal static KeyboardRead RestoreBackupData(Peripherals.Peripheral card, KeyboardBackupFile backup, IWootingTransport transport)
+    {
+        if (card.VendorId is not { } vid || card.ProductId is not { } pid || ModelOf(vid, pid) is not { } model)
+            return Read(card, transport) with { Ok = false, Message = "Wooting keyboard not supported for restore." };
+        if (backup.Profiles.Count == 0)
+            return Read(card, transport) with { Ok = false, Message = "Backup file is empty or damaged." };
+        if (ModelFamilyKey(backup.ProductId) != ModelFamilyKey(pid))
+            return Read(card, transport) with { Ok = false, Message = $"Backup belongs to {backup.Model}, not {model.Name}." };
+
+        if (card.Collections.FirstOrDefault(c => c.Page is 0xFF55 or 0x1337) is not { } config || ResolveInterfacePath(config.Id, transport) is not { } path)
+            return Read(card, transport) with { Ok = false, Message = "Keyboard config interface unavailable." };
 
         var multi = config.Page == 0xFF55;
         if (!multi)
-            return Read(card) with { Ok = false, Message = "Direct restore requires an ARM Wooting keyboard." };
+            return Read(card, transport) with { Ok = false, Message = "Direct restore requires ARM v2.12+ firmware (0xFF55)." };
 
+        var wootilityInstalled = FindWootilityExe() is not null;
+        var bgRunning = IsBackgroundServiceRunning();
         using (HidGate.EnterScope())
         {
             try
             {
-                EnsureAutoBackupLocked(card, model.Name, pid, path, multi);
+                var channel = transport.Inspect(path);
+                if (ReferenceEquals(transport, DefaultTransport))
+                    EnsureAutoBackupLocked(card, model.Name, pid, path, multi, model.HasRgb, transport);
+                SendFeatureChecked(transport, path, multi, EncodeCommand(CmdWootDevInit, 0, 0, 0, 0, multi), CmdWootDevInit);
+
                 foreach (var slot in backup.Profiles)
                 {
                     if (slot.Index < 0 || slot.Index > 3 || string.IsNullOrWhiteSpace(slot.RawBodyBase64)) continue;
                     var raw = Convert.FromBase64String(slot.RawBodyBase64);
-                    var report = EncodeProfileOutputReport(OutSetKeyboardBase, slot.Index, save: true, raw, multi);
-                    WriteOutputReport(path, report);
-                    Thread.Sleep(60);
-                    SendFeatureOnly(path, multi, EncodeProfileCommand(CmdReloadProfile, slot.Index, multi));
-                    Thread.Sleep(60);
+                    var report = EncodeProfileOutputReport(
+                        OutSetKeyboardBase,
+                        slot.Index,
+                        save: true,
+                        raw,
+                        multi,
+                        channel.OutputReportByteLength,
+                        channel.OutputReportSizes);
+                    transport.WriteOutput(path, report, multi);
+                    transport.Delay(60);
+
+                    if (model.HasRgb && !string.IsNullOrWhiteSpace(slot.RgbCoreBase64))
+                    {
+                        var rgbRaw = Convert.FromBase64String(slot.RgbCoreBase64);
+                        var rgbReport = EncodeProfileOutputReport(
+                            OutSetRgbProfileCore,
+                            slot.Index,
+                            save: true,
+                            rgbRaw,
+                            multi,
+                            channel.OutputReportByteLength,
+                            channel.OutputReportSizes);
+                        transport.WriteOutput(path, rgbReport, multi);
+                        transport.Delay(40);
+                        SendFeatureChecked(transport, path, multi, EncodeProfileCommand(CmdSaveRgbProfile, slot.Index, multi), CmdSaveRgbProfile);
+                        transport.Delay(40);
+                    }
+
+                    SendFeatureChecked(transport, path, multi, EncodeProfileCommand(CmdReloadProfile, slot.Index, multi), CmdReloadProfile);
+                    transport.Delay(60);
                 }
+
                 if (backup.ActiveProfile is >= 0 and <= 3)
                 {
-                    SendFeatureOnly(path, multi, EncodeCommand(CmdWootDevInit, 0, 0, 0, 0, multi));
-                    SendFeatureOnly(path, multi, EncodeProfileCommand(CmdActivateProfile, backup.ActiveProfile, multi));
-                    Thread.Sleep(110);
-                    SendFeatureOnly(path, multi, EncodeProfileCommand(CmdReloadProfile, backup.ActiveProfile, multi));
-                    Thread.Sleep(110);
+                    SendFeatureChecked(transport, path, multi, EncodeCommand(CmdWootDevInit, 0, 0, 0, 0, multi), CmdWootDevInit);
+                    SendFeatureChecked(transport, path, multi, EncodeProfileCommand(CmdActivateProfile, backup.ActiveProfile, multi), CmdActivateProfile);
+                    transport.Delay(110);
+                    SendFeatureChecked(transport, path, multi, EncodeProfileCommand(CmdReloadProfile, backup.ActiveProfile, multi), CmdReloadProfile);
+                    transport.Delay(110);
+                }
+
+                foreach (var slot in backup.Profiles)
+                {
+                    if (slot.Index < 0 || slot.Index > 3 || string.IsNullOrWhiteSpace(slot.RawBodyBase64)) continue;
+                    var expected = Convert.FromBase64String(slot.RawBodyBase64);
+                    var readBackReply = QueryProfileFeature(transport, path, multi, CmdGetKeyboardProfile, slot.Index);
+                    var actual = readBackReply is { Length: > 0 } ? DecodeReplyBody(readBackReply, CmdGetKeyboardProfile, multi) : null;
+                    if (actual is null || !actual.AsSpan().SequenceEqual(expected))
+                        return ReadLocked(card, model, path, multi, wootilityInstalled, bgRunning, transport)
+                            with { Ok = false, Message = $"Restore verification failed on profile P{slot.Index + 1}." };
+
+                    if (model.HasRgb && !string.IsNullOrWhiteSpace(slot.RgbCoreBase64))
+                    {
+                        var expectedRgb = Convert.FromBase64String(slot.RgbCoreBase64);
+                        var rgbReply = QueryProfileFeature(transport, path, multi, CmdGetRgbProfileCore, slot.Index);
+                        var actualRgb = rgbReply is { Length: > 0 } ? DecodeReplyBody(rgbReply, CmdGetRgbProfileCore, multi) : null;
+                        if (actualRgb is null || !actualRgb.AsSpan().SequenceEqual(expectedRgb))
+                            return ReadLocked(card, model, path, multi, wootilityInstalled, bgRunning, transport)
+                                with { Ok = false, Message = $"RGB restore verification failed on profile P{slot.Index + 1}." };
+                    }
                 }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or FormatException or ArgumentException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or FormatException or ArgumentException or OperationCanceledException)
             {
                 AppLog.Warn("Wooting: restore failed: " + ex.Message);
-                return Read(card) with { Ok = false, Message = "Couldn't restore keyboard backup." };
+                return ReadLocked(card, model, path, multi, wootilityInstalled, bgRunning, transport)
+                    with { Ok = false, Message = $"Couldn't restore keyboard backup: {ex.Message}" };
             }
+
+            return ReadLocked(card, model, path, multi, wootilityInstalled, bgRunning, transport);
         }
-        return Read(card);
     }
 
-    private static void EnsureAutoBackupLocked(Peripherals.Peripheral card, string modelName, int pid, string path, bool multi)
+    private static void EnsureAutoBackupLocked(Peripherals.Peripheral card, string modelName, int pid, string path, bool multi, bool hasRgb, IWootingTransport transport)
     {
         if (AutoBackedUp.ContainsKey(card.Id)) return;
-        if (CaptureAndWriteBackupLocked(modelName, pid, path, multi) is not null)
+        if (CaptureAndWriteBackupLocked(modelName, pid, path, multi, hasRgb, transport) is not null)
             AutoBackedUp[card.Id] = true;
     }
 
-    private static KeyboardBackupSummary? CaptureAndWriteBackupLocked(string modelName, int pid, string path, bool multi)
+    private static KeyboardBackupSummary? CaptureAndWriteBackupLocked(string modelName, int pid, string path, bool multi, bool hasRgb, IWootingTransport transport)
     {
-        var version = QueryFeature(path, multi, CmdGetVersion, 0) is { Length: > 0 } verReply ? DecodeVersion(verReply) : null;
-        var active = QueryFeature(path, multi, CmdGetCurrentProfileIndex, 0) is { Length: > 0 } idxReply && DecodeProfileIndex(idxReply) is { } idx
+        var version = QueryFeature(transport, path, multi, CmdGetVersion, 0) is { Length: > 0 } verReply
+            ? DecodeVersion(verReply, multi)
+            : null;
+        var active = QueryFeature(transport, path, multi, CmdGetCurrentProfileIndex, 0) is { Length: > 0 } idxReply
+            && DecodeProfileIndex(idxReply, multi) is { } idx
             ? idx.Active
             : 0;
         var slots = new List<ProfileBackupSlot>();
         for (var slot = 0; slot < 4; slot++)
         {
-            var metaReply = QueryProfileFeature(path, multi, CmdGetProfileMetadata, slot);
-            var meta = metaReply is { Length: > 0 } ? DecodeProfileMetadata(metaReply) : null;
+            var metaReply = QueryProfileFeature(transport, path, multi, CmdGetProfileMetadata, slot);
+            var meta = metaReply is { Length: > 0 } ? DecodeProfileMetadata(metaReply, multi) : null;
             var name = meta?.Name ?? (slot == 0 ? "Digital" : $"Profile {slot}");
-            var profileReply = QueryProfileFeature(path, multi, CmdGetKeyboardProfile, slot);
+            var profileReply = QueryProfileFeature(transport, path, multi, CmdGetKeyboardProfile, slot);
             if (profileReply is { Length: > 0 } && DecodeReplyBody(profileReply, CmdGetKeyboardProfile, multi) is { Length: > 0 } body)
-                slots.Add(new(slot, name, Convert.ToBase64String(body)));
+            {
+                string? rgbBase64 = null;
+                if (hasRgb && multi
+                    && QueryProfileFeature(transport, path, multi, CmdGetRgbProfileCore, slot) is { Length: > 0 } rgbReply
+                    && DecodeReplyBody(rgbReply, CmdGetRgbProfileCore, multi) is { Length: > 0 } rgbBody)
+                {
+                    rgbBase64 = Convert.ToBase64String(rgbBody);
+                }
+                slots.Add(new(slot, name, Convert.ToBase64String(body), rgbBase64));
+            }
         }
         if (slots.Count == 0) return null;
 
@@ -233,7 +315,7 @@ internal static partial class WootingKeyboard
             full = Path.Combine(dir, fileName);
         }
 
-        var payload = new KeyboardBackupFile(1, modelName, pid, version, createdUtc, active, slots);
+        var payload = new KeyboardBackupFile(2, modelName, pid, version, createdUtc, active, slots);
         var json = SerializeBackup(payload);
         var tmp = full + ".tmp";
         File.WriteAllText(tmp, json);

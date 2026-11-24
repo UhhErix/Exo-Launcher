@@ -790,7 +790,7 @@
     "ExoLauncher/Services/DependencyService.Catalog.cs": 73,
     "ExoLauncher/Services/DependencyService.Dotnet.cs": 32,
     "ExoLauncher/Services/DependencyService.Games.cs": 25,
-    "ExoLauncher/Services/DependencyService.Install.cs": 39,
+    "ExoLauncher/Services/DependencyService.Install.cs": 15,
     "ExoLauncher/Services/DependencyService.cs": 36,
     "ExoLauncher/Services/DeviceImages.cs": 121,
     "ExoLauncher/Services/DiscordClient/CallRelayClient.cs": 28,
