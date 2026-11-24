@@ -43,6 +43,7 @@ mod music;
 mod music_pages;
 mod music_sound;
 mod native_autopilot;
+mod native_media;
 mod notes;
 mod notice;
 mod palette;
@@ -73,6 +74,7 @@ mod store_engine;
 mod store_media;
 mod store_page;
 mod video_decoder;
+mod web_host;
 mod whats_new;
 
 use crate::state::AppState;
@@ -88,6 +90,7 @@ struct CliArgs {
     native_autopilot: bool,
     present_hud: Option<String>,
     present_hud_secs: Option<u64>,
+    bench_web_lifecycle: Option<String>,
     passthrough: Vec<String>,
 }
 
@@ -98,6 +101,7 @@ fn split_cli_args() -> CliArgs {
     let mut native_autopilot = false;
     let mut present_hud = None;
     let mut present_hud_secs = None;
+    let mut bench_web_lifecycle = None;
     let mut passthrough = Vec::new();
     let mut iter = std::env::args();
     if let Some(exe) = iter.next() {
@@ -124,6 +128,10 @@ fn split_cli_args() -> CliArgs {
             present_hud = Some(name.to_string());
         } else if arg == "--present-hud-secs" {
             present_hud_secs = iter.next().and_then(|v| v.parse().ok());
+        } else if arg == "--bench-web-lifecycle" {
+            bench_web_lifecycle = iter.next();
+        } else if let Some(path) = arg.strip_prefix("--bench-web-lifecycle=") {
+            bench_web_lifecycle = Some(path.to_string());
         } else {
             passthrough.push(arg);
         }
@@ -135,6 +143,7 @@ fn split_cli_args() -> CliArgs {
         native_autopilot,
         present_hud,
         present_hud_secs,
+        bench_web_lifecycle,
         passthrough,
     }
 }
@@ -456,6 +465,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let music = s.music_tick(now);
     let pg = s.tick_power_guard(now);
     let hw = s.tick_hw_sensors(now);
+    let web = s.poll_web_host();
+    let bench = s.tick_web_lifecycle_bench(now, tx);
     focus_changed
         || notices
         || setup
@@ -468,6 +479,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
         || music
         || pg
         || hw
+        || web
+        || bench
 }
 
 #[cfg(windows)]
@@ -3480,6 +3493,7 @@ fn main() {
         None
     };
 
+    let bench_web_out = cli.bench_web_lifecycle.clone();
     let mut spec = AppSpec::new(
         "Exo Launcher",
         (1280.0, 800.0),
@@ -3501,7 +3515,13 @@ fn main() {
         .on_rest(AppState::on_rest)
         .release_gpu_when_closed();
 
-    if let Some(ref pipe) = pipe_name {
+    if let Some(out_path) = bench_web_out {
+        app = app.init(move || {
+            let mut s = AppState::with_demo_games();
+            s.web_host.start_lifecycle_bench(out_path.clone());
+            s
+        });
+    } else if let Some(ref pipe) = pipe_name {
         if headless_flag {
             #[cfg(windows)]
             {
@@ -3514,8 +3534,7 @@ fn main() {
         }
     }
 
-    static WINDOW_VISIBLE: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(true);
+    static WINDOW_VISIBLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
     let handle = app.handle();
     let win_handle = handle.clone();
     app = app
@@ -3530,11 +3549,18 @@ fn main() {
                 win_handle.update(move |s, _| s.set_owner_hwnd(hwnd));
             }
         })
-        .on_close(|s, _| s.close_mouse_panel())
-        .on_quit(|s, _| s.close_mouse_panel())
+        .on_close(|s, _| {
+            s.close_mouse_panel();
+            s.close_web_surface();
+        })
+        .on_quit(|s, _| {
+            s.close_mouse_panel();
+            s.close_web_surface();
+        })
         .on_visibility(|s, visible, _| {
             WINDOW_VISIBLE.store(visible, std::sync::atomic::Ordering::Relaxed);
             s.set_mouse_panel_window_visible(visible);
+            s.set_web_host_window_visible(visible);
         });
 
     if !headless_flag {

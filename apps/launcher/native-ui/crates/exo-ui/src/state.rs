@@ -743,6 +743,7 @@ pub struct AppState {
     pub key_modal: KeyModalState,
     pub notice_runtime: NoticeRuntimeState,
     pub palette_extras: PaletteExtrasState,
+    pub web_host: Box<crate::web_host::LazyWebHostState>,
     #[cfg(windows)]
     pub rpc: Option<Arc<RpcClient>>,
     #[cfg(windows)]
@@ -985,6 +986,7 @@ impl AppState {
             key_modal: KeyModalState::default(),
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
+            web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,
             #[cfg(windows)]
@@ -1102,6 +1104,7 @@ impl AppState {
             key_modal: KeyModalState::default(),
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
+            web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,
             #[cfg(windows)]
@@ -1131,6 +1134,7 @@ impl AppState {
 
     pub fn install_waker(&mut self, waker: Waker) {
         self.store_ext.waker = Some(waker.clone());
+        self.web_host.set_waker(waker.clone());
         let budget = self.images.borrow().max_bytes();
         self.image_cache = Some(ImageCache::with_budget(waker, budget));
     }
@@ -1438,6 +1442,15 @@ impl AppState {
             } else {
                 -1.0
             };
+        }
+        if room != self.room
+            && self
+                .web_host
+                .active
+                .as_ref()
+                .is_some_and(|k| k.is_ephemeral_on_room_leave())
+        {
+            self.close_web_surface();
         }
         if self.room == Room::Devices && room != Room::Devices {
             if self.pc.mouse_panel_open {
@@ -2934,6 +2947,10 @@ impl AppState {
         }
         if self.whats_new.mode.is_some() {
             self.close_whats_new();
+            return true;
+        }
+        if self.web_host.is_open() {
+            self.close_web_surface();
             return true;
         }
         if self.chrome.gamepad_paused {

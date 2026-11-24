@@ -2229,6 +2229,10 @@ impl AppState {
         if self.wp4.store_busy.contains_key(&store) {
             return;
         }
+        if store == "gog" && self.status == HostStatus::Standalone {
+            self.open_web_surface(crate::web_host::WebSurfaceKind::GogSignIn);
+            return;
+        }
         self.wp4
             .store_busy
             .insert(store.clone(), StoreActionKind::Connect);
@@ -2244,6 +2248,9 @@ impl AppState {
                         s.wp4.store_busy.remove(&st);
                         match res {
                             Ok(reply) => {
+                                if !reply.ok && st == "gog" {
+                                    s.open_web_surface(crate::web_host::WebSurfaceKind::GogSignIn);
+                                }
                                 if reply.message.is_some() || !reply.ok {
                                     let text = reply.message.unwrap_or_else(|| {
                                         format!("Could not sign in to {display_name}. Try again.")

@@ -64,6 +64,7 @@ pub struct StoreExtraState {
     pub reviews_loading: bool,
     pub shown_media: Option<ShownMedia>,
     pub trailer_player: Option<rune_media::Player>,
+    pub trailer_mf: Option<Box<crate::native_media::NativeMediaSession>>,
     pub trailer_url: Option<String>,
     pub trailer_playing: bool,
     pub trailer_muted: bool,
@@ -116,6 +117,7 @@ impl Default for StoreExtraState {
             reviews_loading: false,
             shown_media: None,
             trailer_player: None,
+            trailer_mf: None,
             trailer_url: None,
             trailer_playing: false,
             trailer_muted: true,
@@ -990,6 +992,13 @@ impl AppState {
 
     pub fn store_open_offer(&mut self, store_key: String, store_name: String, url: String) {
         if self.store_ext.offer_busy.contains(&store_key) {
+            return;
+        }
+        if url.starts_with("https://") {
+            self.open_web_surface(crate::web_host::WebSurfaceKind::StorePage {
+                title: store_name,
+                url,
+            });
             return;
         }
         if self.status == HostStatus::Standalone {
