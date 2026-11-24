@@ -198,6 +198,8 @@
     "game.frameCap": "GameFrameCap",
     "game.frameGen": "GameFrameGen",
     "game.get": "{ ok: boolean; game?: Game; message?: string }",
+    "game.graphicsFeatures": "GameGraphicsFeaturesState",
+    "game.graphicsFeatures.set": "GameGraphicsFeaturesState",
     "game.install": "InstallResponse",
     "game.launch": "LaunchResponse",
     "game.openFolder": "{ ok: boolean; message?: string }",

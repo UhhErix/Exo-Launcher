@@ -87,9 +87,10 @@ pub use game_types::{
     AntiCheatLaunch, ArtworkMutationResponse, CompressProgressEvent, CompressState,
     CompressStateReply, DequeueReply, DlssFileOutcome, DlssNewerItem, DlssNewerReply,
     DlssRunResult, DlssStatus, DlssStatusItem, DriveHeat, FrameGenMod, GameAchievementsEvent,
-    GameContent, GameOptimizeEvent, GameSettingsGroup, GameSettingsState, GpuGame, HdrAutoHdr,
-    HdrGame, InstallResponse, KeepStatus, MovingProgress, OpenUrlReply, PropertyChoice,
-    ShaderStatus, ShaderWarmed, UninstallResponse,
+    GameContent, GameGraphicsFeaturesState, GameOptimizeEvent, GameSettingsGroup,
+    GameSettingsState, GpuGame, GraphicsFeatureRow, HdrAutoHdr, HdrGame, InstallResponse,
+    KeepStatus, MovingProgress, OpenUrlReply, PropertyChoice, ShaderStatus, ShaderWarmed,
+    UninstallResponse,
 };
 pub use media_types::{
     CaptureEditReply, CaptureHotkeys, CaptureItem, CaptureItemReply, CaptureListReply,
@@ -395,6 +396,8 @@ pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_GAME_RESUME_DOWNLOAD: &str = "game.resumeDownload";
 pub const METHOD_GAME_SETTINGS: &str = "game.settings";
+pub const METHOD_GAME_GRAPHICS_FEATURES: &str = "game.graphicsFeatures";
+pub const METHOD_GAME_GRAPHICS_FEATURES_SET: &str = "game.graphicsFeatures.set";
 pub const METHOD_GAME_FRAME_GEN: &str = "game.frameGen";
 pub const METHOD_GAME_FRAME_CAP: &str = "game.frameCap";
 pub const METHOD_GAME_CAP_LAB_RUN: &str = "game.capLab.run";
@@ -730,6 +733,8 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_PROPERTIES_SET,
     METHOD_GAME_RESUME_DOWNLOAD,
     METHOD_GAME_SETTINGS,
+    METHOD_GAME_GRAPHICS_FEATURES,
+    METHOD_GAME_GRAPHICS_FEATURES_SET,
     METHOD_GAME_FRAME_GEN,
     METHOD_GAME_FRAME_CAP,
     METHOD_GAME_CAP_LAB_RUN,

@@ -244,6 +244,30 @@ public sealed partial class DlssSwapService
         ("reshade", "ReShade"), ("special k", "Special K"), ("specialk", "Special K"),
     ];
 
+    internal static bool HasSpecialK(string folder)
+    {
+        if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return false;
+        if (File.Exists(Path.Combine(folder, "SpecialK64.dll")) || File.Exists(Path.Combine(folder, "SpecialK.ini")))
+            return true;
+        foreach (var proxy in ProxyNames)
+        {
+            var path = Path.Combine(folder, proxy);
+            if (!File.Exists(path)) continue;
+            var text = ReadVersionText(path);
+            if (text is not null && (text.Contains("special k", StringComparison.OrdinalIgnoreCase) || text.Contains("specialk", StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+        return false;
+    }
+
+    internal static bool HasRtxRemix(string folder)
+    {
+        if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return false;
+        return File.Exists(Path.Combine(folder, "rtx.conf"))
+            || Directory.Exists(Path.Combine(folder, ".trex"))
+            || File.Exists(Path.Combine(folder, ".trex", "d3d9.dll"));
+    }
+
     /// <summary>
     /// The mod whose file is over Exo's loader, by that file alone: its version information names an upscaler mod, a
     /// loader or an overlay (ReShade, Special K). A file with no version information at all is named by a loader mod's

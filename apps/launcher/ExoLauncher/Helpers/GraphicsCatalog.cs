@@ -44,6 +44,8 @@ internal static class GraphicsCatalog
     internal const uint SmoothMotion = 0xB0D384C0;
     internal const uint LowLatencyState = 0x0005F543, UltraLowLatency = 0x10835000, PreRenderedFrames = 0x007BA09E;
     internal const uint FrameRateLimit = 0x10835002;
+    internal const uint StreamlineDlssOverride = 0x10E41E06;
+    internal const uint AnisotropicFilteringMode = 0x10D2BB16, PreferredRefreshRate = 0x0064B541, ResizableBarMode = 0x000BFA21;
 
 
     /// <summary>A setting's plain name, for an import's list; null when Exo has no name for it.</summary>

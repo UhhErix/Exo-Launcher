@@ -3,7 +3,7 @@ use crate::game_actions::{
     install_verb, is_installing_game, is_noise_status, primary_cta_label, resolve_primary_action,
     transfer_for_game, transfer_meta_line, transfer_share, unavailable_reason,
 };
-use crate::game_perf::performance_card;
+use crate::game_perf::{graphics_features_card, performance_card};
 use crate::game_props::{artwork_tools, properties_card};
 use crate::state::{AppState, InputMode, title_hue};
 use exo_kit::{
@@ -747,7 +747,11 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
             .items_stretch()
             .child(performance_card(s, &game))
             .child(properties_card(s, &game));
-        page = page.child(lower_cards);
+        let gfx_block = el()
+            .w_full()
+            .px(GAME_EDGE)
+            .child(graphics_features_card(s, &game));
+        page = page.child(lower_cards).child(gfx_block);
     }
 
     if let Some(ref msg) = s.game_page.status_msg
