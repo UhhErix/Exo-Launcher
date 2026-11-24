@@ -3440,7 +3440,27 @@ fn run_parity_probe(
     );
 }
 
+#[global_allocator]
+static GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+const MI_OPTION_ARENA_EAGER_COMMIT: libmimalloc_sys::mi_option_t = 4;
+const MI_OPTION_PURGE_DECOMMITS: libmimalloc_sys::mi_option_t = 5;
+const MI_OPTION_PURGE_DELAY: libmimalloc_sys::mi_option_t = 15;
+const MI_OPTION_ARENA_PURGE_MULT: libmimalloc_sys::mi_option_t = 24;
+const MI_OPTION_PAGE_COMMIT_ON_DEMAND: libmimalloc_sys::mi_option_t = 40;
+
+fn configure_mimalloc() {
+    unsafe {
+        libmimalloc_sys::mi_option_set(MI_OPTION_ARENA_EAGER_COMMIT, 0);
+        libmimalloc_sys::mi_option_set(MI_OPTION_PURGE_DECOMMITS, 1);
+        libmimalloc_sys::mi_option_set(MI_OPTION_PURGE_DELAY, 0);
+        libmimalloc_sys::mi_option_set(MI_OPTION_ARENA_PURGE_MULT, 1);
+        libmimalloc_sys::mi_option_set(MI_OPTION_PAGE_COMMIT_ON_DEMAND, 1);
+    }
+}
+
 fn main() {
+    configure_mimalloc();
     let cli = split_cli_args();
     let pipe_name = cli.pipe;
     let rune_args = cli.passthrough;

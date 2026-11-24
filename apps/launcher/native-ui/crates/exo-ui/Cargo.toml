@@ -16,6 +16,8 @@ exo-rpc = { path = "../exo-rpc" }
 exo-sensors = { path = "../exo-sensors" }
 exo-stores = { path = "../exo-stores" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+libmimalloc-sys = { version = "0.1.49", features = ["extended"] }
+mimalloc = { version = "0.1.52", features = ["extended"] }
 rune.workspace = true
 rune-media.workspace = true
 serde_json.workspace = true
