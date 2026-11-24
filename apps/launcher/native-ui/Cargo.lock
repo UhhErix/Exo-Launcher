@@ -893,6 +893,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-net-latency"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
 name = "exo-rpc"
 version = "0.1.0"
 dependencies = [

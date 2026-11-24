@@ -1,0 +1,22 @@
+[package]
+name = "exo-net-latency"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "exo_net_latency"
+path = "src/lib.rs"
+
+[[bin]]
+name = "exo-net-latency-bench"
+path = "src/bench_main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }
