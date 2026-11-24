@@ -60,6 +60,8 @@ The Controller Lab's stick calibration follows the sequences of [dualshock-tools
 
 Devices' USB port line follows the idea of [CPU Direct USB](https://github.com/MariusHeier/cpu-direct-usb) by Marius Heier (MIT): tell a device's USB controller by its PCI id and count the chips between it and the processor. Exo's reader is its own code; the controller ids it knows are facts from [The PCI ID Repository](https://pci-ids.ucw.cz/) and Linux's xHCI driver.
 
+Per-process GPU engine and VRAM monitoring (`GpuProcessMonitor.cs`) follows the Windows PDH (`\GPU Engine(*)\Utilization Percentage`, `\GPU Process Memory(*)\Local Usage` and `Non-Local Usage`) and DXGI LUID attribution method of [gputaskman](https://github.com/shanselman/gputaskman) by Scott Hanselman (MIT). Exo's C# implementation is its own code.
+
 ## Downloaded by Exo
 
 Exo does not ship these in its installer file; it downloads a fixed release and checks its size and SHA-256 first (the frame generation mods: their newest release, checked against the SHA-256 its release publishes for it). Exo's setup fetches the store tools and the two NVIDIA models while it installs; the upscaler files come only for a game that ships them, and the frame generation mods only for a game you turn frame generation on in. The store tools run as their own programs.

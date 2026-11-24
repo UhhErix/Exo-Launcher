@@ -9,7 +9,8 @@ internal sealed record ExoAiSnapshot(
     IReadOnlyList<string> AutoApplied,
     IReadOnlyList<string> NeedsAttention,
     ExoAiAutopilotSnapshot Gaming,
-    FanStatus Fans);
+    FanStatus Fans,
+    GpuUsageAnswer? GpuAnswer = null);
 
 /// <summary>
 /// Unified real-time optimization coordinator ("Exo AI"):
@@ -56,13 +57,15 @@ internal sealed class ExoAiCoordinator : IDisposable
             return attention;
         },
         () => Autopilot.Engine.Snapshot(),
-        () => DateTimeOffset.UtcNow);
+        () => DateTimeOffset.UtcNow,
+        () => GpuProcessMonitor.Shared.Sample(allowWarmup: true).Answer);
 
     private readonly Func<bool> _isGaming;
     private readonly Func<IReadOnlyList<string>> _applySafe;
     private readonly Func<IReadOnlyList<string>> _readAttention;
     private readonly Func<ExoAiAutopilotSnapshot> _autopilotSnapshot;
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<GpuUsageAnswer?> _readGpuAnswer;
     private readonly Lock _gate = new();
 
     private Func<ExoAiSettings>? _getSettings;
@@ -82,7 +85,8 @@ internal sealed class ExoAiCoordinator : IDisposable
         Func<IReadOnlyList<string>> applySafe,
         Func<IReadOnlyList<string>> readAttention,
         Func<ExoAiAutopilotSnapshot> autopilotSnapshot,
-        Func<DateTimeOffset> now)
+        Func<DateTimeOffset> now,
+        Func<GpuUsageAnswer?>? readGpuAnswer = null)
     {
         Fans = fans;
         _isGaming = isGaming;
@@ -90,6 +94,7 @@ internal sealed class ExoAiCoordinator : IDisposable
         _readAttention = readAttention;
         _autopilotSnapshot = autopilotSnapshot;
         _now = now;
+        _readGpuAnswer = readGpuAnswer ?? (() => null);
     }
 
     internal void Start(Func<AppSettings> settingsProvider)
@@ -131,6 +136,9 @@ internal sealed class ExoAiCoordinator : IDisposable
         var current = ReadSettings();
         var gaming = _autopilotSnapshot();
         var fanStatus = Fans.ReadStatus();
+        GpuUsageAnswer? gpuAnswer = null;
+        try { gpuAnswer = _readGpuAnswer(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: GPU process read skipped: " + ex.GetType().Name); }
         lock (_gate)
         {
             return new ExoAiSnapshot(
@@ -140,7 +148,8 @@ internal sealed class ExoAiCoordinator : IDisposable
                 [.. _autoApplied],
                 [.. _needsAttention],
                 gaming,
-                fanStatus);
+                fanStatus,
+                gpuAnswer);
         }
     }
 

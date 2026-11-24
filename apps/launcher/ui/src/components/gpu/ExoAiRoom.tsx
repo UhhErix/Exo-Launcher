@@ -25,12 +25,14 @@ import { AutoTuneCinema } from './AutoTuneCinema'
 import { bestSteps } from './BestSetup'
 import { useCompressList } from './CompressGames'
 import { DriversSection } from './DriversSection'
+import { GpuProcessesSection } from './GpuProcessesSection'
 import { useExoAi } from './ExoAiPanel'
 import { useAppsSummary } from './PcApps'
 import { ThisPc, type PcPartMenu } from './PcOverview'
 import { PcPartMenus, StorageChip } from './PcPartMenus'
 import { SectionSlot } from './SectionHead'
 import { StorageRoom } from './StorageRoom'
+import { SetupRows } from './ThisPcTab'
 import type { PcLink } from './pcSections'
 import { usePcState, type PcState } from './usePcState'
 import {
@@ -120,7 +122,7 @@ function RightSection({
   title,
   children,
 }: {
-  id: 'drivers' | 'shaders'
+  id: 'drivers' | 'gpu-usage' | 'shaders'
   title: string
   children: ReactNode
 }) {
@@ -262,6 +264,26 @@ function useExoAiJump({
     }
     scroller.querySelector(`[data-pc-part="${jump.tab}"]`)?.scrollIntoView({ block: 'start' })
   }, [active, jump, vendor, room, onStorage, onMenu])
+}
+
+function OverviewHealthRows({
+  active,
+  health,
+  onHealth,
+}: {
+  active: boolean
+  health: PcHealth | null
+  onHealth: (next: PcHealth) => void
+}) {
+  const show = health?.items.some(
+    item => !item.applied && !item.current && item.key !== 'power' && item.key !== 'chipset' && !item.key.startsWith('net'),
+  )
+  if (!show) return null
+  return (
+    <div className="exo-ai-health-rows">
+      <SetupRows place="needs" active={active} health={health} onHealth={onHealth} />
+    </div>
+  )
 }
 
 export function ExoAiRoom({
@@ -426,6 +448,7 @@ export function ExoAiRoom({
 
             <section className="exo-system-panel exo-ai-specs" data-pc-part="overview" aria-label="This PC">
               <ThisPc state={state} chips={null} onMenu={setMenu} />
+              <OverviewHealthRows active={active} health={state.health} onHealth={setHealth} />
             </section>
           </div>
 
@@ -440,6 +463,9 @@ export function ExoAiRoom({
                 about={state.about}
                 runtimes={apps?.runtimes ?? null}
               />
+            </RightSection>
+            <RightSection id="gpu-usage" title="GPU activity">
+              <GpuProcessesSection active={active} />
             </RightSection>
             <RightSection id="shaders" title="Shaders">
               <ShadersBoard active={active} games={games} />
