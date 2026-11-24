@@ -10,11 +10,11 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "exo-shaders-service"
-path = "src/bin/exo-shaders-service.rs"
+path = "src/service_main.rs"
 
 [[bin]]
 name = "exo-shaders-bench"
-path = "src/bin/exo-shaders-bench.rs"
+path = "src/bench_main.rs"
 
 [dependencies]
 blake3 = "1"

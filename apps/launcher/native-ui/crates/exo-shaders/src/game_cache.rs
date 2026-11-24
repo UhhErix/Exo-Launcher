@@ -1,5 +1,5 @@
 use crate::fossilize::{FossilizeArchiveInfo, inspect_fossilize_archive};
-use crate::policy::{AntiCheatClass, AntiCheatDetection, detect_anti_cheat_markers};
+use crate::policy::{AntiCheatClass, AntiCheatDetection, resolve_anti_cheat_class};
 use crate::ue_archive::{UePakHeader, UeUtocHeader, inspect_pak_header, inspect_utoc_header};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -40,10 +40,11 @@ pub fn scan_game_directory(
     id: &str,
     name: &str,
     install_dir: &Path,
+    host_class: Option<AntiCheatClass>,
     steam_shadercache_dir: Option<&Path>,
 ) -> GameShaderProfile {
     let start = Instant::now();
-    let anti_cheat = detect_anti_cheat_markers(install_dir);
+    let anti_cheat = resolve_anti_cheat_class(host_class, install_dir);
     let mut pak_count = 0usize;
     let mut utoc_count = 0usize;
     let mut shader_cache_files = 0usize;

@@ -11,13 +11,31 @@ pub enum AntiCheatClass {
     Unknown,
 }
 
+impl AntiCheatClass {
+    fn strictness(self) -> u8 {
+        match self {
+            Self::Offline => 0,
+            Self::OnlinePvE => 1,
+            Self::Unknown => 2,
+            Self::CompetitivePvP => 3,
+        }
+    }
+
+    pub fn stricter_of(self, other: Self) -> Self {
+        if other.strictness() > self.strictness() {
+            other
+        } else {
+            self
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RouteKind {
     DriverCacheScan,
     OfflinePsoWarm,
     FileRoute,
-    DllRoute,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,7 +43,6 @@ pub enum RouteKind {
 pub enum RouteDecision {
     Allowed,
     AllowedWithNote { note: String },
-    RequiresOptIn { reason: String },
     Denied { reason: String },
 }
 
@@ -46,42 +63,27 @@ pub fn evaluate_route(
     class: AntiCheatClass,
     route: RouteKind,
     game_running: bool,
-    dll_opt_in: bool,
+    has_restore_record: bool,
 ) -> RouteDecision {
     match route {
         RouteKind::DriverCacheScan | RouteKind::OfflinePsoWarm => RouteDecision::Allowed,
-        RouteKind::FileRoute | RouteKind::DllRoute if game_running => RouteDecision::Denied {
-            reason: "Game is currently running; never modify files or inject while active.".into(),
+        RouteKind::FileRoute if game_running => RouteDecision::Denied {
+            reason: "Game is currently running; never modify game shader folders while active."
+                .into(),
+        },
+        RouteKind::FileRoute if !has_restore_record => RouteDecision::Denied {
+            reason: "File route requires a tracked restore record before writing.".into(),
         },
         RouteKind::FileRoute => match class {
             AntiCheatClass::CompetitivePvP | AntiCheatClass::Unknown => RouteDecision::Denied {
-                reason: "Competitive PvP and unknown games disallow file routes.".into(),
+                reason: "Competitive PvP and unknown games disallow game-folder file routes."
+                    .into(),
             },
-            AntiCheatClass::OnlinePvE => RouteDecision::Allowed,
+            AntiCheatClass::OnlinePvE => RouteDecision::AllowedWithNote {
+                note: "Online PvE: game-folder shader cache file route allowed while closed with restore record.".into(),
+            },
             AntiCheatClass::Offline => RouteDecision::AllowedWithNote {
-                note: "Offline game: file route allowed and tracked for clean restore.".into(),
-            },
-        },
-        RouteKind::DllRoute => match class {
-            AntiCheatClass::CompetitivePvP | AntiCheatClass::Unknown => RouteDecision::Denied {
-                reason:
-                    "Competitive PvP and unknown games forbid DLL routes, hooks, and injection."
-                        .into(),
-            },
-            AntiCheatClass::OnlinePvE => {
-                if dll_opt_in {
-                    RouteDecision::AllowedWithNote {
-                        note: "Online PvE: opt-in DLL route enabled; session-cleaned on exit."
-                            .into(),
-                    }
-                } else {
-                    RouteDecision::RequiresOptIn {
-                        reason: "Online PvE requires explicit user opt-in for DLL routes.".into(),
-                    }
-                }
-            }
-            AntiCheatClass::Offline => RouteDecision::AllowedWithNote {
-                note: "Offline game: session-cleaned DLL route allowed; removed on exit.".into(),
+                note: "Offline game: game-folder shader cache file route allowed while closed with restore record.".into(),
             },
         },
     }
@@ -101,10 +103,14 @@ const PVP_MARKERS: &[(&str, &str)] = &[
     ("eaanticheat", "EA AntiCheat"),
 ];
 
-pub fn detect_anti_cheat_markers(install_dir: &Path) -> AntiCheatDetection {
+pub fn resolve_anti_cheat_class(
+    host_class: Option<AntiCheatClass>,
+    install_dir: &Path,
+) -> AntiCheatDetection {
+    let base = host_class.unwrap_or(AntiCheatClass::Unknown);
     if !install_dir.exists() {
         return AntiCheatDetection {
-            class: AntiCheatClass::Unknown,
+            class: base.stricter_of(AntiCheatClass::Unknown),
             markers: Vec::new(),
         };
     }
@@ -114,15 +120,15 @@ pub fn detect_anti_cheat_markers(install_dir: &Path) -> AntiCheatDetection {
     walk_markers(install_dir, 0, &mut visited, &mut unreadable, &mut found);
     found.sort();
     found.dedup();
-    let class = if !found.is_empty() {
+    let local_floor = if !found.is_empty() {
         AntiCheatClass::CompetitivePvP
     } else if unreadable {
         AntiCheatClass::Unknown
     } else {
-        AntiCheatClass::Offline
+        base
     };
     AntiCheatDetection {
-        class,
+        class: base.stricter_of(local_floor),
         markers: found,
     }
 }
@@ -166,60 +172,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn competitive_and_unknown_forbid_file_and_dll_routes() {
-        for class in [AntiCheatClass::CompetitivePvP, AntiCheatClass::Unknown] {
-            assert!(evaluate_route(class, RouteKind::DriverCacheScan, false, false).is_permitted());
-            assert!(evaluate_route(class, RouteKind::OfflinePsoWarm, false, false).is_permitted());
-            assert!(!evaluate_route(class, RouteKind::FileRoute, false, true).is_permitted());
-            assert!(!evaluate_route(class, RouteKind::DllRoute, false, true).is_permitted());
-        }
+    fn cs2_like_folder_without_markers_is_unknown_and_denies_file_route() {
+        let root = std::env::temp_dir().join(format!("exo-shaders-cs2-{}", std::process::id()));
+        let bin = root.join("game").join("bin").join("win64");
+        let _ = fs::create_dir_all(&bin);
+        let _ = fs::write(bin.join("cs2.exe"), b"stub");
+        let det = resolve_anti_cheat_class(None, &root);
+        assert_eq!(det.class, AntiCheatClass::Unknown);
+        assert!(det.markers.is_empty());
+        assert!(!evaluate_route(det.class, RouteKind::FileRoute, false, true).is_permitted());
+        assert!(evaluate_route(det.class, RouteKind::DriverCacheScan, false, false).is_permitted());
+        assert!(evaluate_route(det.class, RouteKind::OfflinePsoWarm, false, false).is_permitted());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
-    fn online_pve_allows_file_and_requires_opt_in_for_dll() {
-        assert!(
-            evaluate_route(
-                AntiCheatClass::OnlinePvE,
-                RouteKind::FileRoute,
-                false,
-                false
-            )
-            .is_permitted()
-        );
-        assert!(matches!(
-            evaluate_route(AntiCheatClass::OnlinePvE, RouteKind::DllRoute, false, false),
-            RouteDecision::RequiresOptIn { .. }
-        ));
-        assert!(
-            evaluate_route(AntiCheatClass::OnlinePvE, RouteKind::DllRoute, false, true)
-                .is_permitted()
-        );
-        assert!(
-            !evaluate_route(AntiCheatClass::OnlinePvE, RouteKind::DllRoute, true, true)
-                .is_permitted()
-        );
-    }
-
-    #[test]
-    fn offline_allows_routes_with_note_when_not_running() {
-        assert!(matches!(
-            evaluate_route(AntiCheatClass::Offline, RouteKind::DllRoute, false, false),
-            RouteDecision::AllowedWithNote { .. }
-        ));
-        assert!(
-            !evaluate_route(AntiCheatClass::Offline, RouteKind::FileRoute, true, false)
-                .is_permitted()
-        );
-    }
-
-    #[test]
-    fn detects_eac_marker_in_temp_dir() {
-        let root = std::env::temp_dir().join(format!("exo-shaders-ac-test-{}", std::process::id()));
+    fn host_offline_plus_eac_marker_escalates_to_competitive_pvp() {
+        let root = std::env::temp_dir().join(format!("exo-shaders-eac-{}", std::process::id()));
         let eac = root.join("EasyAntiCheat");
         let _ = fs::create_dir_all(&eac);
-        let det = detect_anti_cheat_markers(&root);
+        let det = resolve_anti_cheat_class(Some(AntiCheatClass::Offline), &root);
         assert_eq!(det.class, AntiCheatClass::CompetitivePvP);
         assert!(det.markers.iter().any(|m| m == "EasyAntiCheat"));
+        assert!(!evaluate_route(det.class, RouteKind::FileRoute, false, true).is_permitted());
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn file_route_requires_closed_game_and_restore_record() {
+        for class in [AntiCheatClass::Offline, AntiCheatClass::OnlinePvE] {
+            assert!(evaluate_route(class, RouteKind::FileRoute, false, true).is_permitted());
+            assert!(!evaluate_route(class, RouteKind::FileRoute, true, true).is_permitted());
+            assert!(!evaluate_route(class, RouteKind::FileRoute, false, false).is_permitted());
+        }
+        for class in [AntiCheatClass::CompetitivePvP, AntiCheatClass::Unknown] {
+            assert!(!evaluate_route(class, RouteKind::FileRoute, false, true).is_permitted());
+            assert!(evaluate_route(class, RouteKind::DriverCacheScan, false, false).is_permitted());
+            assert!(evaluate_route(class, RouteKind::OfflinePsoWarm, false, false).is_permitted());
+        }
     }
 }

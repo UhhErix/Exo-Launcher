@@ -3,7 +3,7 @@ use crate::driver_cache::{
     format_bytes, scan_driver_caches,
 };
 use crate::game_cache::{GameShaderProfile, classify_status_label, scan_game_directory};
-use crate::policy::{RouteKind, evaluate_route};
+use crate::policy::AntiCheatClass;
 use crate::pso_dx12::recommended_worker_threads;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -16,11 +16,14 @@ use std::time::{Duration, Instant};
 #[serde(rename_all = "camelCase")]
 pub struct HostGameInput {
     pub id: String,
+    #[serde(alias = "title")]
     pub name: String,
     #[serde(default)]
     pub install_dir: Option<String>,
     #[serde(default)]
     pub store: Option<String>,
+    #[serde(default)]
+    pub anti_cheat_class: Option<AntiCheatClass>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -262,7 +265,13 @@ impl ServiceState {
                                 .as_deref()
                                 .map(Path::new)
                                 .unwrap_or_else(|| Path::new(""));
-                            scanned.push(scan_game_directory(&g.id, &g.name, dir, None));
+                            scanned.push(scan_game_directory(
+                                &g.id,
+                                &g.name,
+                                dir,
+                                g.anti_cheat_class,
+                                None,
+                            ));
                         }
                     }
                     self.games = scanned;
@@ -368,23 +377,12 @@ impl ServiceState {
                 Ok(json!({ "ok": true }))
             }
             "recorder.set" => {
-                let id = params
-                    .and_then(|p| p.get("id"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
                 let on = params
                     .and_then(|p| p.get("on"))
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
-                if on && let Some(game) = self.games.iter().find(|g| g.id == id) {
-                    let decision =
-                        evaluate_route(game.anti_cheat.class, RouteKind::DllRoute, false, false);
-                    if !decision.is_permitted() {
-                        return Err(
-                            "Recorder DLL is not permitted for this game's anti-cheat class."
-                                .into(),
-                        );
-                    }
+                if on {
+                    return Err("exo-shaders never loads recorder DLLs into games.".into());
                 }
                 self.rev += 1;
                 Ok(json!({ "ok": true }))
