@@ -34,6 +34,8 @@
   <ItemGroup>
     <!-- The Discord voice libraries the app ships (voice/build.ps1), beside the test run: the tests that load them check the same files. -->
     <Content Include="..\voice\out\*.dll" Condition="Exists('..\voice\out')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\native-ui\target\release\exo_voice_ml.dll" Condition="Exists('..\native-ui\target\release\exo_voice_ml.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(NuGetPackageRoot)microsoft.ml.onnxruntime\1.31.1\runtimes\win-x64\native\onnxruntime.dll" Condition="Exists('$(NuGetPackageRoot)microsoft.ml.onnxruntime\1.31.1\runtimes\win-x64\native\onnxruntime.dll')" Link="onnxruntime.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -205,6 +205,7 @@ internal static class PlayerData
         new("discord-accounts.bin", "DiscordAccounts", Why.Secret, "the Discord accounts' tokens, sealed with DPAPI"),
         new("discord-client.bin", "DiscordToken", Why.Secret, "the Discord session token, sealed with DPAPI"),
         new("voice/my-voice.bin", "Voiceprint", Why.Secret, "the learned voiceprint, sealed with DPAPI and learned again by itself"),
+        new("my-voice-enroll.bin", "VoiceModels", Why.Secret, "the short voice isolation sample, sealed with DPAPI"),
         new("steam-account.bin", "StoreSecretVault", Why.Secret, "the Steam sign-in, sealed with DPAPI"),
         // What Exo fetches or works out again.
         new("-intel.json", "NetworkDrivers", Why.Cache, "Intel's network driver list as last fetched"),

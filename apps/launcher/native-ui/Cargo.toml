@@ -17,6 +17,7 @@ members = [
     "crates/exo-flow",
     "crates/exo-autopilot",
     "crates/exo-upscale",
+    "crates/exo-voice-ml",
 ]
 
 [workspace.package]

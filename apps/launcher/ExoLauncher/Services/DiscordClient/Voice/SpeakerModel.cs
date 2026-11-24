@@ -54,13 +54,6 @@ internal static class SpeakerModel
     }
 
     private static readonly Lock Gate = new();
-    private static nint _extractor;
-    private static int _dim;
-    private static unsafe delegate* unmanaged[Cdecl]<nint, nint> _createStream;
-    private static unsafe delegate* unmanaged[Cdecl]<nint, int, float*, int, void> _accept;
-    private static unsafe delegate* unmanaged[Cdecl]<nint, void> _finish, _destroyStream, _destroyEmbedding;
-    private static unsafe delegate* unmanaged[Cdecl]<nint, nint, int> _ready;
-    private static unsafe delegate* unmanaged[Cdecl]<nint, nint, float*> _compute;
 
     /// <summary>
     /// Loads the model ahead of a call when there is a voice to judge (a voiceprint taught): as Discord connects
@@ -75,76 +68,17 @@ internal static class SpeakerModel
 
     internal static int SessionThreads(int processorCount) => Math.Clamp(processorCount, 1, 2);
 
-    // Loads sherpa-onnx and the model once; under Gate.
-    private static unsafe bool Load()
-    {
-        if (_extractor != 0) return true;
-        // Windows 11 has its own, other onnxruntime.dll in System32 (Windows ML): the one beside Exo loads first, by full
-        // path, so sherpa-onnx binds to it and not to Windows' (whose interface differs: it crashed the first run).
-        if (!Ready() || !NativeLibrary.TryLoad(Path.Combine(AppContext.BaseDirectory, "onnxruntime.dll"), out _)
-            || !NativeLibrary.TryLoad(Path.Combine(AppContext.BaseDirectory, "sherpa-onnx-c-api.dll"), out var lib)) return false;
-        if (!NativeLibrary.TryGetExport(lib, "SherpaOnnxCreateSpeakerEmbeddingExtractor", out var create)
-            || !NativeLibrary.TryGetExport(lib, "SherpaOnnxSpeakerEmbeddingExtractorDim", out var dim)
-            || !NativeLibrary.TryGetExport(lib, "SherpaOnnxSpeakerEmbeddingExtractorCreateStream", out var createStream)
-            || !NativeLibrary.TryGetExport(lib, "SherpaOnnxOnlineStreamAcceptWaveform", out var accept)
-            || !NativeLibrary.TryGetExport(lib, "SherpaOnnxOnlineStreamInputFinished", out var finish)
-            || !NativeLibrary.TryGetExport(lib, "SherpaOnnxSpeakerEmbeddingExtractorIsReady", out var ready)
-            || !NativeLibrary.TryGetExport(lib, "SherpaOnnxSpeakerEmbeddingExtractorComputeEmbedding", out var compute)
-            || !NativeLibrary.TryGetExport(lib, "SherpaOnnxSpeakerEmbeddingExtractorDestroyEmbedding", out var destroyEmbedding)
-            || !NativeLibrary.TryGetExport(lib, "SherpaOnnxDestroyOnlineStream", out var destroyStream))
-            return false;
-        // SherpaOnnxSpeakerEmbeddingExtractorConfig: model (char*), num_threads, debug, provider (char*).
-        var model = Encoding.UTF8.GetBytes(ModelPath + "\0");
-        var config = stackalloc byte[24];
-        fixed (byte* path = model)
-        fixed (byte* cpu = "cpu"u8)
-        {
-            *(byte**)config = path;
-            *(int*)(config + 8) = SessionThreads(Environment.ProcessorCount);
-            *(int*)(config + 12) = 0;
-            *(byte**)(config + 16) = cpu;
-            _extractor = ((delegate* unmanaged[Cdecl]<byte*, nint>)create)(config);
-        }
-        if (_extractor == 0) { AppLog.Info("Discord voice: the voice model wouldn't load."); return false; }
-        _dim = ((delegate* unmanaged[Cdecl]<nint, int>)dim)(_extractor);
-        _createStream = (delegate* unmanaged[Cdecl]<nint, nint>)createStream;
-        _accept = (delegate* unmanaged[Cdecl]<nint, int, float*, int, void>)accept;
-        _finish = (delegate* unmanaged[Cdecl]<nint, void>)finish;
-        _ready = (delegate* unmanaged[Cdecl]<nint, nint, int>)ready;
-        _compute = (delegate* unmanaged[Cdecl]<nint, nint, float*>)compute;
-        _destroyEmbedding = (delegate* unmanaged[Cdecl]<nint, void>)destroyEmbedding;
-        _destroyStream = (delegate* unmanaged[Cdecl]<nint, void>)destroyStream;
-        return true;
-    }
+    private static bool Load() => Ready() && ExoVoiceMl.WarmTitaNet(ModelPath);
 
     /// <summary>The voiceprint of 16 kHz mono voice, unit length; null when the model isn't here or can't judge it.</summary>
-    internal static unsafe float[]? Embed(ReadOnlySpan<float> voice16k)
+    internal static float[]? Embed(ReadOnlySpan<float> voice16k)
     {
         lock (Gate)
         {
             try
             {
-                if (!Load()) return null;
-                var stream = _createStream(_extractor);
-                if (stream == 0) return null;
-                try
-                {
-                    fixed (float* samples = voice16k) _accept(stream, 16000, samples, voice16k.Length);
-                    _finish(stream);
-                    if (_ready(_extractor, stream) == 0) return null;
-                    var embedding = _compute(_extractor, stream);
-                    if (embedding is null) return null;
-                    try
-                    {
-                        var print = new ReadOnlySpan<float>(embedding, _dim).ToArray();
-                        var length = MathF.Sqrt(print.Sum(x => x * x));
-                        if (!(length > 0)) return null;
-                        for (var i = 0; i < print.Length; i++) print[i] /= length;
-                        return print;
-                    }
-                    finally { _destroyEmbedding((nint)embedding); }
-                }
-                finally { _destroyStream(stream); }
+                if (!Ready()) return null;
+                return ExoVoiceMl.EmbedTitaNet(voice16k, ModelPath);
             }
             catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
             {

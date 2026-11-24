@@ -226,6 +226,7 @@ internal sealed class MyVoice : IThreadPoolWorkItem
             return $"Exo has heard {voice.Count / Rate} of the {TeachSeconds} seconds of your voice it needs. Keep talking, in a call or on the meter above, then teach it again.";
         if (!await SpeakerModel.EnsureAsync(ct).ConfigureAwait(false)) return "The voice model couldn't be downloaded. Check your connection and try again.";
         if (await Task.Run(() => SpeakerModel.Embed(voice.ToArray()), ct).ConfigureAwait(false) is not { } print) return "Exo couldn't learn the voice from that take. Record it again.";
+        VoiceModels.SaveEnrollmentAudio(voice.ToArray());
         // A teach starts learning over: this take is the anchor calls learn around.
         Voiceprint.Save(new VoiceprintLearning.State(print, print.ToArray(), voice.Count / (float)Rate, 0));
         VoiceprintLearning.Reset();
@@ -318,6 +319,7 @@ internal static class Voiceprint
     internal static void Forget()
     {
         try { DeletionGate.DeleteFile(FilePath); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        VoiceModels.ForgetEnrollmentAudio();
         _learned = File.Exists(FilePath);
         VoiceprintLearning.Reset();
         Taught();

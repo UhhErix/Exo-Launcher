@@ -37,7 +37,7 @@ internal static class AccountSyncMap
         "DiscordAttenuateOthers", "DiscordAttenuateSelf", "DiscordAttenuation", "DiscordAutoSensitivity",
         "DiscordDesktopNotifications", "DiscordDisableAllSounds", "DiscordDisabledSounds", "DiscordEchoCancellation",
         "DiscordEvenVoices", "DiscordVoiceTargetLufs", "DiscordMicAutoGain", "DiscordInputDevice", "DiscordInputProfile", "DiscordInputVolume",
-        "DiscordKeybinds", "DiscordNoiseSuppression", "DiscordNoiseSuppressionKind", "DiscordOnlyMyVoice",
+        "DiscordKeybinds", "DiscordNoiseSuppression", "DiscordNoiseSuppressionKind", "DiscordVoiceTier", "DiscordVoiceIsolation", "DiscordLoopbackEchoCancellation", "DiscordOnlyMyVoice",
         "DiscordOthersNoiseSuppression", "DiscordOutputDevice", "DiscordOutputVolume", "DiscordPttDelay",
         "DiscordPushToTalk", "DiscordQuietWhilePlaying", "DiscordSelectedChannelSound",
         "DiscordSensitivity", "DiscordSoundVolume", "DiscordSoundboardMuted", "DiscordSoundboardVolume",

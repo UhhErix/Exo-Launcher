@@ -431,6 +431,9 @@ public sealed class AppSettings
     public bool DiscordNoiseSuppression { get; set; } = true;
     /// <summary>Which noise suppression runs when it is on: "exo" (Exo Voice, the default: the tuned Exo AI chain), "standard" (Google's WebRTC alone: <see cref="ExoLauncher.Services.DiscordClient.Voice.WebRtcNoise"/>), or an earlier build's "ai" or "krisp" (all Exo Voice now).</summary>
     public string DiscordNoiseSuppressionKind { get; set; } = "exo";
+    public string DiscordVoiceTier { get; set; } = "auto";
+    public bool DiscordVoiceIsolation { get; set; }
+    public bool DiscordLoopbackEchoCancellation { get; set; }
     /// <summary>The same on everyone else's voice in a call, each their own (<see cref="ExoLauncher.Services.DiscordClient.Voice.InboundCleaner"/>); off by default.</summary>
     public bool DiscordOthersNoiseSuppression { get; set; }
     /// <summary>Only My Voice: voices that aren't the user's learned one are held back in calls (<see cref="ExoLauncher.Services.DiscordClient.Voice.MyVoice"/>); off by default.</summary>

@@ -2503,6 +2503,37 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             s.open_game_id = Some(id);
         }
     }),
+    ("discord-voice", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.discord.settings_open = true;
+        s.discord.settings_page = crate::discord_state::DiscordSettingsPage::Voice;
+        s.discord.settings_ext.client.noise_suppression = true;
+        s.discord.settings_ext.client.noise_suppression_kind = Some("exo".into());
+        s.discord.settings_ext.client.voice_tier = "auto".into();
+        s.discord.settings_ext.client.voice_model_ready = Some(true);
+        s.discord.settings_ext.client.voice_hq_model_ready = Some(true);
+        s.discord.settings_ext.client.only_my_voice = true;
+        s.discord.settings_ext.client.voice_isolation = true;
+        s.discord.settings_ext.client.voice_isolation_ready = Some(true);
+        s.discord.settings_ext.client.my_voice_learned = Some(true);
+        s.discord.settings_ext.client.my_voice_seconds = Some(14.0);
+        s.discord.settings_ext.mic_level = Some(exo_rpc::DiscordMicLevel {
+            level: -28.0,
+            gate_level: -22.0,
+            after: -22.0,
+            voiced: true,
+            stages: exo_rpc::DiscordVoiceStages {
+                profile: "exo".into(),
+                suppression: "exo-v2".into(),
+                suppression_limit_db: 70.0,
+                focus: false,
+                gain: "exo".into(),
+                echo: "on".into(),
+                tuned: false,
+            },
+            heard: None,
+        });
+    }),
     ("discord-voice-loudness", |s: &mut AppState| {
         s.switch_room(state::Room::Discord);
         s.discord.settings_open = true;

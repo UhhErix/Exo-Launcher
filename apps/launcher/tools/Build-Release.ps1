@@ -73,6 +73,8 @@ if (@('dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll') | Where-Objec
 Push-Location native-ui
 cargo build --release --locked --bin exo-ui
 if ($LASTEXITCODE) { throw "Native UI release build failed ($LASTEXITCODE)." }
+cargo build --release --locked -p exo-voice-ml
+if ($LASTEXITCODE) { throw "Exo Voice ML release build failed ($LASTEXITCODE)." }
 Pop-Location
 dotnet publish ExoLauncher\ExoLauncher.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained -v q -nologo
 if ($LASTEXITCODE) { throw "dotnet publish failed ($LASTEXITCODE)." }
@@ -106,7 +108,8 @@ Copy-Item (Join-Path $repo 'capture\out\obs') $captureAddon -Recurse -Force
 
 # What every release must hold. The voice libraries are only copied once they're built, and releases have gone out
 # without them, so a missing part stops the build, and the voice libraries must also load here.
-$voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'sherpa-onnx-c-api.dll', 'onnxruntime.dll'
+$voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'exo_voice_ml.dll', 'onnxruntime.dll'
+if (Test-Path (Join-Path $publish.FullName 'sherpa-onnx-c-api.dll')) { throw 'sherpa-onnx-c-api.dll must not ship; exo_voice_ml.dll replaces it.' }
 $parts = $voice + 'ExoLauncher.exe', 'exo-ui.exe', 'wwwroot\index.html', 'wwwroot\mouse\index.html', 'steam-ipc\ExoLauncher.SteamIpc.exe',
     'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe'
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
