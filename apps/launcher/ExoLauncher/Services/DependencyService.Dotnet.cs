@@ -135,10 +135,16 @@ public sealed partial class DependencyService
         return releases!;
     }
 
+    private static readonly Lazy<HttpClient> DotnetHttp = new(() => ExoHttp.Create(TimeSpan.FromSeconds(15), new SocketsHttpHandler
+    {
+        AutomaticDecompression = System.Net.DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+    }));
+
     private static async Task<Dictionary<string, DotnetRelease>?> FetchDotnetReleasesAsync(CancellationToken lookup)
     {
         var releases = new Dictionary<string, DotnetRelease>(StringComparer.Ordinal);
-        using var http = ExoHttp.Create(TimeSpan.FromSeconds(15));
+        var http = DotnetHttp.Value;
         var channels = ParseDotnetIndex(await http.GetStringAsync(ReleaseIndex, lookup).ConfigureAwait(false));
         var reads = channels.Select(channel => ReadChannelAsync(http, channel, lookup)).ToArray();
         foreach (var (channel, release) in await Task.WhenAll(reads).ConfigureAwait(false))

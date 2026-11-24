@@ -84,11 +84,16 @@ public static class UserReport
     /// <summary>Posts one body; returns the status code and the answer's text. A test replaces it.</summary>
     internal static Func<string, CancellationToken, Task<(int Status, string Body)>> Poster = PostAsync;
 
+    private static readonly Lazy<HttpClient> SharedHttp = new(() => ExoHttp.Create(TimeSpan.FromSeconds(30), new SocketsHttpHandler
+    {
+        AutomaticDecompression = System.Net.DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+    }));
+
     private static async Task<(int, string)> PostAsync(string body, CancellationToken ct)
     {
         using var content = new StringContent(body, Encoding.UTF8, "application/json");
-        using var http = ExoHttp.Create(TimeSpan.FromSeconds(30));
-        using var response = await http.PostAsync(Endpoint, content, ct).ConfigureAwait(false);
+        using var response = await SharedHttp.Value.PostAsync(Endpoint, content, ct).ConfigureAwait(false);
         return ((int)response.StatusCode, await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
     }
 

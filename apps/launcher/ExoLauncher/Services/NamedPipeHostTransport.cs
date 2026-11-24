@@ -16,12 +16,14 @@ namespace ExoLauncher.Services;
 /// </summary>
 public sealed class NamedPipeHostTransport : IHostTransport
 {
-    internal const int MaxMessageBytes = 4 * 1024 * 1024;
+    internal const int MaxMessageBytes = ExoBridgeProtocol.MaxImageRequestCharacters;
     internal const int MaxVideoFrameBytes = 8 * 1024 * 1024;
     internal const int MaxVideoMetaBytes = 64 * 1024;
     private const int StreamQueueCapacity = 64;
     private const int MediaQueueCapacity = 16;
     private const int WriteBatchBytes = 64 * 1024;
+
+    private readonly int _maxMessageBytes;
 
     private readonly CancellationTokenSource _cts = new();
     private readonly Channel<byte[]> _reliable = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions
@@ -60,9 +62,12 @@ public sealed class NamedPipeHostTransport : IHostTransport
     public event Action<string>? MessageReceived;
     public event Action? SessionReset;
 
-    public NamedPipeHostTransport(string? pipeName = null)
+    public NamedPipeHostTransport(string? pipeName = null) : this(pipeName, MaxMessageBytes) { }
+
+    internal NamedPipeHostTransport(string? pipeName, int maxMessageBytes)
     {
         PipeName = string.IsNullOrWhiteSpace(pipeName) ? $"exo-launcher-rpc-{Environment.ProcessId}" : pipeName;
+        _maxMessageBytes = maxMessageBytes > 0 ? maxMessageBytes : MaxMessageBytes;
     }
 
     public void Start()
@@ -211,7 +216,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
                 if (chunk[i] != (byte)'\n') continue;
 
                 var segLen = i - start;
-                if (line.Length + segLen > MaxMessageBytes)
+                if (line.Length + segLen > _maxMessageBytes)
                     throw new InvalidDataException("Named pipe inbound message exceeded MaxMessageBytes.");
 
                 if (segLen > 0) line.Write(chunk, start, segLen);
@@ -223,7 +228,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
             var tail = read - start;
             if (tail > 0)
             {
-                if (line.Length + tail > MaxMessageBytes)
+                if (line.Length + tail > _maxMessageBytes)
                     throw new InvalidDataException("Named pipe inbound message exceeded MaxMessageBytes.");
                 line.Write(chunk, start, tail);
             }
@@ -385,16 +390,17 @@ public sealed class NamedPipeHostTransport : IHostTransport
                             if (metaLen > MaxVideoMetaBytes || frameLen == 0 || frameLen > MaxVideoFrameBytes)
                                 continue;
                             var prefixLen = 8 + metaLen;
-                            if (prefixLen > headerBuf.Length)
+                            var totalLen = prefixLen + frameLen;
+                            if (totalLen > headerBuf.Length)
                             {
                                 ArrayPool<byte>.Shared.Return(headerBuf);
-                                headerBuf = ArrayPool<byte>.Shared.Rent(prefixLen);
+                                headerBuf = ArrayPool<byte>.Shared.Rent(totalLen);
                             }
                             BinaryPrimitives.WriteUInt32LittleEndian(headerBuf.AsSpan(0, 4), (uint)metaLen);
                             BinaryPrimitives.WriteUInt32LittleEndian(headerBuf.AsSpan(4, 4), (uint)frameLen);
                             Encoding.UTF8.GetBytes(item.MetaJson, headerBuf.AsSpan(8, metaLen));
-                            await pipe.WriteAsync(headerBuf.AsMemory(0, prefixLen), _cts.Token).ConfigureAwait(false);
-                            await pipe.WriteAsync(item.Frame.AsMemory(0, frameLen), _cts.Token).ConfigureAwait(false);
+                            item.Frame.AsSpan(0, frameLen).CopyTo(headerBuf.AsSpan(prefixLen, frameLen));
+                            await pipe.WriteAsync(headerBuf.AsMemory(0, totalLen), _cts.Token).ConfigureAwait(false);
                         }
                     }
                 }

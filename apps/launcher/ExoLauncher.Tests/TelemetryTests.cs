@@ -218,6 +218,36 @@ public sealed class TelemetryTests : IDisposable
         Assert.Null(Telemetry.TakeBatch().Body);
     }
 
+    [Fact]
+    public async Task FlushDoesNotRewriteQueueFileWhenThrottledAndPerfSampleHonorsTenMinuteCadence()
+    {
+        Telemetry.Track("app.exit", ("session_s", 11L));
+        Telemetry.Poster = (_, _) => Task.FromResult(503);
+        await Telemetry.FlushAsync(CancellationToken.None);
+
+        var queueFile = Path.Combine(TelemetryDir, "queue.jsonl");
+        Assert.True(File.Exists(queueFile));
+        var sentinel = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(queueFile, sentinel);
+
+        await Telemetry.FlushAsync(CancellationToken.None);
+        Assert.Equal(sentinel, File.GetLastWriteTimeUtc(queueFile));
+
+        var start = new DateTime(2026, 11, 24, 12, 0, 0, DateTimeKind.Utc);
+        Assert.True(Telemetry.ShouldSamplePerf(start));
+        Assert.False(Telemetry.ShouldSamplePerf(start.AddMinutes(5)));
+        Assert.True(Telemetry.ShouldSamplePerf(start.AddMinutes(10)));
+    }
+
+    [Fact]
+    public void CrashReportJsonIsCompactSingleLine()
+    {
+        var payload = new CrashReport.Payload("launcher", "3.30.2", "10.0.26300.0", "NullReferenceException", "Error: boom", null);
+        var json = CrashReport.ToJson(payload);
+        Assert.DoesNotContain('\n', json);
+        Assert.DoesNotContain('\r', json);
+    }
+
     // ---- The random source: an ID is made only from it, and a failure makes no ID and sends nothing ----------------
 
     [Fact]

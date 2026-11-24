@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
 
+export const MENU_ITEM_SELECTOR = '[role^="menuitem"]:not([aria-disabled="true"])'
 const ROWS = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]'
 const KEYS = new Set(['ArrowDown', 'ArrowUp', 'Home', 'End'])
 
 /** The rows an arrow key reaches: the menu's own, in order, not a disabled one or one in a menu opened inside it. */
 function rowsOf(menu: Element) {
   return Array.from(menu.querySelectorAll<HTMLElement>(ROWS))
-    .filter(row => row.closest('[role="menu"]') === menu && !(row as HTMLButtonElement).disabled && row.getClientRects().length > 0)
+    .filter(row => row.closest('[role="menu"]') === menu && !(row as HTMLButtonElement).disabled && row.getAttribute('aria-disabled') !== 'true' && row.getClientRects().length > 0)
 }
 
 /** Where a key leads: Home and End to the ends, Up and Down one row (from outside the rows, to the first or last). */

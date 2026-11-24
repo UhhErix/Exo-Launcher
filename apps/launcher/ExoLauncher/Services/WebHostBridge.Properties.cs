@@ -301,15 +301,25 @@ public sealed partial class WebHostBridge
     /// own update data names (<c>version.json</c> › <c>game_overrides.sdl_config</c>),
     /// fetched once per run from the same API Legendary uses.
     /// </summary>
+    private static readonly Lazy<HttpClient> EpicSdlHttp = new(() =>
+    {
+        var http = ExoHttp.Create(TimeSpan.FromSeconds(6), new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        });
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("ExoLauncher/1.0");
+        return http;
+    });
+
     private static async Task<IReadOnlyList<EpicComponent>> EpicComponentsAsync(string folder, string appName, CancellationToken ct)
     {
         if (EpicSdlCache.TryGetValue(appName, out var cached)) return cached;
         if (!EpicListsSdl(SteamPlaytime.ReadSharedText(Path.Combine(folder, "version.json")), appName)) return [];
         try
         {
-            using var http = ExoHttp.Create(TimeSpan.FromSeconds(6), new HttpClientHandler { AllowAutoRedirect = false });
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("ExoLauncher/1.0");
-            var json = await http.GetStringAsync($"https://api.legendary.gl/v1/sdl/{appName}.json", ct).ConfigureAwait(false);
+            var json = await EpicSdlHttp.Value.GetStringAsync($"https://api.legendary.gl/v1/sdl/{appName}.json", ct).ConfigureAwait(false);
             var components = LegendaryProperties.ParseSdl(json);
             EpicSdlCache[appName] = components;
             return components;

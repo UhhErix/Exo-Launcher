@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { cn } from '../../lib/cn'
 import { useDismissOnAncestorScroll } from '../../lib/dismiss'
+import { MENU_ITEM_SELECTOR } from '../../lib/menuKeys'
 import { ConfirmLabel, useConfirmInPlace } from './ConfirmButton'
 
 /** section: a heading over the items that share it (macOS menus); on: this item's own check, for a menu
@@ -16,10 +17,8 @@ const FILTER_FROM = 10
 /** A menu at a point stays mounted through its fade as it closes (rooms.css › .exo-shelf-sort-menu, the quick time). */
 const LEAVE_MS = 140
 
-const rowsOf = (menu: RefObject<HTMLElement | null>) => Array.from(menu.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])
+const rowsOf = (menu: RefObject<HTMLElement | null>) => Array.from(menu.current?.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR) ?? [])
 
-/** A menu's keys: the arrows, Home and End move between its rows (from its field, to the first or the last), Escape
-    closes it and gives focus back, Tab closes it. */
 function menuKeys(menu: RefObject<HTMLElement | null>, close: (returnFocus: boolean) => void) {
   return (event: KeyboardEvent<HTMLDivElement>) => {
     const list = rowsOf(menu)
@@ -29,7 +28,7 @@ function menuKeys(menu: RefObject<HTMLElement | null>, close: (returnFocus: bool
       : { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: list.length - 1 }[event.key]
     if (to !== undefined) {
       event.preventDefault()
-      list[(to + list.length) % list.length]?.focus()
+      if (list.length > 0) list[(to + list.length) % list.length]?.focus()
     } else if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()

@@ -20,6 +20,8 @@ internal sealed class MusicAppVolume : IDisposable
     internal static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan WaitWindow = TimeSpan.FromSeconds(20);
 
+    private const int WrapperVersion = 5;
+    private const string NeedInstallSentinel = "__exo_need_install";
     private readonly Evaluate _evaluate;
     private readonly string _page;
     private readonly Func<bool> _paused;
@@ -27,6 +29,7 @@ internal sealed class MusicAppVolume : IDisposable
     private readonly CancellationTokenSource _life = new();
     private readonly SemaphoreSlim _wake = new(0, 1);
     private bool _watching;
+    private bool _installed;
 
     internal string Service { get; }
     /// The last level the app reported (0–1).
@@ -79,13 +82,34 @@ internal sealed class MusicAppVolume : IDisposable
     internal Task<double?> WriteAsync(double level, CancellationToken cancellation = default) =>
         CallAsync("write(" + Math.Clamp(level, 0, 1).ToString("0.####", CultureInfo.InvariantCulture) + ")", CallTimeout, cancellation);
 
+    internal void MarkNavigationStarting() => Volatile.Write(ref _installed, false);
+
+    internal string CallExpression(string call, bool installed) =>
+        installed
+            ? "(window.__exoVolume&&window.__exoVolume.v===" + WrapperVersion + "?window.__exoVolume." + call + ":\"" + NeedInstallSentinel + "\")"
+            : "(" + _page + ")." + call;
+
+    private static bool NeedsInstall(JsonElement? reply) =>
+        reply is { ValueKind: JsonValueKind.String } text &&
+        string.Equals(text.GetString(), NeedInstallSentinel, StringComparison.Ordinal);
+
     private async Task<double?> CallAsync(string call, TimeSpan timeout, CancellationToken cancellation)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _life.Token);
         JsonElement? value;
-        try { value = await _evaluate("(" + _page + ")." + call, timeout, linked.Token); }
-        catch { return null; } // timed out, cancelled, or the page went away
+        var fast = Volatile.Read(ref _installed);
+        try
+        {
+            value = await _evaluate(CallExpression(call, fast), timeout, linked.Token);
+            if (fast && NeedsInstall(value))
+            {
+                Volatile.Write(ref _installed, false);
+                value = await _evaluate(CallExpression(call, installed: false), timeout, linked.Token);
+            }
+        }
+        catch { return null; }
         if (value is not { ValueKind: JsonValueKind.Number } number) return null;
+        Volatile.Write(ref _installed, true);
         var level = Math.Clamp(number.GetDouble(), 0, 1);
         var changed = Last is not { } previous || Math.Abs(previous - level) > 0.004;
         Last = level;

@@ -79,6 +79,32 @@ public sealed class MusicEngineReturnTests
         Assert.EndsWith(".write(0.25)", sent);
     }
 
+    [Fact]
+    public async Task VolumeReusesWindowSentinelAndReinstallsAfterNavigation()
+    {
+        var expressions = new List<string>();
+        var call = 0;
+        using var volume = MusicAppVolume.ForWebPage("spotify", (expression, _, _) =>
+        {
+            expressions.Add(expression);
+            call++;
+            var json = call == 3 ? "\"__exo_need_install\"" : "0.5";
+            using var answer = JsonDocument.Parse(json);
+            return Task.FromResult<JsonElement?>(answer.RootElement.Clone());
+        }, () => true);
+
+        Assert.Equal(0.5, await volume.ReadAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(0.5, await volume.ReadAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(0.5, await volume.ReadAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(4, expressions.Count);
+        Assert.True(expressions[0].Length > 500);
+        Assert.True(expressions[1].Length < 150);
+        Assert.Contains("window.__exoVolume", expressions[1]);
+        Assert.True(expressions[2].Length < 150);
+        Assert.True(expressions[3].Length > 500);
+    }
+
     /// The script runs in the page, so no test here can run it: what it must not wait on is pinned instead.
     [Fact]
     public void TheWriteDoesNotWaitOnTheApp()

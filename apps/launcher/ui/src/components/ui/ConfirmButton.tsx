@@ -30,11 +30,16 @@ function announce(text: string) {
 /** The control settles into its new size with a compositor-only scale spring, on the base time (DESIGN.md › Feel). */
 export function morph(element: HTMLElement, from: number) {
   const to = element.getBoundingClientRect().width
-  if (shouldReduceMotion() || Math.abs(to - from) < 1) return
+  if (shouldReduceMotion() || to <= 0 || from <= 0 || Math.abs(to - from) < 1) return
   const root = getComputedStyle(document.documentElement)
   const easing = root.getPropertyValue('--ease-spring').trim() || 'ease-out'
   const duration = parseFloat(root.getPropertyValue('--dur-base')) || 160
-  element.animate([{ transform: 'scale(0.96)' }, { transform: 'scale(1)' }], { duration, easing })
+  const ratio = Math.max(0.5, Math.min(2, from / to))
+  element.animate([{ transform: `scaleX(${ratio})` }, { transform: 'scaleX(1)' }], { duration, easing })
+  const label = element.querySelector<HTMLElement>('.exo-confirm-label')
+  if (label && typeof label.animate === 'function') {
+    label.animate([{ transform: `scaleX(${1 / ratio})` }, { transform: 'scaleX(1)' }], { duration, easing })
+  }
 }
 
 /**

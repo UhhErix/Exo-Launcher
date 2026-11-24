@@ -2146,7 +2146,12 @@ public static partial class CoverArtService
 
     private static HttpClient CreateCoverHttpClient()
     {
-        var http = ExoHttp.Create(TimeSpan.FromSeconds(12), new CoverNetworkWatch(new HttpClientHandler { AllowAutoRedirect = false }));
+        var http = ExoHttp.Create(TimeSpan.FromSeconds(12), new CoverNetworkWatch(new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        }));
         http.DefaultRequestHeaders.TryAddWithoutValidation(
             "User-Agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ExoLauncher/1.0");

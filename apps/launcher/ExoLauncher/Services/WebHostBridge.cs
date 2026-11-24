@@ -600,7 +600,7 @@ public sealed partial class WebHostBridge
             if (_detached) return;
             if (method == "rpc.cancel")
             {
-                var target = ReadString(paramsEl, hasParams, "requestId");
+                var target = ReadString(paramsEl, hasParams, "requestId") ?? ReadString(paramsEl, hasParams, "id");
                 if (target is { Length: > 0 and <= 128 })
                 {
                     _earlyCancels.Record(target);
