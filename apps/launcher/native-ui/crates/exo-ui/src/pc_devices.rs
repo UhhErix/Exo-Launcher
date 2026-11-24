@@ -140,7 +140,7 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
         .motion(SPRING_MOVE)
         .on_press(move |s: &mut AppState| {
             if is_mouse {
-                s.open_mouse_panel(dev_id.clone());
+                s.open_mouse_page(dev_id.clone());
             } else if is_controller {
                 s.pc.selected_device_id = Some(dev_id.clone());
                 s.open_controller_page(dev_id.clone());
@@ -1228,6 +1228,10 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
             ),
             None => connection_label(dev.connection.as_deref()).to_string(),
         };
+
+        if dev.kind == "mouse" {
+            return crate::devices_mouse::mouse_page(s, dev, display_name, status_line, scale);
+        }
 
         if dev.kind == "audio" {
             let output = devices

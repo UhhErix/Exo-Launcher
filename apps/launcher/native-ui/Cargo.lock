@@ -884,6 +884,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-hid-devices"
+version = "0.1.0"
+dependencies = [
+ "exo-rpc",
+ "serde",
+ "windows",
+]
+
+[[package]]
 name = "exo-kit"
 version = "0.1.0"
 dependencies = [
@@ -995,6 +1004,7 @@ dependencies = [
  "exo-autopilot",
  "exo-controller",
  "exo-gpu",
+ "exo-hid-devices",
  "exo-kit",
  "exo-macros",
  "exo-power-guard",
