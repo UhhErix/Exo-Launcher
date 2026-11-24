@@ -25,18 +25,21 @@ __declspec(dllexport) void* exo_aec_create() {
 
 // What Exo plays, 480 samples; returns 0 or an APM error.
 __declspec(dllexport) int exo_aec_render(void* handle, const float* samples) {
+  if (!handle || !samples) return -1;
   const float* in[1] = {samples};
   return static_cast<webrtc::AudioProcessing*>(handle)->AnalyzeReverseStream(in, kMono);
 }
 
 // The microphone, 480 samples, cleaned in place; returns 0 or an APM error.
 __declspec(dllexport) int exo_aec_capture(void* handle, float* samples) {
+  if (!handle || !samples) return -1;
   const float* in[1] = {samples};
   float* out[1] = {samples};
   return static_cast<webrtc::AudioProcessing*>(handle)->ProcessStream(in, kMono, kMono, out);
 }
 
 __declspec(dllexport) void exo_aec_destroy(void* handle) {
+  if (!handle) return;
   static_cast<webrtc::AudioProcessing*>(handle)->Release();
 }
 
@@ -54,12 +57,14 @@ __declspec(dllexport) void* exo_ns_create(int level) {
 
 // 480 samples cleaned in place; returns 0 or an APM error.
 __declspec(dllexport) int exo_ns_process(void* handle, float* samples) {
+  if (!handle || !samples) return -1;
   const float* in[1] = {samples};
   float* out[1] = {samples};
   return static_cast<webrtc::AudioProcessing*>(handle)->ProcessStream(in, kMono, kMono, out);
 }
 
 __declspec(dllexport) void exo_ns_destroy(void* handle) {
+  if (!handle) return;
   static_cast<webrtc::AudioProcessing*>(handle)->Release();
 }
 }
