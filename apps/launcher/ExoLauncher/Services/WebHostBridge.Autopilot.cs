@@ -18,6 +18,22 @@ public sealed partial class WebHostBridge
         catch (Exception ex) when (ex is not OutOfMemoryException) { return "The processor's layout couldn't be read"; }
     });
 
+    private static readonly Lazy<string?> CpuSetsText = new(() =>
+    {
+        try { return AutopilotCpuSets.DescribePlan(AutopilotCpuSets.ReadSystemCpuSets(), Autopilot.CpuClass, Autopilot.Layout); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+    });
+
+    private static bool GlobalTimerEnabled()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(SystemTuning.KernelSessionKey);
+            return key?.GetValue(SystemTuning.GlobalTimerValue) is int v && v == 1;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return false; }
+    }
+
     private static object AutopilotState()
     {
         var settings = Autopilot.Settings;
@@ -26,6 +42,8 @@ public sealed partial class WebHostBridge
         var integrityItem = SystemTuning.Shared.ReadMemoryIntegrityOnly();
         var integrityBlocked = integrityItem is { On: true, Restart: false } ? SystemTuning.Shared.IntegrityBlocked() : null;
         var standbyPurge = StandbyPurger.Status();
+        var win11_24H2 = Environment.OSVersion.Version.Build >= SystemTuning.Win11_24H2Build;
+        var dlPause = GameSessionDownloadPause.Shared.Current();
         return new
         {
             on = settings.On,
@@ -39,6 +57,9 @@ public sealed partial class WebHostBridge
             memoryIntegrity = DescribeMemoryIntegrity(integrityItem, integrityBlocked),
             standbyPurge = new { available = standbyPurge.Available, reason = standbyPurge.Reason },
             cpu = CcdText.Value,
+            cpuSets = CpuSetsText.Value,
+            timerGlobal = new { enabled = GlobalTimerEnabled(), neededForWin11 = win11_24H2 },
+            downloadsPaused = new { active = dlPause.Active, jobs = dlPause.PausedBitsJobs, services = dlPause.PausedServices },
             now = game is null ? null : new { game, did = Autopilot.Engine.Did(game) },
             live = AutopilotLive(),
             reports = AutopilotReports.Load(AutopilotReports.DefaultPath).Take(10).Select(AutopilotReportDto).ToList(),

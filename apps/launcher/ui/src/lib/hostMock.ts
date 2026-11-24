@@ -2188,6 +2188,25 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'system.tuning': (p) => mockTuning(p),
+  'system.qos': (p) => {
+    const games = [
+      { gameId: 'steam:730', title: 'Counter-Strike 2', exeName: 'cs2.exe', enabled: p?.action === 'on' && p?.gameId === 'steam:730' },
+    ]
+    return {
+      ok: true,
+      message: null,
+      nlaBypassed: games.some(g => g.enabled),
+      note: 'Tags outgoing game traffic with DSCP 46 (EF). Only routers with SQM/DSCP QoS (OpenWrt CAKE, ASUS/Ubiquiti) or Wi-Fi WMM honor it; ISPs strip DSCP on the internet.',
+      games,
+    }
+  },
+  'system.overlays': () => ({
+    ok: true,
+    message: null,
+    items: [
+      { id: 'gamebar', name: 'Xbox Game Bar & Game DVR', status: 'off', enabled: false, cost: '2-5% GPU and encoder overhead when background recording is on', detail: 'Xbox Game Bar background recording (Game DVR) is off.', canToggle: true, canUndo: false, manualSteps: null },
+    ],
+  }),
   'system.interrupts': (p) => {
     const applied = p?.action === 'apply'
     return {

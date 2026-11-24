@@ -70,12 +70,20 @@ function activeSummary(state: AutopilotState): string {
     : state.gamePriority === 'high'
       ? 'Gives your game high priority while it runs'
       : 'Gives your game priority while it runs'
-  const corePart = state.coreParking ? ', throttles background hogs, and keeps cores awake.' : ' and throttles background hogs.'
+  const corePart = state.coreParking
+    ? ', throttles background hogs, pauses background downloads, and keeps cores awake.'
+    : ', throttles background hogs, and pauses background downloads.'
   const parts = [
     priorityPart + corePart,
     state.gameMode.off ? 'Windows Game Mode off.' : state.gameMode.keptOn ? `Windows Game Mode stays on (${state.gameMode.keptOn}).` : null,
     state.mouseAccel?.off ? 'Mouse acceleration off (1:1).' : null,
     state.cpu || null,
+    state.cpuSets || null,
+    state.timerGlobal?.neededForWin11
+      ? (state.timerGlobal.enabled
+        ? 'GlobalTimerResolutionRequests is on for Windows 11 24H2+.'
+        : 'Enable Global timer resolution in System settings so 0.507 ms game timers apply on Windows 11 24H2+.')
+      : null,
   ]
   return parts.filter(Boolean).join(' ')
 }
