@@ -34,6 +34,8 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
     /// <summary>A report was kept; the bridge tells the page.</summary>
     internal static event Action<AutopilotReport>? Reported;
 
+    internal event Action? LiveChanged;
+
     /// <summary>What Autopilot did for the game this session (set by <see cref="Autopilot"/>); nothing when it is off.</summary>
     internal Func<string, IReadOnlyList<string>> Did { get; set; } = _ => [];
 
@@ -57,44 +59,74 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
     /// <summary>One look of the recorder: the game (null with none), whether it is in front, its frame times since the last look, its processes.</summary>
     internal void Second(string? game, string? title, bool inFront, IReadOnlyList<double> framesMs, IReadOnlyCollection<int> tree)
     {
+        var notify = false;
         lock (_gate)
         {
-            if (game != _game) EndLocked();
-            if (game is null) return;
-            if (_analyzer is null)
+            var hadLive = _analyzer is not null && _game is not null;
+            var switched = game != _game;
+            if (switched) EndLocked();
+            if (game is null)
             {
-                _analyzer = new StutterAnalyzer();
-                (_game, _title, _started) = (game, title, now());
+                notify = hadLive;
             }
-            if (!inFront)
+            else
             {
-                // Behind: nothing is read, and the sampler goes so it holds nothing while the player is elsewhere.
-                _sampler?.Dispose();
-                _sampler = null;
-                return;
-            }
-            SystemSecond? system = null;
-            try { system = (_sampler ??= open())?.Read(tree); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("Autopilot: a read failed: " + ex.GetType().Name); }
-            _analyzer.Add(framesMs, system);
-            if (purgeStandby is not null && system is { Free: { } free, Standby: { } standby }
-                && free < StutterAnalyzer.IslcBytes && standby >= StutterAnalyzer.IslcBytes)
-            {
-                var utc = now();
-                if (_lastStandbyPurge is not { } prev || utc - prev >= StandbyPurgeCooldown)
+                if (_analyzer is null)
                 {
-                    _lastStandbyPurge = utc;
-                    if (purgeStandby())
-                        AppLog.Info("Autopilot: purged standby memory list (free < 1 GB, standby >= 1 GB).");
+                    _analyzer = new StutterAnalyzer();
+                    (_game, _title, _started) = (game, title, now());
+                }
+                if (!inFront)
+                {
+                    // Behind: nothing is read, and the sampler goes so it holds nothing while the player is elsewhere.
+                    _sampler?.Dispose();
+                    _sampler = null;
+                    notify = switched;
+                }
+                else
+                {
+                    SystemSecond? system = null;
+                    try { system = (_sampler ??= open())?.Read(tree); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("Autopilot: a read failed: " + ex.GetType().Name); }
+                    _analyzer.Add(framesMs, system);
+                    notify = true;
+                    if (purgeStandby is not null && system is { Free: { } free, Standby: { } standby }
+                        && free < StutterAnalyzer.IslcBytes && standby >= StutterAnalyzer.IslcBytes)
+                    {
+                        var utc = now();
+                        if (_lastStandbyPurge is not { } prev || utc - prev >= StandbyPurgeCooldown)
+                        {
+                            _lastStandbyPurge = utc;
+                            if (purgeStandby())
+                                AppLog.Info("Autopilot: purged standby memory list (free < 1 GB, standby >= 1 GB).");
+                        }
+                    }
                 }
             }
         }
+        if (notify) NotifyLiveChanged();
     }
 
     /// <summary>The game closed, another took over, or Exo is closing: the session's report is kept.</summary>
     internal void End()
     {
-        lock (_gate) EndLocked();
+        bool hadLive;
+        lock (_gate)
+        {
+            hadLive = _analyzer is not null && _game is not null;
+            EndLocked();
+        }
+        if (hadLive) NotifyLiveChanged();
+    }
+
+    private void NotifyLiveChanged()
+    {
+        if (LiveChanged is not { } handlers) return;
+        foreach (var handler in handlers.GetInvocationList())
+        {
+            try { ((Action)handler)(); }
+            catch (Exception ex) { AppLog.Warn("Autopilot: a live listener failed: " + ex.GetType().Name); }
+        }
     }
 
     private void EndLocked()
@@ -257,10 +289,22 @@ internal static class AutopilotReports
     internal const string FileName = "autopilot-reports.json";
     internal const int MaxReports = 50, MaxDays = 90;
 
+    private sealed record CachedReports(DateTime LastWriteUtc, long Length, List<AutopilotReport> Reports);
+
     private static readonly Lock Gate = new();
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly Dictionary<string, CachedReports> Cache = new(StringComparer.OrdinalIgnoreCase);
 
     internal static string DefaultPath => Path.Combine(PathHelper.AppDataDir, FileName);
+
+    internal static void InvalidateCache(string? path = null)
+    {
+        lock (Gate)
+        {
+            if (path is null) Cache.Clear();
+            else Cache.Remove(Path.GetFullPath(path));
+        }
+    }
 
     private sealed class Doc
     {
@@ -271,7 +315,25 @@ internal static class AutopilotReports
     /// <summary>Newest first.</summary>
     internal static List<AutopilotReport> Load(string path)
     {
-        lock (Gate) return Read(path) ?? [];
+        lock (Gate)
+        {
+            var key = Path.GetFullPath(path);
+            var info = new FileInfo(key);
+            if (!info.Exists)
+            {
+                Cache.Remove(key);
+                return [];
+            }
+            if (Cache.TryGetValue(key, out var cached)
+                && cached.LastWriteUtc == info.LastWriteTimeUtc
+                && cached.Length == info.Length)
+                return [.. cached.Reports];
+            var reports = Read(key);
+            if (reports is null) return [];
+            var fresh = new FileInfo(key);
+            if (fresh.Exists) Cache[key] = new CachedReports(fresh.LastWriteTimeUtc, fresh.Length, reports);
+            return [.. reports];
+        }
     }
 
     /// <summary>The apps the game's last five reports learned to hold back, most recent first, each once.</summary>
@@ -294,16 +356,20 @@ internal static class AutopilotReports
     {
         lock (Gate)
         {
-            if (Read(path) is not { } reports) return false;
+            var key = Path.GetFullPath(path);
+            if (Read(key) is not { } reports) return false;
             var oldest = nowUtc.AddDays(-MaxDays);
             var kept = reports.Prepend(report).Where(r => r.EndedUtc >= oldest).OrderByDescending(r => r.EndedUtc).Take(MaxReports).ToList();
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                var temp = path + ".tmp";
+                Directory.CreateDirectory(Path.GetDirectoryName(key)!);
+                var temp = key + ".tmp";
                 File.WriteAllText(temp, JsonSerializer.Serialize(new Doc { Reports = kept }, Json));
-                if (File.Exists(path)) File.Replace(temp, path, null);
-                else File.Move(temp, path);
+                if (File.Exists(key)) File.Replace(temp, key, null);
+                else File.Move(temp, key);
+                var fresh = new FileInfo(key);
+                if (fresh.Exists) Cache[key] = new CachedReports(fresh.LastWriteTimeUtc, fresh.Length, kept);
+                else Cache.Remove(key);
                 return true;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

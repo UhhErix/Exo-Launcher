@@ -122,6 +122,58 @@ internal static class WebClientPreferences
         Commit(patch.RootElement);
     }
 
+    internal const string UiPrefMusicServiceKey = "exo.musicWebService";
+
+    internal static string? TryNormalizeMusicService(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "spotify" => "spotify",
+            "apple" or "cider" => "apple",
+            "youtube" or "ytmusic" => "youtube",
+            _ => null,
+        };
+    }
+
+    internal static string EffectiveMusicService(string? configured) =>
+        TryNormalizeMusicService(configured) ?? "spotify";
+
+    internal static Dictionary<string, JsonElement> BuildSettingsUiPrefs(
+        IReadOnlyDictionary<string, JsonElement> uiPrefs,
+        string? musicService)
+    {
+        var merged = new Dictionary<string, JsonElement>(uiPrefs, StringComparer.Ordinal)
+        {
+            [UiPrefMusicServiceKey] = JsonSerializer.SerializeToElement(EffectiveMusicService(musicService)),
+        };
+        return merged;
+    }
+
+    internal static (string? MusicService, Dictionary<string, JsonElement> Remaining) ExtractMusicServiceFromUiPrefs(JsonElement uiPrefs)
+    {
+        string? extracted = null;
+        var remaining = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var pref in uiPrefs.EnumerateObject())
+        {
+            if (pref.Name is UiPrefMusicServiceKey or "musicService")
+            {
+                if (pref.Value.ValueKind == JsonValueKind.String)
+                    extracted = pref.Value.GetString();
+                continue;
+            }
+            remaining[pref.Name] = pref.Value;
+        }
+        return (extracted, remaining);
+    }
+
+    internal static WebClientOptions SaveMusicService(string service)
+    {
+        var normalized = TryNormalizeMusicService(service) ?? throw new ArgumentException("Choose a music service.");
+        using var patch = JsonDocument.Parse(JsonSerializer.Serialize(new { musicService = normalized }));
+        return Save(patch.RootElement);
+    }
+
     private static void PublishChanged()
     {
         foreach (var handler in Changed?.GetInvocationList() ?? [])

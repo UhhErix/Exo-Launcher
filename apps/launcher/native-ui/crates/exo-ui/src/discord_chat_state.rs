@@ -214,7 +214,8 @@ impl DiscordChatState {
                     id: "1309000000000001002".into(),
                     channel_id: "dm-ada".into(),
                     author: erix.clone(),
-                    content: "Joining `Main Lounge` right after this **DX12** test finishes!".into(),
+                    content: "Joining `Main Lounge` right after this **DX12** test finishes!"
+                        .into(),
                     timestamp: "2026-11-22T18:03:15.000Z".into(),
                     reactions: vec![DiscordReaction {
                         count: 1,
@@ -259,7 +260,19 @@ impl AppState {
         if self.discord.chat.loading_channels.contains(channel_id) {
             return;
         }
-        self.discord.chat.loading_channels.insert(channel_id.to_string());
+        #[cfg(windows)]
+        if before.is_none()
+            && let Some(prev_cid) = self
+                .inflight_discord_channel
+                .replace(channel_id.to_string())
+            && prev_cid != channel_id
+        {
+            self.discord.chat.loading_channels.remove(&prev_cid);
+        }
+        self.discord
+            .chat
+            .loading_channels
+            .insert(channel_id.to_string());
         #[cfg(windows)]
         {
             let cid = channel_id.to_string();
@@ -268,43 +281,55 @@ impl AppState {
             if let Some(b) = before {
                 params["before"] = json!(b);
             }
-            self.call_host_async(
-                METHOD_DISCORD_MESSAGES,
-                params,
-                move |s, res: Result<DiscordMessagesReply, String>| {
-                    s.discord.chat.loading_channels.remove(&cid);
-                    if let Ok(rep) = res
-                        && rep.ok
-                        && let Some(mut page) = rep.messages
-                    {
-                        let page_len = page.len();
-                        page.reverse();
-                        s.discord.chat.has_more_before.insert(cid.clone(), page_len >= 50);
-                        let newest_id = page.last().map(|m| m.id.clone());
-                        let entry = s
-                            .discord
-                            .chat
-                            .messages_by_channel
-                            .entry(cid.clone())
-                            .or_default();
-                        if is_older {
-                            let existing_ids: HashSet<String> =
-                                entry.iter().map(|m| m.id.clone()).collect();
-                            let mut merged: Vec<DiscordMessage> = page
-                                .into_iter()
-                                .filter(|m| !existing_ids.contains(&m.id))
-                                .collect();
-                            merged.append(entry);
-                            *entry = merged;
-                        } else {
-                            *entry = page;
-                        }
-                        if !is_older && let Some(mid) = newest_id {
-                            s.ack_discord_channel(&cid, &mid);
-                        }
+            let on_done = move |s: &mut AppState, res: Result<DiscordMessagesReply, String>| {
+                s.discord.chat.loading_channels.remove(&cid);
+                if s.inflight_discord_channel.as_deref() == Some(cid.as_str()) {
+                    s.inflight_discord_channel = None;
+                }
+                if let Ok(rep) = res
+                    && rep.ok
+                    && let Some(mut page) = rep.messages
+                {
+                    let page_len = page.len();
+                    page.reverse();
+                    s.discord
+                        .chat
+                        .has_more_before
+                        .insert(cid.clone(), page_len >= 50);
+                    let newest_id = page.last().map(|m| m.id.clone());
+                    let entry = s
+                        .discord
+                        .chat
+                        .messages_by_channel
+                        .entry(cid.clone())
+                        .or_default();
+                    if is_older {
+                        let existing_ids: HashSet<String> =
+                            entry.iter().map(|m| m.id.clone()).collect();
+                        let mut merged: Vec<DiscordMessage> = page
+                            .into_iter()
+                            .filter(|m| !existing_ids.contains(&m.id))
+                            .collect();
+                        merged.append(entry);
+                        *entry = merged;
+                    } else {
+                        *entry = page;
                     }
-                },
-            );
+                    if !is_older && let Some(mid) = newest_id {
+                        s.ack_discord_channel(&cid, &mid);
+                    }
+                }
+            };
+            if is_older {
+                self.call_host_async(METHOD_DISCORD_MESSAGES, params, on_done);
+            } else {
+                self.call_host_replaceable(
+                    "discord.messages",
+                    METHOD_DISCORD_MESSAGES,
+                    params,
+                    on_done,
+                );
+            }
         }
     }
 
@@ -357,10 +382,8 @@ impl AppState {
         );
     }
 
-    pub fn send_discord_message(&mut self) {
-        let Some(cid) = self.active_chat_channel_id() else {
-            return;
-        };
+    pub fn send_discord_message(&mut self) -> Option<String> {
+        let cid = self.active_chat_channel_id()?;
         let content = self.discord.chat.composer.text.trim().to_string();
         let upload_ids: Vec<String> = self
             .discord
@@ -370,24 +393,42 @@ impl AppState {
             .filter_map(|u| u.upload_id.clone())
             .collect();
         if content.is_empty() && upload_ids.is_empty() {
-            return;
+            return None;
         }
-        if self.discord.chat.pending_uploads.iter().any(|u| u.uploading) {
+        if self
+            .discord
+            .chat
+            .pending_uploads
+            .iter()
+            .any(|u| u.uploading)
+        {
             self.notice = Some("Wait for attachments to finish uploading".into());
-            return;
+            return None;
         }
 
-        let reply_id = self.discord.chat.reply_to.as_ref().map(|(id, _)| id.clone());
+        let reply_id = self
+            .discord
+            .chat
+            .reply_to
+            .as_ref()
+            .map(|(id, _)| id.clone());
         let seq = self.discord.chat.next_local_seq;
         self.discord.chat.next_local_seq += 1;
         let local_id = format!("local-{seq}");
+        let launch_id = (!content.is_empty()).then(|| local_id.clone());
         let me = self.discord.home.me.clone();
         let optimistic = DiscordMessage {
             id: local_id.clone(),
             channel_id: cid.clone(),
             author: DiscordUser {
-                id: me.as_ref().map(|m| m.id.clone()).unwrap_or_else(|| "me".into()),
-                username: me.as_ref().map(|m| m.name.clone()).unwrap_or_else(|| "You".into()),
+                id: me
+                    .as_ref()
+                    .map(|m| m.id.clone())
+                    .unwrap_or_else(|| "me".into()),
+                username: me
+                    .as_ref()
+                    .map(|m| m.name.clone())
+                    .unwrap_or_else(|| "You".into()),
                 global_name: me.as_ref().map(|m| m.name.clone()),
                 avatar: me.and_then(|m| m.avatar),
                 bot: false,
@@ -410,7 +451,7 @@ impl AppState {
         self.discord.chat.composer_emoji_open = false;
 
         if self.status != HostStatus::Connected {
-            return;
+            return launch_id;
         }
         #[cfg(windows)]
         {
@@ -461,6 +502,7 @@ impl AppState {
                 },
             );
         }
+        launch_id
     }
 
     pub fn begin_edit_discord_message(&mut self, message_id: &str, content: &str) {
@@ -582,7 +624,12 @@ impl AppState {
         );
     }
 
-    pub fn toggle_discord_pin(&mut self, channel_id: &str, message_id: &str, currently_pinned: bool) {
+    pub fn toggle_discord_pin(
+        &mut self,
+        channel_id: &str,
+        message_id: &str,
+        currently_pinned: bool,
+    ) {
         let pin = !currently_pinned;
         if let Some(list) = self.discord.chat.messages_by_channel.get_mut(channel_id)
             && let Some(m) = list.iter_mut().find(|m| m.id == message_id)
@@ -840,10 +887,9 @@ impl AppState {
                 if let Some(pos) = list.iter().position(|m| m.id == msg.id) {
                     list[pos] = msg;
                 } else {
-                    if let Some(ppos) = list
-                        .iter()
-                        .position(|m| m.pending && m.author.id == msg.author.id && m.content == msg.content)
-                    {
+                    if let Some(ppos) = list.iter().position(|m| {
+                        m.pending && m.author.id == msg.author.id && m.content == msg.content
+                    }) {
                         list[ppos] = msg;
                     } else {
                         list.push(msg);
@@ -870,7 +916,12 @@ impl AppState {
     }
 
     pub fn handle_discord_reaction(&mut self, ev: DiscordReactionEvent) {
-        let Some(list) = self.discord.chat.messages_by_channel.get_mut(&ev.channel_id) else {
+        let Some(list) = self
+            .discord
+            .chat
+            .messages_by_channel
+            .get_mut(&ev.channel_id)
+        else {
             return;
         };
         let Some(msg) = list.iter_mut().find(|m| m.id == ev.message_id) else {

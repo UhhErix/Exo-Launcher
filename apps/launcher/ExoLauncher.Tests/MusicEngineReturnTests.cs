@@ -86,4 +86,143 @@ public sealed class MusicEngineReturnTests
         Assert.DoesNotContain("await adapter.write", MusicAppVolume.Wrapper);
         Assert.Contains("Promise.resolve(adapter.write(h, c)).catch", MusicAppVolume.Wrapper);
     }
+
+    [Fact]
+    public void AppleMusicControlDoesNotAwaitMusicKitPromises()
+    {
+        var script = MusicNowPlaying.AppleMusicAdapterScript;
+        Assert.DoesNotContain("return Promise.resolve(m.", script);
+        Assert.Contains("Promise.resolve(m.play()).catch", script);
+        Assert.Contains("Promise.resolve(m.pause()).catch", script);
+        Assert.Contains("Promise.resolve(m.skipToNextItem()).catch", script);
+        Assert.Contains("Promise.resolve(m.skipToPreviousItem()).catch", script);
+        Assert.Contains("Promise.resolve(m.seekToTime(ms / 1000)).catch", script);
+    }
+
+    [Fact]
+    public void AppleMusicNativeCachedExpressionsStaySmall()
+    {
+        var fullView = AppleMusicNative.View("player", null, null, 0, installed: false);
+        var fastView = AppleMusicNative.View("player", null, null, 0, installed: true);
+        var fullAct = AppleMusicNative.Act("shuffle", null, null, null, true, null, null, null, installed: false);
+        var fastAct = AppleMusicNative.Act("shuffle", null, null, null, true, null, null, null, installed: true);
+
+        Assert.True(fullView.Length > 50_000);
+        Assert.True(fastView.Length < 200);
+        Assert.Contains("window.__exoAppleMusic", fastView);
+        Assert.Contains(AppleMusicNative.NeedInstallProperty, fastView);
+        Assert.True(fullAct.Length > 50_000);
+        Assert.True(fastAct.Length < 250);
+        Assert.Contains("window.__exoAppleMusic", fastAct);
+    }
+
+    [Fact]
+    public async Task AppleMusicNativeInvokeCachedUsesFastPathAndFallsBackOnMiss()
+    {
+        var calls = new List<string>();
+        var installed = true;
+
+        var okReply = await AppleMusicNative.InvokeCachedAsync(
+            cached => AppleMusicNative.View("status", null, null, 0, cached),
+            expr =>
+            {
+                calls.Add(expr);
+                using var doc = JsonDocument.Parse("{\"ready\":true}");
+                return Task.FromResult<JsonElement?>(doc.RootElement.Clone());
+            },
+            () => installed,
+            v => installed = v);
+
+        Assert.NotNull(okReply);
+        Assert.Single(calls);
+        Assert.True(calls[0].Length < 200);
+        Assert.True(installed);
+
+        calls.Clear();
+        var fallbackReply = await AppleMusicNative.InvokeCachedAsync(
+            cached => AppleMusicNative.View("player", null, null, 0, cached),
+            expr =>
+            {
+                calls.Add(expr);
+                var json = calls.Count == 1 ? "{\"" + AppleMusicNative.NeedInstallProperty + "\":true}" : "{\"shuffle\":false}";
+                using var doc = JsonDocument.Parse(json);
+                return Task.FromResult<JsonElement?>(doc.RootElement.Clone());
+            },
+            () => installed,
+            v => installed = v);
+
+        Assert.NotNull(fallbackReply);
+        Assert.Equal(2, calls.Count);
+        Assert.True(calls[0].Length < 200);
+        Assert.True(calls[1].Length > 50_000);
+        Assert.True(installed);
+
+        calls.Clear();
+        installed = false;
+        var nullReply = await AppleMusicNative.InvokeCachedAsync(
+            cached => AppleMusicNative.View("queue", null, null, 0, cached),
+            expr =>
+            {
+                calls.Add(expr);
+                return Task.FromResult<JsonElement?>(null);
+            },
+            () => installed,
+            v => installed = v);
+
+        Assert.Null(nullReply);
+        Assert.Single(calls);
+        Assert.True(calls[0].Length > 50_000);
+        Assert.False(installed);
+    }
+
+    [Fact]
+    public async Task MusicNowPlayingControlCachesPerNavigationAndFallsBackImmediately()
+    {
+        var sent = new List<string>();
+        using var now = MusicNowPlaying.ForWebPage(
+            "apple",
+            (_, _, _) => Task.FromResult<JsonElement?>(null),
+            () => true,
+            control: (expr, _, _) =>
+            {
+                sent.Add(expr);
+                using var doc = JsonDocument.Parse("true");
+                return Task.FromResult<JsonElement?>(doc.RootElement.Clone());
+            },
+            preinstalled: false);
+
+        Assert.True(await now.ControlAsync("pause", null));
+        Assert.True(await now.ControlAsync("play", null));
+        now.MarkNavigationStarting();
+        Assert.True(await now.ControlAsync("next", null));
+        Assert.True(await now.ControlAsync("seek", 12345));
+
+        Assert.Equal(4, sent.Count);
+        Assert.True(sent[0].Length > 5000);
+        Assert.True(sent[1].Length < 200);
+        Assert.True(sent[2].Length > 5000);
+        Assert.True(sent[3].Length < 200);
+
+        var fallbackSent = new List<string>();
+        using var pre = MusicNowPlaying.ForWebPage(
+            "apple",
+            (_, _, _) => Task.FromResult<JsonElement?>(null),
+            () => true,
+            control: (expr, _, _) =>
+            {
+                fallbackSent.Add(expr);
+                var json = fallbackSent.Count == 1 ? "\"" + MusicNowPlaying.NeedInstallSentinel + "\"" : "true";
+                using var doc = JsonDocument.Parse(json);
+                return Task.FromResult<JsonElement?>(doc.RootElement.Clone());
+            },
+            preinstalled: true);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Assert.True(await pre.ControlAsync("toggle", null));
+        sw.Stop();
+        Assert.Equal(2, fallbackSent.Count);
+        Assert.True(fallbackSent[0].Length < 200);
+        Assert.True(fallbackSent[1].Length > 5000);
+        Assert.True(sw.ElapsedMilliseconds < 400);
+    }
 }

@@ -1,35 +1,135 @@
 use crate::tokens::{
     BG, FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
-    RADIUS_PANEL, RADIUS_PILL, SPRING_QUICK, TRANSPARENT, bad, fg_muted, glass_control_fill,
-    glass_panel_fill, glass_rim, good, hairline, hover_fill, pressed_fill, subtle_fill,
-    type_control, type_section, type_small, warn,
+    RADIUS_PANEL, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_muted,
+    glass_control_fill, glass_outer_edge, glass_panel_fill, glass_rim, glass_rim_bottom,
+    glass_rim_top, glass_specular_sheen, glass_still_control_fill, glass_still_panel_fill, good,
+    hairline, hover_fill, pressed_fill, subtle_fill, track_fill, type_control, type_section,
+    type_small, warn,
 };
-use rune::{Color, El, col, el, row, text};
+use rune::{Color, El, SpringPair, Transition, Vec2, col, el, row, text};
+
+pub fn popover_transition() -> Transition {
+    let enter = Transition::scale_anchor(0.96, Vec2::new(1.0, 0.0)).combined(Transition::opacity());
+    Transition::asymmetric(enter, Transition::opacity())
+        .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
+}
+
+pub fn modal_scrim_transition() -> Transition {
+    Transition::asymmetric(Transition::opacity(), Transition::opacity())
+        .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
+}
+
+pub fn modal_card_transition() -> Transition {
+    let enter = Transition::scale(0.98).combined(Transition::opacity());
+    Transition::asymmetric(enter, Transition::opacity())
+        .springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
+}
 
 pub fn glass_capsule(key: &'static str) -> El {
-    row()
+    glass_capsule_opt(key, true)
+}
+
+pub fn glass_capsule_opt(key: &'static str, blur: bool) -> El {
+    let mut capsule = row()
         .key(key)
-        .h(40.0)
-        .px(4.0)
+        .h(36.0)
+        .px(3.0)
         .gap(2.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .fill(glass_control_fill())
-        .border(1.0, glass_rim())
+        .fill(if blur {
+            glass_control_fill()
+        } else {
+            glass_still_control_fill()
+        })
+        .linear_gradient(std::f32::consts::PI, glass_specular_sheen())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .shadow(1.0, 3.0, glass_outer_edge())
+        .shadow(6.0, 18.0, BG.alpha(0.45));
+    if blur {
+        capsule = capsule.backdrop_blur(GLASS_CONTROL_SIGMA);
+    }
+    capsule
 }
 
-pub fn glass_panel(key: &'static str, width: f32) -> El {
-    rune::col()
+pub fn glass_panel(key: impl Into<String>, width: f32) -> El {
+    glass_panel_opt(key, width, true).transition(popover_transition())
+}
+
+pub fn glass_panel_opt(key: impl Into<String>, width: f32, blur: bool) -> El {
+    let mut panel = rune::col()
         .key(key)
         .w(width)
         .radius(RADIUS_PANEL)
+        .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
         .hit()
-        .backdrop_blur(GLASS_PANEL_SIGMA)
-        .fill(glass_panel_fill())
-        .border(1.0, glass_rim())
-        .shadow(16.0, 42.0, BG.alpha(0.65))
+        .fill(if blur {
+            glass_panel_fill()
+        } else {
+            glass_still_panel_fill()
+        })
+        .linear_gradient(std::f32::consts::PI, glass_specular_sheen())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .shadow(1.0, 3.0, glass_outer_edge())
+        .shadow(12.0, 32.0, BG.alpha(0.55));
+    if blur {
+        panel = panel.backdrop_blur(GLASS_PANEL_SIGMA);
+    }
+    panel
+}
+
+pub fn amoled_card(radius: f32) -> El {
+    col()
+        .radius(radius)
+        .continuous_corners()
+        .fill(BG)
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+}
+
+pub fn exo_play_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
+    let mut btn = row()
+        .key(key)
+        .role("button")
+        .label(label)
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(40.0)
+        .min_w(112.0)
+        .px(24.0)
+        .gap(8.0)
+        .justify_center()
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(FG)
+        .hover(FG.alpha(0.92))
+        .press(FG.alpha(0.84))
+        .motion(SPRING_QUICK);
+    if let Some(ic) = icon {
+        btn = btn.child(ic);
+    }
+    btn.child(text(label).font(type_section()).color(PRIMARY_FG))
+}
+
+pub fn glass_icon_circle(key: &'static str, label: &'static str, size: f32, icon: El) -> El {
+    el().key(key)
+        .role("button")
+        .label(label)
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .size(size, size)
+        .center()
+        .radius(RADIUS_PILL)
+        .fill(glass_control_fill())
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .motion(SPRING_QUICK)
+        .child(icon)
 }
 
 pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
@@ -41,8 +141,8 @@ pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) 
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(34.0)
-        .px(16.0)
+        .h(32.0)
+        .px(12.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
@@ -65,15 +165,15 @@ pub fn glass_button(key: &'static str, label: &'static str, icon: Option<El>) ->
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(34.0)
-        .px(14.0)
+        .h(32.0)
+        .px(12.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
         .hover(hover_fill())
         .press(pressed_fill())
-        .border(1.0, glass_rim())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -90,16 +190,21 @@ pub fn filter_pill(key: &'static str, label: String, active: bool) -> El {
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(30.0)
-        .px(12.0)
+        .px(13.0)
         .radius(RADIUS_PILL)
         .center()
-        .fill(if active { FG } else { subtle_fill() })
+        .fill(if active { FG } else { TRANSPARENT })
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
+        .border(if active { 0.0 } else { 1.0 }, glass_rim())
         .motion(SPRING_QUICK)
         .child(
             text(label)
-                .font(type_control())
+                .font(if active {
+                    type_section()
+                } else {
+                    type_control()
+                })
                 .color(if active { PRIMARY_FG } else { FG }),
         )
 }
@@ -113,8 +218,8 @@ pub fn nav_tab(key: &'static str, label: &'static str, active: bool, icon: El) -
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(32.0)
-        .px(12.0)
+        .h(30.0)
+        .px(10.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
@@ -125,7 +230,7 @@ pub fn nav_tab(key: &'static str, label: &'static str, active: bool, icon: El) -
         .child(icon)
         .child(
             text(label)
-                .font(type_control())
+                .font(type_section())
                 .color(if active { PRIMARY_FG } else { FG }),
         )
 }
@@ -139,8 +244,8 @@ pub fn danger_button(key: &'static str, label: &'static str, icon: Option<El>) -
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(34.0)
-        .px(14.0)
+        .h(32.0)
+        .px(12.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
@@ -160,7 +265,11 @@ pub fn discount_badge(discount: i32) -> El {
         .radius(RADIUS_PILL)
         .center()
         .fill(good())
-        .child(text(format!("-{discount}%")).font(type_small()).color(PRIMARY_FG))
+        .child(
+            text(format!("-{discount}%"))
+                .font(type_small())
+                .color(PRIMARY_FG),
+        )
 }
 
 pub fn stat_chip(label: &'static str, value: String) -> El {
@@ -177,11 +286,12 @@ pub fn stat_chip(label: &'static str, value: String) -> El {
 
 pub fn switch_pill(key: &'static str, label: &'static str, on: bool) -> El {
     let knob = el()
-        .size(16.0, 16.0)
-        .radius(8.0)
-        .fill(if on { PRIMARY_FG } else { FG })
+        .size(20.0, 20.0)
+        .radius(10.0)
+        .fill(FG)
+        .shadow(1.0, 3.0, BG.alpha(0.35))
         .absolute(if on { 18.0 } else { 2.0 }, 2.0)
-        .motion(SPRING_QUICK);
+        .motion(SPRING_MOVE);
 
     el().key(key)
         .role("switch")
@@ -190,9 +300,9 @@ pub fn switch_pill(key: &'static str, label: &'static str, on: bool) -> El {
         .focusable(true)
         .hit()
         .press_on_down()
-        .size(36.0, 20.0)
-        .radius(10.0)
-        .fill(if on { FG } else { Color::WHITE.alpha(0.18) })
+        .size(40.0, 24.0)
+        .radius(RADIUS_PILL)
+        .fill(if on { good() } else { track_fill() })
         .motion(SPRING_QUICK)
         .child(knob)
 }
@@ -230,9 +340,18 @@ pub fn status_badge(label: String, tone: BadgeTone) -> El {
 }
 
 pub fn section_card(title: &'static str, subtitle: Option<String>) -> El {
-    let mut header = col().w_full().gap(2.0).child(text(title).font(type_section()).color(FG));
+    let mut header = col()
+        .w_full()
+        .gap(2.0)
+        .child(text(title).font(type_section()).color(FG));
     if let Some(sub) = subtitle {
-        header = header.child(text(sub).font(type_small()).color(fg_muted()).w_full().wrap());
+        header = header.child(
+            text(sub)
+                .font(type_small())
+                .color(fg_muted())
+                .w_full()
+                .wrap(),
+        );
     }
     col()
         .w_full()
@@ -277,8 +396,10 @@ pub fn segmented_bar(segments: &[(f32, Color)]) -> El {
         .clip_rounded(4.0)
         .fill(Color::WHITE.alpha(0.10))
         .gap(1.5)
-        .children(segments.iter().filter(|(f, _)| *f > 0.004).map(|(frac, color)| {
-            el().grow(*frac).h(8.0).fill(*color)
-        }))
+        .children(
+            segments
+                .iter()
+                .filter(|(f, _)| *f > 0.004)
+                .map(|(frac, color)| el().grow(*frac).h(8.0).fill(*color)),
+        )
 }
-

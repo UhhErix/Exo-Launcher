@@ -34,11 +34,7 @@ fn spoiler_hidden_bg() -> Color {
     hex(0x28282f, 1.0)
 }
 
-pub fn parse_inline(
-    input: &str,
-    mentions: &[DiscordUser],
-    reveal_spoilers: bool,
-) -> ParsedInline {
+pub fn parse_inline(input: &str, mentions: &[DiscordUser], reveal_spoilers: bool) -> ParsedInline {
     let mut plain = String::with_capacity(input.len());
     let mut spans = Vec::new();
     let mut strikes = Vec::new();
@@ -369,16 +365,14 @@ pub fn render_markdown(
                     .w_full()
                     .gap(10.0)
                     .child(el().w(3.0).radius(2.0).fill(fg_faint()))
-                    .child(
-                        col().grow(1.0).min_w(0.0).child(render_inline_text(
-                            &joined,
-                            mentions,
-                            type_body(),
-                            fg_muted(),
-                            msg_id,
-                            reveal_spoilers,
-                        )),
-                    ),
+                    .child(col().grow(1.0).min_w(0.0).child(render_inline_text(
+                        &joined,
+                        mentions,
+                        type_body(),
+                        fg_muted(),
+                        msg_id,
+                        reveal_spoilers,
+                    ))),
             );
             continue;
         }

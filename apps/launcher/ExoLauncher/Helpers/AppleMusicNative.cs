@@ -57,12 +57,49 @@ internal static class AppleMusicNative
     internal static bool IsText(string? text) =>
         text is null || text.Length <= 1200 && !text.Any(c => char.IsControl(c) && c is not '\n');
 
-    internal static string View(string view, string? uri, string? query, int offset) =>
-        "(" + Adapter + ")().view(" + JsonSerializer.Serialize(view) + "," + JsonSerializer.Serialize(new { uri, text = query, number = offset }) + ")";
+    internal const int AdapterVersion = 7;
+    internal const string NeedInstallProperty = "__exoNeedInstall";
+    internal const string InstallScript = "(" + Adapter + ")();";
 
-    internal static string Act(string action, string? uri, string? context, int? index, bool? on, string? uid, string? query, string? text) =>
-        "(" + Adapter + ")().act(" + JsonSerializer.Serialize(action) + "," +
-        JsonSerializer.Serialize(new { uri, text = context, number = index ?? -1, on, uid, query, body = text }) + ")";
+    internal static bool NeedsInstall(JsonElement? reply) =>
+        reply is { ValueKind: JsonValueKind.Object } obj &&
+        obj.TryGetProperty(NeedInstallProperty, out var flag) &&
+        flag.ValueKind == JsonValueKind.True;
+
+    internal static async Task<JsonElement?> InvokeCachedAsync(
+        Func<bool, string> buildExpression,
+        Func<string, Task<JsonElement?>> evaluate,
+        Func<bool> getInstalled,
+        Action<bool> setInstalled)
+    {
+        var installed = getInstalled();
+        var reply = await evaluate(buildExpression(installed));
+        if (installed && NeedsInstall(reply))
+        {
+            setInstalled(false);
+            reply = await evaluate(buildExpression(false));
+        }
+        if (reply is not null && !NeedsInstall(reply))
+            setInstalled(true);
+        return reply;
+    }
+
+    internal static string View(string view, string? uri, string? query, int offset, bool installed = false)
+    {
+        var args = JsonSerializer.Serialize(view) + "," + JsonSerializer.Serialize(new { uri, text = query, number = offset });
+        return installed
+            ? "(window.__exoAppleMusic&&window.__exoAppleMusic.v===" + AdapterVersion + "?window.__exoAppleMusic.view(" + args + "):{\"" + NeedInstallProperty + "\":true})"
+            : "(" + Adapter + ")().view(" + args + ")";
+    }
+
+    internal static string Act(string action, string? uri, string? context, int? index, bool? on, string? uid, string? query, string? text, bool installed = false)
+    {
+        var args = JsonSerializer.Serialize(action) + "," +
+            JsonSerializer.Serialize(new { uri, text = context, number = index ?? -1, on, uid, query, body = text });
+        return installed
+            ? "(window.__exoAppleMusic&&window.__exoAppleMusic.v===" + AdapterVersion + "?window.__exoAppleMusic.act(" + args + "):{\"" + NeedInstallProperty + "\":true})"
+            : "(" + Adapter + ")().act(" + args + ")";
+    }
 
     /// The page's own sign-in: MusicKit's authorize() opens Apple's sign-in
     /// window (the Sign In button on music.apple.com calls the same). Signed in
@@ -125,10 +162,15 @@ internal static class AppleMusicNative
         (function () {
           var w = window, ex = w.__exoAppleMusic;
           if (ex && ex.v === 7) return ex;
+          var bitrateRestored = false;
           function mk() {
             var M = w.MusicKit, m = null;
             try { m = M && typeof M.getInstance === 'function' ? M.getInstance() : null; } catch (_) { m = null; }
             if (!m || !m.api || typeof m.api.music !== 'function') throw new Error('loading');
+            if (!bitrateRestored) {
+              bitrateRestored = true;
+              try { var kept = +localStorage.getItem('exo.bitrate'); if (kept === 64 || kept === 256) m.bitrate = kept; } catch (_) { }
+            }
             return m;
           }
           // The page's own API client: it signs the request itself.
@@ -921,8 +963,6 @@ internal static class AppleMusicNative
               } catch (e) { return Promise.resolve({ ok: false, error: String(e && e.message || e).slice(0, 200) }); }
             }
           };
-          // The quality chosen in Exo, back on the page after it reloads.
-          try { var kept = +localStorage.getItem('exo.bitrate'); if (kept === 64 || kept === 256) mk().bitrate = kept; } catch (_) { }
           w.__exoAppleMusic = me;
           return me;
         })

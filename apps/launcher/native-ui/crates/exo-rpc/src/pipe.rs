@@ -26,6 +26,18 @@ mod win {
 
     impl PipeHandle {
         pub fn connect(pipe_name: &str, timeout: Duration) -> io::Result<Arc<Self>> {
+            Self::connect_with_access(pipe_name, timeout, GENERIC_READ | GENERIC_WRITE)
+        }
+
+        pub fn connect_read_only(pipe_name: &str, timeout: Duration) -> io::Result<Arc<Self>> {
+            Self::connect_with_access(pipe_name, timeout, GENERIC_READ)
+        }
+
+        fn connect_with_access(
+            pipe_name: &str,
+            timeout: Duration,
+            access: u32,
+        ) -> io::Result<Arc<Self>> {
             let full = format!(r"\\.\pipe\{pipe_name}");
             let wide: Vec<u16> = OsStr::new(&full).encode_wide().chain(Some(0)).collect();
             let deadline = Instant::now() + timeout;
@@ -34,7 +46,7 @@ mod win {
                 let handle = unsafe {
                     CreateFileW(
                         wide.as_ptr(),
-                        GENERIC_READ | GENERIC_WRITE,
+                        access,
                         0,
                         null(),
                         OPEN_EXISTING,
@@ -93,6 +105,20 @@ mod win {
                 return Err(io::Error::from_raw_os_error(wait_err as i32));
             }
             Ok(read as usize)
+        }
+
+        pub fn read_exact_overlapped(&self, event: HANDLE, mut buf: &mut [u8]) -> io::Result<()> {
+            while !buf.is_empty() {
+                let n = self.read_overlapped(event, buf)?;
+                if n == 0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "media pipe eof",
+                    ));
+                }
+                buf = &mut buf[n..];
+            }
+            Ok(())
         }
 
         pub fn write_all_overlapped(&self, event: HANDLE, mut data: &[u8]) -> io::Result<()> {

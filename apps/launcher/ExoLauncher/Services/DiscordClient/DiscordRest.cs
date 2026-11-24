@@ -19,10 +19,13 @@ namespace ExoLauncher.Services.DiscordClient;
 internal sealed partial class DiscordRest : IDisposable
 {
     internal const string Api = "https://discord.com/api/v9/";
-    // Discord's web client build when this was written (October 2026); replaced by the live one
+    // Discord's web client build when this was written (November 2026); replaced by the live one
     // read from discord.com's own scripts at start.
-    private const int FallbackBuild = 653945;
+    private const int FallbackBuild = 678976;
     private static int? _build;
+    private static readonly string LaunchId = Guid.NewGuid().ToString();
+    private static readonly string HeartbeatSessionId = Guid.NewGuid().ToString();
+    private static (int Build, string Encoded) _superPropertiesCache;
 
     // As Chrome talks to Discord: HTTP/2 on one warm connection (no new TLS handshake per call or after a minute idle)
     // and compressed answers (a page of messages is several times smaller). The connection is pinged while in use, so
@@ -48,7 +51,7 @@ internal sealed partial class DiscordRest : IDisposable
         _http.DefaultRequestHeaders.Referrer = new Uri("https://discord.com/channels/@me");
         _http.DefaultRequestHeaders.Add("X-Discord-Locale", "en-US");
         _http.DefaultRequestHeaders.Add("X-Discord-Timezone", TimeZoneName());
-        _http.DefaultRequestHeaders.Add("X-Super-Properties", SuperProperties());
+        _http.DefaultRequestHeaders.Add("X-Debug-Options", "bugReporterEnabled");
         _http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
     }
 
@@ -63,6 +66,7 @@ internal sealed partial class DiscordRest : IDisposable
         ["os"] = "Windows",
         ["browser"] = "Chrome",
         ["device"] = "",
+        ["device_model_name"] = "",
         ["system_locale"] = "en-US",
         ["has_client_mods"] = false,
         ["browser_user_agent"] = UserAgent,
@@ -75,10 +79,23 @@ internal sealed partial class DiscordRest : IDisposable
         ["release_channel"] = "stable",
         ["client_build_number"] = Build,
         ["client_event_source"] = null,
+        ["client_launch_id"] = LaunchId,
+        ["client_heartbeat_session_id"] = HeartbeatSessionId,
+        ["client_app_state"] = "focused",
     };
 
-    private static string SuperProperties() =>
-        Convert.ToBase64String(Encoding.UTF8.GetBytes(Properties().ToJsonString()));
+    internal static string SuperProperties()
+    {
+        var build = Build;
+        var cached = _superPropertiesCache;
+        if (cached.Build == build && cached.Encoded is not null) return cached.Encoded;
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(Properties().ToJsonString()));
+        _superPropertiesCache = (build, encoded);
+        return encoded;
+    }
+
+    internal static string ContextProperties(string location) =>
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(new JsonObject { ["location"] = location }.ToJsonString()));
 
     /// <summary>
     /// Reads the build number of Discord's web client from discord.com's own scripts, at most once a day: it is kept in
@@ -261,25 +278,46 @@ internal sealed partial class DiscordRest : IDisposable
     internal Task<Reply> StopRingingAsync(string channelId, CancellationToken ct) =>
         SendAsync(HttpMethod.Post, $"channels/{Id(channelId)}/call/stop-ringing", new JsonObject(), ct);
 
+    internal sealed record RequestSpec(HttpMethod Method, string Path, JsonNode? Body, string? ContextLocation = null);
+
+    internal static RequestSpec AcceptFriendRequest(string userId, bool confirmStranger) =>
+        new(HttpMethod.Put, $"users/@me/relationships/{Id(userId)}",
+            new JsonObject { ["confirm_stranger_request"] = confirmStranger }, "Friends");
+
+    internal static RequestSpec BlockRequest(string userId) =>
+        new(HttpMethod.Put, $"users/@me/relationships/{Id(userId)}",
+            new JsonObject { ["type"] = 2 }, "Context Menu");
+
+    internal static RequestSpec IgnoreRequest(string userId, bool ignore) =>
+        new(ignore ? HttpMethod.Put : HttpMethod.Delete, $"users/@me/relationships/{Id(userId)}/ignore",
+            null, "Context Menu");
+
+    internal static RequestSpec RemoveRelationshipRequest(string userId) =>
+        new(HttpMethod.Delete, $"users/@me/relationships/{Id(userId)}", null, "Friends");
+
+    internal static RequestSpec AddFriendRequest(string username) =>
+        new(HttpMethod.Post, "users/@me/relationships",
+            new JsonObject { ["username"] = username, ["discriminator"] = null }, "Add Friend");
+
     /// <summary>Add Friend (or accept theirs) by id, as Discord's person menu sends it; a request from someone you share no server with answers 80013 until it is sent again confirmed, as Discord's own confirm does.</summary>
     internal Task<Reply> AcceptFriendAsync(string userId, bool confirmStranger, CancellationToken ct) =>
-        SendAsync(HttpMethod.Put, $"users/@me/relationships/{Id(userId)}", confirmStranger ? new JsonObject { ["confirm_stranger_request"] = true } : new JsonObject(), ct);
+        SendAsync(AcceptFriendRequest(userId, confirmStranger), ct);
 
     internal const int StrangerRequest = 80013;
 
     /// <summary>Block: the relationship becomes type 2 (Unblock removes it).</summary>
     internal Task<Reply> BlockAsync(string userId, CancellationToken ct) =>
-        SendAsync(HttpMethod.Put, $"users/@me/relationships/{Id(userId)}", new JsonObject { ["type"] = 2 }, ct);
+        SendAsync(BlockRequest(userId), ct);
 
     /// <summary>Ignore or Unignore: Discord hides their messages and notifications without telling them.</summary>
     internal Task<Reply> IgnoreAsync(string userId, bool ignore, CancellationToken ct) =>
-        SendAsync(ignore ? HttpMethod.Put : HttpMethod.Delete, $"users/@me/relationships/{Id(userId)}/ignore", null, ct);
+        SendAsync(IgnoreRequest(userId, ignore), ct);
 
     internal Task<Reply> RemoveRelationshipAsync(string userId, CancellationToken ct) =>
-        SendAsync(HttpMethod.Delete, $"users/@me/relationships/{Id(userId)}", null, ct);
+        SendAsync(RemoveRelationshipRequest(userId), ct);
 
     internal Task<Reply> AddFriendAsync(string username, CancellationToken ct) =>
-        SendAsync(HttpMethod.Post, "users/@me/relationships", new JsonObject { ["username"] = username, ["discriminator"] = null }, ct);
+        SendAsync(AddFriendRequest(username), ct);
 
     /// <summary>Close DM (Discord's ×): the conversation leaves the list; a group DM is left.</summary>
     internal Task<Reply> CloseDmAsync(string channelId, CancellationToken ct) =>
@@ -610,31 +648,49 @@ internal sealed partial class DiscordRest : IDisposable
     internal Task<Reply> RemoteAuthLoginAsync(string ticket, CancellationToken ct) =>
         SendAsync(HttpMethod.Post, "users/@me/remote-auth/login", new JsonObject { ["ticket"] = ticket }, ct);
 
+    internal static HttpRequestMessage BuildRequest(RequestSpec spec, string? token = null) =>
+        BuildRequest(spec.Method, spec.Path, spec.Body, token, contextLocation: spec.ContextLocation);
+
+    internal static HttpRequestMessage BuildRequest(HttpMethod method, string path, JsonNode? body, string? token = null,
+        IReadOnlyList<Upload>? files = null, string? reason = null, Func<HttpContent>? content = null,
+        string? mfaToken = null, string? contextLocation = null)
+    {
+        var request = new HttpRequestMessage(method, Api + path) { Version = HttpVersion.Version20, VersionPolicy = HttpVersionPolicy.RequestVersionOrLower };
+        if (token is not null) request.Headers.TryAddWithoutValidation("Authorization", token);
+        request.Headers.TryAddWithoutValidation("X-Super-Properties", SuperProperties());
+        if (!string.IsNullOrWhiteSpace(contextLocation))
+            request.Headers.TryAddWithoutValidation("X-Context-Properties", ContextProperties(contextLocation));
+        if (!string.IsNullOrWhiteSpace(reason)) request.Headers.TryAddWithoutValidation("X-Audit-Log-Reason", Uri.EscapeDataString(reason.Trim()));
+        if (mfaToken is not null) request.Headers.TryAddWithoutValidation("X-Discord-MFA-Authorization", mfaToken);
+        if (content is not null) request.Content = content();
+        else if (files is not null)
+        {
+            var form = new MultipartFormDataContent();
+            form.Add(new StringContent(body?.ToJsonString() ?? "{}", Encoding.UTF8, "application/json"), "payload_json");
+            for (var i = 0; i < files.Count; i++)
+            {
+                var part = new ByteArrayContent(files[i].Data);
+                part.Headers.ContentType = MediaTypeHeaderValue.TryParse(files[i].Type, out var type) ? type : new MediaTypeHeaderValue("application/octet-stream");
+                form.Add(part, $"files[{i}]", files[i].Name);
+            }
+            request.Content = form;
+        }
+        else if (body is not null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+        return request;
+    }
+
+    private Task<Reply> SendAsync(RequestSpec spec, CancellationToken ct) =>
+        SendAsync(spec.Method, spec.Path, spec.Body, ct, contextLocation: spec.ContextLocation);
+
     // reason: the Audit Log's reason (X-Audit-Log-Reason); content: a form other than a message's (made again on a retry);
     // mfaToken: the verified check's token, on the one retry after Discord asked for it.
     private async Task<Reply> SendAsync(HttpMethod method, string path, JsonNode? body, CancellationToken ct, IReadOnlyList<Upload>? files = null,
-        string? reason = null, Func<HttpContent>? content = null, string? mfaToken = null, bool retryRateLimit = true, bool quietNotFound = false)
+        string? reason = null, Func<HttpContent>? content = null, string? mfaToken = null, bool retryRateLimit = true, bool quietNotFound = false,
+        string? contextLocation = null)
     {
         for (var attempt = 0; ; attempt++)
         {
-            using var request = new HttpRequestMessage(method, Api + path) { Version = HttpVersion.Version20, VersionPolicy = HttpVersionPolicy.RequestVersionOrLower };
-            if (_token is not null) request.Headers.TryAddWithoutValidation("Authorization", _token);
-            if (!string.IsNullOrWhiteSpace(reason)) request.Headers.TryAddWithoutValidation("X-Audit-Log-Reason", Uri.EscapeDataString(reason.Trim()));
-            if (mfaToken is not null) request.Headers.TryAddWithoutValidation("X-Discord-MFA-Authorization", mfaToken);
-            if (content is not null) request.Content = content();
-            else if (files is not null)
-            {
-                var form = new MultipartFormDataContent();
-                form.Add(new StringContent(body?.ToJsonString() ?? "{}", Encoding.UTF8, "application/json"), "payload_json");
-                for (var i = 0; i < files.Count; i++)
-                {
-                    var part = new ByteArrayContent(files[i].Data);
-                    part.Headers.ContentType = MediaTypeHeaderValue.TryParse(files[i].Type, out var type) ? type : new MediaTypeHeaderValue("application/octet-stream");
-                    form.Add(part, $"files[{i}]", files[i].Name);
-                }
-                request.Content = form;
-            }
-            else if (body is not null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+            using var request = BuildRequest(method, path, body, _token, files, reason, content, mfaToken, contextLocation);
             HttpResponseMessage response;
             var sent = System.Diagnostics.Stopwatch.GetTimestamp();
             try { response = await _http.SendAsync(request, ct).ConfigureAwait(false); }
@@ -679,24 +735,46 @@ internal sealed partial class DiscordRest : IDisposable
                     continue;
                 }
                 if (!(quietNotFound && response.StatusCode == HttpStatusCode.NotFound))
-                    AppLog.Info($"Discord client: {method} {Route(path)} answered {(int)response.StatusCode}.");
+                    AppLog.Info(FormatStatusLog(method, path, response.StatusCode, json));
                 // Discord wants the person to verify first: the request waits here for the code (once; a second ask is refused, as Discord's client does).
                 if (mfaToken is null && ReadMfa(response.StatusCode, json) is { } challenge)
-                    return AskMfa(challenge, json, (token, again) => SendAsync(method, path, body, again, files, reason, content, token));
+                    return AskMfa(challenge, json, (token, again) => SendAsync(method, path, body, again, files, reason, content, token, retryRateLimit, quietNotFound, contextLocation));
                 return new Reply(json, ErrorLine(response.StatusCode, json), Status: response.StatusCode);
             }
         }
     }
 
-    private static string ErrorLine(HttpStatusCode status, JsonElement? json)
+    internal static string FormatStatusLog(HttpMethod method, string path, HttpStatusCode status, JsonElement? json)
+    {
+        var detail = ErrorCode(json) is { } code ? $" (code {code})"
+            : json is { ValueKind: JsonValueKind.Object } obj && obj.TryGetProperty("captcha_key", out _) ? " (captcha)"
+            : "";
+        return $"Discord client: {method} {Route(path)} answered {(int)status}{detail}.";
+    }
+
+    internal static int? ErrorCode(JsonElement? json) =>
+        json is { ValueKind: JsonValueKind.Object } body && body.TryGetProperty("code", out var code) &&
+        code.ValueKind == JsonValueKind.Number && code.TryGetInt32(out var number)
+            ? number
+            : null;
+
+    internal static string ErrorLine(HttpStatusCode status, JsonElement? json)
     {
         if (json is { ValueKind: JsonValueKind.Object } body)
         {
             if (body.TryGetProperty("captcha_key", out _))
                 return "Discord wants to check you're human here. Do this once in the Discord app, then try again.";
             // Request entity too large: over the account's upload size (10 MB without Nitro).
-            if (body.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.Number && code.GetInt32() == 40005)
-                return TooLarge;
+            switch (ErrorCode(json))
+            {
+                case 40005: return TooLarge;
+                case 40002: return "Discord wants you to verify your email first. Do that in the Discord app, then try again.";
+                case 70007: return "Discord wants you to verify your phone number first. Do that in the Discord app, then try again.";
+                case 40068 or 340007: return "Discord has limited friend requests on this account. Open the Discord app to check your account status.";
+                case 80000: return "That person isn't accepting friend requests right now.";
+                case 80004: return "No Discord account matches that username.";
+                case 80007: return "You're already friends with them.";
+            }
             if (body.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String)
                 return "Discord: " + message.GetString();
         }

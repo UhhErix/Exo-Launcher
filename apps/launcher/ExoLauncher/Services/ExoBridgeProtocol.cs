@@ -155,28 +155,53 @@ internal static partial class ExoBridgeProtocol
         return (id, method);
     }
 
-    internal static string SerializeResponse(string id, bool ok, object? result, string? error)
+    internal static byte[] SerializeResponseUtf8(string id, bool ok, object? result, string? error)
     {
-        var payload = new Dictionary<string, object?>
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>(256);
+        using (var writer = new Utf8JsonWriter(buffer))
         {
-            ["version"] = Version,
-            ["id"] = id,
-            ["ok"] = ok,
-        };
-        if (ok)
-            payload["result"] = result;
-        else
-            payload["error"] = error ?? "error";
-        return JsonSerializer.Serialize(payload, JsonOptions);
+            writer.WriteStartObject();
+            writer.WriteNumber("version", Version);
+            writer.WriteString("id", id);
+            writer.WriteBoolean("ok", ok);
+            if (ok)
+            {
+                writer.WritePropertyName("result");
+                if (result is null)
+                    writer.WriteNullValue();
+                else
+                    JsonSerializer.Serialize(writer, result, result.GetType(), JsonOptions);
+            }
+            else
+            {
+                writer.WriteString("error", error ?? "error");
+            }
+            writer.WriteEndObject();
+        }
+        return buffer.WrittenSpan.ToArray();
     }
 
+    internal static byte[] SerializeEventUtf8(string name, object? data)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>(256);
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("version", Version);
+            writer.WriteString("event", name);
+            writer.WritePropertyName("data");
+            if (data is null)
+                writer.WriteNullValue();
+            else
+                JsonSerializer.Serialize(writer, data, data.GetType(), JsonOptions);
+            writer.WriteEndObject();
+        }
+        return buffer.WrittenSpan.ToArray();
+    }
+
+    internal static string SerializeResponse(string id, bool ok, object? result, string? error) =>
+        System.Text.Encoding.UTF8.GetString(SerializeResponseUtf8(id, ok, result, error));
+
     internal static string SerializeEvent(string name, object? data) =>
-        JsonSerializer.Serialize(
-            new Dictionary<string, object?>
-            {
-                ["version"] = Version,
-                ["event"] = name,
-                ["data"] = data,
-            },
-            JsonOptions);
+        System.Text.Encoding.UTF8.GetString(SerializeEventUtf8(name, data));
 }

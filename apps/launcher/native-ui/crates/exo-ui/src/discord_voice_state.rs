@@ -249,11 +249,14 @@ impl AppState {
         let uid = user_id.to_string();
         self.discord.voice_ui.watching_stream = Some(uid.clone());
         let key = ("stream".to_string(), uid.clone());
-        self.discord
+        let handle = self
+            .discord
             .voice_ui
             .decoders
-            .entry(key)
-            .or_insert_with(|| VideoStreamHandle::spawn("h264"));
+            .entry(key.clone())
+            .or_insert_with(|| VideoStreamHandle::spawn("h264"))
+            .clone();
+        self.video_router.register(key, handle);
         if self.status != HostStatus::Connected {
             return;
         }
@@ -283,10 +286,9 @@ impl AppState {
         let prev = self.discord.voice_ui.watching_stream.take();
         self.discord.voice_ui.fullscreen_stream = false;
         if let Some(ref uid) = prev {
-            self.discord
-                .voice_ui
-                .decoders
-                .remove(&("stream".to_string(), uid.clone()));
+            let key = ("stream".to_string(), uid.clone());
+            self.discord.voice_ui.decoders.remove(&key);
+            self.video_router.remove(&key);
         }
         if self.status != HostStatus::Connected {
             return;
@@ -378,7 +380,11 @@ impl AppState {
                 fps: fps as f64,
                 bitrate: 6200.0,
                 codec: Some("h265".into()),
-                sound: if sound { Some("Game audio".into()) } else { None },
+                sound: if sound {
+                    Some("Game audio".into())
+                } else {
+                    None
+                },
             });
             self.discord.voice_ui.panel = VoicePanel::None;
             return;
@@ -400,7 +406,9 @@ impl AppState {
                     && !rep.ok
                 {
                     s.discord.voice_ui.golive_state = "off".into();
-                    s.notice = rep.message.or_else(|| Some("Could not start screen share".into()));
+                    s.notice = rep
+                        .message
+                        .or_else(|| Some("Could not start screen share".into()));
                 }
             },
         );
@@ -651,14 +659,18 @@ impl AppState {
         let key = (ev.source.clone(), ev.user_id.clone());
         if ev.active {
             self.discord.voice_ui.active_video_feeds.insert(key.clone());
-            self.discord
+            let handle = self
+                .discord
                 .voice_ui
                 .decoders
-                .entry(key)
-                .or_insert_with(|| VideoStreamHandle::spawn("h264"));
+                .entry(key.clone())
+                .or_insert_with(|| VideoStreamHandle::spawn("h264"))
+                .clone();
+            self.video_router.register(key, handle);
         } else {
             self.discord.voice_ui.active_video_feeds.remove(&key);
             self.discord.voice_ui.decoders.remove(&key);
+            self.video_router.remove(&key);
             if ev.source == "stream"
                 && self.discord.voice_ui.watching_stream.as_deref() == Some(ev.user_id.as_str())
             {
@@ -674,8 +686,10 @@ impl AppState {
             .discord
             .voice_ui
             .decoders
-            .entry(key)
-            .or_insert_with(|| VideoStreamHandle::spawn(&frame.codec));
+            .entry(key.clone())
+            .or_insert_with(|| VideoStreamHandle::spawn(&frame.codec))
+            .clone();
+        self.video_router.register(key, handle.clone());
         handle.push(VideoPacket {
             data: frame.data,
             timestamp_ms: frame.timestamp,

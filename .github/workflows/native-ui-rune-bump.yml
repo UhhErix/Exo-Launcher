@@ -1,0 +1,205 @@
+name: Native UI (Rune) Fork Bump
+
+on:
+  schedule:
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: native-ui-rune-bump
+  cancel-in-progress: false
+
+jobs:
+  bump-rune:
+    name: Bump Rune fork
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      FORK_REPO: UhhErix/rune
+      FORK_URL: https://github.com/UhhErix/rune
+      FORK_BRANCH: exo
+      BUMP_BRANCH: chore/native-ui-rune-bump
+      CARGO_TOML: apps/launcher/native-ui/Cargo.toml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check fork exo head
+        id: check
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $lsRemote = (git ls-remote $env:FORK_URL "refs/heads/$env:FORK_BRANCH").Trim()
+          if (-not $lsRemote -or $lsRemote -notmatch '^([0-9a-f]{40})\s') {
+            throw "Could not resolve $env:FORK_URL refs/heads/$env:FORK_BRANCH"
+          }
+          $newRev = $Matches[1]
+          $shortRev = $newRev.Substring(0, 7)
+
+          $toml = Get-Content -Raw -Path $env:CARGO_TOML
+          $pattern = '(?m)^rune\s*=\s*\{\s*git\s*=\s*"https://github\.com/UhhErix/rune",\s*rev\s*=\s*"([0-9a-f]{40})"'
+          if ($toml -notmatch $pattern) {
+            throw "Could not find pinned Rune fork rev in $env:CARGO_TOML"
+          }
+          $oldRev = $Matches[1]
+
+          "old_rev=$oldRev" >> $env:GITHUB_OUTPUT
+          "new_rev=$newRev" >> $env:GITHUB_OUTPUT
+          "short_rev=$shortRev" >> $env:GITHUB_OUTPUT
+
+          if ($newRev -eq $oldRev) {
+            Write-Host "Already pinned at $newRev"
+            "changed=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          if ($env:GITHUB_EVENT_NAME -eq 'schedule') {
+            $openPr = (gh pr list --head $env:BUMP_BRANCH --base main --state open --json number --jq '.[0].number' 2>$null)
+            if ($LASTEXITCODE -eq 0 -and $openPr -and $openPr.Trim()) {
+              $branchToml = git show "origin/$($env:BUMP_BRANCH):$($env:CARGO_TOML)" 2>$null
+              if ($LASTEXITCODE -eq 0 -and ($branchToml -join "`n") -match $pattern -and $Matches[1] -eq $newRev) {
+                Write-Host "Open PR #$($openPr.Trim()) already targets $newRev"
+                "changed=false" >> $env:GITHUB_OUTPUT
+                exit 0
+              }
+            }
+          }
+
+          Write-Host "Rune fork exo moved: $oldRev -> $newRev"
+          "changed=true" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.check.outputs.changed == 'true'
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            apps/launcher/native-ui/target/
+          key: ${{ runner.os }}-rune-${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rune-
+
+      - name: Rewrite Cargo.toml and update Cargo.lock
+        if: steps.check.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          NEW_REV: ${{ steps.check.outputs.new_rev }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tomlPath = (Resolve-Path $env:CARGO_TOML).Path
+          $toml = Get-Content -Raw -Path $tomlPath
+          $escapedUrl = [regex]::Escape($env:FORK_URL)
+          $revPattern = '(git\s*=\s*"' + $escapedUrl + '",\s*rev\s*=\s*")[0-9a-f]{40}(")'
+          $updated = [regex]::Replace($toml, $revPattern, {
+            param($m)
+            $m.Groups[1].Value + $env:NEW_REV + $m.Groups[2].Value
+          })
+          if ($updated -eq $toml) {
+            throw "No Rune rev entries were updated in $env:CARGO_TOML"
+          }
+          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+          [System.IO.File]::WriteAllText($tomlPath, $updated, $utf8NoBom)
+
+          Push-Location apps/launcher/native-ui
+          try {
+            cargo update `
+              -p rune `
+              -p rune-media `
+              -p wgpu-hal `
+              -p winit `
+              -p sctk-adwaita `
+              -p parley_engine `
+              -p accesskit_windows `
+              -p accesskit_macos
+            if ($LASTEXITCODE -ne 0) { throw "cargo update failed ($LASTEXITCODE)" }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Cargo test
+        if: steps.check.outputs.changed == 'true'
+        working-directory: apps/launcher/native-ui
+        run: cargo test --workspace --locked
+
+      - name: Open or update bump PR
+        if: steps.check.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OLD_REV: ${{ steps.check.outputs.old_rev }}
+          NEW_REV: ${{ steps.check.outputs.new_rev }}
+          SHORT_REV: ${{ steps.check.outputs.short_rev }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $title = "native-ui: bump Rune fork to $($env:SHORT_REV)"
+
+          $commitLines = @()
+          try {
+            $compareJson = gh api "repos/$($env:FORK_REPO)/compare/$($env:OLD_REV)...$($env:NEW_REV)" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $compareJson) {
+              $compare = $compareJson | ConvertFrom-Json
+              foreach ($c in $compare.commits) {
+                $sha7 = $c.sha.Substring(0, 7)
+                $subject = ($c.commit.message -split "`r?`n")[0]
+                $commitLines += ('- `' + $sha7 + '` ' + $subject)
+              }
+            }
+          } catch {}
+
+          if ($commitLines.Count -eq 0) {
+            $listJson = gh api "repos/$($env:FORK_REPO)/commits?sha=$($env:NEW_REV)&per_page=20" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $listJson) {
+              $commits = $listJson | ConvertFrom-Json
+              foreach ($c in $commits) {
+                $sha7 = $c.sha.Substring(0, 7)
+                $subject = ($c.commit.message -split "`r?`n")[0]
+                $commitLines += ('- `' + $sha7 + '` ' + $subject)
+              }
+            }
+          }
+
+          $oldShort = $env:OLD_REV.Substring(0, 7)
+          $bodyLines = @(
+            ('Bumps `apps/launcher/native-ui` from `' + $oldShort + '` to `' + $env:SHORT_REV + '` on `' + $env:FORK_REPO + '` (`' + $env:FORK_BRANCH + '`).'),
+            '',
+            "Compare: $($env:FORK_URL)/compare/$($env:OLD_REV)...$($env:NEW_REV)",
+            '',
+            ('### Fork commits since `' + $oldShort + '`'),
+            ''
+          )
+          if ($commitLines.Count -gt 0) {
+            $bodyLines += $commitLines
+          } else {
+            $bodyLines += '- (commit list unavailable from GitHub API)'
+          }
+          $bodyLines += @(
+            '',
+            'Verified on `windows-latest` with `cargo test --workspace --locked`.'
+          )
+
+          $bodyFile = Join-Path $env:RUNNER_TEMP 'rune-bump-pr-body.md'
+          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+          [System.IO.File]::WriteAllText($bodyFile, ($bodyLines -join "`n") + "`n", $utf8NoBom)
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B $env:BUMP_BRANCH
+          git add apps/launcher/native-ui/Cargo.toml apps/launcher/native-ui/Cargo.lock
+          git commit -m $title
+          git push --force origin "HEAD:$($env:BUMP_BRANCH)"
+
+          $existingPr = (gh pr list --head $env:BUMP_BRANCH --base main --state open --json number --jq '.[0].number').Trim()
+          if ($existingPr) {
+            gh pr edit $existingPr --title $title --body-file $bodyFile
+          } else {
+            gh pr create --base main --head $env:BUMP_BRANCH --title $title --body-file $bodyFile
+          }
