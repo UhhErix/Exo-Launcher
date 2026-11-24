@@ -12,7 +12,7 @@ namespace ExoLauncher.Adapters;
 /// Epic via Legendary CLI — true no-Epic-GUI path when Legendary is present.
 /// https://github.com/legendary-gl/legendary
 /// </summary>
-public sealed class EpicAdapter : IStoreAdapter, IStoreClientPresence, IStoreAccountScope, IStoreRepair
+public sealed class EpicAdapter : IStoreAdapter, IStoreClientPresence, IStoreAccountScope, IStoreRepair, IStoreLayoutProbe
 {
     private readonly ConcurrentDictionary<string, InstallProgress> _progress = new(StringComparer.OrdinalIgnoreCase);
     private readonly EpicAuthService? _authService;
@@ -38,6 +38,10 @@ public sealed class EpicAdapter : IStoreAdapter, IStoreClientPresence, IStoreAcc
     // Settings claim that the separately installed Epic Games Launcher exists.
     public bool IsAgentPresent() => ResolveLegendary() is not null || ResolveEpicLauncher() is not null;
     public bool IsClientPresent() => ResolveEpicLauncher() is not null;
+    public bool IsLayoutRecognized() => EpicClassicManifests.IsLayoutRecognized(
+        EpicLauncherV2.DataDir(),
+        EpicClassicManifests.DefaultManifestsDir(),
+        EpicClassicManifests.DefaultLauncherInstalledPath());
 
     public async Task<AuthResult> AuthenticateAsync(CancellationToken ct = default)
     {
@@ -304,7 +308,15 @@ public sealed class EpicAdapter : IStoreAdapter, IStoreClientPresence, IStoreAcc
             .Where(row => CatalogHygiene.KeepEpicRow(row.Title, row.Categories, installed: true) && InstallPresent(row.InstallPath, row.Executable))
             .Select(row => MapInstalledRow(row, latest.NewerThan(row.AppName, row.Version, row.ChangedUtc)))
             .ToList();
-        var egl = ReadLauncherV2(hasLegendary, games, latest).ToList();
+        var eglV2 = ReadLauncherV2(hasLegendary, games, latest).ToList();
+        var seenApps = eglV2
+            .Select(g => g.LaunchTarget)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var classic = ReadClassicLauncher(hasLegendary, games, latest)
+            .Where(g => string.IsNullOrWhiteSpace(g.LaunchTarget) || seenApps.Add(g.LaunchTarget!))
+            .ToList();
+        var egl = eglV2.Concat(classic).ToList();
         return EpicEglMerge.ApplyInstalledOverlays(games, egl, preferEglInstallPath: ResolveEpicLauncher() is not null);
     }
 
@@ -1954,6 +1966,50 @@ public sealed class EpicAdapter : IStoreAdapter, IStoreClientPresence, IStoreAcc
                 Path = install.Dir,
                 LaunchTarget = install.AppName,
                 Status = installed ? (updateAvailable ? "Update" : "Ready") : "Not installed",
+                Deps = hasLegendary ? new[] { "Legendary (preferred)" } : new[] { "Epic Games Launcher" },
+                LaunchNote = hasLegendary ? "Launches via Legendary when available." : "Installed via Epic Games Launcher.",
+            };
+        }
+    }
+
+    internal static IEnumerable<GameEntry> ReadClassicLauncher(
+        bool hasLegendary,
+        IReadOnlyList<GameEntry> ownedForTitles,
+        LatestBuilds latest,
+        string? manifestsDir = null,
+        string? launcherInstalledPath = null)
+    {
+        var installs = EpicClassicManifests.ReadInstallations(manifestsDir, launcherInstalledPath);
+        if (installs.Count == 0) yield break;
+        var titleByApp = ownedForTitles
+            .Where(g => !string.IsNullOrWhiteSpace(g.LaunchTarget))
+            .GroupBy(g => g.LaunchTarget!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Title, StringComparer.OrdinalIgnoreCase);
+        foreach (var install in installs)
+        {
+            var fallbackDirName = Path.GetFileName(install.InstallLocation.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            var known = !string.IsNullOrWhiteSpace(install.DisplayName)
+                ? install.DisplayName
+                : titleByApp.GetValueOrDefault(install.AppName) ?? fallbackDirName;
+            var title = EpicEglMerge.NormalizeEpicTitle(known, install.AppName);
+            if (string.IsNullOrWhiteSpace(title)) title = install.AppName;
+            if (!CatalogHygiene.KeepEpicRow(title, install.Categories, installed: true)) continue;
+            var installed = InstallPresent(install.InstallLocation, install.LaunchExecutable);
+            if (!installed) continue;
+            var updateAvailable = latest.NewerThan(install.AppName, install.AppVersion, install.WrittenUtc);
+            yield return new GameEntry
+            {
+                Id = "epic:" + install.AppName,
+                Title = title,
+                Store = StoreKind.Epic,
+                Installed = true,
+                Owned = false,
+                EntitlementState = EntitlementState.Unverified,
+                UpdateAvailable = updateAvailable,
+                CanInstall = false,
+                Path = install.InstallLocation,
+                LaunchTarget = install.AppName,
+                Status = updateAvailable ? "Update" : "Ready",
                 Deps = hasLegendary ? new[] { "Legendary (preferred)" } : new[] { "Epic Games Launcher" },
                 LaunchNote = hasLegendary ? "Launches via Legendary when available." : "Installed via Epic Games Launcher.",
             };

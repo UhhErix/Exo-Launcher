@@ -526,15 +526,46 @@ internal static partial class PcHealth
     private static readonly Lazy<byte[]> Smbios = new(SmbiosTable, LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly Lazy<IReadOnlyList<Dimm>> Memory = new(() => ParseDimms(Smbios.Value), LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly Lazy<IReadOnlyList<MemorySlot>> MemorySlotTable = new(() => ParseMemorySlots(Smbios.Value), LazyThreadSafetyMode.ExecutionAndPublication);
-    private static readonly Lazy<HybridGpu?> Hybrid = new(ReadHybrid, LazyThreadSafetyMode.ExecutionAndPublication);
-    private static readonly Lazy<GpuBar?> Gpu = new(() => WithSmartAccessMemory(ReadGpu()), LazyThreadSafetyMode.ExecutionAndPublication);
-    private static readonly Lazy<PcieLink?> GpuPcie = new(() => ReadGpuPcie(Gpu.Value?.Name), LazyThreadSafetyMode.ExecutionAndPublication);
+    private static readonly Lazy<Task<HybridGpu?>> HybridTask = new(() => Task.Run(ReadHybrid), LazyThreadSafetyMode.ExecutionAndPublication);
+    private static readonly Lazy<Task<GpuBar?>> GpuTask = new(() => Task.Run(() => WithSmartAccessMemory(ReadGpu())), LazyThreadSafetyMode.ExecutionAndPublication);
+    private static readonly Lazy<Task<PcieLink?>> GpuPcieTask = new(() => Task.Run(async () =>
+    {
+        var gpu = await TryMainGpuAsync(TimeSpan.FromSeconds(4), CancellationToken.None).ConfigureAwait(false);
+        return ReadGpuPcie(gpu?.Name);
+    }), LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>The SMBIOS table, read once; PC › Overview reads the processor and memory from it too (<see cref="PcAbout"/>).</summary>
     internal static byte[] SmbiosRaw() => Smbios.Value;
 
     /// <summary>The main graphics card as the Resizable BAR check reads it, once.</summary>
-    internal static GpuBar? MainGpu() => Gpu.Value;
+    internal static GpuBar? MainGpu() => GpuTask.Value.GetAwaiter().GetResult();
+
+    internal static GpuBar? TryMainGpu(TimeSpan timeout)
+    {
+        var task = GpuTask.Value;
+        if (task.IsCompletedSuccessfully) return task.Result;
+        try { return task.Wait(timeout) ? task.Result : null; }
+        catch { return null; }
+    }
+
+    internal static Task<GpuBar?> TryMainGpuAsync(TimeSpan timeout, CancellationToken ct) =>
+        ProbeWithTimeoutAsync(() => GpuTask.Value, timeout, default(GpuBar?), ct);
+
+    internal static async Task<T> ProbeWithTimeoutAsync<T>(Func<Task<T>> probe, TimeSpan timeout, T fallback, CancellationToken ct)
+    {
+        try
+        {
+            var work = probe();
+            return await work.WaitAsync(timeout, ct).ConfigureAwait(false);
+        }
+        catch (TimeoutException) { return fallback; }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return fallback; }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppLog.Debug("PC health probe failed: " + ex.GetType().Name);
+            return fallback;
+        }
+    }
 
     /// <summary>
     /// On a Radeon, AMD's own answer (ADLX's Smart Access Memory, AMD's Resizable BAR) wins over Direct3D 12's upload
@@ -557,35 +588,122 @@ internal static partial class PcHealth
         var cpu = CpuName();
         var chipset = Services.ChipsetUpdate.For(cpu);
         var installed = chipset?.Installed();
-        string? latest = null;
-        if (chipset is not null && installed is not null)
-        {
-            try { latest = (await chipset.LatestAsync().WaitAsync(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false))?.Version; }
-            catch (TimeoutException) { /* no row this time; the answer is kept when it lands */ }
-        }
-        WindowsGameMode.KeepOn();
-        object? scheduling = null;
-        try
-        {
-            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers");
-            scheduling = key?.GetValue("HwSchMode");
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { /* left unknown: no row */ }
-        var update = installed is null ? null : chipset!.Current(latest, Services.ChipsetUpdate.BootedAt());
-        var subject = chipset is null ? null : DriverAdvisories.Chipset(chipset.Vendor, cpu);
-        var skipped = subject is null || latest is null || VersionNumber.Same(latest, installed) ? null : DriverAdvisories.Shared.Against(subject, latest);
-        var advised = subject is null ? null : DriverAdvisories.Shared.Against(subject, installed);
         var laptop = ThisPcIsLaptop();
-        var primaryOnIntegrated = !laptop && Hybrid.Value is not null && ReadPrimaryOnIntegrated();
+        var reading = await ReadWithProbesAsync(
+            cpu,
+            installed,
+            chipset,
+            chipsetAuto,
+            fastGpuForGames,
+            laptop,
+            readLatestChipset: chipset is not null && installed is not null
+                ? () => chipset.LatestAsync().ContinueWith(t => t.IsCompletedSuccessfully ? t.Result?.Version : null, TaskScheduler.Default)
+                : () => Task.FromResult<string?>(null),
+            readPower: () => Task.Run(power.Read),
+            readNetwork: () => Task.Run<NetworkBest.State?>(NetworkBest.Shared.Read),
+            readGpu: () => GpuTask.Value,
+            readHybrid: () => HybridTask.Value,
+            readGpuPcie: () => GpuPcieTask.Value,
+            readPrimaryOnIntegrated: () => Task.Run(ReadPrimaryOnIntegrated),
+            readDimms: () => Task.Run(() => Memory.Value),
+            readBoardMaker: () => PcAbout.Maker(PcAbout.Bios.Maker),
+            readHagsOff: () => HagsOff(ReadHwSchMode()),
+            chipsetTimeout: TimeSpan.FromSeconds(5),
+            probeTimeout: TimeSpan.FromSeconds(5),
+            ct: ct).ConfigureAwait(false);
         var (cpuIdentifier, microcode) = ReadCpuSilicon();
         var (osBuild, osUbr) = PcAbout.OsBuildAndUbr();
         if (osBuild <= 0) osBuild = Environment.OSVersion.Version.Build;
         var cpuClass = ClassOf(cpu, CpuHybrid());
         bool? amd3dRunning = cpuClass == PowerProfiles.CpuClass.AmdDualCcdX3d ? IsServiceRunning("amd3dvcacheSvc") : null;
         bool? intelDttRunning = cpuClass == PowerProfiles.CpuClass.IntelHybrid ? (IsServiceRunning("ipfsvc") == true || IsServiceRunning("esifsvc") == true) : null;
-        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid(), BoardMaker: PcAbout.Maker(PcAbout.Bios.Maker), GpuPcie: GpuPcie.Value, Laptop: laptop, PrimaryOnIntegrated: primaryOnIntegrated, MemorySlots: MemorySlotTable.Value, BoardProduct: PcAbout.Bios.Product, CpuIdentifier: cpuIdentifier, MicrocodeRevision: microcode, OsBuild: osBuild, OsUbr: osUbr, Amd3dVCacheRunning: amd3dRunning, IntelDttRunning: intelDttRunning);
+        reading = reading with
+        {
+            MemorySlots = MemorySlotTable.Value,
+            BoardProduct = PcAbout.Bios.Product,
+            CpuIdentifier = cpuIdentifier,
+            MicrocodeRevision = microcode,
+            OsBuild = osBuild,
+            OsUbr = osUbr,
+            Amd3dVCacheRunning = amd3dRunning,
+            IntelDttRunning = intelDttRunning,
+        };
+        WindowsGameMode.KeepOn();
         if (Interlocked.Exchange(ref _logged, 1) == 0) AppLog.Info("PC health: " + Describe(reading));
         return reading;
+    }
+
+    private static object? ReadHwSchMode()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers");
+            return key?.GetValue("HwSchMode");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return null; }
+    }
+
+    internal static async Task<Reading> ReadWithProbesAsync(
+        string? cpu,
+        string? installed,
+        Services.ChipsetUpdate? chipset,
+        bool chipsetAuto,
+        bool fastGpuForGames,
+        bool laptop,
+        Func<Task<string?>> readLatestChipset,
+        Func<Task<PowerPlan.State?>> readPower,
+        Func<Task<NetworkBest.State?>> readNetwork,
+        Func<Task<GpuBar?>> readGpu,
+        Func<Task<HybridGpu?>> readHybrid,
+        Func<Task<PcieLink?>> readGpuPcie,
+        Func<Task<bool>> readPrimaryOnIntegrated,
+        Func<Task<IReadOnlyList<Dimm>>> readDimms,
+        Func<string?> readBoardMaker,
+        Func<bool> readHagsOff,
+        TimeSpan chipsetTimeout,
+        TimeSpan probeTimeout,
+        CancellationToken ct)
+    {
+        var latestTask = ProbeWithTimeoutAsync(readLatestChipset, chipsetTimeout, default(string?), ct);
+        var powerTask = ProbeWithTimeoutAsync(readPower, probeTimeout, default(PowerPlan.State?), ct);
+        var networkTask = ProbeWithTimeoutAsync(readNetwork, probeTimeout, default(NetworkBest.State?), ct);
+        var gpuTask = ProbeWithTimeoutAsync(readGpu, probeTimeout, default(GpuBar?), ct);
+        var hybridTask = ProbeWithTimeoutAsync(readHybrid, probeTimeout, default(HybridGpu?), ct);
+        var pcieTask = ProbeWithTimeoutAsync(readGpuPcie, probeTimeout, default(PcieLink?), ct);
+        var dimmsTask = ProbeWithTimeoutAsync(readDimms, probeTimeout, (IReadOnlyList<Dimm>)[], ct);
+        var hagsOff = readHagsOff();
+        var boardMaker = readBoardMaker();
+
+        await Task.WhenAll(latestTask, powerTask, networkTask, gpuTask, hybridTask, pcieTask, dimmsTask).ConfigureAwait(false);
+
+        var latest = await latestTask.ConfigureAwait(false);
+        var hybrid = await hybridTask.ConfigureAwait(false);
+        var primaryOnIntegrated = !laptop && hybrid is not null
+            && await ProbeWithTimeoutAsync(readPrimaryOnIntegrated, probeTimeout, false, ct).ConfigureAwait(false);
+        var update = installed is null || chipset is null ? null : chipset.Current(latest, Services.ChipsetUpdate.BootedAt());
+        var subject = chipset is null ? null : DriverAdvisories.Chipset(chipset.Vendor, cpu);
+        var skipped = subject is null || latest is null || VersionNumber.Same(latest, installed) ? null : DriverAdvisories.Shared.Against(subject, latest);
+        var advised = subject is null ? null : DriverAdvisories.Shared.Against(subject, installed);
+        return new Reading(
+            await dimmsTask.ConfigureAwait(false),
+            await gpuTask.ConfigureAwait(false),
+            cpu,
+            await powerTask.ConfigureAwait(false),
+            installed,
+            latest,
+            update,
+            chipsetAuto && installed is not null && chipset is not null && !chipset.WindowsAsks(),
+            hagsOff,
+            hybrid,
+            fastGpuForGames,
+            await networkTask.ConfigureAwait(false),
+            skipped,
+            advised,
+            CpuHybrid(),
+            BoardMaker: boardMaker,
+            GpuPcie: await pcieTask.ConfigureAwait(false),
+            Laptop: laptop,
+            PrimaryOnIntegrated: primaryOnIntegrated);
     }
 
     /// <summary>One app.log line of what was read, so a row that did or didn't show can be explained.</summary>

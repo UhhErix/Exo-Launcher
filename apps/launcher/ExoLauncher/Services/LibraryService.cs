@@ -82,6 +82,9 @@ public sealed class LibraryService
     private Dictionary<string, GameEntry>? _queuedCoverWarm;
     private IReadOnlyList<GameEntry> _queuedCoverWarmLibrary = Array.Empty<GameEntry>();
 
+    internal TimeSpan ColdAdapterTimeout { get; set; } = TimeSpan.FromSeconds(60);
+    internal TimeSpan WarmAdapterTimeout { get; set; } = TimeSpan.FromSeconds(35);
+
     private sealed record AdapterScanResult(
         string Id,
         IReadOnlyList<GameEntry> Items,
@@ -91,7 +94,8 @@ public sealed class LibraryService
         bool IsAccountScoped,
         string? AccountScope,
         long ElapsedMilliseconds,
-        long ReadRevision = 0);
+        long ReadRevision = 0,
+        bool Canceled = false);
 
     /// <summary>Raised when the cached library changes or a cover batch lands.</summary>
     public event Action? LibraryUpdated;
@@ -343,10 +347,13 @@ public sealed class LibraryService
                 var scopeBefore = accountScoped
                     ? ((IStoreAccountScope)adapter).GetActiveAccountScope()
                     : null;
+                var adapterTimeout = _latestAdapterReads.ContainsKey(adapter.Id) ? WarmAdapterTimeout : ColdAdapterTimeout;
+                using var external = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetime.Token);
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(external.Token);
                 try
                 {
-                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    timeout.CancelAfter(TimeSpan.FromSeconds(25));
+                    external.Token.ThrowIfCancellationRequested();
+                    timeout.CancelAfter(adapterTimeout);
                     // WaitAsync is the hard deadline: adapters that read the
                     // registry or disk before their first await (or never await)
                     // ignore the token, and one stuck read held the whole scan.
@@ -392,6 +399,31 @@ public sealed class LibraryService
                         scopeBefore,
                         adapterStopwatch.ElapsedMilliseconds);
                 }
+                catch (OperationCanceledException) when (external.IsCancellationRequested)
+                {
+                    return new AdapterScanResult(
+                        adapter.Id,
+                        Array.Empty<GameEntry>(),
+                        false,
+                        "Canceled.",
+                        false,
+                        accountScoped,
+                        scopeBefore,
+                        adapterStopwatch.ElapsedMilliseconds,
+                        Canceled: true);
+                }
+                catch (OperationCanceledException)
+                {
+                    return new AdapterScanResult(
+                        adapter.Id,
+                        Array.Empty<GameEntry>(),
+                        false,
+                        $"Timed out after {(int)Math.Ceiling(adapterTimeout.TotalSeconds)}s.",
+                        false,
+                        accountScoped,
+                        scopeBefore,
+                        adapterStopwatch.ElapsedMilliseconds);
+                }
                 catch (Exception ex)
                 {
                     return new AdapterScanResult(
@@ -404,7 +436,7 @@ public sealed class LibraryService
                         scopeBefore,
                         adapterStopwatch.ElapsedMilliseconds);
                 }
-            }, ct);
+            }, CancellationToken.None);
 
     /// <summary>
     /// One cover warm runs at a time. Targets that arrive meanwhile merge into a
@@ -520,6 +552,13 @@ public sealed class LibraryService
                     _lastGoodByAdapter[LastGoodKey(result.Id, result.AccountScope, result.IsAccountScoped)] = result.Items;
                 discovered.AddRange(result.Items);
             }
+            else if (result.Canceled)
+            {
+                AppLog.Info($"Library scan canceled for {result.Id}.");
+                if (_adapters.FirstOrDefault(adapter => adapter.Id == result.Id) is { } canceled)
+                    _dirtyStores[canceled.Store] = 0;
+                discovered.AddRange(FallbackRowsForFailedAdapter(result));
+            }
             else
             {
                 _scanErrors[result.Id] = result.Error ?? "Unknown scan error";
@@ -528,22 +567,16 @@ public sealed class LibraryService
                 // instead of reusing its older successful read.
                 if (_adapters.FirstOrDefault(adapter => adapter.Id == result.Id) is { } failed)
                     _dirtyStores[failed.Store] = 0;
-                var lastGoodKey = LastGoodKey(result.Id, result.AccountScope, result.IsAccountScoped);
-                if ((!result.IsAccountScoped || result.AccountScope is not null) &&
-                    _lastGoodByAdapter.TryGetValue(lastGoodKey, out var lastGood))
-                {
-                    // A timeout must not make an otherwise healthy store disappear from Exo.
-                    discovered.AddRange(lastGood);
-                }
-                else if (_cacheAt == DateTimeOffset.MinValue)
-                {
-                    // First process scan: keep the disk-painted rows for this
-                    // store when last-good was never seeded (scope-unverified
-                    // adapters, or a cache written before this adapter existed).
-                    discovered.AddRange(PaintedRowsForAdapter(result.Id));
-                }
+                discovered.AddRange(FallbackRowsForFailedAdapter(result));
             }
         }
+
+        if ((ct.IsCancellationRequested || _lifetime.IsCancellationRequested) &&
+            Volatile.Read(ref _hasLibrarySnapshot) &&
+            results.Any(result => result.Canceled) &&
+            discovered.Count == 0 &&
+            _cache.Count > 0)
+            return OverlayUserPrefs(_cache);
 
         // Drop test fixtures and non-games junk. Local is a real wired backend.
         // Current is a detached settings snapshot; capture the flag once rather
@@ -1003,8 +1036,8 @@ public sealed class LibraryService
     /// A client is installed, its read succeeded, and it still found no games: the store probably moved its data
     /// to a layout Exo does not read. A failed read is excluded (its scan error already shows).
     /// </summary>
-    internal static bool IsLayoutUnrecognized(bool clientPresent, bool scanSucceeded, int games) =>
-        clientPresent && scanSucceeded && games == 0;
+    internal static bool IsLayoutUnrecognized(bool clientPresent, bool scanSucceeded, int games, bool layoutRecognized = false) =>
+        clientPresent && scanSucceeded && games == 0 && !layoutRecognized;
 
     private static bool ClientPresent(IStoreAdapter a) =>
         a is IStoreClientPresence client ? client.IsClientPresent() : a.IsAgentPresent();
@@ -1017,13 +1050,36 @@ public sealed class LibraryService
     {
         var adapter = _adapters.FirstOrDefault(a => a.Id == result.Id);
         if (adapter is null || adapter is LocalAdapter) return;
-        if (!IsLayoutUnrecognized(ClientPresent(adapter), result.Succeeded, result.Items.Count))
+        var layoutRecognized = adapter is IStoreLayoutProbe probe && probe.IsLayoutRecognized();
+        if (!IsLayoutUnrecognized(ClientPresent(adapter), result.Succeeded, result.Items.Count, layoutRecognized))
         {
             _layoutUnrecognized.TryRemove(result.Id, out _);
             return;
         }
         if (_layoutUnrecognized.TryAdd(result.Id, true))
             AppLog.Warn($"Store layout not recognized: {adapter.DisplayName} is installed, but its library read found no games. Its data may have moved to a layout Exo does not read.");
+    }
+
+    private IEnumerable<GameEntry> FallbackRowsForFailedAdapter(AdapterScanResult result)
+    {
+        var lastGoodKey = LastGoodKey(result.Id, result.AccountScope, result.IsAccountScoped);
+        if ((!result.IsAccountScoped || result.AccountScope is not null) &&
+            _lastGoodByAdapter.TryGetValue(lastGoodKey, out var lastGood))
+            return lastGood;
+        if (_latestAdapterReads.TryGetValue(result.Id, out var latest) &&
+            latest.Succeeded &&
+            (!result.IsAccountScoped || string.Equals(latest.AccountScope, result.AccountScope, StringComparison.Ordinal)))
+            return latest.Items;
+        var painted = PaintedRowsForAdapter(result.Id).ToArray();
+        if (_cacheAt == DateTimeOffset.MinValue || result.Canceled)
+        {
+            if (result.IsAccountScoped &&
+                (!_lastAccountScopeByAdapter.TryGetValue(result.Id, out var previous) ||
+                 !string.Equals(previous, result.AccountScope, StringComparison.Ordinal)))
+                return InstalledWithoutAccountClaims(painted);
+            return painted;
+        }
+        return [];
     }
 
     private IReadOnlyList<StoreBackendStatus> BuildStoreMatrix() =>

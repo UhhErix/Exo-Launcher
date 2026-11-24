@@ -62,6 +62,11 @@ public interface IStoreClientPresence
     bool IsClientPresent();
 }
 
+public interface IStoreLayoutProbe
+{
+    bool IsLayoutRecognized();
+}
+
 /// <summary>
 /// Optional account boundary for adapters whose on-disk catalog, playtime, or
 /// entitlement data is tied to the currently signed-in vendor user. The value
