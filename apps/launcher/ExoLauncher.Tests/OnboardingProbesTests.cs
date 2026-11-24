@@ -105,21 +105,23 @@ public sealed class OnboardingProbesTests
     }
 
     [Fact]
-    public async Task GpuProfile_TtlReadCache_ServesWarmedResultOnRetryAfterFirstCallTimesOut()
+    public async Task GpuProfile_SharedInFlightRead_ServesWarmedResultOnRetryAfterFirstCallTimesOut()
     {
         var driverReady = new TaskCompletionSource<GpuProfileService.State>(TaskCreationOptions.RunContinuationsAsynchronously);
         var reads = 0;
-        var cache = new TtlReadCache<GpuProfileService.State>(
-            TimeSpan.FromSeconds(30),
-            () =>
+        Task<GpuProfileService.State>? inFlight = null;
+        Task<GpuProfileService.State> SharedRead(CancellationToken ct)
+        {
+            if (inFlight is not { IsCompleted: false })
             {
                 Interlocked.Increment(ref reads);
-                return driverReady.Task;
-            },
-            state => state.Ok);
+                inFlight = driverReady.Task;
+            }
+            return inFlight.WaitAsync(ct);
+        }
 
         var first = await WebHostBridge.ReadProfileWithTimeoutAsync(
-            ct => cache.GetAsync(false, ct),
+            SharedRead,
             () => "nvidia",
             TimeSpan.FromMilliseconds(50),
             CancellationToken.None);
@@ -127,14 +129,16 @@ public sealed class OnboardingProbesTests
         Assert.False(first.Ok);
         Assert.Equal("none", first.Status);
 
-        var full = new GpuProfileService.State(true, null, "nvidia", "RTX 4080", 40, new GpuProfile.Screen("Main", 240, true), "ready", false, false, []);
-        driverReady.SetResult(full);
-
-        var retry = await WebHostBridge.ReadProfileWithTimeoutAsync(
-            ct => cache.GetAsync(false, ct),
+        var retryTask = WebHostBridge.ReadProfileWithTimeoutAsync(
+            SharedRead,
             () => "nvidia",
             TimeSpan.FromSeconds(2),
             CancellationToken.None);
+
+        var full = new GpuProfileService.State(true, null, "nvidia", "RTX 4080", 40, new GpuProfile.Screen("Main", 240, true), "ready", false, false, []);
+        driverReady.SetResult(full);
+
+        var retry = await retryTask;
 
         Assert.True(retry.Ok);
         Assert.Equal("ready", retry.Status);
