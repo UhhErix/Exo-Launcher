@@ -277,7 +277,9 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
         ));
     }
 
-    if let Some(ref fg) = s.game_page.frame_gen {
+    if s.game_frame_gen.is_some() || game.installed {
+        rows.push(crate::frame_gen_row::view(s, game));
+    } else if let Some(ref fg) = s.game_page.frame_gen {
         if !fg.ok {
             rows.push(perf_reading_row(
                 "Frame generation",

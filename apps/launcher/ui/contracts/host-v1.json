@@ -193,6 +193,7 @@
     "game.cancelInstall": "{ ok: boolean; message?: string }",
     "game.dequeue": "{ ok: boolean; message?: string; queuedGameIds?: string[]; pausedDownloads?: PausedDownload[] }",
     "game.extras": "{ ok: boolean; achievementsUnlocked?: number | null; achievementsTotal?: number | null; driveHeat?: DriveHeat | null; message?: string }",
+    "game.frameGen": "GameFrameGen",
     "game.get": "{ ok: boolean; game?: Game; message?: string }",
     "game.install": "InstallResponse",
     "game.launch": "LaunchResponse",

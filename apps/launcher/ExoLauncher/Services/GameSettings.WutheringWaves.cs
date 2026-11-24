@@ -54,7 +54,7 @@ internal static partial class GameSettings
     internal static bool SupportsSmoothMotion(GameEntry game, Pc pc) =>
         IsWutheringWaves(game) && IsNvidiaRtx40Plus(pc);
 
-    private static bool IsWutheringWavesEntry(GameEntry game) =>
+    internal static bool IsWutheringWavesEntry(GameEntry game) =>
         game.Id.Equals(WutheringWavesSteamId, StringComparison.OrdinalIgnoreCase)
         || game.Id.Equals(WutheringWavesLocalId, StringComparison.OrdinalIgnoreCase)
         || StoreService.TitleKey(game.Title ?? "") == "wutheringwaves";

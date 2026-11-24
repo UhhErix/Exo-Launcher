@@ -69,11 +69,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::Duration;
 pub use types::{
-    ActionResult, ArtBase, ExoAccountState, Game, GameExtras, GameGetReply, GameProperties,
-    GamePropertySetReply, GameVariant, HostContract, HostEvent, InstallProgress, KeyPreview,
-    LauncherSettings, LibraryPayload, StoreArt, StoreGame, StoreHome, StoreLowest, StoreMedia,
-    StoreOffer, StoreOtherOffers, StoreRecentReviews, StoreSearchReply, StoreShelf, StoreSpec,
-    StoreTile, StoreWishlistReply,
+    ActionResult, ArtBase, ExoAccountState, FrameGenRoute, Game, GameExtras, GameFrameGen,
+    GameGetReply, GameProperties, GamePropertySetReply, GameVariant, HostContract, HostEvent,
+    InstallProgress, KeyPreview, LauncherSettings, LibraryPayload, StoreArt, StoreGame, StoreHome,
+    StoreLowest, StoreMedia, StoreOffer, StoreOtherOffers, StoreRecentReviews, StoreSearchReply,
+    StoreShelf, StoreSpec, StoreTile, StoreWishlistReply,
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -193,6 +193,7 @@ pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_GAME_RESUME_DOWNLOAD: &str = "game.resumeDownload";
 pub const METHOD_GAME_SETTINGS: &str = "game.settings";
+pub const METHOD_GAME_FRAME_GEN: &str = "game.frameGen";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
 pub const METHOD_MOUSE_PANEL_BOUNDS: &str = "mouse.panel.bounds";
@@ -347,6 +348,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_PROPERTIES_SET,
     METHOD_GAME_RESUME_DOWNLOAD,
     METHOD_GAME_SETTINGS,
+    METHOD_GAME_FRAME_GEN,
     METHOD_KEYS_PREVIEW,
     METHOD_KEYS_ACTIVATE,
     METHOD_MOUSE_PANEL_BOUNDS,
