@@ -969,7 +969,7 @@
     "ExoLauncher/Services/InstalledGameCatalog.cs": 22,
     "ExoLauncher/Services/InstalledPrograms.cs": 44,
     "ExoLauncher/Services/InstallerCache.cs": 23,
-    "ExoLauncher/Services/IntelProfileService.cs": 30,
+    "ExoLauncher/Services/IntelProfileService.cs": 29,
     "ExoLauncher/Services/InterruptMode.Native.cs": 48,
     "ExoLauncher/Services/InterruptMode.cs": 84,
     "ExoLauncher/Services/JunkAutoClean.cs": 42,

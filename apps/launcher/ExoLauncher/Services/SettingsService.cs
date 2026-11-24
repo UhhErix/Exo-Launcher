@@ -783,6 +783,24 @@ public sealed class SettingsService
         });
     }
 
+    public GameFrameCapPref? FrameCapFor(string gameId)
+    {
+        lock (_stateGate)
+            return _current.FrameCap.TryGetValue(gameId, out var pref) ? pref.Copy() : null;
+    }
+
+    public void SetFrameCap(string gameId, GameFrameCapPref? pref)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var next = CopyFrameCaps(settings.FrameCap);
+            if (pref is null) next.Remove(gameId);
+            else next[gameId] = pref.Copy();
+            settings.FrameCap = next;
+        });
+    }
+
     /// <summary>Settings › General › Open Exo when Windows starts.</summary>
     public void SetStartWithWindows(bool on) => CommitMutation(settings => settings.StartWithWindows = on);
     /// <summary>Whether the player set this Steam game to Launch without anti-cheat (<see cref="AppSettings.SteamWithoutAntiCheat"/>).</summary>
@@ -1119,6 +1137,7 @@ public sealed class SettingsService
         SteamOverlayPrior = CopyStrings(source.SteamOverlayPrior),
         SmoothMotion = CopyBools(source.SmoothMotion),
         FrameGenRoute = CopyStrings(source.FrameGenRoute),
+        FrameCap = CopyFrameCaps(source.FrameCap),
         ControllerSound = source.ControllerSound,
         SteamInput = CopyStrings(source.SteamInput),
         ThroughSteam = [.. (source.ThroughSteam ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase)],
@@ -1139,6 +1158,15 @@ public sealed class SettingsService
         if (source is null) return copy;
         foreach (var pair in source)
             if (pair.Key is not null && pair.Value is not null) copy[pair.Key] = pair.Value;
+        return copy;
+    }
+
+    private static Dictionary<string, GameFrameCapPref> CopyFrameCaps(IDictionary<string, GameFrameCapPref>? source)
+    {
+        var copy = new Dictionary<string, GameFrameCapPref>(StringComparer.OrdinalIgnoreCase);
+        if (source is null) return copy;
+        foreach (var pair in source)
+            if (pair.Key is not null && pair.Value is not null) copy[pair.Key] = pair.Value.Copy();
         return copy;
     }
 

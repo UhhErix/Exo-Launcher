@@ -733,6 +733,223 @@ pub struct GameFrameGen {
     pub routes: Vec<FrameGenRoute>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapTier {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub cap_fps: Option<i32>,
+    #[serde(default)]
+    pub output_fps: Option<i32>,
+    #[serde(default)]
+    pub predicted_variance_ms2: f64,
+    #[serde(default)]
+    pub predicted_std_dev_ms: f64,
+    #[serde(default)]
+    pub predicted_dips_per_minute: f64,
+    #[serde(default)]
+    pub measured: bool,
+    #[serde(default)]
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapBackend {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub vendor: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub available: bool,
+    #[serde(default)]
+    pub per_game_native: bool,
+    #[serde(default)]
+    pub latency_note: String,
+    #[serde(default)]
+    pub anti_cheat_note: String,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapSuggestion {
+    #[serde(default)]
+    pub tier: String,
+    #[serde(default)]
+    pub cap_fps: Option<i32>,
+    #[serde(default)]
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapStutterBreakdown {
+    #[serde(default)]
+    pub cause: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub spikes: i32,
+    #[serde(default)]
+    pub share_percent: f64,
+    #[serde(default)]
+    pub detail: String,
+    #[serde(default)]
+    pub hint: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapStutter {
+    #[serde(default)]
+    pub total_spikes: i32,
+    #[serde(default)]
+    pub top_cause: String,
+    #[serde(default)]
+    pub top_cause_label: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub per_process_vram_available: bool,
+    #[serde(default)]
+    pub breakdown: Vec<FrameCapStutterBreakdown>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CapLabArmMetrics {
+    #[serde(default)]
+    pub cap_fps: i32,
+    #[serde(default)]
+    pub frames: i64,
+    #[serde(default)]
+    pub average_fps: f64,
+    #[serde(default)]
+    pub low1_fps: f64,
+    #[serde(default)]
+    pub low01_fps: f64,
+    #[serde(default)]
+    pub average_ms: f64,
+    #[serde(default)]
+    pub frame_time_variance_ms2: f64,
+    #[serde(default)]
+    pub frame_time_std_dev_ms: f64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CapLabStatus {
+    #[serde(default)]
+    pub game_id: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub cap_a_fps: i32,
+    #[serde(default)]
+    pub cap_b_fps: i32,
+    #[serde(default)]
+    pub current_arm: Option<String>,
+    #[serde(default)]
+    pub elapsed_seconds: i32,
+    #[serde(default)]
+    pub total_seconds: i32,
+    #[serde(default)]
+    pub verdict: Option<String>,
+    #[serde(default)]
+    pub winner: Option<String>,
+    #[serde(default)]
+    pub delta_percent: f64,
+    #[serde(default)]
+    pub noise_threshold_percent: f64,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub arm_a: Option<CapLabArmMetrics>,
+    #[serde(default)]
+    pub arm_b: Option<CapLabArmMetrics>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CapLabActionReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub ab: CapLabStatus,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameFrameCap {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub game_id: String,
+    #[serde(default)]
+    pub refresh_hz: f64,
+    #[serde(default)]
+    pub vrr: bool,
+    #[serde(default)]
+    pub in_vrr_range: bool,
+    #[serde(default)]
+    pub vrr_floor_hz: i32,
+    #[serde(default)]
+    pub fg_multiplier: i32,
+    #[serde(default)]
+    pub fg_route_label: Option<String>,
+    #[serde(default)]
+    pub vendor: String,
+    #[serde(default)]
+    pub adapter: Option<String>,
+    #[serde(default)]
+    pub is_hybrid: bool,
+    #[serde(default)]
+    pub backend: String,
+    #[serde(default)]
+    pub backend_label: String,
+    #[serde(default)]
+    pub backend_available: bool,
+    #[serde(default)]
+    pub backend_note: Option<String>,
+    #[serde(default)]
+    pub backends: Vec<FrameCapBackend>,
+    #[serde(default)]
+    pub selected_tier: String,
+    #[serde(default)]
+    pub active_cap_fps: Option<i32>,
+    #[serde(default)]
+    pub target_output_fps: Option<i32>,
+    #[serde(default)]
+    pub tiers: Vec<FrameCapTier>,
+    #[serde(default)]
+    pub refresh_locked_caps: Vec<i32>,
+    #[serde(default)]
+    pub uncapped_option: Option<FrameCapTier>,
+    #[serde(default)]
+    pub suggestion: FrameCapSuggestion,
+    #[serde(default)]
+    pub stutter: FrameCapStutter,
+    #[serde(default)]
+    pub ab: CapLabStatus,
+    #[serde(default)]
+    pub word: String,
+    #[serde(default)]
+    pub good: bool,
+    #[serde(default)]
+    pub bad: bool,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameProperties {
@@ -1648,6 +1865,7 @@ pub enum HostEvent {
     ExoAccountChanged,
     AutopilotReport(crate::events::AutopilotReportEvent),
     AutopilotLive(Option<crate::pc_types::AutopilotLive>),
+    GameCapLab(Box<CapLabStatus>),
     ShadersChanged,
     ShadersEvent(crate::settings_types::ShadersEventPayload),
     AccountsProgress(crate::settings_types::AccountsProgressEvent),

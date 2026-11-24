@@ -24,6 +24,7 @@ internal sealed class IntelProfileService(IGpuDriver driver, string folder, Func
     {
         /// <summary>Each game's frame generation override (1 2x, 2 3x, 3 4x); a game Exo leaves to itself is not listed.</summary>
         public Dictionary<string, int> FrameGen { get; set; } = [];
+        public Dictionary<string, int> FrameLimit { get; set; } = [];
         /// <summary>What a launch switched, and the value it had before.</summary>
         public Dictionary<string, int> Restore { get; set; } = [];
     }
@@ -153,29 +154,101 @@ internal sealed class IntelProfileService(IGpuDriver driver, string folder, Func
         }
     }
 
+    internal (bool Supported, bool PerApp) FrameLimitSupport()
+    {
+        lock (_gate)
+        {
+            if (!isIntel()) return (false, false);
+            var cap = IntelIgcl.FrameLimitCapability();
+            if (cap.Supported) return (true, cap.PerApp);
+            return driver.Read() is { } state && state.Values.ContainsKey(Keys.FrameLimit)
+                ? (true, false)
+                : (false, false);
+        }
+    }
+
+    internal int? FrameLimitCap(string gameId)
+    {
+        lock (_gate)
+            return LoadGames().FrameLimit.TryGetValue(gameId, out var fps) && fps > 0 ? fps : null;
+    }
+
+    internal string? SetFrameLimitCap(string gameId, string? exeName, int? fps)
+    {
+        lock (_gate)
+        {
+            var games = LoadGames();
+            var value = fps is > 0 ? fps.Value : 0;
+            if (value == 0) games.FrameLimit.Remove(gameId);
+            else games.FrameLimit[gameId] = value;
+            if (!SaveGames(games)) return "Could not save Intel frame limit preference.";
+            if (isIntel() && !string.IsNullOrWhiteSpace(exeName) && IntelIgcl.FrameLimitCapability().PerApp)
+                return IntelIgcl.WritePerAppFrameLimit(exeName, value);
+            return null;
+        }
+    }
+
+    internal string? ApplyFrameLimitNow(string? exeName, int fps)
+    {
+        lock (_gate)
+        {
+            if (!isIntel()) return "Intel driver is not active on this PC.";
+            var value = Math.Max(0, fps);
+            if (!string.IsNullOrWhiteSpace(exeName) && IntelIgcl.FrameLimitCapability().PerApp)
+                return IntelIgcl.WritePerAppFrameLimit(exeName, value);
+            if (driver.Read() is not { } state) return "Intel's driver did not answer.";
+            if (!state.Values.TryGetValue(Keys.FrameLimit, out var now))
+                return "This Intel GPU or driver does not expose Frame Limit.";
+            var games = LoadGames();
+            if (value > 0)
+            {
+                games.Restore.TryAdd(Keys.FrameLimit, now);
+                if (!SaveGames(games)) return "Could not save Intel frame limit restore state.";
+                var failed = driver.Write([new(Keys.FrameLimit, value)]);
+                if (failed is null)
+                    _restoreTick ??= new Timer(_ => GameEnded(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+                return failed;
+            }
+            var restoreVal = games.Restore.TryGetValue(Keys.FrameLimit, out var prior) ? prior : 0;
+            var err = driver.Write([new(Keys.FrameLimit, restoreVal)]);
+            if (err is null)
+            {
+                games.Restore.Remove(Keys.FrameLimit);
+                SaveGames(games);
+            }
+            return err;
+        }
+    }
+
     /// <summary>Before a game Exo launches starts: its frame generation override, when the player set one.</summary>
     internal void GameLaunching(string gameId, string title)
     {
         lock (_gate)
         {
             var games = LoadGames();
-            if (!games.FrameGen.TryGetValue(gameId, out var wanted) || wanted <= 0 || !isIntel()) return;
+            var wantFg = games.FrameGen.TryGetValue(gameId, out var fgVal) && fgVal > 0;
+            var wantCap = games.FrameLimit.TryGetValue(gameId, out var capVal) && capVal > 0 && !IntelIgcl.FrameLimitCapability().PerApp;
+            if ((!wantFg && !wantCap) || !isIntel()) return;
             if (driver.Read() is not { } state)
             {
                 AppLog.Warn($"Intel launch settings for {title}: Intel's driver did not answer, so nothing was switched.");
                 return;
             }
-            if (!state.Values.TryGetValue(Keys.FrameGen, out var now))
+            var writes = new List<KeyValuePair<string, int>>();
+            if (wantFg && state.Values.TryGetValue(Keys.FrameGen, out var nowFg) && nowFg != fgVal)
             {
-                AppLog.Info($"Intel launch settings for {title}: this GPU or driver has no {IntelIgcl.Label(Keys.FrameGen)}.");
-                return;
+                games.Restore.TryAdd(Keys.FrameGen, nowFg);
+                writes.Add(new(Keys.FrameGen, fgVal));
             }
-            if (now == wanted) return;
-            games.Restore.TryAdd(Keys.FrameGen, now);
-            // Saved before the switch: if Exo stops before the game ends, the next start puts it back.
+            if (wantCap && state.Values.TryGetValue(Keys.FrameLimit, out var nowCap) && nowCap != capVal)
+            {
+                games.Restore.TryAdd(Keys.FrameLimit, nowCap);
+                writes.Add(new(Keys.FrameLimit, capVal));
+            }
+            if (writes.Count == 0) return;
             if (!SaveGames(games)) return;
-            var failed = driver.Write([new(Keys.FrameGen, wanted)]);
-            AppLog.Info($"Intel launch settings for {title}: XeSS frame generation {GpuProfile.FrameGenChoice(wanted)}; {failed ?? "held"}.");
+            var failed = driver.Write(writes);
+            AppLog.Info($"Intel launch settings for {title}: {string.Join(", ", writes.Select(w => $"{w.Key}={w.Value}"))}; {failed ?? "held"}.");
             _restoreTick ??= new Timer(_ => GameEnded(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         }
     }

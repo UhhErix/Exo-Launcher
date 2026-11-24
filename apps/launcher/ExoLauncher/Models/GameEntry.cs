@@ -314,6 +314,24 @@ public sealed class LibraryFolder
     public List<string> Games { get; set; } = [];
 }
 
+public sealed class GameFrameCapPref
+{
+    public string Tier { get; set; } = "off";
+    public int? CapFps { get; set; }
+    public string? Backend { get; set; }
+    public string? PriorValue { get; set; }
+    public string? PriorBackend { get; set; }
+
+    public GameFrameCapPref Copy() => new()
+    {
+        Tier = Tier,
+        CapFps = CapFps,
+        Backend = Backend,
+        PriorValue = PriorValue,
+        PriorBackend = PriorBackend,
+    };
+}
+
 public sealed class AppSettings
 {
     /// <summary>Always on. Not in Settings.</summary>
@@ -584,6 +602,7 @@ public sealed class AppSettings
     /// <summary>Per-game opt-in for NVIDIA driver Smooth Motion (<c>0xB0D384C0</c>) on RTX 40/50 when not using native DLSS-G.</summary>
     public Dictionary<string, bool> SmoothMotion { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> FrameGenRoute { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, GameFrameCapPref> FrameCap { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>
     /// Devices > controller > Sound in Windows: controllers' own speakers and microphones as Windows audio devices.
     /// Off by default: Exo turns them off whenever a controller connects, so Windows never switches your sound to one.

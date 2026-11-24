@@ -294,6 +294,9 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
             ));
         }
     }
+    if s.game_frame_cap.is_some() || game.installed {
+        rows.push(crate::frame_cap_row::view(s, game));
+    }
 
     if s.pc.hdr.as_ref().is_some_and(|h| h.supported)
         && let Some(ref hdr) = s.game_page.hdr_game

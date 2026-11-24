@@ -10,7 +10,8 @@ internal sealed record ExoAiSnapshot(
     IReadOnlyList<string> NeedsAttention,
     ExoAiAutopilotSnapshot Gaming,
     FanStatus Fans,
-    GpuUsageAnswer? GpuAnswer = null);
+    GpuUsageAnswer? GpuAnswer = null,
+    string? CapSuggestion = null);
 
 /// <summary>
 /// Unified real-time optimization coordinator ("Exo AI"):
@@ -139,6 +140,9 @@ internal sealed class ExoAiCoordinator : IDisposable
         GpuUsageAnswer? gpuAnswer = null;
         try { gpuAnswer = _readGpuAnswer(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: GPU process read skipped: " + ex.GetType().Name); }
+        string? capSuggestion = null;
+        try { capSuggestion = FrameCapService.Shared.SuggestSentenceFor(gaming.GameId); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: cap suggestion skipped: " + ex.GetType().Name); }
         lock (_gate)
         {
             return new ExoAiSnapshot(
@@ -149,7 +153,8 @@ internal sealed class ExoAiCoordinator : IDisposable
                 [.. _needsAttention],
                 gaming,
                 fanStatus,
-                gpuAnswer);
+                gpuAnswer,
+                capSuggestion);
         }
     }
 

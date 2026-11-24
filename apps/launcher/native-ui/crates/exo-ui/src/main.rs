@@ -20,6 +20,7 @@ mod discord_voice_state;
 mod downloads;
 mod events;
 mod folders;
+mod frame_cap_row;
 mod frame_gen_row;
 mod game_actions;
 mod game_page;

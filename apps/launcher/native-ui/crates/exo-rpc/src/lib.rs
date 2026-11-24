@@ -153,13 +153,15 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::Duration;
 pub use types::{
-    ActionResult, ArtBase, ExoAccountState, FolderArtReply, FrameGenRoute, Game, GameExtras,
-    GameFrameGen, GameGetReply, GameProperties, GamePropertySetReply, GameVariant, HostContract,
-    HostEvent, InstallProgress, KeyPreview, LauncherSettings, LibraryFolder, LibraryPayload,
-    LibraryRefreshAllReply, PickPathReply, RiotAccounts, RiotSavedAccount, StoreAccountsReply,
-    StoreArt, StoreGame, StoreGift, StoreGifts, StoreHome, StoreLowest, StoreMedia, StoreOffer,
-    StoreOtherOffers, StoreRecentReviews, StoreSearchReply, StoreShelf, StoreSpec, StoreTile,
-    StoreWishlistReply, UninstallReply,
+    ActionResult, ArtBase, CapLabActionReply, CapLabArmMetrics, CapLabStatus, ExoAccountState,
+    FolderArtReply, FrameCapBackend, FrameCapStutter, FrameCapStutterBreakdown, FrameCapSuggestion,
+    FrameCapTier, FrameGenRoute, Game, GameExtras, GameFrameCap, GameFrameGen, GameGetReply,
+    GameProperties, GamePropertySetReply, GameVariant, HostContract, HostEvent, InstallProgress,
+    KeyPreview, LauncherSettings, LibraryFolder, LibraryPayload, LibraryRefreshAllReply,
+    PickPathReply, RiotAccounts, RiotSavedAccount, StoreAccountsReply, StoreArt, StoreGame,
+    StoreGift, StoreGifts, StoreHome, StoreLowest, StoreMedia, StoreOffer, StoreOtherOffers,
+    StoreRecentReviews, StoreSearchReply, StoreShelf, StoreSpec, StoreTile, StoreWishlistReply,
+    UninstallReply,
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -384,6 +386,9 @@ pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_GAME_RESUME_DOWNLOAD: &str = "game.resumeDownload";
 pub const METHOD_GAME_SETTINGS: &str = "game.settings";
 pub const METHOD_GAME_FRAME_GEN: &str = "game.frameGen";
+pub const METHOD_GAME_FRAME_CAP: &str = "game.frameCap";
+pub const METHOD_GAME_CAP_LAB_RUN: &str = "game.capLab.run";
+pub const METHOD_GAME_CAP_LAB_CANCEL: &str = "game.capLab.cancel";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
 pub const METHOD_MOUSE_PANEL_BOUNDS: &str = "mouse.panel.bounds";
@@ -1521,6 +1526,9 @@ fn parse_event(
                     .unwrap_or_else(|_| raw_fallback(name, data_raw)))
             }
         }
+        "game.capLab" => Ok(serde_json::from_str::<CapLabStatus>(data_raw)
+            .map(|status| HostEvent::GameCapLab(Box::new(status)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "shaders.changed" => Ok(HostEvent::ShadersChanged),
         "shaders.event" => Ok(serde_json::from_str::<ShadersEventPayload>(data_raw)
             .map(HostEvent::ShadersEvent)

@@ -783,6 +783,25 @@ internal static class FrameGenRouter
         facts.Wiki?.Apis is { Count: > 0 } apis
         && !apis.Any(api => api is "dx11" or "dx12" or "vulkan" or "opengl");
 
+    internal static int MultiplierFor(FrameGenDecision? decision)
+    {
+        if (decision is null) return 1;
+        if (decision.State is "unavailable" or "unread" or "off") return 1;
+        if (string.Equals(decision.SelectedRouteId, "off", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(decision.SelectedRouteId, RouteUnavailable, StringComparison.OrdinalIgnoreCase))
+            return 1;
+        var route = decision.Routes.FirstOrDefault(r => string.Equals(r.Id, decision.SelectedRouteId, StringComparison.OrdinalIgnoreCase));
+        if (route is null || !route.Active) return 1;
+        if (!string.IsNullOrWhiteSpace(route.ChoiceValue))
+        {
+            if (string.Equals(route.ChoiceValue, "4x", StringComparison.OrdinalIgnoreCase)) return 4;
+            if (string.Equals(route.ChoiceValue, "3x", StringComparison.OrdinalIgnoreCase)) return 3;
+            if (string.Equals(route.ChoiceValue, "2x", StringComparison.OrdinalIgnoreCase)) return 2;
+            if (string.Equals(route.ChoiceValue, "game", StringComparison.OrdinalIgnoreCase)) return 1;
+        }
+        return 2;
+    }
+
     private static bool WikiHasTech(GameWiki.Facts? wiki, string needle)
     {
         if (wiki?.FrameGen != "true") return false;
