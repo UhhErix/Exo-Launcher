@@ -124,6 +124,7 @@ export function crashBody(group, sample, diagnosis) {
 
 async function diagnosisOf(env, report) {
   if (!env.AI) return null
+  let timer
   try {
     const answer = await Promise.race([
       env.AI.run(DIAGNOSIS_MODEL, {
@@ -133,12 +134,14 @@ async function diagnosisOf(env, report) {
           { role: 'user', content: `${report.app} ${report.version}, Windows ${report.osBuild}\n${report.errorType}\n\n${trimExcerpt(report.excerpt, 3000)}` },
         ],
       }),
-      new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(null), 8000) }),
     ])
     const raw = answer?.response ?? answer?.choices?.[0]?.message?.content
     return typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 600) : null
   } catch {
     return null
+  } finally {
+    clearTimeout(timer)
   }
 }
 
