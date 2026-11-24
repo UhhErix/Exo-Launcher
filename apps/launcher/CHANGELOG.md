@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.30.1 — November 24, 2026
+- **Complete all-in-one game runtime coverage, VC++ v14 14.52 & per-item repair.** Updates Visual C++ 2015–2026 (v14) to official Microsoft 14.52.37029.0, hardens Visual C++ 2005/2012/2013 detection across MSI product codes and registry views, maps Steamworks Common Redistributables (228980) depots (`.NET 3.5/4.x`, XNA 4.0, OpenAL, PhysX/PhysX Legacy) alongside Unreal Engine and Epic Games Launcher manifests, and enables per-item repair for installable runtimes. _Checked in code only._
+- **Controller page stays steady without scroll jumps.** Fixes the layout wrapper in Devices › Controller so the page measures its full container height accurately and stays steady without jumping. _Verified: end-to-end._
+
 ## 3.30.0 — November 24, 2026
 - **Per-speaker Discord voice leveling & mic auto gain.** Upgrades Level voices in Discord › Settings › Voice to BS.1770 LUFS loudness leveling with selectable target loudness (-16, -20, or -24 LUFS), SNR-gated boost, a soft-knee peak limiter, and optional microphone auto gain. _Checked in code only._
 - **Expanded per-game Optimize profiles & individual setting controls.** Improves Call of Duty and Rocket League profiles and adds safe profiles for Rainbow Six Siege, Apex Legends, Overwatch 2, and Minecraft Java (RAM-scaled G1GC flags and opt-in Fabric Sodium, Lithium, and FerriteCore performance mods), with per-setting keep and revert controls on each game page. _Checked in code only._
