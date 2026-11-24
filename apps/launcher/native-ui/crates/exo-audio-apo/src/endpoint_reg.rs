@@ -3,6 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 
 pub const RENDER_ENDPOINTS_ROOT: &str =
     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Render";
+pub const COM_CLSID_ROOT: &str = "SOFTWARE\\Classes\\CLSID";
+pub const AUDIO_POLICY_ROOT: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Audio";
+pub const DISABLE_PROTECTED_AUDIO_DG_VALUE: &str = "DisableProtectedAudioDG";
 
 pub const PKEY_FX_ASSOCIATION: &str = "{D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},0";
 pub const PKEY_FX_PREMIX_CLSID: &str = "{D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},1";
@@ -22,6 +25,11 @@ pub const AUDIO_SIGNALPROCESSINGMODE_DEFAULT: &str = "{C18E2F7E-933D-4965-B7D1-1
 pub const EXO_APO_SFX_CLSID_STR: &str = "{7E3A8C14-4F2B-4A91-9D5E-2B8C6F1A4E01}";
 pub const EXO_APO_MFX_CLSID_STR: &str = "{7E3A8C14-4F2B-4A91-9D5E-2B8C6F1A4E02}";
 pub const EXO_APO_EFX_CLSID_STR: &str = "{7E3A8C14-4F2B-4A91-9D5E-2B8C6F1A4E03}";
+pub const EXO_APO_CLSIDS: [&str; 3] = [
+    EXO_APO_SFX_CLSID_STR,
+    EXO_APO_MFX_CLSID_STR,
+    EXO_APO_EFX_CLSID_STR,
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value", rename_all = "camelCase")]
@@ -39,9 +47,10 @@ pub trait RegistryStore {
     fn write_value(&mut self, path: &str, name: &str, value: &RegValue) -> std::io::Result<()>;
     fn delete_value(&mut self, path: &str, name: &str) -> std::io::Result<()>;
     fn ensure_key(&mut self, path: &str) -> std::io::Result<()>;
+    fn delete_key(&mut self, path: &str) -> std::io::Result<()>;
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MockRegistryStore {
     keys: BTreeMap<String, BTreeMap<String, RegValue>>,
 }
@@ -97,6 +106,11 @@ impl RegistryStore for MockRegistryStore {
         self.keys.entry(path.to_string()).or_default();
         Ok(())
     }
+
+    fn delete_key(&mut self, path: &str) -> std::io::Result<()> {
+        self.keys.remove(path);
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,6 +128,10 @@ pub struct EndpointBackup {
 pub struct KeepBackupLedger {
     pub version: u32,
     pub endpoints: HashMap<String, EndpointBackup>,
+    #[serde(default)]
+    pub registered_dll_path: Option<String>,
+    #[serde(default)]
+    pub com_clsids_registered: Vec<String>,
 }
 
 impl KeepBackupLedger {
@@ -121,6 +139,8 @@ impl KeepBackupLedger {
         Self {
             version: 1,
             endpoints: HashMap::new(),
+            registered_dll_path: None,
+            com_clsids_registered: Vec::new(),
         }
     }
 
@@ -378,6 +398,97 @@ pub fn uninstall_endpoint<R: RegistryStore>(
         store.write_value(&fx_path, name, orig_val)?;
     }
     Ok(true)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RollbackOutcome {
+    pub restored_endpoints: usize,
+    pub removed_com_clsids: usize,
+}
+
+pub fn com_clsid_key_path(clsid: &str) -> String {
+    format!("{COM_CLSID_ROOT}\\{clsid}")
+}
+
+pub fn com_inproc_key_path(clsid: &str) -> String {
+    format!("{COM_CLSID_ROOT}\\{clsid}\\InprocServer32")
+}
+
+pub fn register_com_server<R: RegistryStore>(
+    store: &mut R,
+    ledger: &mut KeepBackupLedger,
+    dll_path: &str,
+) -> std::io::Result<usize> {
+    if dll_path.trim().is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "dll path must not be empty",
+        ));
+    }
+    for clsid in EXO_APO_CLSIDS {
+        let clsid_key = com_clsid_key_path(clsid);
+        let inproc_key = com_inproc_key_path(clsid);
+        store.ensure_key(&clsid_key)?;
+        store.write_value(
+            &clsid_key,
+            "",
+            &RegValue::String("Exo Audio Processing Object".to_string()),
+        )?;
+        store.ensure_key(&inproc_key)?;
+        store.write_value(&inproc_key, "", &RegValue::String(dll_path.to_string()))?;
+        store.write_value(
+            &inproc_key,
+            "ThreadingModel",
+            &RegValue::String("Both".to_string()),
+        )?;
+        if !contains_ci(&ledger.com_clsids_registered, clsid) {
+            ledger.com_clsids_registered.push(clsid.to_string());
+        }
+    }
+    ledger.registered_dll_path = Some(dll_path.to_string());
+    Ok(ledger.com_clsids_registered.len())
+}
+
+pub fn unregister_com_server<R: RegistryStore>(
+    store: &mut R,
+    ledger: &mut KeepBackupLedger,
+) -> std::io::Result<usize> {
+    let clsids = std::mem::take(&mut ledger.com_clsids_registered);
+    for clsid in &clsids {
+        store.delete_key(&com_inproc_key_path(clsid))?;
+        store.delete_key(&com_clsid_key_path(clsid))?;
+    }
+    ledger.registered_dll_path = None;
+    Ok(clsids.len())
+}
+
+pub fn register_with_explicit_consent<R: RegistryStore>(
+    store: &mut R,
+    ledger: &mut KeepBackupLedger,
+    endpoint_id: &str,
+    dll_path: &str,
+    explicit_user_consent: bool,
+) -> std::io::Result<RegisterOutcome> {
+    if !explicit_user_consent {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "explicit user consent is required to register exo_apo.dll",
+        ));
+    }
+    register_com_server(store, ledger, dll_path)?;
+    register_endpoint(store, ledger, endpoint_id)
+}
+
+pub fn one_click_rollback<R: RegistryStore>(
+    store: &mut R,
+    ledger: &mut KeepBackupLedger,
+) -> std::io::Result<RollbackOutcome> {
+    let restored_endpoints = uninstall_all(store, ledger)?;
+    let removed_com_clsids = unregister_com_server(store, ledger)?;
+    Ok(RollbackOutcome {
+        restored_endpoints,
+        removed_com_clsids,
+    })
 }
 
 pub fn uninstall_all<R: RegistryStore>(
@@ -668,6 +779,17 @@ impl RegistryStore for Win32RegistryStore {
         }
         Ok(())
     }
+
+    fn delete_key(&mut self, path: &str) -> std::io::Result<()> {
+        use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RegDeleteKeyW};
+        use windows_core::PCWSTR;
+
+        let wide = Self::to_wide(path);
+        unsafe {
+            let _ = RegDeleteKeyW(HKEY_LOCAL_MACHINE, PCWSTR(wide.as_ptr()));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -786,5 +908,68 @@ mod tests {
             audit.get(TEST_GUID),
             Some(&HealStatus::SysFxDisabledByWindows)
         );
+    }
+
+    #[test]
+    fn refuses_registration_without_explicit_user_consent() {
+        let mut mock = MockRegistryStore::new();
+        let mut original = BTreeMap::new();
+        original.insert(
+            PKEY_FX_ENDPOINT_EFFECT_CLSID.to_string(),
+            RegValue::String(OEM_REALTEK_CLSID.to_string()),
+        );
+        mock.seed_endpoint(TEST_GUID, original);
+        let before = mock.clone();
+        let mut ledger = KeepBackupLedger::new();
+
+        let err = register_with_explicit_consent(
+            &mut mock,
+            &mut ledger,
+            TEST_GUID,
+            "C:\\Program Files\\Exo\\exo_apo.dll",
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(mock, before);
+        assert!(ledger.endpoints.is_empty());
+        assert!(ledger.com_clsids_registered.is_empty());
+    }
+
+    #[test]
+    fn explicit_consent_register_and_one_click_rollback_preserves_protected_audiodg() {
+        let mut mock = MockRegistryStore::new();
+        let mut original = BTreeMap::new();
+        original.insert(
+            PKEY_FX_ENDPOINT_EFFECT_CLSID.to_string(),
+            RegValue::String(OEM_REALTEK_CLSID.to_string()),
+        );
+        mock.seed_endpoint(TEST_GUID, original);
+        let before = mock.clone();
+        let mut ledger = KeepBackupLedger::new();
+
+        let outcome = register_with_explicit_consent(
+            &mut mock,
+            &mut ledger,
+            TEST_GUID,
+            "C:\\Exo\\exo_apo.dll",
+            true,
+        )
+        .expect("register with explicit consent");
+        assert_eq!(outcome.preserved_oem_clsids, vec![OEM_REALTEK_CLSID]);
+        assert_eq!(ledger.com_clsids_registered.len(), 3);
+        assert!(mock.key_exists(&com_inproc_key_path(EXO_APO_EFX_CLSID_STR)));
+        assert!(
+            mock.read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)
+                .unwrap()
+                .is_none()
+        );
+
+        let rb = one_click_rollback(&mut mock, &mut ledger).expect("one-click rollback");
+        assert_eq!(rb.restored_endpoints, 1);
+        assert_eq!(rb.removed_com_clsids, 3);
+        assert_eq!(mock, before);
+        assert!(ledger.endpoints.is_empty());
+        assert!(ledger.com_clsids_registered.is_empty());
     }
 }

@@ -2,7 +2,7 @@ param([Parameter(Mandatory)][string]$PayloadRoot, [Parameter(Mandatory)][string]
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Verify-Payload.ps1') -DefinitionsOnly -PayloadRoot $PayloadRoot
 $rootPath = (Resolve-Path -LiteralPath $PayloadRoot).Path.TrimEnd('\')
-$required = @('ExoLauncher.exe', 'ExoLauncher.dll', 'ExoLauncher.deps.json', 'ExoLauncher.runtimeconfig.json')
+$required = @('ExoLauncher.exe', 'ExoLauncher.dll', 'ExoLauncher.deps.json', 'ExoLauncher.runtimeconfig.json', 'exo_apo.dll', 'exo-apo-helper.exe')
 foreach ($relative in $required) {
     if (-not [IO.File]::Exists((Join-Path $rootPath $relative))) { throw "Required payload file is missing: $relative" }
 }
