@@ -27,6 +27,8 @@ members = [
     "crates/exo-fg-bridge",
     "crates/exo-audio-apo",
     "crates/exo-capture",
+    "crates/exo-delta",
+    "crates/exo-installer",
 ]
 
 [workspace.package]
