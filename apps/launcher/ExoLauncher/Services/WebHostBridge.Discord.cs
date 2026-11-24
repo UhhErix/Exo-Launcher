@@ -397,9 +397,9 @@ public sealed partial class WebHostBridge
         switch (ReadString(p, hasParams, "action"))
         {
             case "accept" when user is not null:
-                reply = await session.Rest.AcceptFriendAsync(user, ReadBool(p, hasParams, "confirm") == true, ct).ConfigureAwait(false);
-                if (reply.Body is { ValueKind: JsonValueKind.Object } refused && refused.TryGetProperty("code", out var code) &&
-                    code.ValueKind == JsonValueKind.Number && code.GetInt32() == DiscordRest.StrangerRequest)
+                var confirm = ReadBool(p, hasParams, "confirm") == true;
+                reply = await session.Rest.AcceptFriendAsync(user, confirm, ct).ConfigureAwait(false);
+                if (!confirm && DiscordRest.ErrorCode(reply.Body) == DiscordRest.StrangerRequest)
                     return new { ok = false, stranger = true };
                 break;
             case "remove" when user is not null: reply = await session.Rest.RemoveRelationshipAsync(user, ct).ConfigureAwait(false); break;

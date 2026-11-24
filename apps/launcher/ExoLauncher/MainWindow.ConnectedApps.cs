@@ -1,38 +1,11 @@
 using ExoLauncher.Helpers;
-using ExoLauncher.Services;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.Web.WebView2.Core;
 
 namespace ExoLauncher;
 
 public sealed partial class MainWindow
 {
-    private readonly Dictionary<WebView2, HashSet<CancellationTokenSource>> _connectedPermissionRequests = new();
     private readonly SemaphoreSlim _connectedDialogGate = new(1, 1);
-    private TaskCompletionSource _connectedPermissionChanged = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private event Action? ConnectedPermissionStateChanged;
 
-    private void NotifyConnectedPermissionStateChanged()
-    {
-        if (_connectedPermissionRequests.Count == 0) return;
-        var previous = _connectedPermissionChanged;
-        _connectedPermissionChanged = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        previous.TrySetResult();
-        foreach (var handler in ConnectedPermissionStateChanged?.GetInvocationList() ?? [])
-            try { ((Action)handler)(); } catch { }
-    }
-
-    private void CancelConnectedPermissions(WebView2? surface)
-    {
-        if (surface is null || !_connectedPermissionRequests.TryGetValue(surface, out var requests)) return;
-        foreach (var request in requests.ToArray()) request.Cancel();
-    }
-
-    /// Once the library is usable (and only after onboarding): Exo's Discord client connects with its
-    /// saved sign-in. Exo Capture starts here too (PrewarmCapture); Exo Shaders' engine starts only from
-    /// Compile or Refresh on its page. The music engine starts with the Music room (its adapter's start),
-    /// so a PC that never opens Music never runs it.
     internal async Task<object> PrepareConnectedRoomsAsync()
     {
         if (PackagedSmoke.Enabled || _closingWindow) return new { ok = true };
@@ -40,7 +13,6 @@ public sealed partial class MainWindow
         _shellUiInactive = null;
         var hiddenNow = WindowIsHiddenOrMinimized();
         _ = UpdateShellActivityAsync(hiddenNow || !_windowActive, hiddenNow);
-        // Every shell load prepares again; only the first is a startup milestone.
         var milestone = !_connectedPreloadLogged;
         _connectedPreloadLogged = true;
         if (milestone) LogStartupMilestone("connected-preload-start");
@@ -51,121 +23,4 @@ public sealed partial class MainWindow
     }
 
     private bool _connectedPreloadLogged;
-
-    private static async Task ResetPermissionGrantsAsync(CoreWebView2Profile profile)
-    {
-        foreach (var grant in await profile.GetNonDefaultPermissionSettingsAsync())
-            await profile.SetPermissionStateAsync(grant.PermissionKind, grant.PermissionOrigin, CoreWebView2PermissionState.Default);
-    }
-
-    internal async Task ResetWebPermissionGrantsAsync()
-    {
-        if (_musicWeb?.CoreWebView2 is { } music) await ResetPermissionGrantsAsync(music.Profile);
-    }
-
-    private async void OnConnectedPermissionRequested(CoreWebView2PermissionRequestedEventArgs e, WebView2 surface, bool popup, string? service)
-    {
-        e.SavesInProfile = false;
-        e.Handled = true;
-        var core = surface.CoreWebView2;
-        bool Trusted(string? uri) => service is not null && MusicWebPolicy.IsPlayerDocument(service, uri);
-        if (core is null || !Trusted(e.Uri) || _closingWindow)
-        {
-            e.State = CoreWebView2PermissionState.Deny;
-            return;
-        }
-        var resource = e.PermissionKind switch
-        {
-            CoreWebView2PermissionKind.Microphone => "microphone",
-            CoreWebView2PermissionKind.Camera => "camera",
-            CoreWebView2PermissionKind.ClipboardRead => "clipboard",
-            CoreWebView2PermissionKind.Notifications => "notifications",
-            _ => null,
-        };
-        if (resource is null)
-        {
-            e.State = CoreWebView2PermissionState.Deny;
-            return;
-        }
-
-        using var request = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
-        var deferral = e.GetDeferral();
-        ContentDialog? dialog = null;
-        var finished = false;
-        bool IsCurrent()
-        {
-            try
-            {
-                return !request.IsCancellationRequested && !_closingWindow && ReferenceEquals(core, surface.CoreWebView2) &&
-                    Trusted(core.Source) && service is not null && !_musicWebClosed && _musicWebService == service &&
-                    (popup || ReferenceEquals(surface, _musicWeb));
-            }
-            catch { return false; }
-        }
-        bool IsVisible() => popup && surface.XamlRoot is not null;
-        string Choice()
-        {
-            var current = WebClientPreferences.Read();
-            return resource switch { "microphone" => current.Microphone, "camera" => current.Camera,
-                "clipboard" => current.Clipboard, _ => current.Notifications };
-        }
-        void HideObsoletePrompt()
-        {
-            if (!finished && dialog is not null && (!IsCurrent() || !IsVisible() || Choice() != "ask"))
-                try { dialog.Hide(); } catch { }
-        }
-        void PreferencesChanged() => DispatcherQueue.Enqueue(() => { if (!finished) NotifyConnectedPermissionStateChanged(); });
-        void Navigation(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args) => UiGuard.Run(() => { if (!args.Cancel) request.Cancel(); });
-        void Failed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs args) => UiGuard.Run(() =>
-        {
-            if (args.ProcessFailedKind is CoreWebView2ProcessFailedKind.BrowserProcessExited or
-                CoreWebView2ProcessFailedKind.RenderProcessExited or CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)
-                request.Cancel();
-        });
-        void Unloaded(object sender, RoutedEventArgs args) => request.Cancel();
-        if (!_connectedPermissionRequests.TryGetValue(surface, out var requests))
-            _connectedPermissionRequests[surface] = requests = [];
-        requests.Add(request);
-        WebClientPreferences.Changed += PreferencesChanged;
-        ConnectedPermissionStateChanged += HideObsoletePrompt;
-        core.NavigationStarting += Navigation;
-        core.ProcessFailed += Failed;
-        surface.Unloaded += Unloaded;
-        using var cancellation = request.Token.Register(() => DispatcherQueue.Enqueue(HideObsoletePrompt));
-        try
-        {
-            var allowed = await ConnectedPermissionRequest.DecideAsync(Choice, IsCurrent, IsVisible,
-                () => _connectedPermissionChanged.Task, _connectedDialogGate, async token =>
-                {
-                    token.ThrowIfCancellationRequested();
-                    if (surface.XamlRoot is not { } root) return false;
-                    var label = service is null ? "This app" : MusicWebPolicy.Label(service);
-                    (dialog, var answered) = Question(root, "Allow " + label + " to use your " + resource + "?",
-                        "You can choose ongoing access in Exo Settings → Connected apps.", "Allow this time", cancel: "Not now");
-                    await dialog.ShowAsync();
-                    return answered();
-                }, request.Token);
-            e.State = allowed ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
-        }
-        catch { try { e.State = CoreWebView2PermissionState.Deny; } catch { } }
-        finally
-        {
-            finished = true;
-            WebClientPreferences.Changed -= PreferencesChanged;
-            ConnectedPermissionStateChanged -= HideObsoletePrompt;
-            try { core.NavigationStarting -= Navigation; core.ProcessFailed -= Failed; surface.Unloaded -= Unloaded; } catch { }
-            requests.Remove(request);
-            if (requests.Count == 0) _connectedPermissionRequests.Remove(surface);
-            try { deferral.Complete(); } catch { }
-        }
-    }
-
-    /// A music service's window in Exo's chrome (its sign-in, or a window its page opens), at the size the page asked
-    /// for or the service's own.
-    private static Window CreateExoWebPopup(string service, WebView2 view, (int Width, int Height)? size = null)
-    {
-        var window = new Window { Title = MusicWebPolicy.Label(service) + " · Exo" };
-        ExoConnectedTheme.WindowContent(window, service, view, size);
-        return window;
-    }
 }

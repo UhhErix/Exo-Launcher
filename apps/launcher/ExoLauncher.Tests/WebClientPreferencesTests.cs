@@ -59,4 +59,59 @@ public sealed class WebClientPreferencesTests : IDisposable
         Write("{\"musicService\":\"" + service + "\"}");
         Assert.Equal(service, WebClientPreferences.Reload().MusicService);
     }
+
+    [Theory]
+    [InlineData(null, null, "spotify")]
+    [InlineData("", null, "spotify")]
+    [InlineData("unknown", null, "spotify")]
+    [InlineData("spotify", "spotify", "spotify")]
+    [InlineData("APPLE", "apple", "apple")]
+    [InlineData("cider", "apple", "apple")]
+    [InlineData("ytmusic", "youtube", "youtube")]
+    [InlineData(" YouTube ", "youtube", "youtube")]
+    public void Music_service_normalization_and_default_work(string? input, string? expectedNormalized, string expectedEffective)
+    {
+        Assert.Equal(expectedNormalized, WebClientPreferences.TryNormalizeMusicService(input));
+        Assert.Equal(expectedEffective, WebClientPreferences.EffectiveMusicService(input));
+    }
+
+    [Fact]
+    public void Settings_uiPrefs_projects_effective_music_service_without_mutating_source()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse("true");
+        var source = new Dictionary<string, System.Text.Json.JsonElement>(StringComparer.Ordinal)
+        {
+            ["voiceChat"] = doc.RootElement.Clone(),
+        };
+
+        var merged = WebClientPreferences.BuildSettingsUiPrefs(source, "apple");
+
+        Assert.False(source.ContainsKey(WebClientPreferences.UiPrefMusicServiceKey));
+        Assert.Equal("apple", merged[WebClientPreferences.UiPrefMusicServiceKey].GetString());
+        Assert.True(merged["voiceChat"].GetBoolean());
+        Assert.Equal("spotify", WebClientPreferences.BuildSettingsUiPrefs(source, null)[WebClientPreferences.UiPrefMusicServiceKey].GetString());
+    }
+
+    [Fact]
+    public void Extracting_music_service_from_uiPrefs_strips_it_and_keeps_other_prefs()
+    {
+        using var patch = System.Text.Json.JsonDocument.Parse("""{"exo.musicWebService":"youtube","voiceChat":false}""");
+        var (service, remaining) = WebClientPreferences.ExtractMusicServiceFromUiPrefs(patch.RootElement);
+
+        Assert.Equal("youtube", service);
+        Assert.Single(remaining);
+        Assert.False(remaining["voiceChat"].GetBoolean());
+    }
+
+    [Fact]
+    public void SaveMusicService_normalizes_and_preserves_permissions()
+    {
+        Write("""{"microphone":"allow"}""");
+        var saved = WebClientPreferences.SaveMusicService("ytmusic");
+
+        Assert.Equal("youtube", saved.MusicService);
+        Assert.Equal("allow", saved.Microphone);
+        Assert.Equal("youtube", WebClientPreferences.Reload().MusicService);
+        Assert.Throws<ArgumentException>(() => WebClientPreferences.SaveMusicService("invalid"));
+    }
 }

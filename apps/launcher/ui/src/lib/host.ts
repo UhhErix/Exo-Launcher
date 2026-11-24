@@ -1449,6 +1449,7 @@ export interface LauncherSettings {
   /** Always black: Exo is pure black (AMOLED), with no Background choice (lib/exoTheme.ts › BACKGROUNDS). */
   background?: 'black' | 'near' | 'grey' | 'windows' | 'graphite' | string
   textSize?: 'small' | 'normal' | 'large' | string
+  musicService?: MusicService
   /** The page's own choices Exo keeps (lib/uiPrefs.ts), by key. settings.set merges the keys sent; null removes one. */
   uiPrefs?: Record<string, unknown>
   sortMode?: SortMode | string
@@ -1925,6 +1926,7 @@ export interface HostEventMap {
   'game.optimizeHeld': { title: string }
   /** Autopilot kept a session's report (shown in PC › Autopilot afterwards; nothing is said during play). */
   'autopilot.report': { game: string; title: string }
+  'autopilot.live': AutopilotLive | null
   /** The shader precompile moved on (at most four a second) or ended (ok set). */
   /** The Exo Shaders engine changed its list or a game's record: read shaders.status again. */
   'shaders.changed': Record<string, never>
@@ -2302,6 +2304,23 @@ export const host = {
   shellPainted: () => rawCall<{ ok: boolean }>('shell.painted'),
   /** The Library or first-run setup is up: an update's startup check (UpdateStartupHealth) counts this start as working. */
   shellReady: () => rawCall<{ ok: boolean }>('shell.ready'),
+  shellBootstrap: () =>
+    rawCall<{
+      ok: boolean
+      artBase: {
+        covers: string
+        coversDir?: string
+        devicesDir?: string
+        notesDir?: string
+        capturesDir?: string
+        captureThumbsDir?: string
+      }
+      settings: LauncherSettings
+      library: LibraryResponse
+      musicPlayback: { ok: boolean; playback: MusicPlayback | null }
+      discordStatus: DiscordStatus
+      binaryMediaPipe?: string | null
+    }>('shell.bootstrap'),
   getLibrary: (force = false, full = false) =>
     rawCall<LibraryResponse>(force ? 'library.refresh' : 'library.get',
       { force, ...(full ? { full: true } : {}) }).then((res) => {

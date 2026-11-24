@@ -57,6 +57,24 @@ internal static class CaptionDragRegions
         passthrough = [.. passes];
     }
 
+    internal enum CaptionRegion { Caption, Passthrough, Maximize }
+
+    internal readonly record struct CaptionRegionWrite(CaptionRegion Region, RectInt32[]? Rects);
+
+    internal static List<CaptionRegionWrite> WriteOrder(RectInt32[] caption, RectInt32[] passthrough, RectInt32[] maximize)
+    {
+        var writes = new List<CaptionRegionWrite>
+        {
+            new(CaptionRegion.Caption, null),
+            new(CaptionRegion.Caption, caption),
+            new(CaptionRegion.Passthrough, null),
+            new(CaptionRegion.Passthrough, passthrough),
+            new(CaptionRegion.Maximize, null),
+        };
+        if (maximize.Length > 0) writes.Add(new(CaptionRegion.Maximize, maximize));
+        return writes;
+    }
+
     private static RectInt32? ToPixels(RectInt32 area, int width, int titleH, double scale)
     {
         if (area.Width <= 0 || area.Height <= 0) return null;

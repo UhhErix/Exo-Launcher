@@ -1,12 +1,29 @@
-use crate::state::{AppState, PaletteItem};
+use crate::shell::room_icon;
+use crate::state::{AppState, PaletteItem, PaletteTarget};
 use exo_kit::{
-    BG, FG, RADIUS_SMALL, SPRING_BASE, TRANSPARENT, fg_muted, glass_panel, hairline, hover_fill,
-    icon_search, type_body, type_control, type_small,
+    FG, RADIUS_SHEET, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, fg_muted,
+    glass_panel_opt, hairline, hover_fill, icon_gamepad, icon_key, icon_refresh, icon_search,
+    icon_sparkles, modal_card_transition, modal_scrim_transition, scaled, scrim_fill, type_body,
+    type_control, type_small,
 };
-use rune::{El, Key, KeyEvent, Tx, col, edit_access, el, row, text, text_input};
+use rune::{
+    El, Key, KeyEvent, ScrollSpec, Spring, TextStyle, Tx, col, edit_access, el, row, text,
+    text_input,
+};
+
+fn palette_icon(target: &PaletteTarget) -> El {
+    match target {
+        PaletteTarget::Room(room) => room_icon(*room, false),
+        PaletteTarget::OpenGame(_) => icon_gamepad(16.0, fg_muted()),
+        PaletteTarget::RefreshLibrary => icon_refresh(16.0, fg_muted()),
+        PaletteTarget::ActivateKey => icon_key(16.0, fg_muted()),
+        PaletteTarget::StartTour => icon_sparkles(16.0, fg_muted()),
+    }
+}
 
 fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
     let target = item.target.clone();
+    let icon = palette_icon(&target);
     row()
         .key(item.id)
         .role("option")
@@ -15,24 +32,26 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
         .hit()
         .press_on_down()
         .w_full()
-        .h(38.0)
-        .px(12.0)
-        .radius(RADIUS_SMALL)
-        .justify_between()
+        .h(scaled(44.0))
+        .px(scaled(10.0))
+        .gap(scaled(12.0))
         .center_y()
+        .radius(RADIUS_SMALL + 2.0)
         .fill(if selected { hover_fill() } else { TRANSPARENT })
         .hover(hover_fill())
+        .hover_motion(Spring::NONE, SPRING_QUICK)
         .on_press_tx(move |s: &mut AppState, tx| {
             s.palette_index = index;
             s.execute_palette_target(target.clone(), tx);
         })
+        .child(icon)
         .child(text(item.title).font(type_control()).color(FG).truncate())
-        .child(text(item.subtitle).font(type_small()).color(fg_muted()))
 }
 
 pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     match ev.key {
         Key::Escape => {
+            tx.instant();
             s.close_palette();
             true
         }
@@ -51,6 +70,7 @@ pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
             true
         }
         Key::Enter => {
+            tx.instant();
             let items = s.palette_results();
             if let Some(item) = items.get(s.palette_index) {
                 s.execute_palette_target(item.target.clone(), tx);
@@ -73,59 +93,90 @@ pub fn view(s: &AppState) -> El {
 
     let input = text_input(&s.palette_query, type_body())
         .key("palette-input")
-        .label("Search games, rooms, and actions")
+        .label("Search")
         .grow(1.0)
         .single_line()
         .color(FG)
-        .placeholder("Search games, rooms, and actions…", fg_muted())
+        .placeholder("Search", fg_muted())
         .on_edit(edit_access(|s: &mut AppState| &mut s.palette_query))
         .on_input_change(|s: &mut AppState, _| s.palette_index = 0)
         .on_input_key(handle_palette_key)
         .on_submit(|s: &mut AppState, tx| {
+            tx.instant();
             let list = s.palette_results();
             if let Some(item) = list.get(s.palette_index) {
                 s.execute_palette_target(item.target.clone(), tx);
             }
         });
 
+    let header_h = scaled(48.0);
     let header = row()
         .w_full()
-        .h(48.0)
-        .px(16.0)
-        .gap(10.0)
+        .h(header_h)
+        .px(scaled(16.0))
+        .gap(scaled(12.0))
         .center_y()
-        .child(icon_search(15.0, fg_muted()))
-        .child(input)
-        .child(text("Esc").font(type_small()).color(fg_muted()));
+        .child(icon_search(16.0, fg_muted()))
+        .child(input);
 
+    let max_palette_h = 520.0;
     let body = if items.is_empty() {
-        el().w_full()
-            .h(72.0)
-            .center()
-            .child(
-                text("No matching games or commands")
-                    .font(type_small())
-                    .color(fg_muted()),
-            )
-    } else {
-        col().w_full().px(6.0).py(6.0).gap(2.0).children(
-            items
-                .into_iter()
-                .enumerate()
-                .map(|(i, item)| palette_row(item, i, i == clamped)),
+        el().w_full().h(72.0).center().child(
+            text("No matching games or commands")
+                .font(type_small())
+                .color(fg_muted()),
         )
+    } else {
+        let mut rows: Vec<El> = Vec::new();
+        let mut last_group: Option<&'static str> = None;
+        for (i, item) in items.into_iter().enumerate() {
+            if last_group != Some(item.group) {
+                rows.push(
+                    el().w_full()
+                        .px(scaled(10.0))
+                        .pt(if last_group.is_some() {
+                            scaled(12.0)
+                        } else {
+                            scaled(8.0)
+                        })
+                        .pb(scaled(4.0))
+                        .child(
+                            text(item.group)
+                                .font(TextStyle::new(scaled(12.0), 500.0))
+                                .color(fg_muted()),
+                        ),
+                );
+                last_group = Some(item.group);
+            }
+            rows.push(palette_row(item, i, i == clamped));
+        }
+        col()
+            .w_full()
+            .max_h(max_palette_h - header_h - 1.0)
+            .px(scaled(6.0))
+            .py(scaled(6.0))
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .clip_fade_linear(0.0, 0.0, 0.0, 28.0)
+            .children(rows)
     };
 
-    let card = glass_panel("command-palette", 540.0)
+    let card = glass_panel_opt("command-palette", scaled(576.0), true)
+        .max_h(max_palette_h)
+        .radius(RADIUS_SHEET)
+        .clip_rounded(RADIUS_SHEET)
         .motion(SPRING_BASE)
+        .transition(modal_card_transition())
         .child(header)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(body);
 
     el().key("palette-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.45))
+        .fill(scrim_fill())
         .hit()
+        .transition(modal_scrim_transition())
         .on_press(|s: &mut AppState| s.close_palette())
-        .child(col().w_full().h_full().pt(112.0).items_center().child(card))
+        .child(col().w_full().h_full().pt(130.0).items_center().child(card))
 }

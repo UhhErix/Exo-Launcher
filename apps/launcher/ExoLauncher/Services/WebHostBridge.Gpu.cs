@@ -25,18 +25,61 @@ public sealed partial class WebHostBridge
         }
     }
 
-    // The System room's header and its profile tab both read the profile as it shows, and each read is a whole driver
-    // session (half a second or more): the second waited out the first. One read in flight answers both.
-    private readonly Lock _profileReadGate = new();
-    private Task<GpuProfileService.State>? _profileRead;
+    private static readonly TimeSpan ProfileCacheTtl = TimeSpan.FromSeconds(30);
+    private TtlReadCache<GpuProfileService.State>? _profileCache;
+    private Action? _gpuHardwareChangedHandler;
 
-    private Task<GpuProfileService.State> SharedProfileRead()
+    private TtlReadCache<GpuProfileService.State> ProfileCache => _profileCache ??= new(
+        ProfileCacheTtl,
+        () => Task.Run(GpuProfileService.Read),
+        state => state.Ok,
+        ReadDisplaySignature);
+
+    private void InitGpuAndDisplayCaches()
     {
-        lock (_profileReadGate)
-        {
-            if (_profileRead is { IsCompleted: false } running) return running;
-            return _profileRead = Task.Run(GpuProfileService.Read);
-        }
+        _profileCache ??= new(
+            ProfileCacheTtl,
+            () => Task.Run(GpuProfileService.Read),
+            state => state.Ok,
+            ReadDisplaySignature);
+        _displayCache ??= new(
+            DisplayCacheTtl,
+            () => ReadDisplayStateAsync(null),
+            fingerprint: ReadDisplaySignature);
+        DriverInstallSignal.Changed += OnGpuCacheDriverSignal;
+        NvidiaDriverService.Changed += OnGpuCacheDriverProgress;
+        GpuDriverUpdate.Changed += OnGpuCacheDriverProgress;
+    }
+
+    private void WatchGpuAndDisplayHardware()
+    {
+        if (_gpuHardwareChangedHandler is not null) return;
+        _gpuHardwareChangedHandler = InvalidateGpuAndDisplayCaches;
+        Peripherals.Watch(_gpuHardwareChangedHandler);
+    }
+
+    private void DetachGpuAndDisplayCaches()
+    {
+        DriverInstallSignal.Changed -= OnGpuCacheDriverSignal;
+        NvidiaDriverService.Changed -= OnGpuCacheDriverProgress;
+        GpuDriverUpdate.Changed -= OnGpuCacheDriverProgress;
+        if (Interlocked.Exchange(ref _gpuHardwareChangedHandler, null) is { } handler)
+            Peripherals.Unwatch(handler);
+        InvalidateGpuAndDisplayCaches();
+    }
+
+    internal void InvalidateGpuAndDisplayCaches()
+    {
+        _profileCache?.Invalidate();
+        _displayCache?.Invalidate();
+    }
+
+    private void OnGpuCacheDriverSignal(DriverInstallSignal.Step _) => InvalidateGpuAndDisplayCaches();
+
+    private void OnGpuCacheDriverProgress(NvidiaDriverService.Progress progress)
+    {
+        if (progress.Stage is "installing" or "reloading" or "restoring" or "done" or "failed")
+            InvalidateGpuAndDisplayCaches();
     }
 
     private async Task<object> GpuProfileAsync(JsonElement p, bool hasParams, CancellationToken ct)
@@ -44,9 +87,20 @@ public sealed partial class WebHostBridge
         var action = ReadString(p, hasParams, "action");
         var lowLatency = ReadString(p, hasParams, "lowLatency");
         var vrr = ReadBool(p, hasParams, "vrr");
-        var state = action is "apply" or "undo"
-            ? await Task.Run(() => action == "apply" ? GpuProfileService.ApplyWith(lowLatency, vrr) : GpuProfileService.Undo(), ct).ConfigureAwait(false)
-            : await SharedProfileRead().WaitAsync(ct).ConfigureAwait(false);
+        var force = ReadBool(p, hasParams, "force") == true;
+        GpuProfileService.State state;
+        if (action is "apply" or "undo")
+        {
+            var gen = ProfileCache.BeginMutation();
+            _displayCache?.Invalidate();
+            state = await Task.Run(() => action == "apply" ? GpuProfileService.ApplyWith(lowLatency, vrr) : GpuProfileService.Undo(), ct).ConfigureAwait(false);
+            ProfileCache.CompleteMutation(gen, state);
+            _displayCache?.Invalidate();
+        }
+        else
+        {
+            state = await ProfileCache.GetAsync(force, ct).ConfigureAwait(false);
+        }
         return new
         {
             ok = state.Ok,
@@ -244,4 +298,123 @@ public sealed partial class WebHostBridge
     /// <summary>gpu.driverInstall: a step of a driver install, for the page's driver screen; done lists what was put back and what wasn't.</summary>
     private void PostDriverInstall(DriverInstallSignal.Step step) =>
         PostEvent("gpu.driverInstall", new { phase = step.Phase, version = step.Version, message = step.Message, restored = step.Restored, notRestored = step.NotRestored });
+}
+
+internal sealed class TtlReadCache<T>(
+    TimeSpan ttl,
+    Func<Task<T>> read,
+    Func<T, bool>? shouldCache = null,
+    Func<string>? fingerprint = null,
+    Func<long>? clockMs = null) where T : class
+{
+    private readonly Lock _gate = new();
+    private readonly long _ttlMs = Math.Max(0, (long)ttl.TotalMilliseconds);
+    private readonly Func<long> _clockMs = clockMs ?? (() => Environment.TickCount64);
+    private long _generation;
+    private T? _value;
+    private long _cachedAtMs;
+    private string? _cachedFingerprint;
+    private Task<T>? _inFlight;
+    private long _inFlightGeneration;
+    private string? _inFlightFingerprint;
+
+    internal void Invalidate()
+    {
+        lock (_gate)
+        {
+            _generation++;
+            _value = null;
+            _cachedFingerprint = null;
+            _inFlight = null;
+        }
+    }
+
+    internal long BeginMutation()
+    {
+        lock (_gate)
+        {
+            _generation++;
+            _value = null;
+            _cachedFingerprint = null;
+            _inFlight = null;
+            return _generation;
+        }
+    }
+
+    internal void CompleteMutation(long mutationGeneration, T value)
+    {
+        if (shouldCache is not null && !shouldCache(value)) return;
+        var fp = fingerprint?.Invoke();
+        lock (_gate)
+        {
+            if (_generation != mutationGeneration) return;
+            _value = value;
+            _cachedAtMs = _clockMs();
+            _cachedFingerprint = fp;
+        }
+    }
+
+    internal Task<T> GetAsync(bool force = false, CancellationToken ct = default)
+    {
+        var fp = fingerprint?.Invoke();
+        Task<T> task;
+        lock (_gate)
+        {
+            if (!force && _value is { } hit && (_clockMs() - _cachedAtMs) < _ttlMs
+                && string.Equals(_cachedFingerprint, fp, StringComparison.Ordinal))
+                return Task.FromResult(hit);
+
+            if (force || (_value is not null && !string.Equals(_cachedFingerprint, fp, StringComparison.Ordinal)))
+            {
+                _generation++;
+                _value = null;
+                _cachedFingerprint = null;
+                _inFlight = null;
+            }
+            else if (_inFlight is { IsCompleted: false } running
+                && string.Equals(_inFlightFingerprint, fp, StringComparison.Ordinal))
+            {
+                return WaitAsync(running, ct);
+            }
+
+            var gen = _generation;
+            task = RunReadAsync(gen, fp);
+            _inFlight = task;
+            _inFlightGeneration = gen;
+            _inFlightFingerprint = fp;
+        }
+        return WaitAsync(task, ct);
+    }
+
+    private async Task<T> RunReadAsync(long gen, string? startFp)
+    {
+        try
+        {
+            var result = await read().ConfigureAwait(false);
+            var canCache = shouldCache is null || shouldCache(result);
+            var endFp = canCache ? fingerprint?.Invoke() : null;
+            lock (_gate)
+            {
+                if (canCache && _generation == gen && string.Equals(startFp, endFp, StringComparison.Ordinal))
+                {
+                    _value = result;
+                    _cachedAtMs = _clockMs();
+                    _cachedFingerprint = endFp;
+                }
+                if (_inFlightGeneration == gen) _inFlight = null;
+            }
+            return result;
+        }
+        catch
+        {
+            lock (_gate)
+            {
+                if (_inFlightGeneration == gen) _inFlight = null;
+            }
+            throw;
+        }
+    }
+
+    private static Task<T> WaitAsync(Task<T> task, CancellationToken ct) =>
+        ct.CanBeCanceled ? task.WaitAsync(ct) : task;
 }

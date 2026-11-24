@@ -60,7 +60,12 @@ fn fnv64(bytes: &[u8], seed: u64) -> u64 {
 
 pub fn default_cache_dir() -> Option<PathBuf> {
     let base = std::env::var_os("LOCALAPPDATA")?;
-    Some(PathBuf::from(base).join("ExoLauncher").join("cache").join("rune-art"))
+    Some(
+        PathBuf::from(base)
+            .join("ExoLauncher")
+            .join("cache")
+            .join("rune-art"),
+    )
 }
 
 #[cfg(windows)]
@@ -119,7 +124,13 @@ fn winhttp_get(host: &str, path: &str) -> Option<Vec<u8>> {
 
     let agent = to_wide("ExoLauncher-Rune/1.0");
     let session = Handle(unsafe {
-        WinHttpOpen(agent.as_ptr(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, null(), null(), 0)
+        WinHttpOpen(
+            agent.as_ptr(),
+            WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+            null(),
+            null(),
+            0,
+        )
     });
     if session.0.is_null() {
         return None;
@@ -198,7 +209,15 @@ fn winhttp_get(host: &str, path: &str) -> Option<Vec<u8>> {
         let start = out.len();
         out.resize(start + chunk_len, 0);
         let mut read: u32 = 0;
-        if unsafe { WinHttpReadData(req.0, out[start..].as_mut_ptr().cast(), chunk_len as u32, &mut read) } == 0 {
+        if unsafe {
+            WinHttpReadData(
+                req.0,
+                out[start..].as_mut_ptr().cast(),
+                chunk_len as u32,
+                &mut read,
+            )
+        } == 0
+        {
             return None;
         }
         out.truncate(start + read as usize);

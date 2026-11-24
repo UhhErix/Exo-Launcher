@@ -729,6 +729,20 @@ public sealed class LeftoverScanTests : IDisposable
 
         Assert.True(steps.Count > 1);
         Assert.All(steps, step => Assert.True(step.Length < 7800, $"{step.Length} long"));
+        var decoded = string.Join("\n", steps.Select(step => System.Text.Encoding.Unicode.GetString(Convert.FromBase64String(step.Split(' ')[^1]))));
+        Assert.All(items, item => Assert.Contains($"'{item.Path}'", decoded));
+
+        var quoted = Enumerable.Range(0, 30).Select(i => $@"C:\Program Files\{new string('\'', 80)}App{i}").ToList();
+        var quotedSteps = LeftoverScan.RecycleSteps(quoted);
+        Assert.True(quotedSteps.Count > 1);
+        Assert.All(quotedSteps, step => Assert.True(step.Length < 7800, $"{step.Length} long"));
+
+        var longFolder = Place("ProgramFiles", $@"{new string('x', 130)}\{new string('y', 130)}");
+        File_("ProgramFiles", $@"{new string('x', 130)}\{new string('y', 130)}\a.txt");
+        Assert.True(longFolder.Length > 260);
+        var longSteps = scan.RecycleAsAdmin([new Leftover(longFolder, false, null, true)]);
+        Assert.Single(longSteps);
+        Assert.Contains($"'{longFolder}'", System.Text.Encoding.Unicode.GetString(Convert.FromBase64String(longSteps[0].Split(' ')[^1])));
     }
 
     [Fact]

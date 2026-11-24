@@ -25,6 +25,7 @@ public sealed partial class WebHostBridge
     private readonly FolderArtStore _folderArt = new();
     private readonly CancellationTokenSource _bridgeLifetime = new();
     private readonly BridgeRequestRegistry _rpcRequests = new();
+    private readonly EarlyCancelTracker _earlyCancels = new();
     private bool _detached;
     private int _backgroundMonitorsStarted;
     private Action<UpdateFlow.State>? _updaterStateChanged;
@@ -62,6 +63,7 @@ public sealed partial class WebHostBridge
     {
         _services = services;
         _queue = queue;
+        SystemSpecs.WarmInBackground();
         // The adapter and the store opener start Steam without the bridge at hand; the waiting settings go in first.
         SteamPendingSettings.Attach(this);
         SteamSignIn.SteamWebsiteToken.Fetch = SteamWebsiteTokenAsync;
@@ -94,6 +96,8 @@ public sealed partial class WebHostBridge
         ExoComponents.FailedTwice += OnComponentFailed;
         GameSettings.AppliedAgain += OnOptimizedAgain;
         AutopilotWatch.Reported += OnAutopilotReported;
+        AutopilotWatch.Shared.LiveChanged += OnAutopilotLiveChanged;
+        InitGpuAndDisplayCaches();
         GameSettings.WindowModeHeld += OnOptimizeHeld;
         Account.AccountSessionStore.Changed += OnAccountChanged;
         _runStatePoll = new System.Threading.Timer(_ => PollRunStates(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
@@ -119,6 +123,7 @@ public sealed partial class WebHostBridge
     {
         if (_detached || Interlocked.Exchange(ref _backgroundMonitorsStarted, 1) != 0) return;
         WatchDevices();
+        WatchGpuAndDisplayHardware();
         KeepSteamClientCurrent();
         KeepShadersPrepared();
         WatchVersions();
@@ -260,15 +265,12 @@ public sealed partial class WebHostBridge
         RequestRunStateScan();
     }
 
-    private static async Task<object> SaveWebPreferencesAsync(JsonElement patch)
+    private async Task<object> SaveWebPreferencesAsync(JsonElement patch)
     {
         var preferences = WebClientPreferences.Save(patch);
-        if (App.MainAppWindow is { } window)
-        {
-            if (preferences.MusicService is { } service) window.SelectMusicService(service);
-            if (new[] { "microphone", "camera", "clipboard", "notifications" }.Any(key => patch.TryGetProperty(key, out _)))
-                await window.ResetWebPermissionGrantsAsync();
-        }
+        if (preferences.MusicService is { } service) _services.MusicEngine.SelectService(service);
+        if (new[] { "microphone", "camera", "clipboard", "notifications" }.Any(key => patch.TryGetProperty(key, out _)))
+            await _services.MusicEngine.ResetPermissionGrantsAsync().ConfigureAwait(false);
         return preferences;
     }
 
@@ -284,6 +286,9 @@ public sealed partial class WebHostBridge
         HangWatchdog.PageAttached();
         _services.GogAuth.AttachDispatcher(_queue);
         _services.EpicAuth.AttachDispatcher(_queue);
+        _services.MusicEngine.Attach(_queue, PostEvent);
+        _services.HeadlessMusic.Attach(PostEvent, () => _services.MusicEngine.IsActive || App.MainAppWindow is not null);
+        _services.HeadlessCapture.Attach(PostCaptureEvent);
         if (Interlocked.Exchange(ref _transport, transport) is { } previous)
         {
             previous.MessageReceived -= OnMessage;
@@ -297,6 +302,7 @@ public sealed partial class WebHostBridge
     private void OnTransportReset() => UiGuard.Run(() =>
     {
         _rpcRequests.CancelAll();
+        _earlyCancels.Clear();
         // A new session has none of the rows the last push carried.
         Volatile.Write(ref _libraryPushedHash, null);
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
@@ -308,6 +314,8 @@ public sealed partial class WebHostBridge
     {
         if (_detached) return;
         Volatile.Write(ref _detached, true);
+        _services.HeadlessMusic.Detach();
+        _services.HeadlessCapture.Detach();
         try { _bridgeLifetime.Cancel(); } catch { }
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
@@ -348,6 +356,8 @@ public sealed partial class WebHostBridge
         ExoComponents.FailedTwice -= OnComponentFailed;
         GameSettings.AppliedAgain -= OnOptimizedAgain;
         AutopilotWatch.Reported -= OnAutopilotReported;
+        AutopilotWatch.Shared.LiveChanged -= OnAutopilotLiveChanged;
+        DetachGpuAndDisplayCaches();
         GameSettings.WindowModeHeld -= OnOptimizeHeld;
         Account.AccountSessionStore.Changed -= OnAccountChanged;
         if (Volatile.Read(ref _driverEvents) is { } driverEvents)
@@ -556,7 +566,7 @@ public sealed partial class WebHostBridge
     private void OnMessage(string raw) => UiGuard.Run(() =>
     {
         if (_detached || string.IsNullOrWhiteSpace(raw)) return;
-        _ = HandleAsync(FromPage(raw));
+        _ = HandleAsync(InboundForTransport(_transport, raw));
     });
 
     private async Task HandleAsync(string raw)
@@ -587,12 +597,17 @@ public sealed partial class WebHostBridge
             if (method == "rpc.cancel")
             {
                 var target = ReadString(paramsEl, hasParams, "requestId");
-                if (target is { Length: > 0 and <= 128 }) _rpcRequests.Cancel(target);
+                if (target is { Length: > 0 and <= 128 })
+                {
+                    _earlyCancels.Record(target);
+                    if (_rpcRequests.Cancel(target)) _earlyCancels.Consume(target);
+                }
                 return;
             }
             // Any Discord request means the page wants Discord's events (calls, video), not only Home or sign-in.
             if (method.StartsWith("discord.", StringComparison.Ordinal)) DiscordEvents();
             scope = _rpcRequests.Begin(id, method, _bridgeLifetime.Token);
+            if (_earlyCancels.Consume(id)) throw new OperationCanceledException();
             var requestToken = scope?.Token ?? _bridgeLifetime.Token;
             requestToken.ThrowIfCancellationRequested();
 
@@ -620,17 +635,7 @@ public sealed partial class WebHostBridge
                 "art.reset" => await ArtworkResetAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "art.refetch" => await ArtworkRefetchAsync(paramsEl, hasParams).ConfigureAwait(true),
                 // Answered at once, so it reaches the page before the library does (cover art the page names itself).
-                "art.base" => _transport is NamedPipeHostTransport
-                    ? new
-                    {
-                        covers = LocalFileHost.Url(CoverArtService.VirtualHost, ""),
-                        coversDir = CoverArtService.CacheRoot,
-                        devicesDir = DeviceImages.CacheRoot,
-                        notesDir = NoteStore.Shared.PhotosFolder,
-                        capturesDir = _services.HeadlessCapture.CaptureFolder,
-                        captureThumbsDir = HeadlessCaptureService.ThumbsDir,
-                    }
-                    : (object)new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") },
+                "art.base" => BuildArtBase(),
                 "library.folderArt" => await LibraryFolderArtAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "library.refreshAll" => await LibraryRefreshAllAsync(_bridgeLifetime.Token).ConfigureAwait(true),
                 "game.cancelInstall" => _services.Launcher.Cancel(ReadString(paramsEl, hasParams, "id")),
@@ -685,59 +690,49 @@ public sealed partial class WebHostBridge
                     : new { ok = false },
                 // The UI reached a usable start (Library or first-run setup): an update's startup receipt (UpdateStartupHealth).
                 "shell.ready" => ShellReady(),
+                "shell.bootstrap" => await ShellBootstrapAsync(requestToken).ConfigureAwait(false),
                 "shell.prepare" => App.MainAppWindow is { } prepareWindow
                     ? await prepareWindow.PrepareConnectedRoomsAsync()
                     : new { ok = false },
-                "music.playback" => App.MainAppWindow is { } pbWindow
-                    ? pbWindow.MusicPlayback()
+                "music.playback" => _services.MusicEngine.IsActive || App.MainAppWindow is not null
+                    ? await _services.MusicEngine.PlaybackAsync().ConfigureAwait(false)
                     : await _services.HeadlessMusic.PlaybackAsync().ConfigureAwait(false),
                 "music.match" => hasParams ? MusicMatch.Answer(paramsEl) : new { ok = false, message = "Nothing to match." },
-                "music.control" => App.MainAppWindow is { } controlWindow
-                    ? await controlWindow.ControlMusicAsync(ReadString(paramsEl, hasParams, "action"),
-                        ReadDouble(paramsEl, hasParams, "positionMs")).ConfigureAwait(true)
+                "music.control" => _services.MusicEngine.IsActive || App.MainAppWindow is not null
+                    ? await _services.MusicEngine.ControlAsync(ReadString(paramsEl, hasParams, "action"),
+                        ReadDouble(paramsEl, hasParams, "positionMs")).ConfigureAwait(false)
                     : await _services.HeadlessMusic.ControlAsync(ReadString(paramsEl, hasParams, "action"),
                         ReadDouble(paramsEl, hasParams, "positionMs")).ConfigureAwait(false),
-                "music.volume" => App.MainAppWindow is { } volumeWindow
-                    ? await volumeWindow.MusicVolumeAsync(ReadDouble(paramsEl, hasParams, "level"),
-                        ReadBool(paramsEl, hasParams, "muted")).ConfigureAwait(true)
+                "music.volume" => _services.MusicEngine.IsActive || App.MainAppWindow is not null
+                    ? await _services.MusicEngine.VolumeAsync(ReadDouble(paramsEl, hasParams, "level"),
+                        ReadBool(paramsEl, hasParams, "muted")).ConfigureAwait(false)
                     : await _services.HeadlessMusic.VolumeAsync(ReadDouble(paramsEl, hasParams, "level"),
                         ReadBool(paramsEl, hasParams, "muted")).ConfigureAwait(false),
-                "spotify.start" => App.MainAppWindow is { } spotifyWindow
-                    ? await spotifyWindow.WebMusicStartAsync("spotify").ConfigureAwait(true)
-                    : new { ok = false, state = "error", message = "The app window is unavailable." },
+                "spotify.start" => await _services.MusicEngine.StartAsync("spotify").ConfigureAwait(false),
                 "spotify.link" => await SpotifyLinks.LinkAsync(ReadString(paramsEl, hasParams, "url")).ConfigureAwait(true),
-                "spotify.view" => App.MainAppWindow is { } spotifyViewWindow
-                    ? await spotifyViewWindow.SpotifyViewAsync(ReadString(paramsEl, hasParams, "view"),
-                        ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "query"),
-                        (int)(ReadDouble(paramsEl, hasParams, "offset") ?? 0)).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "spotify.act" => App.MainAppWindow is { } spotifyActWindow
-                    ? await spotifyActWindow.SpotifyActAsync(ReadString(paramsEl, hasParams, "action"),
-                        ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "context"),
-                        ReadDouble(paramsEl, hasParams, "index") is { } index ? (int)index : null,
-                        ReadBool(paramsEl, hasParams, "on"), ReadString(paramsEl, hasParams, "uid"),
-                        ReadString(paramsEl, hasParams, "query"), ReadString(paramsEl, hasParams, "name"),
-                        ReadString(paramsEl, hasParams, "description"), ReadString(paramsEl, hasParams, "image")).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "ytmusic.start" or "applemusic.start" => App.MainAppWindow is { } webMusicWindow
-                    ? await webMusicWindow.WebMusicStartAsync(method == "ytmusic.start" ? "youtube" : "apple").ConfigureAwait(true)
-                    : new { ok = false, state = "error", message = "The app window is unavailable." },
-                "ytmusic.view" or "applemusic.view" => App.MainAppWindow is { } webMusicViewWindow
-                    ? await webMusicViewWindow.WebMusicViewAsync(method == "ytmusic.view" ? "youtube" : "apple", ReadString(paramsEl, hasParams, "view"),
-                        ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "query"),
-                        (int)(ReadDouble(paramsEl, hasParams, "offset") ?? 0)).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "ytmusic.act" or "applemusic.act" => App.MainAppWindow is { } webMusicActWindow
-                    ? await webMusicActWindow.WebMusicActAsync(method == "ytmusic.act" ? "youtube" : "apple", ReadString(paramsEl, hasParams, "action"),
-                        ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "context"),
-                        ReadDouble(paramsEl, hasParams, "index") is { } webIndex ? (int)webIndex : null,
-                        ReadBool(paramsEl, hasParams, "on"), ReadString(paramsEl, hasParams, "uid"),
-                        ReadString(paramsEl, hasParams, "query"), ReadString(paramsEl, hasParams, "text")).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "music.signIn" => App.MainAppWindow is { } signInWindow
-                    ? await signInWindow.MusicSignInAsync(ReadString(paramsEl, hasParams, "service")).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "music.warm" => App.MainAppWindow?.WarmMusic() ?? new { ok = false },
+                "spotify.view" => await _services.MusicEngine.SpotifyViewAsync(ReadString(paramsEl, hasParams, "view"),
+                    ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "query"),
+                    (int)(ReadDouble(paramsEl, hasParams, "offset") ?? 0)).ConfigureAwait(false),
+                "spotify.act" => await _services.MusicEngine.SpotifyActAsync(ReadString(paramsEl, hasParams, "action"),
+                    ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "context"),
+                    ReadDouble(paramsEl, hasParams, "index") is { } index ? (int)index : null,
+                    ReadBool(paramsEl, hasParams, "on"), ReadString(paramsEl, hasParams, "uid"),
+                    ReadString(paramsEl, hasParams, "query"), ReadString(paramsEl, hasParams, "name"),
+                    ReadString(paramsEl, hasParams, "description"), ReadString(paramsEl, hasParams, "image")).ConfigureAwait(false),
+                "ytmusic.start" or "applemusic.start" => await _services.MusicEngine.StartAsync(
+                    method == "ytmusic.start" ? "youtube" : "apple").ConfigureAwait(false),
+                "ytmusic.view" or "applemusic.view" => await _services.MusicEngine.WebMusicViewAsync(
+                    method == "ytmusic.view" ? "youtube" : "apple", ReadString(paramsEl, hasParams, "view"),
+                    ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "query"),
+                    (int)(ReadDouble(paramsEl, hasParams, "offset") ?? 0)).ConfigureAwait(false),
+                "ytmusic.act" or "applemusic.act" => await _services.MusicEngine.WebMusicActAsync(
+                    method == "ytmusic.act" ? "youtube" : "apple", ReadString(paramsEl, hasParams, "action"),
+                    ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "context"),
+                    ReadDouble(paramsEl, hasParams, "index") is { } webIndex ? (int)webIndex : null,
+                    ReadBool(paramsEl, hasParams, "on"), ReadString(paramsEl, hasParams, "uid"),
+                    ReadString(paramsEl, hasParams, "query"), ReadString(paramsEl, hasParams, "text")).ConfigureAwait(false),
+                "music.signIn" => await _services.MusicEngine.SignInAsync(ReadString(paramsEl, hasParams, "service")).ConfigureAwait(false),
+                "music.warm" => await _services.MusicEngine.WarmAsync().ConfigureAwait(false),
                 "shaders.addon" => await Task.Run(_services.ShadersHost.Status).ConfigureAwait(true),
                 "shaders.call" => await _services.ShadersHost.CallAsync(ReadString(paramsEl, hasParams, "method"),
                         hasParams && paramsEl.TryGetProperty("params", out var shadersParams) ? System.Text.Json.Nodes.JsonNode.Parse(shadersParams.GetRawText()) : null,
@@ -885,7 +880,7 @@ public sealed partial class WebHostBridge
                 "hdr.game" => await HdrGameAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.settings" => await GameSettingsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "keep.status" => KeepStatusForPage(paramsEl, hasParams),
-                "gpu.display" => await GpuDeadlineAsync(GpuDisplayAsync(paramsEl, hasParams), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(true),
+                "gpu.display" => await GpuDeadlineAsync(GpuDisplayAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "discord.status" => DiscordStatus(paramsEl, hasParams),
                 "discord.signIn" => DiscordSignIn(paramsEl, hasParams),
                 "discord.accounts" => DiscordAccountsCall(paramsEl, hasParams),
@@ -2396,6 +2391,8 @@ public sealed partial class WebHostBridge
         // autoInstallRedistributables, minimizeWhilePlaying, antiCheatSafeMode,
         // framelessMode, theme, copyPortableIntoLibrary, allowResize,
         // checkForUpdates, libraryShowInstalled, libraryShowOwned.
+        var musicService = WebClientPreferences.EffectiveMusicService(WebClientPreferences.Read().MusicService);
+        var riotId = RiotIdStore.TryRead();
         return new
         {
             appVersion = _services.AppVersion,
@@ -2408,14 +2405,15 @@ public sealed partial class WebHostBridge
             textColour = s.TextColour,
             textSize = s.TextSize,
             background = s.Background,
-            uiPrefs = s.UiPrefs,
+            musicService,
+            uiPrefs = WebClientPreferences.BuildSettingsUiPrefs(s.UiPrefs, musicService),
             sortMode = s.SortMode,
             defaultInstallRoot = s.DefaultInstallRoot,
             preferredGameSources = s.PreferredGameSources,
             recent = s.Recent,
             onboardingComplete = s.OnboardingComplete,
-            riotId = RiotIdStore.TryRead(),
-            riotBaseline = RiotBaselineFor(RiotIdStore.TryRead()),
+            riotId,
+            riotBaseline = RiotBaselineFor(riotId),
             showLibraryTools = s.ShowLibraryTools,
             achievementBanners = s.AchievementBanners,
             achievementVolume = s.AchievementVolume,
@@ -2425,7 +2423,7 @@ public sealed partial class WebHostBridge
             fpsCounterHideOverBuiltIn = s.FpsCounterHideOverBuiltIn,
             hdrForGames = s.HdrForGames,
             frameGenEverywhere = s.FrameGenEverywhere,
-            frameGenEverywhereCard = DlssSwapService.FrameGenEverywhereCard(SystemSpecs.FrameGenGpu) is not null,
+            frameGenEverywhereCard = DlssSwapService.FrameGenEverywhereCard(SystemSpecs.FastFrameGenGpu) is not null,
             hdrSdrGamma = s.HdrSdrGamma,
             discordNoiseSuppression = s.DiscordNoiseSuppression,
             discordQuietWhilePlaying = s.DiscordQuietWhilePlaying,
@@ -2574,11 +2572,37 @@ public sealed partial class WebHostBridge
             // A deleted folder's picture, and a removed or replaced one, goes with it.
             _folderArt.DeleteUnreferenced(kept.Select(folder => folder.Art));
         }
+        string? requestedMusicService = p.TryGetProperty("musicService", out var musicServiceProp) && musicServiceProp.ValueKind == JsonValueKind.String
+            ? musicServiceProp.GetString()
+            : null;
         if (p.TryGetProperty("uiPrefs", out var uiPrefs) && uiPrefs.ValueKind == JsonValueKind.Object)
-            _services.Settings.SetUiPrefs(uiPrefs.EnumerateObject().ToDictionary(pref => pref.Name, pref => pref.Value, StringComparer.Ordinal));
+        {
+            var (fromUiPrefs, remaining) = WebClientPreferences.ExtractMusicServiceFromUiPrefs(uiPrefs);
+            requestedMusicService ??= fromUiPrefs;
+            if (remaining.Count > 0) _services.Settings.SetUiPrefs(remaining);
+        }
         // A choice the page kept before Exo did, moved once: it never counts as a newer change than the account's.
         if (p.TryGetProperty("uiPrefsMoved", out var moved) && moved.ValueKind == JsonValueKind.Object)
-            foreach (var pref in moved.EnumerateObject()) _services.Settings.MoveUiPref(pref.Name, pref.Value);
+        {
+            foreach (var pref in moved.EnumerateObject())
+            {
+                if (pref.Name is WebClientPreferences.UiPrefMusicServiceKey or "musicService")
+                {
+                    if (pref.Value.ValueKind == JsonValueKind.String && WebClientPreferences.Read().MusicService is null &&
+                        WebClientPreferences.TryNormalizeMusicService(pref.Value.GetString()) is { } movedService)
+                        WebClientPreferences.ApplySyncedMusicService(movedService);
+                    continue;
+                }
+                _services.Settings.MoveUiPref(pref.Name, pref.Value);
+            }
+        }
+        if (requestedMusicService is not null)
+        {
+            var normalized = WebClientPreferences.TryNormalizeMusicService(requestedMusicService)
+                ?? throw new UserFacingException("Choose a music service.");
+            WebClientPreferences.SaveMusicService(normalized);
+            _services.MusicEngine.SelectService(normalized);
+        }
         if (p.TryGetProperty("hiddenGames", out var hidden) && hidden.ValueKind == JsonValueKind.Array)
             _services.Settings.SetHiddenGames(hidden.EnumerateArray().Where(id => id.ValueKind == JsonValueKind.String).Select(id => id.GetString()));
 
@@ -3402,8 +3426,56 @@ public sealed partial class WebHostBridge
             officialUrl = d.OfficialUrl,
         }).ToArray();
 
+    private object BuildArtBase() =>
+        _transport is NamedPipeHostTransport
+            ? new
+            {
+                covers = LocalFileHost.Url(CoverArtService.VirtualHost, ""),
+                coversDir = CoverArtService.CacheRoot,
+                devicesDir = DeviceImages.CacheRoot,
+                notesDir = NoteStore.Shared.PhotosFolder,
+                capturesDir = _services.HeadlessCapture.CaptureFolder,
+                captureThumbsDir = HeadlessCaptureService.ThumbsDir,
+            }
+            : (object)new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") };
+
+    private async Task<object> ShellBootstrapAsync(CancellationToken ct)
+    {
+        var libraryTask = Task.Run(() => LibraryGetAsync(default, false), ct);
+        var settingsTask = Task.Run(BuildSettings, ct);
+        var musicTask = Task.Run(
+            () => _services.MusicEngine.IsActive || App.MainAppWindow is not null
+                ? _services.MusicEngine.PlaybackAsync()
+                : _services.HeadlessMusic.PlaybackAsync(),
+            ct);
+        var discordTask = Task.Run(() => DiscordStatus(default, false), ct);
+        UpdateStartupHealth.UiReady(_services.AppVersion);
+        var artBase = BuildArtBase();
+        await Task.WhenAll(libraryTask, settingsTask, musicTask, discordTask).WaitAsync(ct).ConfigureAwait(false);
+        return new
+        {
+            ok = true,
+            artBase,
+            settings = await settingsTask.ConfigureAwait(false),
+            library = await libraryTask.ConfigureAwait(false),
+            musicPlayback = await musicTask.ConfigureAwait(false),
+            discordStatus = await discordTask.ConfigureAwait(false),
+            binaryMediaPipe = (_transport as NamedPipeHostTransport)?.MediaPipeName,
+        };
+    }
+
     private void PostResponse(string id, bool ok, object? result = null, string? error = null)
-        => PostSerialized(ExoBridgeProtocol.SerializeResponse(id, ok, result, error));
+    {
+        var transport = _transport;
+        if (transport is null || _detached) return;
+        if (transport is NamedPipeHostTransport pipeTransport)
+        {
+            try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeResponseUtf8(id, ok, result, error)); }
+            catch { }
+            return;
+        }
+        PostSerialized(ExoBridgeProtocol.SerializeResponse(id, ok, result, error));
+    }
 
     /// <summary>An event from the shader add-on's engine, for its page.</summary>
     internal void PostShadersEvent(string name, System.Text.Json.Nodes.JsonNode? data) =>
@@ -3416,7 +3488,17 @@ public sealed partial class WebHostBridge
     private void OnComponentFailed(string feature) => PostEvent("components.failed", new { feature });
 
     private void PostEvent(string name, object? data)
-        => PostSerialized(ExoBridgeProtocol.SerializeEvent(name, data));
+    {
+        var transport = _transport;
+        if (transport is null || _detached) return;
+        if (transport is NamedPipeHostTransport pipeTransport)
+        {
+            try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeEventUtf8(name, data)); }
+            catch { }
+            return;
+        }
+        PostSerialized(ExoBridgeProtocol.SerializeEvent(name, data));
+    }
 
     /// <summary>
     /// Cover art on its way to the page: every cover cache and thumbnail address with this run's token, which
@@ -3430,15 +3512,59 @@ public sealed partial class WebHostBridge
     internal static string FromPage(string raw) =>
         LocalFileHost.WithoutToken(LocalFileHost.WithoutToken(raw, CoverArtService.VirtualHost), CoverArtService.ThumbnailHost);
 
+    internal static string OutboundForTransport(IHostTransport transport, string json) =>
+        transport is NamedPipeHostTransport ? json : ToPage(json);
+
+    internal static string InboundForTransport(IHostTransport? transport, string raw) =>
+        transport is NamedPipeHostTransport ? raw : FromPage(raw);
+
     private void PostSerialized(string json)
     {
         try
         {
             var transport = _transport;
             if (transport is null || _detached) return;
-            transport.PostJson(ToPage(json));
+            transport.PostJson(OutboundForTransport(transport, json));
         }
         catch { }
+    }
+
+    internal sealed class EarlyCancelTracker
+    {
+        private const int MaxEntries = 256;
+        private readonly long _ttlMs;
+        private readonly Func<long> _clockMs;
+        private readonly ConcurrentDictionary<string, long> _pending = new(StringComparer.Ordinal);
+
+        internal EarlyCancelTracker(long ttlMs = 5_000, Func<long>? clockMs = null)
+        {
+            _ttlMs = ttlMs;
+            _clockMs = clockMs ?? (() => Environment.TickCount64);
+        }
+
+        internal void Record(string id)
+        {
+            var now = _clockMs();
+            if (_pending.Count >= MaxEntries) Prune(now);
+            if (_pending.Count >= MaxEntries) _pending.Clear();
+            _pending[id] = now;
+        }
+
+        internal bool Consume(string id)
+        {
+            if (!_pending.TryRemove(id, out var at)) return false;
+            return _clockMs() - at <= _ttlMs;
+        }
+
+        internal void Clear() => _pending.Clear();
+
+        private void Prune(long now)
+        {
+            foreach (var pair in _pending)
+            {
+                if (now - pair.Value > _ttlMs) _pending.TryRemove(pair.Key, out _);
+            }
+        }
     }
 
     /// <summary>A Windows notification from Exo's own UI, when it is in the background: a short title and line.</summary>

@@ -53,6 +53,9 @@ internal sealed class MusicNowPlaying : IDisposable
     private const int PlayingWindowMs = 5000;
     private const int IdleWindowMs = 20000;
 
+    internal const int WrapperVersion = 7;
+    internal const string NeedInstallSentinel = "__exoNeedInstall";
+
     private readonly MusicAppVolume.Evaluate _evaluate;
     private readonly MusicAppVolume.Evaluate _control;
     private readonly Func<double, double, CancellationToken, Task<bool>>? _press;
@@ -65,6 +68,7 @@ internal sealed class MusicNowPlaying : IDisposable
     private bool _watching;
     private bool _frozenNow;
     private bool _answered;
+    private bool _installed;
 
     internal string Service { get; }
     internal State Current => Volatile.Read(ref _state);
@@ -76,7 +80,8 @@ internal sealed class MusicNowPlaying : IDisposable
     internal event Action? Changed;
 
     private MusicNowPlaying(string service, MusicAppVolume.Evaluate evaluate, string adapter, Func<bool> frozen,
-        MusicAppVolume.Evaluate? control = null, Func<double, double, CancellationToken, Task<bool>>? press = null)
+        MusicAppVolume.Evaluate? control = null, Func<double, double, CancellationToken, Task<bool>>? press = null,
+        bool preinstalled = false)
     {
         Service = service;
         _evaluate = evaluate;
@@ -84,7 +89,46 @@ internal sealed class MusicNowPlaying : IDisposable
         _press = press;
         _page = Wrapper.Replace("__ADAPTER__", adapter, StringComparison.Ordinal);
         _frozen = frozen;
+        _installed = preinstalled;
     }
+
+    internal static string InstallScriptFor(string service) =>
+        "(" + Wrapper.Replace("__ADAPTER__", AdapterFor(service), StringComparison.Ordinal) + ");";
+
+    internal static string AppleMusicAdapterScript => AppleMusicAdapter;
+
+    private static string AdapterFor(string service) =>
+        service switch { "apple" => AppleMusicAdapter, "spotify" => SpotifyAdapter, _ => YouTubeMusicAdapter };
+
+    internal void MarkNavigationStarting() => Volatile.Write(ref _installed, false);
+
+    internal void MarkInstalled() => Volatile.Write(ref _installed, true);
+
+    internal string WaitExpression(string? lastKey, int windowMs, bool installed)
+    {
+        var call = "wait(" + JsonSerializer.Serialize(lastKey) + "," + windowMs.ToString(CultureInfo.InvariantCulture) + ")";
+        return installed
+            ? "(window.__exoNow&&window.__exoNow.v===" + WrapperVersion + "?window.__exoNow." + call + ":{\"" + NeedInstallSentinel + "\":true})"
+            : "(" + _page + ")." + call;
+    }
+
+    internal string ControlExpression(string action, double? positionMs, bool installed)
+    {
+        var ms = positionMs is { } p && double.IsFinite(p) && p >= 0 ? p.ToString("0", CultureInfo.InvariantCulture) : "null";
+        var call = "control(" + JsonSerializer.Serialize(action) + "," + ms + ")";
+        return installed
+            ? "(window.__exoNow&&window.__exoNow.v===" + WrapperVersion + "?window.__exoNow." + call + ":\"" + NeedInstallSentinel + "\")"
+            : "(" + _page + ")." + call;
+    }
+
+    private static bool NeedsInstallObject(JsonElement? reply) =>
+        reply is { ValueKind: JsonValueKind.Object } obj &&
+        obj.TryGetProperty(NeedInstallSentinel, out var flag) &&
+        flag.ValueKind == JsonValueKind.True;
+
+    private static bool NeedsInstallString(JsonElement? reply) =>
+        reply is { ValueKind: JsonValueKind.String } text &&
+        string.Equals(text.GetString(), NeedInstallSentinel, StringComparison.Ordinal);
 
     /// <summary>Wakes a backed-off poll immediately when the player wakes or resumes.</summary>
     internal void Wake()
@@ -98,8 +142,9 @@ internal sealed class MusicNowPlaying : IDisposable
     /// A web player in Exo's own WebView2. <paramref name="control"/>
     /// runs transport (a click the user just made in Exo).
     internal static MusicNowPlaying ForWebPage(string service, MusicAppVolume.Evaluate evaluate, Func<bool> frozen,
-        MusicAppVolume.Evaluate? control = null, Func<double, double, CancellationToken, Task<bool>>? press = null) =>
-        new(service, evaluate, service switch { "apple" => AppleMusicAdapter, "spotify" => SpotifyAdapter, _ => YouTubeMusicAdapter }, frozen, control: control, press: press);
+        MusicAppVolume.Evaluate? control = null, Func<double, double, CancellationToken, Task<bool>>? press = null,
+        bool preinstalled = false) =>
+        new(service, evaluate, AdapterFor(service), frozen, control: control, press: press, preinstalled: preinstalled);
 
     /// Starts the long-poll on the caller's context (the UI thread for
     /// YouTube Music, whose DevTools calls must be made there).
@@ -138,14 +183,24 @@ internal sealed class MusicNowPlaying : IDisposable
                 // While a game runs nobody watches the clock: a playing song is re-anchored as seldom as a paused one
                 // (its own events still answer at once).
                 var window = Current.Track is { Playing: true } && !LeanSignal.Active ? PlayingWindowMs : IdleWindowMs;
-                var call = "wait(" + JsonSerializer.Serialize(_lastKey) + "," + window.ToString(CultureInfo.InvariantCulture) + ")";
+                var timeout = TimeSpan.FromMilliseconds(window) + WaitGrace;
+                var installed = Volatile.Read(ref _installed);
                 JsonElement? reply;
-                try { reply = await _evaluate("(" + _page + ")." + call, TimeSpan.FromMilliseconds(window) + WaitGrace, token); }
+                try { reply = await _evaluate(WaitExpression(_lastKey, window, installed), timeout, token); }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
                 catch { reply = null; }
                 if (token.IsCancellationRequested) return;
-                if (reply is { ValueKind: JsonValueKind.Object } answer)
+                if (installed && NeedsInstallObject(reply))
                 {
+                    Volatile.Write(ref _installed, false);
+                    try { reply = await _evaluate(WaitExpression(_lastKey, window, installed: false), timeout, token); }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
+                    catch { reply = null; }
+                    if (token.IsCancellationRequested) return;
+                }
+                if (reply is { ValueKind: JsonValueKind.Object } answer && !NeedsInstallObject(answer))
+                {
+                    Volatile.Write(ref _installed, true);
                     failureBackoffMs = 1000;
                     Accept(answer);
                 }
@@ -233,19 +288,32 @@ internal sealed class MusicNowPlaying : IDisposable
     internal async Task<bool?> ControlAsync(string action, double? positionMs)
     {
         if (await PressPlayButtonAsync(action) is { } pressed) return pressed;
-        var ms = positionMs is { } p && double.IsFinite(p) && p >= 0 ? p.ToString("0", CultureInfo.InvariantCulture) : "null";
-        var call = "(" + _page + ").control(" + JsonSerializer.Serialize(action) + "," + ms + ")";
         for (var attempt = 0; attempt < 7 && !_life.IsCancellationRequested; attempt++)
         {
             if (attempt > 0)
             {
                 try { await Task.Delay(500, _life.Token); } catch (OperationCanceledException) { return null; }
             }
+            var installed = Volatile.Read(ref _installed);
             JsonElement? reply;
-            try { reply = await _control(call, CallTimeout, _life.Token); }
+            try { reply = await _control(ControlExpression(action, positionMs, installed), CallTimeout, _life.Token); }
             catch { reply = null; }
-            if (reply is { ValueKind: JsonValueKind.True }) return true;
-            if (reply is { ValueKind: JsonValueKind.False }) return false;
+            if (installed && NeedsInstallString(reply))
+            {
+                Volatile.Write(ref _installed, false);
+                try { reply = await _control(ControlExpression(action, positionMs, installed: false), CallTimeout, _life.Token); }
+                catch { reply = null; }
+            }
+            if (reply is { ValueKind: JsonValueKind.True })
+            {
+                Volatile.Write(ref _installed, true);
+                return true;
+            }
+            if (reply is { ValueKind: JsonValueKind.False })
+            {
+                Volatile.Write(ref _installed, true);
+                return false;
+            }
         }
         return null;
     }
@@ -282,7 +350,7 @@ internal sealed class MusicNowPlaying : IDisposable
     private const string Wrapper = """
         (function (adapter) {
           var w = window;
-          if (w.__exoNow && w.__exoNow.v === 6) return w.__exoNow;
+          if (w.__exoNow && w.__exoNow.v === 7) return w.__exoNow;
           var handle = null, heard = null, missAt = 0, waiters = [], base = null;
           function wake() { var list = waiters; waiters = []; list.forEach(function (f) { f(); }); }
           function locate() {
@@ -335,7 +403,7 @@ internal sealed class MusicNowPlaying : IDisposable
             if (!h) return false;
             try { return (await adapter.control(h, action, ms)) !== false; } catch (_) { return false; }
           }
-          return (w.__exoNow = { v: 6, wait: wait, control: control });
+          return (w.__exoNow = { v: 7, wait: wait, control: control });
         })(__ADAPTER__)
         """;
 
@@ -468,11 +536,11 @@ internal sealed class MusicNowPlaying : IDisposable
           control: function (m, action, ms) {
             var playing = !!m.isPlaying;
             if (action === 'toggle') action = playing ? 'pause' : 'play';
-            if (action === 'play') return Promise.resolve(m.play()).then(function () { return true; });
-            if (action === 'pause') return Promise.resolve(m.pause()).then(function () { return true; });
-            if (action === 'next') return Promise.resolve(m.skipToNextItem()).then(function () { return true; });
-            if (action === 'previous') return Promise.resolve(m.skipToPreviousItem()).then(function () { return true; });
-            if (action === 'seek' && typeof ms === 'number') return Promise.resolve(m.seekToTime(ms / 1000)).then(function () { return true; });
+            if (action === 'play') { Promise.resolve(m.play()).catch(function () {}); return true; }
+            if (action === 'pause') { Promise.resolve(m.pause()).catch(function () {}); return true; }
+            if (action === 'next') { Promise.resolve(m.skipToNextItem()).catch(function () {}); return true; }
+            if (action === 'previous') { Promise.resolve(m.skipToPreviousItem()).catch(function () {}); return true; }
+            if (action === 'seek' && typeof ms === 'number' && isFinite(ms) && ms >= 0) { Promise.resolve(m.seekToTime(ms / 1000)).catch(function () {}); return true; }
             return false;
           }
         }

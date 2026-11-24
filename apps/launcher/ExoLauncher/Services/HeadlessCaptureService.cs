@@ -18,12 +18,24 @@ internal sealed class HeadlessCaptureService : IDisposable
     private readonly AppServices _services;
     private readonly Lock _gate = new();
     private CaptureAddon? _addon;
+    private Action<string, object?>? _publishEvent;
+    private JsonNode? _lastState;
     private MainWindow.CaptureSettings? _settings;
     private Dictionary<string, MainWindow.CaptureMeta>? _index;
 
     internal HeadlessCaptureService(AppServices services)
     {
         _services = services;
+    }
+
+    internal void Attach(Action<string, object?> publishEvent)
+    {
+        Volatile.Write(ref _publishEvent, publishEvent);
+    }
+
+    internal void Detach()
+    {
+        Volatile.Write(ref _publishEvent, null);
     }
 
     internal static string DataDir => MainWindow.CaptureData;
@@ -85,9 +97,82 @@ internal sealed class HeadlessCaptureService : IDisposable
             if (_addon is not null || !CaptureAddon.Present) return _addon;
             lock (_gate)
             {
-                return _addon ??= new CaptureAddon();
+                if (_addon is null)
+                {
+                    var addon = new CaptureAddon();
+                    addon.Event += HandleAddonEvent;
+                    _addon = addon;
+                }
+                return _addon;
             }
         }
+    }
+
+    internal void HandleAddonEvent(string name, JsonNode? data)
+    {
+        var publish = Volatile.Read(ref _publishEvent);
+        switch (name)
+        {
+            case "ready":
+            case "state":
+                Volatile.Write(ref _lastState, data);
+                publish?.Invoke("capture.state", StateDto());
+                break;
+            case "exited":
+            case "failed":
+                Volatile.Write(ref _lastState, null);
+                publish?.Invoke("capture.state", StateDto());
+                break;
+            case "saved":
+                if (data?["path"]?.GetValue<string>() is not { } path) return;
+                var relative = RelativePath(path);
+                if (relative is null) return;
+                var kind = data["kind"]?.GetValue<string>();
+                lock (_gate)
+                {
+                    var game = data["game"]?.GetValue<string>();
+                    Index[relative] = new MainWindow.CaptureMeta
+                    {
+                        GameId = string.IsNullOrEmpty(game) ? null : game,
+                        DurationMs = data["durationMs"]?.GetValue<double>() ?? 0,
+                        Derived = kind is "trim" or "export" or "concat",
+                    };
+                }
+                if (MapItem(path) is { } item)
+                    publish?.Invoke("capture.saved", new { item, edit = string.Equals(kind, "snip", StringComparison.OrdinalIgnoreCase) });
+                break;
+            case "concat":
+                var state = data?["state"]?.GetValue<string>() ?? "working";
+                var percent = data?["percent"]?.GetValue<double>() ?? 0;
+                var message = data?["message"]?.GetValue<string>();
+                var wait = data?["wait"]?.GetValue<bool>() == true;
+                var reelPath = data?["path"]?.GetValue<string>();
+                var reelItem = !string.IsNullOrEmpty(reelPath) ? MapItem(reelPath) : null;
+                publish?.Invoke("capture.reel", new { state, percent, message, wait, item = reelItem });
+                break;
+        }
+    }
+
+    private object StateDto()
+    {
+        var s = Config;
+        var state = Volatile.Read(ref _lastState);
+        return new
+        {
+            present = CaptureAddon.Present,
+            running = state is not null,
+            replay = s.ReplayMode != "off",
+            buffering = state?["buffering"]?.GetValue<bool>() ?? false,
+            recording = state?["recording"]?.GetValue<bool>() ?? false,
+            recordingMs = state?["recordingMs"]?.GetValue<double>() ?? 0,
+            codec = state?["codec"]?.GetValue<string>(),
+            encoder = state?["encoder"]?.GetValue<string>(),
+            width = state?["width"]?.GetValue<double>(),
+            height = state?["height"]?.GetValue<double>(),
+            fps = state?["fps"]?.GetValue<double>(),
+            hdr = state?["hdr"]?.GetValue<bool>() ?? false,
+            error = state?["error"]?.GetValue<string>(),
+        };
     }
 
     private void SaveSettings()
@@ -109,12 +194,7 @@ internal sealed class HeadlessCaptureService : IDisposable
             ok = true,
             present = CaptureAddon.Present,
             folder = CaptureFolder,
-            state = new
-            {
-                replay = s.ReplayMode != "off",
-                recording = false,
-                present = CaptureAddon.Present,
-            },
+            state = StateDto(),
             settings = new
             {
                 quality = s.Quality,
@@ -351,7 +431,12 @@ internal sealed class HeadlessCaptureService : IDisposable
 
     public void Dispose()
     {
+        Detach();
         var addon = Interlocked.Exchange(ref _addon, null);
-        try { addon?.Dispose(); } catch { }
+        if (addon is not null)
+        {
+            addon.Event -= HandleAddonEvent;
+            try { addon.Dispose(); } catch { }
+        }
     }
 }

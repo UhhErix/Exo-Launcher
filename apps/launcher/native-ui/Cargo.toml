@@ -12,18 +12,18 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
-rune-media = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5", default-features = false }
+rune = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+rune-media = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2", default-features = false }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 
 [patch.crates-io]
-wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
-winit = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
-sctk-adwaita = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
-parley_engine = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
-accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
-accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
+wgpu-hal = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+winit = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+sctk-adwaita = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+parley_engine = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
 
 [profile.release]
 lto = "thin"
