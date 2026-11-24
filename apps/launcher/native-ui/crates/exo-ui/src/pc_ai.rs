@@ -1,10 +1,11 @@
 use crate::pc_menus::{driver_row_view, menu_btn};
 use crate::pc_state::{
     AutoTuneStageStatus, PcPartMenu, PcTab, compute_initial_auto_tune_stages,
-    count_pending_auto_tune, format_bytes, trim_stop,
+    count_pending_auto_tune, format_bytes, format_gpu_process_metrics, format_gpu_process_subtitle,
+    overview_health_items, trim_stop,
 };
 use crate::pc_storage::{exo_ai_storage_view, format_gb_short};
-use crate::state::{AppState, title_hue};
+use crate::state::{AppState, HostStatus, title_hue};
 use exo_kit::{
     BG, BadgeTone, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_QUICK, bad, fg_faint, fg_muted, float_line, glass_button, glass_control_fill,
@@ -1368,6 +1369,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         s.pc.auto_tune
             .as_ref()
             .is_some_and(|t| t.parts.iter().any(|p| p.state == "testing"));
+    let autopilot_on = s.pc.autopilot.as_ref().is_none_or(|a| a.on);
     let live_text = if gaming {
         match s
             .pc
@@ -1380,8 +1382,10 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         }
     } else if testing {
         "Calibrating hardware".into()
-    } else {
+    } else if autopilot_on {
         "Autopilot active".into()
+    } else {
+        "Autopilot paused".into()
     };
 
     let pending = count_pending_auto_tune(&s.pc, &s.settings);
@@ -1712,12 +1716,13 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             .grow(1.0)
             .min_w(0.0)
             .on_press(move |s: &mut AppState| {
-                s.pc.part_menu = if s.pc.part_menu == Some(menu) {
-                    None
-                } else {
-                    Some(menu)
-                };
+                let opening = s.pc.part_menu != Some(menu);
+                s.pc.part_menu = if opening { Some(menu) } else { None };
                 s.pc.armed_confirm = None;
+                if opening && menu == PcPartMenu::Board {
+                    s.load_system_qos();
+                    s.load_system_overlays();
+                }
             })
             .child(el().w_full().h(1.0).fill(float_line()))
             .child(
@@ -1785,7 +1790,21 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 ),
         );
 
-    let hw_card = col()
+    let health_detail = |key: &str| -> Option<String> {
+        s.pc.health
+            .as_ref()
+            .and_then(|h| h.items.iter().find(|i| i.key == key))
+            .map(|i| i.detail.clone())
+            .filter(|d| !d.is_empty())
+    };
+    let cpu_note = health_detail("cpumicrocode")
+        .map(|d| (d, true))
+        .or_else(|| health_detail("ryzenbranch").map(|d| (d, true)));
+    let ram_note = health_detail("ramchannel")
+        .or_else(|| health_detail("ram"))
+        .map(|d| (d, true));
+
+    let mut hw_card = col()
         .key("exo-ai-hw-card")
         .w_full()
         .pt(20.0)
@@ -1803,7 +1822,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .child(spec_cell(
                     icon_cpu(16.0, fg_muted()),
                     cpu_name.to_string(),
-                    None,
+                    cpu_note,
                 ))
                 .child(spec_action_cell(
                     "pc-cell-graphics",
@@ -1816,7 +1835,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .child(spec_cell(
                     icon_hard_drive(16.0, fg_muted()),
                     ram_label,
-                    None,
+                    ram_note,
                 ))
                 .child(spec_action_cell(
                     "pc-cell-display",
@@ -1851,6 +1870,91 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 ))
                 .child(drive_cell),
         );
+
+    let ov_health = overview_health_items(s.pc.health.as_ref());
+    if !ov_health.is_empty() {
+        let mut h_col = col()
+            .key("exo-ai-health-rows")
+            .w_full()
+            .mt(8.0)
+            .pt(4.0)
+            .child(el().w_full().h(1.0).fill(float_line()));
+        for item in ov_health {
+            let ctrl = match item.key.as_str() {
+                "gpupref" => {
+                    if item.applied && item.can_undo {
+                        menu_btn("ov-hp-gpupref-undo".into(), "Undo", false, false, false)
+                            .on_press(|s: &mut AppState| s.run_health_action("gpupref-undo"))
+                    } else if !item.applied {
+                        menu_btn(
+                            "ov-hp-gpupref".into(),
+                            "Use the fast card",
+                            true,
+                            false,
+                            false,
+                        )
+                        .on_press(|s: &mut AppState| s.run_health_action("gpupref"))
+                    } else {
+                        row()
+                    }
+                }
+                "cpumicrocode" => {
+                    if let Some(url) = item.url.clone() {
+                        menu_btn(
+                            "ov-hp-cpumicrocode".into(),
+                            "BIOS page",
+                            false,
+                            false,
+                            false,
+                        )
+                        .on_press(move |s: &mut AppState| s.open_external_url(&url))
+                    } else {
+                        row()
+                    }
+                }
+                "ryzenbranch" => menu_btn(
+                    "ov-hp-winupdate".into(),
+                    "Windows Update",
+                    false,
+                    false,
+                    false,
+                )
+                .on_press(|s: &mut AppState| s.run_health_action("winupdate")),
+                "gpusched" => menu_btn(
+                    "ov-hp-gpusched".into(),
+                    "Open Settings",
+                    false,
+                    false,
+                    false,
+                )
+                .on_press(|s: &mut AppState| s.run_health_action("gpusched")),
+                _ => row(),
+            };
+            h_col = h_col.child(
+                row()
+                    .w_full()
+                    .py(8.0)
+                    .gap(12.0)
+                    .justify_between()
+                    .center_y()
+                    .child(
+                        col()
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .gap(2.0)
+                            .child(text(item.label.clone()).font(type_control()).color(FG))
+                            .children((!item.detail.is_empty()).then(|| {
+                                text(item.detail.clone())
+                                    .font(type_small())
+                                    .color(fg_muted())
+                                    .wrap()
+                            })),
+                    )
+                    .child(ctrl),
+            );
+        }
+        hw_card = hw_card.child(h_col);
+    }
 
     let updates_card = updates_card_view(s);
 
@@ -2296,12 +2400,92 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         shaders_card = shaders_card.child(shader_rows);
     }
 
-    let right_col = col()
+    let mut right_col = col()
         .key("exo-ai-right-col")
         .grow(1.0)
         .min_w(0.0)
         .gap(10.0)
         .child(shaders_card);
+
+    if s.pc.gpu_processes.is_some() || s.status != HostStatus::Standalone {
+        let gpu_data = s.pc.gpu_processes.as_ref();
+        let summary = gpu_data
+            .map(|d| d.answer.summary.as_str())
+            .filter(|t| !t.is_empty())
+            .unwrap_or("Reading GPU activity…");
+        let multi_adapter = gpu_data.is_some_and(|d| d.adapters.len() > 1);
+        let mut gpu_card = col()
+            .key("exo-ai-gpu-usage-card")
+            .w_full()
+            .pt(18.0)
+            .px(24.0)
+            .pb(18.0)
+            .gap(8.0)
+            .radius(RADIUS_PANEL)
+            .continuous_corners()
+            .fill(BG)
+            .border(1.0, float_line())
+            .child(
+                row()
+                    .w_full()
+                    .min_h(36.0)
+                    .justify_between()
+                    .center_y()
+                    .child(text("GPU activity").font(type_title()).color(FG))
+                    .child(
+                        menu_btn(
+                            "gpu-proc-refresh".into(),
+                            "Refresh",
+                            false,
+                            false,
+                            s.pc.gpu_processes_busy,
+                        )
+                        .on_press(|s: &mut AppState| s.load_gpu_processes()),
+                    ),
+            )
+            .child(
+                text(summary.to_string())
+                    .font(type_body())
+                    .color(fg_muted())
+                    .wrap(),
+            );
+        if let Some(d) = gpu_data
+            && !d.processes.is_empty()
+        {
+            let mut list = col().w_full();
+            for proc in d.processes.iter().take(6) {
+                let sub = format_gpu_process_subtitle(proc, multi_adapter);
+                let metrics = format_gpu_process_metrics(proc);
+                list = list.child(el().w_full().h(1.0).fill(float_line())).child(
+                    row()
+                        .key(format!("gpu-proc-{}-{}", proc.pid, proc.adapter_luid))
+                        .w_full()
+                        .py(8.0)
+                        .gap(12.0)
+                        .justify_between()
+                        .center_y()
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .min_w(0.0)
+                                .gap(2.0)
+                                .child(
+                                    text(proc.name.clone())
+                                        .font(type_control())
+                                        .color(FG)
+                                        .truncate(),
+                                )
+                                .children(sub.map(|st| {
+                                    text(st).font(type_small()).color(fg_muted()).truncate()
+                                })),
+                        )
+                        .child(text(metrics).font(type_small()).color(FG)),
+                );
+            }
+            gpu_card = gpu_card.child(list);
+        }
+        right_col = right_col.child(gpu_card);
+    }
 
     col()
         .key("room-exo-ai")

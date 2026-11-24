@@ -18,13 +18,13 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 | Store | 16 | 1 | 0 | 0 | 17 |
 | Discord | 25 | 9 | 11 | 0 | 45 |
 | Music | 5 | 7 | 9 | 0 | 21 |
-| Exo AI / PC | 21 | 0 | 0 | 0 | 21 |
+| Exo AI / PC | 24 | 0 | 0 | 0 | 24 |
 | Apps | 12 | 0 | 0 | 0 | 12 |
 | Devices | 3 | 3 | 4 | 1 | 11 |
 | Captures | 0 | 4 | 5 | 1 | 10 |
 | Settings | 6 | 5 | 12 | 0 | 23 |
 | Onboarding & Account | 0 | 4 | 6 | 0 | 10 |
-| **Overall** | **124** | **47** | **63** | **4** | **238** |
+| **Overall** | **196** | **17** | **28** | **0** | **241** |
 
 RPC: React calls 345 of 345 contract methods; native references 134. 211 methods React calls are never called natively. Events: React handles 77 of 77; native handles 35; 42 React-handled events are dropped natively.
 
@@ -236,16 +236,16 @@ Totals: DONE 5, PARTIAL 7, MISSING 9, BROKEN 0 (of 21).
 
 ## Exo AI / PC
 
-Totals: DONE 21, PARTIAL 0, MISSING 0, BROKEN 0 (of 21).
+Totals: DONE 24, PARTIAL 0, MISSING 0, BROKEN 0 (of 24).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
 | Exo AI room: Auto Tune card (stage list, live progress, undo) | components/gpu/AutoTune.tsx:4 | exo-ui/src/pc_ai.rs:372 | DONE | rpc: system.tune, autopilot.state, exoAi.state, exoAi.set. Dynamic 6-stage Auto Tune + real system.tune hardware rows (Tune CPU/GPU with risk confirm, live testing progress + Stop, tuned metrics + Undo). |
 | Exo AI: Run again / Optimizing PC cinema | components/gpu/AutoTuneCinema.tsx:151 | exo-ui/src/pc_menus.rs:1865 | DONE | rpc: exoAi.set + sequential 6-stage pipeline in pc_wp9_actions.rs. Full-screen cinema modal with Stage X of 6, milestones, results summary, Not now / Restart now / Run again / Done. |
 | Auto Tune: PawnIO / unsupported CPU/GPU notice | components/gpu/AutoTune.tsx:139 | exo-ui/src/pc_ai.rs:392 | DONE | rpc: shell.openUrl, system.tune. Get PawnIO link on needs-driver and unsupported hardware notice when parts is empty. |
-| PC overview (hardware, Windows version, Secure Boot, TPM, memory integrity, BIOS) | components/gpu/PcOverview.tsx:1 | exo-ui/src/pc_ai.rs:1790 | DONE | rpc: system.about, system.drives, system.tuning, keep.status, bios.update. Hardware overview grid with verdicts + Motherboard BIOS/Recovery/Secure Boot/TPM/Memory integrity rows with vendor hints. |
-| Autopilot (state, what it found / did, pause, turn back on) | components/gpu/Autopilot.tsx:3 | exo-ui/src/pc_menus.rs:1089 | DONE | rpc: autopilot.state, autopilot.set. Pause/turn on, Memory Integrity, per-app rules, live telemetry, and expandable session reports. |
-| Power & Autopilot group, system tweaks (restore, restart required) | components/gpu/SystemGroup.tsx:50 | exo-ui/src/pc_menus.rs:1169 | DONE | rpc: system.tune, system.health, system.tuning. Network/System tuning groups with Put back undo, connection/latency checks, and restart banners. |
+| PC overview (hardware, Windows version, Secure Boot, TPM, memory integrity, BIOS) | components/gpu/PcOverview.tsx:1 | exo-ui/src/pc_ai.rs:1790 | DONE | rpc: system.about, system.drives, system.tuning, system.health, keep.status, bios.update. Hardware overview grid with verdicts, OverviewHealthRows (gpupref/cpumicrocode/ryzenbranch/gpusched/winupdate), CPU/RAM notes, and Motherboard BIOS/Recovery/Secure Boot/TPM/Memory integrity rows with 11 BIOS vendor hints. |
+| Autopilot (state, what it found / did, pause, turn back on) | components/gpu/Autopilot.tsx:3 | exo-ui/src/pc_menus.rs:1089 | DONE | rpc: autopilot.state, autopilot.set. Pause/turn on (Autopilot paused header status), Memory Integrity, Standby memory purge, Background downloads pause, CPU sets, Win11 24H2+ global timer pacing, game priority/core parking, per-app rules, live telemetry, and expandable session reports. |
+| Power & Autopilot group, system tweaks (restore, restart required) | components/gpu/SystemGroup.tsx:50 | exo-ui/src/pc_menus.rs:1169 | DONE | rpc: system.tune, system.health, system.tuning. Network/System tuning groups with Put back undo, Retired playbook tweaks migration (system.tuning migrate + post-revert summary notice), connection/latency checks, and restart banners. |
 | Interrupts (MSI, DPC latency measure, drivers hold) | components/gpu/InterruptRows.tsx:19 | exo-ui/src/pc_menus.rs:1169 | DONE | rpc: system.interrupts. MSI apply/undo, DPC latency measurement, drivers hold, and device list. |
 | Display tab (refresh rate, HDR, calibrate, G-Sync, best settings) | components/gpu/DisplayTab.tsx:1 | exo-ui/src/pc_menus.rs:571 | DONE | rpc: gpu.display, hdr.state. Multi-monitor switcher, Use best settings, refresh rate, color format/depth/range, DDC brightness/contrast, color adjust + Restore, HDR verdict/auto-HDR/Calibrate. |
 | GPU driver row (latest, install, driver type, profile restore) | components/gpu/DriverRow.tsx:116 | exo-ui/src/pc_menus.rs:259 | DONE | rpc: gpu.driver, gpu.profile. Game Ready/Studio toggle, Install/Reinstall with license consent dialog, gpu.driver push progress. |
@@ -253,7 +253,7 @@ Totals: DONE 21, PARTIAL 0, MISSING 0, BROKEN 0 (of 21).
 | Drivers & updates (chipset, Windows Update, BIOS, restart) | components/gpu/DriversSection.tsx:108 | exo-ui/src/pc_ai.rs:733 | DONE | rpc: system.drivers, system.health, bios.update, controller.read. Update all, GPU/chipset/device/DualSense/Windows Update/ASUS BIOS staging with drivers.step & bios.progress push events. |
 | AFMF 3 row | components/gpu/Afmf3Row.tsx:12 | exo-ui/src/pc_menus.rs:356 | DONE | rpc: gpu.afmf3. Status + toggle inside Graphics part menu. |
 | GPU control panel open | components/gpu/PcPartMenus.tsx:69 | exo-ui/src/pc_menus.rs:356 | DONE | rpc: gpu.controlPanel. Opens vendor GPU control panel from Graphics part menu. |
-| Best Setup (use best settings) | components/gpu/BestSetup.tsx:107 | exo-ui/src/pc_menus.rs:1169 | DONE | rpc: system.health, system.tuning, system.interrupts, gpu.profile, gpu.display. Sequential Use best settings runner inside Motherboard menu. |
+| Best Setup (use best settings) | components/gpu/BestSetup.tsx:107 | exo-ui/src/pc_menus.rs:1169 | DONE | rpc: system.health, system.tuning, system.interrupts, gpu.profile, gpu.display. Sequential Use best settings runner inside Motherboard menu (including SSD TRIM and cpumicrocode/ryzenbranch SetupRows). |
 | Storage room (drives, scan space, drive settings) | components/gpu/StorageRoom.tsx:117 | exo-ui/src/pc_storage.rs:522 | DONE | rpc: system.drives. Full Storage room with drive cards, space breakdown, top games, verdicts, Scan space, and Drive settings fixes. |
 | Compress games (all, idle, after updates) | components/gpu/CompressGames.tsx:14 | exo-ui/src/pc_storage.rs:345 | DONE | rpc: compress.list, compress.all, compress.act, compress.settings. Compress all, per-game Compress/Uncompress with confirm, live compress.progress events, idle & after-updates toggles. |
 | Game runtimes (VC++/.NET list, install) | components/runtimes/RuntimesPanel.tsx:1 | exo-ui/src/pc_ai.rs:564 | DONE | rpc: runtimes.list, runtimes.install. VC++/.NET runtime rows, install/repair/cancel, and live runtimes.progress push events. |
@@ -261,6 +261,9 @@ Totals: DONE 21, PARTIAL 0, MISSING 0, BROKEN 0 (of 21).
 | Keep (CPU/GPU keep-awake status) | components/gpu/PcOverview.tsx:69 | exo-ui/src/pc_ai.rs:1790 | DONE | rpc: keep.status. Displays keep-awake status messages on PC overview card. |
 | FPS counter options | components/settings/GeneralSection.tsx:127 | exo-ui/src/settings.rs:234 | DONE | rpc: fps.counter. In-game settings FPS counter toggle, position selector, and all 9 metric switches. |
 | PC part menus (CPU, GPU, RAM, disk context menus) | components/gpu/PcPartMenus.tsx:69 | exo-ui/src/pc_menus.rs:2272 | DONE | Anchored Graphics, Display, and Motherboard popovers with full interactive controls, Esc/backdrop dismiss, and blur cap compliance. |
+| GPU activity (per-process VRAM, shared memory, engine slices) | components/gpu/GpuProcessesSection.tsx:1 | exo-ui/src/pc_ai.rs:2080 | DONE | rpc: gpu.processes. GPU activity card in Exo AI room with 3-second polling, Refresh button, per-process VRAM/shared memory, engine slices, and multi-adapter subtitle. |
+| Per-game QoS (DSCP 46) toggles | components/gpu/QosGroup.tsx:1 | exo-ui/src/pc_menus.rs:1460 | DONE | rpc: system.qos. Per-game QoS (DSCP 46) section inside Motherboard menu toggling Windows QoS policies per installed game. |
+| Overlay advisor (detect, turn off, put back) | components/gpu/OverlayAdvisorGroup.tsx:1 | exo-ui/src/pc_menus.rs:1520 | DONE | rpc: system.overlays. Overlays advisor section inside Motherboard menu showing active/off status badges with Turn off and Put back actions. |
 
 ## Apps
 
@@ -752,6 +755,9 @@ Depends on: RPC present: system.tune/health/interrupts/drivers, gpu.display/driv
 - `exo-ai-pc-19` [DONE] Keep (CPU/GPU keep-awake status)
 - `exo-ai-pc-20` [DONE] FPS counter options
 - `exo-ai-pc-21` [DONE] PC part menus (CPU, GPU, RAM, disk context menus)
+- `exo-ai-pc-22` [DONE] GPU activity (per-process VRAM, shared memory, engine slices)
+- `exo-ai-pc-23` [DONE] Per-game QoS (DSCP 46) toggles
+- `exo-ai-pc-24` [DONE] Overlay advisor (detect, turn off, put back)
 - `apps-02` [DONE] Uninstall (confirm, progress, leftovers)
 - `apps-04` [DONE] Scan for unused apps ("Not opened in three months")
 - `apps-05` [DONE] Restore point + Undo

@@ -421,7 +421,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let store = s.store_tick(now);
     let wp4 = s.wp4_tick(now);
     let hb = s.tick_shell_heartbeat(now, tx);
-    focus_changed || notices || setup || island || lib || store || wp4 || hb
+    let wp9 = s.pc_wp9_tick(now);
+    focus_changed || notices || setup || island || lib || store || wp4 || hb || wp9
 }
 
 #[cfg(windows)]
@@ -1064,6 +1065,27 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 Duration::from_secs(8),
             ) {
                 state.pc.drives = Some(drv);
+            }
+            if let Ok(gp) = client.call_blocking::<_, exo_rpc::GpuProcessesState>(
+                exo_rpc::METHOD_GPU_PROCESSES,
+                &serde_json::json!({ "limit": 8 }),
+                Duration::from_secs(6),
+            ) {
+                state.pc.gpu_processes = Some(gp);
+            }
+            if let Ok(qos) = client.call_blocking::<_, exo_rpc::QosState>(
+                exo_rpc::METHOD_SYSTEM_QOS,
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) {
+                state.pc.qos_state = Some(qos);
+            }
+            if let Ok(ov) = client.call_blocking::<_, exo_rpc::OverlayAdvisorState>(
+                exo_rpc::METHOD_SYSTEM_OVERLAYS,
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) {
+                state.pc.overlays_state = Some(ov);
             }
             state.refresh_auto_tune_stages_if_idle();
             if let Some(ref cache_dir) = state.remote_cache_dir {

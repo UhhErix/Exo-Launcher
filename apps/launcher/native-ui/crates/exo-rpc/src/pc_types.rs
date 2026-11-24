@@ -170,6 +170,8 @@ pub struct ExoAiState {
     pub gaming: ExoAiGaming,
     #[serde(default)]
     pub fans: ExoAiFans,
+    #[serde(default)]
+    pub gpu_answer: Option<GpuUsageAnswer>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -310,11 +312,43 @@ pub struct AutopilotStandbyPurge {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AutopilotTimerGlobal {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub needed_for_win11: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutopilotDownloadsPaused {
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub jobs: u32,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub services: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AutopilotState {
     #[serde(default)]
     pub on: bool,
     #[serde(default)]
+    pub game_priority: String,
+    #[serde(default)]
+    pub keep_game_mode: bool,
+    #[serde(default)]
+    pub core_parking: bool,
+    #[serde(default)]
     pub cpu: String,
+    #[serde(default)]
+    pub cpu_sets: Option<String>,
+    #[serde(default)]
+    pub timer_global: Option<AutopilotTimerGlobal>,
+    #[serde(default)]
+    pub downloads_paused: Option<AutopilotDownloadsPaused>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub always_demote: Vec<String>,
     #[serde(default, deserialize_with = "null_as_default")]
@@ -397,6 +431,21 @@ pub struct TuningItem {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TuningMigration {
+    #[serde(default)]
+    pub pending: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub keys: Vec<String>,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub reverted: Vec<String>,
+    #[serde(default)]
+    pub restart: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SystemTuningState {
     #[serde(default)]
     pub ok: bool,
@@ -409,7 +458,146 @@ pub struct SystemTuningState {
     #[serde(default)]
     pub latency: Option<LatencyReport>,
     #[serde(default)]
+    pub migration: Option<TuningMigration>,
+    #[serde(default)]
     pub items: Vec<TuningItem>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QosGame {
+    #[serde(default)]
+    pub game_id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub exe_name: String,
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QosState {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub nla_bypassed: bool,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub games: Vec<QosGame>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayAdvisorItem {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub cost: String,
+    #[serde(default)]
+    pub detail: String,
+    #[serde(default)]
+    pub can_toggle: bool,
+    #[serde(default)]
+    pub can_undo: bool,
+    #[serde(default)]
+    pub manual_steps: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayAdvisorState {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub items: Vec<OverlayAdvisorItem>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuAdapterUsage {
+    #[serde(default)]
+    pub luid: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub vendor_id: u32,
+    #[serde(default)]
+    pub dedicated_bytes: u64,
+    #[serde(default)]
+    pub shared_bytes: u64,
+    #[serde(default)]
+    pub software: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuEngineSlice {
+    #[serde(default, rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub percent: f64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuProcessUsage {
+    #[serde(default)]
+    pub pid: u32,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub adapter_luid: String,
+    #[serde(default)]
+    pub adapter_name: String,
+    #[serde(default)]
+    pub total_percent: f64,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub engines: Vec<GpuEngineSlice>,
+    #[serde(default)]
+    pub local_bytes: u64,
+    #[serde(default)]
+    pub non_local_bytes: u64,
+    #[serde(default)]
+    pub protected_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuUsageAnswer {
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub top_gpu: Option<GpuProcessUsage>,
+    #[serde(default)]
+    pub top_vram: Option<GpuProcessUsage>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub hogs: Vec<GpuProcessUsage>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuProcessesState {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub adapters: Vec<GpuAdapterUsage>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub processes: Vec<GpuProcessUsage>,
+    #[serde(default)]
+    pub answer: GpuUsageAnswer,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

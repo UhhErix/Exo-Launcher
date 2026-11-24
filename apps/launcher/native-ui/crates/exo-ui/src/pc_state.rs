@@ -5,13 +5,13 @@ use exo_rpc::{
     DisplayState, DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown,
     DriveTemp, DriveVerdict, DriveVolume, DriverProgress, DriverState, DriverStep, DriversState,
     DrivesReply, EqHeadphone, ExoAccountState, ExoAiFans, ExoAiGaming, ExoAiState, FpsCounterReply,
-    GpuProfile, GpuProfileScreen, HdrState, InstalledAppItem, InstallerCacheReply, InterruptsState,
-    JunkItem, KeepStatus, KeyboardBackupSummary, KeyboardProfileSlot, KeyboardReadReply,
-    LatencyReport, LatencySample, LauncherSettings, LeftoverSummary, PcHealth, PcHealthItem,
-    PeripheralCard, RuntimeItem, RuntimeResult, RuntimesProgress, ShaderPrepareGame, ShaderRebuild,
-    ShaderSnapGame, ShadersAddonStatus, StartupItem, StartupListReply, SystemAbout,
-    SystemTuningState, TunePart, TuningItem, UpdateCheckReply, UpdateProgress, WebClientOptions,
-    WindowsApp,
+    GpuProcessUsage, GpuProcessesState, GpuProfile, GpuProfileScreen, HdrState, InstalledAppItem,
+    InstallerCacheReply, InterruptsState, JunkItem, KeepStatus, KeyboardBackupSummary,
+    KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample, LauncherSettings,
+    LeftoverSummary, OverlayAdvisorState, PcHealth, PcHealthItem, PeripheralCard, QosState,
+    RuntimeItem, RuntimeResult, RuntimesProgress, ShaderPrepareGame, ShaderRebuild, ShaderSnapGame,
+    ShadersAddonStatus, StartupItem, StartupListReply, SystemAbout, SystemTuningState, TunePart,
+    TuningItem, UpdateCheckReply, UpdateProgress, WebClientOptions, WindowsApp,
 };
 use rune::TextEdit;
 use std::collections::{HashMap, HashSet};
@@ -198,14 +198,141 @@ pub fn bios_vendor_hints(motherboard: Option<&str>) -> Option<BiosVendorHints> {
             secure_boot: "Settings → Miscellaneous → Secure Boot",
             tpm: "Settings → Miscellaneous → Intel PTT / AMD CPU fTPM",
         })
-    } else if lower.contains("asrock") {
+    } else if lower.contains("asrock") || lower.contains("nzxt") {
         Some(BiosVendorHints {
             secure_boot: "Security → Secure Boot",
             tpm: "Advanced → CPU / Security → fTPM / PTT",
         })
+    } else if lower.contains("biostar") || lower.contains("supermicro") {
+        Some(BiosVendorHints {
+            secure_boot: "Security → Secure Boot",
+            tpm: "Advanced → Trusted Computing",
+        })
+    } else if lower.contains("evga") {
+        Some(BiosVendorHints {
+            secure_boot: "Boot → Secure Boot",
+            tpm: "Advanced → Trusted Computing",
+        })
+    } else if lower.contains("dell") || lower.contains("alienware") {
+        Some(BiosVendorHints {
+            secure_boot: "Boot Configuration → Secure Boot",
+            tpm: "Security → TPM 2.0 Security",
+        })
+    } else if lower.contains("hp") || lower.contains("hewlett") {
+        Some(BiosVendorHints {
+            secure_boot: "Security → Secure Boot Configuration",
+            tpm: "Security → TPM Device",
+        })
+    } else if lower.contains("lenovo") {
+        Some(BiosVendorHints {
+            secure_boot: "Security → Secure Boot",
+            tpm: "Security → Intel Platform Trust Technology / AMD PSP",
+        })
     } else {
         None
     }
+}
+
+pub fn autopilot_active_summary(ap: &AutopilotState) -> String {
+    if !ap.on {
+        let mut parts =
+            vec!["Paused. Your games and background apps are left untouched.".to_string()];
+        if !ap.cpu.is_empty() {
+            parts.push(ap.cpu.clone());
+        }
+        return parts.join(" ");
+    }
+    let priority_part = match ap.game_priority.as_str() {
+        "normal" => "Leaves game priority normal",
+        "high" => "Gives your game high priority while it runs",
+        _ => "Gives your game priority while it runs",
+    };
+    let core_part = if ap.core_parking {
+        ", throttles background hogs, pauses background downloads, and keeps cores awake."
+    } else {
+        ", throttles background hogs, and pauses background downloads."
+    };
+    let mut parts = vec![format!("{priority_part}{core_part}")];
+    if ap.game_mode.off {
+        parts.push("Windows Game Mode off.".into());
+    } else if let Some(ref kept) = ap.game_mode.kept_on {
+        parts.push(format!("Windows Game Mode stays on ({kept})."));
+    }
+    if ap.mouse_accel.as_ref().is_some_and(|m| m.off) {
+        parts.push("Mouse acceleration off (1:1).".into());
+    }
+    if !ap.cpu.is_empty() {
+        parts.push(ap.cpu.clone());
+    }
+    if let Some(ref cs) = ap.cpu_sets
+        && !cs.is_empty()
+    {
+        parts.push(cs.clone());
+    }
+    if let Some(ref tg) = ap.timer_global
+        && tg.needed_for_win11
+    {
+        if tg.enabled {
+            parts.push("GlobalTimerResolutionRequests is on for Windows 11 24H2+.".into());
+        } else {
+            parts.push(
+                "Enable Global timer resolution in System settings so 0.507 ms game timers apply on Windows 11 24H2+.".into(),
+            );
+        }
+    }
+    parts.join(" ")
+}
+
+pub fn format_gpu_process_metrics(proc: &GpuProcessUsage) -> String {
+    const SHARED_NOTE_MIN: u64 = 64 * 1024 * 1024;
+    let mut parts = Vec::new();
+    if proc.total_percent >= 0.1 {
+        parts.push(format!("{}%", proc.total_percent.round() as i64));
+    }
+    if proc.local_bytes > 0 {
+        parts.push(format!("{} VRAM", format_bytes(proc.local_bytes)));
+    }
+    if proc.non_local_bytes >= SHARED_NOTE_MIN {
+        parts.push(format!("{} shared", format_bytes(proc.non_local_bytes)));
+    }
+    if parts.is_empty() {
+        "0%".into()
+    } else {
+        parts.join(" · ")
+    }
+}
+
+pub fn format_gpu_process_subtitle(proc: &GpuProcessUsage, multi_adapter: bool) -> Option<String> {
+    let mut parts = Vec::new();
+    if !proc.engines.is_empty() {
+        let eng: Vec<String> = proc
+            .engines
+            .iter()
+            .take(2)
+            .map(|e| format!("{} {}%", e.kind, e.percent.round() as i64))
+            .collect();
+        parts.push(eng.join(", "));
+    }
+    if multi_adapter && !proc.adapter_name.is_empty() {
+        parts.push(proc.adapter_name.clone());
+    }
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+pub fn overview_health_items(health: Option<&PcHealth>) -> Vec<&PcHealthItem> {
+    let Some(hp) = health else {
+        return Vec::new();
+    };
+    hp.items
+        .iter()
+        .filter(|i| {
+            !i.applied
+                && !i.current
+                && i.key != "power"
+                && i.key != "chipset"
+                && !i.key.starts_with("net")
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -299,6 +426,15 @@ pub struct SettingsAndPcState {
     pub network_error: Option<(String, String)>,
     pub tuning_busy: Option<String>,
     pub tuning_error: Option<(String, String)>,
+    pub qos_state: Option<QosState>,
+    pub qos_busy: Option<String>,
+    pub qos_error: Option<(String, String)>,
+    pub overlays_state: Option<OverlayAdvisorState>,
+    pub overlays_busy: Option<String>,
+    pub overlays_error: Option<(String, String)>,
+    pub gpu_processes: Option<GpuProcessesState>,
+    pub gpu_processes_busy: bool,
+    pub gpu_processes_last_poll: f64,
     pub runtimes: Option<Vec<RuntimeItem>>,
     pub runtimes_running: Option<String>,
     pub runtimes_canceling: bool,
@@ -475,6 +611,7 @@ impl SettingsAndPcState {
                     fan_count: 2,
                     note: None,
                 },
+                gpu_answer: None,
             }),
             autopilot: Some(AutopilotState {
                 on: true,
@@ -491,6 +628,12 @@ impl SettingsAndPcState {
                     needs_restart: false,
                 },
                 standby_purge: None,
+                game_priority: String::new(),
+                keep_game_mode: true,
+                core_parking: true,
+                cpu_sets: None,
+                timer_global: None,
+                downloads_paused: None,
                 live: Some(AutopilotLive {
                     game: "demo:cyberpunk".into(),
                     title: "Cyberpunk 2077".into(),
@@ -543,6 +686,7 @@ impl SettingsAndPcState {
                 message: None,
                 applied: true,
                 restart: false,
+                migration: None,
                 latency: Some(LatencyReport {
                     before: Some(LatencySample {
                         dpc_us: 842.0,
@@ -706,6 +850,15 @@ impl SettingsAndPcState {
             network_error: None,
             tuning_busy: None,
             tuning_error: None,
+            qos_state: None,
+            qos_busy: None,
+            qos_error: None,
+            overlays_state: None,
+            overlays_busy: None,
+            overlays_error: None,
+            gpu_processes: None,
+            gpu_processes_busy: false,
+            gpu_processes_last_poll: 0.0,
             runtimes: None,
             runtimes_running: None,
             runtimes_canceling: false,
@@ -1209,6 +1362,15 @@ impl SettingsAndPcState {
             network_error: None,
             tuning_busy: None,
             tuning_error: None,
+            qos_state: None,
+            qos_busy: None,
+            qos_error: None,
+            overlays_state: None,
+            overlays_busy: None,
+            overlays_error: None,
+            gpu_processes: None,
+            gpu_processes_busy: false,
+            gpu_processes_last_poll: 0.0,
             runtimes: None,
             runtimes_running: None,
             runtimes_canceling: false,
@@ -1397,7 +1559,7 @@ pub fn best_steps_list(pc: &SettingsAndPcState, settings: &LauncherSettings) -> 
         }
     }
     if let Some(drives) = pc.drives.as_ref() {
-        let fixes: Vec<&DriveFix> = ["cache", "flush", "optimize"]
+        let fixes: Vec<&DriveFix> = ["cache", "flush", "optimize", "trim"]
             .iter()
             .filter_map(|k| drives.fixes.iter().find(|f| f.key == *k))
             .collect();
@@ -1407,6 +1569,7 @@ pub fn best_steps_list(pc: &SettingsAndPcState, settings: &LauncherSettings) -> 
                 .map(|f| match f.key.as_str() {
                     "cache" => "write caching",
                     "flush" => "write-cache flushing",
+                    "trim" => "SSD TRIM",
                     _ => "weekly optimize",
                 })
                 .collect();
@@ -2148,5 +2311,181 @@ mod wp9_tests {
         rt.settle_all();
         rt.frame(1.0 / 60.0);
         assert!(rt.find("set-yt-notifications").is_some());
+    }
+
+    #[test]
+    fn perf_os_tweaks_migration_qos_overlays_and_autopilot_fields_render() {
+        assert!(bios_vendor_hints(Some("Alienware Aurora R16")).is_some());
+        assert!(bios_vendor_hints(Some("NZXT N7 B650E")).is_some());
+        assert!(bios_vendor_hints(Some("Lenovo Legion T7")).is_some());
+
+        let ap = AutopilotState {
+            on: true,
+            game_priority: "high".into(),
+            core_parking: true,
+            cpu: "One CCD.".into(),
+            cpu_sets: Some("CPU Sets pin background apps off game cores.".into()),
+            timer_global: Some(exo_rpc::AutopilotTimerGlobal {
+                enabled: false,
+                needed_for_win11: true,
+            }),
+            standby_purge: Some(exo_rpc::AutopilotStandbyPurge {
+                available: true,
+                reason: None,
+            }),
+            downloads_paused: Some(exo_rpc::AutopilotDownloadsPaused {
+                active: true,
+                jobs: 2,
+                services: vec!["BITS".into()],
+            }),
+            ..Default::default()
+        };
+        let summary = autopilot_active_summary(&ap);
+        assert!(summary.contains("high priority"));
+        assert!(summary.contains("pauses background downloads"));
+        assert!(summary.contains("CPU Sets"));
+        assert!(summary.contains("24H2+"));
+
+        let mut s = AppState::default();
+        s.pc.autopilot = Some(ap);
+        s.pc.tuning = Some(SystemTuningState {
+            ok: true,
+            migration: Some(exo_rpc::TuningMigration {
+                pending: true,
+                keys: vec!["osOverhead".into()],
+                summary: "PowerThrottlingOff breaks Autopilot EcoQoS.".into(),
+                reverted: Vec::new(),
+                restart: false,
+            }),
+            items: Vec::new(),
+            ..Default::default()
+        });
+        s.pc.qos_state = Some(QosState {
+            ok: true,
+            message: None,
+            nla_bypassed: true,
+            note: "Tags outgoing game traffic with DSCP 46 (EF).".into(),
+            games: vec![exo_rpc::QosGame {
+                game_id: "steam:730".into(),
+                title: "Counter-Strike 2".into(),
+                exe_name: "cs2.exe".into(),
+                enabled: true,
+            }],
+        });
+        s.pc.overlays_state = Some(OverlayAdvisorState {
+            ok: true,
+            message: None,
+            items: vec![exo_rpc::OverlayAdvisorItem {
+                id: "gamebar".into(),
+                name: "Xbox Game Bar & Game DVR".into(),
+                status: "on".into(),
+                enabled: true,
+                cost: "2-5% GPU overhead".into(),
+                detail: "Game DVR is on.".into(),
+                can_toggle: true,
+                can_undo: false,
+                manual_steps: None,
+            }],
+        });
+        s.pc.drives = Some(DrivesReply {
+            ok: true,
+            fixes: vec![DriveFix {
+                key: "trim".into(),
+                label: "SSD TRIM".into(),
+                detail: "TRIM keeps SSD writes fast.".into(),
+                applied: false,
+                restart: false,
+            }],
+            ..Default::default()
+        });
+        let steps = best_steps_list(&s.pc, &s.settings);
+        assert!(
+            steps
+                .iter()
+                .any(|st| st.key == "drives" && st.what.contains("SSD TRIM"))
+        );
+
+        s.switch_room(Room::ExoAi);
+        s.pc.part_menu = Some(PcPartMenu::Board);
+        let mut rt = Runtime::new(s, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        assert!(rt.find("pc-best-qos-steam:730").is_some());
+        assert!(rt.find("ov-off-gamebar").is_some());
+        assert!(rt.find("sys-tuning-migrate").is_some());
+    }
+
+    #[test]
+    fn perf_hw_phase1_gpu_processes_and_overview_health_rows_render() {
+        let proc = GpuProcessUsage {
+            pid: 4120,
+            name: "chrome".into(),
+            adapter_luid: "0x1".into(),
+            adapter_name: "RTX 3070".into(),
+            total_percent: 14.2,
+            engines: vec![exo_rpc::GpuEngineSlice {
+                kind: "3D".into(),
+                percent: 14.2,
+            }],
+            local_bytes: 640 * 1024 * 1024,
+            non_local_bytes: 128 * 1024 * 1024,
+            protected_reason: None,
+        };
+        let metrics = format_gpu_process_metrics(&proc);
+        assert!(metrics.contains("14%"));
+        assert!(metrics.contains("VRAM"));
+        assert!(metrics.contains("shared"));
+        let sub = format_gpu_process_subtitle(&proc, true).unwrap();
+        assert_eq!(sub, "3D 14% · RTX 3070");
+
+        let mut s = AppState::default();
+        s.pc.gpu_processes = Some(GpuProcessesState {
+            ok: true,
+            adapters: vec![exo_rpc::GpuAdapterUsage {
+                luid: "0x1".into(),
+                name: "RTX 3070".into(),
+                ..Default::default()
+            }],
+            processes: vec![proc],
+            answer: exo_rpc::GpuUsageAnswer {
+                summary: "chrome is using 14% GPU (3D) and 640 MB VRAM.".into(),
+                ..Default::default()
+            },
+        });
+        s.pc.health = Some(PcHealth {
+            ok: true,
+            items: vec![
+                PcHealthItem {
+                    key: "cpumicrocode".into(),
+                    label: "CPU microcode update".into(),
+                    detail: "Update BIOS for Vmin-shift protection.".into(),
+                    url: Some("https://asus.com/bios".into()),
+                    applied: false,
+                    current: false,
+                    ..Default::default()
+                },
+                PcHealthItem {
+                    key: "ryzenbranch".into(),
+                    label: "Windows 11 24H2 branch prediction".into(),
+                    detail: "Update Windows for Ryzen branch prediction boost.".into(),
+                    applied: false,
+                    current: false,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        });
+        s.switch_room(Room::ExoAi);
+        let mut rt = Runtime::new(s, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        assert!(rt.find("exo-ai-gpu-usage-card").is_some());
+        assert!(rt.find("gpu-proc-refresh").is_some());
+        assert!(rt.find("gpu-proc-4120-0x1").is_some());
+        assert!(rt.find("exo-ai-health-rows").is_some());
+        assert!(rt.find("ov-hp-cpumicrocode").is_some());
+        assert!(rt.find("ov-hp-winupdate").is_some());
     }
 }
