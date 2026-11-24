@@ -8,13 +8,13 @@ use crate::{
 };
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
-    CAPTION_TRAILING_INSET, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
-    RADIUS_PILL, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, exo_mark, exo_titlebar, fg_muted,
-    glass_capsule_opt, glass_control_fill, glass_enter, glass_panel_opt, glass_rim_bottom,
-    glass_rim_top, glass_still_control_fill, good, hover_fill, icon_camera, icon_chat, icon_close,
-    icon_grid, icon_library, icon_minimize, icon_mouse, icon_music, icon_settings, icon_sparkles,
-    icon_store, icon_volume, icon_volume_low, icon_volume_off, icon_win_maximize, icon_win_restore,
-    modal_scrim_transition, popover_transition, pressed_fill, scrim_fill, selected_fill,
+    CAPTION_TRAILING_INSET, ExoGlass, FG, GAP, GLASS_CONTAINER_SPACING, GlassAccessibility,
+    PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_MOVE, SPRING_QUICK, TRANSPARENT,
+    apply_glass, bad, exo_mark, exo_titlebar, fg_muted, glass_capsule_opt, glass_enter,
+    glass_panel_opt, good, hover_fill, icon_camera, icon_chat, icon_close, icon_grid, icon_library,
+    icon_minimize, icon_mouse, icon_music, icon_settings, icon_sparkles, icon_store, icon_volume,
+    icon_volume_low, icon_volume_off, icon_win_maximize, icon_win_restore, modal_scrim_transition,
+    popover_transition, pressed_fill, scrim_fill, selected_fill, set_glass_accessibility,
     set_text_scale, slider_track, type_body, type_section, type_small,
 };
 use rune::{
@@ -672,6 +672,7 @@ fn mini_volume_popover_layers(s: &AppState, blur: bool) -> Vec<El> {
 
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     cx.reduced_motion(s.settings.reduce_motion);
+    set_glass_accessibility(GlassAccessibility::from_cx(cx, s.settings.reduce_motion));
     set_text_scale(s.text_scale());
     let has_modal_scrim = s.palette_open
         || s.key_modal_open
@@ -684,6 +685,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         || s.media.captures_open
         || s.discord.settings_open
         || s.setup.beat.is_some();
+    let has_manual_top_bar_scrim = s.store_ext.lightbox_index.is_some() || s.media.captures_open;
     let budget = BlurBudget::compute(s, !s.notices.is_empty());
     cx.set_titlebar(exo_titlebar());
     cx.caption_color(if has_modal_scrim {
@@ -721,49 +723,43 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         return root;
     }
 
-    let mut search = row()
-        .key("search-capsule")
-        .role("button")
-        .label("Search")
-        .focusable(true)
-        .hit()
-        .cursor(Cursor::Pointer)
-        .press_scale(PRESS_SCALE)
-        .w(200.0)
-        .h(36.0)
-        .pl(10.0)
-        .pr(12.0)
-        .gap(10.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(if budget.top_bar_search {
-            glass_control_fill()
-        } else {
-            glass_still_control_fill()
-        })
-        .hover(hover_fill())
-        .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .motion(SPRING_QUICK)
-        .on_press_tx(|s: &mut AppState, tx| {
-            s.capture_menu_open = false;
-            s.chrome.mini_volume_open = false;
-            s.close_context_menu();
-            s.close_dropdown();
-            if s.palette_open {
-                s.close_palette();
-            } else {
-                s.open_palette(tx);
-            }
-        })
-        .on_secondary_press(|s: &mut AppState, p, _| {
-            s.open_context_menu(ContextMenuTarget::SearchCapsule, p.x, p.y);
-        })
-        .child(exo_mark(18.0, FG))
-        .child(text("Search").font(type_body()).color(FG));
-    if budget.top_bar_search {
-        search = search.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
+    let search = apply_glass(
+        row()
+            .key("search-capsule")
+            .role("button")
+            .label("Search")
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .w(200.0)
+            .h(36.0)
+            .pl(10.0)
+            .pr(12.0)
+            .gap(10.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press_tx(|s: &mut AppState, tx| {
+                s.capture_menu_open = false;
+                s.chrome.mini_volume_open = false;
+                s.close_context_menu();
+                s.close_dropdown();
+                if s.palette_open {
+                    s.close_palette();
+                } else {
+                    s.open_palette(tx);
+                }
+            })
+            .on_secondary_press(|s: &mut AppState, p, _| {
+                s.open_context_menu(ContextMenuTarget::SearchCapsule, p.x, p.y);
+            })
+            .child(exo_mark(18.0, FG))
+            .child(text("Search").font(type_body()).color(FG)),
+        ExoGlass::Bar,
+        true,
+    );
 
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
     let discord_badge_count = s.chrome.discord_badge_count;
@@ -847,31 +843,32 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let recording = live_cap.is_some_and(|l| l.recording);
 
     let capture_btn = if recording {
-        row()
-            .key("top-capture-rec")
-            .role("button")
-            .label("Stop recording")
-            .focusable(true)
-            .hit()
-            .cursor(Cursor::Pointer)
-            .press_on_down()
-            .press_scale(PRESS_SCALE)
-            .h(28.0)
-            .px(11.0)
-            .mr(4.0)
-            .gap(7.0)
-            .center_y()
-            .radius(RADIUS_PILL)
-            .fill(glass_control_fill())
-            .hover(hover_fill())
-            .border(1.0, bad().alpha(0.40))
-            .motion(SPRING_QUICK)
-            .on_press(|s: &mut AppState| s.capture_act("record"))
-            .on_secondary_press(|s: &mut AppState, p, _| {
-                s.open_context_menu(ContextMenuTarget::CaptureButton, p.x, p.y);
-            })
-            .child(el().size(8.0, 8.0).radius(4.0).fill(bad()))
-            .child(text("REC").font(type_small()).color(FG))
+        apply_glass(
+            row()
+                .key("top-capture-rec")
+                .role("button")
+                .label("Stop recording")
+                .focusable(true)
+                .hit()
+                .cursor(Cursor::Pointer)
+                .press_on_down()
+                .h(28.0)
+                .px(11.0)
+                .mr(4.0)
+                .gap(7.0)
+                .center_y()
+                .radius(RADIUS_PILL)
+                .hover(hover_fill())
+                .motion(SPRING_QUICK)
+                .on_press(|s: &mut AppState| s.capture_act("record"))
+                .on_secondary_press(|s: &mut AppState, p, _| {
+                    s.open_context_menu(ContextMenuTarget::CaptureButton, p.x, p.y);
+                })
+                .child(el().size(8.0, 8.0).radius(4.0).fill(bad()))
+                .child(text("REC").font(type_small()).color(FG)),
+            ExoGlass::Tinted(bad().alpha(0.45)),
+            true,
+        )
     } else {
         el().key("top-capture-btn")
             .role("button")
@@ -949,26 +946,21 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let divider = el().size(1.0, 16.0).mx(3.0).fill(selected_fill());
 
-    let mut tools = row()
-        .key("titlebar-tools")
-        .h(36.0)
-        .pl(CAPTION_CAPSULE_PAD)
-        .pr(CAPTION_CAPSULE_PAD)
-        .gap(CAPTION_BUTTON_GAP)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(if budget.top_bar_tools {
-            glass_control_fill()
-        } else {
-            glass_still_control_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(capture_btn)
-        .child(settings_btn)
-        .child(divider);
-    if budget.top_bar_tools {
-        tools = tools.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
+    let mut tools = apply_glass(
+        row()
+            .key("titlebar-tools")
+            .h(36.0)
+            .pl(CAPTION_CAPSULE_PAD)
+            .pr(CAPTION_CAPSULE_PAD)
+            .gap(CAPTION_BUTTON_GAP)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .child(capture_btn)
+            .child(settings_btn)
+            .child(divider),
+        ExoGlass::Bar,
+        false,
+    );
 
     if insets.trailing > 0.0 {
         let reserve = (insets.trailing - CAPTION_TRAILING_INSET).max(0.0);
@@ -1043,14 +1035,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let mini = (s.mini_bar_slot != MiniBarSlot::Hidden)
         .then(|| music::mini_player(s, scale, s.mini_bar_slot))
         .flatten()
-        .map(|m| {
-            let m = if budget.mini_player {
-                m
-            } else {
-                m.backdrop_blur(0.0).fill(glass_still_control_fill())
-            };
-            m.transition(mini_player_transition())
-        });
+        .map(|m| m.transition(mini_player_transition()));
 
     let island_cap = island::capsule(s, scale, budget.island);
 
@@ -1072,6 +1057,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let top_bar = el()
         .key("top-bar")
         .window_drag()
+        .glass_container(GLASS_CONTAINER_SPACING)
         .pin(Some(0.0), Some(0.0), Some(0.0), None)
         .h(52.0)
         .on_layout(|s: &mut AppState, r| {
@@ -1114,7 +1100,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .children(mini)
                 .child(tools),
         )
-        .children(has_modal_scrim.then(|| {
+        .children(has_manual_top_bar_scrim.then(|| {
             el().key("top-bar-scrim")
                 .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                 .fill(scrim_fill())

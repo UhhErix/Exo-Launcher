@@ -5,15 +5,14 @@ use crate::library_state::{
 };
 use crate::state::{AppState, ContextMenuTarget, InputMode, LibrarySort};
 use exo_kit::{
-    BG, FG, FOLDER_COLOR_IDS, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
-    RADIUS_PANEL, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK,
-    SelectOption, SelectTrigger, TRANSPARENT, bad, danger_button, fg_muted, folder_color_label,
+    BG, ExoGlass, FG, FOLDER_COLOR_IDS, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
+    RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectOption,
+    SelectTrigger, TRANSPARENT, apply_glass, bad, danger_button, fg_muted, folder_color_label,
     folder_color_mix_black, folder_color_swatch, glass_button, glass_control_fill,
-    glass_icon_circle, glass_panel_fill, glass_panel_opt, glass_rim, glass_rim_bottom,
-    glass_rim_top, hover_fill, icon_check, icon_edit, icon_image_upload, icon_search, icon_zoom_in,
-    icon_zoom_out, modal_card_transition, modal_scrim_transition, primary_button, scrim_fill,
-    select_menu_layers, select_trigger, slider_track, type_body, type_control, type_section,
-    type_small, type_title,
+    glass_icon_circle, glass_panel_fill, glass_panel_opt, glass_rim, hover_fill, icon_check,
+    icon_edit, icon_image_upload, icon_search, icon_zoom_in, icon_zoom_out, modal_card_transition,
+    modal_scrim_transition, primary_button, scrim_fill, select_menu_layers, select_trigger,
+    slider_track, type_body, type_control, type_section, type_small, type_title,
 };
 use exo_rpc::Game;
 use rune::{
@@ -618,15 +617,19 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .pb(24.0)
         .radius(RADIUS_SHEET)
         .continuous_corners()
-        .fill(glass_panel_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(24.0, 64.0, BG.alpha(0.62))
         .transition(modal_card_transition())
+        .modal_tx(true, |s: &mut AppState, tx| {
+            if s.lib.folder_cropper.is_some() {
+                s.lib.folder_cropper = None;
+            } else {
+                s.request_close_folder_sheet(tx);
+            }
+        })
+        .modal_scrim(scrim_fill())
         .child(body);
 
-    if blur {
-        panel = panel.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    panel = apply_glass(panel, ExoGlass::Sheet, false);
 
     if s.lib.folder_cropper.is_none() {
         panel = panel
@@ -656,18 +659,9 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
     }
 
     vec![
-        el().key("folder-sheet-scrim")
+        el().key("folder-sheet-host")
             .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
-            .fill(scrim_fill())
             .center()
-            .transition(modal_scrim_transition())
-            .modal_tx(true, |s: &mut AppState, tx| {
-                if s.lib.folder_cropper.is_some() {
-                    s.lib.folder_cropper = None;
-                } else {
-                    s.request_close_folder_sheet(tx);
-                }
-            })
             .child(panel),
     ]
 }

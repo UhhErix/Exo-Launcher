@@ -6,7 +6,7 @@ use crate::state::AppState;
 use exo_kit::{
     BG, FG, RADIUS_SMALL, SPRING_BASE, bad, fg_muted, glass_panel_opt, glass_rim_bottom,
     glass_rim_top, glass_still_control_fill, good, hairline, icon_check, modal_card_transition,
-    modal_scrim_transition, scaled, switch_pill, type_body, type_small, type_title,
+    scaled, switch_pill, type_body, type_small, type_title,
 };
 use rune::{
     Cursor, El, Key, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text, text_input,
@@ -284,18 +284,11 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
     let card = glass_panel_opt("report-problem-modal", 560.0, blur)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
+        .modal(true, |s: &mut AppState| s.wp4_close_report())
+        .modal_scrim(BG.alpha(0.56))
         .child(content)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(footer);
-
-    let scrim = el()
-        .key("report-modal-scrim")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.56))
-        .hit()
-        .cursor(Cursor::Default)
-        .transition(modal_scrim_transition())
-        .on_press(|s: &mut AppState| s.wp4_close_report());
 
     let host = col()
         .key("report-modal-host")
@@ -304,5 +297,5 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .transition(Transition::none())
         .child(card);
 
-    vec![scrim, host]
+    vec![host]
 }

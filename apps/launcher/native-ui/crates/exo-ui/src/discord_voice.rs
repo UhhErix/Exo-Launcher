@@ -4,15 +4,15 @@ use crate::discord_state::DiscordSettingsPage;
 use crate::discord_voice_state::{GoLiveTab, VoicePanel};
 use crate::state::{AppState, ContextMenuTarget, Room};
 use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
-    RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, fg_faint, fg_muted,
-    filter_pill, glass_button, glass_control_fill, glass_panel_fill, glass_rim_bottom,
-    glass_rim_top, glass_still_control_fill, glass_still_panel_fill, good, hairline, hover_fill,
-    icon_app_window, icon_chat, icon_chevron_left, icon_close, icon_hand, icon_headphones,
-    icon_headphones_off, icon_lock, icon_maximize, icon_mic, icon_mic_off, icon_monitor,
-    icon_music, icon_phone, icon_phone_off, icon_screen_share, icon_search, icon_settings,
-    icon_video, icon_volume, icon_volume_off, pressed_fill, primary_button, subtle_fill, type_body,
-    type_control, type_label, type_section, type_small, type_title, warn,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted, filter_pill,
+    glass_button, glass_control_fill, glass_rim_bottom, glass_rim_top, glass_still_control_fill,
+    good, hairline, hover_fill, icon_app_window, icon_chat, icon_chevron_left, icon_close,
+    icon_hand, icon_headphones, icon_headphones_off, icon_lock, icon_maximize, icon_mic,
+    icon_mic_off, icon_monitor, icon_music, icon_phone, icon_phone_off, icon_screen_share,
+    icon_search, icon_settings, icon_video, icon_volume, icon_volume_off, pressed_fill,
+    primary_button, subtle_fill, type_body, type_control, type_label, type_section, type_small,
+    type_title, warn,
 };
 use exo_rpc::{
     DiscordChannel, DiscordGoLiveStatsEvent, DiscordSoundItem, DiscordVoiceMember, GoLiveSource,
@@ -656,7 +656,7 @@ fn my_stream_tile(s: &AppState, members: &[DiscordVoiceMember], tile_w: f32, sca
 }
 
 fn golive_modal(s: &AppState, blur: bool) -> El {
-    let mut modal = col()
+    let modal = col()
         .key("dc-golive-panel")
         .role("menu")
         .w(900.0)
@@ -664,17 +664,10 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         .padding(20.0)
         .gap(14.0)
         .radius(22.0)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(overlay_transition())
         .hit();
-    if blur {
-        modal = modal.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    let modal = apply_glass(modal, ExoGlass::Popover, false);
 
     let close = el()
         .key("dc-gl-close")
@@ -1127,24 +1120,17 @@ fn soundboard_section(heading: &str, items: &[&DiscordSoundItem]) -> El {
 }
 
 fn soundboard_popover(s: &AppState, blur: bool) -> El {
-    let mut card = col()
+    let card = col()
         .key("dc-soundboard-panel")
         .w(420.0)
         .max_h(480.0)
         .padding(16.0)
         .gap(10.0)
         .radius(20.0)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(overlay_transition())
         .hit();
-    if blur {
-        card = card.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    let card = apply_glass(card, ExoGlass::Popover, false);
 
     let sb_muted = s
         .discord
@@ -1363,24 +1349,17 @@ fn soundboard_popover(s: &AppState, blur: bool) -> El {
 }
 
 fn audio_diag_popover(s: &AppState, blur: bool) -> El {
-    let mut card = col()
+    let card = col()
         .key("dc-audio-panel")
         .w(380.0)
         .max_h(520.0)
         .padding(16.0)
         .gap(12.0)
         .radius(20.0)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(overlay_transition())
         .hit();
-    if blur {
-        card = card.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    let card = apply_glass(card, ExoGlass::Popover, false);
 
     let connected = s.discord.voice.state == "connected";
     let header = row()
@@ -2393,12 +2372,6 @@ pub fn voice_stage_view(
             .gap(8.0)
             .center_y()
             .radius(RADIUS_PILL)
-            .fill(if voice_bar_blur {
-                glass_control_fill()
-            } else {
-                glass_still_control_fill()
-            })
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .child(
                 bar_word_btn(
                     "dc-voice-mute",
@@ -2539,9 +2512,8 @@ pub fn voice_stage_view(
             )
     };
 
-    if voice_bar_blur {
-        voice_bar = voice_bar.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
+    let _ = voice_bar_blur;
+    voice_bar = apply_glass(voice_bar, ExoGlass::Bar, false);
 
     let voice_pane = el()
         .key("dc-voice-stage")
@@ -2702,20 +2674,6 @@ pub fn island_call_capsule(s: &AppState, blur: bool) -> Option<El> {
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(if blur {
-            glass_control_fill()
-        } else {
-            glass_still_control_fill()
-        })
-        .border_gradient(
-            1.0,
-            if !s.discord.speaking.is_empty() {
-                good().alpha(0.65)
-            } else {
-                glass_rim_top()
-            },
-            glass_rim_bottom(),
-        )
         .child(
             row()
                 .key("exo-island-call-open")
@@ -2815,9 +2773,13 @@ pub fn island_call_capsule(s: &AppState, blur: bool) -> Option<El> {
                 .child(icon_phone_off(14.0, FG)),
         );
 
-    if blur {
-        pill = pill.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
+    let _ = blur;
+    let surface = if !s.discord.speaking.is_empty() {
+        ExoGlass::Tinted(good().alpha(0.32))
+    } else {
+        ExoGlass::Bar
+    };
+    pill = apply_glass(pill, surface, false);
     Some(pill)
 }
 
@@ -2840,12 +2802,6 @@ pub fn incoming_call_overlay(s: &AppState, blur: bool) -> Option<El> {
         .gap(12.0)
         .center_y()
         .radius(RADIUS_PANEL)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, good().alpha(0.65), glass_rim_bottom())
         .transition(overlay_transition())
         .hit()
         .child(avatar_box(s, av, &caller, 40.0, 20.0, None, true, 1.0))
@@ -2910,9 +2866,8 @@ pub fn incoming_call_overlay(s: &AppState, blur: bool) -> Option<El> {
                         .child(icon_phone_off(15.0, FG)),
                 ),
         );
-    if blur {
-        card = card.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    card = apply_glass(card, ExoGlass::Tinted(good().alpha(0.32)), false);
     Some(card)
 }
 

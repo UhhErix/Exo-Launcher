@@ -1,12 +1,11 @@
 use crate::events::{EventRegistry, HostEventKind};
 use crate::state::{AppState, Room};
 use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
-    SPRING_QUICK, TRANSPARENT, bad, fg_muted, glass_control_fill, glass_panel_opt,
-    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline, hover_fill,
-    icon_headphones, icon_headphones_off, icon_mic, icon_mic_off, icon_phone, icon_phone_off,
-    popover_transition, pressed_fill, selected_fill, slider_track, type_body, type_section,
-    type_small,
+    BG, ExoGlass, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
+    SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_muted, glass_panel_opt, good, hairline,
+    hover_fill, icon_headphones, icon_headphones_off, icon_mic, icon_mic_off, icon_phone,
+    icon_phone_off, popover_transition, pressed_fill, selected_fill, slider_track, type_body,
+    type_section, type_small,
 };
 use exo_rpc::{DiscordChannels, DiscordHome, DiscordVoiceMember, HostEvent};
 use rune::{Cursor, El, Phase, SpringPair, SurfaceFit, Transition, col, el, row, text};
@@ -333,12 +332,6 @@ pub fn capsule(s: &AppState, scale: f32, blur: bool) -> Option<El> {
             .gap(6.0)
             .center_y()
             .radius(RADIUS_PILL)
-            .fill(if blur {
-                glass_control_fill()
-            } else {
-                glass_still_control_fill()
-            })
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .transition(island_transition())
             .child(el().size(7.0, 7.0).radius(3.5).fill(good()))
             .child(
@@ -364,9 +357,8 @@ pub fn capsule(s: &AppState, scale: f32, blur: bool) -> Option<El> {
                 true,
                 |s| s.island_decline_ring(),
             ));
-        if blur {
-            ring = ring.backdrop_blur(GLASS_CONTROL_SIGMA);
-        }
+        let _ = blur;
+        ring = apply_glass(ring, ExoGlass::Tinted(good().alpha(0.32)), false);
         return Some(ring);
     }
 
@@ -455,12 +447,6 @@ pub fn capsule(s: &AppState, scale: f32, blur: bool) -> Option<El> {
         .gap(3.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(if blur {
-            glass_control_fill()
-        } else {
-            glass_still_control_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(island_transition())
         .child(main_btn);
 
@@ -585,9 +571,8 @@ pub fn capsule(s: &AppState, scale: f32, blur: bool) -> Option<El> {
             |s| s.leave_discord_voice(),
         ));
 
-    if blur {
-        cap = cap.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
+    let _ = blur;
+    cap = apply_glass(cap, ExoGlass::Bar, false);
     Some(cap)
 }
 

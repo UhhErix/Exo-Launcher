@@ -1,10 +1,10 @@
 use crate::components::popover_transition_from;
+use crate::glass::{ExoGlass, apply_glass};
 use crate::icons::{icon_check, icon_chevron_down};
 use crate::tokens::{
-    FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL,
-    RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, fg_faint, fg_muted, glass_control_fill,
-    glass_panel_fill, glass_panel_shadow_color, glass_rim_bottom, glass_rim_top,
-    glass_still_control_fill, glass_still_panel_fill, hover_fill, pressed_fill, type_control,
+    FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, fg_faint,
+    fg_muted, glass_rim_bottom, glass_rim_top, glass_still_control_fill, hover_fill, pressed_fill,
+    type_control,
 };
 use rune::{Align, Cursor, El, Key, Side, Tx, Vec2, col, el, row, text};
 use std::rc::Rc;
@@ -127,17 +127,20 @@ pub fn select_trigger<S: 'static>(
         } else {
             Cursor::Pointer
         })
-        .fill(if open {
-            hover_fill()
-        } else if flat {
-            glass_still_control_fill()
-        } else {
-            glass_control_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK);
-    if !flat {
-        trigger = trigger.backdrop_blur(GLASS_CONTROL_SIGMA);
+    if flat {
+        trigger = trigger
+            .fill(if open {
+                hover_fill()
+            } else {
+                glass_still_control_fill()
+            })
+            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+    } else {
+        if open {
+            trigger = trigger.fill(hover_fill());
+        }
+        trigger = apply_glass(trigger, ExoGlass::Control, !disabled);
     }
 
     if !disabled {
@@ -145,7 +148,6 @@ pub fn select_trigger<S: 'static>(
         let toggle_key = on_toggle;
         trigger = trigger
             .press_on_down()
-            .press_scale(PRESS_SCALE)
             .hover(hover_fill())
             .press(pressed_fill())
             .on_press_tx(move |s: &mut S, tx| toggle_press(s, tx))
@@ -157,6 +159,9 @@ pub fn select_trigger<S: 'static>(
                 }
                 false
             });
+        if flat {
+            trigger = trigger.press_scale(PRESS_SCALE);
+        }
         if gamepad_focus {
             trigger = trigger.focus_ring(2.0, 3.0, FG);
         }
@@ -286,35 +291,29 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
         .collect();
 
     let dismiss_modal = Rc::clone(&on_dismiss);
-    let mut panel = col()
-        .key(format!("{id}-menu"))
-        .role("listbox")
-        .focus_group()
-        .min_w(width)
-        .px(6.0)
-        .py(6.0)
-        .gap(2.0)
-        .radius(RADIUS_CARD)
-        .continuous_corners()
-        .clip_rounded(RADIUS_CARD)
-        .hit()
-        .cursor(Cursor::Default)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(0.0, 40.0, glass_panel_shadow_color())
-        .anchored_fit(trigger_key.clone(), Side::Bottom, align, 6.0)
-        .transition(popover_transition_from(origin))
-        .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
-        .focus_return(trigger_key)
-        .children(rows);
-
-    if blur {
-        panel = panel.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    let panel = apply_glass(
+        col()
+            .key(format!("{id}-menu"))
+            .role("listbox")
+            .focus_group()
+            .min_w(width)
+            .px(6.0)
+            .py(6.0)
+            .gap(2.0)
+            .radius(RADIUS_CARD)
+            .continuous_corners()
+            .clip_rounded(RADIUS_CARD)
+            .hit()
+            .cursor(Cursor::Default)
+            .anchored_fit(trigger_key.clone(), Side::Bottom, align, 6.0)
+            .transition(popover_transition_from(origin))
+            .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
+            .focus_return(trigger_key)
+            .children(rows),
+        ExoGlass::Menu,
+        false,
+    );
 
     vec![panel]
 }

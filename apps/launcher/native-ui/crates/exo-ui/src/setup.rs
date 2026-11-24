@@ -12,9 +12,9 @@ use exo_kit::{
     glass_panel_opt, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chat,
     icon_check, icon_chevron_left, icon_chevron_right, icon_close, icon_gamepad, icon_headphones,
     icon_keyboard, icon_library, icon_microphone, icon_mouse, icon_music, icon_search,
-    icon_settings, icon_shield, icon_sparkles, icon_store, modal_card_transition,
-    modal_scrim_transition, pressed_fill, scaled, scrim_fill, store_logo_or_fallback, subtle_fill,
-    type_body, type_control, type_page, type_small, type_title,
+    icon_settings, icon_shield, icon_sparkles, icon_store, modal_card_transition, pressed_fill,
+    scaled, scrim_fill, store_logo_or_fallback, subtle_fill, type_body, type_control, type_page,
+    type_small, type_title,
 };
 use rune::{Align, Color, Cursor, El, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row, text};
 use serde_json::json;
@@ -2372,17 +2372,11 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
     let is_first = step_idx == 0;
     let is_last = step_idx + 1 == total;
 
-    let scrim = el()
-        .key("exo-tour-scrim")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(if spec.anchor.is_none() {
-            scrim_fill()
-        } else {
-            BG.alpha(0.48)
-        })
-        .hit()
-        .cursor(Cursor::Default)
-        .transition(modal_scrim_transition());
+    let scrim_color = if spec.anchor.is_none() {
+        scrim_fill()
+    } else {
+        BG.alpha(0.48)
+    };
 
     let badge = el()
         .size(32.0, 32.0)
@@ -2584,6 +2578,8 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
         .padding(20.0)
         .gap(14.0)
         .transition(modal_card_transition())
+        .modal(false, |s: &mut AppState| s.finish_tour())
+        .modal_scrim(scrim_color)
         .child(header)
         .child(body)
         .children(meta)
@@ -2600,7 +2596,7 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
             .child(card)
     };
 
-    vec![scrim, positioned]
+    vec![positioned]
 }
 
 pub fn return_bar(s: &AppState) -> El {

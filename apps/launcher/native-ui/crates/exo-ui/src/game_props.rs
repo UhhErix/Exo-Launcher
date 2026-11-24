@@ -5,13 +5,13 @@ use crate::game_actions::{
 };
 use crate::state::{AppState, HostStatus, InputMode, OpenDropdown};
 use exo_kit::{
-    BG, BadgeTone, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_BASE, SPRING_MOVE, SPRING_QUICK, SelectDismissCb, SelectMenuSpec, SelectOption,
-    SelectTrigger, TRANSPARENT, amoled_card, bad, fg_faint, fg_muted, glass_control_fill,
-    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline, hover_fill,
-    icon_folder, icon_refresh, icon_rotate_ccw, icon_trash, icon_upload, icon_wrench, pressed_fill,
-    progress_bar, scaled, select_menu_layers, select_trigger, status_badge, switch_pill,
-    track_fill, type_body, type_control, type_small, type_title,
+    BG, BadgeTone, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
+    SPRING_MOVE, SPRING_QUICK, SelectDismissCb, SelectMenuSpec, SelectOption, SelectTrigger,
+    TRANSPARENT, amoled_card, apply_glass, bad, fg_faint, fg_muted, glass_rim_bottom,
+    glass_rim_top, glass_still_control_fill, good, hairline, hover_fill, icon_folder, icon_refresh,
+    icon_rotate_ccw, icon_trash, icon_upload, icon_wrench, pressed_fill, progress_bar, scaled,
+    select_menu_layers, select_trigger, status_badge, switch_pill, track_fill, type_body,
+    type_control, type_small, type_title,
 };
 use exo_rpc::{Game, GameProperties};
 use rune::{Align, Cursor, El, TextStyle, Tx, col, edit_access, el, row, text, text_input};
@@ -262,38 +262,39 @@ fn general_section(s: &AppState, game: &Game, props: &GameProperties) -> Vec<El>
     if props.launch_options.is_some() {
         let gid_save = game.id.clone();
         let initial = props.launch_options.clone().unwrap_or_default();
-        let launch_input = row()
-            .w(220.0)
-            .h(32.0)
-            .px(12.0)
-            .center_y()
-            .radius(RADIUS_PILL)
-            .fill(glass_control_fill())
-            .backdrop_blur(GLASS_CONTROL_SIGMA)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-            .cursor(Cursor::Text)
-            .child(
-                text_input(&s.props_launch_opts, type_body())
-                    .key("props-launch-input")
-                    .label("Launch options")
-                    .w_full()
-                    .single_line()
-                    .color(FG)
-                    .placeholder("", fg_muted())
-                    .on_edit(edit_access(|st: &mut AppState| &mut st.props_launch_opts))
-                    .on_submit(move |st: &mut AppState, _| {
-                        let val = st.props_launch_opts.text.clone();
-                        if val.trim() != initial.trim() {
-                            st.set_game_property_ex(
-                                &gid_save,
-                                "launchOptions",
-                                &val,
-                                None,
-                                "launchOptions",
-                            );
-                        }
-                    }),
-            );
+        let launch_input = apply_glass(
+            row()
+                .w(220.0)
+                .h(32.0)
+                .px(12.0)
+                .center_y()
+                .radius(RADIUS_PILL)
+                .cursor(Cursor::Text),
+            ExoGlass::Control,
+            false,
+        )
+        .child(
+            text_input(&s.props_launch_opts, type_body())
+                .key("props-launch-input")
+                .label("Launch options")
+                .w_full()
+                .single_line()
+                .color(FG)
+                .placeholder("", fg_muted())
+                .on_edit(edit_access(|st: &mut AppState| &mut st.props_launch_opts))
+                .on_submit(move |st: &mut AppState, _| {
+                    let val = st.props_launch_opts.text.clone();
+                    if val.trim() != initial.trim() {
+                        st.set_game_property_ex(
+                            &gid_save,
+                            "launchOptions",
+                            &val,
+                            None,
+                            "launchOptions",
+                        );
+                    }
+                }),
+        );
         let mut right = row().gap(8.0).center_y();
         if busy == Some("launchOptions") {
             right = right.child(text("Saving…").font(type_small()).color(fg_muted()));

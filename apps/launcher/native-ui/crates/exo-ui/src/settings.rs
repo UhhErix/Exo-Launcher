@@ -8,12 +8,12 @@ use crate::settings_state::{
 use crate::settings_stores::{shaders_section, stores_section};
 use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, SelectTrigger, TRANSPARENT, amoled_card, bad, fg_muted, float_line,
-    glass_control_fill, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline,
-    hover_fill, icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_music,
-    icon_search, icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled, select_trigger,
-    slider_track, switch_pill, type_body, type_control, type_page, type_section, type_small,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, SelectTrigger, TRANSPARENT, amoled_card, bad, exo_glass, fg_muted, float_line,
+    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline, hover_fill,
+    icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_music, icon_search,
+    icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled, select_trigger, slider_track,
+    switch_pill, type_body, type_control, type_page, type_section, type_small,
 };
 use rune::{
     Cursor, El, Phase, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text,
@@ -587,7 +587,8 @@ fn section_music(s: &AppState) -> El {
         _ => s.media.music_service.label(),
     };
     let is_youtube = pref_svc == Some("youtube")
-        || (pref_svc.is_none() && s.media.music_service == crate::media_state::MusicService::YouTube);
+        || (pref_svc.is_none()
+            && s.media.music_service == crate::media_state::MusicService::YouTube);
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
     let mut card = amoled_card(RADIUS_CARD).w_full().child(set_row(
         "Music service",
@@ -803,11 +804,9 @@ pub fn view(s: &AppState) -> El {
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
+        .liquid_glass(exo_glass(ExoGlass::Control, true))
         .hover(hover_fill())
         .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
         .on_press(|s: &mut AppState| s.toggle_settings())
         .child(icon_chevron_left(16.0, FG))
@@ -821,9 +820,7 @@ pub fn view(s: &AppState) -> El {
         .center_y()
         .cursor(Cursor::Text)
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .liquid_glass(exo_glass(ExoGlass::Control, false))
         .child(icon_search(15.0, fg_muted()))
         .child(
             text_input(&s.pc.settings_query, type_body())

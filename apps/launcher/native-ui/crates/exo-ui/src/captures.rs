@@ -5,15 +5,14 @@ use crate::pc_state::format_bytes;
 use crate::snip_editor;
 use crate::state::{AppState, HostStatus, InputMode};
 use exo_kit::{
-    BG, BadgeTone, FG, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
-    RADIUS_PILL, RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, danger_button,
-    fg_faint, fg_muted, filter_pill, glass_control_fill, glass_panel_fill, glass_panel_opt,
-    glass_rim, good, hairline, hover_fill, icon_back, icon_camera, icon_check, icon_close,
-    icon_film, icon_folder, icon_pause, icon_play, icon_plus, icon_record_dot, icon_replay,
-    icon_scissors, icon_settings, icon_star, icon_trash, icon_volume, icon_volume_off,
-    popover_transition, pressed_fill, primary_button, progress_bar, scaled, scrim_fill,
-    slider_track, status_badge, type_body, type_control, type_page, type_section, type_small,
-    type_title, warn,
+    BG, BadgeTone, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, danger_button, exo_glass, fg_faint,
+    fg_muted, filter_pill, glass_control_fill, glass_panel_fill, glass_panel_opt, glass_rim, good,
+    hairline, hover_fill, icon_back, icon_camera, icon_check, icon_close, icon_film, icon_folder,
+    icon_pause, icon_play, icon_plus, icon_record_dot, icon_replay, icon_scissors, icon_settings,
+    icon_star, icon_trash, icon_volume, icon_volume_off, popover_transition, pressed_fill,
+    primary_button, progress_bar, scaled, scrim_fill, slider_track, status_badge, type_body,
+    type_control, type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{
     ActionResult, CaptureEditReply, CaptureItem, CaptureItemReply, CaptureListReply,
@@ -1661,9 +1660,7 @@ fn send_to_dialog_overlay(s: &AppState) -> Option<El> {
         .padding(20.0)
         .gap(12.0)
         .radius(RADIUS_SHEET)
-        .fill(glass_panel_fill())
-        .backdrop_blur(GLASS_PANEL_SIGMA)
-        .border(1.0, glass_rim())
+        .liquid_glass(exo_glass(ExoGlass::Sheet, false))
         .child(text("Send to").font(type_title()).color(FG))
         .child(
             row()
@@ -2306,9 +2303,7 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                 .padding(6.0)
                 .gap(2.0)
                 .radius(RADIUS_PANEL)
-                .fill(glass_panel_fill())
-                .backdrop_blur(GLASS_PANEL_SIGMA)
-                .border(1.0, glass_rim())
+                .liquid_glass(exo_glass(ExoGlass::Menu, false))
                 .child(
                     row()
                         .key("cap-share-discord")
@@ -2359,9 +2354,7 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                 .padding(6.0)
                 .gap(2.0)
                 .radius(RADIUS_PANEL)
-                .fill(glass_panel_fill())
-                .backdrop_blur(GLASS_PANEL_SIGMA)
-                .border(1.0, glass_rim())
+                .liquid_glass(exo_glass(ExoGlass::Menu, false))
                 .child(if is_img {
                     row()
                         .key("cap-more-ocr")
@@ -3494,9 +3487,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .max_h(900.0)
                 .radius(RADIUS_SHEET)
                 .clip_rounded(RADIUS_SHEET)
-                .fill(glass_panel_fill())
-                .backdrop_blur(GLASS_PANEL_SIGMA)
-                .border(1.0, glass_rim())
+                .liquid_glass(exo_glass(ExoGlass::Sheet, false))
                 .child(sheet_inner),
         )
         .children(lb_overlay)

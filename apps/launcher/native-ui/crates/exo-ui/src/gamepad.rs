@@ -1,8 +1,8 @@
 use crate::pc_state::SettingsSection;
 use crate::state::{AppState, Room};
 use exo_kit::{
-    FG, GAP, GLASS_CONTROL_SIGMA, RADIUS_PILL, RADIUS_SMALL, fg_muted, glass_control_fill,
-    glass_rim_bottom, glass_rim_top, icon_gamepad, selected_fill, type_small,
+    ExoGlass, FG, GAP, RADIUS_PILL, RADIUS_SMALL, apply_glass, fg_muted, icon_gamepad,
+    selected_fill, type_small,
 };
 use rune::{El, el, row, text};
 
@@ -159,25 +159,26 @@ pub fn bar_view(s: &AppState) -> El {
         || s.whats_new.sheet_open;
 
     if s.chrome.gamepad_paused {
-        return row()
-            .key("gamepad-bar")
-            .role("complementary")
-            .label("Controller shortcuts")
-            .pin(None, None, Some(GAP), Some(GAP))
-            .h(36.0)
-            .px(14.0)
-            .gap(10.0)
-            .center_y()
-            .radius(RADIUS_PILL)
-            .fill(glass_control_fill())
-            .backdrop_blur(GLASS_CONTROL_SIGMA)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-            .child(icon_gamepad(14.0, FG))
-            .child(
-                text("Controller Lab · navigation paused · Esc to exit")
-                    .font(type_small())
-                    .color(fg_muted()),
-            );
+        return apply_glass(
+            row()
+                .key("gamepad-bar")
+                .role("complementary")
+                .label("Controller shortcuts")
+                .pin(None, None, Some(GAP), Some(GAP))
+                .h(36.0)
+                .px(14.0)
+                .gap(10.0)
+                .center_y()
+                .radius(RADIUS_PILL)
+                .child(icon_gamepad(14.0, FG))
+                .child(
+                    text("Controller Lab · navigation paused · Esc to exit")
+                        .font(type_small())
+                        .color(fg_muted()),
+                ),
+            ExoGlass::Bar,
+            false,
+        );
     }
 
     let detected =
@@ -191,34 +192,35 @@ pub fn bar_view(s: &AppState) -> El {
             })
             .unwrap_or(s.chrome.gamepad_kind);
     let hints = hints_for(detected, s.room, overlay_open);
-    row()
-        .key("gamepad-bar")
-        .role("complementary")
-        .label("Controller shortcuts")
-        .pin(None, None, Some(GAP), Some(GAP))
-        .h(36.0)
-        .px(12.0)
-        .gap(12.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(icon_gamepad(14.0, FG))
-        .children(hints.into_iter().map(|(keys, label)| {
-            row()
-                .gap(5.0)
-                .center_y()
-                .child(
-                    el().h(20.0)
-                        .px(6.0)
-                        .radius(RADIUS_SMALL)
-                        .fill(selected_fill())
-                        .center()
-                        .child(text(keys).font(type_small()).color(FG)),
-                )
-                .child(text(label).font(type_small()).color(fg_muted()))
-        }))
+    apply_glass(
+        row()
+            .key("gamepad-bar")
+            .role("complementary")
+            .label("Controller shortcuts")
+            .pin(None, None, Some(GAP), Some(GAP))
+            .h(36.0)
+            .px(12.0)
+            .gap(12.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .child(icon_gamepad(14.0, FG))
+            .children(hints.into_iter().map(|(keys, label)| {
+                row()
+                    .gap(5.0)
+                    .center_y()
+                    .child(
+                        el().h(20.0)
+                            .px(6.0)
+                            .radius(RADIUS_SMALL)
+                            .fill(selected_fill())
+                            .center()
+                            .child(text(keys).font(type_small()).color(FG)),
+                    )
+                    .child(text(label).font(type_small()).color(fg_muted()))
+            })),
+        ExoGlass::Bar,
+        false,
+    )
 }
 
 pub fn cycle_room_subtab(s: &mut AppState, delta: isize) {

@@ -3,9 +3,9 @@ use crate::state::AppState;
 use exo_kit::{
     BG, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, SPRING_QUICK,
     TRANSPARENT, bad, fg_muted, glass_button, glass_panel_opt, hover_fill, icon_chevron_down,
-    icon_chevron_up, icon_close, icon_pause, icon_play, modal_card_transition,
-    modal_scrim_transition, pressed_fill, primary_button, scaled, switch_pill_keyed, track_fill,
-    type_body, type_section, type_small, type_title,
+    icon_chevron_up, icon_close, icon_pause, icon_play, modal_card_transition, pressed_fill,
+    primary_button, scaled, switch_pill_keyed, track_fill, type_body, type_section, type_small,
+    type_title,
 };
 use exo_rpc::{ActionResult, HostEvent, InstallProgress};
 use rune::{Cursor, El, ScrollSpec, Transition, col, el, row, text};
@@ -607,6 +607,8 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
+        .modal(true, |s: &mut AppState| s.close_downloads())
+        .modal_scrim(BG.alpha(0.56))
         .child(
             col()
                 .w_full()
@@ -617,15 +619,6 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
                 .child(body),
         );
 
-    let scrim = el()
-        .key("downloads-scrim")
-        .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.56))
-        .hit()
-        .cursor(Cursor::Default)
-        .transition(modal_scrim_transition())
-        .on_press(|s: &mut AppState| s.close_downloads());
-
     let host = col()
         .key("downloads-host")
         .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
@@ -633,7 +626,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .transition(Transition::none())
         .child(card);
 
-    vec![scrim, host]
+    vec![host]
 }
 
 #[cfg(test)]
@@ -687,7 +680,7 @@ mod tests {
             held: None,
         });
         let els = layers(&s, true);
-        assert_eq!(els.len(), 2);
+        assert_eq!(els.len(), 1);
         s.close_downloads();
         assert!(!s.downloads.open);
     }

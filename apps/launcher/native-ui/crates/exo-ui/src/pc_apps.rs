@@ -5,10 +5,10 @@ use crate::pc_state::{
 use crate::pc_wp9_actions::UndoTarget;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, TRANSPARENT, bad, fg_muted, float_line, glass_control_fill, glass_rim_bottom,
-    glass_rim_top, good, hover_fill, icon_app_window, icon_check, icon_chevron_down, icon_search,
-    pressed_fill, scaled, subtle_fill, type_body, type_control, type_small, warn,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, TRANSPARENT, bad, fg_muted, float_line, good, hover_fill, icon_app_window,
+    icon_check, icon_chevron_down, icon_search, pressed_fill, scaled, subtle_fill, type_body,
+    type_control, type_small, warn,
 };
 use exo_rpc::{AppFind, AppLeftover, InstalledAppItem, LeftoverSummary};
 use rune::{
@@ -1165,9 +1165,9 @@ pub(crate) fn apps_room(s: &AppState) -> El {
                 .gap(8.0)
                 .center_y()
                 .radius(RADIUS_PILL)
-                .fill(glass_control_fill())
-                .backdrop_blur(GLASS_CONTROL_SIGMA)
-                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                .liquid_glass(
+                    ExoGlass::Control.to_liquid_glass(false, exo_kit::glass_accessibility()),
+                )
                 .child(icon_search(14.0, fg_muted()))
                 .child(
                     text_input(&s.pc.apps_query, type_body())

@@ -70,6 +70,14 @@ pub fn glass_control_fill() -> Color {
     BG.alpha(0.54)
 }
 
+pub fn glass_bar_tint() -> Color {
+    BG.alpha(0.36)
+}
+
+pub fn glass_panel_tint() -> Color {
+    BG.alpha(0.54)
+}
+
 pub fn glass_panel_fill() -> Color {
     BG.alpha(0.76)
 }
@@ -152,6 +160,7 @@ pub const TITLEBAR_HEIGHT: f32 = 52.0;
 
 pub const GLASS_CONTROL_SIGMA: f32 = 10.0;
 pub const GLASS_PANEL_SIGMA: f32 = 16.0;
+pub const GLASS_CONTAINER_SPACING: f32 = 10.0;
 pub const EXO_MAX_BACKDROP_BLURS: usize = 16;
 pub const PRESS_SCALE: f32 = 0.97;
 

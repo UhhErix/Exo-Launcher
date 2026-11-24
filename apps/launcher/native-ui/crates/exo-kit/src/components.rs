@@ -1,11 +1,10 @@
+use crate::glass::{ExoGlass, apply_glass, apply_glass_opt};
 use crate::icons::{icon_close, icon_minimize, icon_win_maximize, icon_win_restore};
 use crate::tokens::{
-    BG, FG, GAP, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
-    RADIUS_PANEL, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK, TITLEBAR_HEIGHT,
-    TRANSPARENT, bad, fg_muted, glass_control_fill, glass_panel_fill, glass_panel_shadow_color,
-    glass_plate_fill, glass_rim, glass_rim_bottom, glass_rim_top, glass_still_control_fill,
-    glass_still_panel_fill, good, hairline, hover_fill, pressed_fill, subtle_fill, track_fill,
-    type_control, type_section, type_small, warn,
+    BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
+    SPRING_MOVE, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, bad, fg_muted, glass_rim,
+    glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, pressed_fill, subtle_fill,
+    track_fill, type_control, type_section, type_small, warn,
 };
 use rune::{
     CaptionGlyph, CaptionStyle, Color, Cursor, Effect, El, SpringPair, Titlebar, Transition, Vec2,
@@ -85,89 +84,62 @@ pub fn glass_capsule(key: &'static str) -> El {
     glass_capsule_opt(key, true)
 }
 
-pub fn glass_capsule_opt(key: &'static str, blur: bool) -> El {
-    let mut capsule = row()
+pub fn glass_capsule_opt(key: &'static str, _blur: bool) -> El {
+    let capsule = row()
         .key(key)
         .h(36.0)
         .px(3.0)
         .gap(2.0)
         .center_y()
-        .radius(RADIUS_PILL)
-        .fill(if blur {
-            glass_control_fill()
-        } else {
-            glass_still_control_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
-    if blur {
-        capsule = capsule.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
-    capsule
+        .radius(RADIUS_PILL);
+    apply_glass(capsule, ExoGlass::Bar, false)
 }
 
 pub fn glass_panel(key: impl Into<String>, width: f32) -> El {
     glass_panel_opt(key, width, true).transition(popover_transition())
 }
 
-pub fn glass_panel_opt(key: impl Into<String>, width: f32, blur: bool) -> El {
-    let mut panel = rune::col()
+pub fn glass_panel_opt(key: impl Into<String>, width: f32, _blur: bool) -> El {
+    let panel = rune::col()
         .key(key)
         .w(width)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
         .hit()
-        .cursor(Cursor::Default)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(0.0, 40.0, glass_panel_shadow_color());
-    if blur {
-        panel = panel.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
-    panel
+        .cursor(Cursor::Default);
+    apply_glass(panel, ExoGlass::Panel, false)
 }
 
-pub fn glass_plate(key: impl Into<String>, blur: bool) -> El {
-    let mut plate = row().key(key).center_y().radius(RADIUS_PILL).fill(if blur {
-        glass_plate_fill()
-    } else {
-        glass_still_control_fill()
-    });
-    if blur {
-        plate = plate.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
-    plate
+pub fn glass_plate(key: impl Into<String>, _blur: bool) -> El {
+    let plate = row().key(key).center_y().radius(RADIUS_PILL);
+    apply_glass(plate, ExoGlass::ClearMedia, false)
 }
 
 pub fn glass_input(key: impl Into<String>) -> El {
-    row()
+    let input = row()
         .key(key)
         .h(34.0)
         .px(12.0)
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .cursor(Cursor::Text)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .cursor(Cursor::Text);
+    apply_glass(input, ExoGlass::Control, false)
 }
 
 pub fn glass_chip(key: impl Into<String>, label: impl Into<String>, icon: Option<El>) -> El {
-    let mut chip = row()
-        .key(key)
-        .h(28.0)
-        .px(10.0)
-        .gap(6.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+    let mut chip = apply_glass(
+        row()
+            .key(key)
+            .h(28.0)
+            .px(10.0)
+            .gap(6.0)
+            .center_y()
+            .radius(RADIUS_PILL),
+        ExoGlass::Control,
+        false,
+    );
     if let Some(ic) = icon {
         chip = chip.child(ic);
     }
@@ -220,7 +192,7 @@ pub fn glass_icon_circle_opt(
     icon: El,
     blur: bool,
 ) -> El {
-    let mut btn = el()
+    let btn = el()
         .key(key)
         .role("button")
         .label(label)
@@ -228,24 +200,14 @@ pub fn glass_icon_circle_opt(
         .hit()
         .cursor(Cursor::Pointer)
         .press_on_down()
-        .press_scale(PRESS_SCALE)
         .size(size, size)
         .center()
         .radius(RADIUS_PILL)
-        .fill(if blur {
-            glass_control_fill()
-        } else {
-            glass_still_control_fill()
-        })
         .hover(hover_fill())
         .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
         .child(icon);
-    if blur {
-        btn = btn.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
-    btn
+    apply_glass_opt(btn, ExoGlass::Control, true, blur)
 }
 
 pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
@@ -293,32 +255,27 @@ pub fn glass_button_dyn(
     blur: bool,
 ) -> El {
     let label_str = label.into();
-    let mut btn = row()
-        .key(key)
-        .role("button")
-        .label(label_str.clone())
-        .focusable(true)
-        .hit()
-        .cursor(Cursor::Pointer)
-        .press_on_down()
-        .press_scale(PRESS_SCALE)
-        .h(32.0)
-        .px(12.0)
-        .gap(6.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(if blur {
-            glass_control_fill()
-        } else {
-            glass_still_control_fill()
-        })
-        .hover(hover_fill())
-        .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .motion(SPRING_QUICK);
-    if blur {
-        btn = btn.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
+    let mut btn = apply_glass_opt(
+        row()
+            .key(key)
+            .role("button")
+            .label(label_str.clone())
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .press_on_down()
+            .h(32.0)
+            .px(12.0)
+            .gap(6.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK),
+        ExoGlass::Control,
+        true,
+        blur,
+    );
     if let Some(ic) = icon {
         btn = btn.child(ic);
     }
@@ -358,32 +315,27 @@ pub fn glass_button_opt(
     icon: Option<El>,
     blur: bool,
 ) -> El {
-    let mut btn = row()
-        .key(key)
-        .role("button")
-        .label(label)
-        .focusable(true)
-        .hit()
-        .cursor(Cursor::Pointer)
-        .press_on_down()
-        .press_scale(PRESS_SCALE)
-        .h(32.0)
-        .px(12.0)
-        .gap(6.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(if blur {
-            glass_control_fill()
-        } else {
-            glass_still_control_fill()
-        })
-        .hover(hover_fill())
-        .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .motion(SPRING_QUICK);
-    if blur {
-        btn = btn.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
+    let mut btn = apply_glass_opt(
+        row()
+            .key(key)
+            .role("button")
+            .label(label)
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .press_on_down()
+            .h(32.0)
+            .px(12.0)
+            .gap(6.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK),
+        ExoGlass::Control,
+        true,
+        blur,
+    );
     if let Some(ic) = icon {
         btn = btn.child(ic);
     }

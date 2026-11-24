@@ -2,13 +2,12 @@ use crate::discord::{avatar_box, status_color, status_label};
 use crate::discord_state::DiscordSettingsPage;
 use crate::state::{AppState, HostStatus};
 use exo_kit::{
-    BG, FG, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, filter_pill, glass_button,
-    glass_panel_fill, glass_rim_bottom, glass_rim_top, glass_still_control_fill,
-    glass_still_panel_fill, good, hairline, hover_fill, icon_check, icon_close, icon_mic,
-    icon_mic_off, icon_settings, icon_volume, modal_card_transition, modal_scrim_transition,
-    pressed_fill, primary_button, scrim_fill, selected_fill, type_body, type_control, type_label,
-    type_section, type_small, type_title, warn,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, filter_pill,
+    glass_button, glass_still_control_fill, good, hairline, hover_fill, icon_check, icon_close,
+    icon_mic, icon_mic_off, icon_settings, icon_volume, modal_card_transition, pressed_fill,
+    primary_button, scrim_fill, selected_fill, type_body, type_control, type_label, type_section,
+    type_small, type_title, warn,
 };
 use exo_rpc::{
     ActionResult, DiscordAccount, DiscordAccountConnection, DiscordAccountReply,
@@ -3034,18 +3033,14 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
         .on_press(|s: &mut AppState| s.close_discord_settings_clean())
         .child(icon_close(14.0, FG));
 
-    let mut sheet = row()
+    let sheet = row()
         .key("dc-settings-modal")
         .w(820.0)
         .h(880.0)
         .radius(RADIUS_PANEL)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
+        .modal(true, |s: &mut AppState| s.close_discord_settings_clean())
+        .modal_scrim(scrim_fill())
         .hit()
         .child(nav)
         .child(
@@ -3065,22 +3060,12 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
                 )
                 .child(close_btn),
         );
-    if blur {
-        sheet = sheet.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    let sheet = apply_glass(sheet, ExoGlass::Sheet, false);
 
     el().key("dc-settings-layer")
         .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
         .center()
-        .child(
-            el().key("dc-settings-scrim")
-                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-                .fill(scrim_fill())
-                .hit()
-                .press_on_down()
-                .transition(modal_scrim_transition())
-                .on_press(|s: &mut AppState| s.close_discord_settings_clean()),
-        )
         .child(sheet)
 }
 
@@ -3096,19 +3081,17 @@ pub fn custom_status_modal(s: &AppState, blur: bool) -> El {
         );
     }
 
-    let mut panel = col()
+    let panel = col()
         .key("dc-cstatus-modal")
         .w(420.0)
         .padding(20.0)
         .gap(14.0)
         .radius(RADIUS_PANEL)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
+        .modal(true, |s: &mut AppState| {
+            s.discord.custom_status_open = false
+        })
+        .modal_scrim(scrim_fill())
         .hit()
         .child(
             row()
@@ -3173,22 +3156,12 @@ pub fn custom_status_modal(s: &AppState, blur: bool) -> El {
                     .on_press(|s: &mut AppState| s.save_discord_custom_status_ext(false)),
                 ),
         );
-    if blur {
-        panel = panel.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    let panel = apply_glass(panel, ExoGlass::Sheet, false);
 
     el().key("dc-cstatus-layer")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .center()
-        .child(
-            el().key("dc-cstatus-scrim")
-                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-                .fill(scrim_fill())
-                .hit()
-                .press_on_down()
-                .transition(modal_scrim_transition())
-                .on_press(|s: &mut AppState| s.discord.custom_status_open = false),
-        )
         .child(panel)
 }
 

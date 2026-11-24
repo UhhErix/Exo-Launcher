@@ -5,8 +5,7 @@ use exo_kit::{
     glass_panel_opt, hairline, hover_fill, icon_chat, icon_close, icon_download, icon_gamepad,
     icon_key, icon_minimize, icon_music, icon_notes, icon_pause, icon_play, icon_plus,
     icon_refresh, icon_search, icon_server, icon_settings, icon_skip_back, icon_skip_forward,
-    icon_sparkles, modal_card_transition, modal_scrim_transition, scaled, scrim_fill, type_body,
-    type_control, type_small,
+    icon_sparkles, modal_card_transition, scaled, scrim_fill, type_body, type_control, type_small,
 };
 use exo_rpc::{DiscordChannels, DiscordHome};
 use rune::{
@@ -621,21 +620,14 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
+        .modal_tx(true, |s: &mut AppState, tx| {
+            tx.instant();
+            s.close_palette();
+        })
+        .modal_scrim(scrim_fill())
         .child(header)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(body);
-
-    let scrim = el()
-        .key("palette-scrim")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(scrim_fill())
-        .hit()
-        .cursor(Cursor::Default)
-        .transition(modal_scrim_transition())
-        .on_press_tx(|s: &mut AppState, tx| {
-            tx.instant();
-            s.close_palette();
-        });
 
     let host = col()
         .key("palette-host")
@@ -644,7 +636,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .transition(Transition::none())
         .child(card);
 
-    vec![scrim, host]
+    vec![host]
 }
 
 #[cfg(test)]

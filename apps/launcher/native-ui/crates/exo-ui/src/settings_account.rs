@@ -7,8 +7,7 @@ use crate::state::AppState;
 use exo_kit::{
     BG, FG, RADIUS_CARD, RADIUS_SMALL, SPRING_BASE, amoled_card, bad, exo_mark, fg_muted,
     glass_panel_opt, glass_rim_bottom, glass_rim_top, glass_still_control_fill, hairline,
-    modal_card_transition, modal_scrim_transition, scaled, type_body, type_section, type_small,
-    type_title,
+    modal_card_transition, scaled, type_body, type_section, type_small, type_title,
 };
 use rune::{
     Cursor, El, PasswordInput, TextStyle, Transition, col, edit_access, el, row, text, text_input,
@@ -1181,6 +1180,8 @@ pub fn account_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         .gap(16.0)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
+        .modal_trap()
+        .modal_scrim(BG.alpha(0.76))
         .child(row().w_full().justify_center().child(exo_mark(48.0, FG)))
         .child(
             row()
@@ -1190,14 +1191,6 @@ pub fn account_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         )
         .child(account_step_view(s));
 
-    let scrim = el()
-        .key("account-sheet-scrim")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.76))
-        .hit()
-        .cursor(Cursor::Default)
-        .transition(modal_scrim_transition());
-
     let host = col()
         .key("account-sheet-host")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -1205,5 +1198,5 @@ pub fn account_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         .transition(Transition::none())
         .child(card);
 
-    vec![scrim, host]
+    vec![host]
 }
