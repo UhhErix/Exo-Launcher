@@ -1,0 +1,188 @@
+[
+  {
+    "scene": "heroui-gallery",
+    "coldStartMs": 2735.08,
+    "totalProcs": 9,
+    "childCount": 8,
+    "totalWsMb": 520.7,
+    "totalPrivMb": 281.19,
+    "procs": [
+      {
+        "pid": 10624,
+        "name": "chrome.exe",
+        "ws": 128.31,
+        "priv": 38.03
+      },
+      {
+        "pid": 23516,
+        "name": "chrome.exe",
+        "ws": 10.99,
+        "priv": 2.27
+      },
+      {
+        "pid": 4820,
+        "name": "chrome.exe",
+        "ws": 10.05,
+        "priv": 2.07
+      },
+      {
+        "pid": 11100,
+        "name": "chrome.exe",
+        "ws": 93.43,
+        "priv": 105.25
+      },
+      {
+        "pid": 4856,
+        "name": "chrome.exe",
+        "ws": 35.51,
+        "priv": 11.97
+      },
+      {
+        "pid": 20324,
+        "name": "chrome.exe",
+        "ws": 19.25,
+        "priv": 8.11
+      },
+      {
+        "pid": 24276,
+        "name": "chrome.exe",
+        "ws": 83.7,
+        "priv": 43.95
+      },
+      {
+        "pid": 24332,
+        "name": "chrome.exe",
+        "ws": 31.97,
+        "priv": 15.18
+      },
+      {
+        "pid": 16820,
+        "name": "chrome.exe",
+        "ws": 107.49,
+        "priv": 54.36
+      }
+    ]
+  },
+  {
+    "scene": "reactbits-bg",
+    "coldStartMs": 2407.46,
+    "totalProcs": 9,
+    "childCount": 8,
+    "totalWsMb": 498.6,
+    "totalPrivMb": 281.9,
+    "procs": [
+      {
+        "pid": 12424,
+        "name": "chrome.exe",
+        "ws": 124.33,
+        "priv": 37.05
+      },
+      {
+        "pid": 18772,
+        "name": "chrome.exe",
+        "ws": 11,
+        "priv": 2.29
+      },
+      {
+        "pid": 15716,
+        "name": "chrome.exe",
+        "ws": 10.08,
+        "priv": 2.12
+      },
+      {
+        "pid": 10420,
+        "name": "chrome.exe",
+        "ws": 97.26,
+        "priv": 124.97
+      },
+      {
+        "pid": 16644,
+        "name": "chrome.exe",
+        "ws": 35.18,
+        "priv": 11.66
+      },
+      {
+        "pid": 14900,
+        "name": "chrome.exe",
+        "ws": 19.32,
+        "priv": 8.21
+      },
+      {
+        "pid": 19460,
+        "name": "chrome.exe",
+        "ws": 83.58,
+        "priv": 44.31
+      },
+      {
+        "pid": 8860,
+        "name": "chrome.exe",
+        "ws": 32.03,
+        "priv": 15.24
+      },
+      {
+        "pid": 23116,
+        "name": "chrome.exe",
+        "ws": 85.82,
+        "priv": 36.05
+      }
+    ]
+  },
+  {
+    "scene": "shadcn-radix",
+    "coldStartMs": 1903.74,
+    "totalProcs": 8,
+    "childCount": 7,
+    "totalWsMb": 476.5,
+    "totalPrivMb": 248.7,
+    "procs": [
+      {
+        "pid": 24192,
+        "name": "chrome.exe",
+        "ws": 130.54,
+        "priv": 38.83
+      },
+      {
+        "pid": 11992,
+        "name": "chrome.exe",
+        "ws": 10.19,
+        "priv": 2.23
+      },
+      {
+        "pid": 21544,
+        "name": "chrome.exe",
+        "ws": 86.73,
+        "priv": 93.29
+      },
+      {
+        "pid": 12284,
+        "name": "chrome.exe",
+        "ws": 35.46,
+        "priv": 11.84
+      },
+      {
+        "pid": 23604,
+        "name": "chrome.exe",
+        "ws": 19.27,
+        "priv": 8.1
+      },
+      {
+        "pid": 22476,
+        "name": "chrome.exe",
+        "ws": 83.74,
+        "priv": 44.24
+      },
+      {
+        "pid": 19328,
+        "name": "chrome.exe",
+        "ws": 32.11,
+        "priv": 15.28
+      },
+      {
+        "pid": 9732,
+        "name": "chrome.exe",
+        "ws": 78.46,
+        "priv": 34.89
+      }
+    ]
+  }
+]

@@ -1,0 +1,959 @@
+[
+  {
+    "scene": "heroui-gallery",
+    "ok": false,
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "loadMs": 1201.53,
+    "inputMs": 274.83,
+    "animFrameMs": {
+      "p50": 6.1,
+      "p99": 10.8
+    },
+    "interactions": {
+      "total": 35,
+      "mounted": 35,
+      "rectOk": 35,
+      "interactionsTotal": 6,
+      "interactionsPassed": 5,
+      "components": [
+        {
+          "name": "Button",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 121,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "ButtonGroup",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 121,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "ToggleButton",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 121,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "CloseButton",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 121,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Switch",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 121,
+          "rectOk": true,
+          "interacted": false
+        },
+        {
+          "name": "Checkbox",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 121,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "RadioGroup",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Slider",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Input",
+          "category": "Forms",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "TextArea",
+          "category": "Forms",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "NumberField",
+          "category": "Forms",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Chip",
+          "category": "Display",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Avatar",
+          "category": "Display",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Badge",
+          "category": "Display",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Kbd",
+          "category": "Display",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Link",
+          "category": "Display",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Spinner",
+          "category": "Feedback",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Skeleton",
+          "category": "Feedback",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "ProgressBar",
+          "category": "Feedback",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 92,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "ProgressCircle",
+          "category": "Feedback",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 92,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Meter",
+          "category": "Feedback",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 92,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Separator",
+          "category": "Layout",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 92,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Breadcrumbs",
+          "category": "Navigation",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 92,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "TagGroup",
+          "category": "Display",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 92,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Card",
+          "category": "Layout",
+          "mounted": true,
+          "error": null,
+          "rectW": 409,
+          "rectH": 155,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Alert",
+          "category": "Feedback",
+          "mounted": true,
+          "error": null,
+          "rectW": 409,
+          "rectH": 155,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Tabs",
+          "category": "Navigation",
+          "mounted": true,
+          "error": null,
+          "rectW": 409,
+          "rectH": 155,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "Accordion",
+          "category": "Layout",
+          "mounted": true,
+          "error": null,
+          "rectW": 409,
+          "rectH": 178,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "Disclosure",
+          "category": "Layout",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 178,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Modal",
+          "category": "Overlays",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 178,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "Popover",
+          "category": "Overlays",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 178,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Tooltip",
+          "category": "Overlays",
+          "mounted": true,
+          "error": null,
+          "rectW": 200,
+          "rectH": 178,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Pagination",
+          "category": "Navigation",
+          "mounted": true,
+          "error": null,
+          "rectW": 409,
+          "rectH": 181,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Table",
+          "category": "Display",
+          "mounted": true,
+          "error": null,
+          "rectW": 409,
+          "rectH": 181,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "EmptyState",
+          "category": "Display",
+          "mounted": true,
+          "error": null,
+          "rectW": 409,
+          "rectH": 181,
+          "rectOk": true,
+          "interacted": null
+        }
+      ]
+    },
+    "screenshot": "chrome-heroui-gallery.png"
+  },
+  {
+    "scene": "shadcn-radix",
+    "ok": true,
+    "errors": [],
+    "loadMs": 778.82,
+    "inputMs": 213.32,
+    "animFrameMs": {
+      "p50": 6.1,
+      "p99": 6.5
+    },
+    "interactions": {
+      "total": 20,
+      "mounted": 20,
+      "rectOk": 20,
+      "interactionsTotal": 7,
+      "interactionsPassed": 6,
+      "components": [
+        {
+          "name": "RadixSwitch",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "RadixCheckbox",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "RadixToggle",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "RadixToggleGroup",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixRadioGroup",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixSlider",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixProgress",
+          "category": "Feedback",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixAvatar",
+          "category": "Display",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixSeparator",
+          "category": "Layout",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixScrollArea",
+          "category": "Layout",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 107,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixTabs",
+          "category": "Navigation",
+          "mounted": true,
+          "error": null,
+          "rectW": 492,
+          "rectH": 143,
+          "rectOk": true,
+          "interacted": false
+        },
+        {
+          "name": "RadixAccordion",
+          "category": "Layout",
+          "mounted": true,
+          "error": null,
+          "rectW": 492,
+          "rectH": 143,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "RadixCollapsible",
+          "category": "Layout",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 143,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "RadixDialog",
+          "category": "Overlays",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "RadixAlertDialog",
+          "category": "Overlays",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixPopover",
+          "category": "Overlays",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixDropdownMenu",
+          "category": "Overlays",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixSelect",
+          "category": "Inputs",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 77,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixHoverCard",
+          "category": "Overlays",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 75,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RadixTooltip",
+          "category": "Overlays",
+          "mounted": true,
+          "error": null,
+          "rectW": 240,
+          "rectH": 75,
+          "rectOk": true,
+          "interacted": null
+        }
+      ]
+    },
+    "screenshot": "chrome-shadcn-radix.png"
+  },
+  {
+    "scene": "motion-gsap",
+    "ok": true,
+    "errors": [],
+    "loadMs": 756.94,
+    "inputMs": 181.48,
+    "animFrameMs": {
+      "p50": 6.1,
+      "p99": 6.8
+    },
+    "interactions": {
+      "total": 8,
+      "mounted": 8,
+      "rectOk": 8,
+      "interactionsTotal": 2,
+      "interactionsPassed": 2,
+      "components": [
+        {
+          "name": "MotionSpring",
+          "category": "framer-motion",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 176,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "MotionLayoutId",
+          "category": "framer-motion",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 176,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "MotionAnimatePresence",
+          "category": "framer-motion",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 176,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "MotionUseSpring",
+          "category": "framer-motion",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 176,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "MotionSvgPath",
+          "category": "framer-motion",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 176,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "WaapiNativeShim",
+          "category": "WAAPI",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 176,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "GsapTween",
+          "category": "GSAP",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 176,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "GsapStagger",
+          "category": "GSAP",
+          "mounted": true,
+          "error": null,
+          "rectW": 828,
+          "rectH": 176,
+          "rectOk": true,
+          "interacted": null
+        }
+      ]
+    },
+    "screenshot": "chrome-motion-gsap.png"
+  },
+  {
+    "scene": "reactbits-ui",
+    "ok": true,
+    "errors": [],
+    "loadMs": 917.8,
+    "inputMs": 183.88,
+    "animFrameMs": {
+      "p50": 6.1,
+      "p99": 24.9
+    },
+    "interactions": {
+      "total": 16,
+      "mounted": 16,
+      "rectOk": 16,
+      "interactionsTotal": 2,
+      "interactionsPassed": 2,
+      "components": [
+        {
+          "name": "BlurText",
+          "category": "TextAnimations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "ShinyText",
+          "category": "TextAnimations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "GradientText",
+          "category": "TextAnimations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "CountUp",
+          "category": "TextAnimations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 83,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "DecryptedText",
+          "category": "TextAnimations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 250,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "GlitchText",
+          "category": "TextAnimations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 250,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "RotatingText",
+          "category": "TextAnimations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 250,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "TextType",
+          "category": "TextAnimations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 250,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "ClickSpark",
+          "category": "Animations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 144,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "StarBorder",
+          "category": "Animations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 144,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "FadeContent",
+          "category": "Animations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 144,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Magnet",
+          "category": "Animations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 144,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "Noise",
+          "category": "Animations",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 160,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "SpotlightCard",
+          "category": "Components",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 160,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "TiltedCard",
+          "category": "Components",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 160,
+          "rectOk": true,
+          "interacted": null
+        },
+        {
+          "name": "Counter",
+          "category": "Components",
+          "mounted": true,
+          "error": null,
+          "rectW": 303,
+          "rectH": 160,
+          "rectOk": true,
+          "interacted": null
+        }
+      ]
+    },
+    "screenshot": "chrome-reactbits-ui.png"
+  },
+  {
+    "scene": "reactbits-bg",
+    "ok": true,
+    "errors": [],
+    "loadMs": 1327.1,
+    "inputMs": 166.27,
+    "animFrameMs": {
+      "p50": 6,
+      "p99": 6.5
+    },
+    "interactions": {
+      "total": 6,
+      "mounted": 6,
+      "rectOk": 6,
+      "interactionsTotal": 6,
+      "interactionsPassed": 6,
+      "components": [
+        {
+          "name": "Aurora",
+          "category": "WebGL2",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 340,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "Iridescence",
+          "category": "WebGL2",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 340,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "Particles",
+          "category": "WebGL-OGL",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 340,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "Waves",
+          "category": "Canvas2D",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 340,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "LetterGlitch",
+          "category": "Canvas2D",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 340,
+          "rectOk": true,
+          "interacted": true
+        },
+        {
+          "name": "DotGrid",
+          "category": "Canvas2D+GSAP",
+          "mounted": true,
+          "error": null,
+          "rectW": 408,
+          "rectH": 340,
+          "rectOk": true,
+          "interacted": true
+        }
+      ]
+    },
+    "screenshot": "chrome-reactbits-bg.png"
+  }
+]

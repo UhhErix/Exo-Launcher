@@ -1,0 +1,23 @@
+[package]
+name = "blitz-react-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rune.workspace = true
+wgpu.workspace = true
+naga.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+png.workspace = true
+windows.workspace = true
+anyrender.workspace = true
+anyrender_vello_cpu.workspace = true
+peniko.workspace = true
+kurbo.workspace = true
+blitz-dom.workspace = true
+blitz-html.workspace = true
+blitz-paint.workspace = true
+blitz-traits.workspace = true
+url.workspace = true

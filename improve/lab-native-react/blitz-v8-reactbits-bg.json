@@ -1,0 +1,165 @@
+{
+  "engine": "blitz-v8",
+  "scene": "reactbits-bg",
+  "ok": true,
+  "js_errors": [],
+  "cold_start_ms": 2169.66,
+  "mount_ms": 2064.24,
+  "first_paint_ms": 13.47,
+  "anim_frame_ms": {
+    "samples": 30,
+    "avg_ms": 44.64,
+    "p50_ms": 30.97,
+    "p95_ms": 174.03,
+    "p99_ms": 259.29,
+    "max_ms": 259.29
+  },
+  "rune_frame_ms": {
+    "samples": 2,
+    "avg_ms": 1.42,
+    "p50_ms": 2.78,
+    "p95_ms": 2.78,
+    "p99_ms": 2.78,
+    "max_ms": 2.78
+  },
+  "input_latency_ms": {
+    "samples": 6,
+    "avg_ms": 42.94,
+    "p50_ms": 47.62,
+    "p95_ms": 68.75,
+    "p99_ms": 68.75,
+    "max_ms": 68.75
+  },
+  "idle_cpu_pct": 18.67,
+  "memory": {
+    "root_pid": 7296,
+    "root_ws_mb": 221.93,
+    "root_priv_mb": 282.16,
+    "child_count": 0,
+    "child_ws_mb": -0.0,
+    "child_priv_mb": -0.0,
+    "total_procs": 1,
+    "total_ws_mb": 221.93,
+    "total_priv_mb": 282.16,
+    "processes": [
+      {
+        "pid": 7296,
+        "parent_pid": 1876,
+        "name": "blitz-v8.exe",
+        "working_set_mb": 221.93,
+        "private_bytes_mb": 282.16
+      }
+    ]
+  },
+  "binary_bytes": 86280192,
+  "non_black_pixels_pct": 22.26,
+  "interactions": {
+    "components": [
+      {
+        "category": "WebGL2",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "Aurora",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "WebGL2",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "Iridescence",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "WebGL-OGL",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "Particles",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "Canvas2D",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "Waves",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "Canvas2D",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "LetterGlitch",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "Canvas2D+GSAP",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "DotGrid",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      }
+    ],
+    "interactionsPassed": 6,
+    "interactionsTotal": 6,
+    "mounted": 6,
+    "rectOk": 6,
+    "total": 6
+  },
+  "bridge_stats": {
+    "dom_ops": 286,
+    "elements_created": 61,
+    "text_nodes_created": 14,
+    "style_sheets_injected": 1,
+    "layout_queries": 40,
+    "computed_style_queries": 0,
+    "selector_queries": 12,
+    "canvas2d_flushes": 3,
+    "waapi_animations": 0,
+    "webgl": {
+      "shaders_attempted": 14,
+      "shaders_translated": 3,
+      "shader_errors": [
+        "glsl parse: ParseErrors { errors: [Error { kind: UnknownType(\"sampler2D\"), meta: Span { start: 386, end: 395 } }] }",
+        "naga validate: Entry point main at Vertex is invalid",
+        "naga validate: Entry point main at Fragment is invalid",
+        "naga validate: Entry point main at Vertex is invalid",
+        "naga validate: Entry point main at Fragment is invalid",
+        "glsl parse: ParseErrors { errors: [Error { kind: UnknownType(\"sampler2D\"), meta: Span { start: 261, end: 270 } }] }",
+        "naga validate: Entry point main at Fragment is invalid",
+        "glsl parse: ParseErrors { errors: [Error { kind: UnknownVariable(\"gl_VertexID\"), meta: Span { start: 50, end: 61 } }] }",
+        "glsl parse: ParseErrors { errors: [Error { kind: UnknownType(\"sampler2D\"), meta: Span { start: 63, end: 72 } }] }",
+        "naga validate: Entry point main at Vertex is invalid",
+        "naga validate: Entry point main at Fragment is invalid"
+      ],
+      "programs_linked": 7,
+      "draw_calls": 115,
+      "unsupported_calls": {
+        "uniform2i": 113,
+        "bufferSubData": 41,
+        "bindAttribLocation": 1,
+        "texSubImage2D": 76,
+        "drawArraysInstanced": 119,
+        "vertexAttribDivisor": 7,
+        "uniform1ui": 39
+      }
+    }
+  },
+  "screenshot": "blitz-v8-reactbits-bg.png"
+}

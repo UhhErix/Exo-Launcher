@@ -1,0 +1,51 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/blitz-react-core",
+    "crates/blitz-qjs",
+    "crates/blitz-v8",
+    "crates/rune-baseline",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+rune = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+wgpu = { version = "~30.0.1", default-features = false }
+naga = { version = "30.0.1", features = ["glsl-in", "wgsl-out"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+png = "0.18"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
+] }
+anyrender = "0.15"
+anyrender_vello_cpu = "0.19"
+peniko = "0.6"
+kurbo = "0.13"
+blitz-dom = { version = "0.3.0-beta.5", features = ["svg", "custom-widget"] }
+blitz-html = "0.3.0-beta.5"
+blitz-paint = { version = "0.3.0-beta.5", features = ["svg", "custom-widget"] }
+blitz-traits = "0.3.0-beta.5"
+rquickjs = { version = "0.14.0", features = ["array-buffer", "classes", "macro"] }
+v8 = "152.2.0"
+url = "2"
+
+[patch.crates-io]
+wgpu-hal = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+winit = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+sctk-adwaita = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+parley_engine = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "ba9aa615f2cc31262653dd3b7f3ee37534443b19" }
+
+[profile.release]
+opt-level = 2
+lto = false
+strip = true

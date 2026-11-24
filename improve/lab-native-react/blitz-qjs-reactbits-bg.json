@@ -1,0 +1,165 @@
+{
+  "engine": "blitz-qjs",
+  "scene": "reactbits-bg",
+  "ok": true,
+  "js_errors": [],
+  "cold_start_ms": 1794.85,
+  "mount_ms": 1685.76,
+  "first_paint_ms": 19.97,
+  "anim_frame_ms": {
+    "samples": 30,
+    "avg_ms": 78.43,
+    "p50_ms": 73.67,
+    "p95_ms": 123.55,
+    "p99_ms": 133.8,
+    "max_ms": 133.8
+  },
+  "rune_frame_ms": {
+    "samples": 2,
+    "avg_ms": 1.3,
+    "p50_ms": 2.47,
+    "p95_ms": 2.47,
+    "p99_ms": 2.47,
+    "max_ms": 2.47
+  },
+  "input_latency_ms": {
+    "samples": 6,
+    "avg_ms": 93.55,
+    "p50_ms": 92.64,
+    "p95_ms": 141.92,
+    "p99_ms": 141.92,
+    "max_ms": 141.92
+  },
+  "idle_cpu_pct": 19.96,
+  "memory": {
+    "root_pid": 16728,
+    "root_ws_mb": 212.56,
+    "root_priv_mb": 274.09,
+    "child_count": 0,
+    "child_ws_mb": -0.0,
+    "child_priv_mb": -0.0,
+    "total_procs": 1,
+    "total_ws_mb": 212.56,
+    "total_priv_mb": 274.09,
+    "processes": [
+      {
+        "pid": 16728,
+        "parent_pid": 25068,
+        "name": "blitz-qjs.exe",
+        "working_set_mb": 212.56,
+        "private_bytes_mb": 274.09
+      }
+    ]
+  },
+  "binary_bytes": 43833856,
+  "non_black_pixels_pct": 22.26,
+  "interactions": {
+    "components": [
+      {
+        "category": "WebGL2",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "Aurora",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "WebGL2",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "Iridescence",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "WebGL-OGL",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "Particles",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "Canvas2D",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "Waves",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "Canvas2D",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "LetterGlitch",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "Canvas2D+GSAP",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "DotGrid",
+        "rectH": 340,
+        "rectOk": true,
+        "rectW": 408
+      }
+    ],
+    "interactionsPassed": 6,
+    "interactionsTotal": 6,
+    "mounted": 6,
+    "rectOk": 6,
+    "total": 6
+  },
+  "bridge_stats": {
+    "dom_ops": 286,
+    "elements_created": 61,
+    "text_nodes_created": 14,
+    "style_sheets_injected": 1,
+    "layout_queries": 40,
+    "computed_style_queries": 0,
+    "selector_queries": 12,
+    "canvas2d_flushes": 3,
+    "waapi_animations": 0,
+    "webgl": {
+      "shaders_attempted": 14,
+      "shaders_translated": 3,
+      "shader_errors": [
+        "glsl parse: ParseErrors { errors: [Error { kind: UnknownType(\"sampler2D\"), meta: Span { start: 386, end: 395 } }] }",
+        "naga validate: Entry point main at Vertex is invalid",
+        "naga validate: Entry point main at Fragment is invalid",
+        "naga validate: Entry point main at Vertex is invalid",
+        "naga validate: Entry point main at Fragment is invalid",
+        "glsl parse: ParseErrors { errors: [Error { kind: UnknownType(\"sampler2D\"), meta: Span { start: 261, end: 270 } }] }",
+        "naga validate: Entry point main at Fragment is invalid",
+        "glsl parse: ParseErrors { errors: [Error { kind: UnknownVariable(\"gl_VertexID\"), meta: Span { start: 50, end: 61 } }] }",
+        "glsl parse: ParseErrors { errors: [Error { kind: UnknownType(\"sampler2D\"), meta: Span { start: 63, end: 72 } }] }",
+        "naga validate: Entry point main at Vertex is invalid",
+        "naga validate: Entry point main at Fragment is invalid"
+      ],
+      "programs_linked": 7,
+      "draw_calls": 115,
+      "unsupported_calls": {
+        "bindAttribLocation": 1,
+        "drawArraysInstanced": 119,
+        "uniform1ui": 39,
+        "bufferSubData": 41,
+        "uniform2i": 113,
+        "texSubImage2D": 76,
+        "vertexAttribDivisor": 7
+      }
+    }
+  },
+  "screenshot": "blitz-qjs-reactbits-bg.png"
+}

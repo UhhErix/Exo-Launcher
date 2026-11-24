@@ -1,0 +1,11 @@
+[package]
+name = "rune-baseline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+blitz-react-core = { path = "../blitz-react-core" }
+rune.workspace = true
+serde.workspace = true
+serde_json.workspace = true

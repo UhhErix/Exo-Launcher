@@ -1,0 +1,51 @@
+{
+  "engine": "rune-handwritten",
+  "scene": "gallery-parity",
+  "cold_start_ms": 247.79,
+  "anim_frame_ms": {
+    "samples": 60,
+    "avg_ms": 0.0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0,
+    "p99_ms": 0.0,
+    "max_ms": 0.0
+  },
+  "rune_frame_ms": {
+    "samples": 59,
+    "avg_ms": 8.34,
+    "p50_ms": 0.55,
+    "p95_ms": 1.36,
+    "p99_ms": 75.65,
+    "max_ms": 381.19
+  },
+  "input_latency_ms": {
+    "samples": 1,
+    "avg_ms": 0.0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0,
+    "p99_ms": 0.0,
+    "max_ms": 0.0
+  },
+  "idle_cpu_pct": 0.0,
+  "memory": {
+    "root_pid": 16744,
+    "root_ws_mb": 36.14,
+    "root_priv_mb": 20.19,
+    "child_count": 0,
+    "child_ws_mb": -0.0,
+    "child_priv_mb": -0.0,
+    "total_procs": 1,
+    "total_ws_mb": 36.14,
+    "total_priv_mb": 20.19,
+    "processes": [
+      {
+        "pid": 16744,
+        "parent_pid": 23812,
+        "name": "rune-baseline.exe",
+        "working_set_mb": 36.14,
+        "private_bytes_mb": 20.19
+      }
+    ]
+  },
+  "binary_bytes": 23600640
+}

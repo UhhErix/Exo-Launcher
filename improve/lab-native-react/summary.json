@@ -1,0 +1,1930 @@
+{
+  "generatedAt": "2026-11-24T17:07:36.141Z",
+  "runeBaseline": {
+    "engine": "rune-handwritten",
+    "scene": "gallery-parity",
+    "cold_start_ms": 30.37,
+    "anim_frame_ms": {
+      "samples": 60,
+      "avg_ms": 0,
+      "p50_ms": 0,
+      "p95_ms": 0,
+      "p99_ms": 0,
+      "max_ms": 0
+    },
+    "rune_frame_ms": {
+      "samples": 60,
+      "avg_ms": 2.87,
+      "p50_ms": 0.55,
+      "p95_ms": 1.27,
+      "p99_ms": 3.05,
+      "max_ms": 134.28
+    },
+    "input_latency_ms": {
+      "samples": 1,
+      "avg_ms": 0,
+      "p50_ms": 0,
+      "p95_ms": 0,
+      "p99_ms": 0,
+      "max_ms": 0
+    },
+    "idle_cpu_pct": 64.41,
+    "memory": {
+      "root_pid": 24908,
+      "root_ws_mb": 155.98,
+      "root_priv_mb": 180.52,
+      "child_count": 0,
+      "child_ws_mb": 0,
+      "child_priv_mb": 0,
+      "total_procs": 1,
+      "total_ws_mb": 155.98,
+      "total_priv_mb": 180.52,
+      "processes": [
+        {
+          "pid": 24908,
+          "parent_pid": 1876,
+          "name": "rune-baseline.exe",
+          "working_set_mb": 155.98,
+          "private_bytes_mb": 180.52
+        }
+      ]
+    },
+    "binary_bytes": 23585792
+  },
+  "engines": {
+    "blitz-qjs": [
+      {
+        "engine": "blitz-qjs",
+        "scene": "heroui-gallery",
+        "ok": false,
+        "js_errors": [
+          "Some(\"Intl is not defined\")     at $d805ff57cab8bee2$export$702d680b21cbd764 (eval_script:22724:9)\n    at $520a025cdb0d710d$export$f09106e7c6677ec5 (eval_script:22753:65)\n    at <anonymous> (eval_script:22756:45)\n    at <eval> (eval_script:52335:1)\n"
+        ],
+        "cold_start_ms": 580.69,
+        "mount_ms": 309.33,
+        "first_paint_ms": 14.6,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 3.77,
+          "p50_ms": 2.12,
+          "p95_ms": 4.73,
+          "p99_ms": 45.75,
+          "max_ms": 45.75
+        },
+        "rune_frame_ms": {
+          "samples": 0,
+          "avg_ms": 0,
+          "p50_ms": 0,
+          "p95_ms": 0,
+          "p99_ms": 0,
+          "max_ms": 0
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 1.87,
+          "p50_ms": 1.83,
+          "p95_ms": 2.21,
+          "p99_ms": 2.21,
+          "max_ms": 2.21
+        },
+        "idle_cpu_pct": 24.54,
+        "memory": {
+          "root_pid": 24480,
+          "root_ws_mb": 132.05,
+          "root_priv_mb": 148.83,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 132.05,
+          "total_priv_mb": 148.83,
+          "processes": [
+            {
+              "pid": 24480,
+              "parent_pid": 1876,
+              "name": "blitz-qjs.exe",
+              "working_set_mb": 132.05,
+              "private_bytes_mb": 148.83
+            }
+          ]
+        },
+        "binary_bytes": 43832320,
+        "non_black_pixels_pct": 0,
+        "interactions": null,
+        "bridge_stats": {
+          "dom_ops": 3,
+          "elements_created": 2,
+          "text_nodes_created": 0,
+          "style_sheets_injected": 1,
+          "layout_queries": 0,
+          "computed_style_queries": 0,
+          "selector_queries": 0,
+          "canvas2d_flushes": 0,
+          "waapi_animations": 0,
+          "webgl": {
+            "shaders_attempted": 0,
+            "shaders_translated": 0,
+            "shader_errors": [],
+            "programs_linked": 0,
+            "draw_calls": 0,
+            "unsupported_calls": {}
+          }
+        },
+        "screenshot": "blitz-qjs-heroui-gallery.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 9.98,
+          "rmse": 28.66,
+          "diffPixelsPct": 17.11,
+          "gridMatchPct": 93.75
+        }
+      },
+      {
+        "engine": "blitz-qjs",
+        "scene": "shadcn-radix",
+        "ok": true,
+        "js_errors": [],
+        "cold_start_ms": 208.75,
+        "mount_ms": 124.91,
+        "first_paint_ms": 1.46,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 1.45,
+          "p50_ms": 1.38,
+          "p95_ms": 1.92,
+          "p99_ms": 2.12,
+          "max_ms": 2.12
+        },
+        "rune_frame_ms": {
+          "samples": 0,
+          "avg_ms": 0,
+          "p50_ms": 0,
+          "p95_ms": 0,
+          "p99_ms": 0,
+          "max_ms": 0
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 1.64,
+          "p50_ms": 1.38,
+          "p95_ms": 3.02,
+          "p99_ms": 3.02,
+          "max_ms": 3.02
+        },
+        "idle_cpu_pct": 73.24,
+        "memory": {
+          "root_pid": 18784,
+          "root_ws_mb": 177.7,
+          "root_priv_mb": 197.92,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 177.7,
+          "total_priv_mb": 197.92,
+          "processes": [
+            {
+              "pid": 18784,
+              "parent_pid": 1876,
+              "name": "blitz-qjs.exe",
+              "working_set_mb": 177.7,
+              "private_bytes_mb": 197.92
+            }
+          ]
+        },
+        "binary_bytes": 43832320,
+        "non_black_pixels_pct": 0,
+        "interactions": {
+          "components": [],
+          "interactionsPassed": 0,
+          "interactionsTotal": 7,
+          "mounted": 0,
+          "rectOk": 0,
+          "total": 0
+        },
+        "bridge_stats": {
+          "dom_ops": 3,
+          "elements_created": 2,
+          "text_nodes_created": 0,
+          "style_sheets_injected": 1,
+          "layout_queries": 0,
+          "computed_style_queries": 0,
+          "selector_queries": 13,
+          "canvas2d_flushes": 0,
+          "waapi_animations": 0,
+          "webgl": {
+            "shaders_attempted": 0,
+            "shaders_translated": 0,
+            "shader_errors": [],
+            "programs_linked": 0,
+            "draw_calls": 0,
+            "unsupported_calls": {}
+          }
+        },
+        "screenshot": "blitz-qjs-shadcn-radix.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 6.5,
+          "rmse": 25.96,
+          "diffPixelsPct": 7.79,
+          "gridMatchPct": 95.83
+        }
+      },
+      {
+        "engine": "blitz-qjs",
+        "scene": "motion-gsap",
+        "ok": true,
+        "js_errors": [],
+        "cold_start_ms": 189.18,
+        "mount_ms": 103.85,
+        "first_paint_ms": 1.55,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 2.15,
+          "p50_ms": 1.71,
+          "p95_ms": 4.27,
+          "p99_ms": 5.86,
+          "max_ms": 5.86
+        },
+        "rune_frame_ms": {
+          "samples": 0,
+          "avg_ms": 0,
+          "p50_ms": 0,
+          "p95_ms": 0,
+          "p99_ms": 0,
+          "max_ms": 0
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 3.47,
+          "p50_ms": 2.89,
+          "p95_ms": 6.74,
+          "p99_ms": 6.74,
+          "max_ms": 6.74
+        },
+        "idle_cpu_pct": 89.8,
+        "memory": {
+          "root_pid": 1200,
+          "root_ws_mb": 179.61,
+          "root_priv_mb": 205,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 179.61,
+          "total_priv_mb": 205,
+          "processes": [
+            {
+              "pid": 1200,
+              "parent_pid": 1876,
+              "name": "blitz-qjs.exe",
+              "working_set_mb": 179.61,
+              "private_bytes_mb": 205
+            }
+          ]
+        },
+        "binary_bytes": 43832320,
+        "non_black_pixels_pct": 0,
+        "interactions": {
+          "components": [],
+          "interactionsPassed": 0,
+          "interactionsTotal": 2,
+          "mounted": 0,
+          "rectOk": 0,
+          "total": 0
+        },
+        "bridge_stats": {
+          "dom_ops": 9,
+          "elements_created": 4,
+          "text_nodes_created": 0,
+          "style_sheets_injected": 1,
+          "layout_queries": 0,
+          "computed_style_queries": 0,
+          "selector_queries": 4,
+          "canvas2d_flushes": 0,
+          "waapi_animations": 0,
+          "webgl": {
+            "shaders_attempted": 0,
+            "shaders_translated": 0,
+            "shader_errors": [],
+            "programs_linked": 0,
+            "draw_calls": 0,
+            "unsupported_calls": {}
+          }
+        },
+        "screenshot": "blitz-qjs-motion-gsap.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 11.04,
+          "rmse": 31.89,
+          "diffPixelsPct": 25.41,
+          "gridMatchPct": 87.5
+        }
+      },
+      {
+        "engine": "blitz-qjs",
+        "scene": "reactbits-ui",
+        "ok": true,
+        "js_errors": [],
+        "cold_start_ms": 290.45,
+        "mount_ms": 221.43,
+        "first_paint_ms": 3.89,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 2.96,
+          "p50_ms": 2.03,
+          "p95_ms": 8.13,
+          "p99_ms": 15.69,
+          "max_ms": 15.69
+        },
+        "rune_frame_ms": {
+          "samples": 0,
+          "avg_ms": 0,
+          "p50_ms": 0,
+          "p95_ms": 0,
+          "p99_ms": 0,
+          "max_ms": 0
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 2.37,
+          "p50_ms": 2.41,
+          "p95_ms": 3.6,
+          "p99_ms": 3.6,
+          "max_ms": 3.6
+        },
+        "idle_cpu_pct": 123.37,
+        "memory": {
+          "root_pid": 9336,
+          "root_ws_mb": 195.19,
+          "root_priv_mb": 218.8,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 195.19,
+          "total_priv_mb": 218.8,
+          "processes": [
+            {
+              "pid": 9336,
+              "parent_pid": 1876,
+              "name": "blitz-qjs.exe",
+              "working_set_mb": 195.19,
+              "private_bytes_mb": 218.8
+            }
+          ]
+        },
+        "binary_bytes": 43832320,
+        "non_black_pixels_pct": 0,
+        "interactions": {
+          "components": [],
+          "interactionsPassed": 0,
+          "interactionsTotal": 2,
+          "mounted": 0,
+          "rectOk": 0,
+          "total": 0
+        },
+        "bridge_stats": {
+          "dom_ops": 18,
+          "elements_created": 5,
+          "text_nodes_created": 0,
+          "style_sheets_injected": 1,
+          "layout_queries": 2,
+          "computed_style_queries": 0,
+          "selector_queries": 4,
+          "canvas2d_flushes": 0,
+          "waapi_animations": 0,
+          "webgl": {
+            "shaders_attempted": 0,
+            "shaders_translated": 0,
+            "shader_errors": [],
+            "programs_linked": 0,
+            "draw_calls": 0,
+            "unsupported_calls": {}
+          }
+        },
+        "screenshot": "blitz-qjs-reactbits-ui.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 11.83,
+          "rmse": 37.69,
+          "diffPixelsPct": 16.97,
+          "gridMatchPct": 89.58
+        }
+      },
+      {
+        "engine": "blitz-qjs",
+        "scene": "reactbits-bg",
+        "ok": true,
+        "js_errors": [],
+        "cold_start_ms": 140.93,
+        "mount_ms": 80.86,
+        "first_paint_ms": 1.71,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 2.23,
+          "p50_ms": 1.67,
+          "p95_ms": 5.35,
+          "p99_ms": 5.62,
+          "max_ms": 5.62
+        },
+        "rune_frame_ms": {
+          "samples": 2,
+          "avg_ms": 0.65,
+          "p50_ms": 1.21,
+          "p95_ms": 1.21,
+          "p99_ms": 1.21,
+          "max_ms": 1.21
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 2.11,
+          "p50_ms": 2.23,
+          "p95_ms": 2.6,
+          "p99_ms": 2.6,
+          "max_ms": 2.6
+        },
+        "idle_cpu_pct": 52.46,
+        "memory": {
+          "root_pid": 20244,
+          "root_ws_mb": 186.58,
+          "root_priv_mb": 217.74,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 186.58,
+          "total_priv_mb": 217.74,
+          "processes": [
+            {
+              "pid": 20244,
+              "parent_pid": 1876,
+              "name": "blitz-qjs.exe",
+              "working_set_mb": 186.58,
+              "private_bytes_mb": 217.74
+            }
+          ]
+        },
+        "binary_bytes": 43832320,
+        "non_black_pixels_pct": 0,
+        "interactions": {
+          "components": [],
+          "interactionsPassed": 0,
+          "interactionsTotal": 6,
+          "mounted": 0,
+          "rectOk": 0,
+          "total": 0
+        },
+        "bridge_stats": {
+          "dom_ops": 3,
+          "elements_created": 2,
+          "text_nodes_created": 0,
+          "style_sheets_injected": 1,
+          "layout_queries": 0,
+          "computed_style_queries": 0,
+          "selector_queries": 6,
+          "canvas2d_flushes": 0,
+          "waapi_animations": 0,
+          "webgl": {
+            "shaders_attempted": 0,
+            "shaders_translated": 0,
+            "shader_errors": [],
+            "programs_linked": 0,
+            "draw_calls": 0,
+            "unsupported_calls": {}
+          }
+        },
+        "screenshot": "blitz-qjs-reactbits-bg.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 29.72,
+          "rmse": 73.61,
+          "diffPixelsPct": 16.97,
+          "gridMatchPct": 72.92
+        }
+      }
+    ],
+    "blitz-v8": [
+      {
+        "engine": "blitz-v8",
+        "scene": "heroui-gallery",
+        "ok": true,
+        "js_errors": [],
+        "cold_start_ms": 1091.63,
+        "mount_ms": 753.94,
+        "first_paint_ms": 95.67,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 19.73,
+          "p50_ms": 15.64,
+          "p95_ms": 57.05,
+          "p99_ms": 62.84,
+          "max_ms": 62.84
+        },
+        "rune_frame_ms": {
+          "samples": 2,
+          "avg_ms": 0.61,
+          "p50_ms": 1.14,
+          "p95_ms": 1.14,
+          "p99_ms": 1.14,
+          "max_ms": 1.14
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 22.52,
+          "p50_ms": 23.3,
+          "p95_ms": 36.08,
+          "p99_ms": 36.08,
+          "max_ms": 36.08
+        },
+        "idle_cpu_pct": 39.67,
+        "memory": {
+          "root_pid": 15744,
+          "root_ws_mb": 219.02,
+          "root_priv_mb": 232.28,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 219.02,
+          "total_priv_mb": 232.28,
+          "processes": [
+            {
+              "pid": 15744,
+              "parent_pid": 1876,
+              "name": "blitz-v8.exe",
+              "working_set_mb": 219.02,
+              "private_bytes_mb": 232.28
+            }
+          ]
+        },
+        "binary_bytes": 86280192,
+        "non_black_pixels_pct": 17.18,
+        "interactions": {
+          "components": [
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "Button",
+              "rectH": 121,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "ButtonGroup",
+              "rectH": 121,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "ToggleButton",
+              "rectH": 121,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "CloseButton",
+              "rectH": 121,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "Switch",
+              "rectH": 121,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "Checkbox",
+              "rectH": 121,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadioGroup",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Slider",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Forms",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Input",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Forms",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "TextArea",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Forms",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "NumberField",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Display",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Chip",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Display",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Avatar",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Display",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Badge",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Display",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Kbd",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Display",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Link",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Feedback",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Spinner",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Feedback",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Skeleton",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Feedback",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "ProgressBar",
+              "rectH": 92,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Feedback",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "ProgressCircle",
+              "rectH": 92,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Feedback",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Meter",
+              "rectH": 92,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Layout",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Separator",
+              "rectH": 92,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Navigation",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Breadcrumbs",
+              "rectH": 92,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Display",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "TagGroup",
+              "rectH": 92,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Layout",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Card",
+              "rectH": 155,
+              "rectOk": true,
+              "rectW": 409
+            },
+            {
+              "category": "Feedback",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Alert",
+              "rectH": 155,
+              "rectOk": true,
+              "rectW": 409
+            },
+            {
+              "category": "Navigation",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "Tabs",
+              "rectH": 155,
+              "rectOk": true,
+              "rectW": 409
+            },
+            {
+              "category": "Layout",
+              "error": null,
+              "interacted": true,
+              "mounted": true,
+              "name": "Accordion",
+              "rectH": 179,
+              "rectOk": true,
+              "rectW": 409
+            },
+            {
+              "category": "Layout",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Disclosure",
+              "rectH": 179,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Overlays",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "Modal",
+              "rectH": 179,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Overlays",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Popover",
+              "rectH": 179,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Overlays",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Tooltip",
+              "rectH": 179,
+              "rectOk": true,
+              "rectW": 200
+            },
+            {
+              "category": "Navigation",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Pagination",
+              "rectH": 181,
+              "rectOk": true,
+              "rectW": 409
+            },
+            {
+              "category": "Display",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Table",
+              "rectH": 181,
+              "rectOk": true,
+              "rectW": 409
+            },
+            {
+              "category": "Display",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "EmptyState",
+              "rectH": 181,
+              "rectOk": true,
+              "rectW": 409
+            }
+          ],
+          "interactionsPassed": 1,
+          "interactionsTotal": 6,
+          "mounted": 35,
+          "rectOk": 35,
+          "total": 35
+        },
+        "bridge_stats": {
+          "dom_ops": 2386,
+          "elements_created": 413,
+          "text_nodes_created": 134,
+          "style_sheets_injected": 1,
+          "layout_queries": 49,
+          "computed_style_queries": 43,
+          "selector_queries": 108,
+          "canvas2d_flushes": 0,
+          "waapi_animations": 0,
+          "webgl": {
+            "shaders_attempted": 0,
+            "shaders_translated": 0,
+            "shader_errors": [],
+            "programs_linked": 0,
+            "draw_calls": 0,
+            "unsupported_calls": {}
+          }
+        },
+        "screenshot": "blitz-v8-heroui-gallery.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 2.43,
+          "rmse": 14.28,
+          "diffPixelsPct": 3.2,
+          "gridMatchPct": 100
+        }
+      },
+      {
+        "engine": "blitz-v8",
+        "scene": "shadcn-radix",
+        "ok": false,
+        "js_errors": [
+          "TypeError: Cannot read properties of undefined (reading 'length')"
+        ],
+        "cold_start_ms": 553.42,
+        "mount_ms": 351.48,
+        "first_paint_ms": 11.71,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 8.44,
+          "p50_ms": 7.5,
+          "p95_ms": 11.53,
+          "p99_ms": 13.56,
+          "max_ms": 13.56
+        },
+        "rune_frame_ms": {
+          "samples": 2,
+          "avg_ms": 0.83,
+          "p50_ms": 1.57,
+          "p95_ms": 1.57,
+          "p99_ms": 1.57,
+          "max_ms": 1.57
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 16.09,
+          "p50_ms": 14.75,
+          "p95_ms": 29.04,
+          "p99_ms": 29.04,
+          "max_ms": 29.04
+        },
+        "idle_cpu_pct": 19.38,
+        "memory": {
+          "root_pid": 18988,
+          "root_ws_mb": 183.6,
+          "root_priv_mb": 199.4,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 183.6,
+          "total_priv_mb": 199.4,
+          "processes": [
+            {
+              "pid": 18988,
+              "parent_pid": 1876,
+              "name": "blitz-v8.exe",
+              "working_set_mb": 183.6,
+              "private_bytes_mb": 199.4
+            }
+          ]
+        },
+        "binary_bytes": 86280192,
+        "non_black_pixels_pct": 7.2,
+        "interactions": {
+          "components": [
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "RadixSwitch",
+              "rectH": 77,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "RadixCheckbox",
+              "rectH": 77,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "RadixToggle",
+              "rectH": 77,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixToggleGroup",
+              "rectH": 77,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixRadioGroup",
+              "rectH": 77,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Inputs",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixSlider",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Feedback",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixProgress",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Display",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixAvatar",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Layout",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixSeparator",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Layout",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixScrollArea",
+              "rectH": 107,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Navigation",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "RadixTabs",
+              "rectH": 143,
+              "rectOk": true,
+              "rectW": 492
+            },
+            {
+              "category": "Layout",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "RadixAccordion",
+              "rectH": 143,
+              "rectOk": true,
+              "rectW": 492
+            },
+            {
+              "category": "Layout",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "RadixCollapsible",
+              "rectH": 143,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Overlays",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "RadixDialog",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Overlays",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixAlertDialog",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Overlays",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixPopover",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Overlays",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixDropdownMenu",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Inputs",
+              "error": "Cannot read properties of undefined (reading 'length')",
+              "interacted": null,
+              "mounted": false,
+              "name": "RadixSelect",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Overlays",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixHoverCard",
+              "rectH": 75,
+              "rectOk": true,
+              "rectW": 240
+            },
+            {
+              "category": "Overlays",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RadixTooltip",
+              "rectH": 75,
+              "rectOk": true,
+              "rectW": 240
+            }
+          ],
+          "interactionsPassed": 0,
+          "interactionsTotal": 7,
+          "mounted": 19,
+          "rectOk": 19,
+          "total": 20
+        },
+        "bridge_stats": {
+          "dom_ops": 1958,
+          "elements_created": 364,
+          "text_nodes_created": 150,
+          "style_sheets_injected": 3,
+          "layout_queries": 33,
+          "computed_style_queries": 6,
+          "selector_queries": 47,
+          "canvas2d_flushes": 0,
+          "waapi_animations": 0,
+          "webgl": {
+            "shaders_attempted": 0,
+            "shaders_translated": 0,
+            "shader_errors": [],
+            "programs_linked": 0,
+            "draw_calls": 0,
+            "unsupported_calls": {}
+          }
+        },
+        "screenshot": "blitz-v8-shadcn-radix.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 2.56,
+          "rmse": 15.18,
+          "diffPixelsPct": 3.9,
+          "gridMatchPct": 100
+        }
+      },
+      {
+        "engine": "blitz-v8",
+        "scene": "motion-gsap",
+        "ok": false,
+        "js_errors": [
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)"
+        ],
+        "cold_start_ms": 448.08,
+        "mount_ms": 334.81,
+        "first_paint_ms": 9.95,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 10.02,
+          "p50_ms": 7.52,
+          "p95_ms": 20.75,
+          "p99_ms": 21.65,
+          "max_ms": 21.65
+        },
+        "rune_frame_ms": {
+          "samples": 2,
+          "avg_ms": 0.27,
+          "p50_ms": 0.51,
+          "p95_ms": 0.51,
+          "p99_ms": 0.51,
+          "max_ms": 0.51
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 15.97,
+          "p50_ms": 20.4,
+          "p95_ms": 28.85,
+          "p99_ms": 28.85,
+          "max_ms": 28.85
+        },
+        "idle_cpu_pct": 22.82,
+        "memory": {
+          "root_pid": 25208,
+          "root_ws_mb": 174.94,
+          "root_priv_mb": 194.82,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 174.94,
+          "total_priv_mb": 194.82,
+          "processes": [
+            {
+              "pid": 25208,
+              "parent_pid": 1876,
+              "name": "blitz-v8.exe",
+              "working_set_mb": 174.94,
+              "private_bytes_mb": 194.82
+            }
+          ]
+        },
+        "binary_bytes": 86280192,
+        "non_black_pixels_pct": 23.78,
+        "interactions": {
+          "components": [
+            {
+              "category": "framer-motion",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "MotionSpring",
+              "rectH": 176,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "framer-motion",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "MotionLayoutId",
+              "rectH": 176,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "framer-motion",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "MotionAnimatePresence",
+              "rectH": 176,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "framer-motion",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "MotionUseSpring",
+              "rectH": 176,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "framer-motion",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "MotionSvgPath",
+              "rectH": 176,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "WAAPI",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "WaapiNativeShim",
+              "rectH": 176,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "GSAP",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "GsapTween",
+              "rectH": 176,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "GSAP",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "GsapStagger",
+              "rectH": 176,
+              "rectOk": true,
+              "rectW": 828
+            }
+          ],
+          "interactionsPassed": 0,
+          "interactionsTotal": 2,
+          "mounted": 8,
+          "rectOk": 8,
+          "total": 8
+        },
+        "bridge_stats": {
+          "dom_ops": 727,
+          "elements_created": 87,
+          "text_nodes_created": 29,
+          "style_sheets_injected": 1,
+          "layout_queries": 12,
+          "computed_style_queries": 222,
+          "selector_queries": 13,
+          "canvas2d_flushes": 0,
+          "waapi_animations": 4,
+          "webgl": {
+            "shaders_attempted": 0,
+            "shaders_translated": 0,
+            "shader_errors": [],
+            "programs_linked": 0,
+            "draw_calls": 0,
+            "unsupported_calls": {}
+          }
+        },
+        "screenshot": "blitz-v8-motion-gsap.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 5.59,
+          "rmse": 25.62,
+          "diffPixelsPct": 7.61,
+          "gridMatchPct": 91.67
+        }
+      },
+      {
+        "engine": "blitz-v8",
+        "scene": "reactbits-ui",
+        "ok": false,
+        "js_errors": [
+          "TypeError: Cannot read properties of null (reading 'replace')",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)",
+          "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:32079:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:32450:24)\n    at _getMatrix2 (<anonymous>:32454:83)\n    at _parseTransform2 (<anonymous>:32525:14)\n    at _get2 (<anonymous>:32237:15)\n    at Plugin.init3 [as init] (<anonymous>:32890:26)\n    at _initTween2 (<anonymous>:30853:49)\n    at _attemptInitTween2 (<anonymous>:29110:5)\n    at _renderZeroDurationTween2 (<anonymous>:29140:30)\n    at Tween2.render3 [as render] (<anonymous>:31080:9)"
+        ],
+        "cold_start_ms": 838.15,
+        "mount_ms": 694.26,
+        "first_paint_ms": 26.34,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 76.72,
+          "p50_ms": 38.78,
+          "p95_ms": 298.87,
+          "p99_ms": 344.31,
+          "max_ms": 344.31
+        },
+        "rune_frame_ms": {
+          "samples": 0,
+          "avg_ms": 0,
+          "p50_ms": 0,
+          "p95_ms": 0,
+          "p99_ms": 0,
+          "max_ms": 0
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 62.89,
+          "p50_ms": 67.84,
+          "p95_ms": 113.81,
+          "p99_ms": 113.81,
+          "max_ms": 113.81
+        },
+        "idle_cpu_pct": 20.02,
+        "memory": {
+          "root_pid": 6648,
+          "root_ws_mb": 111.55,
+          "root_priv_mb": 72.07,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 111.55,
+          "total_priv_mb": 72.07,
+          "processes": [
+            {
+              "pid": 6648,
+              "parent_pid": 1876,
+              "name": "blitz-v8.exe",
+              "working_set_mb": 111.55,
+              "private_bytes_mb": 72.07
+            }
+          ]
+        },
+        "binary_bytes": 86280192,
+        "non_black_pixels_pct": 14.38,
+        "interactions": {
+          "components": [
+            {
+              "category": "TextAnimations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "BlurText",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "TextAnimations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "ShinyText",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "TextAnimations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "GradientText",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "TextAnimations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "CountUp",
+              "rectH": 83,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "TextAnimations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "DecryptedText",
+              "rectH": 250,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "TextAnimations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "GlitchText",
+              "rectH": 250,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "TextAnimations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "RotatingText",
+              "rectH": 250,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "TextAnimations",
+              "error": "Cannot read properties of null (reading 'replace')",
+              "interacted": null,
+              "mounted": false,
+              "name": "TextType",
+              "rectH": 250,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "Animations",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "ClickSpark",
+              "rectH": 144,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "Animations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "StarBorder",
+              "rectH": 144,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "Animations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "FadeContent",
+              "rectH": 144,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "Animations",
+              "error": null,
+              "interacted": false,
+              "mounted": true,
+              "name": "Magnet",
+              "rectH": 144,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "Animations",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Noise",
+              "rectH": 160,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "Components",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "SpotlightCard",
+              "rectH": 160,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "Components",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "TiltedCard",
+              "rectH": 160,
+              "rectOk": true,
+              "rectW": 303
+            },
+            {
+              "category": "Components",
+              "error": null,
+              "interacted": null,
+              "mounted": true,
+              "name": "Counter",
+              "rectH": 160,
+              "rectOk": true,
+              "rectW": 303
+            }
+          ],
+          "interactionsPassed": 0,
+          "interactionsTotal": 2,
+          "mounted": 15,
+          "rectOk": 15,
+          "total": 16
+        },
+        "bridge_stats": {
+          "dom_ops": 3963,
+          "elements_created": 272,
+          "text_nodes_created": 172,
+          "style_sheets_injected": 1,
+          "layout_queries": 81,
+          "computed_style_queries": 178,
+          "selector_queries": 34,
+          "canvas2d_flushes": 52,
+          "waapi_animations": 6,
+          "webgl": {
+            "shaders_attempted": 0,
+            "shaders_translated": 0,
+            "shader_errors": [],
+            "programs_linked": 0,
+            "draw_calls": 0,
+            "unsupported_calls": {}
+          }
+        },
+        "screenshot": "blitz-v8-reactbits-ui.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 7.4,
+          "rmse": 34.21,
+          "diffPixelsPct": 6.42,
+          "gridMatchPct": 91.67
+        }
+      },
+      {
+        "engine": "blitz-v8",
+        "scene": "reactbits-bg",
+        "ok": true,
+        "js_errors": [],
+        "cold_start_ms": 2169.66,
+        "mount_ms": 2064.24,
+        "first_paint_ms": 13.47,
+        "anim_frame_ms": {
+          "samples": 30,
+          "avg_ms": 44.64,
+          "p50_ms": 30.97,
+          "p95_ms": 174.03,
+          "p99_ms": 259.29,
+          "max_ms": 259.29
+        },
+        "rune_frame_ms": {
+          "samples": 2,
+          "avg_ms": 1.42,
+          "p50_ms": 2.78,
+          "p95_ms": 2.78,
+          "p99_ms": 2.78,
+          "max_ms": 2.78
+        },
+        "input_latency_ms": {
+          "samples": 6,
+          "avg_ms": 42.94,
+          "p50_ms": 47.62,
+          "p95_ms": 68.75,
+          "p99_ms": 68.75,
+          "max_ms": 68.75
+        },
+        "idle_cpu_pct": 18.67,
+        "memory": {
+          "root_pid": 7296,
+          "root_ws_mb": 221.93,
+          "root_priv_mb": 282.16,
+          "child_count": 0,
+          "child_ws_mb": 0,
+          "child_priv_mb": 0,
+          "total_procs": 1,
+          "total_ws_mb": 221.93,
+          "total_priv_mb": 282.16,
+          "processes": [
+            {
+              "pid": 7296,
+              "parent_pid": 1876,
+              "name": "blitz-v8.exe",
+              "working_set_mb": 221.93,
+              "private_bytes_mb": 282.16
+            }
+          ]
+        },
+        "binary_bytes": 86280192,
+        "non_black_pixels_pct": 22.26,
+        "interactions": {
+          "components": [
+            {
+              "category": "WebGL2",
+              "error": null,
+              "interacted": true,
+              "mounted": true,
+              "name": "Aurora",
+              "rectH": 340,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "WebGL2",
+              "error": null,
+              "interacted": true,
+              "mounted": true,
+              "name": "Iridescence",
+              "rectH": 340,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "WebGL-OGL",
+              "error": null,
+              "interacted": true,
+              "mounted": true,
+              "name": "Particles",
+              "rectH": 340,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "Canvas2D",
+              "error": null,
+              "interacted": true,
+              "mounted": true,
+              "name": "Waves",
+              "rectH": 340,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "Canvas2D",
+              "error": null,
+              "interacted": true,
+              "mounted": true,
+              "name": "LetterGlitch",
+              "rectH": 340,
+              "rectOk": true,
+              "rectW": 408
+            },
+            {
+              "category": "Canvas2D+GSAP",
+              "error": null,
+              "interacted": true,
+              "mounted": true,
+              "name": "DotGrid",
+              "rectH": 340,
+              "rectOk": true,
+              "rectW": 408
+            }
+          ],
+          "interactionsPassed": 6,
+          "interactionsTotal": 6,
+          "mounted": 6,
+          "rectOk": 6,
+          "total": 6
+        },
+        "bridge_stats": {
+          "dom_ops": 286,
+          "elements_created": 61,
+          "text_nodes_created": 14,
+          "style_sheets_injected": 1,
+          "layout_queries": 40,
+          "computed_style_queries": 0,
+          "selector_queries": 12,
+          "canvas2d_flushes": 3,
+          "waapi_animations": 0,
+          "webgl": {
+            "shaders_attempted": 14,
+            "shaders_translated": 3,
+            "shader_errors": [
+              "glsl parse: ParseErrors { errors: [Error { kind: UnknownType(\"sampler2D\"), meta: Span { start: 386, end: 395 } }] }",
+              "naga validate: Entry point main at Vertex is invalid",
+              "naga validate: Entry point main at Fragment is invalid",
+              "naga validate: Entry point main at Vertex is invalid",
+              "naga validate: Entry point main at Fragment is invalid",
+              "glsl parse: ParseErrors { errors: [Error { kind: UnknownType(\"sampler2D\"), meta: Span { start: 261, end: 270 } }] }",
+              "naga validate: Entry point main at Fragment is invalid",
+              "glsl parse: ParseErrors { errors: [Error { kind: UnknownVariable(\"gl_VertexID\"), meta: Span { start: 50, end: 61 } }] }",
+              "glsl parse: ParseErrors { errors: [Error { kind: UnknownType(\"sampler2D\"), meta: Span { start: 63, end: 72 } }] }",
+              "naga validate: Entry point main at Vertex is invalid",
+              "naga validate: Entry point main at Fragment is invalid"
+            ],
+            "programs_linked": 7,
+            "draw_calls": 115,
+            "unsupported_calls": {
+              "uniform2i": 113,
+              "bufferSubData": 41,
+              "bindAttribLocation": 1,
+              "texSubImage2D": 76,
+              "drawArraysInstanced": 119,
+              "vertexAttribDivisor": 7,
+              "uniform1ui": 39
+            }
+          }
+        },
+        "screenshot": "blitz-v8-reactbits-bg.png",
+        "pixelDiffVsChrome": {
+          "width": 1280,
+          "height": 800,
+          "mae": 34.77,
+          "rmse": 76.18,
+          "diffPixelsPct": 30.24,
+          "gridMatchPct": 54.17
+        }
+      }
+    ]
+  }
+}

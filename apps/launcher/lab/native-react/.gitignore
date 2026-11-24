@@ -1,0 +1,6 @@
+target/
+node_modules/
+bench-suite/node_modules/
+bench-suite/dist/
+vendor/
+*.log

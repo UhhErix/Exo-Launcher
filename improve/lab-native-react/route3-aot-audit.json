@@ -1,0 +1,131 @@
+{
+  "generatedAt": "2026-11-24T16:44:46.004Z",
+  "libraries": [
+    {
+      "library": "@heroui/react (v3.2.8 components)",
+      "filesAudited": 189,
+      "totalLoc": 14645,
+      "pureAotSurvive": 105,
+      "pureAotPct": 55.6,
+      "withRuntimeShimSurvive": 108,
+      "withRuntimeShimPct": 57.1,
+      "blockerTotals": {
+        "aria_portal_focus": 153,
+        "dynamic_js": 14,
+        "dom_measure": 27,
+        "waapi_anim_lib": 11,
+        "dom_global": 35,
+        "css_dynamic": 6,
+        "dom_observers": 3
+      }
+    },
+    {
+      "library": "react-aria-components (HeroUI engine)",
+      "filesAudited": 378,
+      "totalLoc": 32431,
+      "pureAotSurvive": 198,
+      "pureAotPct": 52.4,
+      "withRuntimeShimSurvive": 198,
+      "withRuntimeShimPct": 52.4,
+      "blockerTotals": {
+        "aria_portal_focus": 1170,
+        "dynamic_js": 18,
+        "dom_measure": 54,
+        "dom_global": 50,
+        "waapi_anim_lib": 6,
+        "dom_observers": 6,
+        "css_dynamic": 6
+      }
+    },
+    {
+      "library": "React Bits (all 221 ts-tailwind components)",
+      "filesAudited": 221,
+      "totalLoc": 155288,
+      "pureAotSurvive": 1,
+      "pureAotPct": 0.5,
+      "withRuntimeShimSurvive": 37,
+      "withRuntimeShimPct": 16.7,
+      "blockerTotals": {
+        "dom_global": 2236,
+        "waapi_anim_lib": 776,
+        "css_dynamic": 1208,
+        "dom_measure": 799,
+        "dom_observers": 365,
+        "canvas_webgl": 992,
+        "aria_portal_focus": 2,
+        "dynamic_js": 2
+      }
+    },
+    {
+      "library": "@radix-ui/react-* (20 shadcn primitives)",
+      "filesAudited": 92,
+      "totalLoc": 25462,
+      "pureAotSurvive": 1,
+      "pureAotPct": 1.1,
+      "withRuntimeShimSurvive": 1,
+      "withRuntimeShimPct": 1.1,
+      "blockerTotals": {
+        "dynamic_js": 115,
+        "dom_global": 344,
+        "dom_measure": 98,
+        "waapi_anim_lib": 16,
+        "dom_observers": 10,
+        "aria_portal_focus": 74
+      }
+    },
+    {
+      "library": "framer-motion (v12)",
+      "filesAudited": 163,
+      "totalLoc": 7559,
+      "pureAotSurvive": 122,
+      "pureAotPct": 74.8,
+      "withRuntimeShimSurvive": 157,
+      "withRuntimeShimPct": 96.3,
+      "blockerTotals": {
+        "dom_measure": 39,
+        "waapi_anim_lib": 51,
+        "dom_global": 63,
+        "css_dynamic": 1,
+        "dynamic_js": 2,
+        "dom_observers": 4
+      }
+    },
+    {
+      "library": "gsap (v3.15.1)",
+      "filesAudited": 66,
+      "totalLoc": 45973,
+      "pureAotSurvive": 0,
+      "pureAotPct": 0,
+      "withRuntimeShimSurvive": 53,
+      "withRuntimeShimPct": 80.3,
+      "blockerTotals": {
+        "waapi_anim_lib": 1191,
+        "dom_measure": 280,
+        "dom_observers": 10,
+        "dom_global": 138,
+        "css_dynamic": 53,
+        "dynamic_js": 6,
+        "canvas_webgl": 2
+      }
+    },
+    {
+      "library": "Exo Launcher ui/src/",
+      "filesAudited": 427,
+      "totalLoc": 83842,
+      "pureAotSurvive": 219,
+      "pureAotPct": 51.3,
+      "withRuntimeShimSurvive": 392,
+      "withRuntimeShimPct": 91.8,
+      "blockerTotals": {
+        "dom_global": 1287,
+        "waapi_anim_lib": 65,
+        "dom_measure": 272,
+        "aria_portal_focus": 1,
+        "dom_observers": 49,
+        "canvas_webgl": 12,
+        "css_dynamic": 12
+      }
+    }
+  ],
+  "sampleAotOutput": "use rune::{col, row, el, text, Color, El};\npub fn compiled_view() -> El {\n    col().p(16.0).gap(8.0).rounded(12.0).bg(Color::rgb(24, 24, 27))\n      .child(el()\n        .child(text(\"Exo Native\")))\n      .child(el()\n        .child(text(\"Compiled AOT from static JSX\")))\n}"
+}

@@ -1,0 +1,287 @@
+{
+  "engine": "blitz-v8",
+  "scene": "shadcn-radix",
+  "ok": false,
+  "js_errors": [
+    "TypeError: Cannot read properties of undefined (reading 'length')"
+  ],
+  "cold_start_ms": 553.42,
+  "mount_ms": 351.48,
+  "first_paint_ms": 11.71,
+  "anim_frame_ms": {
+    "samples": 30,
+    "avg_ms": 8.44,
+    "p50_ms": 7.5,
+    "p95_ms": 11.53,
+    "p99_ms": 13.56,
+    "max_ms": 13.56
+  },
+  "rune_frame_ms": {
+    "samples": 2,
+    "avg_ms": 0.83,
+    "p50_ms": 1.57,
+    "p95_ms": 1.57,
+    "p99_ms": 1.57,
+    "max_ms": 1.57
+  },
+  "input_latency_ms": {
+    "samples": 6,
+    "avg_ms": 16.09,
+    "p50_ms": 14.75,
+    "p95_ms": 29.04,
+    "p99_ms": 29.04,
+    "max_ms": 29.04
+  },
+  "idle_cpu_pct": 19.38,
+  "memory": {
+    "root_pid": 18988,
+    "root_ws_mb": 183.6,
+    "root_priv_mb": 199.4,
+    "child_count": 0,
+    "child_ws_mb": -0.0,
+    "child_priv_mb": -0.0,
+    "total_procs": 1,
+    "total_ws_mb": 183.6,
+    "total_priv_mb": 199.4,
+    "processes": [
+      {
+        "pid": 18988,
+        "parent_pid": 1876,
+        "name": "blitz-v8.exe",
+        "working_set_mb": 183.6,
+        "private_bytes_mb": 199.4
+      }
+    ]
+  },
+  "binary_bytes": 86280192,
+  "non_black_pixels_pct": 7.2,
+  "interactions": {
+    "components": [
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "RadixSwitch",
+        "rectH": 77,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "RadixCheckbox",
+        "rectH": 77,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "RadixToggle",
+        "rectH": 77,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixToggleGroup",
+        "rectH": 77,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixRadioGroup",
+        "rectH": 77,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixSlider",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Feedback",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixProgress",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Display",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixAvatar",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Layout",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixSeparator",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Layout",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixScrollArea",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Navigation",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "RadixTabs",
+        "rectH": 143,
+        "rectOk": true,
+        "rectW": 492
+      },
+      {
+        "category": "Layout",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "RadixAccordion",
+        "rectH": 143,
+        "rectOk": true,
+        "rectW": 492
+      },
+      {
+        "category": "Layout",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "RadixCollapsible",
+        "rectH": 143,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Overlays",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "RadixDialog",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Overlays",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixAlertDialog",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Overlays",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixPopover",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Overlays",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixDropdownMenu",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Inputs",
+        "error": "Cannot read properties of undefined (reading 'length')",
+        "interacted": null,
+        "mounted": false,
+        "name": "RadixSelect",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Overlays",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixHoverCard",
+        "rectH": 75,
+        "rectOk": true,
+        "rectW": 240
+      },
+      {
+        "category": "Overlays",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadixTooltip",
+        "rectH": 75,
+        "rectOk": true,
+        "rectW": 240
+      }
+    ],
+    "interactionsPassed": 0,
+    "interactionsTotal": 7,
+    "mounted": 19,
+    "rectOk": 19,
+    "total": 20
+  },
+  "bridge_stats": {
+    "dom_ops": 1958,
+    "elements_created": 364,
+    "text_nodes_created": 150,
+    "style_sheets_injected": 3,
+    "layout_queries": 33,
+    "computed_style_queries": 6,
+    "selector_queries": 47,
+    "canvas2d_flushes": 0,
+    "waapi_animations": 0,
+    "webgl": {
+      "shaders_attempted": 0,
+      "shaders_translated": 0,
+      "shader_errors": [],
+      "programs_linked": 0,
+      "draw_calls": 0,
+      "unsupported_calls": {}
+    }
+  },
+  "screenshot": "blitz-v8-shadcn-radix.png"
+}

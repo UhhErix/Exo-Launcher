@@ -1,0 +1,16 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@source "../src";
+@source "../../vendor/react-bits/src/ts-tailwind";
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 1280px;
+  min-height: 800px;
+  background-color: #050508;
+  color: #f4f4f6;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}

@@ -1,0 +1,203 @@
+{
+  "engine": "blitz-qjs",
+  "scene": "motion-gsap",
+  "ok": false,
+  "js_errors": [
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n",
+    "    at _getComputedProperty2 (eval_script:29279:48)\n    at _getComputedTransformMatrixAsArray2 (eval_script:29650:53)\n    at _getMatrix2 (eval_script:29654:118)\n    at _parseTransform2 (eval_script:29725:33)\n    at _get2 (eval_script:29437:39)\n    at init3 (eval_script:30090:39)\n    at _initTween2 (eval_script:28053:102)\n    at _attemptInitTween2 (eval_script:26310:30)\n    at render3 (eval_script:28318:94)\n    at render3 (eval_script:27553:188)\n"
+  ],
+  "cold_start_ms": 300.09,
+  "mount_ms": 217.42,
+  "first_paint_ms": 12.09,
+  "anim_frame_ms": {
+    "samples": 30,
+    "avg_ms": 10.28,
+    "p50_ms": 9.78,
+    "p95_ms": 14.28,
+    "p99_ms": 15.26,
+    "max_ms": 15.26
+  },
+  "rune_frame_ms": {
+    "samples": 0,
+    "avg_ms": 0.0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0,
+    "p99_ms": 0.0,
+    "max_ms": 0.0
+  },
+  "input_latency_ms": {
+    "samples": 6,
+    "avg_ms": 11.29,
+    "p50_ms": 12.13,
+    "p95_ms": 17.13,
+    "p99_ms": 17.13,
+    "max_ms": 17.13
+  },
+  "idle_cpu_pct": 26.45,
+  "memory": {
+    "root_pid": 25496,
+    "root_ws_mb": 105.13,
+    "root_priv_mb": 107.53,
+    "child_count": 0,
+    "child_ws_mb": -0.0,
+    "child_priv_mb": -0.0,
+    "total_procs": 1,
+    "total_ws_mb": 105.13,
+    "total_priv_mb": 107.53,
+    "processes": [
+      {
+        "pid": 25496,
+        "parent_pid": 25068,
+        "name": "blitz-qjs.exe",
+        "working_set_mb": 105.13,
+        "private_bytes_mb": 107.53
+      }
+    ]
+  },
+  "binary_bytes": 43833856,
+  "non_black_pixels_pct": 23.78,
+  "interactions": {
+    "components": [
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "MotionSpring",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "MotionLayoutId",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "MotionAnimatePresence",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "MotionUseSpring",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "MotionSvgPath",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "WAAPI",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "WaapiNativeShim",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "GSAP",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "GsapTween",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "GSAP",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "GsapStagger",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 828
+      }
+    ],
+    "interactionsPassed": 0,
+    "interactionsTotal": 2,
+    "mounted": 8,
+    "rectOk": 8,
+    "total": 8
+  },
+  "bridge_stats": {
+    "dom_ops": 727,
+    "elements_created": 87,
+    "text_nodes_created": 29,
+    "style_sheets_injected": 1,
+    "layout_queries": 12,
+    "computed_style_queries": 222,
+    "selector_queries": 13,
+    "canvas2d_flushes": 0,
+    "waapi_animations": 4,
+    "webgl": {
+      "shaders_attempted": 0,
+      "shaders_translated": 0,
+      "shader_errors": [],
+      "programs_linked": 0,
+      "draw_calls": 0,
+      "unsupported_calls": {}
+    }
+  },
+  "screenshot": "blitz-qjs-motion-gsap.png"
+}

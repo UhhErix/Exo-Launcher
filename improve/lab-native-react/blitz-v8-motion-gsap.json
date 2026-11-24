@@ -1,0 +1,203 @@
+{
+  "engine": "blitz-v8",
+  "scene": "motion-gsap",
+  "ok": false,
+  "js_errors": [
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)",
+    "TypeError: Cannot read properties of null (reading 'replace')\n    at _getComputedProperty2 (<anonymous>:29235:57)\n    at _getComputedTransformMatrixAsArray2 (<anonymous>:29606:24)\n    at _getMatrix2 (<anonymous>:29610:83)\n    at _parseTransform2 (<anonymous>:29681:14)\n    at _get2 (<anonymous>:29393:15)\n    at Plugin.init3 [as init] (<anonymous>:30046:26)\n    at _initTween2 (<anonymous>:28009:49)\n    at _attemptInitTween2 (<anonymous>:26266:5)\n    at Tween2.render3 [as render] (<anonymous>:28274:15)\n    at Timeline2.render3 [as render] (<anonymous>:27509:21)"
+  ],
+  "cold_start_ms": 448.08,
+  "mount_ms": 334.81,
+  "first_paint_ms": 9.95,
+  "anim_frame_ms": {
+    "samples": 30,
+    "avg_ms": 10.02,
+    "p50_ms": 7.52,
+    "p95_ms": 20.75,
+    "p99_ms": 21.65,
+    "max_ms": 21.65
+  },
+  "rune_frame_ms": {
+    "samples": 2,
+    "avg_ms": 0.27,
+    "p50_ms": 0.51,
+    "p95_ms": 0.51,
+    "p99_ms": 0.51,
+    "max_ms": 0.51
+  },
+  "input_latency_ms": {
+    "samples": 6,
+    "avg_ms": 15.97,
+    "p50_ms": 20.4,
+    "p95_ms": 28.85,
+    "p99_ms": 28.85,
+    "max_ms": 28.85
+  },
+  "idle_cpu_pct": 22.82,
+  "memory": {
+    "root_pid": 25208,
+    "root_ws_mb": 174.94,
+    "root_priv_mb": 194.82,
+    "child_count": 0,
+    "child_ws_mb": -0.0,
+    "child_priv_mb": -0.0,
+    "total_procs": 1,
+    "total_ws_mb": 174.94,
+    "total_priv_mb": 194.82,
+    "processes": [
+      {
+        "pid": 25208,
+        "parent_pid": 1876,
+        "name": "blitz-v8.exe",
+        "working_set_mb": 174.94,
+        "private_bytes_mb": 194.82
+      }
+    ]
+  },
+  "binary_bytes": 86280192,
+  "non_black_pixels_pct": 23.78,
+  "interactions": {
+    "components": [
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "MotionSpring",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "MotionLayoutId",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "MotionAnimatePresence",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "MotionUseSpring",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "framer-motion",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "MotionSvgPath",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "WAAPI",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "WaapiNativeShim",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "GSAP",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "GsapTween",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 408
+      },
+      {
+        "category": "GSAP",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "GsapStagger",
+        "rectH": 176,
+        "rectOk": true,
+        "rectW": 828
+      }
+    ],
+    "interactionsPassed": 0,
+    "interactionsTotal": 2,
+    "mounted": 8,
+    "rectOk": 8,
+    "total": 8
+  },
+  "bridge_stats": {
+    "dom_ops": 727,
+    "elements_created": 87,
+    "text_nodes_created": 29,
+    "style_sheets_injected": 1,
+    "layout_queries": 12,
+    "computed_style_queries": 222,
+    "selector_queries": 13,
+    "canvas2d_flushes": 0,
+    "waapi_animations": 4,
+    "webgl": {
+      "shaders_attempted": 0,
+      "shaders_translated": 0,
+      "shader_errors": [],
+      "programs_linked": 0,
+      "draw_calls": 0,
+      "unsupported_calls": {}
+    }
+  },
+  "screenshot": "blitz-v8-motion-gsap.png"
+}

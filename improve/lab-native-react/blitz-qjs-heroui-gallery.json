@@ -1,0 +1,435 @@
+{
+  "engine": "blitz-qjs",
+  "scene": "heroui-gallery",
+  "ok": true,
+  "js_errors": [],
+  "cold_start_ms": 5609.37,
+  "mount_ms": 4564.94,
+  "first_paint_ms": 32.86,
+  "anim_frame_ms": {
+    "samples": 30,
+    "avg_ms": 12.45,
+    "p50_ms": 12.59,
+    "p95_ms": 16.72,
+    "p99_ms": 20.4,
+    "max_ms": 20.4
+  },
+  "rune_frame_ms": {
+    "samples": 0,
+    "avg_ms": 0.0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0,
+    "p99_ms": 0.0,
+    "max_ms": 0.0
+  },
+  "input_latency_ms": {
+    "samples": 6,
+    "avg_ms": 11.54,
+    "p50_ms": 12.39,
+    "p95_ms": 12.84,
+    "p99_ms": 12.84,
+    "max_ms": 12.84
+  },
+  "idle_cpu_pct": 15.6,
+  "memory": {
+    "root_pid": 23068,
+    "root_ws_mb": 157.56,
+    "root_priv_mb": 173.59,
+    "child_count": 0,
+    "child_ws_mb": -0.0,
+    "child_priv_mb": -0.0,
+    "total_procs": 1,
+    "total_ws_mb": 157.56,
+    "total_priv_mb": 173.59,
+    "processes": [
+      {
+        "pid": 23068,
+        "parent_pid": 23812,
+        "name": "blitz-qjs.exe",
+        "working_set_mb": 157.56,
+        "private_bytes_mb": 173.59
+      }
+    ]
+  },
+  "binary_bytes": 43885568,
+  "non_black_pixels_pct": 17.18,
+  "interactions": {
+    "components": [
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "Button",
+        "rectH": 121,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "ButtonGroup",
+        "rectH": 121,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "ToggleButton",
+        "rectH": 121,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "CloseButton",
+        "rectH": 121,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "Switch",
+        "rectH": 121,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "Checkbox",
+        "rectH": 121,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "RadioGroup",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Inputs",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Slider",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Forms",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Input",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Forms",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "TextArea",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Forms",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "NumberField",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Display",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Chip",
+        "rectH": 107,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Display",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Avatar",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Display",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Badge",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Display",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Kbd",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Display",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Link",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Feedback",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Spinner",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Feedback",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Skeleton",
+        "rectH": 83,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Feedback",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "ProgressBar",
+        "rectH": 92,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Feedback",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "ProgressCircle",
+        "rectH": 92,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Feedback",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Meter",
+        "rectH": 92,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Layout",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Separator",
+        "rectH": 92,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Navigation",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Breadcrumbs",
+        "rectH": 92,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Display",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "TagGroup",
+        "rectH": 92,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Layout",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Card",
+        "rectH": 155,
+        "rectOk": true,
+        "rectW": 409
+      },
+      {
+        "category": "Feedback",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Alert",
+        "rectH": 155,
+        "rectOk": true,
+        "rectW": 409
+      },
+      {
+        "category": "Navigation",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "Tabs",
+        "rectH": 155,
+        "rectOk": true,
+        "rectW": 409
+      },
+      {
+        "category": "Layout",
+        "error": null,
+        "interacted": true,
+        "mounted": true,
+        "name": "Accordion",
+        "rectH": 179,
+        "rectOk": true,
+        "rectW": 409
+      },
+      {
+        "category": "Layout",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Disclosure",
+        "rectH": 179,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Overlays",
+        "error": null,
+        "interacted": false,
+        "mounted": true,
+        "name": "Modal",
+        "rectH": 179,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Overlays",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Popover",
+        "rectH": 179,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Overlays",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Tooltip",
+        "rectH": 179,
+        "rectOk": true,
+        "rectW": 200
+      },
+      {
+        "category": "Navigation",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Pagination",
+        "rectH": 181,
+        "rectOk": true,
+        "rectW": 409
+      },
+      {
+        "category": "Display",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "Table",
+        "rectH": 181,
+        "rectOk": true,
+        "rectW": 409
+      },
+      {
+        "category": "Display",
+        "error": null,
+        "interacted": null,
+        "mounted": true,
+        "name": "EmptyState",
+        "rectH": 181,
+        "rectOk": true,
+        "rectW": 409
+      }
+    ],
+    "interactionsPassed": 1,
+    "interactionsTotal": 6,
+    "mounted": 35,
+    "rectOk": 35,
+    "total": 35
+  },
+  "bridge_stats": {
+    "dom_ops": 2386,
+    "elements_created": 413,
+    "text_nodes_created": 134,
+    "style_sheets_injected": 1,
+    "layout_queries": 49,
+    "computed_style_queries": 43,
+    "selector_queries": 108,
+    "canvas2d_flushes": 0,
+    "waapi_animations": 0,
+    "webgl": {
+      "shaders_attempted": 0,
+      "shaders_translated": 0,
+      "shader_errors": [],
+      "programs_linked": 0,
+      "draw_calls": 0,
+      "unsupported_calls": {}
+    }
+  },
+  "screenshot": "blitz-qjs-heroui-gallery.png"
+}

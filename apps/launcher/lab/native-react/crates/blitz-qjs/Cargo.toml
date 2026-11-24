@@ -1,0 +1,10 @@
+[package]
+name = "blitz-qjs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+blitz-react-core = { path = "../blitz-react-core" }
+rquickjs.workspace = true
+serde_json.workspace = true
