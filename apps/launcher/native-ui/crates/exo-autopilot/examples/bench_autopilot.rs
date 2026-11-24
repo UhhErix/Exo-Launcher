@@ -1,6 +1,6 @@
 use exo_autopilot::os::{AutopilotOs, Win32Os};
 use exo_autopilot::timer_res::TARGET_TIMER_100NS;
-use exo_autopilot::{AutopilotConfig, AutopilotEngine};
+use exo_autopilot::{AntiCheatClass, AutopilotConfig, AutopilotEngine};
 use serde::{Deserialize, Serialize};
 use std::process::{Child, Command};
 use std::sync::Arc;
@@ -397,7 +397,12 @@ fn main() {
     let game_child1 = spawn_self(&["--game-sim", "2200", "5000"]);
     let game_pid1 = game_child1.id();
 
-    engine.on_game_start(game_pid1, "synth-game-sim.exe", false, 0);
+    engine.on_game_start(
+        game_pid1,
+        "synth-game-sim.exe",
+        AntiCheatClass::OfflineAntiCheat,
+        0,
+    );
     let loop_start = Instant::now();
     let mut tick_ms = 0u64;
     let mut hog_cpu_sets_applied_ok = false;
@@ -429,7 +434,12 @@ fn main() {
     let mut engine2 = AutopilotEngine::new(os.clone(), cfg, None);
     let game_child2 = spawn_self(&["--game-sim", "1200", "5000"]);
     let game_pid2 = game_child2.id();
-    engine2.on_game_start(game_pid2, "synth-game-sim.exe", false, 0);
+    engine2.on_game_start(
+        game_pid2,
+        "synth-game-sim.exe",
+        AntiCheatClass::OfflineAntiCheat,
+        0,
+    );
     let corralled_count_session2_instant = engine2.status().corralled_count;
     let loop_start2 = Instant::now();
     let mut tick_ms2 = 0u64;

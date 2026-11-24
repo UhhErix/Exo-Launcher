@@ -17,6 +17,7 @@ use crate::session_pause::{
 use crate::standby::{SmartStandbyShield, StandbyConfig, StandbyStats};
 use crate::timer_res::{TimerResolutionGuard, TimerResolutionState};
 use crate::topology::{TopologyPlan, classify_topology};
+pub use exo_rpc::anticheat::AntiCheatClass;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -59,7 +60,7 @@ impl Default for AutopilotConfig {
 pub struct ActiveGameSession {
     pub pid: u32,
     pub name: String,
-    pub is_anti_cheat: bool,
+    pub anti_cheat_class: AntiCheatClass,
     pub foreground: bool,
     pub started_ms: u64,
 }
@@ -262,7 +263,7 @@ impl<O: AutopilotOs> AutopilotEngine<O> {
         &mut self,
         game_pid: u32,
         game_name: impl Into<String>,
-        is_anti_cheat: bool,
+        anti_cheat_class: AntiCheatClass,
         now_ms: u64,
     ) {
         if self.active_game.is_some() {
@@ -271,7 +272,7 @@ impl<O: AutopilotOs> AutopilotEngine<O> {
         self.active_game = Some(ActiveGameSession {
             pid: game_pid,
             name: game_name.into(),
-            is_anti_cheat,
+            anti_cheat_class,
             foreground: true,
             started_ms: now_ms,
         });
@@ -391,6 +392,7 @@ mod tests {
         default_cpu_sets: HashMap<u32, Vec<u32>>,
         eco_qos: HashMap<u32, bool>,
         touched_pids: HashSet<u32>,
+        set_touched_pids: HashSet<u32>,
         timer_set_calls: Vec<(u32, bool)>,
         memory: MemorySnapshot,
         purge_count: u64,
@@ -447,6 +449,7 @@ mod tests {
         fn set_priority_class(&self, pid: u32, priority_class: u32) -> bool {
             let mut g = self.inner.lock().unwrap();
             g.touched_pids.insert(pid);
+            g.set_touched_pids.insert(pid);
             g.priorities.insert(pid, priority_class);
             true
         }
@@ -458,12 +461,14 @@ mod tests {
         fn set_default_cpu_sets(&self, pid: u32, ids: &[u32]) -> bool {
             let mut g = self.inner.lock().unwrap();
             g.touched_pids.insert(pid);
+            g.set_touched_pids.insert(pid);
             g.default_cpu_sets.insert(pid, ids.to_vec());
             true
         }
         fn set_eco_qos(&self, pid: u32, enabled: bool) -> bool {
             let mut g = self.inner.lock().unwrap();
             g.touched_pids.insert(pid);
+            g.set_touched_pids.insert(pid);
             g.eco_qos.insert(pid, enabled);
             true
         }
@@ -757,7 +762,12 @@ mod tests {
             ..Default::default()
         };
         let mut engine = AutopilotEngine::new(os.clone(), cfg, None);
-        engine.on_game_start(1000, "VALORANT-Win64-Shipping.exe", true, 1000);
+        engine.on_game_start(
+            1000,
+            "VALORANT-Win64-Shipping.exe",
+            AntiCheatClass::CompetitivePvpOnline,
+            1000,
+        );
 
         engine.tick(2000, false);
         {
@@ -874,7 +884,7 @@ mod tests {
         };
 
         let mut engine = AutopilotEngine::new(os.clone(), cfg.clone(), None);
-        engine.on_game_start(1000, "Sekiro.exe", false, 500);
+        engine.on_game_start(1000, "Sekiro.exe", AntiCheatClass::OfflineAntiCheat, 500);
         std::mem::forget(engine);
 
         {
@@ -932,7 +942,7 @@ mod tests {
             ..Default::default()
         };
         let mut engine = AutopilotEngine::new(os.clone(), cfg, None);
-        engine.on_game_start(1000, "Game.exe", false, 1000);
+        engine.on_game_start(1000, "Game.exe", AntiCheatClass::OfflineAntiCheat, 1000);
 
         assert!(!engine.status().timer.active);
         assert_eq!(
@@ -989,7 +999,7 @@ mod tests {
         };
 
         let mut engine = AutopilotEngine::new(os.clone(), cfg.clone(), None);
-        engine.on_game_start(1000, "Sekiro.exe", false, 1000);
+        engine.on_game_start(1000, "Sekiro.exe", AntiCheatClass::OfflineAntiCheat, 1000);
         assert!(engine.status().timer.active);
         assert_eq!(engine.status().corralled_count, 0);
 
@@ -1040,7 +1050,7 @@ mod tests {
                 .learned_offenders
                 .contains(&"custom_transcoder".to_string())
         );
-        engine2.on_game_start(1000, "Sekiro.exe", false, 5000);
+        engine2.on_game_start(1000, "Sekiro.exe", AntiCheatClass::OfflineAntiCheat, 5000);
         assert_eq!(engine2.status().corralled_count, 1);
         assert!(!os.inner.lock().unwrap().default_cpu_sets[&7777].is_empty());
 
@@ -1049,6 +1059,240 @@ mod tests {
             os.inner.lock().unwrap().default_cpu_sets.get(&7777),
             Some(&vec![])
         );
+        let _ = std::fs::remove_file(&jpath);
+    }
+
+    #[test]
+    fn never_opens_game_tree_with_set_rights_for_competitive_or_unknown_class() {
+        for ac_class in [
+            AntiCheatClass::CompetitivePvpOnline,
+            AntiCheatClass::Unknown,
+        ] {
+            let jpath = temp_journal(&format!("game_tree_{ac_class:?}"));
+            let mut st = MockState {
+                brand: "AMD Ryzen 5 5600X 6-Core Processor".into(),
+                cpu_sets: make_monolithic_5600x(),
+                processes: vec![
+                    ProcessEntry {
+                        pid: 1000,
+                        parent_pid: 1,
+                        name: "ShooterGame.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 1001,
+                        parent_pid: 1000,
+                        name: "chrome.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 1002,
+                        parent_pid: 1001,
+                        name: "CrashReporter.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 2101,
+                        parent_pid: 4,
+                        name: "equ8.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 2102,
+                        parent_pid: 4,
+                        name: "ACE-Guard.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 2103,
+                        parent_pid: 4,
+                        name: "mhyprot3.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 2104,
+                        parent_pid: 4,
+                        name: "javelin.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 2105,
+                        parent_pid: 4,
+                        name: "GameGuard.des".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 2106,
+                        parent_pid: 4,
+                        name: "zakynthos.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 2107,
+                        parent_pid: 4,
+                        name: "tvk.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 2108,
+                        parent_pid: 4,
+                        name: "HackShield.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 2109,
+                        parent_pid: 4,
+                        name: "VendorAntiCheatSvc.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 5100,
+                        parent_pid: 1,
+                        name: "blender.exe".into(),
+                        session_id: Some(1),
+                    },
+                    ProcessEntry {
+                        pid: 5101,
+                        parent_pid: 1,
+                        name: "spotify.exe".into(),
+                        session_id: Some(1),
+                    },
+                ],
+                ..Default::default()
+            };
+            for p in &st.processes {
+                st.cpu_times.insert(p.pid, 1_000_000);
+                st.priorities.insert(p.pid, PRIORITY_NORMAL);
+            }
+
+            let os = MockOs::new(st);
+            let cfg = AutopilotConfig {
+                journal_path: jpath.clone(),
+                ..Default::default()
+            };
+            let mut engine = AutopilotEngine::new(os.clone(), cfg, None);
+            engine.on_game_start(1000, "ShooterGame.exe", ac_class, 1000);
+            assert!(ac_class.forbids_game_tree_set_rights());
+            assert_eq!(
+                engine
+                    .status()
+                    .active_game
+                    .as_ref()
+                    .map(|g| g.anti_cheat_class),
+                Some(ac_class)
+            );
+
+            engine.tick(1500, false);
+            for step in 1..=3u64 {
+                {
+                    let mut g = os.inner.lock().unwrap();
+                    for pid in [
+                        1000u32, 1001, 1002, 2101, 2102, 2103, 2104, 2105, 2106, 2107, 2108, 2109,
+                        5100,
+                    ] {
+                        *g.cpu_times.get_mut(&pid).unwrap() += 30_000_000;
+                    }
+                }
+                engine.tick(1500 + step * 500, false);
+            }
+
+            {
+                let g = os.inner.lock().unwrap();
+                for forbidden_pid in [
+                    1000u32, 1001, 1002, 2101, 2102, 2103, 2104, 2105, 2106, 2107, 2108, 2109,
+                ] {
+                    assert!(
+                        !g.set_touched_pids.contains(&forbidden_pid),
+                        "PID {forbidden_pid} must never be opened with SET rights for {ac_class:?}"
+                    );
+                    assert!(
+                        !g.touched_pids.contains(&forbidden_pid),
+                        "PID {forbidden_pid} must never be touched for {ac_class:?}"
+                    );
+                }
+                assert!(g.set_touched_pids.contains(&5100));
+                assert!(g.set_touched_pids.contains(&5101));
+                assert_eq!(g.priorities.get(&5100), Some(&PRIORITY_BELOW_NORMAL));
+                assert_eq!(g.eco_qos.get(&5100), Some(&true));
+                assert_eq!(g.default_cpu_sets.get(&5101), Some(&vec![265, 266, 267]));
+            }
+
+            engine.on_game_exit();
+            {
+                let g = os.inner.lock().unwrap();
+                assert_eq!(g.priorities.get(&5100), Some(&PRIORITY_NORMAL));
+                assert_eq!(g.eco_qos.get(&5100), Some(&false));
+                assert_eq!(g.default_cpu_sets.get(&5100), Some(&vec![]));
+                assert_eq!(g.default_cpu_sets.get(&5101), Some(&vec![]));
+            }
+            let _ = std::fs::remove_file(&jpath);
+        }
+    }
+
+    #[test]
+    fn power_plan_reverts_on_exit_and_crash_journal_restores_scheme_guid() {
+        let orig_guid = "381b4222-f694-41f0-9685-ff5bb260df2e";
+        let gaming_guid = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c";
+        let jpath = temp_journal("power_plan_guid");
+
+        let st = MockState {
+            brand: "AMD Ryzen 5 5600X 6-Core Processor".into(),
+            cpu_sets: make_monolithic_5600x(),
+            power_scheme: Some(orig_guid.into()),
+            ..Default::default()
+        };
+        let os = MockOs::new(st);
+        let cfg = AutopilotConfig {
+            journal_path: jpath.clone(),
+            gaming_power_scheme_guid: Some(gaming_guid.into()),
+            ..Default::default()
+        };
+
+        let mut engine = AutopilotEngine::new(os.clone(), cfg.clone(), None);
+        engine.on_game_start(1000, "Game.exe", AntiCheatClass::OfflineAntiCheat, 1000);
+        assert_eq!(
+            os.inner.lock().unwrap().power_scheme.as_deref(),
+            Some(gaming_guid)
+        );
+        let persisted = AutopilotJournal::load(&jpath);
+        assert!(persisted.active_session);
+        assert_eq!(persisted.previous_power_scheme.as_deref(), Some(orig_guid));
+
+        engine.on_game_exit();
+        assert_eq!(
+            os.inner.lock().unwrap().power_scheme.as_deref(),
+            Some(orig_guid)
+        );
+        let after_exit = AutopilotJournal::load(&jpath);
+        assert!(!after_exit.active_session);
+        assert_eq!(after_exit.previous_power_scheme, None);
+
+        engine.on_game_start(1000, "Game.exe", AntiCheatClass::OfflineAntiCheat, 2000);
+        assert_eq!(
+            os.inner.lock().unwrap().power_scheme.as_deref(),
+            Some(gaming_guid)
+        );
+        std::mem::forget(engine);
+
+        let before_recovery = AutopilotJournal::load(&jpath);
+        assert!(before_recovery.active_session);
+        assert_eq!(
+            before_recovery.previous_power_scheme.as_deref(),
+            Some(orig_guid)
+        );
+
+        let (recovered_journal, restored_items) = recover_from_journal(os.as_ref(), &jpath);
+        assert!(restored_items >= 1);
+        assert!(!recovered_journal.active_session);
+        assert_eq!(recovered_journal.previous_power_scheme, None);
+        assert_eq!(
+            os.inner.lock().unwrap().power_scheme.as_deref(),
+            Some(orig_guid)
+        );
+
+        let on_disk = AutopilotJournal::load(&jpath);
+        assert!(!on_disk.active_session);
+        assert_eq!(on_disk.previous_power_scheme, None);
         let _ = std::fs::remove_file(&jpath);
     }
 }

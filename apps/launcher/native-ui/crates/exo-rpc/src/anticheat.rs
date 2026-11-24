@@ -53,6 +53,134 @@ impl AntiCheatClass {
             Self::OnlineNonCompetitivePve | Self::OfflineAntiCheat
         )
     }
+
+    pub const fn forbids_game_tree_set_rights(self) -> bool {
+        matches!(self, Self::CompetitivePvpOnline | Self::Unknown)
+    }
+}
+
+pub const ANTI_CHEAT_EXACT_NAMES: &[&str] = &[
+    "vgc",
+    "vgk",
+    "vgtray",
+    "vanguard",
+    "easyanticheat",
+    "easyanticheat_eos",
+    "easyanticheat_setup",
+    "easyanticheat_eos_setup",
+    "easyanticheat_launcher",
+    "eac_launcher",
+    "start_protected_game",
+    "start_protected_game64",
+    "beservice",
+    "beservice_x64",
+    "bedaisy",
+    "battleye",
+    "battleye_launcher",
+    "belauncher",
+    "faceit",
+    "faceitclient",
+    "faceitservice",
+    "eseaclient",
+    "pnkbstra",
+    "pnkbstrb",
+    "pbsvc",
+    "punkbuster",
+    "xigncode",
+    "xigncode3",
+    "xhunter1",
+    "nprotect",
+    "gameguard",
+    "gameguard.des",
+    "gamemon",
+    "gamemon64",
+    "gamemon.des",
+    "gamemon64.des",
+    "npggsvc",
+    "npggnt",
+    "npggnt64",
+    "sguard64",
+    "sguardsvc64",
+    "ace-tray",
+    "ace-base",
+    "ace-guard",
+    "ace-service",
+    "tencent ace",
+    "tencentace",
+    "tesafe",
+    "equ8",
+    "equ8_anticheat",
+    "equ8_helper",
+    "mhyprot",
+    "mhyprot2",
+    "mhyprot3",
+    "mhyprotect",
+    "hoyokprotect",
+    "javelin",
+    "zakynthos",
+    "tvk",
+    "hackshield",
+    "ehsvc",
+    "hsupdate",
+    "ricochet",
+    "randgrid",
+    "blackcipher",
+    "blackcipher64",
+    "nexongamesecurity",
+    "wellbia",
+    "anticheat",
+];
+
+pub const ANTI_CHEAT_PREFIXES: &[&str] = &[
+    "eaanticheat.",
+    "eaanticheat",
+    "easyanticheat",
+    "battleye",
+    "faceit",
+    "pnkbstr",
+    "xhunter",
+    "sguard",
+    "equ8",
+    "ace-tray",
+    "ace-base",
+    "ace-guard",
+    "mhyprot",
+    "javelin",
+    "vanguard",
+    "nprotect",
+    "gameguard",
+    "zakynthos",
+    "hackshield",
+];
+
+pub const ANTI_CHEAT_SUFFIXES: &[&str] = &["_be", "_eac", "_eac_eos"];
+
+pub const ANTI_CHEAT_SUBSTRINGS: &[&str] =
+    &["anticheat", "anti-cheat", "anti_cheat", "tencent ace"];
+
+pub fn normalize_process_name(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let tail = trimmed
+        .rsplit_once(['\\', '/'])
+        .map(|(_, f)| f)
+        .unwrap_or(trimmed);
+    let lower = tail.to_ascii_lowercase();
+    lower
+        .strip_suffix(".exe")
+        .or_else(|| lower.strip_suffix(".sys"))
+        .unwrap_or(&lower)
+        .to_string()
+}
+
+pub fn is_anti_cheat_process(name: &str) -> bool {
+    let bare = normalize_process_name(name);
+    if bare.is_empty() {
+        return false;
+    }
+    ANTI_CHEAT_EXACT_NAMES.contains(&bare.as_str())
+        || ANTI_CHEAT_PREFIXES.iter().any(|p| bare.starts_with(p))
+        || ANTI_CHEAT_SUFFIXES.iter().any(|s| bare.ends_with(s))
+        || ANTI_CHEAT_SUBSTRINGS.iter().any(|sub| bare.contains(sub))
 }
 
 #[cfg(test)]
@@ -142,5 +270,55 @@ mod tests {
         assert!(!AntiCheatClass::Unknown.allows_exo_flow());
         assert!(AntiCheatClass::OnlineNonCompetitivePve.allows_exo_flow());
         assert!(AntiCheatClass::OfflineAntiCheat.allows_exo_flow());
+    }
+
+    #[test]
+    fn shared_anti_cheat_process_list_covers_required_engines() {
+        let protected = [
+            "vgc.exe",
+            "vgk.sys",
+            "vanguard.exe",
+            "EasyAntiCheat_EOS.exe",
+            "BEService_x64.exe",
+            "FortniteClient-Win64-Shipping_BE.exe",
+            "equ8.exe",
+            "equ8_helper.exe",
+            "ACE-Tray.exe",
+            "ACE-Base.exe",
+            "ACE-Guard.exe",
+            "Tencent ACE.exe",
+            "SGuard64.exe",
+            "SGuardSvc64.exe",
+            "mhyprot2.exe",
+            "mhyprot3.exe",
+            "javelin.exe",
+            "EAAntiCheat.GameServiceLauncher.exe",
+            "nProtect.exe",
+            "GameGuard.des",
+            "GameMon64.des",
+            "zakynthos.exe",
+            "tvk.exe",
+            "HackShield.exe",
+            "CustomVendorAntiCheatService.exe",
+            "C:\\Program Files\\Vendor\\foo_anticheat_helper.exe",
+        ];
+        for name in protected {
+            assert!(
+                is_anti_cheat_process(name),
+                "expected anti-cheat match for {name}"
+            );
+        }
+
+        let normal = ["chrome.exe", "spotify.exe", "Sekiro.exe", "blender.exe", ""];
+        for name in normal {
+            assert!(
+                !is_anti_cheat_process(name),
+                "unexpected anti-cheat match for {name}"
+            );
+        }
+
+        assert!(AntiCheatClass::CompetitivePvpOnline.forbids_game_tree_set_rights());
+        assert!(AntiCheatClass::Unknown.forbids_game_tree_set_rights());
+        assert!(!AntiCheatClass::OfflineAntiCheat.forbids_game_tree_set_rights());
     }
 }

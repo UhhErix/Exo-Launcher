@@ -84,3 +84,11 @@ All commands run from `apps/launcher/native-ui/`:
 | `cargo test --workspace --locked` | **PASS (exit 0 — 260 passed, 0 failed: `exo-autopilot` 5, `exo-kit` 9, `exo-rpc` 27, `exo-ui` 219)** |
 | `cargo build --release --locked --bin exo-ui` | **PASS (exit 0)** |
 | Zero prose comments in new `.rs` files (`rg -n "//\|/\*"`) | **PASS (0 matches)** |
+
+## 5. Review Follow-Up (Rebased onto `feat/native-polish-2` @ `716f8fcf` / PR #169)
+
+- Moved the anti-cheat process-name list into shared `exo_rpc::anticheat` (`ANTI_CHEAT_EXACT_NAMES`, `ANTI_CHEAT_PREFIXES`, `ANTI_CHEAT_SUFFIXES`, `ANTI_CHEAT_SUBSTRINGS`, `normalize_process_name`, `is_anti_cheat_process`) and removed the private copy from `crates/exo-autopilot/src/blocklist.rs`.
+- Extended the shared list with `equ8`, `ace-tray` / `ace-base` / `ace-guard` / `tencent ace` (`sguard` retained), `mhyprot2` / `mhyprot3`, `javelin` (`eaanticheat` retained), `vanguard`, `nprotect` / `gameguard`, `zakynthos` / `tvk`, `hackshield`, `.sys` driver stripping, and `"*anticheat*"` substring matching.
+- Wired `exo_rpc::anticheat::AntiCheatClass` into `ActiveGameSession` and `on_game_start`, with new unit test `never_opens_game_tree_with_set_rights_for_competitive_or_unknown_class` verifying 0 SET-rights opens on the active game PID tree for both `CompetitivePvpOnline` and `Unknown` while background hogs are corralled/restrained and restored.
+- Added dedicated unit test `power_plan_reverts_on_exit_and_crash_journal_restores_scheme_guid` verifying normal exit restoration and crash-journal restoration of the exact power scheme GUID.
+- Verified locally (`--locked`): `cargo fmt --all -- --check` (exit 0), `cargo clippy -p exo-rpc -p exo-autopilot -p exo-ui --all-targets --locked -- -D warnings` (exit 0), `cargo test -p exo-rpc -p exo-autopilot -p exo-macros -p exo-controller --locked` (exit 0: `exo-autopilot` 7 passed, `exo-rpc` 30 passed, `exo-macros` 5 passed, `exo-controller` 5 passed), zero prose comments.

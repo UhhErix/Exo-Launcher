@@ -1,3 +1,4 @@
+use exo_rpc::anticheat::{is_anti_cheat_process, normalize_process_name};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -15,57 +16,6 @@ pub enum ProtectionReason {
     Input,
     Graphics,
 }
-
-const ANTI_CHEAT_EXACT: &[&str] = &[
-    "vgc",
-    "vgk",
-    "vgtray",
-    "easyanticheat",
-    "easyanticheat_eos",
-    "easyanticheat_setup",
-    "easyanticheat_eos_setup",
-    "easyanticheat_launcher",
-    "eac_launcher",
-    "start_protected_game",
-    "start_protected_game64",
-    "beservice",
-    "beservice_x64",
-    "bedaisy",
-    "battleye",
-    "battleye_launcher",
-    "belauncher",
-    "faceit",
-    "faceitclient",
-    "faceitservice",
-    "pnkbstra",
-    "pnkbstrb",
-    "pbsvc",
-    "xigncode",
-    "xigncode3",
-    "xhunter1",
-    "gamemon",
-    "gamemon64",
-    "gamemon.des",
-    "gamemon64.des",
-    "gameguard.des",
-    "npggsvc",
-    "sguard64",
-    "sguardsvc64",
-    "anticheat",
-    "ricochet",
-];
-
-const ANTI_CHEAT_PREFIXES: &[&str] = &[
-    "eaanticheat.",
-    "easyanticheat",
-    "battleye",
-    "faceit",
-    "pnkbstr",
-    "xhunter",
-    "sguard",
-];
-
-const ANTI_CHEAT_SUFFIXES: &[&str] = &["_be", "_eac", "_eac_eos"];
 
 const EXO_SELF: &[&str] = &[
     "exolauncher",
@@ -304,13 +254,7 @@ const KNOWN_BACKGROUND_HOGS: &[&str] = &[
 ];
 
 pub fn bare_name(raw: &str) -> String {
-    let trimmed = raw.trim();
-    let tail = trimmed
-        .rsplit_once(['\\', '/'])
-        .map(|(_, f)| f)
-        .unwrap_or(trimmed);
-    let lower = tail.to_ascii_lowercase();
-    lower.strip_suffix(".exe").unwrap_or(&lower).to_string()
+    normalize_process_name(raw)
 }
 
 fn matches_pattern(bare: &str, list: &[&str]) -> bool {
@@ -324,13 +268,7 @@ fn matches_pattern(bare: &str, list: &[&str]) -> bool {
 }
 
 pub fn is_anti_cheat(name: &str) -> bool {
-    let bare = bare_name(name);
-    if bare.is_empty() {
-        return false;
-    }
-    ANTI_CHEAT_EXACT.contains(&bare.as_str())
-        || ANTI_CHEAT_PREFIXES.iter().any(|p| bare.starts_with(p))
-        || ANTI_CHEAT_SUFFIXES.iter().any(|s| bare.ends_with(s))
+    is_anti_cheat_process(name)
 }
 
 pub fn is_known_background_hog(name: &str) -> bool {
