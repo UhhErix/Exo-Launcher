@@ -81,27 +81,61 @@ function summary(results: RuntimeResult[]) {
  * asking once, then each row says how it went; Repair all runs every Visual C++ installer again. Nothing is ever
  * uninstalled. A run hands the list what it found after.
  */
-export function RuntimesPanel({ items, onItems }: { items: RuntimeItem[]; onItems: (items: RuntimeItem[]) => void }) {
+export function RuntimesPanel({ items, onItems, initialDeferred = false }: { items: RuntimeItem[]; onItems: (items: RuntimeItem[]) => void; initialDeferred?: boolean }) {
   const [run, setRun] = useState<Run | null>(null)
   const [results, setResults] = useState<Record<string, RuntimeResult>>({})
-  const [note, setNote] = useState<{ text: string; error: boolean } | null>(null)
+  const [note, setNote] = useState<{ text: string; error: boolean; detail?: string } | null>(null)
+  const [deferred, setDeferred] = useState(initialDeferred)
   const [canceling, setCanceling] = useState(false)
   // What a press would do (never one Microsoft no longer supports, which waits for a game to ask), a result, or a download.
   const shown = (item: RuntimeItem) => (item.state === 'missing' && item.bulk) || item.state === 'outdated' || results[item.id]?.outcome === 'failed' || run?.progress?.id === item.id
 
-  useEffect(() => onHostEvent('runtimes.progress', progress => setRun(current => current && { ...current, progress })), [])
+  useEffect(() => { setDeferred(initialDeferred) }, [initialDeferred])
+
+  useEffect(() => onHostEvent('runtimes.progress', progress => {
+    setDeferred(false)
+    setRun(current => ({ mode: current?.mode ?? 'update', progress }))
+  }), [])
+
+  useEffect(() => onHostEvent('runtimes.done', result => {
+    setDeferred(false)
+    setRun(null)
+    setCanceling(false)
+    if (result.items) onItems(result.items)
+    setResults(Object.fromEntries(result.results.map(item => [item.id, item])))
+    if (result.declined || result.canceled || result.results.length === 0) {
+      setNote(result.message ? { text: result.message, error: !result.ok && !result.canceled } : null)
+    } else {
+      const details = result.results
+        .filter(item => item.outcome === 'failed' && item.detail)
+        .map(item => `${item.id}: ${item.detail}`)
+        .join('; ')
+      setNote({ text: summary(result.results), error: result.results.some(item => item.outcome === 'failed'), detail: details || undefined })
+    }
+  }), [onItems])
 
   async function start(mode: Mode) {
-    if (run || planOf(items, mode).length === 0) return
+    if (run || deferred || planOf(items, mode).length === 0) return
     setRun({ mode, progress: null })
     setResults({})
     setNote(null)
     try {
       const result = await host.runtimesInstall(mode)
+      if (result.deferred) {
+        setDeferred(true)
+        setNote(result.message ? { text: result.message, error: false } : { text: 'Will install when your game closes', error: false })
+        return
+      }
       if (result.items) onItems(result.items)
       setResults(Object.fromEntries(result.results.map(item => [item.id, item])))
       if (result.declined || result.canceled || result.results.length === 0) setNote(result.message ? { text: result.message, error: !result.ok && !result.canceled } : null)
-      else setNote({ text: summary(result.results), error: result.results.some(item => item.outcome === 'failed') })
+      else {
+        const details = result.results
+          .filter(item => item.outcome === 'failed' && item.detail)
+          .map(item => `${item.id}: ${item.detail}`)
+          .join('; ')
+        setNote({ text: summary(result.results), error: result.results.some(item => item.outcome === 'failed'), detail: details || undefined })
+      }
     } catch (error) {
       report(error, 'RuntimesPanel.install')
       setNote({ text: 'The runtimes couldn’t be installed. Try again.', error: true })
@@ -115,15 +149,18 @@ export function RuntimesPanel({ items, onItems }: { items: RuntimeItem[]; onItem
     setCanceling(true)
     try {
       const result = await host.runtimesCancel()
-      if (!result.ok && result.message) setNote({ text: result.message, error: false })
+      if (result.ok) setDeferred(false)
+      if (result.message) setNote({ text: result.message, error: false })
     } catch (error) {
       report(error, 'RuntimesPanel.cancel')
+    } finally {
+      setCanceling(false)
     }
   }
 
   return (
     <div className="exo-runtimes">
-      <Head items={items} run={run} note={note} canceling={canceling} onStart={mode => void start(mode)} onCancel={() => void cancel()} />
+      <Head items={items} run={run} deferred={deferred} note={note} canceling={canceling} onStart={mode => void start(mode)} onCancel={() => void cancel()} />
       <div className="exo-set-list">
         {items.filter(shown).map(item => <RuntimeRow key={item.id} item={item} result={results[item.id]} progress={run?.progress?.id === item.id ? run.progress : null} />)}
       </div>
@@ -132,10 +169,11 @@ export function RuntimesPanel({ items, onItems }: { items: RuntimeItem[]; onItem
 }
 
 /** The status line and its two buttons; while they install, the words and the Exo bar for all of it, and Cancel while it downloads. */
-function Head({ items, run, note, canceling, onStart, onCancel }: {
+function Head({ items, run, deferred, note, canceling, onStart, onCancel }: {
   items: RuntimeItem[]
   run: Run | null
-  note: { text: string; error: boolean } | null
+  deferred: boolean
+  note: { text: string; error: boolean; detail?: string } | null
   canceling: boolean
   onStart: (mode: Mode) => void
   onCancel: () => void
@@ -159,6 +197,16 @@ function Head({ items, run, note, canceling, onStart, onCancel }: {
       </div>
     )
   }
+  if (deferred) {
+    return (
+      <div className="exo-runtimes-head">
+        <span className="exo-runtimes-status" role="status">Will install when your game closes</span>
+        <div className="exo-runtimes-actions">
+          <button type="button" className="exo-set-btn" disabled={canceling} onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="exo-runtimes-head">
       <Status items={items} note={note} />
@@ -177,7 +225,7 @@ function Head({ items, run, note, canceling, onStart, onCancel }: {
  * (a "7 installed" that stayed read as all done beside an Install button); one that failed stays, with Copy logs and
  * what's left beside it.
  */
-function Status({ items, note }: { items: RuntimeItem[]; note: { text: string; error: boolean } | null }) {
+function Status({ items, note }: { items: RuntimeItem[]; note: { text: string; error: boolean; detail?: string } | null }) {
   const [shown, setShown] = useState(note)
   useEffect(() => {
     setShown(note)
@@ -187,9 +235,10 @@ function Status({ items, note }: { items: RuntimeItem[]; note: { text: string; e
   }, [note])
   if (!shown?.error) return <span className="exo-runtimes-status" role="status">{shown?.text ?? status(items)}</span>
   const left = runtimesToDo(items)
+  const copyText = shown.detail ? `${shown.text} (${shown.detail})` : shown.text
   return (
     <span className="exo-runtimes-status is-bad" role="status">
-      {shown.text}{left.missing.length + left.outdated.length > 0 ? ` ${status(items)}.` : ''} <CopyLogs error={shown.text} />
+      {shown.text}{left.missing.length + left.outdated.length > 0 ? ` ${status(items)}.` : ''} <CopyLogs error={copyText} />
     </span>
   )
 }
@@ -204,7 +253,12 @@ function RuntimeRow({ item, result, progress }: { item: RuntimeItem; result: Run
   const label = progress ? working(progress, 'update') : ''
   const share = progress?.phase === 'download' && progress.total ? progress.bytes / progress.total : null
   return (
-    <Row label={item.name} detail={versionsOf(item) || undefined} error={result?.outcome === 'failed' ? result.message : null}>
+    <Row
+      label={item.name}
+      detail={versionsOf(item) || undefined}
+      error={result?.outcome === 'failed' ? result.message : null}
+      errorDetail={result?.outcome === 'failed' ? result.detail : null}
+    >
       {progress?.phase === 'download' ? (
         <>
           {share === null ? null : <State><ProgressWords words="Downloading" value={share} /></State>}

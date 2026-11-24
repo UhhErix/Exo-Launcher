@@ -325,6 +325,7 @@ internal static class PlayerData
         new("shader-wipe.json", "ShaderWipeMarks", Why.ThisPc, "shader caches cleared after a driver change"),
         new("shaders-prepared.json", "ShaderPrepare", Why.ThisPc, "games whose shaders were built for this GPU and driver"),
         new("state.json", "ScsKillerStatus,TuneStore", Why.ThisPc, "the shader engine's and AutoTune's run state"),
+        new("applied-at.txt", "TuneStore", Why.ThisPc, "when AutoTune last applied a value, for the crash guard window"),
         new("data/games.json", "ScsKillerStatus", Why.ThisPc, "the shader engine's old game list, read to move it"),
         new("games.json", "ScsKillerStatus,WebHostBridge", Why.ThisPc, "the shader engine's game list and Steam's controller folder file name"),
         new("testing.json", "TuneStore", Why.ThisPc, "an AutoTune test in progress"),
