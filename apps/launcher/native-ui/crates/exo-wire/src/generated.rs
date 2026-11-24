@@ -1,13 +1,13 @@
 pub const HOST_CONTRACT_VERSION: u32 = 1;
-pub const SCHEMA_HASH: u64 = 0x8c54fcc6b7f3bda9;
+pub const SCHEMA_HASH: u64 = 0x729891a3fdfe3441;
 pub const METHOD_ID_UNKNOWN: u16 = 0;
 pub const EVENT_ID_UNKNOWN: u16 = 0;
 
-pub const METHOD_ID_LIBRARY_GET: u16 = 251;
-pub const METHOD_ID_LIBRARY_REFRESH: u16 = 252;
-pub const METHOD_ID_GAME_GET: u16 = 197;
-pub const METHOD_ID_GAME_EXTRAS: u16 = 194;
-pub const METHOD_ID_SHELL_BOOTSTRAP: u16 = 302;
+pub const METHOD_ID_LIBRARY_GET: u16 = 259;
+pub const METHOD_ID_LIBRARY_REFRESH: u16 = 260;
+pub const METHOD_ID_GAME_GET: u16 = 203;
+pub const METHOD_ID_GAME_EXTRAS: u16 = 200;
+pub const METHOD_ID_SHELL_BOOTSTRAP: u16 = 310;
 pub const METHOD_ID_RPC_CANCEL: u16 = 65535;
 
 pub const EVENT_ID_AUTOPILOT_LIVE: u16 = 7;
@@ -64,6 +64,7 @@ pub const METHODS: &[&str] = &[
     "audio.setFormat",
     "audio.setMute",
     "audio.setVolume",
+    "auth.nativeProviders",
     "autopilot.set",
     "autopilot.state",
     "backup.decline",
@@ -172,6 +173,7 @@ pub const METHODS: &[&str] = &[
     "dlss.consent",
     "dlss.downloadNewer",
     "dlss.frameGen",
+    "dlss.frameGenSet",
     "dlss.newer",
     "dlss.restore",
     "dlss.status",
@@ -190,6 +192,10 @@ pub const METHODS: &[&str] = &[
     "exoAccount.markAsked",
     "exoAccount.newRecoveryCode",
     "exoAccount.overview",
+    "exoAccount.passkeyDelete",
+    "exoAccount.passkeyRegister",
+    "exoAccount.passkeySignIn",
+    "exoAccount.passkeyStatus",
     "exoAccount.probe",
     "exoAccount.reset",
     "exoAccount.revoke",
@@ -212,6 +218,8 @@ pub const METHODS: &[&str] = &[
     "game.frameCap",
     "game.frameGen",
     "game.get",
+    "game.graphicsFeatures",
+    "game.graphicsFeatures.set",
     "game.install",
     "game.launch",
     "game.openFolder",

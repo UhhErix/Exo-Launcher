@@ -59,6 +59,21 @@ pub fn decode_install_progress_frame(bytes: &[u8]) -> Result<InstallProgress, Wi
     Ok(val)
 }
 
+fn parse_anti_cheat_class(raw: Option<&str>) -> crate::anticheat::AntiCheatClass {
+    match raw {
+        Some("competitivePvP" | "competitivePvpOnline") => {
+            crate::anticheat::AntiCheatClass::CompetitivePvpOnline
+        }
+        Some("onlinePvE" | "onlineNonCompetitivePve") => {
+            crate::anticheat::AntiCheatClass::OnlineNonCompetitivePve
+        }
+        Some("offline" | "noAntiCheat" | "offlineAntiCheat") => {
+            crate::anticheat::AntiCheatClass::OfflineAntiCheat
+        }
+        _ => crate::anticheat::AntiCheatClass::Unknown,
+    }
+}
+
 pub fn decode_game(r: &mut WireReader<'_>) -> Result<Game, WireError> {
     let id = r.get_string()?;
     let title = r.get_string()?;
@@ -82,8 +97,12 @@ pub fn decode_game(r: &mut WireReader<'_>) -> Result<Game, WireError> {
     let shared_by = r.get_opt_string()?;
     let last_played_utc = r.get_opt_string()?;
     let tags = r.get_string_vec()?;
+    let anti_cheat_class = parse_anti_cheat_class(r.get_opt_string()?.as_deref());
 
     let includes_len = r.get_u32()? as usize;
+    if includes_len > r.remaining() / 2 {
+        return Err(WireError::UnexpectedEof);
+    }
     let mut includes = Vec::with_capacity(includes_len.min(256));
     for _ in 0..includes_len {
         includes.push(GameInclude {
@@ -93,6 +112,9 @@ pub fn decode_game(r: &mut WireReader<'_>) -> Result<Game, WireError> {
     }
 
     let variants_len = r.get_u32()? as usize;
+    if variants_len > r.remaining() / 16 {
+        return Err(WireError::UnexpectedEof);
+    }
     let mut variants = Vec::with_capacity(variants_len.min(64));
     for _ in 0..variants_len {
         let v_id = r.get_string()?;
@@ -141,6 +163,7 @@ pub fn decode_game(r: &mut WireReader<'_>) -> Result<Game, WireError> {
         hero_url,
         launch_target,
         includes,
+        anti_cheat_class,
         variants,
         art_revision,
         playtime_minutes,
@@ -167,6 +190,9 @@ pub fn decode_library_payload_from(r: &mut WireReader<'_>) -> Result<LibraryPayl
         None
     };
     let games_len = r.get_u32()? as usize;
+    if games_len > r.remaining() / 32 {
+        return Err(WireError::UnexpectedEof);
+    }
     let mut games = Vec::with_capacity(games_len.min(16384));
     for _ in 0..games_len {
         games.push(decode_game(r)?);
@@ -449,6 +475,7 @@ mod tests {
         g.put_u32(2);
         g.put_str("Action");
         g.put_str("Singleplayer");
+        g.put_opt_str(Some("offline"));
         g.put_u32(0);
         g.put_u32(0);
 
@@ -469,6 +496,10 @@ mod tests {
         assert!(parsed.games[0].installed);
         assert_eq!(parsed.games[0].playtime_minutes, 240);
         assert_eq!(parsed.games[0].tags, vec!["Action", "Singleplayer"]);
+        assert_eq!(
+            parsed.games[0].anti_cheat_class,
+            crate::anticheat::AntiCheatClass::OfflineAntiCheat
+        );
 
         let mut reply_w = WireWriter::with_capacity(512);
         reply_w.put_bool(true);

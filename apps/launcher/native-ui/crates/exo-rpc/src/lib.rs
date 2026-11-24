@@ -1214,7 +1214,13 @@ fn negotiate_wire(
     while initial.len() < ack_total {
         match pipe.read_overlapped_timeout(&read_ev, &mut tmp, timeout_ms) {
             Ok(Some(0)) => return Err(RpcError::Disconnected),
-            Ok(Some(n)) => initial.extend_from_slice(&tmp[..n]),
+            Ok(Some(n)) => {
+                initial.extend_from_slice(&tmp[..n]);
+                if pref == WirePreference::Auto && initial[0] != exo_wire::WIRE_MAGIC_BYTES[0] {
+                    let _ = pipe.write_all_overlapped(write_ev.raw(), b"\n");
+                    return Ok((ActiveWireMode::Json, initial));
+                }
+            }
             Ok(None) => {
                 if pref == WirePreference::Binary {
                     return Err(RpcError::Timeout);
@@ -1961,12 +1967,12 @@ fn dispatch_wire_frame(
                         _ => None,
                     };
                     if let Some(ev) = ev {
-                        let _ = dispatch_tx.send(DispatchWork::Event(ev));
+                        let _ = dispatch_tx.send(DispatchWork::Event(Box::new(ev)));
                     }
                 }
                 exo_wire::PayloadEncoding::Empty => match parse_event(event_name, "null", None) {
                     Ok(ev) => {
-                        let _ = dispatch_tx.send(DispatchWork::Event(ev));
+                        let _ = dispatch_tx.send(DispatchWork::Event(Box::new(ev)));
                     }
                     Err(frame) => {
                         let _ = dispatch_tx.send(DispatchWork::VideoFrame(frame));
@@ -1978,7 +1984,7 @@ fn dispatch_wire_frame(
                     };
                     match parse_event(event_name, data_raw, None) {
                         Ok(ev) => {
-                            let _ = dispatch_tx.send(DispatchWork::Event(ev));
+                            let _ = dispatch_tx.send(DispatchWork::Event(Box::new(ev)));
                         }
                         Err(frame) => {
                             let _ = dispatch_tx.send(DispatchWork::VideoFrame(frame));
@@ -3090,7 +3096,7 @@ mod tests {
         );
         assert!(matches!(
             queue.pop_blocking().unwrap(),
-            DispatchWork::Event(HostEvent::AutopilotLive(Some(live))) if live.fps == 144.0
+            DispatchWork::Event(ev) if matches!(&*ev, HostEvent::AutopilotLive(Some(live)) if live.fps == 144.0)
         ));
 
         let mut mw = exo_wire::WireWriter::with_capacity(64);
@@ -3212,5 +3218,351 @@ mod tests {
 
         client.close();
         let _ = server.join();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn json_only_legacy_host_negotiates_down_and_serves_every_host_v1_method() {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use std::ptr::{null, null_mut};
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::Storage::FileSystem::{PIPE_ACCESS_DUPLEX, ReadFile, WriteFile};
+        use windows_sys::Win32::System::Pipes::{
+            ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
+        };
+
+        let pipe_name = format!(
+            "exo-json-all-methods-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let full = format!(r"\\.\pipe\{pipe_name}");
+        let wide: Vec<u16> = OsStr::new(&full).encode_wide().chain(Some(0)).collect();
+
+        let server_handle = unsafe {
+            CreateNamedPipeW(
+                wide.as_ptr(),
+                PIPE_ACCESS_DUPLEX,
+                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                1,
+                256 * 1024,
+                256 * 1024,
+                0,
+                null(),
+            )
+        };
+        assert_ne!(server_handle, INVALID_HANDLE_VALUE);
+        let handle_addr = server_handle as usize;
+        let expected_methods = exo_wire::METHODS.len();
+
+        let server = std::thread::spawn(move || {
+            let h = handle_addr as windows_sys::Win32::Foundation::HANDLE;
+            unsafe {
+                ConnectNamedPipe(h, null_mut());
+            }
+            let mut acc = Vec::new();
+            let mut buf = [0u8; 16 * 1024];
+            let mut handled = 0usize;
+            while handled < expected_methods {
+                let mut read = 0u32;
+                let ok = unsafe {
+                    ReadFile(h, buf.as_mut_ptr(), buf.len() as u32, &mut read, null_mut())
+                };
+                if ok == 0 || read == 0 {
+                    break;
+                }
+                acc.extend_from_slice(&buf[..read as usize]);
+                while let Some(pos) = acc.iter().position(|&b| b == b'\n') {
+                    let line = acc[..pos].to_vec();
+                    acc.drain(..=pos);
+                    if let Ok(v) = serde_json::from_slice::<Value>(&line) {
+                        let Some(id) = v.get("id").and_then(Value::as_str) else {
+                            continue;
+                        };
+                        let Some(method) = v.get("method").and_then(Value::as_str) else {
+                            continue;
+                        };
+                        handled += 1;
+                        let reply = serde_json::to_string(&json!({
+                            "version": 1,
+                            "id": id,
+                            "ok": true,
+                            "result": { "method": method }
+                        }))
+                        .unwrap()
+                            + "\n";
+                        let mut written = 0u32;
+                        unsafe {
+                            WriteFile(
+                                h,
+                                reply.as_ptr(),
+                                reply.len() as u32,
+                                &mut written,
+                                null_mut(),
+                            );
+                        }
+                    }
+                }
+            }
+            unsafe {
+                CloseHandle(h);
+            }
+            handled
+        });
+
+        let client = RpcClient::connect_with_preference(
+            &pipe_name,
+            Duration::from_secs(3),
+            WirePreference::Auto,
+            |_| {},
+        )
+        .expect("connect to json-only host");
+        assert_eq!(client.wire_mode(), ActiveWireMode::Json);
+
+        for &method in exo_wire::METHODS {
+            let reply: Value = client
+                .call_blocking(method, &json!({}), Duration::from_secs(3))
+                .unwrap_or_else(|e| panic!("json fallback failed for {method}: {e}"));
+            assert_eq!(
+                reply.get("method").and_then(Value::as_str),
+                Some(method),
+                "wrong echoed method for {method}"
+            );
+        }
+
+        client.close();
+        let handled = server.join().expect("server thread");
+        assert_eq!(handled, exo_wire::METHODS.len());
+    }
+
+    #[test]
+    fn fuzz_corrupt_binary_hot_decoders_never_panic() {
+        let queue = DispatchQueue::new(32, 8);
+        let pending: Mutex<HashMap<String, PendingCallback>> = Mutex::new(HashMap::new());
+        let mut seed: u64 = 0xd1b5_4a32_d192_ed03;
+        let mut next_u64 = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+
+        let length_bombs: &[&[u8]] = &[
+            &[0xFF, 0xFF, 0xFF, 0xFF],
+            &[1, 1, 0xFF, 0xFF, 0xFF, 0xFF],
+            &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF],
+            &[99, 0xFF, 0xFE, 0xFD],
+        ];
+        for &bomb in length_bombs {
+            assert!(wire_codec::decode_game_get_reply(bomb).is_err());
+            assert!(wire_codec::decode_library_payload(bomb).is_err());
+            assert!(wire_codec::decode_game_extras(bomb).is_err());
+            assert!(wire_codec::decode_shell_bootstrap(bomb).is_err());
+            assert!(wire_codec::decode_autopilot_live(bomb).is_err());
+            assert!(wire_codec::decode_install_progress_frame(bomb).is_err());
+        }
+
+        let kinds = [
+            exo_wire::FrameKind::Request,
+            exo_wire::FrameKind::ResponseOk,
+            exo_wire::FrameKind::ResponseErr,
+            exo_wire::FrameKind::Event,
+            exo_wire::FrameKind::BinaryMedia,
+            exo_wire::FrameKind::Hello,
+            exo_wire::FrameKind::HelloAck,
+        ];
+
+        for case in 0..2048usize {
+            let len = (next_u64() as usize) % 128;
+            let mut buf = vec![0u8; len];
+            for b in &mut buf {
+                *b = (next_u64() & 0xFF) as u8;
+            }
+            let _ = wire_codec::decode_game_get_reply(&buf);
+            let _ = wire_codec::decode_library_payload(&buf);
+            let _ = wire_codec::decode_game_extras(&buf);
+            let _ = wire_codec::decode_shell_bootstrap(&buf);
+            let _ = wire_codec::decode_autopilot_live(&buf);
+            let _ = wire_codec::decode_install_progress_frame(&buf);
+
+            let hdr = exo_wire::FrameHeader {
+                version: exo_wire::WIRE_VERSION,
+                kind: kinds[case % kinds.len()],
+                method_id: (next_u64() & 0xFFFF) as u16,
+                req_id: case as u64,
+                payload_len: buf.len() as u32,
+            };
+            dispatch_wire_frame(hdr, &buf, &pending, &queue);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn corrupt_binary_frame_on_live_pipe_drops_to_error_without_panic_or_hang() {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use std::ptr::{null, null_mut};
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::Storage::FileSystem::{PIPE_ACCESS_DUPLEX, ReadFile, WriteFile};
+        use windows_sys::Win32::System::Pipes::{
+            ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
+        };
+
+        let cases: &[(&str, Vec<u8>)] = &[
+            (
+                "bad_magic_garbage",
+                b"NOT_EXW1_CORRUPT_GARBAGE_BYTES_0123456789".to_vec(),
+            ),
+            ("oversized_payload_len", {
+                let mut h = exo_wire::FrameHeader {
+                    version: exo_wire::WIRE_VERSION,
+                    kind: exo_wire::FrameKind::ResponseOk,
+                    method_id: exo_wire::METHOD_ID_GAME_GET,
+                    req_id: 1,
+                    payload_len: 4,
+                }
+                .encode()
+                .to_vec();
+                h[16..20].copy_from_slice(&u32::MAX.to_le_bytes());
+                h
+            }),
+            ("invalid_encoding_byte", {
+                let mut w = exo_wire::WireWriter::with_capacity(32);
+                w.reserve_header();
+                w.put_u8(99);
+                w.put_raw(b"bad");
+                w.finalize_frame(
+                    exo_wire::FrameKind::ResponseOk,
+                    exo_wire::METHOD_ID_GAME_GET,
+                    1,
+                );
+                w.into_vec()
+            }),
+            ("invalid_utf8_json_payload", {
+                let mut w = exo_wire::WireWriter::with_capacity(32);
+                w.reserve_header();
+                w.put_u8(exo_wire::PayloadEncoding::JsonUtf8 as u8);
+                w.put_raw(&[0xFF, 0xFE, 0xFD, 0xFC]);
+                w.finalize_frame(
+                    exo_wire::FrameKind::ResponseOk,
+                    exo_wire::METHOD_ID_GAME_GET,
+                    1,
+                );
+                w.into_vec()
+            }),
+            ("truncated_payload_eof", {
+                let mut h = exo_wire::FrameHeader {
+                    version: exo_wire::WIRE_VERSION,
+                    kind: exo_wire::FrameKind::ResponseOk,
+                    method_id: exo_wire::METHOD_ID_GAME_GET,
+                    req_id: 1,
+                    payload_len: 1024,
+                }
+                .encode()
+                .to_vec();
+                h.extend_from_slice(&[1, 2, 3, 4]);
+                h
+            }),
+        ];
+
+        for (label, corrupt_bytes) in cases {
+            let pipe_name = format!(
+                "exo-corrupt-{label}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            );
+            let full = format!(r"\\.\pipe\{pipe_name}");
+            let wide: Vec<u16> = OsStr::new(&full).encode_wide().chain(Some(0)).collect();
+
+            let server_handle = unsafe {
+                CreateNamedPipeW(
+                    wide.as_ptr(),
+                    PIPE_ACCESS_DUPLEX,
+                    PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                    1,
+                    64 * 1024,
+                    64 * 1024,
+                    0,
+                    null(),
+                )
+            };
+            assert_ne!(
+                server_handle, INVALID_HANDLE_VALUE,
+                "pipe create for {label}"
+            );
+            let handle_addr = server_handle as usize;
+            let payload_to_send = corrupt_bytes.clone();
+
+            let server = std::thread::spawn(move || {
+                let h = handle_addr as windows_sys::Win32::Foundation::HANDLE;
+                unsafe {
+                    ConnectNamedPipe(h, null_mut());
+                }
+                let mut buf = [0u8; 256];
+                let mut read = 0u32;
+                let _ = unsafe {
+                    ReadFile(h, buf.as_mut_ptr(), buf.len() as u32, &mut read, null_mut())
+                };
+                let ack = exo_wire::encode_hello_ack_frame(exo_wire::HelloAckPayload {
+                    negotiated_version: exo_wire::WIRE_VERSION,
+                    status: exo_wire::HELLO_STATUS_OK,
+                    flags: exo_wire::FLAG_USE_SCHEMA_IDS | exo_wire::FLAG_BINARY_HOT_CODECS,
+                    max_frame_bytes: exo_wire::MAX_FRAME_BYTES as u32,
+                    host_schema_hash: exo_wire::SCHEMA_HASH,
+                });
+                let mut written = 0u32;
+                let _ = unsafe {
+                    WriteFile(h, ack.as_ptr(), ack.len() as u32, &mut written, null_mut())
+                };
+                let _ = unsafe {
+                    ReadFile(h, buf.as_mut_ptr(), buf.len() as u32, &mut read, null_mut())
+                };
+                let _ = unsafe {
+                    WriteFile(
+                        h,
+                        payload_to_send.as_ptr(),
+                        payload_to_send.len() as u32,
+                        &mut written,
+                        null_mut(),
+                    )
+                };
+                unsafe {
+                    CloseHandle(h);
+                }
+            });
+
+            let client = RpcClient::connect_with_preference(
+                &pipe_name,
+                Duration::from_secs(3),
+                WirePreference::Binary,
+                |_| {},
+            )
+            .unwrap_or_else(|e| panic!("connect binary for {label}: {e}"));
+
+            let started = std::time::Instant::now();
+            let res: Result<Value, RpcError> = client.call_blocking(
+                "game.get",
+                &json!({ "id": "steam:1" }),
+                Duration::from_secs(2),
+            );
+            assert!(
+                res.is_err(),
+                "expected error on corrupt frame case {label}, got {res:?}"
+            );
+            assert!(
+                started.elapsed() < Duration::from_secs(2),
+                "corrupt frame case {label} hung until timeout"
+            );
+
+            client.close();
+            let _ = server.join();
+        }
     }
 }

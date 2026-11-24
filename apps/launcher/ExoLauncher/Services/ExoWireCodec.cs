@@ -403,6 +403,8 @@ internal static class ExoWireCodec
         ack.WriteTo(dest[HeaderLen..]);
     }
 
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     internal static bool TryDecodeRequest(
         ExoWireFrameHeader header,
         byte[]? pooledPayload,
@@ -410,10 +412,10 @@ internal static class ExoWireCodec
         out ExoWireInboundRequest? request)
     {
         request = null;
-        if (header.Kind != ExoWireFrameKind.Request || payloadLen < 1)
+        if (header.Kind != ExoWireFrameKind.Request || payloadLen < 1 || pooledPayload is null || payloadLen > pooledPayload.Length)
             return false;
 
-        var span = pooledPayload is null ? ReadOnlySpan<byte>.Empty : pooledPayload.AsSpan(0, payloadLen);
+        var span = pooledPayload.AsSpan(0, payloadLen);
         var pos = 0;
         string? methodName;
         var methodId = header.MethodId;
@@ -424,7 +426,8 @@ internal static class ExoWireCodec
             var nameLen = BinaryPrimitives.ReadUInt16LittleEndian(span);
             pos = 2;
             if (nameLen == 0 || nameLen > 128 || pos + nameLen + 1 > span.Length) return false;
-            methodName = Encoding.UTF8.GetString(span.Slice(pos, nameLen));
+            try { methodName = StrictUtf8.GetString(span.Slice(pos, nameLen)); }
+            catch (DecoderFallbackException) { return false; }
             pos += nameLen;
             methodId = ExoWireSchema.GetMethodId(methodName);
         }
@@ -450,9 +453,10 @@ internal static class ExoWireCodec
             if (methodId is ExoWireSchema.MethodGameGet or ExoWireSchema.MethodGameExtras)
             {
                 if (body.Length < 4) return false;
-                var strLen = (int)BinaryPrimitives.ReadUInt32LittleEndian(body);
-                if (strLen < 0 || 4 + strLen != body.Length) return false;
-                binaryId = Encoding.UTF8.GetString(body.Slice(4, strLen));
+                var rawLen = BinaryPrimitives.ReadUInt32LittleEndian(body);
+                if (rawLen != (uint)(body.Length - 4)) return false;
+                try { binaryId = StrictUtf8.GetString(body.Slice(4, (int)rawLen)); }
+                catch (DecoderFallbackException) { return false; }
             }
             else if (methodId is ExoWireSchema.MethodLibraryGet or ExoWireSchema.MethodLibraryRefresh)
             {
@@ -816,6 +820,7 @@ internal static class ExoWireCodec
         w.WriteOptString(g.SharedBy);
         w.WriteOptString(g.LastPlayedUtc);
         w.WriteStringList(g.Tags);
+        w.WriteOptString(g.AntiCheatClass);
 
         var includes = g.Includes;
         if (includes is null || includes.Length == 0)

@@ -7,14 +7,14 @@ namespace ExoLauncher.Services;
 internal static class ExoWireSchema
 {
     internal const int HostContractVersion = 1;
-    internal const ulong SchemaHash = 0x8c54fcc6b7f3bda9UL;
+    internal const ulong SchemaHash = 0x729891a3fdfe3441UL;
     internal const ushort UnknownId = 0;
 
-    internal const ushort MethodLibraryGet = 251;
-    internal const ushort MethodLibraryRefresh = 252;
-    internal const ushort MethodGameGet = 197;
-    internal const ushort MethodGameExtras = 194;
-    internal const ushort MethodShellBootstrap = 302;
+    internal const ushort MethodLibraryGet = 259;
+    internal const ushort MethodLibraryRefresh = 260;
+    internal const ushort MethodGameGet = 203;
+    internal const ushort MethodGameExtras = 200;
+    internal const ushort MethodShellBootstrap = 310;
     internal const ushort MethodRpcCancel = 65535;
 
     internal const ushort EventAutopilotLive = 7;
@@ -72,6 +72,7 @@ internal static class ExoWireSchema
         "audio.setFormat",
         "audio.setMute",
         "audio.setVolume",
+        "auth.nativeProviders",
         "autopilot.set",
         "autopilot.state",
         "backup.decline",
@@ -180,6 +181,7 @@ internal static class ExoWireSchema
         "dlss.consent",
         "dlss.downloadNewer",
         "dlss.frameGen",
+        "dlss.frameGenSet",
         "dlss.newer",
         "dlss.restore",
         "dlss.status",
@@ -198,6 +200,10 @@ internal static class ExoWireSchema
         "exoAccount.markAsked",
         "exoAccount.newRecoveryCode",
         "exoAccount.overview",
+        "exoAccount.passkeyDelete",
+        "exoAccount.passkeyRegister",
+        "exoAccount.passkeySignIn",
+        "exoAccount.passkeyStatus",
         "exoAccount.probe",
         "exoAccount.reset",
         "exoAccount.revoke",
@@ -220,6 +226,8 @@ internal static class ExoWireSchema
         "game.frameCap",
         "game.frameGen",
         "game.get",
+        "game.graphicsFeatures",
+        "game.graphicsFeatures.set",
         "game.install",
         "game.launch",
         "game.openFolder",

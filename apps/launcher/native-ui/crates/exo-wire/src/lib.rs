@@ -493,6 +493,9 @@ impl<'a> WireReader<'a> {
 
     pub fn get_string_vec(&mut self) -> Result<Vec<String>, WireError> {
         let len = self.get_u32()? as usize;
+        if len > self.remaining() / 4 {
+            return Err(WireError::UnexpectedEof);
+        }
         let mut out = Vec::with_capacity(len.min(4096));
         for _ in 0..len {
             out.push(self.get_string()?);
@@ -684,5 +687,118 @@ mod tests {
         assert_eq!(r.get_opt_str().unwrap(), None);
         assert_eq!(r.get_bytes().unwrap(), &[1, 2, 3, 4]);
         r.finish().unwrap();
+    }
+
+    #[test]
+    fn fuzz_and_corrupt_frames_return_error_never_panic() {
+        let mut hdr_bytes = FrameHeader {
+            version: WIRE_VERSION,
+            kind: FrameKind::Request,
+            method_id: METHOD_ID_LIBRARY_GET,
+            req_id: 1,
+            payload_len: 16,
+        }
+        .encode();
+
+        for bad_ver in 0u8..=255 {
+            if bad_ver == WIRE_VERSION {
+                continue;
+            }
+            hdr_bytes[4] = bad_ver;
+            assert_eq!(
+                FrameHeader::decode(&hdr_bytes),
+                Err(WireError::UnsupportedVersion(bad_ver))
+            );
+        }
+        hdr_bytes[4] = WIRE_VERSION;
+
+        for bad_kind in [0u8, 8, 9, 127, 255] {
+            hdr_bytes[5] = bad_kind;
+            assert_eq!(
+                FrameHeader::decode(&hdr_bytes),
+                Err(WireError::InvalidKind(bad_kind))
+            );
+        }
+        hdr_bytes[5] = FrameKind::Request as u8;
+
+        for huge in [(MAX_FRAME_BYTES as u32) + 1, u32::MAX / 2, u32::MAX] {
+            hdr_bytes[16..20].copy_from_slice(&huge.to_le_bytes());
+            assert_eq!(
+                FrameHeader::decode(&hdr_bytes),
+                Err(WireError::FrameTooLarge(huge))
+            );
+        }
+
+        for bad_enc in 3u8..=255 {
+            assert_eq!(
+                PayloadEncoding::from_u8(bad_enc),
+                Err(WireError::InvalidEncoding(bad_enc))
+            );
+        }
+
+        for len in 0..HELLO_PAYLOAD_LEN {
+            let short = vec![0u8; len];
+            assert_eq!(HelloPayload::decode(&short), Err(WireError::UnexpectedEof));
+            assert_eq!(
+                HelloAckPayload::decode(&short),
+                Err(WireError::UnexpectedEof)
+            );
+        }
+        let long_hello = vec![0u8; HELLO_PAYLOAD_LEN + 1];
+        assert_eq!(
+            HelloPayload::decode(&long_hello),
+            Err(WireError::UnexpectedEof)
+        );
+        assert_eq!(
+            HelloAckPayload::decode(&long_hello),
+            Err(WireError::UnexpectedEof)
+        );
+
+        let invalid_utf8 = [4u8, 0, 0, 0, 0xFF, 0xFE, 0xFD, 0xFC];
+        let mut r = WireReader::new(&invalid_utf8);
+        assert_eq!(r.get_str(), Err(WireError::InvalidUtf8));
+
+        let huge_vec_bomb = [0xFFu8, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00];
+        let mut r = WireReader::new(&huge_vec_bomb);
+        assert_eq!(r.get_string_vec(), Err(WireError::UnexpectedEof));
+
+        let mut r = WireReader::new(&huge_vec_bomb);
+        assert_eq!(r.get_bytes(), Err(WireError::UnexpectedEof));
+
+        let mut seed: u64 = 0x9e37_79b9_7f4a_7c15;
+        let mut next_u64 = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+
+        for case in 0..4096usize {
+            let len = (next_u64() as usize) % 96;
+            let mut buf = vec![0u8; len];
+            for b in &mut buf {
+                *b = (next_u64() & 0xFF) as u8;
+            }
+            if case % 4 == 0 && len >= HEADER_LEN {
+                buf[0..4].copy_from_slice(&WIRE_MAGIC_BYTES);
+            }
+            if len >= HEADER_LEN {
+                let raw: [u8; HEADER_LEN] = buf[..HEADER_LEN].try_into().unwrap();
+                let _ = FrameHeader::decode(&raw);
+            }
+            let _ = HelloPayload::decode(&buf);
+            let _ = HelloAckPayload::decode(&buf);
+
+            let mut r1 = WireReader::new(&buf);
+            let _ = r1.get_string_vec();
+            let mut r2 = WireReader::new(&buf);
+            let _ = r2.get_opt_string();
+            let mut r3 = WireReader::new(&buf);
+            let _ = r3.get_bytes();
+            let mut r4 = WireReader::new(&buf);
+            let _ = r4.get_bool();
+            let mut r5 = WireReader::new(&buf);
+            let _ = r5.get_short_str();
+        }
     }
 }
