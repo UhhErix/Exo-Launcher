@@ -19,6 +19,12 @@ public sealed class GameHelperProcessTests
     [InlineData("CrashLogsGenerator")]
     [InlineData("VC_redist.x64")]
     [InlineData("UnityCrashHandler64")]
+    [InlineData("ExoLauncher")]
+    [InlineData("chrome")]
+    [InlineData("msedge")]
+    [InlineData("msedgewebview2")]
+    [InlineData("firefox")]
+    [InlineData("playwright")]
     public void HelpersAreNotTheGame(string name) => Assert.True(ProcessHelper.IsNonGameProcessName(name));
 
     [Theory]

@@ -66,8 +66,7 @@ export function clickChoiceOf(mode: number, intent: number | null | undefined): 
 
 export function nextIntentForChoice(choice: ClickChoice, current: number | null | undefined): number | null {
   if (choice === 'ultraclick') return (current ?? FINALMOUSE_INTENT_TRIGGER.on) | FINALMOUSE_INTENT_TRIGGER.ultraclickBit
-  if (choice === 'analog') return current == null ? null : current & ~FINALMOUSE_INTENT_TRIGGER.ultraclickBit
-  return current ?? null
+  return current == null ? null : current & ~FINALMOUSE_INTENT_TRIGGER.ultraclickBit
 }
 
 export function buildClickModeArgs(
