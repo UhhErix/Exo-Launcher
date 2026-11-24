@@ -4,7 +4,7 @@ use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
     SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_muted, glass_panel_opt, good, hairline,
     hover_fill, icon_headphones, icon_headphones_off, icon_mic, icon_mic_off, icon_phone,
-    icon_phone_off, popover_transition, pressed_fill, selected_fill, slider_track, type_body,
+    icon_phone_off, popover_transition_from, pressed_fill, selected_fill, slider_track, type_body,
     type_section, type_small,
 };
 use exo_rpc::{DiscordChannels, DiscordHome, DiscordVoiceMember, HostEvent};
@@ -678,10 +678,11 @@ pub fn person_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
     let card = glass_panel_opt("island-person-menu", 204.0, blur)
         .role("menu")
         .label(menu.name.clone())
+        .focus_group()
         .radius(RADIUS_CARD)
         .clip_rounded(RADIUS_CARD)
         .absolute(menu.x.max(10.0), (menu.y + 6.0).max(56.0))
-        .transition(popover_transition())
+        .transition(popover_transition_from(rune::Vec2::new(0.0, 0.0)))
         .child(body);
 
     let scrim = el()

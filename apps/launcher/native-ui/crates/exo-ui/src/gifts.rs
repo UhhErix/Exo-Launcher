@@ -4,7 +4,7 @@ use crate::state::AppState;
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_QUICK, apply_glass,
     bad, fg_muted, glass_control_fill, glass_panel_opt, glass_rim, good, hover_fill, icon_gift,
-    popover_transition, pressed_fill, surface_card, type_control, type_section, type_small,
+    popover_transition_for, pressed_fill, surface_card, type_control, type_section, type_small,
 };
 use exo_rpc::StoreGift;
 use rune::{Align, Cursor, El, ScrollSpec, Side, SurfaceFit, Tx, col, el, row, text};
@@ -62,7 +62,9 @@ pub fn gifts_popover_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
 
     let panel = glass_panel_opt("gifts-popover-panel", 560.0, blur)
         .max_h(520.0)
-        .transition(popover_transition())
+        .transition(popover_transition_for(Side::Top, Align::End))
+        .focus_group()
+        .focus_return("home-gifts-pill")
         .anchored_fit("home-gifts-pill", Side::Top, Align::End, 8.0)
         .px(12.0)
         .pt(10.0)
