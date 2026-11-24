@@ -199,20 +199,28 @@ export type KeyboardBackupResult = {
   created?: KeyboardBackupSummary | null
   backups: KeyboardBackupSummary[]
 }
+export type KeyboardFormFactor = '60' | '80' | 'tkl' | 'full' | 'keypad3'
 export type KeyboardRead = {
   ok: boolean
   message?: string | null
   model: string
+  formFactor: KeyboardFormFactor
   hallEffect: boolean
+  hasRapidTrigger: boolean
+  hasRgb: boolean
   maxScanHz: number
+  minActuationMm: number
+  maxActuationMm: number
   firmware: string | null
   layout: string | null
+  layoutCode: string | null
   activeProfile: number
   profiles: KeyboardProfileSlot[]
   actuationMm: number | null
   rapidTrigger: boolean | null
   rapidTriggerMm: number | null
   tachyon: boolean | null
+  rgbBrightness: number | null
   canWrite: boolean
   wootilityInstalled: boolean
   backgroundServiceRunning: boolean
@@ -2986,7 +2994,7 @@ export const host = {
   devicesList: () => rawCall<{ ok: boolean; devices: Peripheral[]; cpuPorts?: CpuPorts | null }>('devices.list', {}, 15_000),
   keyboardRead: (id: string) => rawCall<KeyboardRead>('keyboard.read', { id }, 15_000),
   keyboardProfile: (id: string, slot: number) => rawCall<KeyboardRead>('keyboard.profile', { id, slot }, 15_000),
-  keyboardSettings: (id: string, patch: { actuationMm?: number; rapidTrigger?: boolean; rapidTriggerMm?: number; tachyon?: boolean }) =>
+  keyboardSettings: (id: string, patch: { actuationMm?: number; rapidTrigger?: boolean; rapidTriggerMm?: number; tachyon?: boolean; rgbBrightness?: number }) =>
     rawCall<KeyboardRead>('keyboard.settings', { id, ...patch }, 15_000),
   keyboardOpenApp: () => rawCall<{ ok: boolean }>('keyboard.openApp', {}, 10_000),
   keyboardBackup: (id: string) => rawCall<KeyboardBackupResult>('keyboard.backup', { id }, 30_000),
