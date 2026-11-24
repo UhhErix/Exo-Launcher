@@ -8,6 +8,7 @@ internal static class FrameGenRouter
     internal const string TierNative = "native";
     internal const string TierMod = "mod";
     internal const string TierDriver = "driver";
+    internal const string TierExternal = "external";
     internal const string TierUnavailable = "unavailable";
 
     internal const string RouteNativeDlss = "native_dlss";
@@ -20,6 +21,7 @@ internal static class FrameGenRouter
     internal const string RouteDriverSmoothMotion = "driver_smooth_motion";
     internal const string RouteDriverAfmf = "driver_afmf";
     internal const string RouteDriverXessOverride = "driver_xess_override";
+    internal const string RouteExternalExoFlow = "external_exo_flow";
     internal const string RouteUnavailable = "unavailable";
 
     internal sealed record FrameGenGpu(
@@ -177,7 +179,9 @@ internal static class FrameGenRouter
         bool? AfmfOverride = null,
         string IntelXessOverride = "game",
         string? UserSelectedRoute = null,
-        bool Dx12Mode = true);
+        bool Dx12Mode = true,
+        bool ExoFlowAvailable = false,
+        bool ExoFlowEnabled = false);
 
     internal sealed record FrameGenRoute(
         string Id,
@@ -281,6 +285,13 @@ internal static class FrameGenRouter
 
         AddDriverRoutes(routes, gpu, input, isCompetitive, apiUnsupported, hasUsableNative, shipsDlss, shipsXessDll);
 
+        var allowsExoFlow = acClass is GameAntiCheatClass.NoAntiCheat
+            or GameAntiCheatClass.OfflineAntiCheat
+            or GameAntiCheatClass.OnlineNonCompetitivePve
+            && effectiveAnswer.Kind != AntiCheatCheck.Kind.Unknown
+            && !isCompetitive;
+        AddExternalExoFlowRoute(routes, gpu, input, acClass, allowsExoFlow);
+
         if (!hasActiveMod && (isOptInPve || (!blocksMods && !hasUsableNative)))
         {
             routes.Add(BuildAvailableModRoute(gpu, input, mod, entry, isOfflineAcMode, isOptInPve, antiCheatLabel, allowAuto: !isOfflineAcMode && !isOptInPve));
@@ -346,7 +357,7 @@ internal static class FrameGenRouter
                 AutoEnable: configAuto && routes.Count == 0,
                 LatencyNote: latency,
                 Selectable: true,
-                Active: !input.SmoothMotionEnabled,
+                Active: !input.SmoothMotionEnabled && !input.ExoFlowEnabled,
                 HowToEnable: configHow));
         }
 
@@ -367,7 +378,7 @@ internal static class FrameGenRouter
                 AutoEnable: configAuto && routes.Count == 0,
                 LatencyNote: latency,
                 Selectable: true,
-                Active: !input.SmoothMotionEnabled,
+                Active: !input.SmoothMotionEnabled && !input.ExoFlowEnabled,
                 HowToEnable: configHow));
         }
 
@@ -388,7 +399,7 @@ internal static class FrameGenRouter
                 AutoEnable: configAuto && routes.Count == 0,
                 LatencyNote: latency,
                 Selectable: true,
-                Active: !input.SmoothMotionEnabled,
+                Active: !input.SmoothMotionEnabled && !input.ExoFlowEnabled,
                 HowToEnable: configHow));
         }
 
@@ -620,6 +631,8 @@ internal static class FrameGenRouter
         }
         if (input.SmoothMotionEnabled && routes.FirstOrDefault(r => r.Id == RouteDriverSmoothMotion) is { } sm)
             return sm;
+        if (input.ExoFlowEnabled && routes.FirstOrDefault(r => r.Id == RouteExternalExoFlow) is { } ef)
+            return ef;
         if (routes.FirstOrDefault(r => r.Id == RouteDriverXessOverride && r.Active) is { } xess)
             return xess;
         if (input.AfmfOverride == true && routes.FirstOrDefault(r => r.Id == RouteDriverAfmf) is { } afmf)
@@ -654,7 +667,45 @@ internal static class FrameGenRouter
         if (selected.Tier == TierDriver)
             return ("driver", selected.Summary, selected.Active, false);
 
+        if (selected.Tier == TierExternal)
+            return ("external", selected.Summary, selected.Active, false);
+
         return ("unavailable", selected.Summary, false, false);
+    }
+
+    private static void AddExternalExoFlowRoute(
+        List<FrameGenRoute> routes,
+        FrameGenGpu gpu,
+        FrameGenGameInput input,
+        GameAntiCheatClass acClass,
+        bool allowsExoFlow)
+    {
+        if (!input.ExoFlowAvailable || !allowsExoFlow) return;
+        var active = input.ExoFlowEnabled;
+        var acNote = acClass switch
+        {
+            GameAntiCheatClass.OnlineNonCompetitivePve =>
+                "Safe for online PvE: zero-injection Windows Graphics Capture + DirectComposition overlay; touches no game files, DLLs, or memory.",
+            GameAntiCheatClass.OfflineAntiCheat =>
+                "Safe in offline play: zero-injection Windows Graphics Capture + DirectComposition overlay; touches no game files, DLLs, or memory.",
+            _ =>
+                "Safe: zero-injection Windows Graphics Capture + DirectComposition overlay; touches no game files, DLLs, or memory.",
+        };
+        routes.Add(new FrameGenRoute(
+            Id: RouteExternalExoFlow,
+            Tier: TierExternal,
+            Kind: RouteExternalExoFlow,
+            Label: "Exo Flow",
+            Status: active ? "active" : "available",
+            Summary: active ? "Exo Flow · On" : "Exo Flow · Ready",
+            GpuSupported: true,
+            GpuNote: $"Works on {gpu.Name} (DX12 optical-flow compute, DP4a + FP16 fallback).",
+            AntiCheatVerdict: "safe",
+            AntiCheatNote: acNote,
+            AutoEnable: false,
+            LatencyNote: "Adds ~1 base frame + ~1–2 ms compute latency. Requires Borderless or Windowed mode; keep off in competitive games.",
+            Selectable: true,
+            Active: active));
     }
 
     private static (string Reason, string HowToEnable) BuildUnavailableReason(

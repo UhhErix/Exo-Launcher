@@ -48,6 +48,13 @@ pub fn route_short_label(route: Option<&FrameGenRoute>) -> String {
             Some(c) if c != "game" => format!("XeSS {c}"),
             _ => "XeSS override".into(),
         },
+        "external_exo_flow" => {
+            if route.active {
+                "Exo Flow".into()
+            } else {
+                "Exo Flow · Off".into()
+            }
+        }
         _ => "Not available".into(),
     }
 }
@@ -91,6 +98,7 @@ fn tier_tag(tier: &str) -> &'static str {
         "native" => "Built in",
         "mod" => "Mod",
         "driver" => "Driver",
+        "external" => "Exo Flow",
         _ => "",
     }
 }

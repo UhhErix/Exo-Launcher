@@ -371,6 +371,113 @@ public sealed class FrameGenRouterTests
         Assert.All(dx9Decision.Routes, r => Assert.DoesNotContain("Lossless Scaling", r.HowToEnable ?? "", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void ExoFlowUsesSharedAntiCheatClassForAllFourClassesAndNeverSuggestsLossless()
+    {
+        var unknownAc = new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Unknown, (string?)null, "unknown");
+        var baseInput = new FrameGenGameInput(
+            GameId: "steam:1245620",
+            Title: "ELDEN RING",
+            Installed: true,
+            Readable: true,
+            IsWutheringWaves: false,
+            IsRiot: false,
+            AntiCheat: EacAntiCheat,
+            AllowsPlacedMods: false,
+            ShipsDlssFg: false,
+            ShipsFsrFg: false,
+            ShipsXessFg: false,
+            ShipsXessFgDll: false,
+            ModStatus: new DlssSwapService.FrameGenStatus("hidden"),
+            FluidFacts: SinglePlayerFacts("ELDEN RING", over60: false),
+            ExoFlowAvailable: true);
+
+        var offlineAc = Decide(Rtx3070(), baseInput);
+        AssertAllRouteMetadataPresent(offlineAc);
+        Assert.Equal(RouteExternalExoFlow, offlineAc.BestRouteId);
+        Assert.Equal("safe", offlineAc.Routes[0].AntiCheatVerdict);
+        Assert.True(offlineAc.Routes[0].Selectable);
+        Assert.DoesNotContain(offlineAc.Routes, r => r.Id == "external_lossless_scaling");
+
+        var officialOfflineAc = Decide(Rtx3070(), baseInput with
+        {
+            GameId = "steam:3472040",
+            Title = "NBA 2K26",
+            AntiCheat = OfflineWithoutAc,
+            FluidFacts = SinglePlayerFacts("NBA 2K26", over60: false),
+        });
+        Assert.Contains(officialOfflineAc.Routes, r => r.Id == RouteExternalExoFlow);
+
+        var activeOffline = Decide(Rtx3070(), baseInput with { ExoFlowEnabled = true });
+        Assert.Equal(RouteExternalExoFlow, activeOffline.SelectedRouteId);
+        Assert.Equal("external", activeOffline.State);
+        Assert.True(activeOffline.Good);
+        Assert.Equal("Exo Flow · On", activeOffline.Word);
+
+        var onlinePve = Decide(Rtx3070(), baseInput with
+        {
+            GameId = "steam:2074920",
+            Title = "The First Descendant",
+            AntiCheat = EacAntiCheat,
+            FluidFacts = SinglePlayerFacts("The First Descendant", over60: false),
+        });
+        AssertAllRouteMetadataPresent(onlinePve);
+        Assert.Contains(onlinePve.Routes, r => r.Id == RouteExternalExoFlow);
+        var pveRoute = Assert.Single(onlinePve.Routes, r => r.Id == RouteExternalExoFlow);
+        Assert.Equal("safe", pveRoute.AntiCheatVerdict);
+
+        var noAntiCheat = Decide(Rtx3070(), baseInput with
+        {
+            GameId = "steam:1091500",
+            Title = "Cyberpunk 2077",
+            AntiCheat = NoAntiCheat,
+            AllowsPlacedMods = true,
+            FluidFacts = SinglePlayerFacts("Cyberpunk 2077", over60: false),
+        });
+        AssertAllRouteMetadataPresent(noAntiCheat);
+        Assert.Contains(noAntiCheat.Routes, r => r.Id == RouteExternalExoFlow);
+
+        var competitivePvpEac = Decide(Rtx3070(), baseInput with
+        {
+            GameId = "steam:1172470",
+            Title = "Apex Legends",
+            AntiCheat = EacAntiCheat,
+            FluidFacts = SinglePlayerFacts("Apex Legends", over60: false),
+        });
+        Assert.Equal(RouteUnavailable, competitivePvpEac.BestRouteId);
+        Assert.DoesNotContain(competitivePvpEac.Routes, r => r.Id == RouteExternalExoFlow);
+
+        var unlistedEacFailsClosed = Decide(Rtx3070(), baseInput with
+        {
+            GameId = "steam:9999991",
+            Title = "Mystery EAC Shooter",
+            AntiCheat = EacAntiCheat,
+            FluidFacts = SinglePlayerFacts("Mystery EAC Shooter", over60: false),
+        });
+        Assert.Equal(RouteUnavailable, unlistedEacFailsClosed.BestRouteId);
+        Assert.DoesNotContain(unlistedEacFailsClosed.Routes, r => r.Id == RouteExternalExoFlow);
+
+        var unknownAntiCheat = Decide(Rtx3070(), baseInput with
+        {
+            GameId = "steam:9999992",
+            Title = "Uninspected Online Game",
+            AntiCheat = unknownAc,
+            FluidFacts = SinglePlayerFacts("Uninspected Online Game", over60: false),
+        });
+        Assert.Equal(RouteUnavailable, unknownAntiCheat.BestRouteId);
+        Assert.DoesNotContain(unknownAntiCheat.Routes, r => r.Id == RouteExternalExoFlow);
+
+        var riotGame = Decide(Rtx3070(), baseInput with
+        {
+            GameId = "riot:valorant",
+            Title = "VALORANT",
+            IsRiot = true,
+            AntiCheat = VanguardAntiCheat,
+        });
+        Assert.Equal(RouteUnavailable, riotGame.BestRouteId);
+        Assert.DoesNotContain(riotGame.Routes, r => r.Id == RouteExternalExoFlow);
+    }
+
     private static void AssertAllRouteMetadataPresent(FrameGenDecision decision)
     {
         Assert.NotEmpty(decision.Word);
