@@ -839,6 +839,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-auth"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-future",
+]
+
+[[package]]
 name = "exo-controller"
 version = "0.1.0"
 dependencies = [

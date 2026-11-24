@@ -4,20 +4,22 @@ use crate::state::{AppState, HostStatus};
 use exo_rpc::{
     AccountsProgressEvent, ActionResult, BackupActionReply, BackupStatus, BackupStoppedEvent,
     ClientsStatus, ComponentsFailedEvent, ExoAccountFileReply, ExoAccountHeldItem,
-    ExoAccountOutcome, ExoAccountOverview, ExoAccountProbe, ExoAccountSession,
-    ExoAccountSessionsReply, HostEvent, JunkCleanReply, JunkItem, JunkScanReply, KeepStatus,
-    LauncherSettings, LeftoverSummary, METHOD_ACCOUNTS_EPIC_REMOVE, METHOD_ACCOUNTS_LIST,
-    METHOD_ACHIEVEMENTS_PREVIEW, METHOD_APP_REPAIR_CACHE, METHOD_BACKUP_DECLINE,
-    METHOD_BACKUP_EXPORT, METHOD_BACKUP_IMPORT, METHOD_BACKUP_NOW, METHOD_BACKUP_RESTORE,
-    METHOD_BACKUP_STATUS, METHOD_CLIENTS_FIX, METHOD_CLIENTS_STATUS,
-    METHOD_EXO_ACCOUNT_CHANGE_PASSWORD, METHOD_EXO_ACCOUNT_CODE_CONFIRMED,
-    METHOD_EXO_ACCOUNT_CREATE, METHOD_EXO_ACCOUNT_DELETE, METHOD_EXO_ACCOUNT_EXPORT,
-    METHOD_EXO_ACCOUNT_NEW_RECOVERY_CODE, METHOD_EXO_ACCOUNT_OVERVIEW, METHOD_EXO_ACCOUNT_PROBE,
-    METHOD_EXO_ACCOUNT_RESET, METHOD_EXO_ACCOUNT_REVOKE, METHOD_EXO_ACCOUNT_SAVE_CODE,
-    METHOD_EXO_ACCOUNT_SESSIONS, METHOD_EXO_ACCOUNT_SIGN_IN, METHOD_EXO_ACCOUNT_SIGN_OUT,
-    METHOD_EXO_ACCOUNT_SYNC, METHOD_GIFTS_LIST, METHOD_GIFTS_STEAM_SIGN_IN,
-    METHOD_GIFTS_STEAM_SIGN_OUT, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN, METHOD_KEEP_STATUS,
-    METHOD_PLAYTIME_IMPORT_RIOT_EXPORT, METHOD_PLAYTIME_RIOT_REFRESH,
+    ExoAccountOutcome, ExoAccountOverview, ExoAccountPasskeyStatus, ExoAccountProbe,
+    ExoAccountSession, ExoAccountSessionsReply, HostEvent, JunkCleanReply, JunkItem, JunkScanReply,
+    KeepStatus, LauncherSettings, LeftoverSummary, METHOD_ACCOUNTS_EPIC_REMOVE,
+    METHOD_ACCOUNTS_LIST, METHOD_ACHIEVEMENTS_PREVIEW, METHOD_APP_REPAIR_CACHE,
+    METHOD_AUTH_NATIVE_PROVIDERS, METHOD_BACKUP_DECLINE, METHOD_BACKUP_EXPORT,
+    METHOD_BACKUP_IMPORT, METHOD_BACKUP_NOW, METHOD_BACKUP_RESTORE, METHOD_BACKUP_STATUS,
+    METHOD_CLIENTS_FIX, METHOD_CLIENTS_STATUS, METHOD_EXO_ACCOUNT_CHANGE_PASSWORD,
+    METHOD_EXO_ACCOUNT_CODE_CONFIRMED, METHOD_EXO_ACCOUNT_CREATE, METHOD_EXO_ACCOUNT_DELETE,
+    METHOD_EXO_ACCOUNT_EXPORT, METHOD_EXO_ACCOUNT_NEW_RECOVERY_CODE, METHOD_EXO_ACCOUNT_OVERVIEW,
+    METHOD_EXO_ACCOUNT_PASSKEY_DELETE, METHOD_EXO_ACCOUNT_PASSKEY_REGISTER,
+    METHOD_EXO_ACCOUNT_PASSKEY_SIGN_IN, METHOD_EXO_ACCOUNT_PASSKEY_STATUS,
+    METHOD_EXO_ACCOUNT_PROBE, METHOD_EXO_ACCOUNT_RESET, METHOD_EXO_ACCOUNT_REVOKE,
+    METHOD_EXO_ACCOUNT_SAVE_CODE, METHOD_EXO_ACCOUNT_SESSIONS, METHOD_EXO_ACCOUNT_SIGN_IN,
+    METHOD_EXO_ACCOUNT_SIGN_OUT, METHOD_EXO_ACCOUNT_SYNC, METHOD_GIFTS_LIST,
+    METHOD_GIFTS_STEAM_SIGN_IN, METHOD_GIFTS_STEAM_SIGN_OUT, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN,
+    METHOD_KEEP_STATUS, METHOD_PLAYTIME_IMPORT_RIOT_EXPORT, METHOD_PLAYTIME_RIOT_REFRESH,
     METHOD_PLAYTIME_SET_RIOT_BASELINE, METHOD_REPLACED_REMOVE, METHOD_REPLACED_SCAN,
     METHOD_REPORT_PREVIEW, METHOD_REPORT_SEND, METHOD_SETTINGS_GET, METHOD_SETTINGS_SET,
     METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL, METHOD_SHELL_OPEN_URL, METHOD_SHELL_PICK_FOLDER,
@@ -25,11 +27,12 @@ use exo_rpc::{
     METHOD_STEAM_SIGN_IN_CANCEL, METHOD_STEAM_SIGN_IN_GUARD, METHOD_STEAM_SIGN_IN_PASSWORD,
     METHOD_STEAM_SIGN_IN_POLL, METHOD_STEAM_SIGN_IN_QR, METHOD_STEAM_SIGN_OUT, METHOD_STORES_AUTH,
     METHOD_STORES_CHECK, METHOD_STORES_MATRIX, METHOD_TELEMETRY_DELETE, METHOD_TELEMETRY_SENT,
-    METHOD_WEB_PREFERENCES_GET, METHOD_WEB_PREFERENCES_SET, PickFolderReply, ReplacedApp,
-    ReplacedRemoveReply, ReplacedScanReply, ReportPreviewReply, ReportSendReply, RiotBaseline,
-    RiotBaselineReply, RiotExportImport, RiotHoursRefresh, ShadersAddonStatus, ShadersEventPayload,
-    SteamAccountReply, SteamSignInStep, StoreAccounts, StoreGiftsReply, StoreLocalCheck,
-    StoreStatus, StoresAuthReply, TelemetrySentReply, WebClientOptions,
+    METHOD_WEB_PREFERENCES_GET, METHOD_WEB_PREFERENCES_SET, NativeAuthProviderStatus,
+    NativeAuthProvidersReply, PickFolderReply, ReplacedApp, ReplacedRemoveReply, ReplacedScanReply,
+    ReportPreviewReply, ReportSendReply, RiotBaseline, RiotBaselineReply, RiotExportImport,
+    RiotHoursRefresh, ShadersAddonStatus, ShadersEventPayload, SteamAccountReply, SteamSignInStep,
+    StoreAccounts, StoreGiftsReply, StoreLocalCheck, StoreStatus, StoresAuthReply,
+    TelemetrySentReply, WebClientOptions,
 };
 use rune::{OtpKind, OtpState, TextEdit};
 use serde_json::{Map, Value, json};
@@ -1407,6 +1410,13 @@ pub struct SettingsUiState {
     pub update_note: Option<StoreNote>,
 
     pub account_overview: Option<ExoAccountOverview>,
+    pub account_passkeys: Option<ExoAccountPasskeyStatus>,
+    pub account_passkey_busy: bool,
+    pub account_passkey_note: Option<String>,
+    pub account_passkey_error: Option<String>,
+    pub account_passkey_reauth_needed: bool,
+    pub account_passkey_reauth_pw: TextEdit,
+    pub native_auth_providers: Option<Vec<NativeAuthProviderStatus>>,
     pub account_recovery_code: Option<String>,
     pub account_recovery_typed: TextEdit,
     pub account_recovery_note: Option<String>,
@@ -1567,6 +1577,13 @@ impl Default for SettingsUiState {
             caches_error: None,
             update_note: None,
             account_overview: None,
+            account_passkeys: None,
+            account_passkey_busy: false,
+            account_passkey_note: None,
+            account_passkey_error: None,
+            account_passkey_reauth_needed: false,
+            account_passkey_reauth_pw: TextEdit::new(""),
+            native_auth_providers: None,
             account_recovery_code: None,
             account_recovery_typed: TextEdit::new(""),
             account_recovery_note: None,
@@ -1889,6 +1906,7 @@ impl AppState {
         self.wp4_load_gifts_steam_status();
         self.wp4_load_shaders();
         self.wp4_load_account_overview();
+        self.wp4_load_native_auth_providers();
         self.wp4_load_web_prefs();
         if self.wp4.riot_draft.text.is_empty()
             && let Some(ref id) = self.settings.riot_id
@@ -3079,11 +3097,174 @@ impl AppState {
                             s.pc.account.email = ov.email.clone();
                             s.pc.account.account_asked = ov.account_asked;
                             s.wp4.account_overview = Some(ov);
+                            s.wp4_load_account_passkeys();
                         });
                     }
                 },
             );
         }
+    }
+
+    pub fn wp4_load_native_auth_providers(&mut self) {
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, NativeAuthProvidersReply>(
+                METHOD_AUTH_NATIVE_PROVIDERS,
+                &json!({}),
+                move |res| {
+                    if let Ok(reply) = res {
+                        handle.update(move |s, _| {
+                            s.wp4.native_auth_providers = Some(reply.providers);
+                        });
+                    }
+                },
+            );
+        }
+    }
+
+    pub fn wp4_load_account_passkeys(&mut self) {
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, ExoAccountPasskeyStatus>(
+                METHOD_EXO_ACCOUNT_PASSKEY_STATUS,
+                &json!({}),
+                move |res| {
+                    if let Ok(st) = res {
+                        handle.update(move |s, _| {
+                            s.wp4.account_passkeys = Some(st);
+                        });
+                    }
+                },
+            );
+        }
+    }
+
+    pub fn wp4_account_passkey_register(&mut self) {
+        if self.wp4.account_passkey_busy {
+            return;
+        }
+        self.wp4.account_passkey_busy = true;
+        self.wp4.account_passkey_error = None;
+        self.wp4.account_passkey_note = None;
+        let owner_hwnd = self.pc.owner_hwnd;
+        let password = if self.wp4.account_passkey_reauth_needed {
+            let pw = self.wp4.account_passkey_reauth_pw.text.clone();
+            if pw.is_empty() {
+                self.wp4.account_passkey_busy = false;
+                self.wp4.account_passkey_error =
+                    Some("Enter your account password to confirm adding a passkey.".into());
+                return;
+            }
+            Some(pw)
+        } else {
+            None
+        };
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let payload = match password {
+                Some(pw) => json!({ "ownerHwnd": owner_hwnd, "password": pw }),
+                None => json!({ "ownerHwnd": owner_hwnd }),
+            };
+            rpc.call::<_, ExoAccountOutcome>(
+                METHOD_EXO_ACCOUNT_PASSKEY_REGISTER,
+                &payload,
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.wp4.account_passkey_busy = false;
+                        match res {
+                            Ok(r) if r.ok => {
+                                s.wp4.account_passkey_reauth_needed = false;
+                                s.wp4.account_passkey_reauth_pw = TextEdit::new("");
+                                s.wp4.account_passkey_note = Some(
+                                    "Passkey added. Password and recovery code remain available."
+                                        .into(),
+                                );
+                                s.wp4_load_account_passkeys();
+                            }
+                            Ok(r) if r.error.as_deref() == Some("reauth-required") => {
+                                s.wp4.account_passkey_reauth_needed = true;
+                                s.wp4.account_passkey_error = Some(r.message);
+                            }
+                            Ok(r) => s.wp4.account_passkey_error = Some(r.message),
+                            Err(err) => s.wp4.account_passkey_error = Some(err.to_string()),
+                        }
+                    });
+                },
+            );
+            return;
+        }
+        let _ = (owner_hwnd, password);
+        self.wp4.account_passkey_busy = false;
+    }
+
+    pub fn wp4_account_passkey_delete(&mut self, id: String) {
+        if self.wp4.account_passkey_busy {
+            return;
+        }
+        self.wp4.account_passkey_busy = true;
+        self.wp4.account_passkey_error = None;
+        self.wp4.account_passkey_note = None;
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, ExoAccountOutcome>(
+                METHOD_EXO_ACCOUNT_PASSKEY_DELETE,
+                &json!({ "id": id }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.wp4.account_passkey_busy = false;
+                        match res {
+                            Ok(r) if r.ok => {
+                                s.wp4.account_passkey_note = Some("Passkey removed.".into());
+                                s.wp4_load_account_passkeys();
+                            }
+                            Ok(r) => s.wp4.account_passkey_error = Some(r.message),
+                            Err(err) => s.wp4.account_passkey_error = Some(err.to_string()),
+                        }
+                    });
+                },
+            );
+            return;
+        }
+        let _ = id;
+        self.wp4.account_passkey_busy = false;
+    }
+
+    pub fn wp4_account_passkey_sign_in(&mut self) {
+        if self.wp4.account_form_busy {
+            return;
+        }
+        self.wp4.account_form_error = None;
+        self.wp4.account_form_offline = false;
+        self.wp4.account_form_busy = true;
+        let email = self.wp4.account_email.text.trim().to_string();
+        let owner_hwnd = self.pc.owner_hwnd;
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, ExoAccountOutcome>(
+                METHOD_EXO_ACCOUNT_PASSKEY_SIGN_IN,
+                &json!({ "email": email, "ownerHwnd": owner_hwnd }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.wp4.account_form_busy = false;
+                        match res {
+                            Ok(r) if r.ok => s.wp4_load_account_overview(),
+                            Ok(r) => {
+                                s.wp4.account_form_offline = r.offline;
+                                s.wp4.account_form_error = Some(if r.message.is_empty() {
+                                    "Passkey sign-in didn't finish. You can use your password instead.".into()
+                                } else {
+                                    r.message
+                                });
+                            }
+                            Err(err) => s.wp4.account_form_error = Some(err.to_string()),
+                        }
+                    });
+                },
+            );
+            return;
+        }
+        let _ = (email, owner_hwnd);
+        self.wp4.account_form_busy = false;
     }
 
     pub fn wp4_account_sync_now(&mut self) {

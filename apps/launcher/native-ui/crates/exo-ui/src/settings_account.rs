@@ -366,6 +366,97 @@ pub fn account_section(s: &AppState) -> El {
         sec_card = sec_card.child(form.child(row().justify_end().child(submit_btn)));
     }
 
+    if let Some(ref pk) = s.wp4.account_passkeys
+        && pk.supported
+    {
+        let pk_detail = if pk.passkeys.is_empty() {
+            "Optional Windows Hello or security key sign-in. Password and recovery code always stay active.".to_string()
+        } else {
+            format!(
+                "{} passkey{} registered. Password and recovery code always stay active.",
+                pk.passkeys.len(),
+                if pk.passkeys.len() == 1 { "" } else { "s" }
+            )
+        };
+        let add_btn = set_btn(
+            "set-acct-passkey-add",
+            if s.wp4.account_passkey_reauth_needed {
+                "Confirm & add"
+            } else {
+                "Add passkey"
+            },
+            None,
+        )
+        .disabled(s.wp4.account_passkey_busy)
+        .on_press(|s: &mut AppState| s.wp4_account_passkey_register());
+        sec_card = sec_card
+            .child(el().w_full().h(1.0).fill(hairline()))
+            .child(set_row(
+                "about-account-passkeys",
+                "Passkeys",
+                Some(s.wp4.account_passkey_note.as_deref().unwrap_or(&pk_detail)),
+                s.wp4.account_passkey_error.as_deref(),
+                hi("about-account-passkeys"),
+                add_btn,
+            ));
+        if s.wp4.account_passkey_reauth_needed {
+            sec_card = sec_card.child(
+                col()
+                    .w_full()
+                    .px(18.0)
+                    .pb(12.0)
+                    .gap(6.0)
+                    .child(
+                        text("Confirm account password")
+                            .font(type_small())
+                            .color(fg_muted()),
+                    )
+                    .child(field_box(
+                        PasswordInput::new(&s.wp4.account_passkey_reauth_pw, type_body())
+                            .key("set-acct-passkey-reauth-pw")
+                            .label("Account password")
+                            .color(FG)
+                            .disabled(s.wp4.account_passkey_busy)
+                            .on_edit(|s: &mut AppState| &mut s.wp4.account_passkey_reauth_pw)
+                            .on_submit(|s: &mut AppState, _| s.wp4_account_passkey_register())
+                            .build()
+                            .w_full(),
+                    )),
+            );
+        }
+        for item in &pk.passkeys {
+            let pid = item.id.clone();
+            let used = if item.last_used > 0 {
+                format!("Last used {}", format_unix_timestamp(item.last_used))
+            } else {
+                "Added".to_string()
+            };
+            let warn = if item.flagged {
+                Some("Unusual sign-in counter detected — consider replacing this passkey.")
+            } else {
+                None
+            };
+            sec_card = sec_card
+                .child(el().w_full().h(1.0).fill(hairline()))
+                .child(set_row(
+                    &format!("about-account-passkey-{}", item.id),
+                    if item.label.is_empty() {
+                        "Windows passkey"
+                    } else {
+                        &item.label
+                    },
+                    Some(&used),
+                    warn,
+                    false,
+                    set_btn("set-acct-passkey-remove", "Remove", None)
+                        .disabled(s.wp4.account_passkey_busy)
+                        .on_press(move |s: &mut AppState| {
+                            s.wp4_account_passkey_delete(pid.clone())
+                        }),
+                ));
+        }
+    }
+
     sec_card = sec_card
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(set_row(
@@ -739,6 +830,17 @@ fn signed_out_section(s: &AppState) -> El {
         ));
 
     if mode == AccountSignedOutMode::SignIn {
+        if s.wp4
+            .account_passkeys
+            .as_ref()
+            .is_some_and(|pk| pk.supported)
+        {
+            actions = actions.child(
+                set_btn("set-acct-passkey-signin", "Sign in with passkey", None)
+                    .disabled(s.wp4.account_form_busy)
+                    .on_press(|s: &mut AppState| s.wp4_account_passkey_sign_in()),
+            );
+        }
         actions = actions.child(link_btn(
             "set-acct-forgot",
             "Forgot your password?",

@@ -1080,6 +1080,34 @@ pub fn stores_section(s: &AppState) -> El {
             .child(get_box);
     }
 
+    if let Some(ref providers) = s.wp4.native_auth_providers
+        && !providers.is_empty()
+    {
+        for provider in providers {
+            let status_text = if provider.available {
+                "Ready"
+            } else {
+                "Unavailable"
+            };
+            let badge_color = if provider.available {
+                good()
+            } else {
+                fg_muted()
+            };
+            card = card
+                .child(el().w_full().h(1.0).fill(hairline()))
+                .child(store_row_box(
+                    &format!("native-auth-{}", provider.provider),
+                    None,
+                    &provider.display_name,
+                    Some(provider.note.clone()),
+                    None,
+                    false,
+                    text(status_text).font(type_small()).color(badge_color),
+                ));
+        }
+    }
+
     col()
         .w_full()
         .gap(8.0)

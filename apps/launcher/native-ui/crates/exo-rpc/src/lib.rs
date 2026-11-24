@@ -146,14 +146,15 @@ use serde_json::{Value, json};
 pub use settings_types::{
     AccountsProgressEvent, AmazonAccountInfo, BackupActionReply, BackupStoppedEvent,
     ComponentsFailedEvent, EpicAccountsInfo, EpicAddedAccount, ExoAccountFileReply,
-    ExoAccountHeldItem, ExoAccountOutcome, ExoAccountOverview, ExoAccountProbe, ExoAccountSession,
-    ExoAccountSessionsReply, ExoAccountSyncState, GogAccountInfo, JunkCleanReply, JunkItem,
-    JunkScanReply, LeftoverSummary, PickFolderReply, ReplacedApp, ReplacedRemoveReply,
-    ReplacedScanReply, ReportPreviewReply, ReportSendReply, RiotAccountEntry, RiotAccountsInfo,
-    RiotBaseline, RiotBaselineReply, RiotExportImport, RiotHoursRefresh, ShadersEventPayload,
-    SteamAccountEntry, SteamAccountReply, SteamAccountsInfo, SteamSignInStep, StoreAccounts,
-    StoreGiftsReply, StoreLocalCheck, StoreStatus, StoresAuthReply, TelemetrySentReply,
-    WebClientOptions,
+    ExoAccountHeldItem, ExoAccountOutcome, ExoAccountOverview, ExoAccountPasskeyRow,
+    ExoAccountPasskeyStatus, ExoAccountProbe, ExoAccountSession, ExoAccountSessionsReply,
+    ExoAccountSyncState, GogAccountInfo, JunkCleanReply, JunkItem, JunkScanReply, LeftoverSummary,
+    NativeAuthProviderStatus, NativeAuthProvidersReply, PickFolderReply, ReplacedApp,
+    ReplacedRemoveReply, ReplacedScanReply, ReportPreviewReply, ReportSendReply, RiotAccountEntry,
+    RiotAccountsInfo, RiotBaseline, RiotBaselineReply, RiotExportImport, RiotHoursRefresh,
+    ShadersEventPayload, SteamAccountEntry, SteamAccountReply, SteamAccountsInfo, SteamSignInStep,
+    StoreAccounts, StoreGiftsReply, StoreLocalCheck, StoreStatus, StoresAuthReply,
+    TelemetrySentReply, WebClientOptions,
 };
 use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque};
@@ -224,6 +225,7 @@ pub const METHOD_AUDIO_READ: &str = "audio.read";
 pub const METHOD_AUDIO_SET_FORMAT: &str = "audio.setFormat";
 pub const METHOD_AUDIO_SET_MUTE: &str = "audio.setMute";
 pub const METHOD_AUDIO_SET_VOLUME: &str = "audio.setVolume";
+pub const METHOD_AUTH_NATIVE_PROVIDERS: &str = "auth.nativeProviders";
 pub const METHOD_AUTOPILOT_SET: &str = "autopilot.set";
 pub const METHOD_AUTOPILOT_STATE: &str = "autopilot.state";
 pub const METHOD_BIOS_UPDATE: &str = "bios.update";
@@ -494,6 +496,10 @@ pub const METHOD_EXO_ACCOUNT_REVOKE: &str = "exoAccount.revoke";
 pub const METHOD_EXO_ACCOUNT_EXPORT: &str = "exoAccount.export";
 pub const METHOD_EXO_ACCOUNT_DELETE: &str = "exoAccount.delete";
 pub const METHOD_EXO_ACCOUNT_PROBE: &str = "exoAccount.probe";
+pub const METHOD_EXO_ACCOUNT_PASSKEY_STATUS: &str = "exoAccount.passkeyStatus";
+pub const METHOD_EXO_ACCOUNT_PASSKEY_REGISTER: &str = "exoAccount.passkeyRegister";
+pub const METHOD_EXO_ACCOUNT_PASSKEY_SIGN_IN: &str = "exoAccount.passkeySignIn";
+pub const METHOD_EXO_ACCOUNT_PASSKEY_DELETE: &str = "exoAccount.passkeyDelete";
 pub const METHOD_GIFTS_STEAM_SIGN_IN: &str = "gifts.steamSignIn";
 pub const METHOD_GIFTS_STEAM_SIGN_OUT: &str = "gifts.steamSignOut";
 pub const METHOD_PLAYTIME_IMPORT_RIOT_EXPORT: &str = "playtime.importRiotExport";
@@ -563,6 +569,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_AUDIO_SET_FORMAT,
     METHOD_AUDIO_SET_MUTE,
     METHOD_AUDIO_SET_VOLUME,
+    METHOD_AUTH_NATIVE_PROVIDERS,
     METHOD_AUTOPILOT_SET,
     METHOD_AUTOPILOT_STATE,
     METHOD_BIOS_UPDATE,
@@ -823,6 +830,10 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_EXO_ACCOUNT_EXPORT,
     METHOD_EXO_ACCOUNT_DELETE,
     METHOD_EXO_ACCOUNT_PROBE,
+    METHOD_EXO_ACCOUNT_PASSKEY_STATUS,
+    METHOD_EXO_ACCOUNT_PASSKEY_REGISTER,
+    METHOD_EXO_ACCOUNT_PASSKEY_SIGN_IN,
+    METHOD_EXO_ACCOUNT_PASSKEY_DELETE,
     METHOD_GIFTS_LIST,
     METHOD_GIFTS_STEAM_SIGN_IN,
     METHOD_GIFTS_STEAM_SIGN_OUT,

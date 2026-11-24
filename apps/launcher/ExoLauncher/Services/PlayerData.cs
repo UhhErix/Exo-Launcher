@@ -511,7 +511,8 @@ internal static class PlayerData
         new("Assets/device-images.json", "DeviceImages", Why.Shipped, "the device picture links Exo ships"),
         new("Assets/Overlay/sample-icon.png", "AchievementIconCache", Why.Shipped, "the sample achievement icon Exo ships"),
         new("helixsr_weights.bin", "DlssSwapService", Why.Shipped, "HelixSR's model weights, downloaded"),
-        new("dlssnr_on_amd_weights.bin", "DlssSwapService", Why.Shipped, "the DLSS denoiser on AMD mod's weights, downloaded"),    ];
+        new("dlssnr_on_amd_weights.bin", "DlssSwapService", Why.Shipped, "the DLSS denoiser on AMD mod's weights, downloaded"),
+        new("oauth-clients.json", "NativeAuthProviders", Why.ThisPc, "optional official OAuth client IDs configured for native provider sign-in"),    ];
 
     /// <summary>Every (path, type) the two lists claim.</summary>
     internal static IEnumerable<(string Path, string Place)> AllClaims() =>
