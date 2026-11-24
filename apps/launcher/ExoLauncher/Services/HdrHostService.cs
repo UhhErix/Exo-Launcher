@@ -10,16 +10,26 @@ internal sealed class HdrHostService
 
     private readonly AppServices _services;
     private readonly CancellationToken _lifetime;
+    private readonly HdrSessionController _session = new(new NativeHdrDisplayControl(), new HdrJournal(HdrJournal.DefaultPath), HdrCalibrationStore.Shared);
     private Timer? _watch;
     private WindowsHdr.Screen? _switchedOn;
     private ushort[]? _ramp;
-    private long _releasedAt;
+    private long _releasedAt, _sessionReleasedAt;
     private int _syncing, _asked, _sdrGammaTries = 6, _started;
     private bool _adopted, _offRefusedLogged;
     private readonly Dictionary<string, long> _launching = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _sessionLaunching = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _sdrGammaWhyLogged = [];
     private readonly HashSet<string> _whyLogged = [];
     private readonly Dictionary<string, bool> _runs = new(StringComparer.OrdinalIgnoreCase);
+
+    internal string? BrightnessWarning => _session.BrightnessWarning;
+
+    internal event Action<string, string, string>? WarningRaised
+    {
+        add => _session.WarningRaised += value;
+        remove => _session.WarningRaised -= value;
+    }
 
     private sealed record HdrWant(string Id, WindowsHdr.GameWindow? Window, string? Remembered);
 
@@ -32,6 +42,7 @@ internal sealed class HdrHostService
     internal void Start()
     {
         if (Interlocked.Exchange(ref _started, 1) != 0) return;
+        try { _session.RecoverFromJournal(); } catch (Exception ex) { AppLog.Warn("HDR: journal recovery failed: " + ex.Message); }
         _watch = new Timer(_ => Sync(), null, HdrRecheck, Timeout.InfiniteTimeSpan);
         _services.Launcher.GameRunStateChanged += OnRunState;
         _services.Launcher.GameLaunching += OnLaunching;
@@ -49,7 +60,21 @@ internal sealed class HdrHostService
         }
         catch { }
         _watch = null;
+        try { _session.RestoreAll(); } catch { }
         try { Restore(); } catch { }
+    }
+
+    internal void UndoCalibration(string devicePath)
+    {
+        _session.RestoreNeutralOnly();
+        HdrCalibrationStore.Shared.Remove(devicePath);
+    }
+
+    internal bool SetCalibrationEnabled(string devicePath, bool enabled)
+    {
+        var ok = HdrCalibrationStore.Shared.SetEnabled(devicePath, enabled);
+        if (!enabled) _session.RestoreNeutralOnly();
+        return ok;
     }
 
     internal void SyncSoon()
@@ -79,10 +104,15 @@ internal sealed class HdrHostService
     private void OnLaunching(GameEntry game)
     {
         var settings = _services.Settings;
-        if (!settings.Shared.HdrForGames) return;
         var mode = settings.HdrGameMode(game.Id);
-        if (!WantsHdr(mode, mode == "auto" ? GameHdr.Supports(GameHdr.Judge(game, readFiles: false)) : null)) return;
-        lock (_launching) _launching[game.Id] = Environment.TickCount64;
+        var wantsHdr = settings.Shared.HdrForGames &&
+            WantsHdr(mode, mode == "auto" ? GameHdr.Supports(GameHdr.Judge(game, readFiles: false)) : null);
+        var wantsCursor = settings.HdrCursorFix(game.Id);
+        var hasNeutral = WindowsHdr.All().Any(s => s.IsInternal && HdrCalibrationStore.Shared.ValidPeakFor(s.DevicePath) is > 0);
+        if (!wantsHdr && !wantsCursor && !hasNeutral) return;
+        var now = Environment.TickCount64;
+        if (wantsHdr) lock (_launching) _launching[game.Id] = now;
+        if (wantsCursor || hasNeutral) lock (_sessionLaunching) _sessionLaunching[game.Id] = now;
         Sync();
     }
 
@@ -109,11 +139,17 @@ internal sealed class HdrHostService
             var running = MainWindow.RunningLibraryGames().Keys;
             var screens = WindowsHdr.All();
             Learn(running, screens.Any(screen => screen.Enabled));
-            if (!_services.Settings.Shared.HdrForGames) { Restore(); return _switchedOn is not null || gammaPending; }
-            var pending = PendingLaunches(_launching, running, Environment.TickCount64, HdrLaunchGraceMs);
+            var now = Environment.TickCount64;
+            var pendingSession = PendingLaunches(_sessionLaunching, running, now, HdrLaunchGraceMs);
+            if (!_services.Settings.Shared.HdrForGames)
+            {
+                Restore();
+                SyncSessionAdjustments(running, pendingSession, screens, now);
+                return running.Count > 0 || pendingSession.Count > 0 || _switchedOn is not null || gammaPending;
+            }
+            var pending = PendingLaunches(_launching, running, now, HdrLaunchGraceMs);
             var wanted = running.Concat(pending).Distinct(StringComparer.OrdinalIgnoreCase).Where(WantsHdrNow)
                 .Select(WantOf).ToList();
-            var now = Environment.TickCount64;
             if (wanted.Count > 0) _releasedAt = 0;
             else if (_switchedOn is not null)
             {
@@ -125,7 +161,8 @@ internal sealed class HdrHostService
                 RememberGameScreens(wanted, screens);
                 if (PickTarget(wanted, screens) is { } target) SwitchForGames(target, wanted);
             }
-            return running.Count > 0 || pending.Count > 0 || _switchedOn is not null || gammaPending;
+            SyncSessionAdjustments(running, pending.Concat(pendingSession).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), WindowsHdr.All(), now);
+            return running.Count > 0 || pending.Count > 0 || pendingSession.Count > 0 || _switchedOn is not null || gammaPending;
         }
         catch (Exception ex) { AppLog.Debug("HDR for games: " + ex.GetType().Name); return _switchedOn is not null; }
     }
@@ -352,5 +389,53 @@ internal sealed class HdrHostService
         RememberSwitchedOn("", "");
         if (ramp is not null) WindowsHdr.WriteRamp(screen.GdiName, ramp);
         AppLog.Info($"HDR back off on {screen.GdiName} after the game.");
+    }
+
+    private void SyncSessionAdjustments(ICollection<string> running, IReadOnlyList<string> pending, IReadOnlyList<WindowsHdr.Screen> screens, long now)
+    {
+        var activeIds = running.Concat(pending).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (activeIds.Count == 0)
+        {
+            if (_sessionReleasedAt == 0) _sessionReleasedAt = now;
+            if (HdrPlan.RestoreDue(_sessionReleasedAt, now))
+            {
+                _sessionReleasedAt = 0;
+                _session.RestoreAll();
+            }
+            return;
+        }
+        _sessionReleasedAt = 0;
+
+        var activeWants = activeIds.Select(WantOf).ToList();
+        var target = _switchedOn is { } held
+            ? screens.FirstOrDefault(s => string.Equals(s.DevicePath, held.DevicePath, StringComparison.OrdinalIgnoreCase))
+            : PickTarget(activeWants, screens);
+
+        if (target is not { Supported: true, Enabled: true })
+        {
+            _session.CheckMidGameBrightnessChange();
+            return;
+        }
+
+        if (target.IsInternal)
+        {
+            if (HdrCalibrationStore.Shared.ValidPeakFor(target.DevicePath) is > 0)
+            {
+                _session.ApplyNeutralPairForGame(target);
+                _session.CheckMidGameBrightnessChange();
+            }
+            else
+            {
+                _session.RestoreNeutralOnly();
+            }
+            _session.RestoreCursorOnly();
+        }
+        else
+        {
+            _session.RestoreNeutralOnly();
+            var wantsCursor = activeIds.Any(id => _services.Settings.HdrCursorFix(id));
+            if (wantsCursor) _session.ApplyCursorFixForGame(target, true);
+            else _session.RestoreCursorOnly();
+        }
     }
 }

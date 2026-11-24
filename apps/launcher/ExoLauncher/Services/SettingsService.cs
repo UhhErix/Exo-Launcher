@@ -181,6 +181,7 @@ public sealed class SettingsService
         loaded.LastPlayed = CopyStrings(loaded.LastPlayed);
         loaded.UpscalerAntiCheatConsent = CopyStrings(loaded.UpscalerAntiCheatConsent);
         loaded.HdrGameModes = CopyStrings(loaded.HdrGameModes);
+        loaded.HdrCursorFixGames = NormalizeHiddenGames(loaded.HdrCursorFixGames);
         loaded.NvidiaColor = CopyStrings(loaded.NvidiaColor);
         loaded.SdrGammaBefore = CopyStrings(loaded.SdrGammaBefore);
         loaded.HdrGameScreens = CopyStrings(loaded.HdrGameScreens);
@@ -678,6 +679,12 @@ public sealed class SettingsService
             return _current.HdrGameModes.TryGetValue(gameId, out var mode) ? mode : "auto";
     }
 
+    public bool HdrCursorFix(string gameId)
+    {
+        lock (_stateGate)
+            return _current.HdrCursorFixGames.Contains(gameId, StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <summary>Library > folders: the whole list, as the Library has it now. Returns what was kept.</summary>
     public IReadOnlyList<LibraryFolder> SetLibraryFolders(IEnumerable<LibraryFolder> folders)
     {
@@ -855,6 +862,16 @@ public sealed class SettingsService
             else settings.HdrGameModes[gameId] = mode;
             if (settings.HdrGameModes.Count > 5_000)
                 throw new InvalidDataException("Too many HDR choices are saved.");
+        });
+    }
+
+    public void SetHdrCursorFix(string gameId, bool enabled)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var rest = settings.HdrCursorFixGames.Where(id => !string.Equals(id, gameId, StringComparison.OrdinalIgnoreCase));
+            settings.HdrCursorFixGames = NormalizeHiddenGames(enabled ? rest.Append(gameId) : rest);
         });
     }
 

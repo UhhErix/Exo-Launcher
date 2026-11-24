@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { host, type HdrState } from './host'
+import { host, onHostEvent, type HdrState } from './host'
 import { report } from './report'
 
 /** The main screen's HDR state: read on mount, when shown again, and when Exo's window comes back while shown. */
@@ -11,7 +11,8 @@ export function useHdrState(active = true) {
     load()
     if (!active) return () => { live = false }
     window.addEventListener('focus', load)
-    return () => { live = false; window.removeEventListener('focus', load) }
+    const offWarn = onHostEvent('hdr.warning', () => load())
+    return () => { live = false; window.removeEventListener('focus', load); offWarn() }
   }, [active])
   return state
 }

@@ -82,6 +82,18 @@ internal static unsafe partial class AmdAdlx
     // shortcut: ADLX reports no defaults, so "normal" is AMD Software's own (brightness 0, contrast 100,
     // saturation 100, hue 0, 6500 K), clamped into the range; read the driver's when ADLX offers it.
     private const int DisplaysGetCustomColor = 16;
+    private const int DisplaysGetVariBright = 19;
+
+    internal static bool? ReadVariBright(string name) =>
+        WithDisplay(name, [DisplaysGetVariBright], items =>
+        {
+            var vb = items[0];
+            byte supported = 0, enabled = 0;
+            if (((delegate* unmanaged[Stdcall]<nint, byte*, int>)Slot(vb, 3))(vb, &supported) != AdlxOk) return (bool?)null;
+            if (supported == 0) return false;
+            if (((delegate* unmanaged[Stdcall]<nint, byte*, int>)Slot(vb, 4))(vb, &enabled) != AdlxOk) return null;
+            return enabled != 0;
+        });
     private static readonly (string Key, string Label, int Slot, int Normal, string Unit)[] CustomColors =
     [
         ("brightness", "Brightness", 11, 0, ""), ("contrast", "Contrast", 15, 100, ""), ("saturation", "Saturation", 7, 100, ""),
