@@ -191,12 +191,43 @@ internal sealed partial class Controller : IDisposable
     internal static string Name(Codec c) => c switch { Codec.H264 => "H.264", Codec.Hevc => "HEVC", Codec.Av1 => "AV1", _ => "VP9" };
 
     private readonly Dictionary<Codec, bool> _available = [];
+    private bool _gpuUnavailableLogged;
+
+    internal static bool ProbeCodecAvailability(Func<bool> probe, Action<string> log, ref string? error, ref bool logged)
+    {
+        try
+        {
+            var ok = probe();
+            logged = false;
+            if (error == "Capture unavailable on this GPU.") error = null;
+            return ok;
+        }
+        catch (Exception ex) when (ex is CaptureException or SharpGen.Runtime.SharpGenException)
+        {
+            error ??= "Capture unavailable on this GPU.";
+            if (!logged)
+            {
+                logged = true;
+                log($"Capture unavailable on this GPU (hr=0x{ex.HResult:X8}): {ex.Message}");
+            }
+            return false;
+        }
+    }
+
     private bool Available(Codec codec)
     {
         if (_available.TryGetValue(codec, out var known)) return known;
-        var gpu = _gpu ?? GpuDevice.Shared();
-        var found = VideoEncoder.Playable(codec) && VideoEncoder.Find(codec, gpu.Luid, true) is { Count: > 0 };
-        return _available[codec] = found;
+        var ok = false;
+        var probed = false;
+        ProbeCodecAvailability(() =>
+        {
+            var gpu = _gpu ?? GpuDevice.Shared();
+            ok = VideoEncoder.Playable(codec) && VideoEncoder.Find(codec, gpu.Luid, true) is { Count: > 0 };
+            probed = true;
+            return ok;
+        }, Host.Log, ref _error, ref _gpuUnavailableLogged);
+        if (probed) _available[codec] = ok;
+        return ok;
     }
 
     /// <summary>Sends state when it changed (or always, when asked).</summary>
@@ -315,6 +346,8 @@ internal sealed partial class Controller : IDisposable
             var monitor = window != 0 ? Win32.MonitorFromWindow(window, Win32.MONITOR_DEFAULTTONEAREST) : Win32.MonitorFromPoint(default, 1 /* PRIMARY */);
             var luid = GpuDevice.LuidOfMonitor(monitor);
             _gpu = GpuDevice.Shared(luid);
+            _gpuUnavailableLogged = false;
+            if (_error == "Capture unavailable on this GPU.") _error = null;
             var fps = Math.Min(_config.MaxFps, RefreshRate(monitor));
             var (source, gate) = OpenSource(_gpu, window, monitor);
             var session = new CaptureSession(_gpu, source, new SessionOptions(fps, _config.Quality, true, RateMode.Clip));

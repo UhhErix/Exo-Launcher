@@ -15,6 +15,7 @@ public sealed class FailureReportRulesTests
     [InlineData(1, false, true)]
     [InlineData(-1073741819, false, true)]
     [InlineData(0, false, false)]
+    [InlineData(FailureReportRules.CaptureGpuUnavailableExitCode, false, false)]
     [InlineData(1, true, false)]
     [InlineData(0, true, false)]
     public void CaptureCrashOnlyWhenNonZeroAndNotStoppedByExo(int exitCode, bool stoppedByExo, bool expected) =>

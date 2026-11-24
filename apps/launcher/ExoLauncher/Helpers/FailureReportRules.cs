@@ -8,10 +8,13 @@ namespace ExoLauncher.Helpers;
 /// </summary>
 public static class FailureReportRules
 {
+    public const int CaptureGpuUnavailableExitCode = 78;
+
     /// <summary>
     /// An Exo Capture exit is a crash when Exo did not stop it itself and it exited with a non-zero code.
     /// </summary>
-    public static bool IsCaptureCrash(int exitCode, bool stoppedByExo) => !stoppedByExo && exitCode != 0;
+    public static bool IsCaptureCrash(int exitCode, bool stoppedByExo) =>
+        !stoppedByExo && exitCode != 0 && exitCode != CaptureGpuUnavailableExitCode;
 
     /// <summary>
     /// A store launch that failed for the user: not a stop, not a dependency or offline prompt.

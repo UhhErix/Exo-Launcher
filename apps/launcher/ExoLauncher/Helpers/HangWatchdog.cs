@@ -30,6 +30,7 @@ public static class HangWatchdog
     // Since this stamp the page owes a first beat: set when the watchdog arms and when a new page is attached.
     private static long _pageOwedSince;
     private static volatile bool _pageVisible;
+    private static volatile bool _pageAttached;
     private static DispatcherQueueTimer? _uiTimer;
     private static bool _started;
     private static nint _hwnd;
@@ -103,15 +104,22 @@ public static class HangWatchdog
     /// <summary>A new page was attached: its beats start from now, so an earlier page's silence is never counted.</summary>
     internal static void PageAttached()
     {
+        _pageAttached = true;
         Volatile.Write(ref _pageBeat, 0);
         Volatile.Write(ref _pageOwedSince, Stopwatch.GetTimestamp());
+    }
+
+    internal static void PageDetached()
+    {
+        _pageAttached = false;
+        Volatile.Write(ref _pageBeat, 0);
     }
 
     /// <summary>The page watch's states: no judging, armed and waiting for the first beat, armed and beating, reported (once, until a beat comes back).</summary>
     internal enum PageWatchState { Disarmed, WaitingForFirstBeat, Beating, Reported }
 
     /// <summary>What one check knows about the page.</summary>
-    internal readonly record struct PageWatchInput(bool Armed, bool UiAnswering, bool BeatSinceArm, bool LastBeatVisible, TimeSpan Silent, bool Reported);
+    internal readonly record struct PageWatchInput(bool Armed, bool UiAnswering, bool BeatSinceArm, bool LastBeatVisible, TimeSpan Silent, bool Reported, bool PageAttached = true);
 
     /// <summary>
     /// The page watch as one table. Rows, in order:
@@ -125,7 +133,7 @@ public static class HangWatchdog
     /// </summary>
     internal static (PageWatchState State, bool Report) PageCheck(PageWatchInput i)
     {
-        if (!i.Armed) return (PageWatchState.Disarmed, false);
+        if (!i.Armed || !i.PageAttached) return (PageWatchState.Disarmed, false);
         if (!i.UiAnswering)
             return (i.Reported ? PageWatchState.Reported : i.BeatSinceArm ? PageWatchState.Beating : PageWatchState.WaitingForFirstBeat, false);
         var late = i.Silent > Threshold;
@@ -159,6 +167,7 @@ public static class HangWatchdog
     {
         var uiReported = false;
         var pageReported = false;
+        var uiWasStalled = false;
         while (true)
         {
             try
@@ -166,19 +175,28 @@ public static class HangWatchdog
                 Armed.Wait();
                 Thread.Sleep(CheckEvery);
                 // Disarmed during the wait: the stamps are stale by design, so this check counts for nothing.
-                if (!Armed.IsSet) { uiReported = false; pageReported = false; continue; }
+                if (!Armed.IsSet) { uiReported = false; pageReported = false; uiWasStalled = false; continue; }
                 var now = Stopwatch.GetTimestamp();
                 var shown = OnScreen(hwnd);
                 var uiStalled = Stopwatch.GetElapsedTime(Volatile.Read(ref _uiBeat), now);
                 if (Evaluate(uiStalled, shown, ref uiReported))
                     CrashReport.Submit(kind, $"UI thread stopped responding for {(int)uiStalled.TotalSeconds} s", "ui");
 
+                var uiAnswering = uiStalled <= Threshold;
+                if (!uiAnswering) uiWasStalled = true;
+                else if (uiWasStalled)
+                {
+                    uiWasStalled = false;
+                    Volatile.Write(ref _pageBeat, 0);
+                    Volatile.Write(ref _pageOwedSince, now);
+                }
+
                 // The page's beats come through the UI thread: while that thread is stuck they cannot arrive, so the
                 // page is judged only while the UI thread answers (a stuck UI thread is reported above instead).
                 var pageAt = Volatile.Read(ref _pageBeat);
                 var since = pageAt != 0 ? pageAt : Volatile.Read(ref _pageOwedSince);
                 var pageStalled = Stopwatch.GetElapsedTime(since, now);
-                var (_, reportPage) = PageCheck(new PageWatchInput(shown, uiStalled <= Threshold, pageAt != 0, _pageVisible, pageStalled, pageReported));
+                var (_, reportPage) = PageCheck(new PageWatchInput(shown, uiAnswering, pageAt != 0, _pageVisible, pageStalled, pageReported, _pageAttached));
                 pageReported = reportPage || (pageReported && pageStalled > Threshold);
                 if (reportPage)
                     CrashReport.Submit(kind, $"WebView page stopped responding for {(int)pageStalled.TotalSeconds} s", "page");

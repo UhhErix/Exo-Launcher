@@ -118,6 +118,28 @@ public sealed class CrashReportTests
     }
 
     [Fact]
+    public void TestRunWithoutCustomPosterNeverLeavesTheMachine()
+    {
+        Assert.False(CrashReport.MayLeave(disposable: false, testRun: true, customPoster: false, smokeAllowsSends: false, errorType: "UpdateFailure"));
+        Assert.True(CrashReport.MayLeave(disposable: false, testRun: true, customPoster: true, smokeAllowsSends: false, errorType: "UpdateFailure"));
+        Assert.True(CrashReport.MayLeave(disposable: false, testRun: false, customPoster: false, smokeAllowsSends: false, errorType: "UpdateFailure"));
+    }
+
+    [Fact]
+    public void FitExcerptPreservesErrorLineAtTopAndNewestLogTail()
+    {
+        var head = "Exo Launcher 3.29.0 · Windows 10.0.26200.0 · 2026-11-23 07:27 UTC\nError (exo ai): Its installer didn't start.\n\nExo's log (200 entries):";
+        var lines = Enumerable.Range(1, 200).Select(i => $"[2026-11-23T07:00:{i % 60:00}.0000000Z] WARN Entry {i}: " + new string('x', 80));
+        var full = head + "\n" + string.Join('\n', lines);
+
+        var fitted = CrashReport.FitExcerpt(full, 1200);
+        Assert.True(fitted.Length <= 1200);
+        Assert.StartsWith("Exo Launcher 3.29.0", fitted);
+        Assert.Contains("Error (exo ai): Its installer didn't start.", fitted);
+        Assert.Contains("WARN Entry 200:", fitted);
+    }
+
+    [Fact]
     public void WithoutANamedErrorTheTypeIsAppError()
     {
         // A log with no exception name in it (the sample log above has two, which would be picked first).

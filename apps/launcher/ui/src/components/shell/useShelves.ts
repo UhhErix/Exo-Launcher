@@ -24,23 +24,24 @@ function isShelfGame(game: Game, transferId: string | null, showTools: boolean):
 }
 
 const CONTINUE_MAX = 20
+const continueCollator = new Intl.Collator(undefined, { sensitivity: 'base' })
 
-function continueOrder(games: Game[], transferId: string | null): Game[] {
-  const played = (game: Game) => (game.lastPlayedUtc ? Date.parse(game.lastPlayedUtc) : 0)
-  const rank = (game: Game) => {
-    if (game.isRunning) return 0
-    if (isInstallingGame(game, transferId)) return 1
-    if (game.installed && played(game) > 0) return 2
-    if (game.installed) return 3
-    return 4
-  }
-  return [...games]
-    .sort((a, b) =>
-      rank(a) - rank(b)
-      || played(b) - played(a)
-      || (b.playtimeMinutes ?? 0) - (a.playtimeMinutes ?? 0)
-      || a.title.localeCompare(b.title))
-    .slice(0, CONTINUE_MAX)
+export function continueOrder(games: Game[], transferId: string | null): Game[] {
+  const entries = games.map((game) => {
+    const played = game.lastPlayedUtc ? Date.parse(game.lastPlayedUtc) : 0
+    const rank = game.isRunning ? 0
+      : isInstallingGame(game, transferId) ? 1
+      : game.installed && played > 0 ? 2
+      : game.installed ? 3
+      : 4
+    return { game, rank, played: Number.isNaN(played) ? 0 : played, playtime: game.playtimeMinutes ?? 0 }
+  })
+  entries.sort((a, b) =>
+    a.rank - b.rank
+    || b.played - a.played
+    || b.playtime - a.playtime
+    || continueCollator.compare(a.game.title, b.game.title))
+  return entries.slice(0, CONTINUE_MAX).map((entry) => entry.game)
 }
 
 /**

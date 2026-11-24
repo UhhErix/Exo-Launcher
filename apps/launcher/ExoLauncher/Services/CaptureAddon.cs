@@ -294,6 +294,11 @@ internal sealed class CaptureAddon(Func<ProcessStartInfo?> getStartInfo) : IDisp
         process.Dispose();
         run.Completion.TrySetResult();
         if (closing) return;
+        if (code == FailureReportRules.CaptureGpuUnavailableExitCode)
+        {
+            AppLog.Info("Capture add-on exited: capture unavailable on this GPU.");
+            return;
+        }
         AppLog.Warn("Capture add-on exited: code " + code + ".");
         if (FailureReportRules.IsCaptureCrash(code, stoppedByExo: false))
             CrashReport.Submit("CaptureCrash", "Exo Capture stopped with exit code " + code, "capture");
