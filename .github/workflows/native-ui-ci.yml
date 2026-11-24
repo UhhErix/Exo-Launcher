@@ -6,6 +6,8 @@ on:
       - 'apps/launcher/native-ui/**'
       - 'apps/launcher/ui/contracts/host-v1.json'
       - 'apps/launcher/ui/contracts/keyboard-layouts.json'
+      - 'apps/launcher/ui/src/lib/whatsNew.json'
+      - 'apps/launcher/CHANGELOG.md'
       - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
   push:
@@ -14,6 +16,8 @@ on:
       - 'apps/launcher/native-ui/**'
       - 'apps/launcher/ui/contracts/host-v1.json'
       - 'apps/launcher/ui/contracts/keyboard-layouts.json'
+      - 'apps/launcher/ui/src/lib/whatsNew.json'
+      - 'apps/launcher/CHANGELOG.md'
       - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
 
@@ -42,6 +46,8 @@ jobs:
           sparse-checkout: |
             apps/launcher/native-ui
             apps/launcher/ui/contracts
+            apps/launcher/ui/src/lib/whatsNew.json
+            apps/launcher/CHANGELOG.md
             apps/launcher/ExoLauncher/Assets/Fonts
           persist-credentials: false
 

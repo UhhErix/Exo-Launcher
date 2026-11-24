@@ -1,11 +1,11 @@
 use crate::events::{EventRegistry, HostEventKind};
 use crate::state::{AppState, HostStatus, NoticeTone};
-use exo_rpc::HostEvent;
 use exo_kit::{
     BG, FG, RADIUS_PANEL, RADIUS_PILL, bad, exo_mark, fg_muted, glass_button, glass_panel_opt,
     good, icon_alert, icon_check, icon_cpu, icon_monitor, primary_button, progress_bar, scaled,
     track_fill, type_body, type_small, type_title,
 };
+use exo_rpc::HostEvent;
 use rune::{El, col, el, row, text};
 use serde_json::{Value, json};
 use std::panic::{AssertUnwindSafe, catch_unwind};

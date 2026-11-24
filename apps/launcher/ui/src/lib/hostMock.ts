@@ -676,6 +676,7 @@ const mockSettings: LauncherSettings = {
   hdrForGames: false,
   frameGenEverywhere: false,
   frameGenEverywhereCard: true,
+  graphicsFeaturesBestSettings: false,
     hdrSdrGamma: true,
     discordNoiseSuppression: true,
     discordQuietWhilePlaying: true,
@@ -2569,6 +2570,39 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     message: p?.action === 'undo' ? 'Neutral-pair calibration removed and display restored.' : 'Neutral pair found.',
   }),
   'game.settings': mockGameSettings,
+  'game.graphicsFeatures': (p) => {
+    const id = typeof p?.id === 'string' ? p.id : 'mock:game'
+    return {
+      ok: true,
+      engine: 'Unreal Engine 5',
+      running: false,
+      antiCheat: id.includes('valorant') ? 'Riot Vanguard' : null,
+      features: [
+        { id: 'upscalers', name: 'Upscalers', state: 'inGame', route: 'DLSS / FSR / XeSS · NVIDIA DRS DLSS 4/4.5 override', routeKind: 'driver', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'reflex', name: 'Reflex & low latency', state: 'on', route: 'NVIDIA Reflex (config + driver Low Latency Ultra)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'rayTracing', name: 'Ray tracing', state: 'off', route: 'UE5 Lumen Hardware RT (Engine.ini)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'pathTracing', name: 'Path tracing', state: 'off', route: 'UE5 Path Tracer (Engine.ini)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'hiddenSettings', name: 'Hidden settings', state: 'off', route: 'FPS uncap + above-Ultra LOD/AF (UE config)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+      ],
+    }
+  },
+  'game.graphicsFeatures.set': (p) => {
+    const feature = typeof p?.feature === 'string' ? p.feature : 'rayTracing'
+    const on = p?.on === true
+    return {
+      ok: true,
+      engine: 'Unreal Engine 5',
+      running: false,
+      antiCheat: null,
+      features: [
+        { id: 'upscalers', name: 'Upscalers', state: feature === 'upscalers' ? (on ? 'on' : 'off') : 'inGame', route: 'DLSS / FSR / XeSS · NVIDIA DRS DLSS 4/4.5 override', routeKind: 'driver', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'reflex', name: 'Reflex & low latency', state: feature === 'reflex' ? (on ? 'on' : 'off') : 'on', route: 'NVIDIA Reflex (config + driver Low Latency Ultra)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'rayTracing', name: 'Ray tracing', state: feature === 'rayTracing' ? (on ? 'on' : 'off') : 'off', route: 'UE5 Lumen Hardware RT (Engine.ini)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'pathTracing', name: 'Path tracing', state: feature === 'pathTracing' ? (on ? 'on' : 'off') : 'off', route: 'UE5 Path Tracer (Engine.ini)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'hiddenSettings', name: 'Hidden settings', state: feature === 'hiddenSettings' ? (on ? 'on' : 'off') : 'off', route: 'FPS uncap + above-Ultra LOD/AF (UE config)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+      ],
+    }
+  },
   // As on the RX 9070 XT of ?gpu=amd.
   'gpu.afmf3': (p) => {
     const offer = mockGpu === 'amd'

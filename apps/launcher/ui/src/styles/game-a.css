@@ -103,6 +103,13 @@
   padding: 0 var(--exo-game-edge);
 }
 
+.exo-game-workspace-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
 .exo-game-panel {
   --exo-panel-pad: 20px;
   display: flex;

@@ -48,6 +48,7 @@ pub enum HostEventKind {
     HidInput,
     AppsChanged,
     MusicVolume,
+    MusicStatus,
     CaptureState,
     CaptureSaved,
     CaptureReel,
@@ -132,6 +133,7 @@ impl HostEventKind {
             HostEvent::HidInput(_) => Self::HidInput,
             HostEvent::AppsChanged => Self::AppsChanged,
             HostEvent::MusicVolume(_) => Self::MusicVolume,
+            HostEvent::MusicStatus(_) => Self::MusicStatus,
             HostEvent::CaptureState(_) => Self::CaptureState,
             HostEvent::CaptureSaved(_) => Self::CaptureSaved,
             HostEvent::CaptureReel(_) => Self::CaptureReel,
@@ -333,7 +335,9 @@ fn register_media(reg: &mut EventRegistry) {
         let HostEvent::MusicPlayback(pb) = ev else {
             return false;
         };
-        state.apply_music_playback(pb)
+        let changed = state.apply_music_playback(pb);
+        state.on_music_playback_changed();
+        changed
     });
     reg.on(HostEventKind::MusicVolume, |state, ev| {
         let HostEvent::MusicVolume(vol) = ev else {
@@ -342,7 +346,23 @@ fn register_media(reg: &mut EventRegistry) {
         let prev_vol = state.media.music_volume;
         let prev_muted = state.media.music_muted;
         state.apply_music_volume(vol);
+        state.media.music_volume_known = true;
+        if state.media.music_volume > 0.0 {
+            state.media.music_last_audible_volume = state.media.music_volume;
+        }
         (prev_vol - state.media.music_volume).abs() > 0.001 || prev_muted != state.media.music_muted
+    });
+    reg.on(HostEventKind::MusicStatus, |state, ev| {
+        let HostEvent::MusicStatus(st) = ev else {
+            return false;
+        };
+        state.on_music_status(st)
+    });
+    reg.on(HostEventKind::DiscordCallSong, |state, ev| {
+        let HostEvent::DiscordCallSong(song) = ev else {
+            return false;
+        };
+        state.on_discord_call_song(song.clone())
     });
     reg.on(HostEventKind::CaptureState, |state, ev| {
         let HostEvent::CaptureState(live) = ev else {
@@ -412,7 +432,11 @@ fn register_discord(reg: &mut EventRegistry) {
         let HostEvent::DiscordPresence(dp) = ev else {
             return false;
         };
-        state.handle_discord_presence(dp)
+        let uid = dp.user_id.clone();
+        let rich = dp.rich.clone();
+        let changed = state.handle_discord_presence(dp);
+        state.on_listen_along_presence(&uid, rich.as_ref());
+        changed
     });
     reg.on(HostEventKind::DiscordUnread, |state, ev| {
         let HostEvent::DiscordUnread(du) = ev else {

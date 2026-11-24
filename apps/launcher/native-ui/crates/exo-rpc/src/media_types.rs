@@ -1,8 +1,11 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicPlayback {
+    #[serde(default)]
+    pub seq: Option<u64>,
     #[serde(default)]
     pub provider: String,
     #[serde(default)]
@@ -23,6 +26,10 @@ pub struct MusicPlayback {
     pub position_ms: Option<i64>,
     #[serde(default)]
     pub duration_ms: Option<i64>,
+    #[serde(default)]
+    pub position_age_ms: Option<f64>,
+    #[serde(default)]
+    pub rate: Option<f64>,
     #[serde(default)]
     pub can_play: bool,
     #[serde(default)]
@@ -56,6 +63,19 @@ pub struct MusicPlaybackReply {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MusicControlReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub cause: Option<String>,
+    #[serde(default)]
+    pub device_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MusicVolumeReply {
     #[serde(default)]
     pub ok: bool,
@@ -63,6 +83,49 @@ pub struct MusicVolumeReply {
     pub level: Option<f64>,
     #[serde(default)]
     pub muted: bool,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicMatchSong {
+    pub title: String,
+    pub artists: Vec<String>,
+    pub duration_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicMatchReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub index: Option<i32>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicStatusEvent {
+    #[serde(default)]
+    pub service: String,
+    #[serde(default)]
+    pub state: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerActReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub uri: Option<String>,
 }
 
 fn null_vec<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
@@ -121,6 +184,8 @@ pub struct PlayerOption {
     pub id: String,
     #[serde(default)]
     pub name: String,
+    #[serde(default)]
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -164,6 +229,18 @@ pub struct PlayerTrack {
     pub playable: bool,
     #[serde(default)]
     pub liked: Option<bool>,
+    #[serde(default)]
+    pub disliked: Option<bool>,
+    #[serde(default)]
+    pub in_library: Option<bool>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub played: Option<bool>,
+    #[serde(default)]
+    pub progress_ms: Option<f64>,
 }
 
 impl PlayerTrack {
@@ -174,6 +251,10 @@ impl PlayerTrack {
             .filter(|n| !n.is_empty())
             .collect::<Vec<_>>()
             .join(", ")
+    }
+
+    pub fn is_episode(&self) -> bool {
+        self.uri.starts_with("spotify:episode:")
     }
 }
 
@@ -200,9 +281,368 @@ pub struct PlayerHeader {
     #[serde(default)]
     pub image: String,
     #[serde(default)]
+    pub banner: Option<String>,
+    #[serde(default)]
     pub description: Option<String>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub artists: Vec<PlayerArtist>,
     #[serde(default)]
     pub saved: Option<bool>,
+    #[serde(default)]
+    pub editable: Option<bool>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub badges: Vec<String>,
+    #[serde(default)]
+    pub about: Option<String>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub facts: Vec<String>,
+    #[serde(default)]
+    pub station: Option<String>,
+    #[serde(default)]
+    pub privacy: Option<String>,
+    #[serde(default)]
+    pub radio: Option<bool>,
+    #[serde(default)]
+    pub owned: Option<bool>,
+    #[serde(default)]
+    pub public: Option<bool>,
+    #[serde(default)]
+    pub collaborative: Option<bool>,
+    #[serde(default)]
+    pub downloaded: Option<Value>,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub copyright: Vec<String>,
+    #[serde(default)]
+    pub duration_ms: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistAboutCity {
+    #[serde(default)]
+    pub city: String,
+    #[serde(default)]
+    pub country: String,
+    #[serde(default)]
+    pub listeners: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistAboutLink {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistAbout {
+    #[serde(default)]
+    pub bio: String,
+    #[serde(default)]
+    pub followers: u64,
+    #[serde(default)]
+    pub listeners: u64,
+    #[serde(default)]
+    pub rank: u64,
+    #[serde(default)]
+    pub image: String,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub cities: Vec<ArtistAboutCity>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub links: Vec<ArtistAboutLink>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Concert {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub date: String,
+    #[serde(default)]
+    pub place: String,
+    #[serde(default)]
+    pub venue: String,
+    #[serde(default)]
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreditPerson {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub roles: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreditGroup {
+    #[serde(default)]
+    pub role: String,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub people: Vec<CreditPerson>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerDevice {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub r#type: String,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub local: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerFriendUser {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub image: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerFriendContext {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerFriendTrack {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub image: String,
+    #[serde(default)]
+    pub artist: Option<PlayerArtist>,
+    #[serde(default)]
+    pub context: Option<PlayerFriendContext>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerFriend {
+    #[serde(default)]
+    pub user: PlayerFriendUser,
+    #[serde(default)]
+    pub track: PlayerFriendTrack,
+    #[serde(default)]
+    pub at: i64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JamMember {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub image: String,
+    #[serde(default)]
+    pub me: bool,
+    #[serde(default)]
+    pub host: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JamSession {
+    #[serde(default)]
+    pub owner: bool,
+    #[serde(default)]
+    pub link: String,
+    #[serde(default)]
+    pub can_remove: bool,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub members: Vec<JamMember>,
+    #[serde(default)]
+    pub guests_play: Option<bool>,
+    #[serde(default)]
+    pub guest_volume: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsWord {
+    #[serde(default)]
+    pub start: f64,
+    #[serde(default)]
+    pub end: f64,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub bg: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsLine {
+    #[serde(default)]
+    pub start: f64,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub words: Vec<LyricsWord>,
+    #[serde(default)]
+    pub agent: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerRating {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub liked: Option<bool>,
+    #[serde(default)]
+    pub disliked: Option<bool>,
+    #[serde(default)]
+    pub in_library: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerFolderRef {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub parent: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotifyEqFilter {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub frequency: f64,
+    #[serde(default)]
+    pub gain: f64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotifyEq {
+    #[serde(default)]
+    pub supported: bool,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub filters: Option<Vec<SpotifyEqFilter>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotifyAudio {
+    #[serde(default)]
+    pub quality: Option<i32>,
+    #[serde(default)]
+    pub lossless: bool,
+    #[serde(default)]
+    pub crossfade: bool,
+    #[serde(default)]
+    pub crossfade_ms: i32,
+    #[serde(default)]
+    pub gapless: bool,
+    #[serde(default)]
+    pub auto_mix: bool,
+    #[serde(default)]
+    pub normalize: bool,
+    #[serde(default)]
+    pub mono: bool,
+    #[serde(default)]
+    pub exclusive: Option<bool>,
+    #[serde(default)]
+    pub smart_shuffle: Option<bool>,
+    #[serde(default)]
+    pub equalizer: SpotifyEq,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotifyAudioReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub data: Option<SpotifyAudio>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerStateData {
+    #[serde(default)]
+    pub track_uri: String,
+    #[serde(default)]
+    pub context_uri: String,
+    #[serde(default)]
+    pub shuffle: bool,
+    #[serde(default)]
+    pub repeat: i32,
+    #[serde(default)]
+    pub liked: bool,
+    #[serde(default)]
+    pub can_shuffle: bool,
+    #[serde(default)]
+    pub can_repeat: bool,
+    #[serde(default)]
+    pub disliked: Option<bool>,
+    #[serde(default)]
+    pub can_video: Option<bool>,
+    #[serde(default)]
+    pub video: Option<bool>,
+    #[serde(default)]
+    pub speed: Option<f64>,
+    #[serde(default)]
+    pub image: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub artists: Vec<PlayerArtist>,
+    #[serde(default)]
+    pub autoplay: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerStateReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub data: Option<PlayerStateData>,
+    #[serde(default)]
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -210,6 +650,8 @@ pub struct PlayerHeader {
 pub struct PlayerViewData {
     #[serde(default, deserialize_with = "null_vec")]
     pub sections: Vec<PlayerSection>,
+    #[serde(default)]
+    pub more: Option<PlayerLink>,
     #[serde(default, deserialize_with = "null_vec")]
     pub items: Vec<PlayerCard>,
     #[serde(default, deserialize_with = "null_vec")]
@@ -221,9 +663,41 @@ pub struct PlayerViewData {
     #[serde(default, deserialize_with = "null_vec")]
     pub playlists: Vec<PlayerCard>,
     #[serde(default, deserialize_with = "null_vec")]
+    pub shows: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub audiobooks: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub episodes: Vec<PlayerTrack>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub singles: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub related: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub compilations: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub appears_on: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub featuring: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub discovered_on: Vec<PlayerCard>,
+    #[serde(default)]
+    pub about: Option<ArtistAbout>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub concerts: Vec<Concert>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub tags: Vec<PlayerOption>,
+    #[serde(default)]
+    pub uri: Option<String>,
+    #[serde(default, deserialize_with = "null_vec")]
     pub tracks: Vec<PlayerTrack>,
     #[serde(default)]
     pub header: Option<PlayerHeader>,
+    #[serde(default)]
+    pub rating: Option<String>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub ratings: Vec<PlayerRating>,
+    #[serde(default)]
+    pub offset: Option<u32>,
     #[serde(default)]
     pub total: Option<u32>,
     #[serde(default)]
@@ -235,9 +709,41 @@ pub struct PlayerViewData {
     #[serde(default, deserialize_with = "null_vec")]
     pub next: Vec<PlayerTrack>,
     #[serde(default, deserialize_with = "null_vec")]
+    pub autoplayed: Vec<PlayerTrack>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub stations: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub videos: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub devices: Vec<PlayerDevice>,
+    #[serde(default, deserialize_with = "null_vec")]
     pub filters: Vec<PlayerOption>,
     #[serde(default)]
     pub filter: Option<String>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub sorts: Vec<PlayerOption>,
+    #[serde(default)]
+    pub sort: Option<String>,
+    #[serde(default)]
+    pub folder: Option<PlayerFolderRef>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub friends: Vec<PlayerFriend>,
+    #[serde(default)]
+    pub experience: Option<String>,
+    #[serde(default)]
+    pub session: Option<JamSession>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub lines: Vec<LyricsLine>,
+    #[serde(default)]
+    pub synced: Option<bool>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub qualities: Vec<PlayerOption>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub groups: Vec<CreditGroup>,
+    #[serde(default)]
+    pub sources: Option<String>,
     #[serde(default)]
     pub track_uri: Option<String>,
     #[serde(default)]
@@ -247,9 +753,19 @@ pub struct PlayerViewData {
     #[serde(default)]
     pub liked: Option<bool>,
     #[serde(default)]
+    pub disliked: Option<bool>,
+    #[serde(default)]
     pub can_shuffle: Option<bool>,
     #[serde(default)]
     pub can_repeat: Option<bool>,
+    #[serde(default)]
+    pub can_video: Option<bool>,
+    #[serde(default)]
+    pub video: Option<bool>,
+    #[serde(default)]
+    pub speed: Option<f64>,
+    #[serde(default)]
+    pub autoplay: Option<bool>,
     #[serde(default)]
     pub image: Option<String>,
     #[serde(default)]

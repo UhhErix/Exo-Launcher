@@ -87,19 +87,24 @@ pub use game_types::{
     AntiCheatLaunch, ArtworkMutationResponse, CompressProgressEvent, CompressState,
     CompressStateReply, DequeueReply, DlssFileOutcome, DlssNewerItem, DlssNewerReply,
     DlssRunResult, DlssStatus, DlssStatusItem, DriveHeat, FrameGenMod, GameAchievementsEvent,
-    GameContent, GameOptimizeEvent, GameSettingsGroup, GameSettingsState, GpuGame, HdrAutoHdr,
-    HdrGame, InstallResponse, KeepStatus, MovingProgress, OpenUrlReply, PropertyChoice,
-    ShaderStatus, ShaderWarmed, UninstallResponse,
+    GameContent, GameGraphicsFeaturesState, GameOptimizeEvent, GameSettingsGroup,
+    GameSettingsState, GpuGame, GraphicsFeatureRow, HdrAutoHdr, HdrGame, InstallResponse,
+    KeepStatus, MovingProgress, OpenUrlReply, PropertyChoice, ShaderStatus, ShaderWarmed,
+    UninstallResponse,
 };
 pub use media_types::{
-    CaptureEditReply, CaptureHotkeys, CaptureItem, CaptureItemReply, CaptureListReply,
-    CaptureLiveState, CaptureReelReply, CaptureSaveImageReply, CaptureSendReply,
-    CaptureSettingsDto, CaptureStatusReply, CaptureTextReply, MusicPlayback, MusicPlaybackReply,
+    ArtistAbout, ArtistAboutCity, ArtistAboutLink, CaptureEditReply, CaptureHotkeys, CaptureItem,
+    CaptureItemReply, CaptureListReply, CaptureLiveState, CaptureReelReply, CaptureSaveImageReply,
+    CaptureSendReply, CaptureSettingsDto, CaptureStatusReply, CaptureTextReply, Concert,
+    CreditGroup, CreditPerson, JamMember, JamSession, LyricsLine, LyricsWord, MusicControlReply,
+    MusicMatchReply, MusicMatchSong, MusicPlayback, MusicPlaybackReply, MusicStatusEvent,
     MusicVolumeReply, NoteInfo, NotesActReply, NotesListReply, NotesOpenReply, NotesPendingReply,
     NotesPhotoReply, NotesReadReply, NotesSaveAsReply, NotesSaveReply, NotesSpellReply,
-    NotesTextFilesReply, PlayerAlbumRef, PlayerArtist, PlayerCard, PlayerHeader, PlayerLink,
-    PlayerOption, PlayerSection, PlayerStartReply, PlayerTrack, PlayerViewData, PlayerViewReply,
-    format_duration_ms,
+    NotesTextFilesReply, PlayerActReply, PlayerAlbumRef, PlayerArtist, PlayerCard, PlayerDevice,
+    PlayerFolderRef, PlayerFriend, PlayerFriendContext, PlayerFriendTrack, PlayerFriendUser,
+    PlayerHeader, PlayerLink, PlayerOption, PlayerRating, PlayerSection, PlayerStartReply,
+    PlayerStateData, PlayerStateReply, PlayerTrack, PlayerViewData, PlayerViewReply, SpotifyAudio,
+    SpotifyAudioReply, SpotifyEq, SpotifyEqFilter, format_duration_ms,
 };
 pub use pc_types::{
     Afmf3State, AppAutoCleared, AppCleanReply, AppConfirmReply, AppFind, AppLeftover, AppSkip,
@@ -395,6 +400,8 @@ pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_GAME_RESUME_DOWNLOAD: &str = "game.resumeDownload";
 pub const METHOD_GAME_SETTINGS: &str = "game.settings";
+pub const METHOD_GAME_GRAPHICS_FEATURES: &str = "game.graphicsFeatures";
+pub const METHOD_GAME_GRAPHICS_FEATURES_SET: &str = "game.graphicsFeatures.set";
 pub const METHOD_GAME_FRAME_GEN: &str = "game.frameGen";
 pub const METHOD_GAME_FRAME_CAP: &str = "game.frameCap";
 pub const METHOD_GAME_CAP_LAB_RUN: &str = "game.capLab.run";
@@ -405,9 +412,11 @@ pub const METHOD_MOUSE_PANEL_BOUNDS: &str = "mouse.panel.bounds";
 pub const METHOD_MOUSE_PANEL_CLOSE: &str = "mouse.panel.close";
 pub const METHOD_MOUSE_PANEL_OPEN: &str = "mouse.panel.open";
 pub const METHOD_MUSIC_CONTROL: &str = "music.control";
+pub const METHOD_MUSIC_MATCH: &str = "music.match";
 pub const METHOD_MUSIC_PLAYBACK: &str = "music.playback";
 pub const METHOD_MUSIC_SIGN_IN: &str = "music.signIn";
 pub const METHOD_MUSIC_VOLUME: &str = "music.volume";
+pub const METHOD_MUSIC_WARM: &str = "music.warm";
 pub const METHOD_PLAYTIME_RIOT_REFRESH: &str = "playtime.riotRefresh";
 pub const METHOD_REPLACED_REMOVE: &str = "replaced.remove";
 pub const METHOD_RUNTIMES_CANCEL: &str = "runtimes.cancel";
@@ -730,6 +739,8 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_PROPERTIES_SET,
     METHOD_GAME_RESUME_DOWNLOAD,
     METHOD_GAME_SETTINGS,
+    METHOD_GAME_GRAPHICS_FEATURES,
+    METHOD_GAME_GRAPHICS_FEATURES_SET,
     METHOD_GAME_FRAME_GEN,
     METHOD_GAME_FRAME_CAP,
     METHOD_GAME_CAP_LAB_RUN,
@@ -740,9 +751,11 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_MOUSE_PANEL_CLOSE,
     METHOD_MOUSE_PANEL_OPEN,
     METHOD_MUSIC_CONTROL,
+    METHOD_MUSIC_MATCH,
     METHOD_MUSIC_PLAYBACK,
     METHOD_MUSIC_SIGN_IN,
     METHOD_MUSIC_VOLUME,
+    METHOD_MUSIC_WARM,
     METHOD_PLAYTIME_RIOT_REFRESH,
     METHOD_REPLACED_REMOVE,
     METHOD_RUNTIMES_CANCEL,
@@ -893,7 +906,7 @@ const VIDEO_FRAME_QUEUE_CAP: usize = 8;
 
 enum DispatchWork {
     Response(PendingCallback, Result<Box<RawValue>, RpcError>),
-    Event(HostEvent),
+    Event(Box<HostEvent>),
     VideoFrame(DiscordVideoFrame),
 }
 
@@ -994,6 +1007,7 @@ impl DispatchQueue {
                 guard.responses.push_back((cb, res));
             }
             DispatchWork::Event(ev) => {
+                let ev = *ev;
                 if matches!(ev, HostEvent::MusicPlayback(_))
                     && let Some(slot) = guard
                         .events
@@ -1028,7 +1042,7 @@ impl DispatchQueue {
                 return Some(DispatchWork::Response(cb, res));
             }
             if let Some(ev) = guard.events.pop_front() {
-                return Some(DispatchWork::Event(ev));
+                return Some(DispatchWork::Event(Box::new(ev)));
             }
             if let Some(frame) = guard.video_frames.pop_front() {
                 return Some(DispatchWork::VideoFrame(frame));
@@ -1114,7 +1128,7 @@ impl RpcClient {
                 while let Some(work) = dispatch_rx.pop_blocking() {
                     match work {
                         DispatchWork::Response(cb, res) => cb(res),
-                        DispatchWork::Event(ev) => dispatch_events(ev),
+                        DispatchWork::Event(ev) => dispatch_events(*ev),
                         DispatchWork::VideoFrame(frame) => {
                             let handler = dispatch_video
                                 .lock()
@@ -1174,7 +1188,9 @@ impl RpcClient {
                         read_dispatch.send(DispatchWork::Response(cb, Err(RpcError::Disconnected)));
                 }
                 drop(map);
-                let _ = read_dispatch.send(DispatchWork::Event(HostEvent::Disconnected(reason)));
+                let _ = read_dispatch.send(DispatchWork::Event(Box::new(HostEvent::Disconnected(
+                    reason,
+                ))));
             })?;
 
         Ok(Arc::new(Self {
@@ -1611,6 +1627,9 @@ fn parse_event(
         "music.volume" => Ok(serde_json::from_str::<MusicVolumeEvent>(data_raw)
             .map(HostEvent::MusicVolume)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "music.status" => Ok(serde_json::from_str::<MusicStatusEvent>(data_raw)
+            .map(HostEvent::MusicStatus)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "capture.state" => Ok(serde_json::from_str::<CaptureLiveState>(data_raw)
             .map(HostEvent::CaptureState)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
@@ -1894,7 +1913,7 @@ fn dispatch_line_to(
         let meta_raw = env.meta.map(RawValue::get);
         match parse_event(name, data_raw, meta_raw) {
             Ok(ev) => {
-                let _ = dispatch_tx.send(DispatchWork::Event(ev));
+                let _ = dispatch_tx.send(DispatchWork::Event(Box::new(ev)));
             }
             Err(frame) => {
                 let _ = dispatch_tx.send(DispatchWork::VideoFrame(frame));
@@ -1986,32 +2005,38 @@ mod tests {
 
         dispatch_line_to(flat, &pending, &queue);
         match queue.pop_blocking().unwrap() {
-            DispatchWork::Event(HostEvent::MusicPlayback(Some(pb))) => {
-                assert_eq!(pb.status, "playing");
-                assert_eq!(pb.title, "Track A");
-                assert_eq!(pb.artist, "Artist A");
-            }
+            DispatchWork::Event(ev) => match *ev {
+                HostEvent::MusicPlayback(Some(pb)) => {
+                    assert_eq!(pb.status, "playing");
+                    assert_eq!(pb.title, "Track A");
+                    assert_eq!(pb.artist, "Artist A");
+                }
+                _ => panic!("expected flat MusicPlayback(Some)"),
+            },
             _ => panic!("expected flat MusicPlayback(Some)"),
         }
 
         dispatch_line_to(wrapped, &pending, &queue);
         match queue.pop_blocking().unwrap() {
-            DispatchWork::Event(HostEvent::MusicPlayback(Some(pb))) => {
-                assert_eq!(pb.status, "paused");
-                assert_eq!(pb.title, "Track B");
-            }
+            DispatchWork::Event(ev) => match *ev {
+                HostEvent::MusicPlayback(Some(pb)) => {
+                    assert_eq!(pb.status, "paused");
+                    assert_eq!(pb.title, "Track B");
+                }
+                _ => panic!("expected wrapped MusicPlayback(Some)"),
+            },
             _ => panic!("expected wrapped MusicPlayback(Some)"),
         }
 
         dispatch_line_to(wrapped_null, &pending, &queue);
         match queue.pop_blocking().unwrap() {
-            DispatchWork::Event(HostEvent::MusicPlayback(None)) => {}
+            DispatchWork::Event(ev) if matches!(*ev, HostEvent::MusicPlayback(None)) => {}
             _ => panic!("expected wrapped MusicPlayback(None)"),
         }
 
         dispatch_line_to(bare_null, &pending, &queue);
         match queue.pop_blocking().unwrap() {
-            DispatchWork::Event(HostEvent::MusicPlayback(None)) => {}
+            DispatchWork::Event(ev) if matches!(*ev, HostEvent::MusicPlayback(None)) => {}
             _ => panic!("expected bare null MusicPlayback(None)"),
         }
     }
@@ -2119,7 +2144,7 @@ mod tests {
             dispatch_line_to(payload, &pending, &queue);
             let work = queue.pop_blocking().expect("event dispatched");
             match work {
-                DispatchWork::Event(ev) => assert!(check(ev), "case {idx} failed"),
+                DispatchWork::Event(ev) => assert!(check(*ev), "case {idx} failed"),
                 _ => panic!("case {idx} was not an Event"),
             }
         }
@@ -2274,21 +2299,21 @@ mod tests {
     fn dispatch_queue_bounds_events_video_and_coalesces_music_playback() {
         let q = DispatchQueue::new(4, 2);
         for i in 0..10 {
-            q.send(DispatchWork::Event(HostEvent::DiscordPresence(
+            q.send(DispatchWork::Event(Box::new(HostEvent::DiscordPresence(
                 DiscordPresenceEvent {
                     user_id: format!("u{i}"),
                     status: "online".into(),
                     ..Default::default()
                 },
-            )));
+            ))));
         }
         for i in 0..5 {
-            q.send(DispatchWork::Event(HostEvent::MusicPlayback(Some(
-                MusicPlayback {
+            q.send(DispatchWork::Event(Box::new(HostEvent::MusicPlayback(
+                Some(MusicPlayback {
                     title: format!("track-{i}"),
                     position_ms: Some(i * 1000),
                     ..Default::default()
-                },
+                }),
             ))));
         }
         for i in 0..5 {
@@ -2309,8 +2334,11 @@ mod tests {
         q.close();
         while let Some(work) = q.pop_blocking() {
             match work {
-                DispatchWork::Event(HostEvent::DiscordPresence(p)) => presences.push(p.user_id),
-                DispatchWork::Event(HostEvent::MusicPlayback(Some(m))) => music.push(m.title),
+                DispatchWork::Event(ev) => match *ev {
+                    HostEvent::DiscordPresence(p) => presences.push(p.user_id),
+                    HostEvent::MusicPlayback(Some(m)) => music.push(m.title),
+                    _ => {}
+                },
                 DispatchWork::VideoFrame(f) => frames.push(f.user_id),
                 _ => {}
             }

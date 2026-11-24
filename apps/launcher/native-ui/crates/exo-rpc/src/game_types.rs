@@ -89,6 +89,40 @@ pub struct GameSettingsState {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
+pub struct GraphicsFeatureRow {
+    #[serde(deserialize_with = "null_as_default")]
+    pub id: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub name: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub state: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub route: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub route_kind: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub can_toggle: bool,
+    #[serde(deserialize_with = "null_as_default")]
+    pub needs_anti_cheat_confirm: bool,
+    pub anti_cheat_warning: Option<String>,
+    pub closest_option: Option<String>,
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GameGraphicsFeaturesState {
+    #[serde(deserialize_with = "null_as_default")]
+    pub ok: bool,
+    pub message: Option<String>,
+    pub engine: Option<String>,
+    pub running: Option<bool>,
+    pub anti_cheat: Option<String>,
+    pub features: Option<Vec<GraphicsFeatureRow>>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct KeepStatus {
     #[serde(deserialize_with = "null_as_default")]
     pub pc: String,

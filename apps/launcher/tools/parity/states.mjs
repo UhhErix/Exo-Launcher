@@ -1494,6 +1494,52 @@ export const STATES = [
     },
   },
   {
+    id: 'music-sound',
+    room: 'music',
+    name: 'Music Sound panel open',
+    kind: 'subpage',
+    priority: 2,
+    expectGlass: true,
+    react: {
+      room: 'Music',
+      steps: [
+        { type: 'wait', ms: 1600 },
+        { type: 'click', selector: 'button[aria-label="More panels"]' },
+        { type: 'wait', ms: 300 },
+        { type: 'clickText', selector: '[role="menu"] [role^="menuitem"]', text: /^Sound$/i },
+        { type: 'wait', ms: 600 },
+      ],
+      openSelector: '.exo-music-panel',
+    },
+    native: {
+      scene: 'music-sound',
+      expect: { room: 'Music', musicPanel: 'Sound' },
+    },
+  },
+  {
+    id: 'music-jam',
+    room: 'music',
+    name: 'Music Jam / Listen along panel open',
+    kind: 'subpage',
+    priority: 2,
+    expectGlass: true,
+    react: {
+      room: 'Music',
+      steps: [
+        { type: 'wait', ms: 1600 },
+        { type: 'click', selector: 'button[aria-label="More panels"]' },
+        { type: 'wait', ms: 300 },
+        { type: 'clickText', selector: '[role="menu"] [role^="menuitem"]', text: /^Jam$/i },
+        { type: 'wait', ms: 600 },
+      ],
+      openSelector: '.exo-music-panel',
+    },
+    native: {
+      scene: 'music-jam',
+      expect: { room: 'Music', musicPanel: 'Jam' },
+    },
+  },
+  {
     id: 'devices-overview',
     room: 'devices',
     name: 'Devices room overview',
