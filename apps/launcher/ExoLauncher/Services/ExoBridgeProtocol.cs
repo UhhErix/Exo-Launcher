@@ -71,7 +71,7 @@ internal static partial class ExoBridgeProtocol
 
     internal const int MaxVideoFrameCharacters = 8 * 1024 * 1024;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

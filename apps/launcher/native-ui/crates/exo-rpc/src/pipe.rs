@@ -8,14 +8,14 @@ mod win {
     use std::time::{Duration, Instant};
     use windows_sys::Win32::Foundation::{
         CloseHandle, ERROR_FILE_NOT_FOUND, ERROR_IO_PENDING, ERROR_PIPE_BUSY, GENERIC_READ,
-        GENERIC_WRITE, GetLastError, HANDLE, INVALID_HANDLE_VALUE,
+        GENERIC_WRITE, GetLastError, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, FILE_FLAG_OVERLAPPED, OPEN_EXISTING, ReadFile, WriteFile,
     };
     use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
     use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
-    use windows_sys::Win32::System::Threading::CreateEventW;
+    use windows_sys::Win32::System::Threading::{CreateEventW, ResetEvent, WaitForSingleObject};
 
     pub struct PipeHandle {
         raw: HANDLE,
@@ -105,6 +105,57 @@ mod win {
                 return Err(io::Error::from_raw_os_error(wait_err as i32));
             }
             Ok(read as usize)
+        }
+
+        pub fn read_overlapped_timeout(
+            &self,
+            event: &EventHandle,
+            buf: &mut [u8],
+            timeout_ms: u32,
+        ) -> io::Result<Option<usize>> {
+            let raw_event = event.raw();
+            unsafe {
+                ResetEvent(raw_event);
+            }
+            let mut ov: OVERLAPPED = unsafe { std::mem::zeroed() };
+            ov.hEvent = raw_event;
+            let mut read = 0u32;
+            let ok = unsafe {
+                ReadFile(
+                    self.raw,
+                    buf.as_mut_ptr(),
+                    buf.len() as u32,
+                    &mut read,
+                    &mut ov,
+                )
+            };
+            if ok != 0 {
+                return Ok(Some(read as usize));
+            }
+            let err = unsafe { GetLastError() };
+            if err != ERROR_IO_PENDING {
+                return Err(io::Error::from_raw_os_error(err as i32));
+            }
+            let wait = unsafe { WaitForSingleObject(raw_event, timeout_ms) };
+            if wait == WAIT_OBJECT_0 {
+                let done = unsafe { GetOverlappedResult(self.raw, &ov, &mut read, 1) };
+                if done == 0 {
+                    let wait_err = unsafe { GetLastError() };
+                    return Err(io::Error::from_raw_os_error(wait_err as i32));
+                }
+                return Ok(Some(read as usize));
+            }
+            if wait == WAIT_TIMEOUT {
+                unsafe {
+                    CancelIoEx(self.raw, &ov);
+                }
+                let done = unsafe { GetOverlappedResult(self.raw, &ov, &mut read, 1) };
+                if done != 0 && read > 0 {
+                    return Ok(Some(read as usize));
+                }
+                return Ok(None);
+            }
+            Err(io::Error::last_os_error())
         }
 
         pub fn read_exact_overlapped(&self, event: HANDLE, mut buf: &mut [u8]) -> io::Result<()> {

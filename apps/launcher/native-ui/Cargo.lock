@@ -966,6 +966,7 @@ version = "0.1.0"
 name = "exo-rpc"
 version = "0.1.0"
 dependencies = [
+ "exo-wire",
  "serde",
  "serde_json",
  "windows-sys 0.61.2",
@@ -1029,6 +1030,10 @@ dependencies = [
 
 [[package]]
 name = "exo-voice-ml"
+version = "0.1.0"
+
+[[package]]
+name = "exo-wire"
 version = "0.1.0"
 
 [[package]]

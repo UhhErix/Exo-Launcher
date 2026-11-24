@@ -125,30 +125,30 @@ public sealed partial class WebHostBridge
         return new { ok = true, message = (string?)null, state = AutopilotState() };
     }
 
-    private static object? AutopilotLive()
+    private static AutopilotLiveDto? AutopilotLive()
     {
         if (AutopilotWatch.Shared.Live is not { } live) return null;
         var s = live.Last;
-        return new
+        return new AutopilotLiveDto
         {
-            game = live.Game,
-            title = live.Title,
-            seconds = Math.Round(live.Frames.Seconds),
-            fps = Math.Round(live.Frames.AverageFps, 1),
-            low1 = Math.Round(live.Frames.Low1Fps, 1),
-            low01 = Math.Round(live.Frames.Low01Fps, 1),
-            stutters = live.Stutters,
-            cpu = s?.CpuPercent,
-            gpu = s?.GpuPercent,
-            gpuTemp = s?.GpuTemperature,
-            vramGb = Gb(s?.VramUsed),
-            vramTotalGb = Gb(s?.VramTotal),
-            ramGb = Gb(s?.RamUsed),
-            ramTotalGb = Gb(s?.RamTotal),
-            standbyGb = Gb(s?.Standby),
-            freeGb = Gb(s?.Free),
-            dpc = s?.DpcPercent is { } dpc ? Math.Round(dpc, 1) : (double?)null,
-            clock = s?.CpuPerformance is { } perf ? Math.Round(perf) : (double?)null,
+            Game = live.Game,
+            Title = live.Title,
+            Seconds = Math.Round(live.Frames.Seconds),
+            Fps = Math.Round(live.Frames.AverageFps, 1),
+            Low1 = Math.Round(live.Frames.Low1Fps, 1),
+            Low01 = Math.Round(live.Frames.Low01Fps, 1),
+            Stutters = live.Stutters,
+            Cpu = s?.CpuPercent,
+            Gpu = s?.GpuPercent,
+            GpuTemp = s?.GpuTemperature,
+            VramGb = Gb(s?.VramUsed),
+            VramTotalGb = Gb(s?.VramTotal),
+            RamGb = Gb(s?.RamUsed),
+            RamTotalGb = Gb(s?.RamTotal),
+            StandbyGb = Gb(s?.Standby),
+            FreeGb = Gb(s?.Free),
+            Dpc = s?.DpcPercent is { } dpc ? Math.Round(dpc, 1) : null,
+            Clock = s?.CpuPerformance is { } perf ? Math.Round(perf) : null,
         };
     }
 

@@ -301,10 +301,14 @@ public sealed partial class WebHostBridge
         {
             previous.MessageReceived -= OnMessage;
             previous.SessionReset -= OnTransportReset;
+            if (previous is NamedPipeHostTransport prevPipe)
+                prevPipe.WireRequestReceived -= OnWireRequest;
             try { previous.Detach(); } catch { }
         }
         transport.MessageReceived += OnMessage;
         transport.SessionReset += OnTransportReset;
+        if (transport is NamedPipeHostTransport nextPipe)
+            nextPipe.WireRequestReceived += OnWireRequest;
     }
 
     private void OnTransportReset() => UiGuard.Run(() =>
@@ -333,6 +337,8 @@ public sealed partial class WebHostBridge
         {
             transport.MessageReceived -= OnMessage;
             transport.SessionReset -= OnTransportReset;
+            if (transport is NamedPipeHostTransport pipeTransport)
+                pipeTransport.WireRequestReceived -= OnWireRequest;
             try { transport.Detach(); } catch { }
         }
         SteamPendingSettings.Detach(this);
@@ -547,20 +553,38 @@ public sealed partial class WebHostBridge
                         // before it raises LibraryUpdated. Publish that snapshot;
                         // do not regroup the entire library a second time here.
                         var games = _services.Library.PeekCachedLibrary();
-                        var json = ExoBridgeProtocol.SerializeEvent("library.updated", new
+                        if (_transport is NamedPipeHostTransport { IsBinaryWireActive: true } wirePipe)
                         {
-                            games = games.Select(game => MapGame(game)).ToList(),
-                            count = games.Count,
-                        });
-                        // Cover warms, size measurements and derived refreshes
-                        // often settle on the rows the page already has. The
-                        // page re-parses and re-merges every row it is sent, so
-                        // an unchanged library is not sent again.
-                        var hash = System.Security.Cryptography.SHA256.HashData(System.Runtime.InteropServices.MemoryMarshal.AsBytes(json.AsSpan()));
-                        if (Volatile.Read(ref _libraryPushedHash) is not { } pushed || !pushed.AsSpan().SequenceEqual(hash))
+                            var dto = new LibraryResponseDto
+                            {
+                                Games = games.Select(game => (object)MapGame(game)).ToList(),
+                                Count = games.Count,
+                            };
+                            var frame = ExoWireCodec.EncodeEventFrame("library.updated", dto, wirePipe.UseSchemaIds, wirePipe.UseBinaryHotCodecs);
+                            var hash = System.Security.Cryptography.SHA256.HashData(frame.Buffer.AsSpan(0, frame.Length));
+                            if (Volatile.Read(ref _libraryPushedHash) is not { } pushed || !pushed.AsSpan().SequenceEqual(hash))
+                            {
+                                Volatile.Write(ref _libraryPushedHash, hash);
+                                wirePipe.PostWireFrame(frame, reliable: true);
+                            }
+                            else
+                            {
+                                frame.Release();
+                            }
+                        }
+                        else
                         {
-                            Volatile.Write(ref _libraryPushedHash, hash);
-                            PostSerialized(json);
+                            var json = ExoBridgeProtocol.SerializeEvent("library.updated", new
+                            {
+                                games = games.Select(game => MapGame(game)).ToList(),
+                                count = games.Count,
+                            });
+                            var hash = System.Security.Cryptography.SHA256.HashData(System.Runtime.InteropServices.MemoryMarshal.AsBytes(json.AsSpan()));
+                            if (Volatile.Read(ref _libraryPushedHash) is not { } pushed || !pushed.AsSpan().SequenceEqual(hash))
+                            {
+                                Volatile.Write(ref _libraryPushedHash, hash);
+                                PostSerialized(json);
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -585,36 +609,111 @@ public sealed partial class WebHostBridge
         _ = HandleAsync(InboundForTransport(_transport, raw));
     });
 
-    private async Task HandleAsync(string raw)
+    private void OnWireRequest(ExoWireInboundRequest wireReq) => UiGuard.Run(() =>
     {
-        string? id = null;
-        string? method = null;
-        string? perfKey = null;
-        BridgeRequestRegistry.Lease? scope = null;
+        if (_detached)
+        {
+            wireReq.Dispose();
+            return;
+        }
+        _ = HandleWireRequestAsync(wireReq);
+    });
+
+    private async Task HandleWireRequestAsync(ExoWireInboundRequest wireReq)
+    {
         var started = Stopwatch.GetTimestamp();
         try
         {
-            if (!ExoBridgeProtocol.TryParseRequest(raw, out var request))
+            var id = wireReq.ReqId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var method = wireReq.MethodName;
+            if (wireReq.Encoding == ExoWireEncoding.BinaryTyped && wireReq.MethodId == ExoWireSchema.MethodRpcCancel)
             {
-                // Well formed but too large: answer, so the page does not wait for a reply that never comes.
-                if (request.Id.Length > 0 && !_detached)
-                {
-                    AppLog.Warn($"RPC {request.Method}: request of {raw.Length} characters is over the limit.");
-                    PostResponse(request.Id, ok: false, error: "That is too large for Exo to take.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-                }
+                var target = wireReq.BinaryCancelTargetId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                _earlyCancels.Record(target);
+                if (_rpcRequests.Cancel(target)) _earlyCancels.Consume(target);
                 return;
             }
-            id = request.Id;
-            method = request.Method;
-            var paramsEl = request.Params;
-            var hasParams = request.HasParams;
+
+            if (wireReq.Encoding == ExoWireEncoding.JsonUtf8)
+            {
+                if (wireReq.PayloadLength > ExoBridgeProtocol.MaxCharactersFor(method))
+                {
+                    if (!_detached)
+                    {
+                        AppLog.Warn($"RPC {method}: wire request of {wireReq.PayloadLength} bytes is over the limit.");
+                        PostResponseCore(id, wireReq.ReqId, wireReq.MethodId, isWire: true, ok: false, error: "That is too large for Exo to take.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                    }
+                    return;
+                }
+                using var doc = JsonDocument.Parse(wireReq.JsonPayloadMemory);
+                await DispatchParsedAsync(id, wireReq.ReqId, wireReq.MethodId, isWire: true, method, doc.RootElement.Clone(), hasParams: true, binaryIdParam: null, binaryFlags: 0, started).ConfigureAwait(false);
+                return;
+            }
+
+            await DispatchParsedAsync(
+                id,
+                wireReq.ReqId,
+                wireReq.MethodId,
+                isWire: true,
+                method,
+                default,
+                hasParams: false,
+                binaryIdParam: wireReq.BinaryIdParam,
+                binaryFlags: wireReq.BinaryFlags,
+                started).ConfigureAwait(false);
+        }
+        catch (JsonException)
+        {
+            if (!_detached)
+            {
+                var id = wireReq.ReqId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                PostResponseCore(id, wireReq.ReqId, wireReq.MethodId, isWire: true, ok: false, error: "Invalid request payload.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            }
+        }
+        finally
+        {
+            wireReq.Dispose();
+        }
+    }
+
+    private async Task HandleAsync(string raw)
+    {
+        var started = Stopwatch.GetTimestamp();
+        if (!ExoBridgeProtocol.TryParseRequest(raw, out var request))
+        {
+            if (request.Id.Length > 0 && !_detached)
+            {
+                AppLog.Warn($"RPC {request.Method}: request of {raw.Length} characters is over the limit.");
+                PostResponse(request.Id, ok: false, error: "That is too large for Exo to take.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            }
+            return;
+        }
+        await DispatchParsedAsync(request.Id, 0, 0, isWire: false, request.Method, request.Params, request.HasParams, binaryIdParam: null, binaryFlags: 0, started).ConfigureAwait(false);
+    }
+
+    private async Task DispatchParsedAsync(
+        string id,
+        ulong wireReqId,
+        ushort wireMethodId,
+        bool isWire,
+        string method,
+        JsonElement paramsEl,
+        bool hasParams,
+        string? binaryIdParam,
+        byte binaryFlags,
+        long started)
+    {
+        string? perfKey = null;
+        BridgeRequestRegistry.Lease? scope = null;
+        try
+        {
             perfKey = hasParams ? PerfKey(paramsEl) : null;
             if (_detached) return;
             if (_trace.IsEnabled)
                 _trace.RecordRequest(RpcTrace.ClientKind(_transport), id, method, paramsEl, hasParams);
             if (_trace.IsEnabled && method == "debug.mark")
             {
-                PostResponse(id, ok: true, result: new { ok = true }, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: new { ok = true }, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
                 return;
             }
             if (method == "rpc.cancel")
@@ -627,12 +726,30 @@ public sealed partial class WebHostBridge
                 }
                 return;
             }
-            // Any Discord request means the page wants Discord's events (calls, video), not only Home or sign-in.
             if (method.StartsWith("discord.", StringComparison.Ordinal)) DiscordEvents();
             scope = _rpcRequests.Begin(id, method, _bridgeLifetime.Token);
             if (_earlyCancels.Consume(id)) throw new OperationCanceledException();
             var requestToken = scope?.Token ?? _bridgeLifetime.Token;
             requestToken.ThrowIfCancellationRequested();
+
+            if (isWire && binaryIdParam is not null && method is "game.get" or "game.extras")
+            {
+                var fast = method == "game.get"
+                    ? await GameGetByIdAsync(binaryIdParam).ConfigureAwait(true)
+                    : await GameExtrasByIdAsync(binaryIdParam).ConfigureAwait(true);
+                if (!_detached && scope?.Token.IsCancellationRequested != true)
+                    PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: fast, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                return;
+            }
+            if (isWire && binaryFlags != 0 && method is "library.get" or "library.refresh")
+            {
+                var force = method == "library.refresh" || (binaryFlags & 1) != 0;
+                var full = (binaryFlags & 2) != 0;
+                var fast = await Task.Run(() => LibraryGetAsync(default, hasParams: false, force: force, full: full)).WaitAsync(requestToken).ConfigureAwait(false);
+                if (!_detached && scope?.Token.IsCancellationRequested != true)
+                    PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: fast, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                return;
+            }
 
             object? result = method switch
             {
@@ -1062,26 +1179,22 @@ public sealed partial class WebHostBridge
             };
 
             if (!_detached && scope?.Token.IsCancellationRequested != true)
-                PostResponse(id!, ok: true, result: result, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: result, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         catch (OperationCanceledException)
         {
-            if (!_detached && id is not null) PostResponse(id, ok: false, error: "The request was canceled or timed out.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            if (!_detached && id is not null) PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: false, error: "The request was canceled or timed out.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         catch (BridgeRequestRegistry.DuplicateRequestException)
         {
-            // Not answered under that id: it belongs to the request still running, whose own answer is coming.
             AppLog.Warn($"RPC {method}: a request reused the id of one still running; dropped.");
         }
         catch (Exception ex)
         {
             AppLog.Warn($"RPC {method} {id}: {ex.Message}");
-            // A failure nobody planned for is reported on its own, so nobody has to copy a log (the daily limits apply).
             if (FailureReportRules.IsHostCallBug(ex)) CrashReport.Submit("HostCallFailed", FailureReportRules.HostCallReason(method ?? "unknown", ex), "rpc");
-            // Handlers throw InvalidOperation/InvalidData with a line meant for the user; file and
-            // Windows errors carry paths, which stay in native code (AGENTS.md).
             if (!_detached && id is not null)
-                PostResponse(id, ok: false, error: UserMessage(ex, "Exo could not finish that. The details are in the log."), elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: false, error: UserMessage(ex, "Exo could not finish that. The details are in the log."), elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         finally
         {
@@ -1140,36 +1253,37 @@ public sealed partial class WebHostBridge
         IReadOnlyList<PausedDownload> pausedDownloads,
         string sortMode,
         IReadOnlyList<string> recent) =>
-        new
+        new LibraryResponseDto
         {
-            games = mappedGames,
-            count,
-            stores = MapStoreMatrix(storeMatrix),
-            progress = MapProgress(progress),
-            queuedGameIds,
-            pausedDownloads,
-            sortMode,
-            recent,
+            Games = mappedGames,
+            Count = count,
+            Stores = MapStoreMatrix(storeMatrix),
+            Progress = MapProgress(progress),
+            QueuedGameIds = queuedGameIds,
+            PausedDownloads = pausedDownloads,
+            SortMode = sortMode,
+            Recent = recent,
         };
 
-    private async Task<object> GameGetAsync(JsonElement p, bool hasParams)
-    {
-        var gameId = ReadString(p, hasParams, "id");
-        if (string.IsNullOrWhiteSpace(gameId))
-            return new { ok = false, message = "Missing game id." };
+    private Task<object> GameGetAsync(JsonElement p, bool hasParams) =>
+        GameGetByIdAsync(ReadString(p, hasParams, "id"));
 
-        var game = _services.Library.Find(gameId!);
+    private async Task<object> GameGetByIdAsync(string? gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return new GameGetReplyDto { Ok = false, Message = "Missing game id." };
+
+        var game = _services.Library.Find(gameId);
         if (game is null)
         {
             await _services.Library.GetLibraryAsync().ConfigureAwait(true);
-            game = _services.Library.Find(gameId!);
+            game = _services.Library.Find(gameId);
         }
         if (game is null)
-            return new { ok = false, message = "Game not found." };
+            return new GameGetReplyDto { Ok = false, Message = "Game not found." };
 
-        // Finding a game started outside Exo reads every process on the PC: off the UI thread.
         var mapped = await Task.Run(() => MapGame(game, discoverExternalRunningGame: true)).ConfigureAwait(true);
-        return new { ok = true, game = mapped };
+        return new GameGetReplyDto { Ok = true, Game = mapped };
     }
 
     private const int UiLogMaxChars = 4000;
@@ -1856,28 +1970,30 @@ public sealed partial class WebHostBridge
         };
     }
 
-    private async Task<object> GameExtrasAsync(JsonElement p, bool hasParams)
+    private Task<object> GameExtrasAsync(JsonElement p, bool hasParams) =>
+        GameExtrasByIdAsync(ReadString(p, hasParams, "id"));
+
+    private async Task<object> GameExtrasByIdAsync(string? gameId)
     {
-        var gameId = ReadString(p, hasParams, "id");
         if (string.IsNullOrWhiteSpace(gameId))
-            return new { ok = false, message = "Missing game id." };
-        var game = _services.Library.Find(gameId!);
+            return new GameExtrasDto { Ok = false, Message = "Missing game id." };
+        var game = _services.Library.Find(gameId);
         if (game is null)
-            return new { ok = false, message = "Game not found." };
+            return new GameExtrasDto { Ok = false, Message = "Game not found." };
         if (_bannerAsked.Add(game.Id)) _ = WarmBannerAsync(game.Id);
 
-        // Cached counts only; a played game with none (or old ones) is read in
-        // the background and pushed as game.achievements.
         var achievements = await Task.Run(() => _services.Achievements.GetSummary(game.Id)).ConfigureAwait(true);
         if (game.PlaytimeMinutes > 0 || game.LastPlayedUtc is not null)
             _services.Achievements.RefreshInBackgroundIfStale(game, achievements);
         var hasAchievements = achievements is { Total: > 0 };
-        return new
+        return new GameExtrasDto
         {
-            ok = true,
-            achievementsUnlocked = hasAchievements ? achievements!.Unlocked : (int?)null,
-            achievementsTotal = hasAchievements ? achievements!.Total : (int?)null,
-            driveHeat = DriveHeat.Last(game.Id) is { } heat ? new { peak = heat.PeakC, warn = heat.WarnC, slowedSeconds = heat.SlowedSeconds } : null,
+            Ok = true,
+            AchievementsUnlocked = hasAchievements ? achievements!.Unlocked : null,
+            AchievementsTotal = hasAchievements ? achievements!.Total : null,
+            DriveHeat = DriveHeat.Last(game.Id) is { } heat
+                ? new DriveHeatDto { Peak = heat.PeakC, Warn = heat.WarnC, SlowedSeconds = heat.SlowedSeconds }
+                : null,
         };
     }
 
@@ -3295,7 +3411,7 @@ public sealed partial class WebHostBridge
         return target.IndexOfAny(['\\', '/', ':']) >= 0 ? null : target;
     }
 
-    private object MapGame(GameEntry g, bool discoverExternalRunningGame = false) =>
+    private GamePageDto MapGame(GameEntry g, bool discoverExternalRunningGame = false) =>
         GameForPage(g, _services.Launcher.GetGameRunState(g, discoverExternalRunningGame),
             variant => _services.Launcher.GetGameRunState(variant.ToGameEntry(g), discoverExternalRunningGame));
 
@@ -3356,93 +3472,82 @@ public sealed partial class WebHostBridge
         string.IsNullOrEmpty(text) || PathInText.IsMatch(text) ? "" : text;
 
     /// <summary>What the page may know about one game: ids, flags and words, never a file path (AGENTS.md).</summary>
-    internal static object GameForPage(GameEntry g, GameRunState runState, Func<GameVariant, GameRunState> variantRunState)
+    internal static GamePageDto GameForPage(GameEntry g, GameRunState runState, Func<GameVariant, GameRunState> variantRunState)
     {
-        return new
+        return new GamePageDto
         {
-        id = g.Id,
-        title = g.Title,
-        store = g.Store.ToString().ToLowerInvariant(),
-        // `store` remains the deterministic selected source. `stores` and
-        // `variants` let a card show alternate active sources without exposing
-        // account identity or replacing any exact action ids.
-        stores = (g.Variants.Count == 0 ? new[] { g.Store } : g.Variants.Select(v => v.Store))
-            .Distinct()
-            .Select(store => store.ToString().ToLowerInvariant())
-            .ToArray(),
-        canonicalTitleKey = g.CanonicalTitleKey,
-        selectedVariantId = g.SelectedVariantId ?? g.Id,
-        variants = g.Variants.Select(variant =>
-        {
-            // game.get is the deliberate, selected-card reconciliation point.
-            // Scan every exact source on that card there, otherwise a running
-            // alternate-store copy stays invisible until the user happens to
-            // switch sources and triggers another round trip. library.get keeps
-            // this false so the grid never enumerates every installed process.
-            var variantRun = variantRunState(variant);
-            return new
+            Id = g.Id,
+            Title = g.Title,
+            Store = g.Store.ToString().ToLowerInvariant(),
+            Stores = (g.Variants.Count == 0 ? new[] { g.Store } : g.Variants.Select(v => v.Store))
+                .Distinct()
+                .Select(store => store.ToString().ToLowerInvariant())
+                .ToArray(),
+            CanonicalTitleKey = g.CanonicalTitleKey,
+            SelectedVariantId = g.SelectedVariantId ?? g.Id,
+            Variants = g.Variants.Select(variant =>
             {
-                id = variant.Id,
-                store = variant.Store.ToString().ToLowerInvariant(),
-                installed = variant.Installed,
-                owned = variant.Owned,
-                entitlementState = variant.EntitlementState,
-                updateAvailable = variant.UpdateAvailable,
-                canInstall = variant.CanInstall,
-                primaryAction = variant.PrimaryAction,
-                // Paths stay in native code (AGENTS.md): a store id goes to the page, a program's path does not.
-                path = (string?)null,
-                launchTarget = PageTarget(variant.LaunchTarget),
-                playtimeMinutes = variant.PlaytimeMinutes ?? 0,
-                lastPlayedUtc = variant.LastPlayedUtc?.ToString("O"),
-                status = PageText(variant.Status),
-                isRunning = variantRun.IsRunning,
-                canStop = variantRun.CanStop,
-            };
-        }).ToArray(),
-        installed = g.Installed,
-        owned = g.Owned,
-        entitlementState = g.EntitlementState,
-        updateAvailable = g.UpdateAvailable,
-        canInstall = g.CanInstall,
-        primaryAction = g.PrimaryAction,
-        path = (string?)null,
-        coverUrl = g.CoverUrl,
-        coverSource = g.CoverSource,
-        artRevision = g.ArtRevision,
-        playtimeMinutes = g.PlaytimeMinutes ?? 0,
-        sizeBytes = g.SizeBytes ?? InstalledSizeCache.Peek(g.Path)?.Bytes,
-        sizeApproximate = g.SizeBytes is null && InstalledSizeCache.Peek(g.Path) is { Complete: false, Bytes: not null },
-        status = PageText(g.Status),
-        deps = g.Deps.Select(PageText).ToArray(),
-        launchNote = PageText(g.LaunchNote),
-        familyShared = g.FamilyShared,
-        // A family member's Steam name, for the game page's "Shared by"; never an id.
-        sharedBy = g.FamilyShared && PageText(g.SharedBy) is { Length: > 0 } lender ? lender : null,
-        launchTarget = PageTarget(g.LaunchTarget),
-        includes = g.Includes?.Select(game => new { appId = game.AppId, title = game.Title }),
-        lastPlayedUtc = g.LastPlayedUtc?.ToString("O"),
-        isAddPortable = string.Equals(g.Id, "local:add", StringComparison.OrdinalIgnoreCase),
-        isRunning = runState.IsRunning,
-        canStop = runState.CanStop,
-        buyUrl = Storefront.BuyUrl(g),
-        // The Library's search and Filter menu (racing, co-op ...): Steam's own record, already in memory.
-        tags = SteamAppTags.For(g),
-        antiCheatClass = AntiCheatClass.WireClass(g, AntiCheatCheck.PeekCached(g)),
+                var variantRun = variantRunState(variant);
+                return new GameVariantDto
+                {
+                    Id = variant.Id,
+                    Store = variant.Store.ToString().ToLowerInvariant(),
+                    Installed = variant.Installed,
+                    Owned = variant.Owned,
+                    EntitlementState = variant.EntitlementState,
+                    UpdateAvailable = variant.UpdateAvailable,
+                    CanInstall = variant.CanInstall,
+                    PrimaryAction = variant.PrimaryAction,
+                    Path = null,
+                    LaunchTarget = PageTarget(variant.LaunchTarget),
+                    PlaytimeMinutes = variant.PlaytimeMinutes ?? 0,
+                    LastPlayedUtc = variant.LastPlayedUtc?.ToString("O"),
+                    Status = PageText(variant.Status),
+                    IsRunning = variantRun.IsRunning,
+                    CanStop = variantRun.CanStop,
+                };
+            }).ToArray(),
+            Installed = g.Installed,
+            Owned = g.Owned,
+            EntitlementState = g.EntitlementState,
+            UpdateAvailable = g.UpdateAvailable,
+            CanInstall = g.CanInstall,
+            PrimaryAction = g.PrimaryAction,
+            Path = null,
+            CoverUrl = g.CoverUrl,
+            CoverSource = g.CoverSource,
+            ArtRevision = g.ArtRevision,
+            PlaytimeMinutes = g.PlaytimeMinutes ?? 0,
+            SizeBytes = g.SizeBytes ?? InstalledSizeCache.Peek(g.Path)?.Bytes,
+            SizeApproximate = g.SizeBytes is null && InstalledSizeCache.Peek(g.Path) is { Complete: false, Bytes: not null },
+            Status = PageText(g.Status),
+            Deps = g.Deps.Select(PageText).ToArray(),
+            LaunchNote = PageText(g.LaunchNote),
+            FamilyShared = g.FamilyShared,
+            SharedBy = g.FamilyShared && PageText(g.SharedBy) is { Length: > 0 } lender ? lender : null,
+            LaunchTarget = PageTarget(g.LaunchTarget),
+            Includes = g.Includes?.Select(game => new GameIncludeDto { AppId = game.AppId, Title = game.Title }).ToArray(),
+            LastPlayedUtc = g.LastPlayedUtc?.ToString("O"),
+            IsAddPortable = string.Equals(g.Id, "local:add", StringComparison.OrdinalIgnoreCase),
+            IsRunning = runState.IsRunning,
+            CanStop = runState.CanStop,
+            BuyUrl = Storefront.BuyUrl(g),
+            Tags = SteamAppTags.For(g),
+            AntiCheatClass = AntiCheatClass.WireClass(g, AntiCheatCheck.PeekCached(g)),
         };
     }
 
-    private static object MapProgress(InstallProgress p) => new
+    private static InstallProgressDto MapProgress(InstallProgress p) => new()
     {
-        gameId = p.GameId,
-        phase = p.Phase.ToString().ToLowerInvariant(),
-        percent = p.Percent,
-        bytesDownloaded = p.BytesDownloaded,
-        bytesToDownload = p.BytesToDownload,
-        bytesPerSecond = p.BytesPerSecond,
-        status = p.Status,
-        canCancel = p.CanCancel,
-        isActive = p.IsActive,
+        GameId = p.GameId,
+        Phase = p.Phase.ToString().ToLowerInvariant(),
+        Percent = p.Percent,
+        BytesDownloaded = p.BytesDownloaded,
+        BytesToDownload = p.BytesToDownload,
+        BytesPerSecond = p.BytesPerSecond,
+        Status = p.Status,
+        CanCancel = p.CanCancel,
+        IsActive = p.IsActive,
     };
 
     /// <summary>The params that only name a page or a kind of call, never what it is about.</summary>
@@ -3554,15 +3659,15 @@ public sealed partial class WebHostBridge
         object musicPlayback,
         object discordStatus,
         string? binaryMediaPipe) =>
-        new
+        new ShellBootstrapDto
         {
-            ok = true,
-            artBase,
-            settings,
-            library,
-            musicPlayback,
-            discordStatus,
-            binaryMediaPipe,
+            Ok = true,
+            ArtBase = artBase,
+            Settings = settings,
+            Library = library,
+            MusicPlayback = musicPlayback,
+            DiscordStatus = discordStatus,
+            BinaryMediaPipe = binaryMediaPipe,
         };
 
     private async Task<object> ShellBootstrapAsync(CancellationToken ct)
@@ -3587,7 +3692,10 @@ public sealed partial class WebHostBridge
             (_transport as NamedPipeHostTransport)?.MediaPipeName);
     }
 
-    private void PostResponse(string id, bool ok, object? result = null, string? error = null, double elapsedMs = 0)
+    private void PostResponse(string id, bool ok, object? result = null, string? error = null, double elapsedMs = 0) =>
+        PostResponseCore(id, 0, 0, isWire: false, ok, result, error, elapsedMs);
+
+    private void PostResponseCore(string id, ulong wireReqId, ushort wireMethodId, bool isWire, bool ok, object? result = null, string? error = null, double elapsedMs = 0)
     {
         var transport = _transport;
         if (transport is null || _detached) return;
@@ -3595,7 +3703,13 @@ public sealed partial class WebHostBridge
             _trace.RecordReply(RpcTrace.ClientKind(transport), id, ok, elapsedMs);
         if (transport is NamedPipeHostTransport pipeTransport)
         {
-            try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeResponseUtf8(id, ok, result, error)); }
+            try
+            {
+                if (isWire && pipeTransport.IsBinaryWireActive)
+                    pipeTransport.PostWireResponse(wireReqId, wireMethodId, ok, result, error);
+                else
+                    pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeResponseUtf8(id, ok, result, error));
+            }
             catch { }
             return;
         }
@@ -3622,7 +3736,13 @@ public sealed partial class WebHostBridge
             _trace.RecordEvent(RpcTrace.ClientKind(transport), name, data);
         if (transport is NamedPipeHostTransport pipeTransport)
         {
-            try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeEventUtf8(name, data)); }
+            try
+            {
+                if (pipeTransport.IsBinaryWireActive)
+                    pipeTransport.PostWireEvent(name, data);
+                else
+                    pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeEventUtf8(name, data));
+            }
             catch { }
             return;
         }
