@@ -63,8 +63,27 @@ public sealed partial class MicCatalogTests
     [InlineData("Shure MVX2U Gen 2", "Shure MVX2U Gen 2")]
     [InlineData("RODECaster Pro Stereo", "RØDECaster Pro")]
     [InlineData("M•Caster Studio", "Mackie M•Caster Studio")]
+    [InlineData("Maono AU-A04", "Maono AU-A04")]
+    [InlineData("AU-A04", "Maono AU-A04")]
+    [InlineData("Maono AU-A04TR", "Maono AU-A04TR")]
+    [InlineData("MAONO AU-A04TR (USB)", "Maono AU-A04TR")]
+    [InlineData("AU-A04TR", "Maono AU-A04TR")]
     public void TheLongestMatchingNameWins(string name, string title) =>
         Assert.Equal(title, MicCatalog.Describe(Usb(name)).Title);
+
+    [Fact]
+    public void TheAuA04ModelsShareOneGainTipAndTheirOwnKnob()
+    {
+        const string gainTip = "Too much gain makes the room louder than you: turn the knob down until your voice is clear and the room is quiet.";
+        foreach (var name in new[] { "Maono AU-A04", "Maono AU-A04TR" })
+        {
+            var profile = MicCatalog.Describe(Usb(name));
+            Assert.Equal(MicKind.UsbMic, profile.Kind);
+            Assert.Contains(gainTip, profile.SetupTips);
+            var knob = Assert.Single(profile.Features, f => f.Stage == MicStage.Gain);
+            Assert.Contains(name.Replace("Maono ", ""), knob.Steps);
+        }
+    }
 
     [Fact]
     public void ThisPcsFifineIsKnownByItsVendor()
