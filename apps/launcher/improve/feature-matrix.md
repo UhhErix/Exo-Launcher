@@ -18,13 +18,13 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 | Store | 16 | 1 | 0 | 0 | 17 |
 | Discord | 9 | 16 | 20 | 0 | 45 |
 | Music | 5 | 7 | 9 | 0 | 21 |
-| Exo AI / PC | 0 | 8 | 12 | 1 | 21 |
-| Apps | 4 | 1 | 7 | 0 | 12 |
+| Exo AI / PC | 21 | 0 | 0 | 0 | 21 |
+| Apps | 12 | 0 | 0 | 0 | 12 |
 | Devices | 3 | 3 | 4 | 1 | 11 |
 | Captures | 0 | 4 | 5 | 1 | 10 |
 | Settings | 6 | 5 | 12 | 0 | 23 |
 | Onboarding & Account | 0 | 4 | 6 | 0 | 10 |
-| **Overall** | **77** | **66** | **90** | **5** | **238** |
+| **Overall** | **106** | **57** | **71** | **4** | **238** |
 
 RPC: React calls 345 of 345 contract methods; native references 134. 211 methods React calls are never called natively. Events: React handles 77 of 77; native handles 35; 42 React-handled events are dropped natively.
 
@@ -236,50 +236,50 @@ Totals: DONE 5, PARTIAL 7, MISSING 9, BROKEN 0 (of 21).
 
 ## Exo AI / PC
 
-Totals: DONE 0, PARTIAL 8, MISSING 12, BROKEN 1 (of 21).
+Totals: DONE 21, PARTIAL 0, MISSING 0, BROKEN 0 (of 21).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Exo AI room: Auto Tune card (stage list, live progress, undo) | components/gpu/AutoTune.tsx:4 | exo-ui/src/pc.rs:1344 | BROKEN | rpc: system.tune, autopilot.state, exoAi.state, exoAi.set. pc.rs:~1615-1700: six stage rows and "Auto Tune complete" are hardcoded; descriptions like "No bloatware found", "Graphics & chipset drivers up to date" are static text, not read from the host. |
-| Exo AI: Run again / Optimizing PC cinema | components/gpu/AutoTuneCinema.tsx:151 | exo-ui/src/pc.rs:1289 | PARTIAL | rpc: exoAi.set. Button calls exoAi.set; no cinema, no stage events, no Not now. |
-| Auto Tune: PawnIO / unsupported CPU/GPU notice | components/gpu/AutoTune.tsx:139 | — | MISSING | rpc: shell.openUrl, system.tune.  |
-| PC overview (hardware, Windows version, Secure Boot, TPM, memory integrity, BIOS) | components/gpu/PcOverview.tsx:1 | exo-ui/src/pc.rs:781 | PARTIAL | rpc: system.about, system.drives, system.tuning. Name/drives/tuning only; no Secure Boot/TPM/BIOS/recovery rows; bios.update never called. |
-| Autopilot (state, what it found / did, pause, turn back on) | components/gpu/Autopilot.tsx:3 | exo-ui/src/pc.rs:1219 | PARTIAL | rpc: autopilot.state, autopilot.set. Shows state only; autopilot.set never called so cannot pause/resume. |
-| Power & Autopilot group, system tweaks (restore, restart required) | components/gpu/SystemGroup.tsx:50 | — | MISSING | rpc: system.tune, system.health.  |
-| Interrupts (MSI, DPC latency measure, drivers hold) | components/gpu/InterruptRows.tsx:19 | — | MISSING | rpc: system.interrupts.  |
-| Display tab (refresh rate, HDR, calibrate, G-Sync, best settings) | components/gpu/DisplayTab.tsx:1 | exo-ui/src/pc.rs:1591 | PARTIAL | rpc: gpu.display, hdr.state. Opens a menu; gpu.display / calibration not called; only hdr.state read. |
-| GPU driver row (latest, install, driver type, profile restore) | components/gpu/DriverRow.tsx:116 | — | MISSING | rpc: gpu.driver, gpu.profile. gpu.driver / gpu.driverInstall events not handled. |
-| Driver profile (low latency, boost) | components/gpu/DriverProfile.tsx:26 | exo-ui/src/pc.rs:1013 | PARTIAL | rpc: gpu.profile. Read only. |
-| Drivers & updates (chipset, Windows Update, BIOS, restart) | components/gpu/DriversSection.tsx:108 | — | MISSING | rpc: system.drivers, system.health, bios.update, controller.read. drivers.step / bios.progress events not handled. |
-| AFMF 3 row | components/gpu/Afmf3Row.tsx:12 | — | MISSING | rpc: gpu.afmf3.  |
-| GPU control panel open | components/gpu/PcPartMenus.tsx:69 | — | MISSING | rpc: gpu.controlPanel.  |
-| Best Setup (use best settings) | components/gpu/BestSetup.tsx:107 | — | MISSING | rpc: system.health.  |
-| Storage room (drives, scan space, drive settings) | components/gpu/StorageRoom.tsx:117 | exo-ui/src/pc.rs:1238 | PARTIAL | rpc: system.drives. Drives list; scan space and drive settings absent. |
-| Compress games (all, idle, after updates) | components/gpu/CompressGames.tsx:14 | — | MISSING | rpc: compress.all, compress.act, compress.settings. compress.progress event not handled; native only compress.list. |
-| Game runtimes (VC++/.NET list, install) | components/runtimes/RuntimesPanel.tsx:1 | — | MISSING | rpc: runtimes.list, runtimes.install. runtimes.progress event not handled. |
-| Shaders board (pre-compile all, rebuild, cancel) | components/shaders/ShadersBoard.tsx:25 | exo-ui/src/pc.rs:1846 | PARTIAL | rpc: shaders.status, shaders.prepare.start, shaders.prepare.games, shaders.prepare.cancel, shaders.rebuild. Cancel / rebuild missing; shaders.event not handled. |
-| Keep (CPU/GPU keep-awake status) | components/gpu/PcOverview.tsx:69 | — | MISSING | rpc: keep.status.  |
-| FPS counter options | components/settings/GeneralSection.tsx:127 | — | MISSING | rpc: fps.counter. See Settings. |
-| PC part menus (CPU, GPU, RAM, disk context menus) | components/gpu/PcPartMenus.tsx:69 | exo-ui/src/pc.rs:1 | PARTIAL | Display + others present; actions inside menus limited. |
+| Exo AI room: Auto Tune card (stage list, live progress, undo) | components/gpu/AutoTune.tsx:4 | exo-ui/src/pc_ai.rs:372 | DONE | rpc: system.tune, autopilot.state, exoAi.state, exoAi.set. Dynamic 6-stage Auto Tune + real system.tune hardware rows (Tune CPU/GPU with risk confirm, live testing progress + Stop, tuned metrics + Undo). |
+| Exo AI: Run again / Optimizing PC cinema | components/gpu/AutoTuneCinema.tsx:151 | exo-ui/src/pc_menus.rs:1865 | DONE | rpc: exoAi.set + sequential 6-stage pipeline in pc_wp9_actions.rs. Full-screen cinema modal with Stage X of 6, milestones, results summary, Not now / Restart now / Run again / Done. |
+| Auto Tune: PawnIO / unsupported CPU/GPU notice | components/gpu/AutoTune.tsx:139 | exo-ui/src/pc_ai.rs:392 | DONE | rpc: shell.openUrl, system.tune. Get PawnIO link on needs-driver and unsupported hardware notice when parts is empty. |
+| PC overview (hardware, Windows version, Secure Boot, TPM, memory integrity, BIOS) | components/gpu/PcOverview.tsx:1 | exo-ui/src/pc_ai.rs:1790 | DONE | rpc: system.about, system.drives, system.tuning, keep.status, bios.update. Hardware overview grid with verdicts + Motherboard BIOS/Recovery/Secure Boot/TPM/Memory integrity rows with vendor hints. |
+| Autopilot (state, what it found / did, pause, turn back on) | components/gpu/Autopilot.tsx:3 | exo-ui/src/pc_menus.rs:1089 | DONE | rpc: autopilot.state, autopilot.set. Pause/turn on, Memory Integrity, per-app rules, live telemetry, and expandable session reports. |
+| Power & Autopilot group, system tweaks (restore, restart required) | components/gpu/SystemGroup.tsx:50 | exo-ui/src/pc_menus.rs:1169 | DONE | rpc: system.tune, system.health, system.tuning. Network/System tuning groups with Put back undo, connection/latency checks, and restart banners. |
+| Interrupts (MSI, DPC latency measure, drivers hold) | components/gpu/InterruptRows.tsx:19 | exo-ui/src/pc_menus.rs:1169 | DONE | rpc: system.interrupts. MSI apply/undo, DPC latency measurement, drivers hold, and device list. |
+| Display tab (refresh rate, HDR, calibrate, G-Sync, best settings) | components/gpu/DisplayTab.tsx:1 | exo-ui/src/pc_menus.rs:571 | DONE | rpc: gpu.display, hdr.state. Multi-monitor switcher, Use best settings, refresh rate, color format/depth/range, DDC brightness/contrast, color adjust + Restore, HDR verdict/auto-HDR/Calibrate. |
+| GPU driver row (latest, install, driver type, profile restore) | components/gpu/DriverRow.tsx:116 | exo-ui/src/pc_menus.rs:259 | DONE | rpc: gpu.driver, gpu.profile. Game Ready/Studio toggle, Install/Reinstall with license consent dialog, gpu.driver push progress. |
+| Driver profile (low latency, boost) | components/gpu/DriverProfile.tsx:26 | exo-ui/src/pc_menus.rs:356 | DONE | rpc: gpu.profile. Apply/Undo, NVIDIA Reflex/Low Latency/Power/Shader details, manual profile controls, Frame Generation switch. |
+| Drivers & updates (chipset, Windows Update, BIOS, restart) | components/gpu/DriversSection.tsx:108 | exo-ui/src/pc_ai.rs:733 | DONE | rpc: system.drivers, system.health, bios.update, controller.read. Update all, GPU/chipset/device/DualSense/Windows Update/ASUS BIOS staging with drivers.step & bios.progress push events. |
+| AFMF 3 row | components/gpu/Afmf3Row.tsx:12 | exo-ui/src/pc_menus.rs:356 | DONE | rpc: gpu.afmf3. Status + toggle inside Graphics part menu. |
+| GPU control panel open | components/gpu/PcPartMenus.tsx:69 | exo-ui/src/pc_menus.rs:356 | DONE | rpc: gpu.controlPanel. Opens vendor GPU control panel from Graphics part menu. |
+| Best Setup (use best settings) | components/gpu/BestSetup.tsx:107 | exo-ui/src/pc_menus.rs:1169 | DONE | rpc: system.health, system.tuning, system.interrupts, gpu.profile, gpu.display. Sequential Use best settings runner inside Motherboard menu. |
+| Storage room (drives, scan space, drive settings) | components/gpu/StorageRoom.tsx:117 | exo-ui/src/pc_storage.rs:522 | DONE | rpc: system.drives. Full Storage room with drive cards, space breakdown, top games, verdicts, Scan space, and Drive settings fixes. |
+| Compress games (all, idle, after updates) | components/gpu/CompressGames.tsx:14 | exo-ui/src/pc_storage.rs:345 | DONE | rpc: compress.list, compress.all, compress.act, compress.settings. Compress all, per-game Compress/Uncompress with confirm, live compress.progress events, idle & after-updates toggles. |
+| Game runtimes (VC++/.NET list, install) | components/runtimes/RuntimesPanel.tsx:1 | exo-ui/src/pc_ai.rs:564 | DONE | rpc: runtimes.list, runtimes.install. VC++/.NET runtime rows, install/repair/cancel, and live runtimes.progress push events. |
+| Shaders board (pre-compile all, rebuild, cancel) | components/shaders/ShadersBoard.tsx:25 | exo-ui/src/pc_ai.rs:2060 | DONE | rpc: shaders.status, shaders.prepare.start, shaders.prepare.games, shaders.prepare.cancel, shaders.rebuild, shaders.call. Queue compile/pause/resume/stop, per-game compile/cancel, cache strip, shaders.event & shaders.rebuild push events. |
+| Keep (CPU/GPU keep-awake status) | components/gpu/PcOverview.tsx:69 | exo-ui/src/pc_ai.rs:1790 | DONE | rpc: keep.status. Displays keep-awake status messages on PC overview card. |
+| FPS counter options | components/settings/GeneralSection.tsx:127 | exo-ui/src/settings.rs:234 | DONE | rpc: fps.counter. In-game settings FPS counter toggle, position selector, and all 9 metric switches. |
+| PC part menus (CPU, GPU, RAM, disk context menus) | components/gpu/PcPartMenus.tsx:69 | exo-ui/src/pc_menus.rs:2272 | DONE | Anchored Graphics, Display, and Motherboard popovers with full interactive controls, Esc/backdrop dismiss, and blur cap compliance. |
 
 ## Apps
 
-Totals: DONE 4, PARTIAL 1, MISSING 7, BROKEN 0 (of 12).
+Totals: DONE 12, PARTIAL 0, MISSING 0, BROKEN 0 (of 12).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Installed apps list (icons, size, publisher, search) | components/apps/AppsPanel.tsx:110 | exo-ui/src/pc.rs:1307 | DONE | rpc: apps.list, apps.icons.  |
-| Uninstall (confirm, progress, leftovers) | components/apps/AppsPanel.tsx:77 | exo-ui/src/pc_actions.rs:181 | PARTIAL | rpc: apps.uninstall. apps.confirm / apps.clean (leftover scan) / apps.leave not called. |
-| Tidy / clean up apps | components/apps/AppsPanel.tsx:120 | exo-ui/src/pc_actions.rs:24 | DONE | rpc: apps.tidy.  |
-| Scan for unused apps ("Not opened in three months") | components/apps/AppsPanel.tsx:323 | — | MISSING | rpc: apps.scan.  |
-| Restore point + Undo | components/apps/AppsPanel.tsx:98 | — | MISSING | rpc: apps.restorePoint, apps.undo.  |
-| Installer cache (scan, clean) | components/apps/AppsPanel.tsx:821 | — | MISSING | rpc: apps.installerCache, apps.installerCacheClean.  |
-| Default apps open | components/apps/AppsPanel.tsx:744 | — | MISSING | rpc: apps.openDefaults.  |
-| Replaced apps (remove duplicates) | components/apps/AppsPanel.tsx:195 | — | MISSING | rpc: replaced.remove.  |
-| Packages: plan / remove / add back | components/gpu/autoTuneStages.ts:212 | — | MISSING | rpc: apps.packages, apps.packagesPlan, apps.packagesRemove, apps.packageAddBack.  |
-| Startup apps (list, remove, restore, clean) | components/apps/AppsPanel.tsx:14 | exo-ui/src/pc.rs:2158 | DONE | rpc: startup.list, startup.remove, startup.clean, startup.restore.  |
-| Junk files (scan, clean) | components/apps/AppsPanel.tsx:3 | exo-ui/src/pc.rs:1066 | DONE | rpc: junk.scan, junk.clean.  |
-| Edge allow, web preferences (default browser behaviour) | components/settings/AppsSection.tsx:1 | — | MISSING | rpc: apps.allowEdge, web.preferences.get, web.preferences.set.  |
+| Installed apps list (icons, size, publisher, search) | components/apps/AppsPanel.tsx:110 | exo-ui/src/pc_apps.rs:1095 | DONE | rpc: apps.list, apps.icons. Split out of pc.rs into pc_apps.rs with sortable Name/Last used/Size headers and collapsible Needed section. |
+| Uninstall (confirm, progress, leftovers) | components/apps/AppsPanel.tsx:77 | exo-ui/src/pc_apps.rs:259 | DONE | rpc: apps.uninstall, apps.confirm, apps.clean, apps.leave. In-place confirm, multi-select batch uninstall, leftover Review picker, Clean up, Leave, and auto-cleared rows. |
+| Tidy / clean up apps | components/apps/AppsPanel.tsx:120 | exo-ui/src/pc_apps.rs:531 | DONE | rpc: apps.tidy, apps.clean, apps.leave. Ready-for-you tidy row with Review picker and Put back undo. |
+| Scan for unused apps ("Not opened in three months") | components/apps/AppsPanel.tsx:323 | exo-ui/src/pc_apps.rs:531 | DONE | rpc: apps.scan. Unused >90d summary row, Show filter toggle, and filtered banner. |
+| Restore point + Undo | components/apps/AppsPanel.tsx:98 | exo-ui/src/pc_apps.rs:259 | DONE | rpc: apps.restorePoint, apps.undo. Restore point creation before batch uninstall + Put back undo for cleaned leftovers & installer cache. |
+| Installer cache (scan, clean) | components/apps/AppsPanel.tsx:821 | exo-ui/src/pc_apps.rs:531 | DONE | rpc: apps.installerCache, apps.installerCacheClean. Installer cache row with Clear and Put back undo. |
+| Default apps open | components/apps/AppsPanel.tsx:744 | exo-ui/src/pc_apps.rs:225 | DONE | rpc: apps.openDefaults. Default apps prompt row after removing an app with file associations. |
+| Replaced apps (remove duplicates) | components/apps/AppsPanel.tsx:195 | exo-ui/src/pc_apps.rs:531 | DONE | rpc: replaced.remove. Duplicate/replaced app cleanup row in Ready for you. |
+| Packages: plan / remove / add back | components/gpu/autoTuneStages.ts:212 | exo-ui/src/pc_apps.rs:531 | DONE | rpc: apps.packages, apps.packagesPlan, apps.packagesRemove, apps.packageAddBack. Auto Tune bloatware stage + Apps bloat removal and removed package Add back rows. |
+| Startup apps (list, remove, restore, clean) | components/apps/AppsPanel.tsx:14 | exo-ui/src/pc_apps.rs:1095 | DONE | rpc: startup.list, startup.remove, startup.clean, startup.restore. Startup tab with Turn off, Clean up, Kept reasons, and Turned off Put back. |
+| Junk files (scan, clean) | components/apps/AppsPanel.tsx:3 | exo-ui/src/pc_apps.rs:531 | DONE | rpc: junk.scan, junk.clean. Ready-for-you junk summary row with Clean action. |
+| Edge allow, web preferences (default browser behaviour) | components/settings/AppsSection.tsx:1 | exo-ui/src/settings.rs:320 | DONE | rpc: apps.allowEdge, web.preferences.get, web.preferences.set. Allow Edge row in pc_apps.rs when edge_removed is true; web preferences & YouTube Music notifications in settings.rs. |
 
 ## Devices
 
@@ -731,35 +731,35 @@ Owns: pc.rs (Exo AI + Apps + Storage parts), pc_actions.rs, pc_state.rs; STEP 0 
 
 Depends on: RPC present: system.tune/health/interrupts/drivers, gpu.display/driver/afmf3/controlPanel, bios.update, compress.*, runtimes.*, apps.scan/clean/confirm/restorePoint/undo/installerCache/packages*, replaced.remove, keep.status, autopilot.set.
 
-- `exo-ai-pc-01` [BROKEN] Exo AI room: Auto Tune card (stage list, live progress, undo)
-- `exo-ai-pc-02` [PARTIAL] Exo AI: Run again / Optimizing PC cinema
-- `exo-ai-pc-03` [MISSING] Auto Tune: PawnIO / unsupported CPU/GPU notice
-- `exo-ai-pc-04` [PARTIAL] PC overview (hardware, Windows version, Secure Boot, TPM, memory integrity, BIOS)
-- `exo-ai-pc-05` [PARTIAL] Autopilot (state, what it found / did, pause, turn back on)
-- `exo-ai-pc-06` [MISSING] Power & Autopilot group, system tweaks (restore, restart required)
-- `exo-ai-pc-07` [MISSING] Interrupts (MSI, DPC latency measure, drivers hold)
-- `exo-ai-pc-08` [PARTIAL] Display tab (refresh rate, HDR, calibrate, G-Sync, best settings)
-- `exo-ai-pc-09` [MISSING] GPU driver row (latest, install, driver type, profile restore)
-- `exo-ai-pc-10` [PARTIAL] Driver profile (low latency, boost)
-- `exo-ai-pc-11` [MISSING] Drivers & updates (chipset, Windows Update, BIOS, restart)
-- `exo-ai-pc-12` [MISSING] AFMF 3 row
-- `exo-ai-pc-13` [MISSING] GPU control panel open
-- `exo-ai-pc-14` [MISSING] Best Setup (use best settings)
-- `exo-ai-pc-15` [PARTIAL] Storage room (drives, scan space, drive settings)
-- `exo-ai-pc-16` [MISSING] Compress games (all, idle, after updates)
-- `exo-ai-pc-17` [MISSING] Game runtimes (VC++/.NET list, install)
-- `exo-ai-pc-18` [PARTIAL] Shaders board (pre-compile all, rebuild, cancel)
-- `exo-ai-pc-19` [MISSING] Keep (CPU/GPU keep-awake status)
-- `exo-ai-pc-20` [MISSING] FPS counter options
-- `exo-ai-pc-21` [PARTIAL] PC part menus (CPU, GPU, RAM, disk context menus)
-- `apps-02` [PARTIAL] Uninstall (confirm, progress, leftovers)
-- `apps-04` [MISSING] Scan for unused apps ("Not opened in three months")
-- `apps-05` [MISSING] Restore point + Undo
-- `apps-06` [MISSING] Installer cache (scan, clean)
-- `apps-07` [MISSING] Default apps open
-- `apps-08` [MISSING] Replaced apps (remove duplicates)
-- `apps-09` [MISSING] Packages: plan / remove / add back
-- `apps-12` [MISSING] Edge allow, web preferences (default browser behaviour)
+- `exo-ai-pc-01` [DONE] Exo AI room: Auto Tune card (stage list, live progress, undo)
+- `exo-ai-pc-02` [DONE] Exo AI: Run again / Optimizing PC cinema
+- `exo-ai-pc-03` [DONE] Auto Tune: PawnIO / unsupported CPU/GPU notice
+- `exo-ai-pc-04` [DONE] PC overview (hardware, Windows version, Secure Boot, TPM, memory integrity, BIOS)
+- `exo-ai-pc-05` [DONE] Autopilot (state, what it found / did, pause, turn back on)
+- `exo-ai-pc-06` [DONE] Power & Autopilot group, system tweaks (restore, restart required)
+- `exo-ai-pc-07` [DONE] Interrupts (MSI, DPC latency measure, drivers hold)
+- `exo-ai-pc-08` [DONE] Display tab (refresh rate, HDR, calibrate, G-Sync, best settings)
+- `exo-ai-pc-09` [DONE] GPU driver row (latest, install, driver type, profile restore)
+- `exo-ai-pc-10` [DONE] Driver profile (low latency, boost)
+- `exo-ai-pc-11` [DONE] Drivers & updates (chipset, Windows Update, BIOS, restart)
+- `exo-ai-pc-12` [DONE] AFMF 3 row
+- `exo-ai-pc-13` [DONE] GPU control panel open
+- `exo-ai-pc-14` [DONE] Best Setup (use best settings)
+- `exo-ai-pc-15` [DONE] Storage room (drives, scan space, drive settings)
+- `exo-ai-pc-16` [DONE] Compress games (all, idle, after updates)
+- `exo-ai-pc-17` [DONE] Game runtimes (VC++/.NET list, install)
+- `exo-ai-pc-18` [DONE] Shaders board (pre-compile all, rebuild, cancel)
+- `exo-ai-pc-19` [DONE] Keep (CPU/GPU keep-awake status)
+- `exo-ai-pc-20` [DONE] FPS counter options
+- `exo-ai-pc-21` [DONE] PC part menus (CPU, GPU, RAM, disk context menus)
+- `apps-02` [DONE] Uninstall (confirm, progress, leftovers)
+- `apps-04` [DONE] Scan for unused apps ("Not opened in three months")
+- `apps-05` [DONE] Restore point + Undo
+- `apps-06` [DONE] Installer cache (scan, clean)
+- `apps-07` [DONE] Default apps open
+- `apps-08` [DONE] Replaced apps (remove duplicates)
+- `apps-09` [DONE] Packages: plan / remove / add back
+- `apps-12` [DONE] Edge allow, web preferences (default browser behaviour)
 
 #### WP10 Devices (controller, audio, EQ, mouse relay) and Captures + Notes (L, 18 items)
 

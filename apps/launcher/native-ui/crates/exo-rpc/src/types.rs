@@ -1227,6 +1227,10 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub hdr_for_games: bool,
     #[serde(default)]
+    pub frame_gen_everywhere: bool,
+    #[serde(default)]
+    pub frame_gen_everywhere_card: bool,
+    #[serde(default)]
     pub auto_update_upscalers: bool,
     #[serde(default)]
     pub auto_update_chipset: bool,
@@ -1452,11 +1456,16 @@ pub enum HostEvent {
     DiscordState(crate::discord_types::DiscordStateEvent),
     DiscordSignIn(crate::discord_types::DiscordSignInStep),
     DiscordChanged(crate::discord_types::DiscordChangedEvent),
-    DiscordMembers { guild_id: String },
+    DiscordMembers {
+        guild_id: String,
+    },
     DiscordPresence(crate::discord_types::DiscordPresenceEvent),
     DiscordUnread(crate::discord_types::DiscordUnreadEvent),
     DiscordVoice(crate::discord_types::DiscordVoice),
-    DiscordSpeaking { user_id: String, speaking: bool },
+    DiscordSpeaking {
+        user_id: String,
+        speaking: bool,
+    },
     DiscordMessage(Box<crate::discord_types::DiscordMessageEvent>),
     DiscordReaction(crate::discord_types::DiscordReactionEvent),
     DiscordTyping(crate::discord_types::DiscordTypingEvent),
@@ -1490,7 +1499,18 @@ pub enum HostEvent {
     GameOptimizeHeld(crate::game_types::GameOptimizeEvent),
     CompressProgress(crate::game_types::CompressProgressEvent),
     StoreSale(crate::events::StoreSaleEvent),
-    Raw { event: String, data: Value },
+    GpuDriver(crate::pc_types::DriverProgress),
+    GpuDriverInstall(crate::events::GpuDriverInstallEvent),
+    DriversStep(crate::pc_types::DriverStep),
+    BiosProgress {
+        share: f64,
+    },
+    RuntimesProgress(crate::pc_types::RuntimesProgress),
+    ShadersRebuild(crate::pc_types::ShaderRebuild),
+    Raw {
+        event: String,
+        data: Value,
+    },
     Disconnected(String),
 }
 

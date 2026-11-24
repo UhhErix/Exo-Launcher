@@ -1231,6 +1231,9 @@ impl AppState {
         if self.room == Room::Store && room != Room::Store {
             self.store_on_room_leave();
         }
+        if self.room == Room::ExoAi && room != Room::ExoAi {
+            self.notify_shaders_visibility(false);
+        }
         if self.room != Room::Settings && room == Room::Settings {
             self.prev_room = self.room;
         }
@@ -3268,6 +3271,7 @@ impl AppState {
         self.apply_library(boot.library);
         self.apply_music_playback(boot.music_playback.playback);
         self.discord.status = boot.discord_status;
+        self.load_web_preferences();
         match self.room {
             Room::Discord if !self.discord.loaded => self.load_discord_room(),
             Room::Music => self.load_music_room(),

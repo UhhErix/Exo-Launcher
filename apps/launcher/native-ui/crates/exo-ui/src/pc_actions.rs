@@ -5,9 +5,8 @@ use exo_rpc::{
     DevicesListReply, DrivesReply, EqStateReply, ExoAiState, HdrState, KeyboardBackupResult,
     KeyboardBackupsReply, KeyboardReadReply, LauncherSettings, METHOD_APP_CHECK_UPDATE,
     METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS, METHOD_APPS_ICONS, METHOD_APPS_LIST,
-    METHOD_APPS_UNINSTALL, METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME,
-    METHOD_AUTOPILOT_STATE, METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST, METHOD_EQ,
-    METHOD_EXO_AI_SET, METHOD_EXO_AI_STATE, METHOD_HDR_STATE, METHOD_JUNK_CLEAN,
+    METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE,
+    METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST, METHOD_EQ, METHOD_EXO_AI_STATE, METHOD_HDR_STATE,
     METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ,
     METHOD_KEYBOARD_RESTORE, METHOD_KEYBOARD_SETTINGS, METHOD_MOUSE_PANEL_BOUNDS,
     METHOD_MOUSE_PANEL_CLOSE, METHOD_MOUSE_PANEL_OPEN, METHOD_SETTINGS_SET, METHOD_SHADERS_ADDON,
@@ -38,9 +37,48 @@ impl AppState {
                     h3.update(move |s, _| s.pc.system_about = Some(about));
                 }
             });
+            let h4 = handle.clone();
+            rpc.call::<_, Value>(METHOD_SHADERS_ADDON, &json!({}), move |res| {
+                if let Ok(v) = res {
+                    let present = v.get("present").and_then(|x| x.as_bool()).unwrap_or(false);
+                    let status = ShadersAddonStatus {
+                        ok: v.get("ok").and_then(|x| x.as_bool()).unwrap_or(true),
+                        present,
+                        state: v.get("state").and_then(|x| x.as_str()).map(str::to_string),
+                        message: v
+                            .get("message")
+                            .and_then(|x| x.as_str())
+                            .map(str::to_string),
+                        snapshot: None,
+                    };
+                    h4.update(move |s, _| {
+                        s.pc.shaders = Some(status);
+                        if let Some(snap_val) = v.get("snapshot") {
+                            s.apply_shaders_snapshot_value(snap_val);
+                        }
+                    });
+                }
+            });
+            let h5 = handle.clone();
+            rpc.call::<_, Value>(
+                METHOD_SHADERS_CALL,
+                &json!({ "method": "snapshot", "params": {} }),
+                move |snap_res| {
+                    if let Ok(sv) = snap_res
+                        && let Some(res_val) = sv.get("result")
+                    {
+                        let res_clone = res_val.clone();
+                        h5.update(move |s, _| {
+                            s.apply_shaders_snapshot_value(&res_clone);
+                        });
+                    }
+                },
+            );
             if self.pc.update_check.is_none() && !self.pc.checking_update {
                 self.check_app_update();
             }
+            self.load_fps_counter_state();
+            self.load_web_preferences();
         }
     }
 
@@ -57,6 +95,7 @@ impl AppState {
             "achievementBanners" => self.settings.achievement_banners = value,
             "fpsCounter" => self.settings.fps_counter = value,
             "hdrForGames" => self.settings.hdr_for_games = value,
+            "frameGenEverywhere" => self.settings.frame_gen_everywhere = value,
             "autoUpdateUpscalers" => self.settings.auto_update_upscalers = value,
             "autoUpdateChipset" => self.settings.auto_update_chipset = value,
             _ => {}
@@ -180,7 +219,6 @@ impl AppState {
                         .get("snapshot")
                         .map(parse_shader_snap_games)
                         .unwrap_or_default();
-                    let has_games = !snap_games.is_empty();
                     let status = ShadersAddonStatus {
                         ok: v.get("ok").and_then(|x| x.as_bool()).unwrap_or(true),
                         present,
@@ -197,8 +235,16 @@ impl AppState {
                             s.pc.shader_snap_games = snap_games;
                         }
                         s.pc.shaders = Some(status);
+                        if let Some(snap_val) = v.get("snapshot") {
+                            s.apply_shaders_snapshot_value(snap_val);
+                        }
                     });
-                    if present && !has_games {
+                    if present {
+                        rpc_sh.call_raw(
+                            METHOD_SHADERS_CALL,
+                            &json!({ "method": "ui.visible", "params": { "visible": true } }),
+                            |_| {},
+                        );
                         rpc_sh.call::<_, Value>(
                             METHOD_SHADERS_CALL,
                             &json!({ "method": "snapshot", "params": {} }),
@@ -206,12 +252,10 @@ impl AppState {
                                 if let Ok(sv) = snap_res
                                     && let Some(res_val) = sv.get("result")
                                 {
-                                    let games = parse_shader_snap_games(res_val);
-                                    if !games.is_empty() {
-                                        h5_snap.update(move |s, _| {
-                                            s.pc.shader_snap_games = games;
-                                        });
-                                    }
+                                    let res_clone = res_val.clone();
+                                    h5_snap.update(move |s, _| {
+                                        s.apply_shaders_snapshot_value(&res_clone);
+                                    });
                                 }
                             },
                         );
@@ -246,33 +290,10 @@ impl AppState {
                     h7.update(move |s, _| s.pc.system_about = Some(about));
                 }
             });
-            let h8 = handle.clone();
-            rpc.call::<_, Value>("gpu.profile", &json!({}), move |res| {
-                if let Ok(v) = res {
-                    let (gpu_name, screen) = parse_gpu_profile_fields(&v);
-                    h8.update(move |s, _| {
-                        if gpu_name.is_some() {
-                            s.pc.gpu_short_name = gpu_name;
-                        }
-                        if screen.is_some() {
-                            s.pc.screen_label = screen;
-                        }
-                    });
-                }
-            });
-            let h9 = handle.clone();
-            rpc.call::<_, Value>("compress.list", &json!({}), move |res| {
-                if let Ok(v) = res {
-                    let (potential, saved) = parse_compress_totals(&v);
-                    h9.update(move |s, _| {
-                        s.pc.compress_potential_bytes = potential;
-                        s.pc.compress_saved_bytes = saved;
-                    });
-                }
-            });
             if self.pc.drives.is_none() {
                 self.load_pc_drives();
             }
+            self.load_pc_exo_ai_full();
         }
     }
 
@@ -301,25 +322,6 @@ impl AppState {
                     },
                 );
             }
-        }
-    }
-
-    pub fn run_exo_ai_now(&mut self) {
-        self.notice = Some("Running Exo AI optimization pass…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ExoAiState>(METHOD_EXO_AI_SET, &json!({ "runNow": true }), move |res| {
-                handle.update(move |s, _| match res {
-                    Ok(ai) => {
-                        s.notice = Some(format!(
-                            "Exo AI ready: {} optimizations active.",
-                            ai.auto_applied.len()
-                        ));
-                        s.pc.exo_ai = Some(ai);
-                    }
-                    Err(e) => s.notice = Some(format!("Exo AI failed: {e}")),
-                });
-            });
         }
     }
 
@@ -356,7 +358,35 @@ impl AppState {
     pub fn load_pc_apps(&mut self) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.pc.apps_loading = true;
+            self.pc.apps_loading = self.pc.apps_list.is_none();
+            if let Some(ref existing) = self.pc.apps_list {
+                let mut by_size: Vec<&exo_rpc::InstalledAppItem> = existing
+                    .programs
+                    .iter()
+                    .filter(|p| !self.pc.app_icons.contains_key(&p.id))
+                    .collect();
+                by_size.sort_by_key(|a| std::cmp::Reverse(a.bytes.unwrap_or(0)));
+                let missing_ids: Vec<String> = by_size.into_iter().map(|p| p.id.clone()).collect();
+                for chunk in missing_ids.chunks(100) {
+                    let chunk_vec: Vec<String> = chunk.to_vec();
+                    let h_c = handle.clone();
+                    rpc.call::<_, AppsIconsReply>(
+                        METHOD_APPS_ICONS,
+                        &json!({ "ids": chunk_vec }),
+                        move |ic_res| {
+                            if let Ok(reply) = ic_res {
+                                h_c.update(move |s, _| {
+                                    for (k, v) in reply.icons {
+                                        if let Some(data_url) = v {
+                                            s.pc.app_icons.insert(k, data_url);
+                                        }
+                                    }
+                                });
+                            }
+                        },
+                    );
+                }
+            }
             let h1 = handle.clone();
             let rpc_icons = rpc.clone();
             rpc.call::<_, AppsListReply>(METHOD_APPS_LIST, &json!({}), move |res| {
@@ -399,6 +429,7 @@ impl AppState {
                     h2.update(move |s, _| s.pc.startup_list = Some(list));
                 }
             });
+            self.load_pc_apps_extras(false);
         }
     }
 
@@ -438,19 +469,7 @@ impl AppState {
     }
 
     pub fn uninstall_app(&mut self, id: &str) {
-        self.pc.armed_uninstall = None;
-        self.notice = Some("Starting application uninstaller…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_APPS_UNINSTALL, &json!({ "id": id }), move |res| {
-                handle.update(move |s, _| {
-                    if let Ok(r) = res {
-                        s.notice = r.message;
-                    }
-                    s.load_pc_apps();
-                });
-            });
-        }
+        self.remove_single_app(id);
     }
 
     pub fn remove_startup_item(&mut self, id: &str) {
@@ -492,24 +511,6 @@ impl AppState {
                     });
                 },
             );
-        }
-    }
-
-    pub fn clean_system_junk(&mut self) {
-        self.notice = Some("Cleaning temporary files and caches…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_JUNK_CLEAN, &json!({}), move |res| {
-                handle.update(move |s, _| {
-                    s.notice = match res {
-                        Ok(r) => r
-                            .message
-                            .or_else(|| Some("Temporary files cleaned.".into())),
-                        Err(e) => Some(format!("Cleanup failed: {e}")),
-                    };
-                    s.load_pc_drives();
-                });
-            });
         }
     }
 
