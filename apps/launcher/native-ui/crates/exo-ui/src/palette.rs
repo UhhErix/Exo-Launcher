@@ -423,6 +423,7 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
     let mut r = row()
         .key(format!("command-palette-{}", item.id))
         .role("option")
+        .focus_selected(selected)
         .label(label)
         .focusable(true)
         .hit()
@@ -618,6 +619,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
+        .focus_return("search-capsule")
         .modal_tx(true, |s: &mut AppState, tx| {
             tx.instant();
             s.close_palette();
