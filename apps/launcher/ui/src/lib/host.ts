@@ -493,7 +493,7 @@ export type EqAction = 'state' | 'install' | 'devices' | 'sound-settings' | 'hea
 export type VoiceStages = {
   profile: 'exo' | 'custom'
   suppression: 'standard' | 'on' | 'light' | 'mic' | 'windows' | 'loading' | 'missing' | 'off'; suppressionLimitDb: number
-  focus: boolean; gain: 'windows' | 'exo' | 'off'
+  focus: boolean; gain: 'windows' | 'exo' | 'agc2' | 'off'
   /** Echo cancellation as a call on the chosen speakers runs it: on, not run on headphones or a headset, or off. */
   echo: 'on' | 'head' | 'off'
   tuned: boolean

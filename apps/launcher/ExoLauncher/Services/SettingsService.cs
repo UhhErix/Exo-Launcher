@@ -1080,6 +1080,8 @@ public sealed class SettingsService
         DiscordOthersNoiseSuppression = source.DiscordOthersNoiseSuppression,
         DiscordOnlyMyVoice = source.DiscordOnlyMyVoice,
         DiscordEvenVoices = source.DiscordEvenVoices,
+        DiscordVoiceTargetLufs = Math.Clamp(source.DiscordVoiceTargetLufs, (int)DiscordClient.Voice.VoiceLeveling.MinTargetLufs, (int)DiscordClient.Voice.VoiceLeveling.MaxTargetLufs),
+        DiscordMicAutoGain = source.DiscordMicAutoGain,
         DiscordQuietWhilePlaying = source.DiscordQuietWhilePlaying,
         DiscordInputDevice = source.DiscordInputDevice is { Length: > 0 and <= 512 } input ? input : null,
         DiscordOutputDevice = source.DiscordOutputDevice is { Length: > 0 and <= 512 } output ? output : null,
