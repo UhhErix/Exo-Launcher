@@ -649,9 +649,16 @@ public sealed class AutopilotSettings
 
     internal AutopilotSettings Copy() => new()
     {
-        On = On, GamePriority = GamePriority is "high" or "normal" ? GamePriority : "above", KeepGameMode = KeepGameMode, CoreParking = CoreParking,
+        On = On, GamePriority = NormalizePriority(GamePriority), KeepGameMode = KeepGameMode, CoreParking = CoreParking,
         AlwaysDemote = [.. (AlwaysDemote ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(200)],
         Suspend = [.. (Suspend ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(50)],
+    };
+
+    internal static string NormalizePriority(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "high" => "high",
+        "normal" => "normal",
+        _ => "above",
     };
 }
 

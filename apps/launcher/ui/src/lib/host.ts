@@ -947,6 +947,7 @@ export type AutopilotState = {
   gameMode: { off: boolean; keptOn?: string | null }
   mouseAccel?: { off: boolean; managed: boolean }
   memoryIntegrity?: { status: AutopilotMemoryIntegrityStatus; reason: string; canUndo: boolean; needsRestart: boolean }
+  standbyPurge?: { available: boolean; reason?: string | null }
   cpu: string
   now?: { game: string; did: string[] } | null
   live: AutopilotLive | null; reports: AutopilotReport[]

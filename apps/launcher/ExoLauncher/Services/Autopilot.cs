@@ -160,7 +160,7 @@ internal sealed record AutopilotGame(string Id, string Title, IReadOnlyCollectio
 internal static class AutopilotRules
 {
     internal const int Idle = 0x40, BelowNormal = 0x4000, Normal = 0x20, AboveNormal = 0x8000, High = 0x80, Realtime = 0x100;
-    internal const int EcoDefault = 0, EcoOn = 3;
+    internal const int EcoDefault = 0, EcoOff = 1, EcoOn = 3;
     internal const int IoLow = 1, IoNormal = 2;
     internal const int MemoryLow = 2, MemoryNormal = 5;
 
@@ -421,6 +421,11 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
     {
         var game = _game!;
         var options = settings();
+        if (!options.On)
+        {
+            EndLocked();
+            return;
+        }
         var rows = system.Processes();
         var now = Environment.TickCount64;
         var seconds = _cpuAt == 0 ? 0 : (now - _cpuAt) / 1000.0;
@@ -455,15 +460,21 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         AcquireTimerLocked();
 
         // The game: its own processes, as they start or when focus returns from alt-tab.
-        if (AutopilotRules.GamePriority(options.GamePriority, game.MayTouchGame) is { } wanted)
+        if (game.MayTouchGame)
         {
+            var wanted = AutopilotRules.GamePriority(options.GamePriority, true);
             var set = 0;
             foreach (var row in rows.Where(row => tree.Contains(row.Pid) && row.Session == _session && !ProcessTermination.IsAntiCheat(row.Name)))
-                if (Change(Knob.Priority, row, current => current is AutopilotRules.Normal or AutopilotRules.AboveNormal && current != wanted ? wanted : null)) set++;
-            if (set > 0)
-                _gameSaid = $"Gave {game.Title} {(wanted == AutopilotRules.High ? "high" : "above normal")} priority";
+            {
+                if (wanted is { } priority
+                    && Change(Knob.Priority, row, current => current is AutopilotRules.Normal or AutopilotRules.AboveNormal && current != priority ? priority : null))
+                    set++;
+                Change(Knob.Eco, row, current => current == AutopilotRules.EcoDefault ? AutopilotRules.EcoOff : null);
+            }
+            if (set > 0 && wanted is { } appliedPriority)
+                _gameSaid = $"Gave {game.Title} {(appliedPriority == AutopilotRules.High ? "high" : "above normal")} priority";
         }
-        else _gameSaid ??= game.MayTouchGame ? null : $"Left {game.Title} itself alone: it runs with anti-cheat, so Exo doesn't open it";
+        else _gameSaid ??= $"Left {game.Title} itself alone: it runs with anti-cheat, so Exo doesn't open it";
 
         // Background apps: named, learned or hogging, while the game is in front.
         var named = new HashSet<string>(options.AlwaysDemote.Concat(game.Learned).Select(AutopilotSafety.Bare), StringComparer.OrdinalIgnoreCase);

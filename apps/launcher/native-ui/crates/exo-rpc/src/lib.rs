@@ -46,16 +46,16 @@ pub use media_types::{
 };
 pub use pc_types::{
     AppsIconsReply, AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
-    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, BackupDay, BackupNote, BackupOffer,
-    BackupStatus, ClientsEpic, ClientsStatus, ClientsSteam, DevicesImageReply, DevicesListReply,
-    DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
-    DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, EqStateReply, ExoAiFans, ExoAiGaming,
-    ExoAiState, HdrState, InstalledAppItem, KeyboardBackupResult, KeyboardBackupSummary,
-    KeyboardBackupsReply, KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample,
-    PeripheralCard, PeripheralPort, ShaderEstimate, ShaderPrepareGame, ShaderSnapGame,
-    ShadersAddonStatus, ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot,
-    StartupItem, StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
-    UpdateCheckReply, UpdateProgress,
+    AutopilotMemoryIntegrity, AutopilotReport, AutopilotStandbyPurge, AutopilotState, BackupDay,
+    BackupNote, BackupOffer, BackupStatus, ClientsEpic, ClientsStatus, ClientsSteam,
+    DevicesImageReply, DevicesListReply, DriveFix, DriveGameEntry, DriveHealth, DriveInfo,
+    DriveLink, DriveSpaceBreakdown, DriveTemp, DriveVerdict, DriveVolume, DrivesReply, EqHeadphone,
+    EqStateReply, ExoAiFans, ExoAiGaming, ExoAiState, HdrState, InstalledAppItem,
+    KeyboardBackupResult, KeyboardBackupSummary, KeyboardBackupsReply, KeyboardProfileSlot,
+    KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard, PeripheralPort,
+    ShaderEstimate, ShaderPrepareGame, ShaderSnapGame, ShadersAddonStatus, ShadersEstimatesReply,
+    ShadersPrepareGamesReply, ShadersSnapshot, StartupItem, StartupListReply, StartupRemovedItem,
+    SystemAbout, SystemTuningState, TuningItem, UpdateCheckReply, UpdateProgress,
 };
 pub use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
