@@ -935,6 +935,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-power-guard"
+version = "0.1.0"
+
+[[package]]
 name = "exo-rpc"
 version = "0.1.0"
 dependencies = [
@@ -971,6 +975,7 @@ dependencies = [
  "exo-controller",
  "exo-kit",
  "exo-macros",
+ "exo-power-guard",
  "exo-rpc",
  "image",
  "rune",

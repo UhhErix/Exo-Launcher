@@ -9,6 +9,7 @@ exo-autopilot = { path = "../exo-autopilot" }
 exo-controller = { path = "../exo-controller" }
 exo-kit = { path = "../exo-kit" }
 exo-macros = { path = "../exo-macros" }
+exo-power-guard = { path = "../exo-power-guard" }
 exo-rpc = { path = "../exo-rpc" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 rune.workspace = true
