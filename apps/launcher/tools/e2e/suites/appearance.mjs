@@ -3,7 +3,7 @@
 import { sleep } from '../cdp.mjs'
 
 const OVERLAYS = {
-  'game sheet': async (t) => { await t.k.nav('Library'); await t.shell.click(() => [...document.querySelectorAll('.exo-game-grid button[data-game-id]')].find(b => !b.closest('.exo-folder-tile')) ?? document.querySelector('.exo-continue-open')); return t.shell.waitFor(() => !!document.querySelector('.exo-game-overlay-stage .exo-game-title'), { timeoutMs: 5000 }) },
+  'game sheet': async (t) => { await t.k.nav('Library'); await t.shell.click(() => document.querySelector('.exo-home-more-btn') ?? [...document.querySelectorAll('.exo-game-grid button[data-game-id]')].find(b => !b.closest('.exo-folder-tile'))); return t.shell.waitFor(() => !!document.querySelector('.exo-game-room .exo-game-page')?.checkVisibility(), { timeoutMs: 5000 }) },
   'search': async (t) => {
     await t.k.nav('Library')
     for (let i = 0; i < 2; i++) {
@@ -14,7 +14,7 @@ const OVERLAYS = {
     await t.shell.type('a')
     return t.shell.waitFor(() => document.querySelectorAll('[role="dialog"] [role="option"]').length > 2, { timeoutMs: 4000 })
   },
-  'menu': async (t) => { await t.k.nav('Library'); await t.shell.click(() => document.querySelector('.exo-library-more')); return t.shell.waitFor(() => [...document.querySelectorAll('[role="menu"]')].some(m => m.getBoundingClientRect().width), { timeoutMs: 3000 }) },
+  'menu': async (t) => { await t.k.nav('Library'); await t.shell.click(() => document.querySelector('main.exo-library-pane button[aria-label="More"], .exo-library-more')); return t.shell.waitFor(() => [...document.querySelectorAll('[role="menu"]')].some(m => m.getBoundingClientRect().width), { timeoutMs: 3000 }) },
   'settings': async (t) => { await t.k.closeAll(); await t.shell.click(() => document.querySelector('.exo-settings-btn')); return t.shell.waitFor(() => !!document.querySelector('.exo-settings')?.checkVisibility(), { timeoutMs: 4000 }) },
   "Discord's pages in Settings": async (t) => { await t.k.nav('Discord'); if (!await t.shell.waitFor(() => !!document.querySelector('main.exo-dc'), { timeoutMs: 15000 })) return 'skip'; await t.shell.click(() => document.querySelector('.exo-dc-me-who')); await t.shell.click(() => [...document.querySelectorAll('.exo-dc-me [role="menuitem"]')].find(b => b.textContent.trim() === 'Edit profile')); return t.shell.waitFor(() => !!document.querySelector('.exo-dc-settings-page'), { timeoutMs: 5000 }) },
 }

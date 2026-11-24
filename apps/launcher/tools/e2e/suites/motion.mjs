@@ -53,13 +53,13 @@ export async function run(t) {
   })
 
   await run.check('motion', 'sheet', 'a game\'s sheet opens and closes smoothly', async (c) => {
-    const open = await framesDuring(t, () => t.shell.click(() => document.querySelector('.exo-game-grid button[data-game-id]:not(.exo-folder-tile *)')), 700)
+    const open = await framesDuring(t, () => t.shell.click(() => document.querySelector('.exo-home-more-btn') ?? document.querySelector('.exo-game-grid button[data-game-id]:not(.exo-folder-tile *)')), 700)
     const close = await framesDuring(t, () => t.shell.key('Escape'), 600)
     return [...judge(c, open, refresh, 'open'), ...judge(c, close, refresh, 'close')]
   })
 
   await run.check('motion', 'menus', 'menus and Ctrl+K open and close smoothly', async (c) => {
-    const menu = await framesDuring(t, () => t.shell.click(() => document.querySelector('.exo-library-more')), 400)
+    const menu = await framesDuring(t, () => t.shell.click(() => document.querySelector('main.exo-library-pane button[aria-label="More"], .exo-library-more')), 400)
     await t.shell.key('Escape')
     await sleep(300)
     const palette = await framesDuring(t, () => t.shell.key('k', { ctrl: true }), 400)

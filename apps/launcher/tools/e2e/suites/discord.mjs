@@ -158,9 +158,10 @@ export async function run(t) {
     const end = (sel) => t.shell.eval(`(async () => {
       const els = [...document.querySelectorAll(${JSON.stringify(sel)})]; const el = els[els.length - 1]
       if (!el) return 'none'
-      el.scrollIntoView({ block: 'end', inline: 'end' }); await new Promise(r => setTimeout(r, 400))
+      el.scrollIntoView({ block: 'end', inline: 'end' }); await new Promise(r => setTimeout(r, 300))
+      el.scrollIntoView({ block: 'end', inline: 'end' }); await new Promise(r => setTimeout(r, 300))
       const r = el.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
-      return top === el || el.contains(top) ? 'clear' : 'under ' + (top?.className?.toString().slice(0, 40) ?? '?')
+      return top === el || el.contains(top) ? 'clear' : 'under ' + ((top?.getAttribute?.('class') ?? top?.tagName?.toLowerCase() ?? '?').slice(0, 40))
     })()`)
     await place('Messages')
     await sleep(400)

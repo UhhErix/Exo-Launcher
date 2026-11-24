@@ -39,7 +39,7 @@ export async function run(t) {
   })
 
   await run.check('perf', 'library-scroll', 'the Library scrolls smoothly with the wheel', async (c) => {
-    await k.nav('Library')
+    await k.libraryGrid()
     await t.win.front()
     const at = await t.shell.eval(`(() => { const r = document.querySelector('.exo-game-grid')?.getBoundingClientRect(); return r ? { x: r.left + r.width / 2, y: Math.min(innerHeight - 100, r.top + 200) } : null })()`)
     if (!at) c.skip('no grid')
@@ -55,6 +55,7 @@ export async function run(t) {
     c.metric('late', late / Math.max(1, gaps.length) * 100, '%', 5)
     c.metric('worst', Math.max(0, ...gaps), ' ms', 50)
     await t.shell.eval(`(document.querySelector('main.exo-library-pane') ?? document.scrollingElement).scrollTop = 0`)
+    await k.libraryHome()
     return Math.max(0, ...gaps) > 250 ? [`a ${Math.round(Math.max(...gaps))} ms freeze while scrolling`] : []
   })
 

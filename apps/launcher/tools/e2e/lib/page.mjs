@@ -15,7 +15,7 @@ export function roomState() {
     errorScreen: /something went wrong|unexpected error|this room stopped/i.test(text),
     settings: !!document.querySelector('.exo-settings')?.checkVisibility(),
     // Some stay mounted, hidden while closed (PC's Upscalers): only one that shows is open.
-    sheet: [...document.querySelectorAll('.exo-game-overlay-stage')].some(s => s.checkVisibility()),
+    sheet: [...document.querySelectorAll('.exo-game-room, .exo-game-overlay-stage')].some(s => s.checkVisibility()),
   }
 }
 
