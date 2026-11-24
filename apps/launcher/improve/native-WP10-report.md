@@ -70,3 +70,35 @@ All commands run fresh after the final edit:
 - `cargo build --release -p exo-ui`: **exit 0**
 - `node apps/launcher/tools/check-comments.mjs`: **exit 0** (225 zero-comment files; 0 comments in new/edited files)
 - `node --test apps/launcher/tools/parity/parity.test.mjs`: **exit 0** (8/8 passed)
+
+---
+
+## Follow-up: `feat/native-polish-2` Merge, Rune `e6c0716a` (`Lightbox`), and Vision Parity Fixes (2026-11-23)
+
+### Integration & Rune Pin
+- **Base merge (`1b23da5`):** Merged `origin/feat/native-polish-2` (`f2d3797`) into `UhhErix/native-WP10`, preserving `events.rs` `EventRegistry` push-event registrations (`capture.shrunk`, `capture.reel`, `notes.open`, `controller.state`, `audio.changed`, `devices.changed`) and deduplicating `METHOD_SHELL_OPEN_URL` / `AppState::open_external_url` cleanly. `git merge-base --is-ancestor origin/feat/native-polish-2 HEAD` exits `0`.
+- **Isolated Rune pin (`f64e9cb`):** Updated all 8 Rune fork crate pins in `apps/launcher/native-ui/Cargo.toml` and `Cargo.lock` to `exo-inputs` rev `e6c0716a660a97576b3e3951973c599b82bd11e7` in one isolated commit.
+- **Rune `Lightbox` adoption:** Wired Rune `Lightbox` / `LightboxState` / `LightboxItem` in `media_state.rs`, `captures.rs`, `notes.rs`, and `state.rs` so clicking a screenshot in the Captures viewer or an embedded photo in Notes Markdown preview opens the native zoom/pan/prev/next modal lightbox (dismissed via Esc in `dismiss_top_layer`).
+
+### Vision Parity Fixes (All 8 WP10 Items from `vision-parity.md`)
+
+Verified via `node tools/parity/run.mjs --states shell-capture-popover,shell-capture-sheet,shell-capture-notes,devices-overview,devices-keyboard` against a safe temp copy of `%LOCALAPPDATA%\ExoLauncher` and the repo Debug host on real connected hardware (StarlightX Dongle, Wooting 60HE v2, ZiiGaat Lush, DualSense Edge). Mean absolute pixel diff across all 5 compared WP10 states: **5.17** (`CRITICAL=0`, `Open=0 failures`, `Menus=0 failures`, `Pixels >15=0`).
+
+| # | State | Severity | Vision Issue | Fix & Verification | Before -> After |
+|---|---|---|---|---|---|
+| 1 | `shell-capture-popover` | BLOCKER | Native rendered Settings behind popover instead of Library | Fixed `("captures", ...)` scene in `main.rs` to stay on `Room::Library` with `capture_menu_open = true`. Visual PNG confirmed Library hero & game carousel behind frosted popover; Menus 2/2 PASS, Glass 10/10 PASS. | px **32.75 -> 5.90** |
+| 2 | `devices-keyboard` | BLOCKER | Missing `405px` left hero card + 2x3 spec grid + protocol footer | Upgraded `device_page_shell_columns_no_rescan` (`devices_audio.rs`) & `wooting_keyboard_page` (`pc_devices.rs`) to full-height `405px` left hero rail with centered Wooting 60HE v2 photo, 2x3 spec grid (`Profile`, `Actuation`, `Rapid Trigger`, `Scan rate`, `Firmware`, `Layout`), and `"Direct Wooting USB HID protocol"` footer. Top strip shows `< Devices` only (no extra `Rescan`). | px 9.31 (layout mismatch) -> **9.94** (1:1 3-column layout, Cursors 11/11 PASS) |
+| 3 | `devices-keyboard` | BLOCKER | Compact single-column layout missing 3-column middle/right structure | Replaced temporary compact card with full 3-column `KeyboardPage.tsx` layout (`Profiles` P1-P4 dark-bordered tabs, `Actuation` knobbed slider + 4 presets, `Rapid Trigger` green switch + Sensitivity knobbed slider, `Lighting` RGB brightness knobbed slider in col A; `Keyboard map`, `Performance`, `Backups` in col B). | Verified visually side-by-side vs React PNG |
+| 4 | `devices-keyboard` | BLOCKER | `Keyboard map` showed `'3.0'` sublabels inside WASD keys and lacked telemetry bar/pills | Removed per-key numeric sublabels inside keycaps; added 5 status summary pills, full-width `0.1-4.0 mm` travel bar, and 2-line wrapped React helper copy (all `kb-key-*` and `kb-key-inspect` keys preserved). | Verified visually side-by-side vs React PNG |
+| 5 | `devices-keyboard` | BLOCKER | Missing `Performance` panel (`Tachyon mode`, `USB port`, `Open Wootility`) | Added `Performance` card with green `Tachyon mode` switch, plain `Chipset USB` USB port row, and `Open Wootility` / `Wootility Web` button wired to `AppState::open_keyboard_app` (`METHOD_KEYBOARD_OPEN_APP`). | Verified visually side-by-side vs React PNG |
+| 6 | `devices-keyboard` | BLOCKER | Missing `Backups` panel (`Save snapshot`, timestamped restore list) | Added `Backups` card with white primary `Save backup` button and formatted timestamp rows (`Nov 22, 2026, 1:26 PM`, `Wooting 60HE v2 · 1 profile`, `Restore` button). | Verified visually side-by-side vs React PNG |
+| 7 | `shell-capture-sheet` / `shell-capture-notes` | BLOCKER | Sheet rendered Captures over opaque black instead of Library; diverged from React when Capture add-on absent | Rendered `captures::view` as an overlay layer above the active room in `shell.rs`; matched `.exo-game-overlay` geometry (`pin(0, 52, 0, 0)`, `max_w 1280`, `max_h 900`); aligned `captures-sheet` scene to open Notes when Capture add-on is not present; matched empty-state button copy and text cursor on Search notes. Cursors improved 11/19 -> 16/19, Glass 10/10 PASS. | px **8.06 -> 4.36** |
+| 8 | `devices-overview` | MINOR | 2-4px artwork sizing/centering inside 2x2 device showcase cards | Tuned `device_showcase_card` artwork dimensions to `468 x 312` (3:2 aspect matching React `84%` in `min(100cqw, 150cqh)`). Cursors 10/10 PASS. | px **1.42 -> 1.29** |
+
+### Fresh Verification Gates (Post-Follow-up)
+- `cargo fmt --check` (in `apps/launcher/native-ui`): **exit 0**
+- `cargo clippy --workspace --all-targets -- -D warnings`: **exit 0** (0 warnings)
+- `cargo test --workspace`: **exit 0** (`exo-kit` 4 passed, `exo-rpc` 22 passed / 1 ignored bench, `exo-ui` 119 passed — 145 total passed, 0 failed)
+- `cargo build --release -p exo-ui`: **exit 0**
+- `node --test apps/launcher/tools/parity/parity.test.mjs`: **exit 0** (8/8 passed)
+- `node apps/launcher/tools/check-comments.mjs`: **exit 1** — **0 comment violations in any Rust/WP10 file**; exit 1 is solely due to 12 pre-existing stale lower-count ratchet entries in `mouse/` and `ui/` inherited from `origin/feat/native-polish-2` (`f2d3797`), left untouched to stay strictly inside WP10 file ownership.

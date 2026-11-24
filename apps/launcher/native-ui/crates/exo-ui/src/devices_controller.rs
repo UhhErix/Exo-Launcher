@@ -17,8 +17,8 @@ use exo_rpc::{
     METHOD_CONTROLLER_GAME_PROFILES, METHOD_CONTROLLER_GAME_PROFILES_SAVE,
     METHOD_CONTROLLER_MEASURE, METHOD_CONTROLLER_QUALITY, METHOD_CONTROLLER_READ,
     METHOD_CONTROLLER_SETTINGS, METHOD_CONTROLLER_SOUND, METHOD_CONTROLLER_TEST,
-    METHOD_CONTROLLER_WATCH, METHOD_STEAM_INPUT_STATE, PadOverrides,
-    PadSettings, PeripheralCard, SteamInputStateReply, StickEdge, StickRest, TriggerSweep,
+    METHOD_CONTROLLER_WATCH, METHOD_STEAM_INPUT_STATE, PadOverrides, PadSettings, PeripheralCard,
+    SteamInputStateReply, StickEdge, StickRest, TriggerSweep,
 };
 use rune::{
     El, ScrollSpec, Shape, SurfaceFit, TextEdit, TextStyle, canvas, col, edit_access, el, row,

@@ -2574,6 +2574,10 @@ impl AppState {
             }
             return true;
         }
+        if self.media.lightbox.is_open() {
+            self.media.lightbox.close();
+            return true;
+        }
         if self.media.captures_ui.send_dialog.open {
             self.media.captures_ui.send_dialog.open = false;
             return true;

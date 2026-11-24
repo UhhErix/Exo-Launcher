@@ -395,6 +395,46 @@ pub fn device_page_shell(
     on_back: impl Fn(&mut AppState) + 'static,
     on_rescan: impl Fn(&mut AppState) + 'static,
 ) -> El {
+    let mut col_a = Vec::new();
+    let mut col_b = Vec::new();
+    for (idx, p) in panels.into_iter().enumerate() {
+        if idx % 2 == 0 {
+            col_a.push(p);
+        } else {
+            col_b.push(p);
+        }
+    }
+    device_page_shell_columns(header, col_a, col_b, on_back, on_rescan)
+}
+
+pub fn device_page_shell_columns(
+    header: DevicePageHeader,
+    col_a: Vec<El>,
+    col_b: Vec<El>,
+    on_back: impl Fn(&mut AppState) + 'static,
+    on_rescan: impl Fn(&mut AppState) + 'static,
+) -> El {
+    device_page_shell_inner(header, col_a, col_b, on_back, Some(Box::new(on_rescan)))
+}
+
+pub fn device_page_shell_columns_no_rescan(
+    header: DevicePageHeader,
+    col_a: Vec<El>,
+    col_b: Vec<El>,
+    on_back: impl Fn(&mut AppState) + 'static,
+) -> El {
+    device_page_shell_inner(header, col_a, col_b, on_back, None)
+}
+
+type DeviceCallback = Box<dyn Fn(&mut AppState) + 'static>;
+
+fn device_page_shell_inner(
+    header: DevicePageHeader,
+    col_a: Vec<El>,
+    col_b: Vec<El>,
+    on_back: impl Fn(&mut AppState) + 'static,
+    on_rescan: Option<DeviceCallback>,
+) -> El {
     let DevicePageHeader {
         key,
         name,
@@ -404,11 +444,12 @@ pub fn device_page_shell(
         credit,
     } = header;
     let mut hero = amoled_card(RADIUS_PANEL)
-        .w(360.0)
-        .px(20.0)
+        .w(405.0)
+        .h_full()
+        .px(24.0)
         .py(20.0)
-        .gap(14.0)
-        .child(el().w_full().h(220.0).center().child(media))
+        .gap(16.0)
+        .child(el().w_full().grow(1.0).min_h(220.0).center().child(media))
         .child(
             col()
                 .w_full()
@@ -419,51 +460,41 @@ pub fn device_page_shell(
 
     if !stats.is_empty() {
         let mut dl = col().w_full();
-        for (idx, (k, v)) in stats.into_iter().enumerate() {
-            if idx > 0 {
+        for (row_idx, pair) in stats.chunks(2).enumerate() {
+            if row_idx > 0 {
                 dl = dl.child(el().w_full().h(1.0).fill(hairline()));
             }
-            dl = dl.child(
-                row()
-                    .w_full()
-                    .py(8.0)
-                    .justify_between()
-                    .center_y()
-                    .gap(12.0)
-                    .child(text(k).font(type_small()).color(fg_muted()))
-                    .child(text(v).font(type_body()).color(FG).truncate()),
-            );
+            let mut r = row().w_full().gap(16.0).py(12.0);
+            for (k, v) in pair {
+                r = r.child(
+                    col()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .gap(4.0)
+                        .child(text(*k).font(type_small()).color(fg_muted()))
+                        .child(
+                            text(v.clone())
+                                .font(TextStyle::new(scaled(17.0), 600.0))
+                                .color(FG)
+                                .w_full()
+                                .wrap(),
+                        ),
+                );
+            }
+            if pair.len() == 1 {
+                r = r.child(el().grow(1.0).min_w(0.0));
+            }
+            dl = dl.child(r);
         }
         hero = hero.child(el().w_full().h(1.0).fill(hairline())).child(dl);
     }
 
     if let Some(cred) = credit {
-        hero = hero.child(
+        hero = hero.child(el().w_full().h(1.0).fill(hairline())).child(
             text(cred)
                 .font(TextStyle::new(scaled(11.0), 400.0))
                 .color(fg_faint()),
         );
-    }
-
-    let left_col: Vec<El> = panels
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| i % 2 == 0)
-        .map(|(_, _)| ())
-        .collect::<Vec<_>>()
-        .into_iter()
-        .map(|_| el())
-        .collect();
-    let _ = left_col;
-
-    let mut col_a = Vec::new();
-    let mut col_b = Vec::new();
-    for (idx, p) in panels.into_iter().enumerate() {
-        if idx % 2 == 0 {
-            col_a.push(p);
-        } else {
-            col_b.push(p);
-        }
     }
 
     let right = if col_b.is_empty() {
@@ -477,6 +508,22 @@ pub fn device_page_shell(
             .child(col().grow(1.0).min_w(0.0).gap(12.0).children(col_b))
     };
 
+    let mut top_strip = row().w_full().justify_between().center_y().child(
+        device_icon_btn(
+            "dev-back",
+            "Devices",
+            Some(icon_chevron_left(14.0, FG)),
+            false,
+        )
+        .on_press(on_back),
+    );
+    if let Some(rescan_fn) = on_rescan {
+        top_strip = top_strip.child(
+            device_icon_btn("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)), false)
+                .on_press(move |s: &mut AppState| rescan_fn(s)),
+        );
+    }
+
     col()
         .key(key)
         .w_full()
@@ -486,25 +533,7 @@ pub fn device_page_shell(
         .px(24.0)
         .pb(24.0)
         .gap(16.0)
-        .child(
-            row()
-                .w_full()
-                .justify_between()
-                .center_y()
-                .child(
-                    device_icon_btn(
-                        "dev-back",
-                        "Devices",
-                        Some(icon_chevron_left(14.0, FG)),
-                        false,
-                    )
-                    .on_press(on_back),
-                )
-                .child(
-                    device_icon_btn("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)), false)
-                        .on_press(on_rescan),
-                ),
-        )
+        .child(top_strip)
         .child(
             row()
                 .grow(1.0)

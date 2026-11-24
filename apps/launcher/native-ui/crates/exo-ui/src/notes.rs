@@ -1795,13 +1795,22 @@ fn render_markdown_preview(s: &AppState, doc: &NoteDoc, scale: f32) -> El {
         {
             let url = format!("{base}{file}");
             if let Some(photo) = s.capture_thumb_image(&url, scale) {
+                let lb_url = url.clone();
                 blocks.push(
-                    el().w_full()
+                    el().key(format!("note-photo-{i}"))
+                        .role("button")
+                        .cursor(Cursor::Pointer)
+                        .hit()
+                        .w_full()
                         .max_w(540.0)
                         .h(300.0)
                         .radius(RADIUS_SMALL)
                         .clip_rounded(RADIUS_SMALL)
-                        .pixels_fit(photo.pixels(), SurfaceFit::Fit),
+                        .pixels_fit(photo.pixels(), SurfaceFit::Fit)
+                        .on_press(move |s: &mut AppState| {
+                            s.media.lightbox_urls = vec![lb_url.clone()];
+                            s.media.lightbox.open(0);
+                        }),
                 );
             } else {
                 blocks.push(
@@ -1926,6 +1935,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .radius(RADIUS_PILL)
                 .fill(glass_control_fill())
                 .border(1.0, glass_rim())
+                .cursor(Cursor::Text)
                 .child(icon_search(13.0, fg_muted()))
                 .child(
                     text_input(&notes.search_query, type_body())
@@ -2563,11 +2573,11 @@ pub fn view(s: &AppState, scale: f32) -> El {
                     row()
                         .gap(12.0)
                         .child(
-                            device_btn("notes-empty-new", "New note · Ctrl + N", false)
+                            device_btn("notes-empty-new", "+  New note  Ctrl + N", false)
                                 .on_press(|s: &mut AppState| s.notes_new_note()),
                         )
                         .child(
-                            device_btn("notes-empty-open", "Open a file · Ctrl + O", false)
+                            device_btn("notes-empty-open", "Open a file  Ctrl + O", false)
                                 .on_press(|s: &mut AppState| s.notes_open_file()),
                         ),
                 ),

@@ -25,8 +25,9 @@ use exo_rpc::{
 };
 use rune::color::oklch;
 use rune::{
-    Align, Color, Cursor, El, Key, KeyEvent, Phase, ScrollSpec, Shape, Side, Spring, SurfaceFit,
-    TextEdit, TextStyle, Tx, canvas, col, edit_access, el, row, text, text_input,
+    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, Phase, ScrollSpec, Shape, Side, Spring,
+    SurfaceFit, TextEdit, TextStyle, Tx, canvas, col, edit_access, el, lightbox, row, text,
+    text_input,
 };
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -2206,14 +2207,35 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
             )
         }
     } else if let Some(img) = s.capture_thumb_image(&item.url, scale) {
+        let cur_url = item.url.clone();
         el().grow(1.0).h_full().padding(16.0).child(
-            el().w_full()
+            el().key("cap-viewer-img-zoom")
+                .role("button")
+                .cursor(Cursor::Pointer)
+                .hit()
+                .w_full()
                 .h_full()
                 .radius(RADIUS_PANEL)
                 .clip_rounded(RADIUS_PANEL)
                 .fill(BG)
                 .border(1.0, glass_rim())
-                .pixels_fit(img.pixels(), SurfaceFit::Fit),
+                .pixels_fit(img.pixels(), SurfaceFit::Fit)
+                .on_press(move |s: &mut AppState| {
+                    let urls: Vec<String> = s
+                        .media
+                        .capture_items
+                        .iter()
+                        .filter(|c| c.kind == "image" && !c.url.is_empty())
+                        .map(|c| c.url.clone())
+                        .collect();
+                    let idx = urls.iter().position(|u| u == &cur_url).unwrap_or(0);
+                    s.media.lightbox_urls = if urls.is_empty() {
+                        vec![cur_url.clone()]
+                    } else {
+                        urls
+                    };
+                    s.media.lightbox.open(idx);
+                }),
         )
     } else {
         el().grow(1.0).h_full().padding(16.0).child(
@@ -3432,17 +3454,44 @@ pub fn view(s: &AppState, scale: f32) -> El {
         scaled,
     );
 
+    let lb_overlay = if s.media.lightbox.is_open() {
+        let slides: Vec<LightboxItem> = s
+            .media
+            .lightbox_urls
+            .iter()
+            .filter_map(|u| s.capture_thumb_image(u, scale))
+            .map(|img| LightboxItem::new(img.pixels().clone()))
+            .collect();
+        if slides.is_empty() {
+            None
+        } else {
+            lightbox(
+                "captures-lightbox",
+                slides,
+                |s: &AppState| &s.media.lightbox,
+                |s: &mut AppState| &mut s.media.lightbox,
+            )
+            .backdrop_color(BG.alpha(0.92))
+            .surface_color(glass_panel_fill())
+            .text_color(FG)
+            .border_color(glass_rim())
+            .build(s)
+        }
+    } else {
+        None
+    };
+
     el().key("captures-sheet-backdrop")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.72))
+        .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
+        .fill(BG.alpha(0.62))
         .center()
         .padding(24.0)
         .child(
             el().key("captures-sheet")
                 .w_full()
-                .max_w(1360.0)
+                .max_w(1280.0)
                 .h_full()
-                .max_h(880.0)
+                .max_h(900.0)
                 .radius(RADIUS_SHEET)
                 .clip_rounded(RADIUS_SHEET)
                 .fill(glass_panel_fill())
@@ -3450,6 +3499,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .border(1.0, glass_rim())
                 .child(sheet_inner),
         )
+        .children(lb_overlay)
 }
 
 #[cfg(test)]

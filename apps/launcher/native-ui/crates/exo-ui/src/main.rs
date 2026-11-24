@@ -1516,23 +1516,36 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.media.music_immersion = true;
     }),
     ("captures", |s: &mut AppState| {
-        s.switch_room(state::Room::Settings);
+        s.switch_room(state::Room::Library);
         s.capture_menu_open = true;
     }),
     ("captures-sheet", |s: &mut AppState| {
-        s.open_captures(None);
+        s.switch_room(state::Room::Library);
+        let present = s
+            .media
+            .capture_status
+            .as_ref()
+            .is_none_or(|st| st.present && st.state.as_ref().is_none_or(|l| l.present));
+        if present {
+            s.open_captures(None);
+        } else {
+            s.open_notes(None, false);
+        }
     }),
     ("captures-settings", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
         s.open_captures(None);
         s.media.captures_settings_open = true;
     }),
     ("capture-clip", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
         s.open_captures(None);
         if let Some(first) = s.media.capture_items.first().map(|c| c.id.clone()) {
             s.open_capture_item(&first);
         }
     }),
     ("captures-notes", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
         s.open_notes(None, false);
     }),
     ("captures-clip-edit", |s: &mut AppState| {

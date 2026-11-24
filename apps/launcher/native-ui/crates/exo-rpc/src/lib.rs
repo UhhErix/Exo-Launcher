@@ -71,9 +71,9 @@ pub use pc_types::{
     InstalledAppItem, KeyboardBackupResult, KeyboardBackupSummary, KeyboardBackupsReply,
     KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard,
     PeripheralPort, ShaderEstimate, ShaderPrepareGame, ShaderSnapGame, ShadersAddonStatus,
-    ShadersEstimatesReply,
-    ShadersPrepareGamesReply, ShadersSnapshot, StartupItem, StartupListReply, StartupRemovedItem,
-    SystemAbout, SystemTuningState, TuningItem, UpdateCheckReply, UpdateProgress,
+    ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot, StartupItem,
+    StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
+    UpdateCheckReply, UpdateProgress,
 };
 pub use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};

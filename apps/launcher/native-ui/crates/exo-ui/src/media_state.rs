@@ -195,6 +195,8 @@ pub struct MediaState {
     pub captures_ui: crate::captures::CapturesUiState,
     pub snip_editor: Option<crate::snip_editor::SnipEditorState>,
     pub notes: crate::notes::NotesState,
+    pub lightbox: rune::LightboxState,
+    pub lightbox_urls: Vec<String>,
 }
 
 impl MediaState {
@@ -507,6 +509,8 @@ impl MediaState {
             captures_ui: crate::captures::CapturesUiState::default(),
             snip_editor: None,
             notes: crate::notes::NotesState::demo(),
+            lightbox: rune::LightboxState::new(),
+            lightbox_urls: Vec::new(),
         }
     }
 
@@ -559,6 +563,8 @@ impl MediaState {
             captures_ui: crate::captures::CapturesUiState::default(),
             snip_editor: None,
             notes: crate::notes::NotesState::default(),
+            lightbox: rune::LightboxState::new(),
+            lightbox_urls: Vec::new(),
         }
     }
 
@@ -1149,6 +1155,8 @@ impl AppState {
         self.media.captures_ui.send_dialog.open = false;
         self.media.captures_ui.selection = None;
         self.media.notes.open = false;
+        self.media.lightbox.close();
+        self.media.lightbox_urls.clear();
         self.media.clip_player = None;
     }
 
