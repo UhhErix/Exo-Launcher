@@ -1,0 +1,114 @@
+name: Sign and publish Exo delta packs
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to sign and attach packs to (vMAJOR.MINOR.PATCH)
+        required: true
+        type: string
+      previous_tag:
+        description: Optional previous release tag for delta.exopack generation
+        required: false
+        type: string
+        default: ''
+
+permissions: {}
+
+concurrency:
+  group: release-delta-sign-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sign-delta-packs:
+    name: Sign delta and full .exopack assets
+    if: ${{ github.repository == 'UhhErix/Exo-Launcher' }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher/native-ui
+          persist-credentials: false
+
+      - name: Build exo-delta signer
+        shell: pwsh
+        working-directory: apps/launcher/native-ui
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo build --release --locked -p exo-delta
+
+      - name: Download release payload zip(s)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PREVIOUS_TAG: ${{ inputs.previous_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$') {
+            throw 'release_tag must match vMAJOR.MINOR.PATCH'
+          }
+          if ($env:PREVIOUS_TAG -and $env:PREVIOUS_TAG -notmatch '^v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$') {
+            throw 'previous_tag must match vMAJOR.MINOR.PATCH'
+          }
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\exo-pack\new", "$env:RUNNER_TEMP\exo-pack\out" | Out-Null
+          gh release download $env:RELEASE_TAG --pattern 'ExoLauncher-win-x64.zip' --dir "$env:RUNNER_TEMP\exo-pack\new-zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\exo-pack\new-zip\ExoLauncher-win-x64.zip" -DestinationPath "$env:RUNNER_TEMP\exo-pack\new" -Force
+          if ($env:PREVIOUS_TAG) {
+            New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\exo-pack\old" | Out-Null
+            gh release download $env:PREVIOUS_TAG --pattern 'ExoLauncher-win-x64.zip' --dir "$env:RUNNER_TEMP\exo-pack\old-zip"
+            Expand-Archive -Path "$env:RUNNER_TEMP\exo-pack\old-zip\ExoLauncher-win-x64.zip" -DestinationPath "$env:RUNNER_TEMP\exo-pack\old" -Force
+          }
+
+      - name: Build and Ed25519-sign full.exopack and delta.exopack
+        shell: pwsh
+        env:
+          EXO_DELTA_ED25519_PRIVATE_KEY: ${{ secrets.EXO_DELTA_ED25519_PRIVATE_KEY }}
+          EXO_DELTA_RELEASE_PUBKEY_HEX: ${{ vars.EXO_DELTA_RELEASE_PUBKEY_HEX }}
+          PREVIOUS_TAG: ${{ inputs.previous_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:EXO_DELTA_ED25519_PRIVATE_KEY) {
+            throw 'Repository secret EXO_DELTA_ED25519_PRIVATE_KEY is not configured.'
+          }
+          if (-not $env:EXO_DELTA_RELEASE_PUBKEY_HEX) {
+            throw 'Repository variable EXO_DELTA_RELEASE_PUBKEY_HEX is not configured.'
+          }
+          $deltaExe = 'apps/launcher/native-ui/target/release/exo-delta.exe'
+          $newDir = "$env:RUNNER_TEMP\exo-pack\new"
+          $outDir = "$env:RUNNER_TEMP\exo-pack\out"
+
+          & $deltaExe build-full $newDir "$outDir\full.exopack" --level 12 --sign-key-env EXO_DELTA_ED25519_PRIVATE_KEY --sig-out "$outDir\full.exopack.sig"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $deltaExe verify $newDir "$outDir\full.exopack" --sig "$outDir\full.exopack.sig" --pubkey-hex $env:EXO_DELTA_RELEASE_PUBKEY_HEX
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          if ($env:PREVIOUS_TAG) {
+            $oldDir = "$env:RUNNER_TEMP\exo-pack\old"
+            & $deltaExe build-delta $oldDir $newDir "$outDir\delta.exopack" --level 12 --sign-key-env EXO_DELTA_ED25519_PRIVATE_KEY --sig-out "$outDir\delta.exopack.sig"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            & $deltaExe verify $newDir "$outDir\delta.exopack" --sig "$outDir\delta.exopack.sig" --pubkey-hex $env:EXO_DELTA_RELEASE_PUBKEY_HEX
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Upload signed packs to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PREVIOUS_TAG: ${{ inputs.previous_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outDir = "$env:RUNNER_TEMP\exo-pack\out"
+          $assets = @("$outDir\full.exopack", "$outDir\full.exopack.sig")
+          if ($env:PREVIOUS_TAG) {
+            $assets += @("$outDir\delta.exopack", "$outDir\delta.exopack.sig")
+          }
+          gh release upload $env:RELEASE_TAG $assets --clobber
