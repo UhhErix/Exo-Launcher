@@ -39,29 +39,27 @@ export function ControllerPage({ card, name, status, art, visible }: { card: Per
   const usb = padSettable(card.connection)
   const firmware = read?.firmware
   return (
-    <div className="contents" data-controller-lab="active">
-      <DevicePage name={name} status={status} art={art} stats={heroStats(card, firmware, live, polling.result)}>
-        <Panel title="Sticks">
-          <Sticks id={card.id} live={live} tested={read?.tested ?? null} />
-          {sony ? <CalibrationRows id={card.id} edge={edge} usb={usb} live={live} state={read?.calibration ?? undefined} onChanged={() => setReadAt(n => n + 1)} /> : null}
+    <DevicePage controllerLab name={name} status={status} art={art} stats={heroStats(card, firmware, live, polling.result)}>
+      <Panel title="Sticks">
+        <Sticks id={card.id} live={live} tested={read?.tested ?? null} />
+        {sony ? <CalibrationRows id={card.id} edge={edge} usb={usb} live={live} state={read?.calibration ?? undefined} onChanged={() => setReadAt(n => n + 1)} /> : null}
+      </Panel>
+      <Panel title="Triggers"><Triggers id={card.id} live={live} edge={edge} /></Panel>
+      <Panel title="Buttons"><Buttons id={card.id} /></Panel>
+      {edge ? <EdgePanels live={live} slots={read?.slots ?? null} /> : null}
+      <Panel title="Polling"><Polling polling={polling} /></Panel>
+      {sony ? <Panel title="Game profiles"><GameProfileRows /></Panel> : null}
+      {read ? <ReadPanels id={card.id} read={read} sony={sony} usb={usb} /> : null}
+      {card.port ? <Panel title="USB port"><PortRows port={card.port} /></Panel> : null}
+      {firmware?.current === false ? (
+        <Panel title="Firmware">
+          <Row label={`Firmware ${firmware.latest} is out`}>
+            <button type="button" className="exo-set-btn" onClick={() => void host.openUrl('https://www.playstation.com/support/hardware/ps5-controller-update/')}>How to update</button>
+          </Row>
         </Panel>
-        <Panel title="Triggers"><Triggers id={card.id} live={live} edge={edge} /></Panel>
-        <Panel title="Buttons"><Buttons id={card.id} /></Panel>
-        {edge ? <EdgePanels live={live} slots={read?.slots ?? null} /> : null}
-        <Panel title="Polling"><Polling polling={polling} /></Panel>
-        {sony ? <Panel title="Game profiles"><GameProfileRows /></Panel> : null}
-        {read ? <ReadPanels id={card.id} read={read} sony={sony} usb={usb} /> : null}
-        {card.port ? <Panel title="USB port"><PortRows port={card.port} /></Panel> : null}
-        {firmware?.current === false ? (
-          <Panel title="Firmware">
-            <Row label={`Firmware ${firmware.latest} is out`}>
-              <button type="button" className="exo-set-btn" onClick={() => void host.openUrl('https://www.playstation.com/support/hardware/ps5-controller-update/')}>How to update</button>
-            </Row>
-          </Panel>
-        ) : null}
-        {read?.layers ? <Panel title="Between it and your games"><LayerRows layers={read.layers} /></Panel> : null}
-      </DevicePage>
-    </div>
+      ) : null}
+      {read?.layers ? <Panel title="Between it and your games"><LayerRows layers={read.layers} /></Panel> : null}
+    </DevicePage>
   )
 }
 
