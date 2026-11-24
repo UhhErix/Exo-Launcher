@@ -1,6 +1,7 @@
 EXO LAB: Micro-Acoustic UI Foley & DualSense / XInput Tactile Haptics Engine (task-name: ux-tactile-haptics)
 
 SHELL SETUP, in every shell: `Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue`. Never print or commit tokens. Read `apps/launcher/AGENTS.md`, `apps/launcher/.agents/skills/exo-design/SKILL.md`, and `apps/launcher/.agents/skills/native-ui/SKILL.md` first.
+HARDWARE SAFETY: Never write to the owner's real mouse, keyboard, controller, or any HID device (`XInputSetState`/HID writes must be verified via unit-tested mock/virtual sinks in agent sessions — never fire rumble/HID writes at physical hardware). Never launch `%LOCALAPPDATA%\ExoLauncher\app`.
 
 ## What the owner asked (2026-11-24)
 

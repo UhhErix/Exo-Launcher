@@ -1,6 +1,7 @@
 EXO LAB: Native Peripherals Live Telemetry Studio & Physical Calibration Lab (240 Hz HID Oscilloscope) (task-name: ux-devices-telemetry-lab)
 
 SHELL SETUP, in every shell: `Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue`. Never print or commit tokens. Read `apps/launcher/AGENTS.md`, `apps/launcher/.agents/skills/exo-design/SKILL.md`, and `apps/launcher/.agents/skills/native-ui/SKILL.md` first.
+HARDWARE SAFETY: Never write to the owner's real mouse, keyboard, controller, or any HID device (read-only inspection and synthetic/mock HID feeds only during agent sessions). Never launch `%LOCALAPPDATA%\ExoLauncher\app`; use your own build with dev mocks.
 
 ## Hard License Boundary (CRITICAL — Read `apps/launcher/AGENTS.md:56`)
 

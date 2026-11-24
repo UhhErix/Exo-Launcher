@@ -1,6 +1,7 @@
 EXO LAB: 10-Foot Controller-First Spatial OS & Thumbstick Radial Quick-Wheel (task-name: ux-controller-spatial-os)
 
 SHELL SETUP, in every shell: `Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue`. Never print or commit tokens. Read `apps/launcher/AGENTS.md`, `apps/launcher/.agents/skills/exo-design/SKILL.md`, and `apps/launcher/.agents/skills/native-ui/SKILL.md` first.
+HARDWARE SAFETY: Never write to the owner's real mouse, keyboard, controller, or any HID device (read-only inspection and headless synthetic gamepad events only). Never launch `%LOCALAPPDATA%\ExoLauncher\app`.
 
 ## What the owner asked (2026-11-24)
 
