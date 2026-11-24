@@ -2796,7 +2796,6 @@ pub fn controller_page(
         panels.push(layers_panel(s, layers));
     }
 
-    let id_rescan = card.id.clone();
     let page = device_page_shell(
         DevicePageHeader {
             key: "room-devices-controller",
@@ -2808,10 +2807,6 @@ pub fn controller_page(
         },
         panels,
         |s| s.close_controller_page(),
-        move |s| {
-            s.load_pc_devices();
-            s.open_controller_page(id_rescan.clone());
-        },
     );
 
     let mut overlay = Vec::new();

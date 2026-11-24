@@ -1051,6 +1051,50 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.pc.audio_mic_id = mic_id;
                 state.pc.keyboard_id = kb_id;
                 state.pc.devices = Some(list);
+                if scene == Some("pc-devices-mouse") {
+                    let probe = client.call_blocking::<_, exo_rpc::ActionResult>(
+                        exo_rpc::METHOD_HID_SEND_REPORT,
+                        &serde_json::json!({ "device": "probe", "reportId": 0, "data": "" }),
+                        Duration::from_secs(2),
+                    );
+                    let refusal = match probe {
+                        Ok(r) if !r.ok => r.message.filter(|m| m.contains("test instance")),
+                        Err(e) => {
+                            let s = e.to_string();
+                            s.contains("test instance").then(|| {
+                                s.rsplit_once(": ")
+                                    .map(|(_, tail)| tail.to_string())
+                                    .unwrap_or(s)
+                            })
+                        }
+                        _ => None,
+                    };
+                    let err_msg = if refusal.is_some() {
+                        refusal
+                    } else {
+                        match client.call_blocking::<_, exo_rpc::ActionResult>(
+                            exo_rpc::METHOD_MOUSE_PANEL_OPEN,
+                            &serde_json::json!({
+                                "ownerHwnd": 0,
+                                "x": 0.0,
+                                "y": 56.0,
+                                "width": 1920.0,
+                                "height": 1024.0,
+                                "visible": true,
+                            }),
+                            Duration::from_secs(3),
+                        ) {
+                            Ok(r) if r.ok => None,
+                            Ok(r) => Some(
+                                r.message
+                                    .unwrap_or_else(|| "Exo Mouse could not open.".into()),
+                            ),
+                            Err(e) => Some(e.to_string()),
+                        }
+                    };
+                    state.pc.mouse_panel_loading = false;
+                    state.pc.mouse_panel_error = err_msg;
+                }
             }
             let kb_payload = match state.pc.keyboard_id.as_deref() {
                 Some(id) => serde_json::json!({ "id": id }),
@@ -1467,7 +1511,27 @@ fn select_device_by_kind(s: &mut AppState, kind: &str) {
             .and_then(|d| d.devices.iter().find(|item| item.kind == kind))
             .map(|item| item.id.clone())
     {
-        s.pc.selected_device_id = Some(id);
+        match kind {
+            "mouse" => s.open_mouse_panel(id),
+            "controller" => {
+                s.pc.selected_device_id = Some(id.clone());
+                s.open_controller_page(id);
+            }
+            "audio" => {
+                s.pc.selected_device_id = Some(id);
+                s.open_audio_device_page();
+            }
+            "keyboard" => {
+                s.pc.selected_device_id = Some(id.clone());
+                s.pc.keyboard_id = Some(id);
+                if s.pc.keyboard.as_ref().is_none_or(|k| !k.ok) {
+                    s.reload_keyboard();
+                }
+            }
+            _ => {
+                s.pc.selected_device_id = Some(id);
+            }
+        }
     }
 }
 

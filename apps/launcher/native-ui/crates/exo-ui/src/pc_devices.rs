@@ -1,10 +1,10 @@
 use crate::devices_audio::{
-    DevicePageHeader, device_btn, device_page_shell_columns_no_rescan, device_panel, device_row,
-    device_switch, port_short, port_words,
+    DevicePageHeader, device_btn, device_icon_btn, device_page_shell_columns_no_rescan,
+    device_panel, device_row, device_switch, port_short, port_words,
 };
 use crate::state::AppState;
 use exo_kit::{
-    BG, BadgeTone, FG, GAP, PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_SMALL, SPRING_MOVE,
+    BG, BadgeTone, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_SMALL, SPRING_MOVE,
     SPRING_QUICK, amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, float_line,
     glass_button, good, hairline, hover_fill, icon_chevron_left, icon_gamepad, icon_headphones,
     icon_keyboard, icon_mouse, icon_refresh, pressed_fill, primary_button, scaled, status_badge,
@@ -1166,16 +1166,20 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
                     .center()
                     .gap(12.0)
                     .px(24.0)
-                    .child(text("Exo Mouse unavailable").font(type_section()).color(FG))
+                    .child(
+                        text("Exo could not reach your mouse")
+                            .font(type_title())
+                            .color(FG),
+                    )
                     .child(text(err.clone()).font(type_body()).color(fg_muted()))
                     .child(
-                        glass_button("mouse-panel-retry", "Retry", Some(icon_refresh(14.0, FG)))
+                        device_btn("mouse-panel-retry", "Try again", false)
                             .on_press(|s: &mut AppState| s.retry_mouse_panel()),
                     ),
             );
         } else if s.pc.mouse_panel_loading {
             slot = slot.child(
-                text("Opening Exo Mouse…")
+                text("Looking for your mouse")
                     .font(type_body())
                     .color(fg_muted()),
             );
@@ -1187,9 +1191,14 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
             .h_full()
             .fill(BG)
             .child(
-                row().w_full().pt(60.0).px(GAP).pb(0.0).center_y().child(
-                    glass_button("dev-back", "Devices", Some(icon_chevron_left(14.0, FG)))
-                        .on_press(|s: &mut AppState| s.close_mouse_panel()),
+                row().w_full().pt(60.0).px(16.0).pb(0.0).center_y().child(
+                    device_icon_btn(
+                        "dev-back",
+                        "Devices",
+                        Some(icon_chevron_left(14.0, FG)),
+                        false,
+                    )
+                    .on_press(|s: &mut AppState| s.close_mouse_panel()),
                 ),
             )
             .child(slot);
@@ -1262,18 +1271,15 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
             .pb(36.0)
             .gap(16.0)
             .child(
-                row()
-                    .w_full()
-                    .justify_between()
-                    .center_y()
-                    .child(
-                        glass_button("dev-back", "Devices", Some(icon_chevron_left(14.0, FG)))
-                            .on_press(|s: &mut AppState| s.pc.selected_device_id = None),
+                row().w_full().center_y().child(
+                    device_icon_btn(
+                        "dev-back",
+                        "Devices",
+                        Some(icon_chevron_left(14.0, FG)),
+                        false,
                     )
-                    .child(
-                        glass_button("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)))
-                            .on_press(|s: &mut AppState| s.load_pc_devices()),
-                    ),
+                    .on_press(|s: &mut AppState| s.pc.selected_device_id = None),
+                ),
             )
             .child(
                 text(dev.name.clone())

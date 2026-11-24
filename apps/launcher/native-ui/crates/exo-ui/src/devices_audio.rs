@@ -2,9 +2,8 @@ use crate::state::{AppState, HostStatus};
 use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
     SPRING_QUICK, amoled_card, bad, fg_faint, fg_muted, glass_control_fill, glass_rim, good,
-    hairline, hover_fill, icon_chevron_left, icon_refresh, icon_search, primary_button, scaled,
-    slider_track, status_badge, track_fill, type_body, type_control, type_section, type_small,
-    type_title,
+    hairline, hover_fill, icon_chevron_left, icon_search, primary_button, scaled, slider_track,
+    status_badge, track_fill, type_body, type_control, type_section, type_small, type_title,
 };
 use exo_rpc::{
     ActionResult, AudioFormatOption, AudioFormatsReply, AudioReadReply, DevicesImageReply,
@@ -393,7 +392,6 @@ pub fn device_page_shell(
     header: DevicePageHeader,
     panels: Vec<El>,
     on_back: impl Fn(&mut AppState) + 'static,
-    on_rescan: impl Fn(&mut AppState) + 'static,
 ) -> El {
     let mut col_a = Vec::new();
     let mut col_b = Vec::new();
@@ -404,17 +402,7 @@ pub fn device_page_shell(
             col_b.push(p);
         }
     }
-    device_page_shell_columns(header, col_a, col_b, on_back, on_rescan)
-}
-
-pub fn device_page_shell_columns(
-    header: DevicePageHeader,
-    col_a: Vec<El>,
-    col_b: Vec<El>,
-    on_back: impl Fn(&mut AppState) + 'static,
-    on_rescan: impl Fn(&mut AppState) + 'static,
-) -> El {
-    device_page_shell_inner(header, col_a, col_b, on_back, Some(Box::new(on_rescan)))
+    device_page_shell_columns_no_rescan(header, col_a, col_b, on_back)
 }
 
 pub fn device_page_shell_columns_no_rescan(
@@ -423,17 +411,14 @@ pub fn device_page_shell_columns_no_rescan(
     col_b: Vec<El>,
     on_back: impl Fn(&mut AppState) + 'static,
 ) -> El {
-    device_page_shell_inner(header, col_a, col_b, on_back, None)
+    device_page_shell_inner(header, col_a, col_b, on_back)
 }
-
-type DeviceCallback = Box<dyn Fn(&mut AppState) + 'static>;
 
 fn device_page_shell_inner(
     header: DevicePageHeader,
     col_a: Vec<El>,
     col_b: Vec<El>,
     on_back: impl Fn(&mut AppState) + 'static,
-    on_rescan: Option<DeviceCallback>,
 ) -> El {
     let DevicePageHeader {
         key,
@@ -508,7 +493,7 @@ fn device_page_shell_inner(
             .child(col().grow(1.0).min_w(0.0).gap(12.0).children(col_b))
     };
 
-    let mut top_strip = row().w_full().justify_between().center_y().child(
+    let top_strip = row().w_full().justify_between().center_y().child(
         device_icon_btn(
             "dev-back",
             "Devices",
@@ -517,12 +502,6 @@ fn device_page_shell_inner(
         )
         .on_press(on_back),
     );
-    if let Some(rescan_fn) = on_rescan {
-        top_strip = top_strip.child(
-            device_icon_btn("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)), false)
-                .on_press(move |s: &mut AppState| rescan_fn(s)),
-        );
-    }
 
     col()
         .key(key)
@@ -530,7 +509,7 @@ fn device_page_shell_inner(
         .h_full()
         .fill(BG)
         .pt(60.0)
-        .px(24.0)
+        .px(16.0)
         .pb(24.0)
         .gap(16.0)
         .child(top_strip)
@@ -1989,10 +1968,6 @@ pub fn audio_page(
             s.pc.selected_device_id = None;
             s.pc.audio_ui.open_picker = None;
             s.pc.audio_ui.headphone_picker_open = false;
-        },
-        |s| {
-            s.load_pc_devices();
-            s.open_audio_device_page();
         },
     )
 }
