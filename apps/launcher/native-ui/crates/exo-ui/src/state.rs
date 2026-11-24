@@ -539,6 +539,7 @@ pub enum PaletteTarget {
     MinimizeWindow,
     CloseWindow,
     ResumeSetup,
+    ReportProblem,
 }
 
 #[derive(Clone, Debug)]
@@ -666,6 +667,7 @@ pub struct AppState {
     pub input_mode: InputMode,
     pub settings: LauncherSettings,
     pub pc: SettingsAndPcState,
+    pub wp4: crate::settings_state::SettingsUiState,
     pub media: MediaState,
     pub discord: DiscordState,
     pub art_base: ArtBase,
@@ -815,6 +817,7 @@ impl AppState {
                 ..LauncherSettings::default()
             },
             pc: SettingsAndPcState::demo(),
+            wp4: crate::settings_state::SettingsUiState::default(),
             media: MediaState::demo(),
             discord: DiscordState::demo(),
             art_base: ArtBase::default(),
@@ -910,6 +913,7 @@ impl AppState {
             input_mode: InputMode::Pointer,
             settings: LauncherSettings::default(),
             pc: SettingsAndPcState::empty_for_host(),
+            wp4: crate::settings_state::SettingsUiState::default(),
             media: MediaState::empty_for_host(),
             discord: DiscordState::empty(),
             art_base: ArtBase::default(),
@@ -1201,6 +1205,10 @@ impl AppState {
         }
     }
 
+    pub fn notice_clock(&self) -> f64 {
+        self.clock_secs
+    }
+
     pub fn switch_room(&mut self, room: Room) {
         let prev_cache_room = Self::cache_room_for(self.room);
         let next_cache_room = Self::cache_room_for(room);
@@ -1254,7 +1262,10 @@ impl AppState {
                 self.load_discord_room();
             }
             Room::Music => self.load_music_room(),
-            Room::Settings => self.load_settings_room(),
+            Room::Settings => {
+                self.load_settings_room();
+                self.wp4_load_settings_all();
+            }
             Room::Devices => self.load_pc_tab(crate::pc_state::PcTab::Devices),
             Room::ExoAi => self.load_pc_tab(crate::pc_state::PcTab::ExoAi),
             Room::Apps => self.load_pc_tab(crate::pc_state::PcTab::Apps),
@@ -2497,6 +2508,10 @@ impl AppState {
             self.close_palette();
             return true;
         }
+        if self.wp4.report_open {
+            self.wp4_close_report();
+            return true;
+        }
         if self.key_modal_open {
             self.close_key_modal();
             return true;
@@ -3010,7 +3025,7 @@ impl AppState {
             });
         }
 
-        let actions: [(&str, &str, &[&str], PaletteTarget); 8] = [
+        let actions: [(&str, &str, &[&str], PaletteTarget); 9] = [
             (
                 "pal-action-add-game",
                 "Add a game",
@@ -3046,6 +3061,12 @@ impl AppState {
                 "Check for updates",
                 &["upgrade"],
                 PaletteTarget::CheckUpdates,
+            ),
+            (
+                "pal-action-report",
+                "Report a problem",
+                &["bug", "issue", "feedback", "support", "logs"],
+                PaletteTarget::ReportProblem,
             ),
             (
                 "pal-action-minimize",
@@ -3114,6 +3135,7 @@ impl AppState {
             PaletteTarget::MinimizeWindow => tx.minimize(),
             PaletteTarget::CloseWindow => tx.close_window(),
             PaletteTarget::ResumeSetup => self.setup_resume(),
+            PaletteTarget::ReportProblem => self.wp4_open_report(),
         }
     }
 
@@ -3420,6 +3442,7 @@ impl AppState {
                     s.apply_bootstrap(boot);
                     s.warm_discord();
                     s.warm_store_on_startup();
+                    s.wp4_warm_startup();
                 });
             }
             Err(e) => {

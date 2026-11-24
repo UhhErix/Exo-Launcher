@@ -604,34 +604,34 @@ Owns: settings.rs (+ new settings_accounts.rs, settings_stores.rs, settings_acco
 
 Depends on: Rune fork: masked (password) text input, one-time-code / QR image display. RPC: all present (accounts.*, steam.signIn*, exoAccount.*, stores.*, telemetry.*, report.*, web.preferences.*, backup.restore).
 
-- `shell-bar-25` [MISSING] Report a problem entry points (Settings, palette, error screen)
-- `settings-01` [PARTIAL] Settings search + jump (38 entries)
+- `shell-bar-25` [DONE] Report a problem entry points (Settings, palette, error screen)
+- `settings-01` [DONE] Settings search + jump (38 entries)
 - `settings-04` [MISSING] General: FPS counter (position, 1% low, on/off)
-- `settings-05` [MISSING] General: achievement pop-up sound, test pop-up, OBS overlay URL
-- `settings-06` [PARTIAL] General: install folder, download hours, auto-update games, update upscalers in anti-cheat games
-- `settings-07` [MISSING] Store accounts: sign in to Steam (QR / password / guard)
-- `settings-08` [MISSING] Store accounts: Epic / GOG / Ubisoft / EA accounts (add, switch, remove, import)
-- `settings-09` [PARTIAL] Stores section (auth state, check, matrix, offline mode, Riot ID, get another store)
-- `settings-10` [MISSING] Gifts (Steam gifts sign-in)
-- `settings-11` [MISSING] Riot data export import / baseline
-- `settings-12` [PARTIAL] Exo Account (create, sign in, password, recovery code, devices, export, delete)
-- `settings-14` [MISSING] Privacy: what was sent, delete my data, telemetry opt-out
-- `settings-15` [MISSING] Report a problem (preview payload, attach logs, send, open on GitHub)
+- `settings-05` [DONE] General: achievement pop-up sound, test pop-up, OBS overlay URL
+- `settings-06` [DONE] General: install folder, download hours, auto-update games, update upscalers in anti-cheat games
+- `settings-07` [DONE] Store accounts: sign in to Steam (QR / password / guard)
+- `settings-08` [DONE] Store accounts: Epic / GOG / Ubisoft / EA accounts (add, switch, remove, import)
+- `settings-09` [DONE] Stores section (auth state, check, matrix, offline mode, Riot ID, get another store)
+- `settings-10` [DONE] Gifts (Steam gifts sign-in)
+- `settings-11` [DONE] Riot data export import / baseline
+- `settings-12` [DONE] Exo Account (create, sign in, password, recovery code, devices, export, delete)
+- `settings-14` [DONE] Privacy: what was sent, delete my data, telemetry opt-out
+- `settings-15` [DONE] Report a problem (preview payload, attach logs, send, open on GitHub)
 - `settings-17` [PARTIAL] Music settings (service)
 - `settings-18` [MISSING] Apps settings (web preferences)
-- `settings-21` [MISSING] About: Clear caches, Changelog, Licenses, Support Exo
-- `settings-22` [MISSING] Shader pre-compile settings
+- `settings-21` [DONE] About: Clear caches, Changelog, Licenses, Support Exo
+- `settings-22` [DONE] Shader pre-compile settings
 - `settings-23` [MISSING] Discord settings pages (Account, Voice, App, Privacy, Keybinds)
-- `onboarding-account-01` [PARTIAL] Setup flow (welcome, scan, stores, account, apps, cleanup, restore)
-- `onboarding-account-02` [PARTIAL] Setup: Account step (create / sign in / recovery code, probe)
-- `onboarding-account-03` [MISSING] Setup: Recovery code screen (save, confirm)
-- `onboarding-account-04` [MISSING] Setup: Apps step (web preferences)
-- `onboarding-account-05` [MISSING] Setup: Cleanup step (replaced apps remove)
-- `onboarding-account-06` [MISSING] Setup: Restore step (restore from backup)
-- `onboarding-account-07` [PARTIAL] Setup: per-device bodies; PC defaults count
-- `onboarding-account-08` [PARTIAL] Clients gate (store clients missing / fix)
-- `onboarding-account-09` [MISSING] Account sheet (from bar) / sign-in state
-- `onboarding-account-10` [MISSING] Backup answer prompt (first-run restore/decline)
+- `onboarding-account-01` [DONE] Setup flow (welcome, scan, stores, account, apps, cleanup, restore)
+- `onboarding-account-02` [DONE] Setup: Account step (create / sign in / recovery code, probe)
+- `onboarding-account-03` [DONE] Setup: Recovery code screen (save, confirm)
+- `onboarding-account-04` [DONE] Setup: Apps step (web preferences)
+- `onboarding-account-05` [DONE] Setup: Cleanup step (replaced apps remove)
+- `onboarding-account-06` [DONE] Setup: Restore step (restore from backup)
+- `onboarding-account-07` [DONE] Setup: per-device bodies; PC defaults count
+- `onboarding-account-08` [DONE] Clients gate (store clients missing / fix)
+- `onboarding-account-09` [DONE] Account sheet (from bar) / sign-in state
+- `onboarding-account-10` [DONE] Backup answer prompt (first-run restore/decline)
 
 #### WP5 Store game page and store extras (M, 12 items)
 

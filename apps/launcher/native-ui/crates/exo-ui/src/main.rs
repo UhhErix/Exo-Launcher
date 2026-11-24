@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod captures;
+mod clients_gate;
 mod discord;
 mod discord_chat;
 mod discord_chat_state;
@@ -30,7 +31,12 @@ mod pc_apps;
 mod pc_devices;
 mod pc_state;
 mod pc_storage;
+mod report;
 mod settings;
+mod settings_account;
+mod settings_privacy;
+mod settings_state;
+mod settings_stores;
 mod setup;
 mod shell;
 mod state;
@@ -159,7 +165,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let notices = s.sync_and_tick_notices(now, tx);
     let setup = s.setup_tick(now);
     let store = s.store_tick(now);
-    notices || setup || store
+    let wp4 = s.wp4_tick(now);
+    notices || setup || store || wp4
 }
 
 #[cfg(windows)]
@@ -1378,6 +1385,107 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("settings-about", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
         s.pc.settings_section = pc_state::SettingsSection::About;
+    }),
+    ("settings-report", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::About;
+        s.wp4_open_report();
+    }),
+    ("settings-steam-signin", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Account;
+        if s.wp4.stores.is_empty() {
+            s.wp4.stores.push(exo_rpc::StoreStatus {
+                store: "steam".into(),
+                display_name: "Steam".into(),
+                agent_present: true,
+                client_present: Some(true),
+                signed_in: true,
+                ..Default::default()
+            });
+        }
+        s.wp4.steam_panel_open = true;
+        s.wp4.steam_step = Some(exo_rpc::SteamSignInStep {
+            state: "waiting".into(),
+            challenge_url: Some("https://s.team/q/1/1234567890123456".into()),
+            interval_seconds: Some(5),
+            ..Default::default()
+        });
+    }),
+    ("settings-steam-password", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Account;
+        if s.wp4.stores.is_empty() {
+            s.wp4.stores.push(exo_rpc::StoreStatus {
+                store: "steam".into(),
+                display_name: "Steam".into(),
+                agent_present: true,
+                client_present: Some(true),
+                signed_in: true,
+                ..Default::default()
+            });
+        }
+        s.wp4.steam_panel_open = true;
+        s.wp4.steam_mode = settings_state::SteamSignInMode::Password;
+        s.wp4.steam_step = None;
+        s.wp4.steam_user = rune::TextEdit::new("erix_demo");
+        s.wp4.steam_pass = rune::TextEdit::new("hunter2secret").secure();
+    }),
+    ("settings-steam-guard", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Account;
+        if s.wp4.stores.is_empty() {
+            s.wp4.stores.push(exo_rpc::StoreStatus {
+                store: "steam".into(),
+                display_name: "Steam".into(),
+                agent_present: true,
+                client_present: Some(true),
+                signed_in: true,
+                ..Default::default()
+            });
+        }
+        s.wp4.steam_panel_open = true;
+        s.wp4.steam_mode = settings_state::SteamSignInMode::Password;
+        s.wp4.steam_step = Some(exo_rpc::SteamSignInStep {
+            state: "guard".into(),
+            ..Default::default()
+        });
+        s.wp4.steam_guard.set_value("A2B");
+    }),
+    ("account-sheet", |s: &mut AppState| {
+        s.status = state::HostStatus::Connected;
+        s.wp4.account_overview = Some(exo_rpc::ExoAccountOverview {
+            signed_in: false,
+            ..Default::default()
+        });
+        s.wp4.account_later_this_run = false;
+    }),
+    ("account-sheet-create", |s: &mut AppState| {
+        s.status = state::HostStatus::Connected;
+        s.wp4.account_overview = Some(exo_rpc::ExoAccountOverview {
+            signed_in: false,
+            ..Default::default()
+        });
+        s.wp4.account_later_this_run = false;
+        s.wp4_flow_open(settings_state::AccountScreen::Create);
+        s.wp4.flow_email = rune::TextEdit::new("player@example.com");
+        s.wp4.flow_password = rune::TextEdit::new("correcthorsebatterystaple").secure();
+    }),
+    ("clients-gate", |s: &mut AppState| {
+        s.status = state::HostStatus::Connected;
+        s.settings.onboarding_complete = Some(true);
+        s.pc.clients = Some(exo_rpc::ClientsStatus {
+            ok: true,
+            needs_fix: true,
+            problem: None,
+            epic: exo_rpc::ClientsEpic {
+                layout: "old".into(),
+                ..Default::default()
+            },
+            steam: exo_rpc::ClientsSteam {
+                channel: "stable".into(),
+            },
+        });
     }),
     ("pc", |s: &mut AppState| s.switch_room(state::Room::ExoAi)),
     ("pc-apps", |s: &mut AppState| {

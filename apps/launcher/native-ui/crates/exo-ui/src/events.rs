@@ -40,6 +40,11 @@ pub enum HostEventKind {
     AutopilotReport,
     AutopilotLive,
     ShadersChanged,
+    ShadersEvent,
+    AccountsProgress,
+    BackupStopped,
+    ComponentsFailed,
+    GiftsChanged,
     StoreChanged,
     StoreSale,
     GameAchievements,
@@ -87,6 +92,11 @@ impl HostEventKind {
             HostEvent::AutopilotReport(_) => Self::AutopilotReport,
             HostEvent::AutopilotLive(_) => Self::AutopilotLive,
             HostEvent::ShadersChanged => Self::ShadersChanged,
+            HostEvent::ShadersEvent(_) => Self::ShadersEvent,
+            HostEvent::AccountsProgress(_) => Self::AccountsProgress,
+            HostEvent::BackupStopped(_) => Self::BackupStopped,
+            HostEvent::ComponentsFailed(_) => Self::ComponentsFailed,
+            HostEvent::GiftsChanged(_) => Self::GiftsChanged,
             HostEvent::StoreChanged(_) => Self::StoreChanged,
             HostEvent::StoreSale(_) => Self::StoreSale,
             HostEvent::GameAchievements(_) => Self::GameAchievements,
@@ -122,6 +132,7 @@ impl EventRegistry {
         register_pc(&mut reg);
         register_store(&mut reg);
         register_game(&mut reg);
+        crate::settings_state::register_wp4_events(&mut reg);
         reg
     }
 

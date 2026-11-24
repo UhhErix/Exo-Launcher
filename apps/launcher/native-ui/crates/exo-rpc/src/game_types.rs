@@ -87,7 +87,7 @@ pub struct GameSettingsState {
     pub smooth_motion: Option<bool>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct KeepStatus {
     #[serde(deserialize_with = "null_as_default")]
