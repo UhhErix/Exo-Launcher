@@ -60,6 +60,33 @@ public sealed class CaptureRecoveryTests
     }
 
     [Fact]
+    public async Task SuspendStopsAddonWithoutRestartingUntilResume()
+    {
+        var launch = 0;
+        var secondReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var addon = new CaptureAddon(() =>
+        {
+            var n = Interlocked.Increment(ref launch);
+            return Fake(n == 1 ? Echo : "[Console]::WriteLine('{\"event\":\"ready\",\"data\":{}}')" + Environment.NewLine + Echo);
+        });
+        addon.Event += (name, _) =>
+        {
+            if (name == "ready" && Volatile.Read(ref launch) == 2) secondReady.TrySetResult();
+        };
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        Assert.Equal("ping", (await addon.CallAsync("ping", null, deadline.Token))?.GetValue<string>());
+        addon.Suspend();
+        Assert.True(addon.IsSuspended);
+        addon.Start();
+        Assert.Equal(1, Volatile.Read(ref launch));
+        addon.Resume();
+        Assert.False(addon.IsSuspended);
+        await secondReady.Task.WaitAsync(deadline.Token);
+        Assert.Equal(2, Volatile.Read(ref launch));
+        Assert.Equal("back", (await addon.CallAsync("back", null, deadline.Token))?.GetValue<string>());
+    }
+
+    [Fact]
     public async Task ABlockedPipeDoesNotBlockTheCallerThread()
     {
         using var addon = new CaptureAddon(() => Fake("Start-Sleep -Seconds 5"));

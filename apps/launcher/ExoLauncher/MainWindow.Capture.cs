@@ -152,6 +152,7 @@ public sealed partial class MainWindow
             if (_captureAddon is not null) return _captureAddon;
             var addon = new Services.CaptureAddon();
             addon.Event += OnCaptureEvent;
+            Services.DriverInstallSignal.Changed += OnCaptureDriverInstallChanged;
             // A game starting or closing, however it was started: the bridge's run-state poll
             // reports games started from a store, a shortcut or before Exo as well.
             App.Services.Launcher.GameRunStateChanged += (gameId, state) => _ = Task.Run(async () =>
@@ -169,6 +170,28 @@ public sealed partial class MainWindow
 
     /// <summary>Exo Capture for Discord's Go Live (pictures of windows and screens, and the stream itself); null when it isn't installed.</summary>
     internal Services.CaptureAddon? StreamCapture => CaptureAddon;
+
+    private void OnCaptureDriverInstallChanged(Services.DriverInstallSignal.Step step)
+    {
+        if (_captureAddon is not { } addon) return;
+        if (step.Phase is "installing" or "reloading")
+        {
+            addon.Suspend();
+            return;
+        }
+        if (step.Phase is "done" or "failed")
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), _lifetimeCts.Token).ConfigureAwait(false);
+                    addon.Resume();
+                }
+                catch (OperationCanceledException) { }
+            });
+        }
+    }
 
     /// <summary>A text file Windows opened with Exo while it runs: in Captures › Notes, or once the page is up.</summary>
     /// <summary>A place an exolauncher:// link names: shown now, or once the page is up.</summary>

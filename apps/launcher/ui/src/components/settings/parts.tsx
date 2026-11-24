@@ -1,5 +1,6 @@
 import { ErrorNote } from '../ui/ErrorNote'
 import { useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Switch } from '../Switch'
 import { Slider } from '../ui/Slider'
 import { useSaid } from '../ui/useSaid'
@@ -51,12 +52,34 @@ export function Group({ id, title, action, children }: {
  * what the row can't show otherwise (a folder, a result just in, why its control is off) or, where the name alone doesn't
  * say it, what the row does; `error` sits under the row; `stacked` puts a wide control (a field, a meter) under the label.
  */
-export function Row({ label, labelId, detail, icon, stacked, children, error, errorDetail }: {
+function TruncatedLabel({ id, label }: { id?: string; label: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [tip, setTip] = useState<{ left: number; top: number } | null>(null)
+  const show = () => {
+    const el = ref.current
+    if (!el || el.scrollWidth <= el.clientWidth + 1) return
+    const rect = el.getBoundingClientRect()
+    setTip({
+      left: Math.max(16, Math.min(rect.left + rect.width / 2, window.innerWidth - 16)),
+      top: Math.max(16, rect.top - 6),
+    })
+  }
+  const hide = () => setTip(null)
+  return (
+    <>
+      <span ref={ref} id={id} className="exo-set-item-label is-truncated" onMouseEnter={show} onMouseLeave={hide}>{label}</span>
+      {tip ? createPortal(<span className="exo-glass exo-set-tip" role="tooltip" style={{ left: `${tip.left}px`, top: `${tip.top}px` }}>{label}</span>, document.body) : null}
+    </>
+  )
+}
+
+export function Row({ label, labelId, detail, icon, stacked, truncateLabel, children, error, errorDetail }: {
   label: string
   labelId?: string
   detail?: ReactNode
   icon?: ReactNode
   stacked?: boolean
+  truncateLabel?: boolean
   children?: ReactNode
   error?: string | null
   errorDetail?: string | null
@@ -66,7 +89,7 @@ export function Row({ label, labelId, detail, icon, stacked, children, error, er
       <div className="exo-set-item-main">
         {icon ? <span className="exo-set-item-icon">{icon}</span> : null}
         <div className="exo-set-item-copy">
-          <span id={labelId} className="exo-set-item-label">{label}</span>
+          {truncateLabel ? <TruncatedLabel id={labelId} label={label} /> : <span id={labelId} className="exo-set-item-label">{label}</span>}
           {detail ? <span className="exo-set-item-detail">{detail}</span> : null}
         </div>
         {children ? <div className="exo-set-item-control">{children}</div> : null}

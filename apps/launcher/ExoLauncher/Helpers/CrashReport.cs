@@ -139,10 +139,22 @@ public static partial class CrashReport
         var excerpt = Scrub(raw, userName, profile, machineName);
         if (excerpt.Length > MaxExcerpt) excerpt = FitExcerpt(excerpt, MaxExcerpt);
         excerpt = string.Join('\n', excerpt.Split('\n').Select(line => Personal.Any(p => p.IsMatch(line)) ? "<removed>" : line));
-        // A known kind (Hang, WebView2Crash, ...) is the type; otherwise the error's own name, as before.
-        var type = kind is { Length: > 0 } ? kind : ErrorName().Match(error + "\n" + raw) is { Success: true } named ? named.Value : "AppError";
+        var type = ClassifyErrorType(error, raw, kind);
         var head = VersionHead().Match(version);
         return new Payload("launcher", head.Success ? head.Value : "0.0.0", OsBuild(windows), type, excerpt);
+    }
+
+    private static string ClassifyErrorType(string error, string raw, string? kind)
+    {
+        if (kind is { Length: > 0 }) return kind;
+        if (ErrorName().Match(error) is { Success: true } fromError) return fromError.Value;
+        foreach (var line in raw.Split('\n'))
+        {
+            if (line.Contains("] WARN ", StringComparison.Ordinal) || line.Contains("] INFO ", StringComparison.Ordinal) || line.Contains("] DEBUG ", StringComparison.Ordinal))
+                continue;
+            if (ErrorName().Match(line) is { Success: true } fromLine) return fromLine.Value;
+        }
+        return "AppError";
     }
 
     /// <summary>
