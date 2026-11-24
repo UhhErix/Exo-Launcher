@@ -1,0 +1,18 @@
+[workspace]
+
+[package]
+name = "exo-delta"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+blake3 = "1"
+rayon = "1"
+zstd = "0.13"
+zstd-safe = "7"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
