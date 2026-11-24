@@ -1,14 +1,18 @@
+use crate::devices_audio::{
+    DevicePageHeader, device_btn, device_icon_btn, device_page_shell_columns_no_rescan,
+    device_panel, device_row, device_switch, port_short, port_words,
+};
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, GAP, PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK,
-    amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, float_line, glass_button, good,
-    hover_fill, icon_chevron_left, icon_gamepad, icon_headphones, icon_keyboard, icon_mouse,
-    icon_refresh, icon_volume, icon_volume_off, pressed_fill, scaled, type_body, type_control,
-    type_label, type_section, type_small, type_title, warn,
+    BG, BadgeTone, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_SMALL, SPRING_MOVE,
+    SPRING_QUICK, amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, float_line,
+    glass_button, good, hairline, hover_fill, icon_chevron_left, icon_gamepad, icon_headphones,
+    icon_keyboard, icon_mouse, icon_refresh, pressed_fill, primary_button, scaled, status_badge,
+    type_body, type_control, type_label, type_section, type_small, type_title,
 };
 use exo_rpc::keyboard_layouts::{FormFactor, KeyCap, KeyKind, build_keyboard_layout, find_key};
 use exo_rpc::{KeyboardReadReply, PeripheralCard};
-use rune::{Cursor, El, ScrollSpec, SurfaceFit, TextStyle, col, el, row, text};
+use rune::{Cursor, El, Phase, ScrollSpec, SurfaceFit, TextStyle, col, el, row, text};
 
 fn connection_label(conn: Option<&str>) -> &'static str {
     match conn.unwrap_or("") {
@@ -78,7 +82,7 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
 
     let media = if let Some(photo) = img {
         el().w_full().grow(1.0).min_h(0.0).center().child(
-            el().size(471.0, 314.0)
+            el().size(468.0, 312.0)
                 .pixels_fit(photo.pixels(), SurfaceFit::Fit),
         )
     } else {
@@ -107,7 +111,9 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
 
     let dev_id = dev.id.clone();
     let is_mouse = dev.kind == "mouse";
-    let is_kb = dev.lab || dev.kind == "keyboard";
+    let is_kb = dev.kind == "keyboard" && dev.lab;
+    let is_audio = dev.kind == "audio";
+    let is_controller = dev.kind == "controller";
     col()
         .key(format!("dev-card-{}", dev.id))
         .role("button")
@@ -133,6 +139,12 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
         .on_press(move |s: &mut AppState| {
             if is_mouse {
                 s.open_mouse_panel(dev_id.clone());
+            } else if is_controller {
+                s.pc.selected_device_id = Some(dev_id.clone());
+                s.open_controller_page(dev_id.clone());
+            } else if is_audio {
+                s.pc.selected_device_id = Some(dev_id.clone());
+                s.open_audio_device_page();
             } else {
                 s.pc.selected_device_id = Some(dev_id.clone());
                 if is_kb {
@@ -175,7 +187,6 @@ fn render_key_section(
     unit: f32,
     key_h: f32,
     gap: f32,
-    act: Option<f64>,
     rt_on: bool,
     selected_key: Option<&str>,
 ) -> El {
@@ -277,15 +288,7 @@ fn render_key_section(
                     .border(1.0, border_c)
                     .motion(SPRING_QUICK)
                     .on_press(move |s: &mut AppState| s.toggle_keyboard_key(key_id.clone()))
-                    .child(text(cap.label.clone()).font(lbl_font).color(FG))
-                    .children((is_hot && act.is_some()).then(|| {
-                        let v = act.unwrap_or(0.4);
-                        text(format!("{v:.1}")).font(type_label()).color(if rt_on {
-                            good()
-                        } else {
-                            fg_muted()
-                        })
-                    })),
+                    .child(text(cap.label.clone()).font(lbl_font).color(FG)),
             );
         }
         section = section.child(krow);
@@ -293,28 +296,96 @@ fn render_key_section(
     section
 }
 
-fn wooting_key_matrix(s: &AppState, kb: &KeyboardReadReply) -> El {
+fn format_thousands(n: i32) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (idx, ch) in s.chars().rev().enumerate() {
+        if idx > 0 && idx % 3 == 0 {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out.chars().rev().collect()
+}
+
+fn format_backup_time(iso: &str) -> String {
+    let bytes = iso.as_bytes();
+    if bytes.len() >= 16
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && let (Ok(y), Ok(m), Ok(d), Ok(hr), Ok(min)) = (
+            iso[0..4].parse::<u32>(),
+            iso[5..7].parse::<usize>(),
+            iso[8..10].parse::<u32>(),
+            iso[11..13].parse::<u32>(),
+            iso[14..16].parse::<u32>(),
+        )
+        && (1..=12).contains(&m)
+    {
+        const MONTHS: [&str; 12] = [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ];
+        let h12 = if hr % 12 == 0 { 12 } else { hr % 12 };
+        let ampm = if hr < 12 { "AM" } else { "PM" };
+        return format!("{} {d}, {y}, {h12}:{min:02} {ampm}", MONTHS[m - 1]);
+    }
+    iso.get(..16).unwrap_or(iso).replace('T', " ")
+}
+
+fn kb_slider(key: &str, label: &str, width: f32, ratio: f32, disabled: bool) -> El {
+    let clamped = ratio.clamp(0.0, 1.0);
+    let knob = 12.0_f32;
+    let left_w = ((width - knob).max(0.0) * clamped).max(0.0);
+    row()
+        .key(key)
+        .role("slider")
+        .label(label)
+        .focusable(!disabled)
+        .hit()
+        .cursor(if disabled {
+            Cursor::NotAllowed
+        } else {
+            Cursor::Pointer
+        })
+        .opacity(if disabled { 0.45 } else { 1.0 })
+        .size(width, 20.0)
+        .center_y()
+        .child(el().size(left_w, 4.0).radius(2.0).fill(FG))
+        .child(el().size(knob, knob).radius(knob / 2.0).fill(FG))
+        .child(
+            el().grow(1.0)
+                .min_w(0.0)
+                .h(4.0)
+                .radius(2.0)
+                .fill(hairline()),
+        )
+}
+
+fn kb_tag(label: String, tone: BadgeTone) -> El {
+    status_badge(label, tone)
+}
+
+fn wooting_key_map_panel(s: &AppState, dev: &PeripheralCard, kb: &KeyboardReadReply) -> El {
     let spec = build_keyboard_layout(
         kb.form_factor.as_deref(),
         kb.layout_code.as_deref(),
-        kb.model.as_deref(),
-        kb.layout.as_deref(),
+        kb.model.as_deref().or(dev.model.as_deref()),
+        kb.layout.as_deref().or(dev.layout.as_deref()),
     );
     let (unit, key_h, gap) = match spec.form {
-        FormFactor::Sixty => (42.0, 38.0, 4.0),
-        FormFactor::Eighty | FormFactor::Tkl => (34.0, 34.0, 3.0),
-        FormFactor::Full => (28.0, 32.0, 3.0),
-        FormFactor::Keypad3 => (56.0, 46.0, 6.0),
+        FormFactor::Sixty => (36.0, 34.0, 4.0),
+        FormFactor::Eighty | FormFactor::Tkl => (30.0, 30.0, 3.0),
+        FormFactor::Full => (24.0, 28.0, 3.0),
+        FormFactor::Keypad3 => (52.0, 44.0, 6.0),
     };
     let rt_on = kb.has_rapid_trigger && kb.rapid_trigger.unwrap_or(false);
     let selected_id = s.pc.keyboard_selected_key.as_deref();
 
-    let mut sections = row().gap(12.0).child(render_key_section(
+    let mut sections = row().gap(10.0).center_y().child(render_key_section(
         &spec.main_rows,
         unit,
         key_h,
         gap,
-        kb.actuation_mm,
         rt_on,
         selected_id,
     ));
@@ -324,7 +395,6 @@ fn wooting_key_matrix(s: &AppState, kb: &KeyboardReadReply) -> El {
             unit,
             key_h,
             gap,
-            kb.actuation_mm,
             rt_on,
             selected_id,
         ));
@@ -335,235 +405,516 @@ fn wooting_key_matrix(s: &AppState, kb: &KeyboardReadReply) -> El {
             unit,
             key_h,
             gap,
-            kb.actuation_mm,
             rt_on,
             selected_id,
         ));
     }
 
-    let inspect_line = selected_id.and_then(|id| find_key(&spec, id)).map(|cap| {
-        let mut parts = vec![cap.label.clone()];
-        if let Some(ref note) = cap.note {
-            parts.push(note.clone());
-        }
-        if let Some(a) = kb.actuation_mm {
-            parts.push(format!("Actuation {a:.1} mm"));
-        }
-        if rt_on && let Some(rtm) = kb.rapid_trigger_mm {
-            parts.push(format!("RT {rtm:.2} mm"));
-        }
-        row()
-            .key("kb-key-inspect")
-            .w_full()
-            .pt(6.0)
-            .justify_between()
-            .center_y()
-            .child(text(parts.join(" · ")).font(type_small()).color(fg_muted()))
-    });
-
-    col()
-        .key("kb-matrix")
-        .w_full()
-        .px(16.0)
-        .py(14.0)
-        .gap(8.0)
-        .radius(RADIUS_CARD)
-        .fill(BG)
-        .border(1.0, card_border())
-        .child(sections)
-        .children(inspect_line)
-}
-
-fn kb_button(
-    key: &'static str,
-    label: &'static str,
-    enabled: bool,
-    on_press: impl Fn(&mut AppState) + 'static,
-) -> El {
-    let mut btn = glass_button(key, label, None);
-    if enabled {
-        btn = btn.on_press(on_press);
-    } else {
-        btn = btn.cursor(Cursor::NotAllowed).opacity(0.45);
-    }
-    btn
-}
-
-fn kb_pill(
-    key: &'static str,
-    label: String,
-    active: bool,
-    enabled: bool,
-    on_press: impl Fn(&mut AppState) + 'static,
-) -> El {
-    let mut pill = filter_pill(key, label, active);
-    if enabled {
-        pill = pill.on_press(on_press);
-    } else {
-        pill = pill.cursor(Cursor::NotAllowed).opacity(0.45);
-    }
-    pill
-}
-
-fn wooting_detail(s: &AppState, kb: &KeyboardReadReply) -> El {
+    let active_prof = kb
+        .profiles
+        .iter()
+        .find(|p| p.index == kb.active_profile)
+        .map(|p| p.name.clone());
     let min_act = kb.min_actuation_mm.unwrap_or(0.1);
     let max_act = kb.max_actuation_mm.unwrap_or(4.0);
-    let act = kb.actuation_mm.unwrap_or(min_act).clamp(min_act, max_act);
-    let rt_on = kb.has_rapid_trigger && kb.rapid_trigger.unwrap_or(false);
-    let rt_mm = kb.rapid_trigger_mm.unwrap_or(0.15).clamp(0.10, 2.35);
-    let show_tach = kb.tachyon.is_some() || kb.hall_effect;
-    let tach = kb.tachyon.unwrap_or(false);
-    let rgb = kb.rgb_brightness.unwrap_or(100).clamp(0, 100);
-    let can_write = kb.can_write;
-
-    let mut meta_parts: Vec<String> = Vec::new();
-    if let Some(ref lay) = kb.layout
-        && !lay.is_empty()
-    {
-        meta_parts.push(lay.clone());
+    let mut tags = row().w_full().flex_wrap().gap(6.0);
+    if let Some(ref pname) = active_prof {
+        tags = tags.child(kb_tag(pname.clone(), BadgeTone::Neutral));
     }
-    if let Some(ref fw) = kb.firmware
-        && !fw.is_empty()
-    {
-        meta_parts.push(format!("FW {fw}"));
+    if let Some(a) = kb.actuation_mm {
+        tags = tags.child(kb_tag(format!("Actuation {a:.1} mm"), BadgeTone::Neutral));
     }
-    if let Some(hz) = kb.max_scan_hz
-        && hz > 0
+    if kb.has_rapid_trigger
+        && let Some(rt) = kb.rapid_trigger
     {
-        meta_parts.push(format!("{hz} Hz"));
+        let lbl = if rt {
+            match kb.rapid_trigger_mm {
+                Some(mm) => format!("Rapid Trigger {mm:.2} mm"),
+                None => "Rapid Trigger On".into(),
+            }
+        } else {
+            "Rapid Trigger Off".into()
+        };
+        tags = tags.child(kb_tag(
+            lbl,
+            if rt {
+                BadgeTone::Good
+            } else {
+                BadgeTone::Neutral
+            },
+        ));
     }
-
-    let latest_backup = s.pc.keyboard_backups.first().map(|b| b.file_name.clone());
-
-    let profiles = row()
-        .gap(6.0)
-        .flex_wrap()
-        .children(kb.profiles.iter().map(|p| {
-            let idx = p.index;
-            let active = kb.active_profile == idx;
-            kb_pill(
-                match idx {
-                    0 => "kb-prof-0",
-                    1 => "kb-prof-1",
-                    2 => "kb-prof-2",
-                    _ => "kb-prof-3",
-                },
-                p.name.clone(),
-                active,
-                can_write,
-                move |s: &mut AppState| s.switch_keyboard_profile(idx),
+    if let Some(tach) = kb.tachyon {
+        let lbl = if tach {
+            format!(
+                "Tachyon · {} Hz",
+                format_thousands(kb.max_scan_hz.unwrap_or(1000))
             )
-        }));
+        } else {
+            "Tachyon Off".into()
+        };
+        tags = tags.child(kb_tag(lbl, BadgeTone::Neutral));
+    }
+    if kb.has_rgb
+        && let Some(rgb) = kb.rgb_brightness
+    {
+        tags = tags.child(kb_tag(format!("Brightness {rgb}%"), BadgeTone::Neutral));
+    }
 
-    let error_banner = s.pc.keyboard_error.as_ref().map(|err| {
+    let travel_bar = kb.actuation_mm.map(|a| {
+        let ratio = if max_act > min_act {
+            ((a - min_act) / (max_act - min_act)).clamp(0.0, 1.0) as f32
+        } else {
+            0.0
+        };
         row()
-            .key("kb-write-error")
             .w_full()
-            .px(12.0)
-            .py(10.0)
             .gap(10.0)
-            .justify_between()
             .center_y()
-            .radius(RADIUS_SMALL)
-            .fill(bad().alpha(0.12))
-            .border(1.0, bad().alpha(0.45))
-            .child(text(err.clone()).font(type_small()).color(bad()))
             .child(
-                glass_button("kb-error-dismiss", "Dismiss", None)
-                    .on_press(|s: &mut AppState| s.pc.keyboard_error = None),
+                row()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .h(4.0)
+                    .radius(2.0)
+                    .clip_rounded(2.0)
+                    .fill(hairline())
+                    .child(el().grow(ratio.max(0.005)).h(4.0).fill(FG))
+                    .child(el().grow((1.0 - ratio).max(0.005)).h(4.0)),
+            )
+            .child(
+                text(format!("{min_act:.1}–{max_act:.1} mm"))
+                    .font(type_small())
+                    .color(fg_muted()),
             )
     });
 
-    let readonly_banner = (!can_write && s.pc.keyboard_error.is_none()).then(|| {
-        let msg = kb
-            .message
-            .clone()
-            .unwrap_or_else(|| "Keyboard is read-only right now.".into());
-        row()
-            .key("kb-readonly-banner")
-            .w_full()
-            .px(12.0)
-            .py(8.0)
-            .radius(RADIUS_SMALL)
-            .fill(warn().alpha(0.10))
-            .border(1.0, warn().alpha(0.35))
-            .child(text(msg).font(type_small()).color(warn()))
-    });
+    let selected_cap = selected_id.and_then(|id| find_key(&spec, id));
+    let note_copy = match selected_cap {
+        None => "Click any key to inspect active profile settings. Global actuation applies to all keys; open Wootility for per-key DKS, remaps, and RGB layers.".to_string(),
+        Some(cap) if cap.kind == KeyKind::LedBar => format!(
+            "{}. Brightness follows the active profile lighting setting; configure reactive effects in Wootility.",
+            cap.note.as_deref().unwrap_or(&cap.label)
+        ),
+        Some(cap) => {
+            let mm_text = kb
+                .actuation_mm
+                .map(|a| format!("{a:.1} mm"))
+                .unwrap_or_else(|| "default".into());
+            let rt_text = if rt_on {
+                match kb.rapid_trigger_mm {
+                    Some(rtm) => format!(" · Rapid Trigger {rtm:.2} mm"),
+                    None => " · Rapid Trigger on".into(),
+                }
+            } else {
+                String::new()
+            };
+            let prefix = cap.note.as_deref().unwrap_or(&cap.label);
+            let prof = active_prof.as_deref().unwrap_or("the active profile");
+            format!(
+                "{prefix} uses {prof} global actuation ({mm_text}{rt_text}). Open Wootility for per-key DKS and remaps."
+            )
+        }
+    };
 
-    let mut controls = row()
+    let note_el = if selected_cap.is_some() {
+        col().key("kb-key-inspect").w_full().min_w(0.0).child(
+            text(note_copy)
+                .font(type_small())
+                .color(fg_muted())
+                .w_full()
+                .wrap(),
+        )
+    } else {
+        col().w_full().min_w(0.0).child(
+            text(note_copy)
+                .font(type_small())
+                .color(fg_muted())
+                .w_full()
+                .wrap(),
+        )
+    };
+
+    amoled_card(RADIUS_PANEL)
+        .key("kb-matrix")
         .w_full()
+        .px(20.0)
+        .py(16.0)
         .gap(12.0)
-        .justify_between()
-        .center_y()
-        .flex_wrap()
+        .child(text("Keyboard map").font(type_section()).color(FG))
         .child(
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(
-                    text(format!("Actuation {act:.1} mm"))
-                        .font(type_control())
-                        .color(FG),
-                )
-                .child(kb_button(
-                    "kb-act-down",
-                    "−0.1",
-                    can_write && act > min_act + 0.001,
-                    move |s: &mut AppState| {
-                        s.update_keyboard_settings(
-                            Some((act - 0.1).max(min_act)),
-                            None,
-                            None,
-                            None,
-                            None,
-                        );
-                    },
-                ))
-                .child(kb_button(
-                    "kb-act-up",
-                    "+0.1",
-                    can_write && act < max_act - 0.001,
-                    move |s: &mut AppState| {
-                        s.update_keyboard_settings(
-                            Some((act + 0.1).min(max_act)),
-                            None,
-                            None,
-                            None,
-                            None,
-                        );
-                    },
-                )),
-        );
+            el().w_full()
+                .padding(12.0)
+                .radius(RADIUS_CARD)
+                .fill(BG)
+                .border(1.0, card_border())
+                .center()
+                .child(sections),
+        )
+        .child(tags)
+        .children(travel_bar)
+        .child(note_el)
+}
 
-    if kb.has_rapid_trigger && rt_on {
-        controls = controls.child(
-            row()
-                .gap(8.0)
-                .center_y()
+fn wooting_keyboard_page(
+    s: &AppState,
+    dev: &PeripheralCard,
+    display_name: String,
+    status_line: String,
+    scale: f32,
+) -> El {
+    let kb_opt = s.pc.keyboard.as_ref().filter(|k| k.ok);
+    let hero_img =
+        s.pc.device_images
+            .get(&dev.id)
+            .and_then(|u| s.device_image(u, scale));
+    let media = if let Some(photo) = hero_img {
+        el().size(355.0, 236.0)
+            .pixels_fit(photo.pixels(), SurfaceFit::Fit)
+    } else {
+        icon_keyboard(56.0, fg_faint())
+    };
+
+    let mut stats = Vec::new();
+    if let Some(kb) = kb_opt {
+        if let Some(p) = kb.profiles.iter().find(|p| p.index == kb.active_profile) {
+            stats.push(("Profile", p.name.clone()));
+        }
+        if let Some(a) = kb.actuation_mm {
+            stats.push(("Actuation", format!("{a:.1} mm")));
+        }
+        if kb.has_rapid_trigger
+            && let Some(rt) = kb.rapid_trigger
+        {
+            let v = if !rt {
+                "Off".into()
+            } else if let Some(mm) = kb.rapid_trigger_mm {
+                format!("{mm:.2} mm")
+            } else {
+                "On".into()
+            };
+            stats.push(("Rapid Trigger", v));
+        }
+        if let Some(hz) = kb.max_scan_hz
+            && hz > 0
+        {
+            stats.push(("Scan rate", format!("{} Hz", format_thousands(hz))));
+        }
+        if let Some(ref fw) = kb.firmware
+            && !fw.is_empty()
+        {
+            stats.push(("Firmware", fw.clone()));
+        }
+        if let Some(ref lay) = kb.layout
+            && !lay.is_empty()
+        {
+            stats.push(("Layout", lay.clone()));
+        }
+    }
+
+    let mut col_a = Vec::new();
+    let mut col_b = Vec::new();
+
+    if let Some(kb) = kb_opt {
+        let min_act = kb.min_actuation_mm.unwrap_or(0.1);
+        let max_act = kb.max_actuation_mm.unwrap_or(4.0);
+        let act = kb.actuation_mm.unwrap_or(min_act).clamp(min_act, max_act);
+        let rt_on = kb.has_rapid_trigger && kb.rapid_trigger.unwrap_or(false);
+        let rt_mm = kb.rapid_trigger_mm.unwrap_or(0.15).clamp(0.10, 2.35);
+        let rgb = kb.rgb_brightness.unwrap_or(100).clamp(0, 100);
+        let can_write = kb.can_write;
+
+        if let Some(ref err) = s.pc.keyboard_error {
+            col_a.push(
+                amoled_card(RADIUS_PANEL)
+                    .key("kb-write-error")
+                    .w_full()
+                    .px(20.0)
+                    .py(14.0)
+                    .child(
+                        row()
+                            .w_full()
+                            .justify_between()
+                            .center_y()
+                            .gap(12.0)
+                            .child(
+                                col()
+                                    .grow(1.0)
+                                    .min_w(0.0)
+                                    .gap(2.0)
+                                    .child(
+                                        text("Keyboard change didn't apply")
+                                            .font(type_body())
+                                            .color(bad()),
+                                    )
+                                    .child(
+                                        text(err.clone())
+                                            .font(type_small())
+                                            .color(fg_muted())
+                                            .wrap(),
+                                    ),
+                            )
+                            .child(
+                                device_btn("kb-reread", "Re-read", false)
+                                    .on_press(|s: &mut AppState| s.reload_keyboard()),
+                            ),
+                    ),
+            );
+        }
+
+        if !can_write {
+            col_a.push(
+                amoled_card(RADIUS_PANEL)
+                    .key("kb-readonly-banner")
+                    .w_full()
+                    .px(20.0)
+                    .py(12.0)
+                    .child(
+                        text(
+                            kb.message.clone().unwrap_or_else(|| {
+                                "Read-only mode — close Wootility to edit.".into()
+                            }),
+                        )
+                        .font(type_small())
+                        .color(fg_muted())
+                        .wrap(),
+                    ),
+            );
+        }
+
+        if !kb.profiles.is_empty() {
+            let tabs = row()
+                .w_full()
+                .flex_wrap()
+                .gap(6.0)
+                .children(kb.profiles.iter().map(|p| {
+                    let idx = p.index;
+                    let active = kb.active_profile == idx;
+                    let key = match idx {
+                        0 => "kb-prof-0",
+                        1 => "kb-prof-1",
+                        2 => "kb-prof-2",
+                        _ => "kb-prof-3",
+                    };
+                    let mut tab = row()
+                        .key(key)
+                        .role("tab")
+                        .focusable(true)
+                        .hit()
+                        .press_on_down()
+                        .press_scale(PRESS_SCALE)
+                        .cursor(Cursor::Pointer)
+                        .h(32.0)
+                        .px(12.0)
+                        .gap(6.0)
+                        .center_y()
+                        .radius(8.0)
+                        .fill(if active {
+                            FG.alpha(0.08)
+                        } else {
+                            FG.alpha(0.02)
+                        })
+                        .border(
+                            1.0,
+                            if active {
+                                FG.alpha(0.45)
+                            } else {
+                                card_border()
+                            },
+                        )
+                        .hover(hover_fill())
+                        .motion(SPRING_QUICK)
+                        .child(
+                            text(format!("P{}", idx + 1))
+                                .font(type_small())
+                                .color(fg_muted()),
+                        )
+                        .child(text(p.name.clone()).font(type_control()).color(FG));
+                    if !active {
+                        tab = tab.on_press(move |s: &mut AppState| s.switch_keyboard_profile(idx));
+                    }
+                    tab
+                }));
+            col_a.push(device_panel(
+                "Profiles",
+                vec![
+                    col()
+                        .w_full()
+                        .py(10.0)
+                        .gap(10.0)
+                        .child(
+                            col()
+                                .gap(2.0)
+                                .child(text("Onboard profiles").font(type_body()).color(FG))
+                                .child(
+                                    text("Switch active slot stored on keyboard memory")
+                                        .font(type_small())
+                                        .color(fg_muted()),
+                                ),
+                        )
+                        .child(tabs),
+                ],
+            ));
+        }
+
+        if kb.actuation_mm.is_some() {
+            let act_ratio = if max_act > min_act {
+                ((act - min_act) / (max_act - min_act)).clamp(0.0, 1.0) as f32
+            } else {
+                0.0
+            };
+            let act_slider = kb_slider(
+                "kb-act-slider",
+                "Actuation point",
+                180.0,
+                act_ratio,
+                !can_write,
+            )
+            .on_drag(move |s: &mut AppState, d, _| {
+                if !can_write || d.phase != Phase::Up || d.cancelled() {
+                    return;
+                }
+                let r = (d.x / d.w.max(1.0)).clamp(0.0, 1.0) as f64;
+                let stepped = ((min_act + r * (max_act - min_act)) * 10.0).round() / 10.0;
+                s.update_keyboard_settings(
+                    Some(stepped.clamp(min_act, max_act)),
+                    None,
+                    None,
+                    None,
+                    None,
+                );
+            });
+            let mut act_readout = el()
+                .key("kb-act-up")
+                .hit()
+                .cursor(if can_write {
+                    Cursor::Pointer
+                } else {
+                    Cursor::Default
+                })
                 .child(
-                    text(format!("RT {rt_mm:.2} mm"))
-                        .font(type_control())
-                        .color(FG),
-                )
-                .child(kb_button(
-                    "kb-rt-down",
-                    "−0.05",
-                    can_write && rt_mm > 0.101,
-                    move |s: &mut AppState| {
-                        s.update_keyboard_settings(
-                            None,
-                            None,
-                            Some((rt_mm - 0.05).max(0.10)),
-                            None,
-                            None,
-                        );
-                    },
-                ))
-                .child(kb_button(
-                    "kb-rt-up",
-                    "+0.05",
-                    can_write && rt_mm < 2.349,
-                    move |s: &mut AppState| {
+                    text(format!("{act:.1} mm"))
+                        .font(type_small())
+                        .color(fg_muted()),
+                );
+            if can_write {
+                act_readout = act_readout.on_press(move |s: &mut AppState| {
+                    s.update_keyboard_settings(
+                        Some((act + 0.1).min(max_act)),
+                        None,
+                        None,
+                        None,
+                        None,
+                    );
+                });
+            }
+
+            let presets: &[(f64, &str)] = if min_act >= 1.0 {
+                &[
+                    (1.5, "1.5 mm"),
+                    (2.0, "2.0 mm"),
+                    (2.8, "2.8 mm"),
+                    (3.6, "3.6 mm"),
+                ]
+            } else {
+                &[
+                    (0.1, "0.1 mm"),
+                    (0.4, "0.4 mm"),
+                    (1.2, "1.2 mm"),
+                    (2.0, "2.0 mm"),
+                ]
+            };
+            let preset_row =
+                row()
+                    .gap(6.0)
+                    .flex_wrap()
+                    .children(presets.iter().map(|&(val, lbl)| {
+                        let on = (act - val).abs() < 0.05;
+                        let mut pill = filter_pill(format!("kb-act-p-{lbl}"), lbl, on);
+                        if can_write {
+                            pill = pill.on_press(move |s: &mut AppState| {
+                                s.update_keyboard_settings(Some(val), None, None, None, None);
+                            });
+                        } else {
+                            pill = pill.cursor(Cursor::NotAllowed).opacity(0.45);
+                        }
+                        pill
+                    }));
+
+            col_a.push(device_panel(
+                "Actuation",
+                vec![
+                    device_row(
+                        "Actuation point",
+                        None,
+                        None,
+                        Some(
+                            row()
+                                .gap(10.0)
+                                .center_y()
+                                .child(act_slider)
+                                .child(act_readout),
+                        ),
+                    ),
+                    device_row(
+                        "Presets",
+                        Some("Instant global travel presets".into()),
+                        None,
+                        Some(preset_row),
+                    ),
+                ],
+            ));
+        }
+
+        if kb.has_rapid_trigger && kb.rapid_trigger.is_some() {
+            let mut rt_rows = vec![device_row(
+                "Rapid Trigger",
+                Some("Resets key actuation the instant it moves upward".into()),
+                None,
+                Some(
+                    device_switch("kb-rt-toggle", "Rapid Trigger", rt_on, !can_write).on_press(
+                        move |s: &mut AppState| {
+                            if can_write {
+                                s.update_keyboard_settings(None, Some(!rt_on), None, None, None);
+                            }
+                        },
+                    ),
+                ),
+            )];
+            if rt_on && kb.rapid_trigger_mm.is_some() {
+                let rt_ratio = ((rt_mm - 0.10) / (2.35 - 0.10)).clamp(0.0, 1.0) as f32;
+                let rt_slider =
+                    kb_slider("kb-rt-slider", "Sensitivity", 180.0, rt_ratio, !can_write).on_drag(
+                        move |s: &mut AppState, d, _| {
+                            if !can_write || d.phase != Phase::Up || d.cancelled() {
+                                return;
+                            }
+                            let r = (d.x / d.w.max(1.0)).clamp(0.0, 1.0) as f64;
+                            let stepped = ((0.10 + r * (2.35 - 0.10)) * 20.0).round() / 20.0;
+                            s.update_keyboard_settings(
+                                None,
+                                None,
+                                Some(stepped.clamp(0.10, 2.35)),
+                                None,
+                                None,
+                            );
+                        },
+                    );
+                let mut rt_readout = el()
+                    .key("kb-rt-up")
+                    .hit()
+                    .cursor(if can_write {
+                        Cursor::Pointer
+                    } else {
+                        Cursor::Default
+                    })
+                    .child(
+                        text(format!("{rt_mm:.2} mm"))
+                            .font(type_small())
+                            .color(fg_muted()),
+                    );
+                if can_write {
+                    rt_readout = rt_readout.on_press(move |s: &mut AppState| {
                         s.update_keyboard_settings(
                             None,
                             None,
@@ -571,197 +922,231 @@ fn wooting_detail(s: &AppState, kb: &KeyboardReadReply) -> El {
                             None,
                             None,
                         );
-                    },
-                )),
-        );
-    }
-
-    if kb.has_rgb {
-        controls = controls.child(
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(text(format!("RGB {rgb}%")).font(type_control()).color(FG))
-                .child(kb_button(
-                    "kb-rgb-down",
-                    "−5%",
-                    can_write && rgb > 0,
-                    move |s: &mut AppState| {
-                        s.update_keyboard_settings(None, None, None, None, Some((rgb - 5).max(0)));
-                    },
-                ))
-                .child(kb_button(
-                    "kb-rgb-up",
-                    "+5%",
-                    can_write && rgb < 100,
-                    move |s: &mut AppState| {
-                        s.update_keyboard_settings(
-                            None,
-                            None,
-                            None,
-                            None,
-                            Some((rgb + 5).min(100)),
-                        );
-                    },
-                )),
-        );
-    }
-
-    let mut toggles = row().gap(8.0).center_y();
-    if kb.has_rapid_trigger {
-        toggles = toggles.child(kb_pill(
-            "kb-rt-toggle",
-            "Rapid Trigger".into(),
-            rt_on,
-            can_write,
-            move |s: &mut AppState| {
-                s.update_keyboard_settings(None, Some(!rt_on), None, None, None);
-            },
-        ));
-    }
-    if show_tach {
-        toggles = toggles.child(kb_pill(
-            "kb-tach-toggle",
-            "Tachyon".into(),
-            tach,
-            can_write,
-            move |s: &mut AppState| {
-                s.update_keyboard_settings(None, None, None, Some(!tach), None);
-            },
-        ));
-    }
-    controls = controls.child(toggles);
-
-    amoled_card(RADIUS_PANEL)
-        .w_full()
-        .px(20.0)
-        .py(18.0)
-        .gap(16.0)
-        .child(
-            row()
-                .w_full()
-                .justify_between()
-                .center_y()
-                .gap(12.0)
-                .child(
-                    col()
-                        .gap(2.0)
-                        .child(
-                            text(
-                                kb.model
-                                    .clone()
-                                    .unwrap_or_else(|| "Wooting Hall-Effect".into()),
-                            )
-                            .font(type_title())
-                            .color(FG),
-                        )
-                        .children((!meta_parts.is_empty()).then(|| {
-                            text(meta_parts.join(" · "))
-                                .font(type_small())
-                                .color(fg_muted())
-                        })),
-                )
-                .child(
-                    row()
-                        .gap(8.0)
-                        .center_y()
-                        .child(
-                            glass_button("kb-backup", "Backup profiles", None)
-                                .on_press(|s: &mut AppState| s.backup_keyboard_profiles()),
-                        )
-                        .children(latest_backup.map(|file_name| {
-                            kb_button(
-                                "kb-restore-latest",
-                                "Restore backup",
-                                can_write,
-                                move |s: &mut AppState| {
-                                    s.restore_keyboard_backup(file_name.clone());
-                                },
-                            )
-                        })),
-                ),
-        )
-        .children(error_banner)
-        .children(readonly_banner)
-        .child(profiles)
-        .child(wooting_key_matrix(s, kb))
-        .child(controls)
-}
-
-fn audio_detail(s: &AppState) -> El {
-    let Some(aud) = s.pc.audio.as_ref() else {
-        return el();
-    };
-    let mut card = amoled_card(RADIUS_PANEL)
-        .w_full()
-        .px(20.0)
-        .py(18.0)
-        .gap(12.0)
-        .child(text("Audio mixer").font(type_title()).color(FG));
-
-    for (label, ep, is_out, key_mute, key_dn, key_up) in [
-        (
-            "Output",
-            aud.output.as_ref(),
-            true,
-            "aud-out-mute",
-            "aud-out-dn",
-            "aud-out-up",
-        ),
-        (
-            "Microphone",
-            aud.mic.as_ref(),
-            false,
-            "aud-mic-mute",
-            "aud-mic-dn",
-            "aud-mic-up",
-        ),
-    ] {
-        if let Some(ep) = ep {
-            let vol = ep.volume.unwrap_or(80);
-            let muted = ep.muted;
-            card = card.child(
-                row()
-                    .w_full()
-                    .justify_between()
-                    .center_y()
-                    .child(
-                        col()
-                            .gap(2.0)
-                            .child(text(label).font(type_section()).color(FG))
-                            .child(text(format!("{vol}%")).font(type_small()).color(fg_muted())),
-                    )
-                    .child(
+                    });
+                }
+                rt_rows.push(device_row(
+                    "Sensitivity",
+                    None,
+                    None,
+                    Some(
                         row()
-                            .gap(8.0)
+                            .gap(10.0)
                             .center_y()
-                            .child(
-                                glass_button(
-                                    key_mute,
-                                    if muted { "Muted" } else { "Mute" },
-                                    Some(if muted {
-                                        icon_volume_off(13.0, bad())
-                                    } else {
-                                        icon_volume(13.0, FG)
-                                    }),
-                                )
-                                .on_press(move |s: &mut AppState| s.set_audio_mute(is_out, !muted)),
-                            )
-                            .child(glass_button(key_dn, "−10%", None).on_press(
-                                move |s: &mut AppState| {
-                                    s.set_audio_volume(is_out, (vol - 10).max(0));
-                                },
-                            ))
-                            .child(glass_button(key_up, "+10%", None).on_press(
-                                move |s: &mut AppState| {
-                                    s.set_audio_volume(is_out, (vol + 10).min(100));
-                                },
-                            )),
+                            .child(rt_slider)
+                            .child(rt_readout),
                     ),
-            );
+                ));
+            }
+            col_a.push(device_panel("Rapid Trigger", rt_rows));
         }
+
+        if kb.has_rgb && kb.rgb_brightness.is_some() {
+            let rgb_slider = kb_slider(
+                "kb-rgb-slider",
+                "RGB brightness",
+                180.0,
+                rgb as f32 / 100.0,
+                !can_write,
+            )
+            .on_drag(move |s: &mut AppState, d, _| {
+                if !can_write || d.phase != Phase::Up || d.cancelled() {
+                    return;
+                }
+                let r = (d.x / d.w.max(1.0)).clamp(0.0, 1.0);
+                let stepped = ((r * 20.0).round() as i32 * 5).clamp(0, 100);
+                s.update_keyboard_settings(None, None, None, None, Some(stepped));
+            });
+            let mut rgb_label = el()
+                .key("kb-rgb-down")
+                .hit()
+                .child(text("RGB brightness").font(type_body()).color(FG));
+            if can_write {
+                rgb_label = rgb_label.on_press(move |s: &mut AppState| {
+                    s.update_keyboard_settings(None, None, None, None, Some((rgb - 5).max(0)));
+                });
+            }
+            let mut rgb_readout = el()
+                .key("kb-rgb-up")
+                .hit()
+                .child(text(format!("{rgb}%")).font(type_small()).color(fg_muted()));
+            if can_write {
+                rgb_readout = rgb_readout.on_press(move |s: &mut AppState| {
+                    s.update_keyboard_settings(None, None, None, None, Some((rgb + 5).min(100)));
+                });
+            }
+            col_a.push(device_panel(
+                "Lighting",
+                vec![
+                    row()
+                        .w_full()
+                        .py(10.0)
+                        .justify_between()
+                        .center_y()
+                        .gap(12.0)
+                        .child(rgb_label)
+                        .child(
+                            row()
+                                .gap(10.0)
+                                .center_y()
+                                .child(rgb_slider)
+                                .child(rgb_readout),
+                        ),
+                ],
+            ));
+        }
+
+        col_b.push(wooting_key_map_panel(s, dev, kb));
+
+        let mut perf_rows = Vec::new();
+        if let Some(tach) = kb.tachyon {
+            let tach_detail = if kb.max_scan_hz.unwrap_or(1000) >= 8000 {
+                "Enables 8,000 Hz ultra-low latency scanning"
+            } else {
+                "Prioritizes minimum key scan latency over RGB animations"
+            };
+            perf_rows.push(device_row(
+                "Tachyon mode",
+                Some(tach_detail.into()),
+                None,
+                Some(
+                    device_switch("kb-tach-toggle", "Tachyon mode", tach, !can_write).on_press(
+                        move |s: &mut AppState| {
+                            if can_write {
+                                s.update_keyboard_settings(None, None, None, Some(!tach), None);
+                            }
+                        },
+                    ),
+                ),
+            ));
+        }
+        if let Some(ref port) = dev.port {
+            let badge = port_short(port).unwrap_or_else(|| "USB".into());
+            perf_rows.push(device_row(
+                "USB port",
+                Some(port_words(port)),
+                None,
+                Some(text(badge).font(type_small()).color(fg_muted())),
+            ));
+        }
+        let woot_detail = if kb.background_service_running {
+            "Wooting Background Service running · Open for per-key DKS, remap & RGB"
+        } else {
+            "Open for per-key DKS, remapping & RGB layers"
+        };
+        perf_rows.push(device_row(
+            "Wootility",
+            Some(woot_detail.into()),
+            None,
+            Some(
+                device_btn(
+                    "kb-open-wootility",
+                    if kb.wootility_installed {
+                        "Open Wootility"
+                    } else {
+                        "Wootility Web"
+                    },
+                    false,
+                )
+                .on_press(|s: &mut AppState| s.open_keyboard_app()),
+            ),
+        ));
+        col_b.push(device_panel("Performance", perf_rows));
+
+        let mut backup_rows = vec![device_row(
+            "Save snapshot",
+            Some("Stores all onboard profiles locally for this keyboard".into()),
+            None,
+            Some(if can_write {
+                primary_button("kb-backup", "Save backup", None)
+                    .on_press(|s: &mut AppState| s.backup_keyboard_profiles())
+            } else {
+                device_btn("kb-backup", "Save backup", true)
+            }),
+        )];
+        if s.pc.keyboard_backups.is_empty() {
+            backup_rows.push(
+                el().w_full().py(10.0).child(
+                    text("No backups saved yet. A safety backup is created automatically before Exo writes settings.")
+                        .font(type_small())
+                        .color(fg_muted())
+                        .wrap(),
+                ),
+            );
+        } else {
+            for (idx, bk) in s.pc.keyboard_backups.iter().take(6).enumerate() {
+                let fname = bk.file_name.clone();
+                let prof_word = if bk.profile_count == 1 {
+                    "profile"
+                } else {
+                    "profiles"
+                };
+                let key = if idx == 0 {
+                    "kb-restore-latest".to_string()
+                } else {
+                    format!("kb-restore-{idx}")
+                };
+                backup_rows.push(device_row(
+                    format_backup_time(&bk.created_utc),
+                    Some(format!("{} · {} {prof_word}", bk.model, bk.profile_count)),
+                    None,
+                    Some(device_btn(key, "Restore", !can_write).on_press(
+                        move |s: &mut AppState| {
+                            if can_write {
+                                s.restore_keyboard_backup(fname.clone());
+                            }
+                        },
+                    )),
+                ));
+            }
+        }
+        col_b.push(device_panel("Backups", backup_rows));
+    } else if s.pc.keyboard.is_some() || s.pc.keyboard_error.is_some() {
+        let err_msg =
+            s.pc.keyboard_error
+                .clone()
+                .or_else(|| s.pc.keyboard.as_ref().and_then(|k| k.message.clone()))
+                .unwrap_or_else(|| "Could not read Wooting keyboard.".into());
+        col_a.push(
+            amoled_card(RADIUS_PANEL)
+                .key("kb-error-card")
+                .w_full()
+                .px(20.0)
+                .py(18.0)
+                .gap(12.0)
+                .child(text("Keyboard").font(type_section()).color(FG))
+                .child(device_row(
+                    "Couldn't read keyboard",
+                    Some(err_msg),
+                    None,
+                    Some(
+                        device_btn("kb-retry", "Retry", false)
+                            .on_press(|s: &mut AppState| s.reload_keyboard()),
+                    ),
+                )),
+        );
+    } else {
+        col_a.push(
+            amoled_card(RADIUS_PANEL).w_full().px(20.0).py(18.0).child(
+                text("Reading keyboard…")
+                    .font(type_body())
+                    .color(fg_muted()),
+            ),
+        );
     }
-    card
+
+    device_page_shell_columns_no_rescan(
+        DevicePageHeader {
+            key: "room-devices-detail",
+            name: kb_opt.and_then(|k| k.model.clone()).unwrap_or(display_name),
+            status: status_line,
+            media,
+            stats,
+            credit: Some("Direct Wooting USB HID protocol"),
+        },
+        col_a,
+        col_b,
+        |s| s.pc.selected_device_id = None,
+    )
 }
 
 pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
@@ -781,16 +1166,20 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
                     .center()
                     .gap(12.0)
                     .px(24.0)
-                    .child(text("Exo Mouse unavailable").font(type_section()).color(FG))
+                    .child(
+                        text("Exo could not reach your mouse")
+                            .font(type_title())
+                            .color(FG),
+                    )
                     .child(text(err.clone()).font(type_body()).color(fg_muted()))
                     .child(
-                        glass_button("mouse-panel-retry", "Retry", Some(icon_refresh(14.0, FG)))
+                        device_btn("mouse-panel-retry", "Try again", false)
                             .on_press(|s: &mut AppState| s.retry_mouse_panel()),
                     ),
             );
         } else if s.pc.mouse_panel_loading {
             slot = slot.child(
-                text("Opening Exo Mouse…")
+                text("Looking for your mouse")
                     .font(type_body())
                     .color(fg_muted()),
             );
@@ -802,9 +1191,14 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
             .h_full()
             .fill(BG)
             .child(
-                row().w_full().pt(60.0).px(GAP).pb(0.0).center_y().child(
-                    glass_button("dev-back", "Devices", Some(icon_chevron_left(14.0, FG)))
-                        .on_press(|s: &mut AppState| s.close_mouse_panel()),
+                row().w_full().pt(60.0).px(16.0).pb(0.0).center_y().child(
+                    device_icon_btn(
+                        "dev-back",
+                        "Devices",
+                        Some(icon_chevron_left(14.0, FG)),
+                        false,
+                    )
+                    .on_press(|s: &mut AppState| s.close_mouse_panel()),
                 ),
             )
             .child(slot);
@@ -819,6 +1213,52 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
     if let Some(sel_id) = s.pc.selected_device_id.as_deref()
         && let Some(dev) = devices.iter().find(|d| d.id == sel_id)
     {
+        let display_name = clean_device_name(dev, s);
+        let status_line = match dev.battery {
+            Some(b) => format!(
+                "{} · {}%",
+                connection_label(dev.connection.as_deref()),
+                format_battery_pct(b)
+            ),
+            None => connection_label(dev.connection.as_deref()).to_string(),
+        };
+
+        if dev.kind == "audio" {
+            let output = devices
+                .iter()
+                .find(|d| d.kind == "audio" && d.role.as_deref() == Some("output"))
+                .or_else(|| {
+                    devices
+                        .iter()
+                        .find(|d| d.kind == "audio" && d.role.as_deref() != Some("input"))
+                });
+            let mic = devices
+                .iter()
+                .find(|d| d.kind == "audio" && d.role.as_deref() == Some("input"));
+            return crate::devices_audio::audio_page(
+                s,
+                output,
+                mic,
+                display_name,
+                status_line,
+                scale,
+            );
+        }
+
+        if dev.kind == "controller" && dev.lab {
+            return crate::devices_controller::controller_page(
+                s,
+                dev,
+                display_name,
+                status_line,
+                scale,
+            );
+        }
+
+        if dev.kind == "keyboard" && dev.lab {
+            return wooting_keyboard_page(s, dev, display_name, status_line, scale);
+        }
+
         let mut page = col()
             .key("room-devices-detail")
             .w_full()
@@ -831,18 +1271,15 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
             .pb(36.0)
             .gap(16.0)
             .child(
-                row()
-                    .w_full()
-                    .justify_between()
-                    .center_y()
-                    .child(
-                        glass_button("dev-back", "Devices", Some(icon_chevron_left(14.0, FG)))
-                            .on_press(|s: &mut AppState| s.pc.selected_device_id = None),
+                row().w_full().center_y().child(
+                    device_icon_btn(
+                        "dev-back",
+                        "Devices",
+                        Some(icon_chevron_left(14.0, FG)),
+                        false,
                     )
-                    .child(
-                        glass_button("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)))
-                            .on_press(|s: &mut AppState| s.load_pc_devices()),
-                    ),
+                    .on_press(|s: &mut AppState| s.pc.selected_device_id = None),
+                ),
             )
             .child(
                 text(dev.name.clone())
@@ -850,68 +1287,28 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
                     .color(FG),
             );
 
-        if dev.lab || dev.kind == "keyboard" {
-            if let Some(ref kb) = s.pc.keyboard
-                && kb.ok
-            {
-                page = page.child(wooting_detail(s, kb));
-            } else if s.pc.keyboard.is_some() || s.pc.keyboard_error.is_some() {
-                let err_msg =
-                    s.pc.keyboard_error
-                        .clone()
-                        .or_else(|| s.pc.keyboard.as_ref().and_then(|k| k.message.clone()))
-                        .unwrap_or_else(|| "Could not read Wooting keyboard.".into());
-                page = page.child(
-                    amoled_card(RADIUS_PANEL)
-                        .key("kb-error-card")
-                        .w_full()
-                        .px(20.0)
-                        .py(18.0)
-                        .gap(12.0)
-                        .child(text("Keyboard unavailable").font(type_section()).color(FG))
-                        .child(text(err_msg).font(type_body()).color(bad()))
-                        .child(
-                            row().child(
-                                glass_button("kb-retry", "Retry", Some(icon_refresh(14.0, FG)))
-                                    .on_press(|s: &mut AppState| s.reload_keyboard()),
-                            ),
-                        ),
-                );
-            } else {
-                page = page.child(
-                    amoled_card(RADIUS_PANEL).w_full().px(20.0).py(18.0).child(
-                        text("Reading keyboard…")
-                            .font(type_body())
-                            .color(fg_muted()),
-                    ),
-                );
-            }
-        } else if dev.kind == "audio" {
-            page = page.child(audio_detail(s));
-        } else {
-            page = page.child(
-                amoled_card(RADIUS_PANEL)
-                    .w_full()
-                    .px(20.0)
-                    .py(18.0)
-                    .gap(8.0)
-                    .child(
-                        text(connection_label(dev.connection.as_deref()))
-                            .font(type_section())
-                            .color(FG),
-                    )
-                    .children(dev.battery.map(|b| {
-                        text(format!("Battery: {}%", format_battery_pct(b)))
-                            .font(type_body())
-                            .color(fg_muted())
-                    }))
-                    .children(dev.polling_hz.map(|hz| {
-                        text(format!("Polling rate: {hz} Hz"))
-                            .font(type_body())
-                            .color(fg_muted())
-                    })),
-            );
-        }
+        page = page.child(
+            amoled_card(RADIUS_PANEL)
+                .w_full()
+                .px(20.0)
+                .py(18.0)
+                .gap(8.0)
+                .child(
+                    text(connection_label(dev.connection.as_deref()))
+                        .font(type_section())
+                        .color(FG),
+                )
+                .children(dev.battery.map(|b| {
+                    text(format!("Battery: {}%", format_battery_pct(b)))
+                        .font(type_body())
+                        .color(fg_muted())
+                }))
+                .children(dev.polling_hz.map(|hz| {
+                    text(format!("Polling rate: {hz} Hz"))
+                        .font(type_body())
+                        .color(fg_muted())
+                })),
+        );
         return page;
     }
 
@@ -928,21 +1325,29 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
 
     let mut ordered: Vec<&PeripheralCard> = Vec::new();
     for kind in ["mouse", "keyboard", "audio", "controller"] {
+        let mut added_audio = false;
         for dev in devices {
-            if dev.kind == kind {
-                if kind == "audio" && dev.role.as_deref() == Some("input") {
+            if dev.kind != kind {
+                continue;
+            }
+            if (kind == "keyboard" || kind == "controller") && !dev.lab {
+                continue;
+            }
+            if kind == "audio" {
+                if added_audio || dev.role.as_deref() == Some("input") {
                     continue;
                 }
-                ordered.push(dev);
+                added_audio = true;
             }
-        }
-    }
-    for dev in devices {
-        if !matches!(
-            dev.kind.as_str(),
-            "mouse" | "keyboard" | "audio" | "controller"
-        ) {
             ordered.push(dev);
+        }
+        if kind == "audio"
+            && !added_audio
+            && let Some(mic) = devices
+                .iter()
+                .find(|d| d.kind == "audio" && d.role.as_deref() == Some("input"))
+        {
+            ordered.push(mic);
         }
     }
 

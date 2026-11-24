@@ -1,5 +1,5 @@
 use crate::shell::room_icon;
-use crate::state::{AppState, NoticeTone, PaletteItem, PaletteTarget, Room};
+use crate::state::{AppState, PaletteItem, PaletteTarget, Room};
 use exo_kit::{
     FG, RADIUS_SHEET, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, fg_muted,
     glass_panel_opt, hairline, hover_fill, icon_chat, icon_close, icon_download, icon_gamepad,
@@ -353,35 +353,9 @@ impl AppState {
             PaletteTarget::InstallSelected(id) => self.install_game(&id),
             PaletteTarget::OpenDownloads => self.open_downloads(),
             PaletteTarget::OpenWhatsNew => self.open_whats_new_all(),
-            PaletteTarget::NoteNew => {
-                self.open_captures(None);
-                #[cfg(windows)]
-                self.call_host_async(
-                    "notes.act",
-                    json!({ "action": "new" }),
-                    |s, res: Result<serde_json::Value, String>| {
-                        if res.is_err() {
-                            s.push_notice("Could not create note.", NoticeTone::Bad);
-                        }
-                    },
-                );
-            }
-            PaletteTarget::NoteOpen => self.open_captures(None),
-            PaletteTarget::NoteItem(id) => {
-                self.open_captures(None);
-                #[cfg(windows)]
-                self.call_host_async(
-                    "notes.read",
-                    json!({ "id": id }),
-                    |s, res: Result<serde_json::Value, String>| {
-                        if res.is_err() {
-                            s.push_notice("Could not open note.", NoticeTone::Bad);
-                        }
-                    },
-                );
-                #[cfg(not(windows))]
-                let _ = id;
-            }
+            PaletteTarget::NoteNew => self.open_notes(None, true),
+            PaletteTarget::NoteOpen => self.open_notes(None, false),
+            PaletteTarget::NoteItem(id) => self.open_notes(Some(id), false),
             PaletteTarget::DiscordDm(dm_id) => {
                 self.switch_room(Room::Discord);
                 self.open_discord_dm(&dm_id);

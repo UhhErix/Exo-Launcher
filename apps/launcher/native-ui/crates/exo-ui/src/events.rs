@@ -43,11 +43,16 @@ pub enum HostEventKind {
     DiscordUserSettings,
     DiscordVideoKeyframe,
     DevicesChanged,
+    ControllerState,
+    HidChanged,
+    HidInput,
     AppsChanged,
     MusicVolume,
     CaptureState,
     CaptureSaved,
     CaptureReel,
+    CaptureShrunk,
+    NotesOpen,
     InstallQueue,
     GameRunState,
     LaunchStatus,
@@ -117,11 +122,16 @@ impl HostEventKind {
             HostEvent::DiscordUserSettings(_) => Self::DiscordUserSettings,
             HostEvent::DiscordVideoKeyframe { .. } => Self::DiscordVideoKeyframe,
             HostEvent::DevicesChanged => Self::DevicesChanged,
+            HostEvent::ControllerState(_) => Self::ControllerState,
+            HostEvent::HidChanged => Self::HidChanged,
+            HostEvent::HidInput(_) => Self::HidInput,
             HostEvent::AppsChanged => Self::AppsChanged,
             HostEvent::MusicVolume(_) => Self::MusicVolume,
             HostEvent::CaptureState(_) => Self::CaptureState,
             HostEvent::CaptureSaved(_) => Self::CaptureSaved,
             HostEvent::CaptureReel(_) => Self::CaptureReel,
+            HostEvent::CaptureShrunk(_) => Self::CaptureShrunk,
+            HostEvent::NotesOpen(_) => Self::NotesOpen,
             HostEvent::InstallQueue(_) => Self::InstallQueue,
             HostEvent::GameRunState(_) => Self::GameRunState,
             HostEvent::LaunchStatus(_) => Self::LaunchStatus,
@@ -342,7 +352,21 @@ fn register_media(reg: &mut EventRegistry) {
         let HostEvent::CaptureReel(reel) = ev else {
             return false;
         };
-        state.apply_capture_reel(*reel);
+        state.apply_capture_reel_update(*reel);
+        true
+    });
+    reg.on(HostEventKind::CaptureShrunk, |state, ev| {
+        let HostEvent::CaptureShrunk(shrunk) = ev else {
+            return false;
+        };
+        state.apply_capture_shrunk(*shrunk);
+        true
+    });
+    reg.on(HostEventKind::NotesOpen, |state, ev| {
+        let HostEvent::NotesOpen(note_ev) = ev else {
+            return false;
+        };
+        state.apply_notes_open(note_ev);
         true
     });
 }
@@ -560,6 +584,21 @@ fn register_pc(reg: &mut EventRegistry) {
         } else {
             false
         }
+    });
+    reg.on(HostEventKind::ControllerState, |state, ev| {
+        let HostEvent::ControllerState(cs) = ev else {
+            return false;
+        };
+        state.apply_controller_state(cs)
+    });
+    reg.on(HostEventKind::HidChanged, |state, _| {
+        state.apply_hid_changed()
+    });
+    reg.on(HostEventKind::HidInput, |state, ev| {
+        let HostEvent::HidInput(hi) = ev else {
+            return false;
+        };
+        state.apply_hid_input(hi)
     });
     reg.on(HostEventKind::AppsChanged, |state, _| {
         if state.room == Room::Apps {

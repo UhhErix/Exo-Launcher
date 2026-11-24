@@ -18,16 +18,15 @@ use exo_kit::SPRING_MOVE;
 use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
-    CaptureLiveState, CaptureReelEvent, CaptureSavedEvent, CaptureStatusReply, DiscordFriend,
+    CaptureLiveState, CaptureSavedEvent, CaptureStatusReply, DiscordFriend,
     ExoAccountState, FrameGenRoute, Game, GameExtras, GameFrameGen, GameProperties,
     GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
     LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
     METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_FRAME_GEN, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH,
     METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE,
-    METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET,
-    METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback, MusicVolumeEvent, ShellBootstrap,
-    StoreArt, StoreChangedEvent, StoreGame, StoreHome, StoreOtherOffers, StoreShelf, StoreTile,
-    remote_art,
+    METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME,
+    MusicPlayback, MusicVolumeEvent, ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame,
+    StoreHome, StoreOtherOffers, StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -1339,8 +1338,11 @@ impl AppState {
                 -1.0
             };
         }
-        if self.room == Room::Devices && room != Room::Devices && self.pc.mouse_panel_open {
-            self.close_mouse_panel();
+        if self.room == Room::Devices && room != Room::Devices {
+            if self.pc.mouse_panel_open {
+                self.close_mouse_panel();
+            }
+            self.stop_controller_watch();
         }
         if self.room == Room::Discord && room != Room::Discord && self.discord.signin.is_some() {
             self.cancel_discord_signin();
@@ -2747,6 +2749,46 @@ impl AppState {
             self.discord.voice_ui.panel = crate::discord_voice_state::VoicePanel::None;
             return true;
         }
+        if self.pc.controller_ui.calibrate_dialog.open {
+            self.close_calibrate_dialog();
+            return true;
+        }
+        if self.pc.controller_ui.profile_editor.is_some() {
+            if self
+                .pc
+                .controller_ui
+                .profile_editor
+                .as_ref()
+                .is_some_and(|e| e.game_picker_open)
+            {
+                if let Some(ref mut ed) = self.pc.controller_ui.profile_editor {
+                    ed.game_picker_open = false;
+                }
+            } else {
+                self.pc.controller_ui.profile_editor = None;
+            }
+            return true;
+        }
+        if self.media.lightbox.is_open() {
+            self.media.lightbox.close();
+            return true;
+        }
+        if self.media.captures_ui.send_dialog.open {
+            self.media.captures_ui.send_dialog.open = false;
+            return true;
+        }
+        if self.media.snip_editor.is_some() {
+            self.close_snip_editor();
+            return true;
+        }
+        if self.media.clip_editor_open {
+            self.media.clip_editor_open = false;
+            return true;
+        }
+        if self.media.notes.open {
+            self.close_notes_to_captures();
+            return true;
+        }
         if self.media.open_capture_id.is_some() {
             self.close_capture_item();
             return true;
@@ -3093,6 +3135,7 @@ impl AppState {
         self.palette_query.text.clear();
         self.palette_query.sync_invariants();
         self.load_palette_extras();
+        self.load_notes_list(None);
         self.sync_chrome_layout();
         tx.focus("palette-input", false);
     }
@@ -3814,40 +3857,17 @@ impl AppState {
     }
 
     pub fn apply_capture_saved(&mut self, ev: CaptureSavedEvent) {
+        let id = ev.item.id.clone();
         let name = ev.item.name.clone();
-        self.media.capture_items.retain(|it| it.id != ev.item.id);
+        let edit = ev.edit;
+        self.media.capture_items.retain(|it| it.id != id);
         self.media.capture_items.insert(0, ev.item);
-        if !name.is_empty() {
+        if edit {
+            self.open_captures(None);
+            self.open_capture_item(&id);
+            self.open_snip_editor(&id);
+        } else if !name.is_empty() {
             self.notice = Some(format!("Saved {name}."));
-        }
-    }
-
-    pub fn apply_capture_reel(&mut self, ev: CaptureReelEvent) {
-        match ev.state.as_str() {
-            "done" => {
-                if let Some(item) = ev.item {
-                    let name = item.name.clone();
-                    self.media.capture_items.retain(|it| it.id != item.id);
-                    self.media.capture_items.insert(0, item);
-                    if !name.is_empty() {
-                        self.notice = Some(format!("{name} is ready."));
-                    }
-                }
-            }
-            "failed" => {
-                self.notice = Some(
-                    ev.message
-                        .filter(|m| !m.trim().is_empty())
-                        .unwrap_or_else(|| "Could not make reel.".into()),
-                );
-            }
-            "working" => {
-                self.notice = Some(format!("Making reel… {:.0}%", ev.percent.clamp(0.0, 100.0)));
-            }
-            "waiting" => {
-                self.notice = Some("Reel queued until game ends.".into());
-            }
-            _ => {}
         }
     }
 
@@ -3961,6 +3981,8 @@ impl AppState {
                 handle.update(move |s, _| {
                     s.apply_bootstrap(boot);
                     s.warm_discord();
+                    s.load_capture_status();
+                    s.check_pending_notes_on_startup();
                     s.warm_store_on_startup();
                     s.wp4_warm_startup();
                 });
@@ -4182,6 +4204,7 @@ mod tests {
             recording: true,
             recording_ms: Some(4200.0),
             replay: true,
+            ..Default::default()
         });
         assert!(
             s.media

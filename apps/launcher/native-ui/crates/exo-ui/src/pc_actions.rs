@@ -5,14 +5,15 @@ use exo_rpc::{
     DevicesListReply, DrivesReply, EqStateReply, ExoAiState, HdrState, KeyboardBackupResult,
     KeyboardBackupsReply, KeyboardReadReply, LauncherSettings, METHOD_APP_CHECK_UPDATE,
     METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS, METHOD_APPS_ICONS, METHOD_APPS_LIST,
-    METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE,
-    METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST, METHOD_EQ, METHOD_EXO_AI_STATE, METHOD_HDR_STATE,
-    METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ,
-    METHOD_KEYBOARD_RESTORE, METHOD_KEYBOARD_SETTINGS, METHOD_MOUSE_PANEL_BOUNDS,
-    METHOD_MOUSE_PANEL_CLOSE, METHOD_MOUSE_PANEL_OPEN, METHOD_SETTINGS_SET, METHOD_SHADERS_ADDON,
-    METHOD_SHADERS_CALL, METHOD_SHADERS_ESTIMATES, METHOD_SHADERS_PREPARE_GAMES,
-    METHOD_SHADERS_PREPARE_START, METHOD_STARTUP_LIST, METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT,
-    METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_TUNING, ShaderEstimate, ShaderSnapGame, ShadersAddonStatus,
+    METHOD_AUDIO_READ, METHOD_AUTOPILOT_STATE, METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST,
+    METHOD_EQ, METHOD_EXO_AI_STATE, METHOD_HDR_STATE, METHOD_HID_SEND_REPORT,
+    METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_OPEN_APP,
+    METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ, METHOD_KEYBOARD_RESTORE,
+    METHOD_KEYBOARD_SETTINGS, METHOD_MOUSE_PANEL_BOUNDS, METHOD_MOUSE_PANEL_CLOSE,
+    METHOD_MOUSE_PANEL_OPEN, METHOD_SETTINGS_SET, METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL,
+    METHOD_SHADERS_ESTIMATES, METHOD_SHADERS_PREPARE_GAMES, METHOD_SHADERS_PREPARE_START,
+    METHOD_STARTUP_LIST, METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES,
+    METHOD_SYSTEM_TUNING, ShaderEstimate, ShaderSnapGame, ShadersAddonStatus,
     ShadersEstimatesReply, ShadersPrepareGamesReply, StartupListReply, SystemAbout,
     SystemTuningState, UpdateCheckReply,
 };
@@ -525,17 +526,22 @@ impl AppState {
                     let out_id = list
                         .devices
                         .iter()
-                        .find(|d| d.kind == "audio" && d.role.as_deref() != Some("mic"))
+                        .find(|d| d.kind == "audio" && d.role.as_deref() == Some("output"))
+                        .or_else(|| {
+                            list.devices
+                                .iter()
+                                .find(|d| d.kind == "audio" && d.role.as_deref() != Some("input"))
+                        })
                         .map(|d| d.id.clone());
                     let mic_id = list
                         .devices
                         .iter()
-                        .find(|d| d.kind == "audio" && d.role.as_deref() == Some("mic"))
+                        .find(|d| d.kind == "audio" && d.role.as_deref() == Some("input"))
                         .map(|d| d.id.clone());
                     let kb_id = list
                         .devices
                         .iter()
-                        .find(|d| d.lab)
+                        .find(|d| d.kind == "keyboard" && d.lab)
                         .or_else(|| list.devices.iter().find(|d| d.kind == "keyboard"))
                         .map(|d| d.id.clone());
                     let h_aud = h1.clone();
@@ -626,90 +632,40 @@ impl AppState {
             let h4 = handle.clone();
             let rpc_eq_img = rpc.clone();
             rpc.call::<_, EqStateReply>(METHOD_EQ, &json!({ "action": "state" }), move |res| {
-                if let Ok(eq) = res
-                    && let Some(hp) = eq.headphone
-                {
-                    let look = if hp.form == "over-ear" {
-                        "headphones"
-                    } else {
-                        "iem"
-                    };
-                    let img_payload = json!({
-                        "kind": "audio",
-                        "model": look,
-                        "name": hp.name,
-                    });
+                if let Ok(eq) = res {
+                    let hp = eq.headphone.clone();
                     let h4_img = h4.clone();
-                    h4.update(move |s, _| s.pc.eq_headphone = Some(hp));
-                    rpc_eq_img.call::<_, DevicesImageReply>(
-                        METHOD_DEVICES_IMAGE,
-                        &img_payload,
-                        move |img_res| {
-                            if let Ok(reply) = img_res
-                                && let Some(url) = reply.url
-                            {
-                                h4_img.update(move |s, _| {
-                                    if let Some(out_id) = s.pc.audio_output_id.clone() {
-                                        s.pc.device_images.insert(out_id, url.clone());
-                                    }
-                                    s.pc.device_images.insert("audio:worn".into(), url);
-                                });
-                            }
-                        },
-                    );
+                    h4.update(move |s, _| s.apply_eq_state(eq));
+                    if let Some(hp) = hp {
+                        let look = if hp.form == "over-ear" {
+                            "headphones"
+                        } else {
+                            "iem"
+                        };
+                        let img_payload = json!({
+                            "kind": "audio",
+                            "model": look,
+                            "name": hp.name,
+                        });
+                        rpc_eq_img.call::<_, DevicesImageReply>(
+                            METHOD_DEVICES_IMAGE,
+                            &img_payload,
+                            move |img_res| {
+                                if let Ok(reply) = img_res
+                                    && let Some(url) = reply.url
+                                {
+                                    h4_img.update(move |s, _| {
+                                        if let Some(out_id) = s.pc.audio_output_id.clone() {
+                                            s.pc.device_images.insert(out_id, url.clone());
+                                        }
+                                        s.pc.device_images.insert("audio:worn".into(), url);
+                                    });
+                                }
+                            },
+                        );
+                    }
                 }
             });
-        }
-    }
-
-    pub fn set_audio_volume(&mut self, is_output: bool, volume: i32) {
-        let vol = volume.clamp(0, 100);
-        if let Some(ref mut aud) = self.pc.audio {
-            if is_output {
-                if let Some(ref mut o) = aud.output {
-                    o.volume = Some(vol);
-                }
-            } else if let Some(ref mut m) = aud.mic {
-                m.volume = Some(vol);
-            }
-        }
-        let target_id = if is_output {
-            self.pc.audio_output_id.clone()
-        } else {
-            self.pc.audio_mic_id.clone()
-        };
-        #[cfg(windows)]
-        if let (Some(rpc), Some(id)) = (self.rpc.clone(), target_id) {
-            rpc.call_raw(
-                METHOD_AUDIO_SET_VOLUME,
-                &json!({ "id": id, "volume": vol }),
-                |_| {},
-            );
-        }
-    }
-
-    pub fn set_audio_mute(&mut self, is_output: bool, muted: bool) {
-        if let Some(ref mut aud) = self.pc.audio {
-            if is_output {
-                if let Some(ref mut o) = aud.output {
-                    o.muted = muted;
-                }
-            } else if let Some(ref mut m) = aud.mic {
-                m.muted = muted;
-            }
-        }
-        let target_id = if is_output {
-            self.pc.audio_output_id.clone()
-        } else {
-            self.pc.audio_mic_id.clone()
-        };
-        #[cfg(windows)]
-        if let (Some(rpc), Some(id)) = (self.rpc.clone(), target_id) {
-            rpc.call_raw(
-                METHOD_AUDIO_SET_MUTE,
-                &json!({ "id": id, "muted": muted }),
-                |_| {},
-            );
         }
     }
 
@@ -719,7 +675,7 @@ impl AppState {
             && devs
                 .devices
                 .iter()
-                .any(|d| d.id == sel && (d.lab || d.kind == "keyboard"))
+                .any(|d| d.id == sel && d.kind == "keyboard")
         {
             return Some(sel.to_string());
         }
@@ -1038,6 +994,16 @@ impl AppState {
         }
     }
 
+    pub fn open_keyboard_app(&mut self) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(rpc) = self.rpc.clone() {
+            rpc.call_raw(METHOD_KEYBOARD_OPEN_APP, &json!({}), |_| {});
+        }
+    }
+
     pub fn set_owner_hwnd(&mut self, hwnd: u64) {
         if hwnd == 0 || self.pc.owner_hwnd == hwnd {
             return;
@@ -1068,8 +1034,8 @@ impl AppState {
     pub fn open_mouse_panel(&mut self, dev_id: String) {
         self.pc.selected_device_id = Some(dev_id);
         self.pc.mouse_panel_open = true;
-        self.pc.mouse_panel_loading = self.status != HostStatus::Standalone;
-        self.pc.mouse_panel_error = None;
+        self.pc.mouse_panel_loading =
+            self.status != HostStatus::Standalone && self.pc.mouse_panel_error.is_none();
         self.pc.mouse_panel_rect = None;
         self.pc.mouse_panel_visible = false;
     }
@@ -1149,9 +1115,6 @@ impl AppState {
             return;
         }
         let owner_hwnd = self.pc.owner_hwnd;
-        if owner_hwnd == 0 {
-            return;
-        }
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let params = json!({
@@ -1162,27 +1125,69 @@ impl AppState {
                 "height": rect[3] as f64,
                 "visible": visible,
             });
-            rpc.call::<_, ActionResult>(METHOD_MOUSE_PANEL_OPEN, &params, move |res| {
-                handle.update(move |s, _| {
-                    if !s.pc.mouse_panel_open {
-                        return;
-                    }
-                    s.pc.mouse_panel_loading = false;
-                    match res {
-                        Ok(r) if r.ok => {
+            let rpc_probe = rpc.clone();
+            rpc.call::<_, ActionResult>(METHOD_MOUSE_PANEL_OPEN, &params, move |res| match res {
+                Ok(r) if r.ok => {
+                    handle.update(move |s, _| {
+                        if s.pc.mouse_panel_open {
+                            s.pc.mouse_panel_loading = false;
                             s.pc.mouse_panel_error = None;
                         }
-                        Ok(r) => {
-                            s.pc.mouse_panel_error = Some(
-                                r.message
-                                    .unwrap_or_else(|| "Exo Mouse could not open.".into()),
-                            );
-                        }
-                        Err(e) => {
-                            s.pc.mouse_panel_error = Some(e.to_string());
-                        }
+                    });
+                }
+                Ok(r) => {
+                    let msg = r
+                        .message
+                        .unwrap_or_else(|| "Exo Mouse could not open.".into());
+                    if msg.contains("not attached") {
+                        let fallback = msg.clone();
+                        rpc_probe.call::<_, ActionResult>(
+                            METHOD_HID_SEND_REPORT,
+                            &json!({ "device": "probe", "reportId": 0, "data": "" }),
+                            move |probe| {
+                                let detail = match probe {
+                                    Ok(r) if !r.ok => r
+                                        .message
+                                        .filter(|m| m.contains("test instance"))
+                                        .unwrap_or(fallback),
+                                    Err(e) => {
+                                        let s = e.to_string();
+                                        if s.contains("test instance") {
+                                            s.rsplit_once(": ")
+                                                .map(|(_, tail)| tail.to_string())
+                                                .unwrap_or(s)
+                                        } else {
+                                            fallback
+                                        }
+                                    }
+                                    _ => fallback,
+                                };
+                                handle.update(move |s, _| {
+                                    if s.pc.mouse_panel_open {
+                                        s.pc.mouse_panel_loading = false;
+                                        s.pc.mouse_panel_error = Some(detail);
+                                    }
+                                });
+                            },
+                        );
+                    } else {
+                        handle.update(move |s, _| {
+                            if s.pc.mouse_panel_open {
+                                s.pc.mouse_panel_loading = false;
+                                s.pc.mouse_panel_error = Some(msg);
+                            }
+                        });
                     }
-                });
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    handle.update(move |s, _| {
+                        if s.pc.mouse_panel_open {
+                            s.pc.mouse_panel_loading = false;
+                            s.pc.mouse_panel_error = Some(msg);
+                        }
+                    });
+                }
             });
         }
     }

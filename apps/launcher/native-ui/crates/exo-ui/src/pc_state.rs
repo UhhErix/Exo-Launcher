@@ -386,6 +386,8 @@ pub struct SettingsAndPcState {
     pub part_menu: Option<PcPartMenu>,
     pub armed_uninstall: Option<(String, u64)>,
     pub armed_uninstall_seq: u64,
+    pub audio_ui: crate::devices_audio::AudioEqUiState,
+    pub controller_ui: crate::devices_controller::ControllerLabState,
 }
 
 impl SettingsAndPcState {
@@ -999,23 +1001,46 @@ impl SettingsAndPcState {
                         lab: false,
                         ..Default::default()
                     },
+                    PeripheralCard {
+                        id: "dev:pad".into(),
+                        kind: "controller".into(),
+                        name: "DualSense Edge".into(),
+                        maker: Some("Sony".into()),
+                        model: Some("dualsense-edge".into()),
+                        connection: Some("usb".into()),
+                        battery: Some(0.9),
+                        polling_hz: Some(1000),
+                        lab: true,
+                        color: Some("Midnight Black".into()),
+                        ..Default::default()
+                    },
                 ],
             }),
             audio: Some(AudioReadReply {
                 ok: true,
                 output: Some(AudioEndpoint {
                     volume: Some(74),
-                    muted: false,
-                    format: Some("24-bit · 48 kHz".into()),
+                    muted: Some(false),
+                    format: Some(exo_rpc::AudioFormatInfo {
+                        rate: 48_000,
+                        bits: 24,
+                        channels: 2,
+                    }),
                 }),
                 mic: Some(AudioEndpoint {
                     volume: Some(88),
-                    muted: false,
-                    format: Some("24-bit · 48 kHz".into()),
+                    muted: Some(false),
+                    format: Some(exo_rpc::AudioFormatInfo {
+                        rate: 48_000,
+                        bits: 24,
+                        channels: 1,
+                    }),
                 }),
                 voice: AudioVoiceInfo {
-                    noise: "rnnoise".into(),
+                    custom: true,
+                    noise: "exo".into(),
                     push_to_talk: false,
+                    sensitivity: None,
                     focus: true,
                 },
             }),
@@ -1110,6 +1135,8 @@ impl SettingsAndPcState {
             part_menu: None,
             armed_uninstall: None,
             armed_uninstall_seq: 0,
+            audio_ui: crate::devices_audio::AudioEqUiState::demo(),
+            controller_ui: crate::devices_controller::ControllerLabState::demo(),
         }
     }
 
@@ -1265,6 +1292,8 @@ impl SettingsAndPcState {
             part_menu: None,
             armed_uninstall: None,
             armed_uninstall_seq: 0,
+            audio_ui: crate::devices_audio::AudioEqUiState::default(),
+            controller_ui: crate::devices_controller::ControllerLabState::default(),
         }
     }
 }

@@ -1136,46 +1136,32 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         }
     };
 
-    let room_label = if s.media.captures_open {
-        "Captures"
-    } else {
-        s.room.label()
-    };
+    let full_bleed_home =
+        s.room == Room::Library && s.open_game_id.is_none() && !s.library_all_games;
 
-    let full_bleed_home = !s.media.captures_open
-        && s.room == Room::Library
-        && s.open_game_id.is_none()
-        && !s.library_all_games;
-
-    let content = boot::render_room_guarded(s, room_label, || {
-        if !s.media.captures_open && s.room == Room::Discord {
+    let content = boot::render_room_guarded(s, s.room.label(), || {
+        if s.room == Room::Discord {
             discord::view(s, scale, budget)
-        } else if !s.media.captures_open && s.room == Room::Settings {
+        } else if s.room == Room::Settings {
             settings::view(s)
-        } else if !s.media.captures_open
-            && matches!(s.room, Room::Devices | Room::ExoAi | Room::Apps)
-        {
+        } else if matches!(s.room, Room::Devices | Room::ExoAi | Room::Apps) {
             pc::view(s, scale)
         } else if full_bleed_home {
             library::view(s, scale)
         } else {
-            let page = if s.media.captures_open {
-                captures::view(s, scale)
-            } else {
-                match s.room {
-                    Room::Library => {
-                        if let Some(game) = s.open_game() {
-                            game_page::view(s, game, scale)
-                        } else {
-                            library::view(s, scale)
-                        }
+            let page = match s.room {
+                Room::Library => {
+                    if let Some(game) = s.open_game() {
+                        game_page::view(s, game, scale)
+                    } else {
+                        library::view(s, scale)
                     }
-                    Room::Store => store::view(s, scale),
-                    Room::Music => music::view(s, scale),
-                    Room::Devices | Room::ExoAi | Room::Apps => pc::view(s, scale),
-                    Room::Settings => settings::view(s),
-                    Room::Discord => discord::view(s, scale, budget),
                 }
+                Room::Store => store::view(s, scale),
+                Room::Music => music::view(s, scale),
+                Room::Devices | Room::ExoAi | Room::Apps => pc::view(s, scale),
+                Room::Settings => settings::view(s),
+                Room::Discord => discord::view(s, scale, budget),
             };
 
             col()
@@ -1208,6 +1194,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     if let Some(ring) = discord_voice::incoming_call_overlay(s, budget.overlay) {
         root = root.child(ring);
+    }
+    if s.media.captures_open {
+        root = root.child(captures::view(s, scale));
     }
     if s.capture_menu_open {
         root = root.children(captures::popover_layers(s, budget.overlay));

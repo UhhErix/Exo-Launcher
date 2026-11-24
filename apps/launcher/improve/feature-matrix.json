@@ -8,10 +8,10 @@
     "wooting-native 57db49a"
   ],
   "totals": {
-    "DONE": 175,
-    "PARTIAL": 24,
-    "MISSING": 37,
-    "BROKEN": 2,
+    "DONE": 193,
+    "PARTIAL": 17,
+    "MISSING": 28,
+    "BROKEN": 0,
     "total": 238
   },
   "rows": [
@@ -2501,7 +2501,7 @@
       "id": "devices-02",
       "room": "Devices",
       "feature": "Mouse panel (DPI, buttons, lighting, presets, profiles)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "lib/mouseRelay.ts:1",
       "nativeRef": "exo-ui/src/pc_actions.rs:858",
       "rpc": [
@@ -2514,7 +2514,7 @@
         "hid.open",
         "system.mouseCore"
       ],
-      "notes": "Native embeds the host mouse panel window; presets/profiles/hid RPCs not called by native (the embedded panel uses them). Smoke: the snapshot shows only a \"Wireless\" card for the dongle; the host-embedded mouse window is not captured by --snap, so embed could not be verified headless.",
+      "notes": "Embeds AGPL Exo Mouse WebView2 via host MousePanelService (mouse.panel.open/bounds/close); hid.* and mouse.* RPC constants plus hid.changed/hid.input push events wired.",
       "workPackage": "WP10"
     },
     {
@@ -2534,9 +2534,9 @@
       "id": "devices-04",
       "room": "Devices",
       "feature": "Audio page (output/input, volume, mute, format, Exo Voice, noise suppression)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/devices/AudioPage.tsx:23",
-      "nativeRef": "exo-ui/src/pc.rs:401",
+      "nativeRef": "exo-ui/src/devices_audio.rs:1883",
       "rpc": [
         "audio.read",
         "audio.setVolume",
@@ -2544,30 +2544,30 @@
         "audio.formats",
         "audio.setFormat"
       ],
-      "notes": "No format picker, Exo Voice, Voice Focus, input sensitivity.",
+      "notes": "Full format picker, draggable volume sliders, mute switches, Exo Voice, Voice Focus, input sensitivity, 3s polling; fixed role==\"input\" mic bug.",
       "workPackage": "WP10"
     },
     {
       "id": "devices-05",
       "room": "Devices",
       "feature": "EQ (Exo EQ, AutoEQ headphones, Equalizer APO install)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/devices/EqPanels.tsx:1",
-      "nativeRef": "exo-ui/src/pc.rs:45",
+      "nativeRef": "exo-ui/src/devices_audio.rs:1143",
       "rpc": [
         "eq",
         "eq.headphones"
       ],
-      "notes": "eq.headphones (AutoEQ index) never called; no Equalizer APO install/restart flow.",
+      "notes": "Full ApoPanel (install/reinstall/restart), searchable AutoEQ HeadphonePanel, SoundPanel (Compare/headroom/other outputs), Night Shift with Windows Night light sync and 48 half-hour slots, 4s polling.",
       "workPackage": "WP10"
     },
     {
       "id": "devices-06",
       "room": "Devices",
       "feature": "Controller page (battery, update, quality, measure, Steam Input)",
-      "status": "BROKEN",
+      "status": "DONE",
       "reactRef": "components/devices/ControllerPage.tsx:24",
-      "nativeRef": "exo-ui/src/pc.rs:71",
+      "nativeRef": "exo-ui/src/devices_controller.rs:2714",
       "rpc": [
         "controller.read",
         "controller.watch",
@@ -2576,49 +2576,49 @@
         "controller.test",
         "steamInput.state"
       ],
-      "notes": "Native shows only connection/battery/polling card for controllers. controller.* (10 methods) never called.",
+      "notes": "Live Rune canvas sticks, trigger/button/polling tests, Edge back/Fn and 4 slots, USB port, firmware update link, Steam Input card.",
       "workPackage": "WP10"
     },
     {
       "id": "devices-07",
       "room": "Devices",
       "feature": "Controller calibration (sticks, triggers, undo)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/devices/Calibration.tsx:2",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/devices_controller.rs:2211",
       "rpc": [
         "controller.calibrate",
         "controller.test"
       ],
-      "notes": "",
+      "notes": "7-phase calibration dialog with 36-bin perimeter sweep tracker, Undo, and Keep confirmation.",
       "workPackage": "WP10"
     },
     {
       "id": "devices-08",
       "room": "Devices",
       "feature": "Pad settings (light bar, player light, vibration, trigger effects, sound)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/devices/PadSettings.tsx:2",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/devices_controller.rs:1850",
       "rpc": [
         "controller.settings",
         "controller.sound"
       ],
-      "notes": "",
+      "notes": "USB-gated DualSense light bar, player light, mic, speaker, vibration, trigger effects plus Windows Sound toggle.",
       "workPackage": "WP10"
     },
     {
       "id": "devices-09",
       "room": "Devices",
       "feature": "Game profiles (per-game pad profiles)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/devices/GameProfiles.tsx:38",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/devices_controller.rs:1972",
       "rpc": [
         "controller.gameProfiles",
         "controller.gameProfilesSave"
       ],
-      "notes": "",
+      "notes": "Per-game pad overrides list, editor dialog, and searchable game picker.",
       "workPackage": "WP10"
     },
     {
@@ -2636,102 +2636,106 @@
       "id": "devices-11",
       "room": "Devices",
       "feature": "HID relay events (hid.changed, hid.input, controller.state)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "lib/mouseRelay.ts:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/events.rs:425",
       "rpc": [
         "hid.*"
       ],
-      "notes": "Events not handled.",
+      "notes": "Typed HostEvent::{ControllerState, HidChanged, HidInput} registered via AppState::register_event in events.rs and handled in devices_controller.rs.",
       "workPackage": "WP10"
     },
     {
       "id": "captures-01",
       "room": "Captures",
       "feature": "Capture sheet grid (thumbnails, filters, chips, On this day)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/captures/CapturesSheet.tsx:6",
-      "nativeRef": "exo-ui/src/captures.rs:755",
+      "nativeRef": "exo-ui/src/captures.rs:3001",
       "rpc": [
         "capture.list",
-        "capture.item"
+        "capture.item",
+        "capture.status"
       ],
-      "notes": "Smoke: renders \"Exo Capture is not installed\" with the temp data copy (tools excluded), so the grid itself was not exercised. Missing on-this-day, chips filter empty state, waiting-for-game-end state.",
+      "notes": "4-column 16:9 grid grouped by day, On this day resurfacing, Clips/Screenshots/Favorites and game chips, frosted Liquid Glass sheet, React empty/error states.",
       "workPackage": "WP10"
     },
     {
       "id": "captures-02",
       "room": "Captures",
       "feature": "Select, bulk delete, rename, open folder",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/captures/CapturesSheet.tsx:80",
-      "nativeRef": "exo-ui/src/captures.rs:307",
+      "nativeRef": "exo-ui/src/captures.rs:3034",
       "rpc": [
         "capture.act",
+        "capture.item",
         "capture.edit"
       ],
-      "notes": "",
+      "notes": "Selection mode checkboxes, bulk delete, Make reel N, hover/corner Favorite and Delete, Info pane, More menu (Copy text, Make smaller, Show in folder).",
       "workPackage": "WP10"
     },
     {
       "id": "captures-03",
       "room": "Captures",
       "feature": "Send to (Discord, share)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/captures/CapturesSheet.tsx:341",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/captures.rs:1549",
       "rpc": [
-        "capture.send"
+        "capture.send",
+        "discord.home",
+        "discord.channels"
       ],
-      "notes": "",
+      "notes": "Share menu with Send to Discord multi-target DM/channel dialog plus optional message, Copy picture/file.",
       "workPackage": "WP10"
     },
     {
       "id": "captures-04",
       "room": "Captures",
       "feature": "Clip editor (trim, play, export)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/captures/ClipEditor.tsx:180",
-      "nativeRef": "exo-ui/src/captures.rs:377",
+      "nativeRef": "exo-ui/src/captures.rs:1744",
       "rpc": [
         "capture.edit",
         "capture.item"
       ],
-      "notes": "video.frame / keyframe events handled; export unverified.",
+      "notes": "Draggable TrimBar, 0.5x/1x/2x speed, Loop, Play/Audio transport, Trim save and Export presets (Discord <10MB, 16:9, 9:16).",
       "workPackage": "WP10"
     },
     {
       "id": "captures-05",
       "room": "Captures",
       "feature": "Snip editor (mark up, crop, copy text OCR, save)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/captures/SnipEditor.tsx:167",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/snip_editor.rs:567",
       "rpc": [
         "capture.saveImage",
         "capture.text"
       ],
-      "notes": "",
+      "notes": "Rune ImageCanvas with Crop presets (Free/16:9/9:16/Square), Mark up (Arrow/Box/Highlight/Freehand), cell-average RGBA Blur, OCR Copy text via Tx::copy, Undo/Redo/Revert/Save PNG.",
       "workPackage": "WP10"
     },
     {
       "id": "captures-06",
       "room": "Captures",
       "feature": "Notes buttons (capture menu + sheet header)",
-      "status": "BROKEN",
+      "status": "DONE",
       "reactRef": "components/captures/CapturesSheet.tsx:4",
-      "nativeRef": "exo-ui/src/captures.rs:786",
+      "nativeRef": "exo-ui/src/captures.rs:1330",
       "rpc": [],
-      "notes": "captures.rs:~290 \"Notes\" menu row just reopens Captures; captures.rs:~786 header \"Notes\" button calls load_captures(). Neither opens notes.",
+      "notes": "Capture popover (New note, Notes, Capture settings) and sheet header Notes button both open NotesView directly.",
       "workPackage": "WP10"
     },
     {
       "id": "captures-07",
       "room": "Captures",
       "feature": "Notes (Markdown editor, files, session, photo drop, spellcheck)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/captures/NotesView.tsx:351",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/notes.rs:1833",
       "rpc": [
         "notes.list",
         "notes.read",
@@ -2742,46 +2746,49 @@
         "notes.photo",
         "notes.session",
         "notes.spell",
-        "notes.textFiles"
+        "notes.textFiles",
+        "notes.pending"
       ],
-      "notes": "Entire Notes feature absent: 11 notes.* methods, notes.open event, note palette commands, Ctrl+N / Ctrl+O.",
+      "notes": "Full NotesView: tabs, inline rename, Markdown toolbar and live preview with clickable checklists, Find & Replace, photo drag-drop (<=25MB), spellcheck, 450ms autosave, palette commands, Ctrl shortcuts, notes.open event.",
       "workPackage": "WP10"
     },
     {
       "id": "captures-08",
       "room": "Captures",
       "feature": "Capture settings (replay length, quality, save-to, storage cap, auto-delete, voice chat)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/captures/CaptureSettings.tsx:4",
-      "nativeRef": "exo-ui/src/captures.rs:708",
+      "nativeRef": "exo-ui/src/captures.rs:2623",
       "rpc": [
-        "capture.settings"
+        "capture.settings",
+        "shell.pickFolder"
       ],
-      "notes": "Most rows; Max storage, Auto-delete, Record voice chat, Print Screen snips to verify.",
+      "notes": "Instant replay, Replay length, Frame rate, Quality slider, Record voice chat, live hotkey recorder with conflict warnings, Print Screen snips, Save to Open/Change, Max storage, Auto-delete after.",
       "workPackage": "WP10"
     },
     {
       "id": "captures-09",
       "room": "Captures",
       "feature": "Highlight reel (\"Making your reel\")",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/captures/CapturesSheet.tsx:8",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/captures.rs:2923",
       "rpc": [
-        "capture.reel"
+        "capture.reel",
+        "capture.reelCancel"
       ],
-      "notes": "",
+      "notes": "Selection and game-chip Make reel N, progress/waiting/canWait banner with Wait and Cancel, capture.reel event.",
       "workPackage": "WP10"
     },
     {
       "id": "captures-10",
       "room": "Captures",
       "feature": "capture.shrunk event (compaction)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/captures/CapturesSheet.tsx:298",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/captures.rs:375",
       "rpc": [],
-      "notes": "",
+      "notes": "Typed HostEvent::CaptureShrunk registered via AppState::register_event in events.rs; updates item size/URL and viewer state in place.",
       "workPackage": "WP10"
     },
     {
