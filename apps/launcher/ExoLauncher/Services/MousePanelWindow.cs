@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using ExoLauncher.Helpers;
 using Microsoft.Web.WebView2.Core;
 using Windows.Foundation;
 using Windows.UI;
@@ -172,7 +173,21 @@ internal sealed class MousePanelWindow
             ShowWindow(_hwnd, shouldShow ? SwShowNoActivate : SwHide);
             if (_controller is { } controller)
             {
-                try { controller.IsVisible = shouldShow; } catch { }
+                if (shouldShow)
+                {
+                    try { if (_core is { IsSuspended: true } core) core.Resume(); } catch { }
+                    try { controller.IsVisible = true; } catch { }
+                }
+                else
+                {
+                    try { controller.IsVisible = false; } catch { }
+                    try
+                    {
+                        if (_core is { IsSuspended: false } core)
+                            _ = core.TrySuspendAsync().AsTask().ContinueWith(_ => { }, TaskScheduler.Default);
+                    }
+                    catch { }
+                }
             }
             if (changed)
                 VisibilityChanged?.Invoke(shouldShow);
@@ -189,7 +204,7 @@ internal sealed class MousePanelWindow
         _core = null;
         if (controller is not null)
         {
-            try { controller.Close(); } catch { }
+            WebViewEnvironmentLifetime.CloseAndRelease(controller);
         }
         var hwnd = _hwnd;
         if (hwnd != 0)

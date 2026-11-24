@@ -18,6 +18,7 @@ internal sealed class MousePanelService
     private DispatcherQueue? _queue;
     private WebHostBridge? _bridge;
     private MousePanelWindow? _window;
+    private WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? _environmentLease;
     private LocalFileHost? _files;
     private CancellationTokenSource? _panelCts;
     private long _generation;
@@ -170,26 +171,33 @@ internal sealed class MousePanelService
             PostEventOnUiThread(MousePanelRelay.SerializeEvent("room.visible", shown));
         };
 
+        WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? lease = null;
         try
         {
-            var environment = await WebViewEnvironmentFactory.GetAsync();
+            lease = await WebViewEnvironmentFactory.AcquireAsync();
             if (Volatile.Read(ref _generation) != gen || window.IsClosed || ct.IsCancellationRequested)
             {
+                lease.Dispose();
                 if (!window.IsClosed) window.Close();
                 return new { ok = false, message = "Mouse panel closed before ready." };
             }
 
+            var environment = lease.Environment;
             var controller = await environment.CreateCoreWebView2ControllerAsync(
                 CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)window.Handle));
             if (Volatile.Read(ref _generation) != gen || window.IsClosed || ct.IsCancellationRequested)
             {
-                try { controller.Close(); } catch { }
+                WebViewEnvironmentLifetime.CloseAndRelease(controller);
+                lease.Dispose();
                 if (!window.IsClosed) window.Close();
                 return new { ok = false, message = "Mouse panel closed before ready." };
             }
 
+            _environmentLease = lease;
+            lease = null;
             window.AttachController(controller);
             var core = controller.CoreWebView2;
+            WebViewEnvironmentLifetime.ApplyLowMemoryTarget(core);
             WebViewWindowHider.Hide(core.BrowserProcessId);
 
             ConfigureCore(core, environment, mouseDir, gen);
@@ -199,6 +207,7 @@ internal sealed class MousePanelService
         }
         catch (Exception ex)
         {
+            lease?.Dispose();
             AppLog.Warn("MousePanel: WebView2 init failed: " + ex.Message);
             if (Volatile.Read(ref _generation) == gen)
                 CloseCoreOnUiThread();
@@ -572,6 +581,11 @@ internal sealed class MousePanelService
         {
             _window = null;
             try { window.Close(); } catch { }
+        }
+
+        if (Interlocked.Exchange(ref _environmentLease, null) is { } lease)
+        {
+            try { lease.Dispose(); } catch { }
         }
     }
 
