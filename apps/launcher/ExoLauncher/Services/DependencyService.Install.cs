@@ -106,13 +106,14 @@ public sealed partial class DependencyService
     {
         internal string? File;
         internal string? RunSha256;
+        internal long StagedBytes;
         internal string? Failure;
         internal string? FailureDetail;
         internal long Bytes;
         internal long? Total;
     }
 
-    internal async Task<Result> InstallAsync(IReadOnlyList<string>? ids, string mode, Action<Progress>? progress, CancellationToken ct)
+    internal async Task<Result> InstallAsync(IReadOnlyList<string>? ids, string mode, Action<Progress>? progress, CancellationToken ct, Func<Snapshot>? readBefore = null)
     {
         mode = mode is "update" or "repair" ? mode : "missing";
         if (ShouldDeferForGame(_gameRunning()))
@@ -141,28 +142,44 @@ public sealed partial class DependencyService
         try
         {
             await Task.Run(CleanupStaging, cancel.Token).ConfigureAwait(false);
-            var dotnet = await DotnetReleasesAsync(cancel.Token).ConfigureAwait(false);
-            var before = Evaluate(await Task.Run(() => Shows(CurrentSnapshot()), cancel.Token).ConfigureAwait(false), dotnet);
+            var dotnet = await DotnetReleasesAsync(cancel.Token, fresh: true).ConfigureAwait(false);
+            var before = Evaluate(await Task.Run(() => Shows(readBefore is not null ? readBefore() : CurrentSnapshot()), cancel.Token).ConfigureAwait(false), dotnet);
             var plan = Plan(before, mode, ids, _needed);
             if (plan.Count == 0)
+            {
+                AppLog.Info($"Runtimes: {mode} plan is empty; nothing to install.");
                 return new Result(true, ids is { Count: > 0 } ? "Already on this PC." : "Every runtime is up to date.", [], Items: before.Select(s => Shown(s, _needed)).ToArray());
+            }
             AppLog.Info($"Runtimes: {mode} {string.Join(", ", plan.Select(s => s.Runtime.Id))}.");
 
             var steps = plan.Select(s => ToStep(s, mode == "repair", dotnet)).ToList();
+            foreach (var failedStep in steps.Where(s => s.Failure is not null))
+                AppLog.Warn($"Runtimes: {failedStep.Runtime.Id} skipped before download: {failedStep.FailureDetail ?? failedStep.Failure}");
             Directory.CreateDirectory(stage);
             await DownloadAllAsync(steps, stage, progress, cancel.Token).ConfigureAwait(false);
+
+            foreach (var step in steps.Where(s => s.Failure is null && s.Runtime.Kind != Kind.Feature))
+            {
+                if (string.IsNullOrWhiteSpace(step.File) || !File.Exists(step.File) || string.IsNullOrWhiteSpace(step.RunSha256))
+                {
+                    step.Failure = "Its installer file is missing. Try again.";
+                    step.FailureDetail = SanitizeDetail($"Staged installer missing before launch for {step.Runtime.Id} (url={step.Url ?? "none"}, path={step.File ?? "none"}).", stage);
+                    AppLog.Warn($"Runtimes: {step.Runtime.Id} missing staged installer before launch: {step.FailureDetail}");
+                }
+            }
 
             var runnable = steps.Where(s => s.Failure is null).ToList();
             var outcomes = new Dictionary<string, StepOutcome>(StringComparer.Ordinal);
             var declined = false;
             string? fatal = null;
+            int? elevatedExitCode = null;
             if (runnable.Count > 0)
             {
                 lock (job) { cancel.Token.ThrowIfCancellationRequested(); job.Installing = true; }
                 foreach (var step in runnable.Where(s => s.File is not null))
                     held.Add(new FileStream(step.File!, FileMode.Open, FileAccess.Read, FileShare.Read));
                 var index = 0;
-                (declined, outcomes, fatal) = await RunElevatedAsync(stage, runnable, held, id =>
+                (declined, outcomes, fatal, elevatedExitCode) = await RunElevatedAsync(stage, runnable, held, id =>
                 {
                     var step = runnable.First(s => s.Runtime.Id == id);
                     progress?.Invoke(new Progress("install", id, step.Runtime.Name, ++index, runnable.Count, 0, null, 0, 0));
@@ -172,16 +189,23 @@ public sealed partial class DependencyService
             held.Clear();
 
             if (declined)
+            {
+                AppLog.Info("Runtimes: Windows elevation declined; nothing was installed.");
                 return new Result(false, "Windows' permission was declined, so nothing was installed.", [], Declined: true, Items: before.Select(s => Shown(s, _needed)).ToArray());
+            }
             if (fatal is not null) AppLog.Warn("Runtimes: elevated setup failed before running installers: " + fatal);
 
             progress?.Invoke(new Progress("check", null, null, steps.Count, steps.Count, 0, null, 0, 0));
             ForgetSnapshot();
             var after = Evaluate(await Task.Run(() => Shows(CurrentSnapshot()), CancellationToken.None).ConfigureAwait(false), dotnet);
-            var results = steps.Select(step => Outcome(step, before, after, outcomes, fatal)).ToList();
-            foreach (var result in results)
+            var results = steps.Select(step => Outcome(step, before, after, outcomes, fatal, elevatedExitCode)).ToList();
+            for (var i = 0; i < steps.Count; i++)
             {
-                var line = $"Runtimes: {result.Id} {result.Outcome}{(result.Code is { } code ? $" ({code})" : "")}{(result.Detail is { Length: > 0 } detail ? $": {detail}" : "")}.";
+                var step = steps[i];
+                var result = results[i];
+                var pathText = step.File is not null ? SanitizeDetail(step.File, stage) : "none";
+                var shaText = step.RunSha256 is { Length: > 0 } runSha ? runSha.ToLowerInvariant() : "none";
+                var line = $"Runtimes: {result.Id} {result.Outcome} exitCode={(result.Code?.ToString() ?? "none")} url={step.Url ?? "none"} path={pathText} size={step.StagedBytes} sha256={shaText}{(result.Detail is { Length: > 0 } detail ? $" detail={detail}" : "")}.";
                 if (result.Outcome == "failed") AppLog.Warn(line);
                 else AppLog.Info(line);
             }
@@ -216,12 +240,22 @@ public sealed partial class DependencyService
         {
             var key = DotnetKey(r.Id);
             var arch = key[(key.IndexOf('-') + 1)..];
-            if (dotnet.GetValueOrDefault(key) is { } release && release.Files.TryGetValue(arch, out var file))
+            if (dotnet.GetValueOrDefault(key) is { } release
+                && release.Files.TryGetValue(arch, out var file)
+                && IsValidDotnetFile(file))
                 return new Step(r, repair, file.Url, null, file.Sha512, 0, release.Version);
             return new Step(r, repair, null, null, null, 0, status.Latest)
             {
                 Failure = "Microsoft's .NET release list couldn't be read, so Exo can't check its installer. Try again.",
-                FailureDetail = $"Release metadata missing for {r.Id} ({status.Latest}).",
+                FailureDetail = $"Release metadata missing or incomplete for {r.Id} ({status.Latest}).",
+            };
+        }
+        if (r.Kind != Kind.Feature && string.IsNullOrWhiteSpace(r.Url))
+        {
+            return new Step(r, repair, null, null, null, 0, status.Latest)
+            {
+                Failure = "Its installer address is missing. Try again.",
+                FailureDetail = $"Catalog download URL missing for {r.Id} ({status.Latest}).",
             };
         }
         return new Step(r, repair, r.Url, r.Sha256, null, r.Size, status.Latest);
@@ -246,6 +280,7 @@ public sealed partial class DependencyService
             try
             {
                 Report(0, step.Size > 0 ? step.Size : null);
+                AppLog.Info($"Runtimes: {r.Id} downloading url={step.Url} path={SanitizeDetail(path, stage)} expectedBytes={step.Size}.");
                 await DownloadToAsync(step.Url!, path, Report, ct, Path.Combine(StagingRoot, "downloads"), step.Size > 0 ? step.Size : null).ConfigureAwait(false);
                 progress?.Invoke(new Progress("verify", r.Id, r.Name, i + 1, downloads.Count, step.Bytes, step.Total, Done(), All()));
                 await Task.Run(() =>
@@ -253,14 +288,18 @@ public sealed partial class DependencyService
                     Verify(path, r, step.Sha256, step.Sha512);
                     step.File = r.Kind == Kind.Zip ? Unzip(path, r, stage) : path;
                     if (r.Kind == Kind.Zip) RequireSigned(step.File, r);
+                    step.StagedBytes = new FileInfo(step.File).Length;
                     step.RunSha256 = HashOf(step.File, SHA256.Create());
                 }, ct).ConfigureAwait(false);
+                AppLog.Info($"Runtimes: {r.Id} verified url={step.Url} path={SanitizeDetail(step.File, stage)} size={step.StagedBytes} sha256={step.RunSha256!.ToLowerInvariant()}.");
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or HttpRequestException or TimeoutException or UnauthorizedAccessException or OperationCanceledException)
             {
-                AppLog.Warn($"Runtimes: {r.Id} wasn't downloaded: {ex.GetType().Name}: {ex.Message}");
-                step.FailureDetail = SanitizeDetail($"{ex.GetType().Name}: {ex.Message}", stage);
+                var fileSize = File.Exists(path) ? new FileInfo(path).Length : 0;
+                step.StagedBytes = fileSize;
+                step.FailureDetail = SanitizeDetail($"url={step.Url} path={path} size={fileSize} {ex.GetType().Name}: {ex.Message}", stage);
+                AppLog.Warn($"Runtimes: {r.Id} download/verify failed: {step.FailureDetail}");
                 step.Failure = ex is InvalidDataException data && data.Message.StartsWith(r.Name, StringComparison.Ordinal)
                     ? data.Message : "It couldn't be downloaded. Check the connection and try again.";
             }
@@ -304,11 +343,13 @@ public sealed partial class DependencyService
         script.AppendLine("$msi = Join-Path $env:SystemRoot 'System32\\msiexec.exe'");
         script.AppendLine("$dism = Join-Path $env:SystemRoot 'System32\\dism.exe'");
         script.AppendLine("function Take([string]$name, [string]$hash) { $script:phase = 'take'; $src = Join-Path $s $name; if (-not [IO.File]::Exists($src)) { throw (New-Object IO.FileNotFoundException('Staged installer file not found.', $src)) }; $to = Join-Path $w $name; $sha = [Security.Cryptography.SHA256]::Create(); try { $attempt = 0; while ($true) { try { $in = [IO.File]::Open($src, 'Open', 'Read', 'Read'); try { $outF = [IO.File]::Open($to, 'CreateNew', 'Write', 'None'); try { $buf = New-Object byte[] 131072; while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) { $outF.Write($buf, 0, $n); [void]$sha.TransformBlock($buf, 0, $n, $null, 0) }; [void]$sha.TransformFinalBlock($buf, 0, 0) } finally { $outF.Dispose() } } finally { $in.Dispose() }; break } catch [IO.IOException] { if ($attempt -ge 4 -or ($_.Exception.HResult -ne -2147024864 -and $_.Exception.HResult -ne -2147024863)) { throw }; Remove-Item -LiteralPath $to -Force -ErrorAction SilentlyContinue; $attempt++; Start-Sleep -Milliseconds 300; $sha.Dispose(); $sha = [Security.Cryptography.SHA256]::Create() } }; $h = [BitConverter]::ToString($sha.Hash).Replace('-', '') } finally { $sha.Dispose() }; if ($h -ne $hash) { Remove-Item -LiteralPath $to -Force -ErrorAction SilentlyContinue; throw 'changed' }; $to }");
-        script.AppendLine("function Run([string]$file, [string]$arguments) { $script:phase = 'run'; $i = New-Object Diagnostics.ProcessStartInfo($file, $arguments); $i.UseShellExecute = $false; $i.CreateNoWindow = $true; $i.WorkingDirectory = Split-Path -LiteralPath $file; $attempt = 0; while ($true) { try { $p = [Diagnostics.Process]::Start($i); break } catch { $u = Unwrap $_.Exception; $win32 = if ($u -is [ComponentModel.Win32Exception]) { $u.NativeErrorCode } else { 0 }; if ($attempt -ge 4 -or ($win32 -ne 32 -and $win32 -ne 33)) { throw }; $attempt++; Start-Sleep -Milliseconds 300 } }; $p.WaitForExit(); $p.ExitCode }");
-        script.AppendLine("function Step([string]$id, [scriptblock]$body) { Say \"start $id\"; $script:phase = 'run'; $tail = ''; try { $code = @(& $body)[-1] } catch { $u = Unwrap $_.Exception; $w32 = if ($u -is [ComponentModel.Win32Exception]) { $u.NativeErrorCode } else { $u.HResult -band 0xFFFF }; $blocked = ($w32 -in 225, 226, 1260, 1261, 4551) -or (($script:phase -eq 'run') -and (($w32 -eq 5) -or ($u -is [UnauthorizedAccessException]))); $code = if (\"$_\" -eq 'changed') { -1001 } elseif ($blocked) { -1004 } elseif ($script:phase -eq 'take') { -1003 } else { -1002 }; $tail = ' ' + (B64 (ErrText $u)) }; Say \"done $id $code$tail\" }");
+        script.AppendLine("function Run([string]$file, [string]$arguments) { $script:phase = 'run'; if ([string]::IsNullOrWhiteSpace($file) -or -not [IO.File]::Exists($file)) { throw (New-Object IO.FileNotFoundException('Installer file not found before launch.', $file)) }; $i = New-Object Diagnostics.ProcessStartInfo($file, $arguments); $i.UseShellExecute = $false; $i.CreateNoWindow = $true; $i.WorkingDirectory = Split-Path -LiteralPath $file; $attempt = 0; while ($true) { try { $p = [Diagnostics.Process]::Start($i); break } catch { $u = Unwrap $_.Exception; $win32 = if ($u -is [ComponentModel.Win32Exception]) { $u.NativeErrorCode } else { 0 }; if ($attempt -ge 4 -or ($win32 -ne 32 -and $win32 -ne 33)) { throw }; $attempt++; Start-Sleep -Milliseconds 300 } }; $p.WaitForExit(); $p.ExitCode }");
+        script.AppendLine("function Step([string]$id, [scriptblock]$body) { Say \"start $id\"; $script:phase = 'run'; $tail = ''; try { $code = @(& $body)[-1] } catch { $u = Unwrap $_.Exception; $w32 = if ($u -is [ComponentModel.Win32Exception]) { $u.NativeErrorCode } else { $u.HResult -band 0xFFFF }; $blocked = ($w32 -in 225, 226, 1260, 1261, 4551) -or (($script:phase -eq 'run') -and (($w32 -eq 5) -or ($u -is [UnauthorizedAccessException]))); $code = if (\"$_\" -eq 'changed') { -1001 } elseif ($blocked) { -1004 } elseif ($script:phase -eq 'take') { -1003 } else { -1002 }; $tail = ' ' + (B64 (\"[$script:phase] \" + (ErrText $u))) }; Say \"done $id $code$tail\" }");
         script.AppendLine("try {");
         foreach (var (runtime, repair, file, sha256) in steps)
         {
+            if (runtime.Kind != Kind.Feature && (string.IsNullOrWhiteSpace(file) || string.IsNullOrWhiteSpace(sha256)))
+                throw new InvalidOperationException($"Missing staged installer file or SHA-256 for {runtime.Id}.");
             var args = repair && runtime.RepairArgs is { } fix ? fix : runtime.Args;
             var take = file is null ? "" : $"(Take {Q(Path.GetFileName(file))} {Q(sha256 ?? "")})";
             var body = runtime.Kind switch
@@ -364,7 +405,7 @@ public sealed partial class DependencyService
         catch (FormatException) { return null; }
     }
 
-    private static async Task<(bool Declined, Dictionary<string, StepOutcome> Outcomes, string? Fatal)> RunElevatedAsync(string stage, List<Step> steps, List<FileStream> held, Action<string> started)
+    private static async Task<(bool Declined, Dictionary<string, StepOutcome> Outcomes, string? Fatal, int? ExitCode)> RunElevatedAsync(string stage, List<Step> steps, List<FileStream> held, Action<string> started)
     {
         var script = Script(stage, steps.Select(s => (s.Runtime, s.Repair, s.File, s.RunSha256)));
         var scriptPath = Path.Combine(stage, "run.ps1");
@@ -375,6 +416,7 @@ public sealed partial class DependencyService
         held.Add(results);
 
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
+        AppLog.Info($"Runtimes: launching elevated setup for {string.Join(", ", steps.Select(s => s.Runtime.Id))} stage={SanitizeDetail(stage, stage)} scriptSha256={hash.ToLowerInvariant()}.");
         var bootstrap = $"$b = [IO.File]::ReadAllBytes('{scriptPath.Replace("'", "''", StringComparison.Ordinal)}'); " +
             "$h = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($b)).Replace('-', ''); " +
             $"if ($h -ne '{hash}') {{ exit 9 }}; & ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString($b)))";
@@ -391,11 +433,12 @@ public sealed partial class DependencyService
                 WorkingDirectory = Environment.SystemDirectory,
             });
         }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) { return (true, [], null); }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) { return (true, [], null, null); }
         if (process is null) throw new InvalidOperationException("Windows didn't start the runtime installers.");
 
         var outcomes = new Dictionary<string, StepOutcome>(StringComparer.Ordinal);
         string? fatal = null;
+        int? exitCode = null;
         var text = new StringBuilder();
         var reader = new StreamReader(results, Encoding.UTF8);
         void ReadNew()
@@ -422,34 +465,51 @@ public sealed partial class DependencyService
             }
             ReadNew();
             if (!exited.IsCompleted) AppLog.Warn("Runtimes: the installers were still running after 90 minutes.");
-            else if (process.ExitCode == 9) AppLog.Warn("Runtimes: the install script changed before it ran, so it didn't.");
+            else
+            {
+                exitCode = process.ExitCode;
+                if (exitCode == 9) AppLog.Warn("Runtimes: the install script changed before it ran, so it didn't (exitCode=9).");
+                else if (exitCode != 0) AppLog.Warn($"Runtimes: elevated setup exited with code {exitCode}.");
+                else AppLog.Info("Runtimes: elevated setup exited with code 0.");
+            }
         }
-        return (false, outcomes, fatal);
+        return (false, outcomes, fatal, exitCode);
     }
 
     internal static ItemResult Outcome(Step step, IReadOnlyList<RuntimeStatus> before, IReadOnlyList<RuntimeStatus> after,
-        Dictionary<string, int> codes, Dictionary<string, string>? errors = null)
+        Dictionary<string, int> codes, Dictionary<string, string>? errors = null, int? elevatedExitCode = null)
     {
         var outcomes = codes.ToDictionary(kv => kv.Key, kv => new StepOutcome(kv.Value, errors?.GetValueOrDefault(kv.Key)), StringComparer.Ordinal);
-        return Outcome(step, before, after, outcomes, errors?.GetValueOrDefault(step.Runtime.Id));
+        return Outcome(step, before, after, outcomes, errors?.GetValueOrDefault(step.Runtime.Id), elevatedExitCode);
     }
 
-    private static ItemResult Outcome(Step step, IReadOnlyList<RuntimeStatus> before, IReadOnlyList<RuntimeStatus> after, Dictionary<string, StepOutcome> outcomes, string? fatal)
+    private static ItemResult Outcome(Step step, IReadOnlyList<RuntimeStatus> before, IReadOnlyList<RuntimeStatus> after, Dictionary<string, StepOutcome> outcomes, string? fatal, int? elevatedExitCode = null)
     {
         var r = step.Runtime;
         if (step.Failure is { } failure) return new ItemResult(r.Id, r.Name, "failed", failure, null, step.FailureDetail);
         var was = before.FirstOrDefault(s => s.Runtime.Id == r.Id)?.State;
-        var now = after.FirstOrDefault(s => s.Runtime.Id == r.Id)?.State;
+        var afterStatus = after.FirstOrDefault(s => s.Runtime.Id == r.Id);
+        var now = afterStatus?.State;
         if (!outcomes.TryGetValue(r.Id, out var outcome))
-            return new ItemResult(r.Id, r.Name, "failed", "It didn't run: the install stopped before it.", null, fatal);
+        {
+            var missingDetail = fatal ?? (elevatedExitCode is { } exit
+                ? $"Elevated setup exited with code {exit} before reporting {r.Id}."
+                : $"Elevated setup did not report a result for {r.Id}.");
+            return new ItemResult(r.Id, r.Name, "failed", "It didn't run: the install stopped before it.", null, missingDetail);
+        }
         var (code, detail) = outcome;
         if (code is 3010 or 1641) return new ItemResult(r.Id, r.Name, "restart", "Installed. Restart Windows to finish.", code);
         if (code is 1638 or unchecked((int)0x80070666)) return new ItemResult(r.Id, r.Name, "newer", "A newer version is already installed.", code);
         if (code == 0 && now is State.Current)
             return new ItemResult(r.Id, r.Name, "installed", step.Repair && was is State.Current ? "Reinstalled." : "Installed.", code);
-        if (code == 0) return new ItemResult(r.Id, r.Name, "failed", "Its installer finished, but Windows doesn't list it yet. Restart Windows, then check again.", code);
+        if (code == 0)
+            return new ItemResult(r.Id, r.Name, "failed", "Its installer finished, but Windows doesn't list it yet. Restart Windows, then check again.", code,
+                $"Installer exited with code 0 for {r.Id} (expected {step.Version}, detected {afterStatus?.Found?.Shown ?? "not installed"}).");
         if (now is State.Current && was is not State.Current) return new ItemResult(r.Id, r.Name, "installed", "Installed.", code);
-        return new ItemResult(r.Id, r.Name, "failed", DescribeFailure(code, detail), code, detail);
+        var failDetail = string.IsNullOrWhiteSpace(detail)
+            ? $"Installer exited with code {code} (0x{code:X8}) for {r.Id} ({step.Version})."
+            : detail;
+        return new ItemResult(r.Id, r.Name, "failed", DescribeFailure(code, failDetail), code, failDetail);
     }
 
     internal static string? SanitizeDetail(string? raw, string? stagePath = null, string? tempRoot = null, string? userProfile = null, string? userName = null)
