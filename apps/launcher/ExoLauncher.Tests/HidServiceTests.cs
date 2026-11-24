@@ -90,3 +90,62 @@ public sealed class HidListingTests
         Assert.True(HidService.IsNewest(3, ref applied));
     }
 }
+
+public sealed class HidWriteGuardTests
+{
+    [Fact]
+    public void BlocksBurstOverShortWindowPerDevice()
+    {
+        var now = new DateTime(2026, 11, 24, 14, 20, 0, DateTimeKind.Utc).Ticks;
+        var guard = new HidWriteGuard(
+            shortWindow: TimeSpan.FromSeconds(5),
+            maxShort: 3,
+            longWindow: TimeSpan.FromSeconds(60),
+            maxLong: 10,
+            utcNowTicks: () => now);
+
+        Assert.True(guard.TryAcquire("dev-a").Allowed);
+        Assert.True(guard.TryAcquire("dev-a").Allowed);
+        Assert.True(guard.TryAcquire("dev-a").Allowed);
+
+        var blocked = guard.TryAcquire("dev-a");
+        Assert.False(blocked.Allowed);
+        Assert.Equal(3, blocked.ShortCount);
+        Assert.Equal(3, blocked.LongCount);
+
+        Assert.True(guard.TryAcquire("dev-b").Allowed);
+
+        now += TimeSpan.FromSeconds(6).Ticks;
+        Assert.True(guard.TryAcquire("dev-a").Allowed);
+    }
+
+    [Fact]
+    public void BlocksSustainedLoopOverLongWindowAndResetsOnClose()
+    {
+        var now = new DateTime(2026, 11, 24, 14, 20, 0, DateTimeKind.Utc).Ticks;
+        var guard = new HidWriteGuard(
+            shortWindow: TimeSpan.FromSeconds(5),
+            maxShort: 3,
+            longWindow: TimeSpan.FromSeconds(60),
+            maxLong: 5,
+            utcNowTicks: () => now);
+
+        for (var i = 0; i < 5; i++)
+        {
+            Assert.True(guard.TryAcquire("dev-a").Allowed);
+            now += TimeSpan.FromSeconds(6).Ticks;
+        }
+
+        Assert.False(guard.TryAcquire("dev-a").Allowed);
+
+        guard.Reset("dev-a");
+        Assert.True(guard.TryAcquire("dev-a").Allowed);
+    }
+
+    [Fact]
+    public void FormatsCompactHexHeadForDiagnostics()
+    {
+        Assert.Equal("-", HidWriteGuard.FormatHead([]));
+        Assert.Equal("089f060000000002", HidWriteGuard.FormatHead([0x08, 0x9f, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02, 0x02, 0xff]));
+    }
+}

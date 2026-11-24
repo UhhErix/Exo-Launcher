@@ -96,6 +96,7 @@ internal sealed class HidService : IDisposable
     private readonly object _gate = new();
     private readonly Dictionary<string, List<Found>> _listed = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Opened> _open = new(StringComparer.Ordinal);
+    private readonly HidWriteGuard _writeGuard = new();
     /// <summary>Product and serial per interface path while it is present; null where a read has not succeeded yet.</summary>
     private readonly ConcurrentDictionary<string, (string? Product, string? Serial)> _strings = new(StringComparer.OrdinalIgnoreCase);
     private long _listingsStarted;
@@ -364,6 +365,7 @@ internal sealed class HidService : IDisposable
         {
             if (!_open.Remove(key, out opened)) return;
         }
+        _writeGuard.Reset(key);
         foreach (var i in opened.Interfaces) i.Dispose();
     }
 
@@ -397,6 +399,7 @@ internal sealed class HidService : IDisposable
     {
         if (HostMode.IsDisposable) throw new InvalidOperationException(HostMode.Refusal);
         var i = Route(key, reportId, c => c.OutputIds, c => c.OutputLength, "output");
+        GuardAndLogWrite(key, "output", reportId, data);
         var buffer = Frame(reportId, data, i.Caps.OutputLength);
         if (i.Writer is null)
         {
@@ -424,8 +427,24 @@ internal sealed class HidService : IDisposable
     {
         if (HostMode.IsDisposable) throw new InvalidOperationException(HostMode.Refusal);
         var i = Route(key, reportId, c => c.FeatureIds, c => c.FeatureLength, "feature");
+        GuardAndLogWrite(key, "feature", reportId, data);
         var buffer = Frame(reportId, data, i.Caps.FeatureLength);
         return Blocking(() => HidD_SetFeature(i.Control, buffer, buffer.Length), "send a feature report to", ct);
+    }
+
+    private void GuardAndLogWrite(string key, string kind, int reportId, byte[] data)
+    {
+        string devTag;
+        lock (_gate)
+            devTag = _open.TryGetValue(key, out var opened) ? $"{opened.Device.VendorId:x4}:{opened.Device.ProductId:x4}" : "unknown";
+        var decision = _writeGuard.TryAcquire(key);
+        var head = HidWriteGuard.FormatHead(data);
+        if (!decision.Allowed)
+        {
+            AppLog.Warn($"Hid: write blocked by rate limit dev={devTag} kind={kind} rep=0x{reportId:x2} len={data.Length} head={head} w5s={decision.ShortCount}/{decision.ShortLimit} w60s={decision.LongCount}/{decision.LongLimit}");
+            throw new InvalidOperationException("Too many writes to this device. Stopped to protect its settings.");
+        }
+        AppLog.Info($"Hid: write dev={devTag} kind={kind} rep=0x{reportId:x2} len={data.Length} head={head} w5s={decision.ShortCount}/{decision.ShortLimit} w60s={decision.LongCount}/{decision.LongLimit}");
     }
 
     internal async Task<byte[]> ReceiveFeatureReportAsync(string key, int reportId, CancellationToken ct)
