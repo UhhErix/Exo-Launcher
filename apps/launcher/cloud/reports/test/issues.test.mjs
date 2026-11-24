@@ -161,6 +161,28 @@ test('a report with no stack is grouped by its error line, numbers and quoted va
   assert.notEqual(await fingerprintOf(ui('Cannot read "name" of undefined')), await fingerprintOf(ui('Network request failed')))
 })
 
+test('async CLR and WinUI plumbing frames are skipped before picking top frames', async () => {
+  const asyncTrace = (caller) => ({
+    ...crash,
+    excerpt: [
+      'Exo Launcher 3.30.2 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC',
+      'Error (rpc): NullReferenceException',
+      '   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()',
+      '   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)',
+      '   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)',
+      `   at ${caller}()`,
+      '   at ExoLauncher.Services.WebHostBridge.HandleAsync()',
+    ].join('\n'),
+  })
+  const a = asyncTrace('ExoLauncher.Services.StoreService.HomeAsync')
+  const b = asyncTrace('ExoLauncher.Services.DiscordSession.ConnectOnceAsync')
+  assert.deepEqual(signatureOf(a).frames, [
+    'ExoLauncher.Services.StoreService.HomeAsync',
+    'ExoLauncher.Services.WebHostBridge.HandleAsync',
+  ])
+  assert.notEqual(await fingerprintOf(a), await fingerprintOf(b))
+})
+
 // ---- Create versus update ----
 
 test('the first report opens one issue with the excerpt, version, Windows build and labels; later ones edit its count', async () => {

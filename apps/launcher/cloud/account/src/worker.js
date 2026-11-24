@@ -9,7 +9,7 @@ import {
   passwordOf, passwordRight, rehashIfOld, recordByAddress, recordOf, recoveryCodeOf, ringOf, seconds, sessionOf, shownCode, upgradeRecord,
 } from './accounts.js'
 import { hex, random, seal, unseal, utf8 } from './crypto.js'
-import { Refusal, address, body, done, json, refuse } from './http.js'
+import { Refusal, address, body, done, json, notModified, refuse } from './http.js'
 import { limits } from './limits.js'
 
 const DEVICE = /^[0-9a-f]{32}$/
@@ -380,13 +380,25 @@ async function pageAfter(env, account, key, after) {
   return { items, cursor: last, more: count < sizes.length || sizes.length === limits.syncPage }
 }
 
-/** The items changed after a version, oldest first: a page (see pageAfter), with more when there are more. */
+function matchesEtag(asked, etag) {
+  if (!asked) return false
+  const weak = tag => tag.trim().replace(/^W\//, '')
+  const target = weak(etag)
+  return asked.trim() === '*' || asked.split(',').some(tag => weak(tag) === target)
+}
+
 async function getItems(request, env, url) {
   const { account } = await sessionOf(request, env)
   const after = cursorOf(url)
-  const key = await itemKeyOf(env, account, (await recordOf(env.DB, account)).item_key)
+  const record = await recordOf(env.DB, account)
+  const etag = `"seq-${record.seq}"`
+  if (record.seq <= after) {
+    if (matchesEtag(request.headers.get('if-none-match'), etag)) return notModified({ ETag: etag })
+    return json({ items: [], cursor: after, more: false }, 200, { ETag: etag })
+  }
+  const key = await itemKeyOf(env, account, record.item_key)
   const { items, cursor, more } = await pageAfter(env, account, key, after)
-  return json({ items, cursor, more })
+  return json({ items, cursor, more }, 200, more ? {} : { ETag: etag })
 }
 
 /**

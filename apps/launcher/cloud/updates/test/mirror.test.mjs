@@ -137,7 +137,7 @@ test('a release file comes from the mirror, whole or from a byte range, and is i
   const env = { MIRROR: standInMirror({ 'cinema/v1.1.0/ExoCinema-Setup.exe': '0123456789' }) }
   const whole = await ask('/v1/cinema/download/v1.1.0/ExoCinema-Setup.exe', env)
   assert.equal(whole.status, 200)
-  assert.equal(whole.headers.get('cache-control'), 'public, max-age=3600')
+  assert.equal(whole.headers.get('cache-control'), 'public, max-age=31536000, immutable')
   assert.equal(whole.headers.get('content-length'), '10')
   assert.equal(await whole.text(), '0123456789')
   const rest = await ask('/v1/cinema/download/v1.1.0/ExoCinema-Setup.exe', env, { headers: { range: 'bytes=4-' } })
@@ -150,7 +150,7 @@ test('a release file comes from the mirror, whole or from a byte range, and is i
 test('cache metadata stored on the mirror object never stretches a download past its hour', async () => {
   const env = { MIRROR: standInMirror({ 'cinema/v1.4.6/ExoCinema-Setup.exe': '0123456789' }) }
   const r = await ask('/v1/cinema/download/v1.4.6/ExoCinema-Setup.exe', env)
-  assert.equal(r.headers.get('cache-control'), 'public, max-age=3600')
+  assert.equal(r.headers.get('cache-control'), 'public, max-age=31536000, immutable')
 })
 test('HEAD gets the GET answer\'s status and headers, and no body', async () => {
   const env = { MIRROR: standInMirror({ 'launcher/latest.json': JSON.stringify(manifest('launcher', 'v3.24.1', 'ExoLauncher-Setup.exe')) }) }
@@ -167,6 +167,13 @@ test('latest has an ETag, and a poll that holds it gets a 304 with no body', asy
   const polled = await ask('/v1/launcher/latest', env, { headers: { 'if-none-match': etag } })
   assert.equal(polled.status, 304)
   assert.equal(await polled.text(), '')
+  const weak = await ask('/v1/launcher/latest', env, { headers: { 'if-none-match': `W/${etag}` } })
+  assert.equal(weak.status, 304)
+  assert.equal(await weak.text(), '')
+  const listed = await ask('/v1/launcher/latest', env, { headers: { 'if-none-match': `"other", W/${etag}` } })
+  assert.equal(listed.status, 304)
+  const miss = await ask('/v1/launcher/latest', env, { headers: { 'if-none-match': 'W/"launcher-v3.24.0"' } })
+  assert.equal(miss.status, 200)
 })
 test('a copy the client already holds is a 304, and a range still gets its bytes', async () => {
   const env = { MIRROR: standInMirror({ 'cinema/v1.1.0/ExoCinema-Setup.exe': '0123456789' }) }
@@ -181,6 +188,7 @@ test('the driver advisories come from the mirror only, as JSON', async () => {
   const r = await ask('/v1/advisories.json', env)
   assert.equal(r.status, 200)
   assert.equal(r.headers.get('content-type'), 'application/json')
+  assert.equal(r.headers.get('cache-control'), 'public, max-age=3600')
   assert.deepEqual(fetched, [])
 })
 

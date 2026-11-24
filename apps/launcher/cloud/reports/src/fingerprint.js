@@ -2,6 +2,19 @@ export const TOP_FRAMES = 3
 
 const FRAME = /^\s*at\s+(.+?)\s*$/
 const ERROR_LINE = /^Error \([^)]*\):\s*(.*)$/
+const PLUMBING_FRAMES = [
+  /^System\.Runtime\.CompilerServices\./,
+  /^System\.Runtime\.ExceptionServices\.ExceptionDispatchInfo\./,
+  /^System\.Threading\.Tasks\.(Task|ValueTask)\b/,
+  /^System\.Threading\.ExecutionContext\./,
+  /^Microsoft\.UI\.Dispatching\./,
+  /^WinRT\.ExceptionHelpers\./,
+  /^ABI\.System\./,
+]
+
+function isPlumbingFrame(frame) {
+  return PLUMBING_FRAMES.some((pattern) => pattern.test(frame))
+}
 
 export function normalizeFrame(frame) {
   return frame
@@ -29,17 +42,22 @@ export function normalizeMessage(line) {
 export function signatureOf(report) {
   const lines = report.excerpt.split('\n')
   const frames = []
+  const fallback = []
   for (const line of lines) {
     const match = FRAME.exec(line)
     if (!match) continue
     const frame = normalizeFrame(match[1])
-    if (frame && !frames.includes(frame)) frames.push(frame)
+    if (!frame) continue
+    if (fallback.length < TOP_FRAMES && !fallback.includes(frame)) fallback.push(frame)
+    if (isPlumbingFrame(frame)) continue
+    if (!frames.includes(frame)) frames.push(frame)
     if (frames.length === TOP_FRAMES) break
   }
+  const picked = frames.length ? frames : fallback
   const errorLine = lines.map((line) => ERROR_LINE.exec(line)?.[1]).find(Boolean)
     ?? lines.find((line) => line.includes(report.errorType))
     ?? ''
-  return { frames, message: normalizeMessage(errorLine) }
+  return { frames: picked, message: normalizeMessage(errorLine) }
 }
 
 export async function fingerprintOf(report) {
