@@ -238,6 +238,7 @@ public sealed class AppServices
             // Autopilot after the keeper: what a crash left goes back, and Game Mode follows Autopilot's switch.
             Autopilot.Start();
             WindowsGameBar.KeepOff();
+            _ = SystemTuning.Shared.MigrateLegacyPowerThrottlingAsync(allowPrompt: false);
         });
         RadeonProfileService.Shared.Start(Launcher, () => GpuProfileService.MainScreen("amd"));
         IntelProfileService.Shared.Start(Launcher);
@@ -247,6 +248,7 @@ public sealed class AppServices
         DlssSwapService.RecorderSwitch = (id, on, ct) => ShadersHost.RecorderSetAsync(id, on, ct);
         // Frame generation Exo put into a game: checked as each game starts and ends, and kept on the mod's newest release.
         DlssSwapService.WatchFrameGen(Launcher, Settings, Library);
+        FrameGenService.WatchLaunches(Launcher, Settings);
         // Open Exo when Windows starts: the Run value follows the switch (an update or a moved install puts its path right).
         var startWithWindows = Settings.Current.StartWithWindows;
         _ = Task.Run(() => StartWithWindows.Apply(startWithWindows));

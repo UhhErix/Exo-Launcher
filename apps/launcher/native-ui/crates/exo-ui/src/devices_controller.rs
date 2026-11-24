@@ -17,7 +17,7 @@ use exo_rpc::{
     METHOD_CONTROLLER_GAME_PROFILES, METHOD_CONTROLLER_GAME_PROFILES_SAVE,
     METHOD_CONTROLLER_MEASURE, METHOD_CONTROLLER_QUALITY, METHOD_CONTROLLER_READ,
     METHOD_CONTROLLER_SETTINGS, METHOD_CONTROLLER_SOUND, METHOD_CONTROLLER_TEST,
-    METHOD_CONTROLLER_WATCH, METHOD_SHELL_OPEN_URL, METHOD_STEAM_INPUT_STATE, PadOverrides,
+    METHOD_CONTROLLER_WATCH, METHOD_STEAM_INPUT_STATE, PadOverrides,
     PadSettings, PeripheralCard, SteamInputStateReply, StickEdge, StickRest, TriggerSweep,
 };
 use rune::{
@@ -1176,18 +1176,6 @@ impl AppState {
                 },
             );
         }
-    }
-
-    pub fn open_external_url(&mut self, url: &str) {
-        if self.status == HostStatus::Standalone {
-            return;
-        }
-        #[cfg(windows)]
-        if let Some(rpc) = self.rpc.clone() {
-            rpc.call_raw(METHOD_SHELL_OPEN_URL, &json!({ "url": url }), |_| {});
-        }
-        #[cfg(not(windows))]
-        let _ = url;
     }
 
     pub fn apply_controller_state(&mut self, ev: ControllerStateEvent) -> bool {

@@ -60,7 +60,15 @@ internal sealed class RadeonProfileService(IGpuDriver driver, string folder, Fun
     /// <summary>Follows game launches (<see cref="LaunchOrchestrator.GameLaunching"/>) and ends, and does <see cref="AtStart"/> off this thread.</summary>
     internal void Start(LaunchOrchestrator launcher, Func<GpuProfile.Screen> mainScreen)
     {
-        launcher.GameLaunching += game => GameLaunching(game.Title, gpu => FluidMotionFrames.Decide(gpu, FrameGenFacts.ForLaunch(game)));
+        launcher.GameLaunching += game => GameLaunching(game.Title, gpu =>
+        {
+            var chosen = App.Services.Settings.FrameGenRouteFor(game.Id);
+            if (string.Equals(chosen, FrameGenRouter.RouteDriverAfmf, StringComparison.OrdinalIgnoreCase))
+                return new FluidMotionFrames.Decision(true, "selected by player");
+            if (string.Equals(chosen, "off", StringComparison.OrdinalIgnoreCase))
+                return new FluidMotionFrames.Decision(false, "turned off by player");
+            return FluidMotionFrames.Decide(gpu, FrameGenFacts.ForLaunch(game));
+        });
         launcher.GameSessionCompleted += _ => GameEnded();
         _ = Task.Run(() =>
         {

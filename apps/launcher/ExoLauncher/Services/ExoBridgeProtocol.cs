@@ -199,6 +199,9 @@ internal static partial class ExoBridgeProtocol
         return buffer.WrittenSpan.ToArray();
     }
 
+    internal static JsonElement SerializeToElement(object value) =>
+        JsonSerializer.SerializeToElement(value, value.GetType(), JsonOptions);
+
     internal static string SerializeResponse(string id, bool ok, object? result, string? error) =>
         System.Text.Encoding.UTF8.GetString(SerializeResponseUtf8(id, ok, result, error));
 

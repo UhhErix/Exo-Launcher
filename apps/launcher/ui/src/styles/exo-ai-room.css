@@ -124,7 +124,8 @@
   min-height: 0;
 }
 
-.exo-ai-col.is-right > .exo-pc-section.is-drivers {
+.exo-ai-col.is-right > .exo-pc-section.is-drivers,
+.exo-ai-col.is-right > .exo-pc-section.is-gpu-usage {
   flex: none;
 }
 
@@ -196,6 +197,76 @@
 .exo-ai-specs .exo-pc-facts {
   margin-top: 12px;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.exo-ai-health-rows {
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: var(--exo-hair) solid var(--exo-float-line);
+}
+
+.exo-gpu-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 4px;
+}
+
+.exo-gpu-usage-summary {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--exo-type-body);
+  line-height: 1.4;
+}
+
+.exo-gpu-proc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exo-gpu-proc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: var(--exo-hair) solid var(--exo-float-line);
+}
+
+.exo-gpu-proc-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exo-gpu-proc-name {
+  color: var(--color-fg);
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-gpu-proc-sub {
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-gpu-proc-metrics {
+  flex: none;
+  color: var(--color-fg);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-control);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 @keyframes exo-ai-dot-pulse {
