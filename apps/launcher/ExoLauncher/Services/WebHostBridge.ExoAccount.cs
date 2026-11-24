@@ -196,8 +196,7 @@ public sealed partial class WebHostBridge
     private async Task<object> ExoAccountPasskeySignInAsync(JsonElement p, bool hasParams) =>
         await ExoAccountService.SignInWithPasskeyAsync(
             PathHelper.AppDataDir,
-            AccountOwnerHwnd(p, hasParams),
-            ReadString(p, hasParams, "email")).ConfigureAwait(true);
+            AccountOwnerHwnd(p, hasParams)).ConfigureAwait(true);
 
     private async Task<object> ExoAccountPasskeyDeleteAsync(JsonElement p, bool hasParams)
     {

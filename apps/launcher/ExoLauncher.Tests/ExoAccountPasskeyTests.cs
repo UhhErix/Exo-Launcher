@@ -36,7 +36,7 @@ public sealed class ExoAccountPasskeyTests
                 "/v1/passkeys" => """{"passkeys":[{"id":"cred-1","label":"Desktop","created":1700000000,"lastUsed":1700000050,"flagged":true}]}""",
                 "/v1/passkeys/register/start" => """{"challenge":"ch-1","rp":{"id":"accounts.getexo.app","name":"Exo Account"},"origin":"https://accounts.getexo.app","user":{"id":"dXNlcg"}}""",
                 "/v1/passkeys/register/finish" => """{"ok":true,"id":"cred-1","label":"Desktop"}""",
-                "/v1/passkeys/signin/start" => """{"challenge":"ch-2","rpId":"accounts.getexo.app","origin":"https://accounts.getexo.app","allowCredentials":["cred-1"]}""",
+                "/v1/passkeys/signin/start" => """{"challenge":"ch-2","rpId":"accounts.getexo.app","origin":"https://accounts.getexo.app","allowCredentials":[]}""",
                 "/v1/passkeys/signin/finish" => """{"token":"tok-1","account":{"id":"acc-1","email":"a@b.test"},"deviceToken":"dev-1"}""",
                 _ => """{"ok":true}""",
             };
@@ -60,7 +60,7 @@ public sealed class ExoAccountPasskeyTests
         var regFin = await client.PasskeyRegisterFinishAsync("tok-bearer", "ch-1", "cdj", "att", "Desktop");
         Assert.True(regFin.Ok);
 
-        var signStart = await client.PasskeySignInStartAsync("a@b.test");
+        var signStart = await client.PasskeySignInStartAsync();
         Assert.True(signStart.Ok);
         Assert.Equal("ch-2", signStart.Body?["challenge"]?.GetValue<string>());
 
@@ -82,6 +82,7 @@ public sealed class ExoAccountPasskeyTests
         Assert.Contains("dev-tok", seen[1].Body);
         Assert.Equal(("POST", "/v1/passkeys/register/finish"), (seen[2].Method, seen[2].Path));
         Assert.Equal(("POST", "/v1/passkeys/signin/start"), (seen[3].Method, seen[3].Path));
+        Assert.Equal("{}", seen[3].Body);
         Assert.Equal(("POST", "/v1/passkeys/signin/finish"), (seen[4].Method, seen[4].Path));
         Assert.Equal(("DELETE", "/v1/passkeys/cred-1"), (seen[5].Method, seen[5].Path));
     }
@@ -89,7 +90,7 @@ public sealed class ExoAccountPasskeyTests
     [Fact]
     public void AccountMessages_covers_all_passkey_security_codes()
     {
-        foreach (var code in new[] { "passkey-uv-required", "reauth-required", "last-sign-in-method", "passkey-replay", "passkey-limit", "passkey-exists" })
+        foreach (var code in new[] { "passkey-uv-required", "passkeys-unavailable", "reauth-required", "last-sign-in-method", "passkey-replay", "passkey-limit", "passkey-exists" })
         {
             Assert.NotEqual(AccountMessages.Generic, AccountMessages.For(code));
         }

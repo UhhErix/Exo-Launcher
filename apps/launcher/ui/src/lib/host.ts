@@ -2949,7 +2949,7 @@ export const host = {
   exoAccountProbe: () => rawCall<{ reachable: boolean; gameRunning: boolean }>('exoAccount.probe'),
   exoAccountPasskeyStatus: () => rawCall<{ supported: boolean; apiVersion: number; platformAvailable: boolean; passkeys: { id: string; label: string; created: number; lastUsed: number; flagged: boolean }[] }>('exoAccount.passkeyStatus'),
   exoAccountPasskeyRegister: (label?: string, ownerHwnd?: number, password?: string) => rawCall<ExoAccountOutcome>('exoAccount.passkeyRegister', { label, ownerHwnd, password }),
-  exoAccountPasskeySignIn: (email?: string, ownerHwnd?: number) => rawCall<ExoAccountOutcome>('exoAccount.passkeySignIn', { email, ownerHwnd }),
+  exoAccountPasskeySignIn: (ownerHwnd?: number) => rawCall<ExoAccountOutcome>('exoAccount.passkeySignIn', { ownerHwnd }),
   exoAccountPasskeyDelete: (id: string) => rawCall<ExoAccountOutcome>('exoAccount.passkeyDelete', { id }),
   authNativeProviders: () => rawCall<{ providers: { provider: string; displayName: string; flow: string; available: boolean; note: string }[] }>('auth.nativeProviders'),
   /** The show-again state of the sheet, banner and top-bar button, as stored text (device-only). */

@@ -164,9 +164,8 @@ internal sealed class ExoAccountClient : IDisposable
     internal Task<AccountReply> DeletePasskeyAsync(string token, string credentialId) =>
         SendAsync(HttpMethod.Delete, "v1/passkeys/" + Uri.EscapeDataString(credentialId), token, null);
 
-    internal Task<AccountReply> PasskeySignInStartAsync(string? email) =>
-        SendAsync(HttpMethod.Post, "v1/passkeys/signin/start", null,
-            string.IsNullOrWhiteSpace(email) ? new JsonObject() : Body(("email", email.Trim())), throttled: true);
+    internal Task<AccountReply> PasskeySignInStartAsync() =>
+        SendAsync(HttpMethod.Post, "v1/passkeys/signin/start", null, new JsonObject(), throttled: true);
 
     internal Task<AccountReply> PasskeySignInFinishAsync(
         string challenge, string device, string credentialId, string clientDataJson, string authenticatorData, string signature) =>

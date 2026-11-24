@@ -29,6 +29,7 @@ internal static class AccountMessages
         ["passkey-exists"] = "That passkey is already added to this account.",
         ["passkey-replay"] = "That passkey check was rejected. Try again or use your password.",
         ["passkey-uv-required"] = "Verify with Windows Hello or your security key PIN and try again.",
+        ["passkeys-unavailable"] = "Passkey sign-in isn't available right now. Use your password instead.",
         ["reauth-required"] = "Enter your account password to confirm adding a passkey.",
         ["last-sign-in-method"] = "Set a password before removing your last passkey.",
         ["bad-passkey"] = "Windows couldn't verify that passkey. Try again or use your password.",

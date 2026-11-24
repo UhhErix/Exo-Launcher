@@ -3236,13 +3236,12 @@ impl AppState {
         self.wp4.account_form_error = None;
         self.wp4.account_form_offline = false;
         self.wp4.account_form_busy = true;
-        let email = self.wp4.account_email.text.trim().to_string();
         let owner_hwnd = self.pc.owner_hwnd;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             rpc.call::<_, ExoAccountOutcome>(
                 METHOD_EXO_ACCOUNT_PASSKEY_SIGN_IN,
-                &json!({ "email": email, "ownerHwnd": owner_hwnd }),
+                &json!({ "ownerHwnd": owner_hwnd }),
                 move |res| {
                     handle.update(move |s, _| {
                         s.wp4.account_form_busy = false;
@@ -3263,7 +3262,7 @@ impl AppState {
             );
             return;
         }
-        let _ = (email, owner_hwnd);
+        let _ = owner_hwnd;
         self.wp4.account_form_busy = false;
     }
 

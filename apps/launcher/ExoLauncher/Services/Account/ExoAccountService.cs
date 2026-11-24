@@ -92,10 +92,12 @@ internal static class ExoAccountService
         if (!start.Ok || start.Body is not System.Text.Json.Nodes.JsonObject obj)
             return ExoAccountOutcome.From(start);
         var challenge = obj["challenge"]?.GetValue<string>() ?? "";
-        var rpId = obj["rp"]?["id"]?.GetValue<string>() ?? "accounts.getexo.app";
+        var rpId = obj["rp"]?["id"]?.GetValue<string>();
         var rpName = obj["rp"]?["name"]?.GetValue<string>() ?? "Exo Account";
-        var origin = obj["origin"]?.GetValue<string>() ?? ("https://" + rpId);
+        var origin = obj["origin"]?.GetValue<string>();
         var userId = obj["user"]?["id"]?.GetValue<string>() ?? "";
+        if (string.IsNullOrWhiteSpace(challenge) || string.IsNullOrWhiteSpace(rpId) || string.IsNullOrWhiteSpace(origin))
+            return new ExoAccountOutcome(false, AccountMessages.For("passkeys-unavailable"), "passkeys-unavailable", null, false, null);
         var exclude = ReadStringArray(obj["excludeCredentials"]);
 
         var proof = await Task.Run(() => WindowsWebAuthn.MakeCredential(
@@ -115,18 +117,19 @@ internal static class ExoAccountService
     }
 
     internal static async Task<ExoAccountOutcome> SignInWithPasskeyAsync(
-        string dataDir, nint hwnd, string? email, HttpMessageHandler? handler = null, Uri? service = null)
+        string dataDir, nint hwnd, HttpMessageHandler? handler = null, Uri? service = null)
     {
         using var client = new ExoAccountClient(handler, service);
-        var start = await client.PasskeySignInStartAsync(email);
+        var start = await client.PasskeySignInStartAsync();
         if (!start.Ok || start.Body is not System.Text.Json.Nodes.JsonObject obj)
             return ExoAccountOutcome.From(start);
         var challenge = obj["challenge"]?.GetValue<string>() ?? "";
-        var rpId = obj["rpId"]?.GetValue<string>() ?? "accounts.getexo.app";
-        var origin = obj["origin"]?.GetValue<string>() ?? ("https://" + rpId);
-        var allow = ReadStringArray(obj["allowCredentials"]);
+        var rpId = obj["rpId"]?.GetValue<string>();
+        var origin = obj["origin"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(challenge) || string.IsNullOrWhiteSpace(rpId) || string.IsNullOrWhiteSpace(origin))
+            return new ExoAccountOutcome(false, AccountMessages.For("passkeys-unavailable"), "passkeys-unavailable", null, false, null);
 
-        var proof = await Task.Run(() => WindowsWebAuthn.GetAssertion(hwnd, rpId, origin, challenge, allow));
+        var proof = await Task.Run(() => WindowsWebAuthn.GetAssertion(hwnd, rpId, origin, challenge, []));
         if (!proof.Ok || proof.Value is null)
             return new ExoAccountOutcome(false, proof.Cancelled ? "Passkey sign-in was cancelled." : AccountMessages.For("bad-passkey"), proof.Error ?? "bad-passkey", null, false, null);
 
@@ -137,7 +140,7 @@ internal static class ExoAccountService
             proof.Value.ClientDataJson,
             proof.Value.AuthenticatorData,
             proof.Value.Signature);
-        var resolvedEmail = finish.Body?["account"]?["email"]?.GetValue<string>() ?? email?.Trim() ?? "";
+        var resolvedEmail = finish.Body?["account"]?["email"]?.GetValue<string>() ?? "";
         return Finish(dataDir, finish, resolvedEmail);
     }
 
