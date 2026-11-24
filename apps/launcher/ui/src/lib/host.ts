@@ -1216,6 +1216,56 @@ export type MouseCore = {
   test?: { verdict: 'fix' | 'fine' | 'cannot' | 'retry'; detail: string; offer?: number | null; result: MouseTest } | null
 }
 
+export type MouseDiagBucket = { id: string; label: string; rangeMs: string; count: number; percent: number; kind: 'ok' | 'warn' | 'bad' }
+export type MouseDiagJitter = {
+  pollingRateHz: number; nominalMs: number; totalReports: number; checkedGaps: number
+  medianMs: number; spreadMs: number; p95Ms: number; p99Ms: number; p999Ms: number; longestMs: number
+  lateCount: number; droppedCount: number; bunchedCount: number; stabilityScore: number
+  onScreenRefresh: boolean; mouseCpu: number | null; cause: 'steady' | 'pc_busy' | 'usb_uneven' | 'both' | 'insufficient'; causeDetail: string
+  histogram: MouseDiagBucket[]
+}
+export type MouseDiagUsbDevice = {
+  name: string; kind: string | null; portNumber: number; speedCode: number; speedLabel: string
+  bIntervalUs: number | null; pollingHz: number | null; highRate: boolean; highRateReason: string | null
+  sharesHubWithHighRate: boolean; sharedWith: string[]; isMouse: boolean
+}
+export type MouseDiagUsbHub = {
+  name: string; isRoot: boolean; portNumber: number | null; portCount: number; selectiveSuspendEnabled: boolean | null
+  devices: MouseDiagUsbDevice[]; hubs: MouseDiagUsbHub[]
+}
+export type MouseDiagUsbController = {
+  name: string; vendorName: string; pciLocation: string; placement: string; interruptMode: string
+  msiSupported: boolean; freeCpuPorts: number | null; rootHub: MouseDiagUsbHub
+}
+export type MouseDiagUsb = {
+  controllers: MouseDiagUsbController[]; advice: string[]; mouseOnCpu: boolean; mouseOnHub: boolean; mouseSharesHighRateHub: boolean
+}
+export type MouseDiagCore = {
+  core: number; isrCount: number; isrTotalUs: number; isrMaxUs: number; dpcCount: number; dpcTotalUs: number; dpcMaxUs: number; isMouseCore: boolean
+}
+export type MouseDiagDriver = {
+  driver: string; dpcCount: number; dpcTotalUs: number; dpcMaxUs: number; isrCount: number; isrTotalUs: number; isrMaxUs: number; topCore: number; cores: number[]
+}
+export type MouseDiagEtw = {
+  at: string; seconds: number; totalIsrs: number; totalDpcs: number; totalIsrUs: number; totalDpcUs: number
+  maxIsrUs: number; maxDpcUs: number; eventsLost: number; mouseControllerCore: number | null
+  cores: MouseDiagCore[]; topDrivers: MouseDiagDriver[]
+}
+export type MouseDiagSnapshot = {
+  pollingRateHz: number; stabilityScore: number; p99Ms: number; p999Ms: number; longestMs: number
+  lateCount: number; droppedCount: number; bunchedCount: number; mouseCpu: number | null
+}
+export type MouseDiagFixId = 'affinity' | 'msi' | 'usb_suspend'
+export type MouseDiagFixCard = {
+  id: MouseDiagFixId; title: string; summary: string; actionLabel: string; honestyNote: string
+  needsRestart: boolean; needsAdmin: boolean; status: 'available' | 'applied' | 'restart'; canApply: boolean; canUndo: boolean
+  detail: string | null; before: MouseDiagSnapshot | null; after: MouseDiagSnapshot | null; improved: boolean | null
+}
+export type MouseDiagState = {
+  ok: boolean; message?: string | null; running: boolean
+  jitter: MouseDiagJitter | null; usb: MouseDiagUsb; etw: MouseDiagEtw | null; etwProblem?: string | null; fixes: MouseDiagFixCard[]
+}
+
 /** One exact store entry represented by a grouped library card. */
 export interface GameVariant {
   id: string
@@ -3379,6 +3429,10 @@ export const host = {
    */
   systemMouseCore: (action?: 'measure' | 'drivers' | 'spread' | 'unspread' | 'apply' | 'undo') =>
     rawCall<MouseCore>('system.mouseCore', action ? { action } : {}, action ? 120_000 : 15_000),
+  mouseDiagStatus: () => rawCall<MouseDiagState>('mouse.diag.status', {}, 15_000),
+  mouseDiagMeasure: (p: { withEtw?: boolean } = {}) => rawCall<MouseDiagState>('mouse.diag.measure', p, 120_000),
+  mouseDiagCancel: () => rawCall<{ ok: boolean }>('mouse.diag.cancel', {}, 10_000),
+  mouseDiagFix: (p: { id: MouseDiagFixId; action: 'apply' | 'undo' }) => rawCall<MouseDiagState>('mouse.diag.fix', p, 120_000),
   /** The saved home page at once (refreshed behind it); refresh waits for a fresh one. */
   storeHome: (refresh = false) => rawCall<StoreHome>('store.home', refresh ? { refresh: true } : {}, 45_000),
   /**

@@ -10,6 +10,7 @@ import { LogitechPanels, logitechOwnsLiftOff } from './brands/logitech'
 import { MagneticToolsPanels } from './brands/magnetic-tools'
 import { Profiles } from './Profiles'
 import { CpuCore } from './CpuCore'
+import { DiagnoseView } from './Diagnose'
 import { deviceImage } from './device-images'
 import { signalLevel, signalWord, useMouseAlerts } from './alerts'
 import { useSections } from './layout'
@@ -39,11 +40,28 @@ export function App() {
 export function Room({ mouse }: { mouse: ReturnType<typeof useMouse> }) {
   useDocumentHiddenSync()
   useMouseAlerts(mouse.phase === 'ready' ? mouse.status : null)
+  const [view, setView] = useState<'settings' | 'diagnose'>(() =>
+    typeof location !== 'undefined' && new URLSearchParams(location.search).has('diagnose') ? 'diagnose' : 'settings',
+  )
   if (mouse.phase === 'looking' || mouse.phase === 'opening') {
     return <Waiting label={mouse.phase === 'opening' ? `Connecting to ${mouse.current?.name ?? 'your mouse'}` : 'Looking for your mouse'} />
   }
   if (mouse.phase === 'none') {
-    return <Centered title="No supported mouse found" line={mouse.error ?? 'Plug in your mouse or its receiver.'} />
+    if (view === 'diagnose') {
+      return (
+        <main className="m-room m-room-diag-only">
+          <div className="m-diag-topbar">
+            <button type="button" className="m-button" onClick={() => setView('settings')}>Back</button>
+          </div>
+          <DiagnoseView />
+        </main>
+      )
+    }
+    return (
+      <Centered title="No supported mouse found" line={mouse.error ?? 'Plug in your mouse or its receiver.'}>
+        <button type="button" className="m-button" onClick={() => setView('diagnose')}>Diagnose mouse</button>
+      </Centered>
+    )
   }
   if (mouse.phase === 'error' || !mouse.status) {
     return (
@@ -60,6 +78,12 @@ export function Room({ mouse }: { mouse: ReturnType<typeof useMouse> }) {
   return (
     <main className="m-room">
       <Device status={mouse.status} brand={mouse.brand} readAt={mouse.readAt} busy={mouse.busy} error={mouse.error}>
+        <Segmented
+          label="Mode"
+          options={[{ value: 'settings', label: 'Settings' }, { value: 'diagnose', label: 'Diagnose' }]}
+          value={view}
+          onChange={setView}
+        />
         {mouse.candidates.length > 1 ? (
           <Segmented
             label="Device"
@@ -69,22 +93,28 @@ export function Room({ mouse }: { mouse: ReturnType<typeof useMouse> }) {
           />
         ) : null}
       </Device>
-      {ready ? null : <ReadOnly note={mouse.status.ui?.statusNote} />}
-      {ready ? <Settings key={mouse.current?.id}>
-        <Sensitivity {...section} />
-        <CoreExtrasPanels {...section} />
-        <Performance {...section} />
-        <CpuCore />
-        <FinalmousePanels {...section} />
-        <EndgamePulsarPanels {...section} />
-        <AtkMiscPanels {...section} />
-        <LogitechPanels {...section} />
-        <MagneticToolsPanels {...section} />
-        <Buttons {...section} />
-        <Lighting {...section} />
-        <Power {...section} />
-        {mouse.current ? <Profiles device={finalmouseProfileKey(mouse.current.id)} status={mouse.status} client={mouse.client} applyAll={mouse.applyAll} busy={mouse.busy} /> : null}
-      </Settings> : null}
+      {view === 'diagnose' ? (
+        <DiagnoseView />
+      ) : (
+        <>
+          {ready ? null : <ReadOnly note={mouse.status.ui?.statusNote} />}
+          {ready ? <Settings key={mouse.current?.id}>
+            <Sensitivity {...section} />
+            <CoreExtrasPanels {...section} />
+            <Performance {...section} />
+            <CpuCore />
+            <FinalmousePanels {...section} />
+            <EndgamePulsarPanels {...section} />
+            <AtkMiscPanels {...section} />
+            <LogitechPanels {...section} />
+            <MagneticToolsPanels {...section} />
+            <Buttons {...section} />
+            <Lighting {...section} />
+            <Power {...section} />
+            {mouse.current ? <Profiles device={finalmouseProfileKey(mouse.current.id)} status={mouse.status} client={mouse.client} applyAll={mouse.applyAll} busy={mouse.busy} /> : null}
+          </Settings> : null}
+        </>
+      )}
     </main>
   )
 }

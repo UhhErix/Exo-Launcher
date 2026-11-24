@@ -320,6 +320,8 @@ internal static class PlayerData
         new("lucid-held.json", "LucidRetire", Why.ThisPc, "Lucid's settings an earlier Exo held for a game to end, deleted once"),
         new("autoeq-index.txt", "AutoEqCatalog", Why.ThisPc, "AutoEq's headphone list, kept a week"),
         new("mouse-core-backup.json", "WebHostBridge", Why.ThisPc, "interrupt affinity values before Exo spread the mouse"),
+        new("mouse-diag-fixes.json", "WebHostBridge", Why.ThisPc, "mouse diagnostic fix backups before Exo changed them"),
+        new(".mouse-diag.json", "WebHostBridge", Why.ThisPc, "a temporary mouse ETW ISR and DPC trace answer file in the Windows temp folder"),
         new("msi-mode-backup.json", "InterruptMode", Why.ThisPc, "MSI mode values before Exo changed them"),
         new("removals.json", "RemovalHistory", Why.ThisPc, "what was uninstalled on this PC and when"),
         new("retry.json", "GogOwnedLibraryService", Why.ThisPc, "a GOG library read to try again"),
