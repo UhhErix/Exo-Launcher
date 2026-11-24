@@ -102,6 +102,12 @@ internal sealed class ExoAiCoordinator : IDisposable
         ApplyFanPreset(initial.FanPreset);
     }
 
+    internal void OnSystemResume()
+    {
+        if (!_running) return;
+        _ = Task.Run(() => Fans.ResetCache());
+    }
+
     internal void NotifySettings(ExoAiSettings settings)
     {
         ApplyFanPreset(settings.FanPreset);
@@ -171,9 +177,9 @@ internal sealed class ExoAiCoordinator : IDisposable
         }
     }
 
-    private void ApplyFanPreset(string _preset)
+    private void ApplyFanPreset(string preset)
     {
-        var status = Fans.SetPreset("auto");
+        var status = Fans.SetPreset(preset);
         lock (_gate)
         {
             if (!status.Supported)

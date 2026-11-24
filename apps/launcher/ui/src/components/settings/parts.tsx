@@ -51,7 +51,7 @@ export function Group({ id, title, action, children }: {
  * what the row can't show otherwise (a folder, a result just in, why its control is off) or, where the name alone doesn't
  * say it, what the row does; `error` sits under the row; `stacked` puts a wide control (a field, a meter) under the label.
  */
-export function Row({ label, labelId, detail, icon, stacked, children, error }: {
+export function Row({ label, labelId, detail, icon, stacked, children, error, errorDetail }: {
   label: string
   labelId?: string
   detail?: ReactNode
@@ -59,6 +59,7 @@ export function Row({ label, labelId, detail, icon, stacked, children, error }: 
   stacked?: boolean
   children?: ReactNode
   error?: string | null
+  errorDetail?: string | null
 }) {
   return (
     <div className={`exo-set-item${stacked ? ' is-stacked' : ''}`}>
@@ -70,7 +71,7 @@ export function Row({ label, labelId, detail, icon, stacked, children, error }: 
         </div>
         {children ? <div className="exo-set-item-control">{children}</div> : null}
       </div>
-      {error ? <ErrorNote className="exo-set-error" message={error} /> : null}
+      {error ? <ErrorNote className="exo-set-error" message={error} detail={errorDetail} /> : null}
     </div>
   )
 }

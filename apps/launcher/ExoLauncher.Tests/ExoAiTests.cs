@@ -174,4 +174,22 @@ public sealed class ExoAiTests
         coordinator.Shutdown();
         Assert.True(fanBackend.Disposed);
     }
+
+    [Fact]
+    public void FansReapplyTargetAfterResumeResetCache()
+    {
+        var backend = new FakeFanBackend { FanCount = 2, TempC = 70 };
+        using var fans = new ExoAiFans(() => backend);
+        var status = fans.SetPreset("balanced");
+        Assert.Equal("balanced", status.Preset);
+        Assert.Equal(72, status.TargetPercent);
+        Assert.Equal([(0, 72), (1, 72)], backend.Applied);
+
+        backend.Applied.Clear();
+        fans.Tick();
+        Assert.Empty(backend.Applied);
+
+        fans.ResetCache();
+        Assert.Equal([(0, 72), (1, 72)], backend.Applied);
+    }
 }

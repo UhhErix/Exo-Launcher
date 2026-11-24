@@ -327,6 +327,7 @@ function mockTune(p?: Record<string, unknown>) {
   if (p?.action === 'start') mockTuneReads[id] = 0
   if (p?.action === 'stop') delete mockTuneReads[id]
   if (p?.action === 'undo') { delete mockTuneReads[id]; mockTuneDone.delete(id) }
+  if (p?.action === 'reapply') { delete mockTuneReads[id]; mockTuneDone.add(id) }
   const gpu = mockGpu === 'amd' ? 'radeon' : 'nvidia'
   const words: Record<string, string> = {
     nvidia: 'Moves your card\u2019s clock up at each voltage and tests each step, about 40 minutes. It\u2019s outside NVIDIA\u2019s specifications, can void your warranty, and can crash your PC while it tests, so save your work first. Exo goes back to stock by itself if anything goes wrong.',
