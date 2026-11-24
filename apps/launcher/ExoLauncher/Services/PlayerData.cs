@@ -368,6 +368,7 @@ internal static class PlayerData
         new("mmc-pack.json", "GameSettings", Why.Elsewhere, "Prism Launcher's instance component manifest"),
         new("minecraftinstance.json", "GameSettings", Why.Elsewhere, "CurseForge's Minecraft instance metadata"),
         new("profile.json", "GameSettings", Why.Elsewhere, "Modrinth App's instance profile metadata"),
+        new("settings.xml", "LosslessScalingConfig", Why.Elsewhere, "Lossless Scaling's own settings file, updated for per-game AutoScale profiles"),
         new("held.json", "DlssSwapService", Why.ThisPc, "what Exo took out of a game started without its anti-cheat, held for its next session"),
         new("exo-frame-gen.json", "DlssSwapService,GameSettings", Why.Elsewhere, "the note Exo leaves in a game's folder beside frame generation"),
         new(".exo-upscale.json", "DlssSwapService", Why.Elsewhere, "the note Exo leaves beside a swapped upscaler file"),

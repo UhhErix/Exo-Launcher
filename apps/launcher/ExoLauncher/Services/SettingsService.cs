@@ -765,6 +765,24 @@ public sealed class SettingsService
         });
     }
 
+    public string? FrameGenRouteFor(string gameId)
+    {
+        lock (_stateGate)
+            return _current.FrameGenRoute.TryGetValue(gameId, out var route) ? route : null;
+    }
+
+    public void SetFrameGenRoute(string gameId, string? route)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var next = CopyStrings(settings.FrameGenRoute);
+            if (string.IsNullOrWhiteSpace(route)) next.Remove(gameId);
+            else next[gameId] = route.Trim();
+            settings.FrameGenRoute = next;
+        });
+    }
+
     /// <summary>Settings › General › Open Exo when Windows starts.</summary>
     public void SetStartWithWindows(bool on) => CommitMutation(settings => settings.StartWithWindows = on);
     /// <summary>Whether the player set this Steam game to Launch without anti-cheat (<see cref="AppSettings.SteamWithoutAntiCheat"/>).</summary>
@@ -1102,6 +1120,7 @@ public sealed class SettingsService
         SteamOverlay = CopyStrings(source.SteamOverlay),
         SteamOverlayPrior = CopyStrings(source.SteamOverlayPrior),
         SmoothMotion = CopyBools(source.SmoothMotion),
+        FrameGenRoute = CopyStrings(source.FrameGenRoute),
         ControllerSound = source.ControllerSound,
         SteamInput = CopyStrings(source.SteamInput),
         ThroughSteam = [.. (source.ThroughSteam ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase)],

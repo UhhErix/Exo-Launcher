@@ -130,6 +130,42 @@ export type FrameGenMod = {
   reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
 }
 
+export type FrameGenRoute = {
+  id: string
+  tier: 'native' | 'mod' | 'driver' | 'external' | 'unavailable'
+  kind: string
+  label: string
+  status: string
+  summary: string
+  gpuSupported: boolean
+  gpuNote: string
+  antiCheatVerdict: string
+  antiCheatNote: string
+  autoEnable: boolean
+  latencyNote: string
+  selectable: boolean
+  active: boolean
+  reason?: string | null
+  howToEnable?: string | null
+  choiceValue?: string | null
+  choices?: string[] | null
+}
+
+export type GameFrameGen = {
+  ok: boolean
+  message?: string | null
+  bestRouteId: string
+  selectedRouteId: string
+  state: 'native' | 'on' | 'off' | 'broken' | 'mod' | 'driver' | 'external' | 'unavailable' | 'unread'
+  word: string
+  good: boolean
+  bad: boolean
+  reason?: string | null
+  howToEnable?: string | null
+  routes: FrameGenRoute[]
+  legacyMod?: FrameGenMod | null
+}
+
 /**
  * A game's line from the Exo Shaders engine (Library > Shaders).
  * noApp: Exo Shaders is not installed. warmed: compiled for this driver. stale:
@@ -2805,6 +2841,8 @@ export const host = {
     rawCall<{ ok: boolean; message?: string }>('dlss.consent', { id, allow, ...(allow && antiCheat ? { antiCheat } : {}) }),
   /** The game's Frame generation line. */
   dlssFrameGen: (id: string) => rawCall<FrameGenMod>('dlss.frameGen', { id }, 60_000),
+  gameFrameGen: (id: string, change?: { route?: string; xessOverride?: IntelFrameGen }) =>
+    rawCall<GameFrameGen>('game.frameGen', { id, ...change }, 60_000),
   dlssNewer: () => rawCall<{ ok: boolean; items: { family: string; version: string }[] }>('dlss.newer', {}, 15_000),
   dlssDownloadNewer: () => rawCall<{ ok: boolean; message?: string | null }>('dlss.downloadNewer', {}, 10 * 60_000),
   shadersStatus: (id: string) => rawCall<ShaderStatus>('shaders.status', { id }),

@@ -2052,7 +2052,6 @@
     "ui/src/components/discord/waits.tsx": 7,
     "ui/src/components/game/Artwork.tsx": 9,
     "ui/src/components/game/CompressRow.tsx": 10,
-    "ui/src/components/game/FrameGenRow.tsx": 18,
     "ui/src/components/game/GameLine.tsx": 19,
     "ui/src/components/game/HdrRow.tsx": 7,
     "ui/src/components/game/ManageStrip.tsx": 1,

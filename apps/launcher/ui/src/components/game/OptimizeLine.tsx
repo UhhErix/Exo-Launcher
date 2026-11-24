@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { host, onHostEvent, type GameSettingsGroup, type GameSettingsState, type KeepStatus, type MinecraftInstanceState } from '../../lib/host'
 import { report } from '../../lib/report'
-import { Switch } from '../Switch'
 import { Choice } from '../settings/Choice'
+import { Switch } from '../Switch'
 import { GameLine, GameReading, type LineWord } from './GameLine'
 import { sheetMemory } from './useGameDetails'
 import { useSelectionGuard } from './useSelectionGuard'
@@ -98,11 +98,6 @@ export function OptimizeLine({ gameId }: { gameId: string }) {
   }
   const run = (on: boolean, mode?: string) =>
     applySettings(mode ? { mode } : { all: true, on }, on, on ? 'OptimizeLine.apply' : 'OptimizeLine.putBack')
-  const toggleSmoothMotion = (smoothMotion: boolean) => {
-    const payload = smoothMotion ? { smoothMotion: true, all: true, on: true }
-      : applied ? { smoothMotion: false, all: true, on: true } : { smoothMotion: false }
-    applySettings(payload, smoothMotion || applied, 'OptimizeLine.smoothMotion')
-  }
   const toggleGroup = (groupId: string, nextOn: boolean) =>
     applySettings({ group: groupId, on: nextOn }, nextOn, 'OptimizeLine.group')
   const toggleKey = (key: string, nextOn: boolean) =>
@@ -119,11 +114,6 @@ export function OptimizeLine({ gameId }: { gameId: string }) {
       <GameLine name="Optimize" word={wordFor(state, working, work, kept)} state={state.standing === 'applied' ? 'applied' : state.running ? 'running' : 'ready'} action
         disabled={isDisabled || state.standing === 'unfound'} confirm={applied ? 'Put back your settings?' : undefined} onOpen={() => run(!applied)}
         control={state.windowMode ? <Choice label="Window mode" value={state.windowMode} choices={WINDOW_MODES} disabled={isDisabled || state.standing === 'unfound'} onChange={mode => run(true, mode)} /> : null} />
-      {state.smoothMotion != null && (
-        <GameReading name="Smooth Motion" word={state.smoothMotion ? { text: 'On (without in-game DLSS-G)', good: true } : { text: 'Off' }}>
-          <Switch checked={state.smoothMotion} label="Smooth Motion" disabled={isDisabled} onChange={toggleSmoothMotion} />
-        </GameReading>
-      )}
       <OptimizeExtras
         state={state}
         expanded={expanded}
