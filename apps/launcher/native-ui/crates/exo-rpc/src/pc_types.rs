@@ -600,6 +600,406 @@ pub struct GpuProcessesState {
     pub answer: GpuUsageAnswer,
 }
 
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuTuningRange {
+    #[serde(default)]
+    pub min: i32,
+    #[serde(default)]
+    pub max: i32,
+    #[serde(default)]
+    pub step: i32,
+    #[serde(default, rename = "default")]
+    pub default_val: i32,
+    #[serde(default)]
+    pub supported: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuVfPoint {
+    #[serde(default)]
+    pub index: i32,
+    #[serde(default)]
+    pub voltage_mv: i32,
+    #[serde(default)]
+    pub base_clock_mhz: i32,
+    #[serde(default)]
+    pub offset_mhz: i32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuFanPoint {
+    #[serde(default)]
+    pub temp_c: i32,
+    #[serde(default)]
+    pub speed_percent: i32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuFanChannelCurve {
+    #[serde(default)]
+    pub fan_index: i32,
+    #[serde(default)]
+    pub manual: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub points: Vec<GpuFanPoint>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuTuningCapabilities {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub vendor: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub generation: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub device_id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub device_name: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub backend: String,
+    #[serde(default)]
+    pub fallback_reason: Option<String>,
+    #[serde(default)]
+    pub is_laptop: bool,
+    #[serde(default)]
+    pub locked_by_maker: bool,
+    #[serde(default)]
+    pub lock_reason: Option<String>,
+    #[serde(default)]
+    pub requires_waiver: bool,
+    #[serde(default)]
+    pub waiver_accepted: bool,
+    #[serde(default)]
+    pub waiver_text: Option<String>,
+    #[serde(default)]
+    pub persists_in_driver: bool,
+    #[serde(default)]
+    pub needs_resident_for_fan_curve: bool,
+    #[serde(default)]
+    pub persistence_note: Option<String>,
+    #[serde(default)]
+    pub supports_curve_editor: bool,
+    #[serde(default)]
+    pub supports_undervolt_search: bool,
+    #[serde(default)]
+    pub core_clock_offset_mhz: GpuTuningRange,
+    #[serde(default)]
+    pub core_min_clock_mhz: GpuTuningRange,
+    #[serde(default)]
+    pub core_max_clock_mhz: GpuTuningRange,
+    #[serde(default)]
+    pub voltage_mv: GpuTuningRange,
+    #[serde(default)]
+    pub voltage_offset_mv: GpuTuningRange,
+    #[serde(default)]
+    pub memory_clock_offset_mhz: GpuTuningRange,
+    #[serde(default)]
+    pub memory_max_clock_mhz: GpuTuningRange,
+    #[serde(default)]
+    pub power_limit_percent: GpuTuningRange,
+    #[serde(default)]
+    pub power_limit_watts: GpuTuningRange,
+    #[serde(default)]
+    pub temp_limit_c: GpuTuningRange,
+    #[serde(default)]
+    pub clock_lock_mhz: GpuTuningRange,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub memory_timing_levels: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub vf_curve_points: Vec<GpuVfPoint>,
+    #[serde(default)]
+    pub fan_count: i32,
+    #[serde(default)]
+    pub supports_hardware_fan_curve: bool,
+    #[serde(default)]
+    pub supports_software_fan_curve: bool,
+    #[serde(default)]
+    pub supports_zero_rpm: bool,
+    #[serde(default)]
+    pub fan_max_points: i32,
+    #[serde(default)]
+    pub fan_speed_percent: GpuTuningRange,
+    #[serde(default)]
+    pub fan_temp_c: GpuTuningRange,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuManualProfile {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub mode: String,
+    #[serde(default)]
+    pub core_clock_offset_mhz: Option<i32>,
+    #[serde(default)]
+    pub core_min_clock_mhz: Option<i32>,
+    #[serde(default)]
+    pub core_max_clock_mhz: Option<i32>,
+    #[serde(default)]
+    pub voltage_mv: Option<i32>,
+    #[serde(default)]
+    pub voltage_offset_mv: Option<i32>,
+    #[serde(default)]
+    pub memory_clock_offset_mhz: Option<i32>,
+    #[serde(default)]
+    pub memory_max_clock_mhz: Option<i32>,
+    #[serde(default)]
+    pub memory_timing_level: Option<String>,
+    #[serde(default)]
+    pub power_limit_percent: Option<i32>,
+    #[serde(default)]
+    pub power_limit_watts: Option<i32>,
+    #[serde(default)]
+    pub temp_limit_c: Option<i32>,
+    #[serde(default)]
+    pub clock_lock_mhz: Option<i32>,
+    #[serde(default)]
+    pub vf_curve: Option<Vec<GpuVfPoint>>,
+    #[serde(default)]
+    pub zero_rpm: Option<bool>,
+    #[serde(default)]
+    pub fan_curve: Option<Vec<GpuFanPoint>>,
+    #[serde(default)]
+    pub fan_channels: Option<Vec<GpuFanChannelCurve>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuStabilityProgress {
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub kind: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub phase: String,
+    #[serde(default)]
+    pub elapsed_sec: i32,
+    #[serde(default)]
+    pub total_sec: i32,
+    #[serde(default)]
+    pub passes: i32,
+    #[serde(default)]
+    pub temp_c: Option<f64>,
+    #[serde(default)]
+    pub clock_mhz: Option<i32>,
+    #[serde(default)]
+    pub checksum_ok: bool,
+    #[serde(default)]
+    pub current_step: Option<String>,
+    #[serde(default)]
+    pub passed: Option<bool>,
+    #[serde(default)]
+    pub rolled_back: bool,
+    #[serde(default)]
+    pub failure_reason: Option<String>,
+    #[serde(default)]
+    pub summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuTuningLive {
+    #[serde(default)]
+    pub temp_c: Option<f64>,
+    #[serde(default)]
+    pub clock_mhz: Option<i32>,
+    #[serde(default)]
+    pub fan_percent: Option<i32>,
+    #[serde(default)]
+    pub watts: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuManualTuningState {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub mode: String,
+    #[serde(default)]
+    pub paused_after_crash: bool,
+    #[serde(default)]
+    pub pause_reason: Option<String>,
+    #[serde(default)]
+    pub can_reapply: bool,
+    #[serde(default)]
+    pub queued_pending: bool,
+    #[serde(default)]
+    pub queued_reason: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub status_line: String,
+    #[serde(default)]
+    pub live: GpuTuningLive,
+    #[serde(default)]
+    pub capabilities: GpuTuningCapabilities,
+    #[serde(default)]
+    pub factory_defaults: GpuManualProfile,
+    #[serde(default)]
+    pub current: GpuManualProfile,
+    #[serde(default)]
+    pub saved: GpuManualProfile,
+    #[serde(default)]
+    pub test: GpuStabilityProgress,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuTuningChangedEvent {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub mode: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub status_line: String,
+    #[serde(default)]
+    pub paused_after_crash: bool,
+    #[serde(default)]
+    pub queued_pending: bool,
+    #[serde(default)]
+    pub queued_reason: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub backend: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdrPeakHealth {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub status: String,
+    #[serde(default)]
+    pub edid_nits: Option<i32>,
+    #[serde(default)]
+    pub dxgi_nits: Option<i32>,
+    #[serde(default)]
+    pub gap_percent: Option<i32>,
+    #[serde(default)]
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdrCalibration {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub device_path: String,
+    #[serde(default)]
+    pub edid_peak_nits: i32,
+    #[serde(default)]
+    pub measured_peak_nits: i32,
+    #[serde(default)]
+    pub global_brightness: i32,
+    #[serde(default)]
+    pub sdr_white_nits: f64,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub calibrated_at_utc: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdrLaptopCheckItem {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub label: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub status: String,
+    #[serde(default)]
+    pub warn: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdrLaptopChecks {
+    #[serde(default)]
+    pub is_laptop: bool,
+    #[serde(default)]
+    pub plugged_in: Option<bool>,
+    #[serde(default)]
+    pub hdr_on: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub items: Vec<HdrLaptopCheckItem>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdrDisplayInfo {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub gdi_name: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub device_path: String,
+    #[serde(default)]
+    pub main: bool,
+    #[serde(default)]
+    pub supported: bool,
+    #[serde(default)]
+    pub on: bool,
+    #[serde(default)]
+    pub internal: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub connector: String,
+    #[serde(default)]
+    pub color_mode: Option<String>,
+    #[serde(default)]
+    pub edid_peak_nits: Option<i32>,
+    #[serde(default)]
+    pub dxgi_peak_nits: Option<i32>,
+    #[serde(default)]
+    pub sdr_white_nits: Option<f64>,
+    #[serde(default)]
+    pub peak_health: Option<HdrPeakHealth>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdrCalibrateResult {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub status: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub message: String,
+    #[serde(default)]
+    pub manual_steps: Option<Vec<String>>,
+    #[serde(default)]
+    pub entry: Option<HdrCalibration>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdrCalibrationProgress {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub device_path: String,
+    #[serde(default)]
+    pub step: i32,
+    #[serde(default)]
+    pub total: i32,
+    #[serde(default)]
+    pub slider: i32,
+    #[serde(default)]
+    pub measured_nits: Option<i32>,
+    #[serde(default)]
+    pub target_nits: i32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdrWarningEvent {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub device_path: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub kind: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub message: String,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HdrState {
@@ -610,11 +1010,35 @@ pub struct HdrState {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
+    pub device_path: Option<String>,
+    #[serde(default)]
     pub peak_nits: Option<i32>,
+    #[serde(default)]
+    pub edid_peak_nits: Option<i32>,
+    #[serde(default)]
+    pub dxgi_peak_nits: Option<i32>,
+    #[serde(default)]
+    pub sdr_white_nits: Option<f64>,
+    #[serde(default)]
+    pub internal: bool,
+    #[serde(default)]
+    pub color_mode: Option<String>,
+    #[serde(default)]
+    pub auto_hdr_global: Option<bool>,
     #[serde(default)]
     pub calibrated: bool,
     #[serde(default)]
     pub verdict: Option<String>,
+    #[serde(default)]
+    pub peak_health: Option<HdrPeakHealth>,
+    #[serde(default)]
+    pub calibration: Option<HdrCalibration>,
+    #[serde(default)]
+    pub laptop_checks: Option<HdrLaptopChecks>,
+    #[serde(default)]
+    pub brightness_warning: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub displays: Vec<HdrDisplayInfo>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

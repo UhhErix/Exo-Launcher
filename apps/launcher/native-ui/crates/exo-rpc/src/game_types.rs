@@ -188,6 +188,15 @@ pub struct GpuGame {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
+pub struct HdrAutoHdr {
+    pub global: Option<bool>,
+    pub game: Option<bool>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub effective: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct HdrGame {
     #[serde(deserialize_with = "null_as_default")]
     pub ok: bool,
@@ -195,6 +204,12 @@ pub struct HdrGame {
     pub hdr: Option<String>,
     pub reason: Option<String>,
     pub mode: Option<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub cursor_fix: bool,
+    #[serde(deserialize_with = "null_as_default")]
+    pub cursor_fix_eligible: bool,
+    pub sdr_white_nits: Option<f64>,
+    pub auto_hdr: Option<HdrAutoHdr>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]

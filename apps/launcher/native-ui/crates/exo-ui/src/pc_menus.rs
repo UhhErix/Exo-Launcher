@@ -70,7 +70,7 @@ pub(crate) fn menu_btn(
         .child(text(lbl).font(type_small()).color(fg))
 }
 
-fn menu_switch(key: String, label: impl Into<String>, on: bool, disabled: bool) -> El {
+pub(crate) fn menu_switch(key: String, label: impl Into<String>, on: bool, disabled: bool) -> El {
     let knob = el()
         .size(18.0, 18.0)
         .radius(9.0)
@@ -97,7 +97,7 @@ fn menu_switch(key: String, label: impl Into<String>, on: bool, disabled: bool) 
         .child(knob)
 }
 
-fn menu_row(
+pub(crate) fn menu_row(
     label: impl Into<String>,
     detail: Option<String>,
     error: Option<String>,
@@ -128,7 +128,7 @@ fn menu_row(
         )
 }
 
-fn group_head(title: &'static str) -> El {
+pub(crate) fn group_head(title: &'static str) -> El {
     el().w_full().pt(14.0).pb(6.0).child(
         text(title)
             .font(TextStyle::new(scaled(12.0), 600.0))
@@ -546,6 +546,10 @@ fn graphics_menu_body(s: &AppState) -> El {
             row(),
         ));
     }
+
+    body = body
+        .child(group_head("Manual tuning"))
+        .child(crate::gpu_tuning::view(s));
 
     if s.settings.frame_gen_everywhere_card {
         let on = s.settings.frame_gen_everywhere;
@@ -987,59 +991,8 @@ fn display_menu_body(s: &AppState) -> El {
         }
     }
 
-    if let Some(ref hdr) = s.pc.hdr
-        && hdr.supported
-    {
-        let verdict_text = match hdr.verdict.as_deref().unwrap_or("unknown") {
-            "great" => "Bright enough for real HDR",
-            "good" => "Fine for HDR",
-            "weak" => "Too dim for good HDR",
-            _ => "Brightness not reported",
-        };
-        let good_hdr = hdr.verdict.as_deref() != Some("weak");
-        let hdr_games = s.settings.hdr_for_games;
-        body = body
-            .child(menu_row(
-                "HDR",
-                None,
-                None,
-                status_badge(
-                    verdict_text.into(),
-                    if good_hdr {
-                        BadgeTone::Good
-                    } else {
-                        BadgeTone::Neutral
-                    },
-                ),
-            ))
-            .child(menu_row(
-                "Auto-enable HDR for HDR games",
-                None,
-                None,
-                menu_switch(
-                    "set-hdr-games".into(),
-                    "Auto-enable HDR for HDR games",
-                    hdr_games,
-                    false,
-                )
-                .on_press(move |s: &mut AppState| {
-                    s.set_bool_setting("hdrForGames", !hdr_games);
-                }),
-            ))
-            .child(menu_row(
-                "HDR calibration",
-                None,
-                None,
-                if hdr.calibrated {
-                    status_badge("Calibrated".into(), BadgeTone::Good)
-                } else {
-                    menu_btn("disp-hdr-cal".into(), "Calibrate", false, false, false).on_press(
-                        |s: &mut AppState| {
-                            s.open_external_url("ms-windows-store://pdp/?productid=9N7F2SM5D1LR");
-                        },
-                    )
-                },
-            ));
+    if let Some(hdr_el) = crate::pc_hdr::hdr_rows_view(s) {
+        body = body.child(hdr_el);
     }
 
     body

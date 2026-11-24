@@ -1722,6 +1722,10 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 if opening && menu == PcPartMenu::Board {
                     s.load_system_qos();
                     s.load_system_overlays();
+                } else if opening && menu == PcPartMenu::Graphics {
+                    s.load_gpu_manual_tuning();
+                } else if opening && menu == PcPartMenu::Display {
+                    s.refresh_hdr_state();
                 }
             })
             .child(el().w_full().h(1.0).fill(float_line()))

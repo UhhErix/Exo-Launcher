@@ -25,6 +25,16 @@ use std::collections::{HashMap, HashSet};
 
 pub const FONT_SIZES: [i32; 7] = [12, 14, 15, 16, 18, 20, 24];
 pub const ZOOM_LEVELS: [i32; 11] = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
+pub const VOICE_LUFS_MIN: i32 = -26;
+pub const VOICE_LUFS_MAX: i32 = -14;
+
+pub fn clamp_voice_target_lufs(lufs: i32) -> i32 {
+    lufs.clamp(VOICE_LUFS_MIN, VOICE_LUFS_MAX)
+}
+
+pub fn format_voice_lufs(lufs: i32) -> String {
+    format!("{} LUFS", clamp_voice_target_lufs(lufs))
+}
 
 pub const KEYBIND_ACTIONS: [(&str, &str); 7] = [
     ("PUSH_TO_TALK", "Push to talk"),
@@ -1920,9 +1930,47 @@ fn voice_page(s: &AppState) -> El {
         ));
     }
 
+    let even_v = client.even_voices;
+    let target_lufs = clamp_voice_target_lufs(client.voice_target_lufs);
+    let mic_agc = client.mic_auto_gain;
+    page = page.child(toggle_row(
+        "dc-set-even-voices",
+        "Level voices",
+        None,
+        even_v,
+        move |s: &mut AppState| {
+            s.save_discord_client_settings(json!({ "evenVoices": !even_v }));
+        },
+    ));
+    if even_v {
+        page = page.child(step_row(
+            "dc-set-voice-lufs",
+            "Voice target loudness",
+            format_voice_lufs(target_lufs),
+            target_lufs > VOICE_LUFS_MIN,
+            target_lufs < VOICE_LUFS_MAX,
+            move |s: &mut AppState| {
+                let next = clamp_voice_target_lufs(target_lufs - 1);
+                s.save_discord_client_settings(json!({ "voiceTargetLufs": next }));
+            },
+            move |s: &mut AppState| {
+                let next = clamp_voice_target_lufs(target_lufs + 1);
+                s.save_discord_client_settings(json!({ "voiceTargetLufs": next }));
+            },
+        ));
+    }
+    page = page.child(toggle_row(
+        "dc-set-mic-agc",
+        "Mic auto gain",
+        None,
+        mic_agc,
+        move |s: &mut AppState| {
+            s.save_discord_client_settings(json!({ "micAutoGain": !mic_agc }));
+        },
+    ));
+
     if !exo_on {
         let others_ns = client.others_noise_suppression;
-        let even_v = client.even_voices;
         let echo = client.echo_cancellation;
         let auto_sens = client.auto_sensitivity;
         let sens = client.sensitivity.round() as i32;
@@ -1934,15 +1982,6 @@ fn voice_page(s: &AppState) -> El {
                 others_ns,
                 move |s: &mut AppState| {
                     s.save_discord_client_settings(json!({ "othersNoiseSuppression": !others_ns }));
-                },
-            ))
-            .child(toggle_row(
-                "dc-set-even-voices",
-                "Even out voices",
-                None,
-                even_v,
-                move |s: &mut AppState| {
-                    s.save_discord_client_settings(json!({ "evenVoices": !even_v }));
                 },
             ))
             .child(toggle_row(
@@ -3261,5 +3300,23 @@ mod tests {
         assert!(app.handle_discord_keybind("TOGGLE_STREAMER_MODE"));
         assert!(app.discord.settings_ext.streamer_mode);
         assert!(!app.handle_discord_keybind("UNKNOWN"));
+    }
+
+    #[test]
+    fn voice_loudness_clamping_and_client_patch_round_trip() {
+        assert_eq!(clamp_voice_target_lufs(-30), -26);
+        assert_eq!(clamp_voice_target_lufs(-20), -20);
+        assert_eq!(clamp_voice_target_lufs(-10), -14);
+        assert_eq!(format_voice_lufs(-18), "-18 LUFS");
+
+        let mut app = AppState::with_demo_games();
+        app.save_discord_client_settings(json!({
+            "evenVoices": true,
+            "voiceTargetLufs": -16,
+            "micAutoGain": true,
+        }));
+        assert!(app.discord.settings_ext.client.even_voices);
+        assert_eq!(app.discord.settings_ext.client.voice_target_lufs, -16);
+        assert!(app.discord.settings_ext.client.mic_auto_gain);
     }
 }

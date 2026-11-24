@@ -87,9 +87,9 @@ pub use game_types::{
     AntiCheatLaunch, ArtworkMutationResponse, CompressProgressEvent, CompressState,
     CompressStateReply, DequeueReply, DlssFileOutcome, DlssNewerItem, DlssNewerReply,
     DlssRunResult, DlssStatus, DlssStatusItem, DriveHeat, FrameGenMod, GameAchievementsEvent,
-    GameContent, GameOptimizeEvent, GameSettingsGroup, GameSettingsState, GpuGame, HdrGame,
-    InstallResponse, KeepStatus, MovingProgress, OpenUrlReply, PropertyChoice, ShaderStatus,
-    ShaderWarmed, UninstallResponse,
+    GameContent, GameOptimizeEvent, GameSettingsGroup, GameSettingsState, GpuGame, HdrAutoHdr,
+    HdrGame, InstallResponse, KeepStatus, MovingProgress, OpenUrlReply, PropertyChoice,
+    ShaderStatus, ShaderWarmed, UninstallResponse,
 };
 pub use media_types::{
     CaptureEditReply, CaptureHotkeys, CaptureItem, CaptureItemReply, CaptureListReply,
@@ -109,19 +109,22 @@ pub use pc_types::{
     AutopilotReport, AutopilotSetReply, AutopilotStandbyPurge, AutopilotState,
     AutopilotTimerGlobal, BackupDay, BackupNote, BackupOffer, BackupStatus, BiosStaged,
     BiosUpdateReply, ClientsEpic, ClientsStatus, ClientsSteam, ColorControl, CompressActReply,
-    CompressAllReply, CompressList, CompressListGame,
-    CompressSettings, CompressSettingsReply, DevicesImageReply, DevicesListReply, DisplayAdjust,
-    DisplayBest, DisplayDdc, DisplayScreen, DisplayState, DriveFix, DriveGameEntry, DriveHealth,
-    DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp, DriveVendor, DriveVerdict, DriveVolume,
-    DriverAdvised, DriverEntry, DriverEntryAdvised, DriverLatest, DriverProgress, DriverSkipped,
-    DriverState, DriverStep, DriversState, DrivesReply, ExoAiFans, ExoAiGaming, ExoAiState,
-    FpsCounterReply, GpuAdapterUsage, GpuEngineSlice, GpuFeature, GpuProcessUsage,
-    GpuProcessesState, GpuProfile, GpuProfileItem, GpuProfileScreen, GpuUsageAnswer, HdrState,
-    InstalledAppItem, InstallerCacheCleanReply, InstallerCacheReply, InterruptDevice,
-    InterruptsState, KeyboardBackupResult, KeyboardBackupSummary, KeyboardBackupsReply,
-    KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample, NetCheck, NetSample,
-    OutputColor, OverlayAdvisorItem, OverlayAdvisorState, PcHealth, PcHealthItem, PeripheralCard,
-    PeripheralPort, QosGame, QosState, RestorePointReply,
+    CompressAllReply, CompressList, CompressListGame, CompressSettings, CompressSettingsReply,
+    DevicesImageReply, DevicesListReply, DisplayAdjust, DisplayBest, DisplayDdc, DisplayScreen,
+    DisplayState, DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown,
+    DriveTemp, DriveVendor, DriveVerdict, DriveVolume, DriverAdvised, DriverEntry,
+    DriverEntryAdvised, DriverLatest, DriverProgress, DriverSkipped, DriverState, DriverStep,
+    DriversState, DrivesReply, ExoAiFans, ExoAiGaming, ExoAiState, FpsCounterReply,
+    GpuAdapterUsage, GpuEngineSlice, GpuFanChannelCurve, GpuFanPoint, GpuFeature, GpuManualProfile,
+    GpuManualTuningState, GpuProcessUsage, GpuProcessesState, GpuProfile, GpuProfileItem,
+    GpuProfileScreen, GpuStabilityProgress, GpuTuningCapabilities, GpuTuningChangedEvent,
+    GpuTuningLive, GpuTuningRange, GpuUsageAnswer, GpuVfPoint, HdrCalibrateResult, HdrCalibration,
+    HdrCalibrationProgress, HdrDisplayInfo, HdrLaptopCheckItem, HdrLaptopChecks, HdrPeakHealth,
+    HdrState, HdrWarningEvent, InstalledAppItem, InstallerCacheCleanReply, InstallerCacheReply,
+    InterruptDevice, InterruptsState, KeyboardBackupResult, KeyboardBackupSummary,
+    KeyboardBackupsReply, KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample,
+    NetCheck, NetSample, OutputColor, OverlayAdvisorItem, OverlayAdvisorState, PcHealth,
+    PcHealthItem, PeripheralCard, PeripheralPort, QosGame, QosState, RestorePointReply,
     RuntimeItem, RuntimeResult, RuntimesInstallReply, RuntimesListReply, RuntimesProgress,
     ShaderEstimate, ShaderPrepareGame, ShaderRebuild, ShaderSnapGame, ShadersAddonStatus,
     ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot, StartupItem,
@@ -348,6 +351,13 @@ pub const METHOD_GPU_DISPLAY: &str = "gpu.display";
 pub const METHOD_GPU_DRIVER: &str = "gpu.driver";
 pub const METHOD_GPU_PROCESSES: &str = "gpu.processes";
 pub const METHOD_GPU_PROFILE: &str = "gpu.profile";
+pub const METHOD_GPU_TUNING_APPLY: &str = "gpu.tuning.apply";
+pub const METHOD_GPU_TUNING_RESET: &str = "gpu.tuning.reset";
+pub const METHOD_GPU_TUNING_STATE: &str = "gpu.tuning.state";
+pub const METHOD_GPU_TUNING_TEST: &str = "gpu.tuning.test";
+pub const METHOD_GPU_TUNING_UNDERVOLT: &str = "gpu.tuning.undervolt";
+pub const METHOD_GPU_TUNING_WAIVER: &str = "gpu.tuning.waiver";
+pub const METHOD_HDR_CALIBRATE: &str = "hdr.calibrate";
 pub const METHOD_HDR_STATE: &str = "hdr.state";
 pub const METHOD_JUNK_CLEAN: &str = "junk.clean";
 pub const METHOD_JUNK_SCAN: &str = "junk.scan";
@@ -675,6 +685,13 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GPU_DRIVER,
     METHOD_GPU_PROCESSES,
     METHOD_GPU_PROFILE,
+    METHOD_GPU_TUNING_APPLY,
+    METHOD_GPU_TUNING_RESET,
+    METHOD_GPU_TUNING_STATE,
+    METHOD_GPU_TUNING_TEST,
+    METHOD_GPU_TUNING_UNDERVOLT,
+    METHOD_GPU_TUNING_WAIVER,
+    METHOD_HDR_CALIBRATE,
     METHOD_HDR_STATE,
     METHOD_JUNK_CLEAN,
     METHOD_JUNK_SCAN,
@@ -714,6 +731,9 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_RESUME_DOWNLOAD,
     METHOD_GAME_SETTINGS,
     METHOD_GAME_FRAME_GEN,
+    METHOD_GAME_FRAME_CAP,
+    METHOD_GAME_CAP_LAB_RUN,
+    METHOD_GAME_CAP_LAB_CANCEL,
     METHOD_KEYS_PREVIEW,
     METHOD_KEYS_ACTIVATE,
     METHOD_MOUSE_PANEL_BOUNDS,
@@ -1800,6 +1820,18 @@ fn parse_event(
         "gpu.driverInstall" => Ok(serde_json::from_str::<GpuDriverInstallEvent>(data_raw)
             .map(HostEvent::GpuDriverInstall)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "gpu.tuningChanged" => Ok(serde_json::from_str::<GpuTuningChangedEvent>(data_raw)
+            .map(HostEvent::GpuTuningChanged)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "gpu.tuningTestProgress" => Ok(serde_json::from_str::<GpuStabilityProgress>(data_raw)
+            .map(|p| HostEvent::GpuTuningTestProgress(Box::new(p)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "hdr.calibrationProgress" => Ok(serde_json::from_str::<HdrCalibrationProgress>(data_raw)
+            .map(HostEvent::HdrCalibrationProgress)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "hdr.warning" => Ok(serde_json::from_str::<HdrWarningEvent>(data_raw)
+            .map(HostEvent::HdrWarning)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "drivers.step" => Ok(serde_json::from_str::<DriverStep>(data_raw)
             .map(HostEvent::DriversStep)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
@@ -2322,5 +2354,67 @@ mod tests {
             parse_event("shaders.rebuild", r#"{"state":"running","ready":3,"total":8}"#, None),
             Ok(HostEvent::ShadersRebuild(r)) if r.ready == 3 && r.total == 8
         ));
+    }
+
+    #[test]
+    fn parses_perf_tuning_and_hdr_events_and_dtos() {
+        assert!(matches!(
+            parse_event(
+                "gpu.tuningChanged",
+                r#"{"mode":"manual","statusLine":"Manual active · NVAPI","pausedAfterCrash":false,"queuedPending":false,"backend":"nvapi"}"#,
+                None
+            ),
+            Ok(HostEvent::GpuTuningChanged(ev)) if ev.mode == "manual" && ev.backend == "nvapi"
+        ));
+        assert!(matches!(
+            parse_event(
+                "gpu.tuningTestProgress",
+                r#"{"running":true,"kind":"stability","phase":"running","elapsedSec":15,"totalSec":60,"passes":30,"checksumOk":true,"currentStep":"Pass 30"}"#,
+                None
+            ),
+            Ok(HostEvent::GpuTuningTestProgress(p)) if p.running && p.elapsed_sec == 15 && p.total_sec == 60
+        ));
+        assert!(matches!(
+            parse_event(
+                "hdr.calibrationProgress",
+                r#"{"devicePath":"DISPLAY#1","step":3,"total":8,"slider":60,"measuredNits":612,"targetNits":600}"#,
+                None
+            ),
+            Ok(HostEvent::HdrCalibrationProgress(p)) if p.step == 3 && p.measured_nits == Some(612)
+        ));
+        assert!(matches!(
+            parse_event(
+                "hdr.warning",
+                r#"{"devicePath":"DISPLAY#1","kind":"brightness","message":"Brightness changed externally"}"#,
+                None
+            ),
+            Ok(HostEvent::HdrWarning(w)) if w.kind == "brightness"
+        ));
+
+        let range: GpuTuningRange = serde_json::from_str(
+            r#"{"min":-500,"max":500,"step":15,"default":0,"supported":true}"#,
+        )
+        .expect("range");
+        assert!(range.supported);
+        assert_eq!(range.min, -500);
+        assert_eq!(range.max, 500);
+        assert_eq!(range.step, 15);
+        assert_eq!(range.default_val, 0);
+
+        let hdr: HdrState = serde_json::from_str(
+            r#"{"supported":true,"internal":true,"edidPeakNits":600,"dxgiPeakNits":420,"peakHealth":{"status":"mismatch","edidNits":600,"dxgiNits":420,"gapPercent":30,"warning":"Reports 30% below EDID"}}"#,
+        )
+        .expect("hdr");
+        assert!(hdr.internal);
+        assert_eq!(
+            hdr.peak_health.as_ref().map(|h| h.status.as_str()),
+            Some("mismatch")
+        );
+
+        let dc: DiscordClientSettings =
+            serde_json::from_str(r#"{"evenVoices":true,"voiceTargetLufs":-18,"micAutoGain":true}"#)
+                .expect("discord settings");
+        assert_eq!(dc.voice_target_lufs, -18);
+        assert!(dc.mic_auto_gain);
     }
 }

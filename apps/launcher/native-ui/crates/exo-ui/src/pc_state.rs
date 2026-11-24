@@ -524,6 +524,8 @@ pub struct SettingsAndPcState {
     pub armed_uninstall_seq: u64,
     pub audio_ui: crate::devices_audio::AudioEqUiState,
     pub controller_ui: crate::devices_controller::ControllerLabState,
+    pub gpu_tuning_ui: crate::gpu_tuning::GpuManualTuningUiState,
+    pub hdr_ui: crate::pc_hdr::HdrCalibrationUiState,
 }
 
 impl SettingsAndPcState {
@@ -744,6 +746,7 @@ impl SettingsAndPcState {
                 peak_nits: Some(980),
                 calibrated: true,
                 verdict: Some("great".into()),
+                ..Default::default()
             }),
             shaders: Some(ShadersAddonStatus {
                 ok: true,
@@ -1290,6 +1293,8 @@ impl SettingsAndPcState {
             armed_uninstall_seq: 0,
             audio_ui: crate::devices_audio::AudioEqUiState::demo(),
             controller_ui: crate::devices_controller::ControllerLabState::demo(),
+            gpu_tuning_ui: crate::gpu_tuning::GpuManualTuningUiState::demo(),
+            hdr_ui: crate::pc_hdr::HdrCalibrationUiState::default(),
         }
     }
 
@@ -1456,6 +1461,8 @@ impl SettingsAndPcState {
             armed_uninstall_seq: 0,
             audio_ui: crate::devices_audio::AudioEqUiState::default(),
             controller_ui: crate::devices_controller::ControllerLabState::default(),
+            gpu_tuning_ui: crate::gpu_tuning::GpuManualTuningUiState::default(),
+            hdr_ui: crate::pc_hdr::HdrCalibrationUiState::default(),
         }
     }
 }

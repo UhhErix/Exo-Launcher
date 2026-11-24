@@ -25,10 +25,10 @@ use exo_rpc::{
     LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
     METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_CAP_LAB_CANCEL, METHOD_GAME_CAP_LAB_RUN,
     METHOD_GAME_FRAME_CAP, METHOD_GAME_FRAME_GEN, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH,
-    METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE,
-    METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME,
-    MusicPlayback, MusicVolumeEvent, ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame,
-    StoreHome, StoreOtherOffers, StoreShelf, StoreTile, remote_art,
+    METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH,
+    METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback,
+    MusicVolumeEvent, ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame, StoreHome,
+    StoreOtherOffers, StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -682,6 +682,7 @@ pub struct AppState {
     pub game_frame_cap: Option<GameFrameCap>,
     pub frame_cap_menu_open: bool,
     pub frame_cap_busy: bool,
+    pub frame_cap_error: Option<String>,
     pub props_open: bool,
     pub game_props_tab: usize,
     pub props_launch_opts: TextEdit,
@@ -910,6 +911,7 @@ impl AppState {
             }),
             frame_cap_menu_open: false,
             frame_cap_busy: false,
+            frame_cap_error: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -991,6 +993,8 @@ impl AppState {
         };
         crate::library_state::register_library_wp2_events(&mut s);
         crate::frame_cap_row::register_events(&mut s);
+        crate::gpu_tuning::register_events(&mut s);
+        crate::pc_hdr::register_events(&mut s);
         s.selected_game_id = s.home_deck_games().first().map(|g| g.id.clone());
         s
     }
@@ -1035,6 +1039,7 @@ impl AppState {
             game_frame_cap: None,
             frame_cap_menu_open: false,
             frame_cap_busy: false,
+            frame_cap_error: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -1104,6 +1109,8 @@ impl AppState {
         };
         crate::library_state::register_library_wp2_events(&mut s);
         crate::frame_cap_row::register_events(&mut s);
+        crate::gpu_tuning::register_events(&mut s);
+        crate::pc_hdr::register_events(&mut s);
         s
     }
 
@@ -2243,6 +2250,7 @@ impl AppState {
         self.frame_gen_busy = false;
         self.frame_cap_menu_open = false;
         self.frame_cap_busy = false;
+        self.frame_cap_error = None;
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
@@ -2367,6 +2375,7 @@ impl AppState {
         cap_fps: Option<i32>,
         backend: Option<&str>,
     ) {
+        self.frame_cap_error = None;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.frame_cap_busy = true;
@@ -2390,13 +2399,18 @@ impl AppState {
                         s.frame_cap_busy = false;
                         if s.open_game_id.as_deref() == Some(gid.as_str()) {
                             if let Ok(fc) = res {
+                                let ok = fc.ok;
+                                let msg = fc.message.clone();
                                 if !fc.tiers.is_empty() {
                                     s.game_frame_cap = Some(fc);
-                                } else if let Some(msg) = fc.message {
-                                    s.notice = Some(msg);
+                                }
+                                if !ok {
+                                    s.frame_cap_error = Some(
+                                        msg.unwrap_or_else(|| "Could not save frame cap.".into()),
+                                    );
                                 }
                             } else {
-                                s.notice = Some("Could not save frame cap.".into());
+                                s.frame_cap_error = Some("Could not save frame cap.".into());
                             }
                         }
                     });
@@ -2415,6 +2429,10 @@ impl AppState {
                         "Off".into()
                     };
                     fc.good = t == "uncapped";
+                } else if t == "refresh" {
+                    fc.active_cap_fps = cap_fps;
+                    fc.word = format!("{} fps · {}", cap_fps.unwrap_or(0), fc.backend_label);
+                    fc.good = true;
                 } else if let Some(found) = fc.tiers.iter().find(|ti| ti.id == t) {
                     fc.active_cap_fps = found.cap_fps;
                     fc.word = format!("{} fps · {}", found.cap_fps.unwrap_or(0), fc.backend_label);
@@ -2426,11 +2444,15 @@ impl AppState {
             }
             if let Some(b) = backend {
                 fc.backend = b.to_string();
+                if let Some(found) = fc.backends.iter().find(|bk| bk.id == b) {
+                    fc.backend_label = found.label.clone();
+                }
             }
         }
     }
 
     pub fn run_cap_lab(&mut self, id: &str, cap_a_fps: i32, cap_b_fps: i32) {
+        self.frame_cap_error = None;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.frame_cap_busy = true;
@@ -2445,13 +2467,15 @@ impl AppState {
                             if let Some(ref mut fc) = s.game_frame_cap {
                                 fc.ab = reply.ab;
                             }
-                            if !reply.ok
-                                && let Some(msg) = reply.message
-                            {
-                                s.notice = Some(msg);
+                            if !reply.ok {
+                                s.frame_cap_error = Some(
+                                    reply
+                                        .message
+                                        .unwrap_or_else(|| "Could not start A/B test.".into()),
+                                );
                             }
                         } else {
-                            s.notice = Some("Could not start A/B cap test.".into());
+                            s.frame_cap_error = Some("Could not start A/B test.".into());
                         }
                     });
                 },
@@ -2469,6 +2493,7 @@ impl AppState {
     }
 
     pub fn cancel_cap_lab(&mut self, id: &str) {
+        self.frame_cap_error = None;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.frame_cap_busy = true;
@@ -2479,10 +2504,21 @@ impl AppState {
                 move |res| {
                     handle.update(move |s, _| {
                         s.frame_cap_busy = false;
-                        if let Ok(reply) = res
-                            && let Some(ref mut fc) = s.game_frame_cap
-                        {
-                            fc.ab = reply.ab;
+                        match res {
+                            Ok(reply) => {
+                                if let Some(ref mut fc) = s.game_frame_cap {
+                                    fc.ab = reply.ab;
+                                }
+                                if !reply.ok {
+                                    s.frame_cap_error =
+                                        Some(reply.message.unwrap_or_else(|| {
+                                            "Could not cancel A/B test.".into()
+                                        }));
+                                }
+                            }
+                            Err(_) => {
+                                s.frame_cap_error = Some("Could not cancel A/B test.".into());
+                            }
                         }
                     });
                 },
@@ -2507,6 +2543,7 @@ impl AppState {
         self.frame_gen_busy = false;
         self.frame_cap_menu_open = false;
         self.frame_cap_busy = false;
+        self.frame_cap_error = None;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
         self.game_page.pending_choice = None;
