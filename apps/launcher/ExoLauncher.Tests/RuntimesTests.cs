@@ -404,6 +404,21 @@ public sealed class RuntimesTests : IDisposable
     [InlineData(1618, "Another installation")]
     [InlineData(-2146498529, "0x800F081F")]
     [InlineData(-1001, "changed after Exo checked it")]
+    [InlineData(-1003, "couldn't copy")]
+    [InlineData(-1004, "Windows blocked it")]
     [InlineData(42, "code 42")]
     public void ExitCodesReadAsPlainWords(int code, string expected) => Assert.Contains(expected, Words(code));
+
+    [Fact]
+    public void TheElevatedScriptReportsFailureDetailsAndDistinctCodes()
+    {
+        var dotnet = Find("dotnet10-x64")!;
+        var script = Script(@"C:\stage\abc", [(dotnet, false, @"C:\stage\abc\dotnet10-x64.exe", "AA")]);
+        Assert.Contains("-1003", script);
+        Assert.Contains("-1004", script);
+        Assert.Contains("ToBase64String", script);
+        Assert.Contains("HResult", script);
+        Assert.Contains("4551", script);
+        Assert.Contains("fatal ", script);
+    }
 }

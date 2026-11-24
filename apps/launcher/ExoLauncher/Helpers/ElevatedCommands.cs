@@ -44,6 +44,7 @@ internal static class ElevatedCommands
             });
             if (process is null) return "Windows didn't start the change.";
             if (!process.WaitForExit(wait ?? TimeSpan.FromSeconds(60))) return "The change didn't finish.";
+            if (process.ExitCode != 0) AppLog.Warn($"{log}: the change ended with exit code {process.ExitCode}.");
             return null;
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)

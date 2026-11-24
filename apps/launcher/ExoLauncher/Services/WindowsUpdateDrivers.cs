@@ -294,7 +294,9 @@ internal sealed partial class WindowsUpdateDrivers(string folder, Func<DriverIte
             });
             if (process is null) return "Windows didn't start the update.";
             try { process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { /* elevated: not ours to set */ }
-            return process.WaitForExit(limit) ? null : "The update is taking long; it goes on in the background.";
+            if (!process.WaitForExit(limit)) return "The update is taking long; it goes on in the background.";
+            if (process.ExitCode != 0) AppLog.Warn($"Drivers: Windows Update install ended with exit code {process.ExitCode}.");
+            return null;
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
@@ -380,7 +382,7 @@ internal sealed partial class WindowsUpdateDrivers(string folder, Func<DriverIte
           }
           $c = New-Object -ComObject Microsoft.Update.UpdateColl
           [void]$c.Add($u)
-          $ok = $false
+          $ok = $false; $err = $null
           try {
             $dl = $s.CreateUpdateDownloader(); $dl.Updates = $c
             if ($dl.Download().ResultCode -eq 2) {
@@ -389,12 +391,12 @@ internal sealed partial class WindowsUpdateDrivers(string folder, Func<DriverIte
               $ok = $ir.ResultCode -in 2,3
               if ($ir.RebootRequired) { $reboot = $true }
             }
-          } catch { $ok = $false }
+          } catch { $ok = $false; $err = $_.Exception.Message }
           $back = $false
           if (-not $ok -and $keep) {
             foreach ($k in Get-ChildItem -Path $keep -Filter *.inf -Recurse) { & "$env:SystemRoot\System32\pnputil.exe" /add-driver $k.FullName /install | Out-Null; $back = $true }
           }
-          $results += [pscustomobject]@{ Id = $id; Ok = $ok; RolledBack = $back }
+          $results += [pscustomobject]@{ Id = $id; Ok = $ok; RolledBack = $back; Error = $err }
           Landed
         }
         } catch { $results += [pscustomobject]@{ Id = ''; Ok = $false; Error = $_.Exception.Message } }
