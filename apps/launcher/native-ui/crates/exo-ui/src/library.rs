@@ -16,7 +16,7 @@ use exo_kit::{
     glass_rim_top, glass_still_control_fill, good, hover_fill, icon_check, icon_chevron_left,
     icon_chevron_right, icon_close, icon_download, icon_filter, icon_grid, icon_more_horiz,
     icon_play, icon_plus, icon_search, icon_stop, popover_transition, pressed_fill, primary_button,
-    progress_bar, scrim_fill, select_trigger, store_logo, surface_card, type_body, type_control,
+    progress_bar, select_trigger, store_logo, surface_card, type_body, type_control,
     type_first_run, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, InstallProgress};
@@ -108,7 +108,7 @@ pub(crate) fn cover_surface(
         None
     };
 
-    if let Some(img) = cover {
+    if let Some(img) = cover.filter(|img| img.is_ready()) {
         if dim {
             art = art.child(
                 el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -178,8 +178,9 @@ pub(crate) fn cover_surface(
                 .size(22.0, 22.0)
                 .radius(11.0)
                 .center()
-                .fill(scrim_fill())
-                .child(icon_download(13.0, FG.alpha(0.9))),
+                .fill(BG.alpha(0.68))
+                .border(1.0, FG.alpha(0.12))
+                .child(icon_download(14.0, FG)),
         );
     }
 
@@ -399,7 +400,7 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
     }
     let panel = glass_panel_opt("library-filter-pop", 420.0, blur)
         .transition(popover_transition())
-        .anchored_fit("all-games-filter", Side::Bottom, Align::End, 8.0)
+        .anchored_fit("all-games-filter", Side::Bottom, Align::End, 4.0)
         .px(12.0)
         .py(12.0)
         .gap(12.0)
@@ -930,11 +931,11 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         row()
             .key("home-inline-search")
             .cursor(Cursor::Text)
-            .w(240.0)
+            .w(280.0)
             .h(34.0)
             .pl(12.0)
-            .pr(6.0)
-            .gap(6.0)
+            .pr(8.0)
+            .gap(8.0)
             .center_y()
             .radius(RADIUS_PILL)
             .fill(glass_control_fill())
@@ -957,8 +958,8 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
                     .label("Close search")
                     .cursor(Cursor::Pointer)
                     .hit()
-                    .size(22.0, 22.0)
-                    .radius(11.0)
+                    .size(28.0, 28.0)
+                    .radius(14.0)
                     .center()
                     .hover(hover_fill())
                     .on_press(|s: &mut AppState| {
@@ -982,6 +983,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
     };
 
     let right_tools = row()
+        .min_h(40.0)
         .gap(8.0)
         .center_y()
         .children(gifts_pill(s))
@@ -1288,17 +1290,17 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         );
     }
 
-    let filter_on = !s.filters.is_empty();
-    let filter_label = if filter_on {
-        format!("Filter · {}", s.filters.len())
+    let filter_count = s.filters.len();
+    let filter_aria = if filter_count > 0 {
+        format!("Filter ({filter_count})")
     } else {
         "Filter".to_string()
     };
 
-    let filter_btn = row()
+    let mut filter_btn = row()
         .key("all-games-filter")
         .role("button")
-        .label(filter_label.clone())
+        .label(filter_aria)
         .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
@@ -1306,17 +1308,13 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .press_scale(PRESS_SCALE)
         .h(32.0)
         .pl(12.0)
-        .pr(14.0)
+        .pr(if filter_count > 0 { 10.0 } else { 14.0 })
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(if filter_on {
-            FG
-        } else {
-            glass_still_control_fill()
-        })
-        .hover(if filter_on { FG } else { hover_fill() })
-        .press(if filter_on { FG } else { pressed_fill() })
+        .fill(glass_still_control_fill())
+        .hover(hover_fill())
+        .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
         .on_hover(|s: &mut AppState| s.warm_library_friends())
@@ -1324,12 +1322,24 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
             s.warm_library_friends();
             s.library_filter_open = !s.library_filter_open;
         })
-        .child(icon_filter(16.0, if filter_on { PRIMARY_FG } else { FG }))
-        .child(text(filter_label).font(type_control()).color(if filter_on {
-            PRIMARY_FG
-        } else {
-            FG
-        }));
+        .child(icon_filter(16.0, FG))
+        .child(text("Filter").font(type_control()).color(FG));
+    if filter_count > 0 {
+        filter_btn = filter_btn.child(
+            el().key("all-games-filter-count")
+                .min_w(18.0)
+                .h(18.0)
+                .px(5.0)
+                .radius(RADIUS_PILL)
+                .center()
+                .fill(FG)
+                .child(
+                    text(filter_count.to_string())
+                        .font(type_small())
+                        .color(PRIMARY_FG),
+                ),
+        );
+    }
 
     let sort_btn = select_trigger(
         SelectTrigger::new("sort-cycle", "Sort library", s.sort.label())

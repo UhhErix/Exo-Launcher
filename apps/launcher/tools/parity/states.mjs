@@ -610,6 +610,8 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
+        { type: 'click', selector: 'button.exo-library-back', optional: true },
+        { type: 'wait', ms: 250 },
         { type: 'click', selector: 'button.exo-capture-btn' },
         { type: 'wait', ms: 300 },
       ],

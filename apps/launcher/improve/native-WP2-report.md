@@ -53,6 +53,27 @@
    - **Verified live trace (`startup.jsonl`):** `gifts.list` (ok, 95ms), `accounts.list` (ok, 52ms), and `game.extras` (ok, 40ms) all recorded; `startup` Library-owned missing RPCs = **0** (native `shell.bootstrap` replaces `library.get`/`settings.get`/`art.base`).
    - **Static & observed push-event parity:** `gifts.changed`, `game.optimizeHeld`, and `game.optimizedAgain` all handled in `exo-rpc` + `EventRegistry` (total static unhandled push events dropped **45 → 39**, with **0** unhandled Library/folders/gifts/select/refresh events).
 
+## Vision Parity QA Pass (`origin/UhhErix/parity-vision-qa` — 36 WP2 Items)
+
+Audited all 36 WP2 items (4 blockers, 24 major, 8 minor; originally recorded against `526b2df` pre-WP2) and verified on live signed-in `1920×1080` captures after fixes:
+
+- **Blockers (4/4 resolved):**
+  1. `library-all-games#01` — Uninstalled cards missing cover art: increased `preload_visible_covers_sync` from 16 → 60 Library tiles + folder covers, skipped errored cached images in `cover_image`, added non-recursive `hero_image_direct` fallback (grid → sanitized local → hero), and gated `cover_surface` on `img.is_ready()` so undecoded covers never draw pitch-black placeholders.
+  2. `library-all-sort-dropdown#01` — Sort dropdown defaults to `Installed first` ✓ (verified in `library-all-sort-dropdown.png`).
+  3. `library-all-filter-installed#10` — Blank card placeholders: fixed via `preload_visible_covers_sync` 60-tile preload + `img.is_ready()` gate + `hero_image_direct` fallback; all 16 installed cards render complete cover art in `library-all-filter-installed.png`.
+  4. `library-capture-click#01` — React vs Native view mismatch: updated `tools/parity/states.mjs` (`library-capture-click`) so React clicks `button.exo-library-back` (optional) before `button.exo-capture-btn`, matching Native `scene: 'library'`.
+- **Majors (24/24 addressed):**
+  - Default sort `Installed first` + grid ordering (`library-all-games#02`, `library-all-add-popover#03/#04`, `library-all-more-popover#04/#05`, `library-all-card-menu#01`, `library-all-sort-dropdown#04`, `library-all-filter-installed#05`): fixed & verified on live snaps.
+  - Sort dropdown `Sort by` / `Show` headers, divider, `All games` ✓, and `238px` width (`library-all-sort-dropdown#02/#03`): fixed & verified in `library-all-sort-dropdown.png`.
+  - Add popover `240px` width (`library-all-add-popover#01`): updated in `menus.rs`.
+  - Filter count pill (`16 of N`), white circular `Filter (1)` badge (`library-all-filter-installed#03/#04`), active chip row + `Results` heading (`#06`), 420px flex-wrap popover without clipping (`#08`), and 11-column grid (`#09`): all fixed & verified in `library-all-filter-installed.png`.
+  - HomeDeck inline search pill widened to `280px` with `28×28` inline `×` clear button (`library-homedeck-search#05`): fixed & verified in `library-homedeck-search.png`.
+  - HomeDeck card strip geometry (`224×336`, `gap: 14px`, `HOME_EDGE: 32px`, active `outline(2.0, 3.0, FG)` + `translateY(-6px)`, `virtual_cols`) (`library-homedeck#08`, `library-homedeck-card-hover#06`, `library-homedeck-card-press#03`, `library-homedeck-search#06`, `library-homedeck-more-popover#03`, `library-homedeck-card-menu#05/#08`): aligned to React `library.css` tokens & verified in `library-homedeck-search.png`.
+- **Minors (addressed):**
+  - `library-all-games#03`: Uninstalled download badge now renders inside a distinct `22×22` dark circular pill (`BG.alpha(0.68)`, `FG.alpha(0.12)` rim, `14px` icon).
+  - `library-homedeck-card-menu#04`, `library-homedeck-card-press#05`: HomeDeck right toolbar container uses `.min_h(40.0).center_y()` so the 4 circular buttons align vertically centered with the `40px` `Play` / `...` row.
+  - `library-all-sort-dropdown#06`: Aligned Filter pill gap & `4px` popover anchor gap matching React.
+
 ## Verification Gates
 
 All gates ran fresh after the final edit:

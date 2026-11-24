@@ -996,12 +996,29 @@ impl AppState {
                     images.push(img);
                 }
             }
+            let mut preload_ids: Vec<&Game> = self.filtered_games().into_iter().take(60).collect();
+            for folder in &self.settings.library_folders {
+                for gid in folder.games.iter().take(4) {
+                    if let Some(g) = self.games.iter().find(|g| g.id == *gid)
+                        && !preload_ids.iter().any(|existing| existing.id == g.id)
+                    {
+                        preload_ids.push(g);
+                    }
+                }
+            }
             images.extend(
-                self.filtered_games()
-                    .into_iter()
-                    .take(16)
+                preload_ids
+                    .iter()
                     .filter_map(|g| self.cover_image(g, scale)),
             );
+            for img in &images {
+                let _ = img.wait();
+            }
+            let retry: Vec<Image> = preload_ids
+                .iter()
+                .filter_map(|g| self.cover_image(g, scale))
+                .collect();
+            images.extend(retry);
         }
         if self.room == Room::Store {
             if let Some(ref home) = self.store_home {
@@ -1603,8 +1620,8 @@ impl AppState {
                         loaded
                     }
                 };
-                if img.is_some() {
-                    return img;
+                if let Some(ready) = img.filter(|i| i.error().is_none()) {
+                    return Some(ready);
                 }
             } else if cand.url.starts_with("https://") && !waiting_remote {
                 let canonical = remote_art::canonical_cache_key(&cand.url);
@@ -1614,6 +1631,7 @@ impl AppState {
                 }
                 if let Some(img) =
                     self.remote_image_in_room(&cand.url, dim, scale, CacheRoom::Library)
+                    && img.error().is_none()
                 {
                     return Some(img);
                 }
@@ -1621,27 +1639,38 @@ impl AppState {
             }
         }
         let san_key = format!("cov-san:{}#{}", game.id, game.art_revision.unwrap_or(0));
-        if let Some(existing) = self.images.borrow_mut().get(&san_key, Some(cache)) {
-            return existing;
+        let sanitized = if let Some(existing) = self.images.borrow_mut().get(&san_key, Some(cache))
+        {
+            existing
+        } else {
+            let loaded = self
+                .art_base
+                .resolve_local_sanitized_portrait(game)
+                .map(|path| cache.file_capped(path, dim, scale));
+            self.images.borrow_mut().insert(
+                san_key,
+                loaded.clone(),
+                CacheRoom::Library,
+                dim,
+                scale,
+            );
+            loaded
+        };
+        if let Some(ok_img) = sanitized.filter(|i| i.error().is_none()) {
+            return Some(ok_img);
         }
-        let loaded = self
-            .art_base
-            .resolve_local_sanitized_portrait(game)
-            .map(|path| cache.file_capped(path, dim, scale));
-        self.images
-            .borrow_mut()
-            .insert(san_key, loaded.clone(), CacheRoom::Library, dim, scale);
-        loaded
+        self.hero_image_direct(game, scale)
+            .filter(|i| i.error().is_none())
     }
 
-    pub fn hero_image(&self, game: &Game, scale: f32) -> Option<Image> {
+    fn hero_image_direct(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
         let dim = bucket_dim(1440.0);
         let key = format!("hero:{}#{}", game.id, game.art_revision.unwrap_or(0));
         if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            if existing.is_some() {
-                return existing;
+            if let Some(ready) = existing.filter(|i| i.error().is_none()) {
+                return Some(ready);
             }
         } else {
             let loaded = self
@@ -1651,23 +1680,30 @@ impl AppState {
             self.images
                 .borrow_mut()
                 .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
-            if loaded.is_some() {
-                return loaded;
+            if let Some(ready) = loaded.filter(|i| i.error().is_none()) {
+                return Some(ready);
             }
         }
         if let Some(url) = game.hero_url.as_deref()
             && url.starts_with("https://")
             && !url.contains(".exo-launcher.local")
             && let Some(img) = self.remote_image_in_room(url, dim, scale, CacheRoom::Library)
+            && img.error().is_none()
         {
             return Some(img);
         }
         if let Some(url) = game.steam_hero_url()
             && let Some(img) = self.remote_image_in_room(&url, dim, scale, CacheRoom::Library)
+            && img.error().is_none()
         {
             return Some(img);
         }
-        self.cover_image(game, scale)
+        None
+    }
+
+    pub fn hero_image(&self, game: &Game, scale: f32) -> Option<Image> {
+        self.hero_image_direct(game, scale)
+            .or_else(|| self.cover_image(game, scale))
     }
 
     pub fn logo_image(&self, game: &Game, scale: f32) -> Option<Image> {
