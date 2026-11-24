@@ -57,6 +57,18 @@ impl AntiCheatClass {
     pub const fn forbids_game_tree_set_rights(self) -> bool {
         matches!(self, Self::CompetitivePvpOnline | Self::Unknown)
     }
+
+    pub const fn allows_driver_drs_override(self) -> bool {
+        true
+    }
+
+    pub const fn allows_signed_upscaler_swap(self, ban_risk_confirmed: bool) -> bool {
+        match self.effective() {
+            Self::OfflineAntiCheat => true,
+            Self::OnlineNonCompetitivePve => ban_risk_confirmed,
+            Self::CompetitivePvpOnline | Self::Unknown => false,
+        }
+    }
 }
 
 pub const ANTI_CHEAT_EXACT_NAMES: &[&str] = &[
