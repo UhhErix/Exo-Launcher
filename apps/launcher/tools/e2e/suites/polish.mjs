@@ -165,13 +165,14 @@ export async function run(t) {
   }
 
   for (const room of ROOMS) {
-    await run.check('polish', room.toLowerCase(), `${room}: no code in its words, every control big enough and on its row's line, nothing moving once still, type, corners and lines from Exo's set`, async (c) => {
+    const slug = room.toLowerCase().replace(/\s+/g, '-')
+    await run.check('polish', slug, `${room}: no code in its words, every control big enough and on its row's line, nothing moving once still, type, corners and lines from Exo's set`, async (c) => {
       await k.nav(room)
       await sleep(1200)
       await k.settle(300, 8000)
       const failures = await review(c, room)
       await focusSeen(c, room)
-      await c.shot(`polish-${room.toLowerCase()}`, t.shell)
+      await c.shot(`polish-${slug}`, t.shell)
       await k.closeAll()
       return failures
     })
@@ -187,8 +188,9 @@ export async function run(t) {
       failures.push(...await review(c, label))
       await c.shot(`polish-${label}`, t.shell)
     }
-    await k.nav('Library')
+    await k.libraryGrid()
     await open('sort-menu', () => t.shell.click(() => document.querySelector('.exo-shelf-sort-trigger')), () => !!document.querySelector('[role="menu"], .exo-shelf-sort-menu'))
+    await k.libraryHome()
     await open('ctrl-k', () => t.shell.key('k', { ctrl: true }), () => !!document.querySelector('[role="dialog"] [role="combobox"]'))
     await open('settings', () => t.shell.click(() => document.querySelector('.exo-settings-btn')), () => !!document.querySelector('.exo-settings-nav')?.getClientRects().length)
     await k.nav('Discord')

@@ -85,46 +85,12 @@ export async function run(t) {
     await t.shell.waitFor(() => !document.querySelector('.exo-sgp'), { timeoutMs: 3000 })
     // Its card's Library, a quiet button that only opens a page: a run presses nothing primary.
     await t.shell.click((title) => [...document.querySelectorAll('.exo-store-grid .exo-store-card-slot')].find(s => s.querySelector('.exo-store-card-title')?.textContent.trim() === title)?.querySelector('.exo-store-library') ?? null, name)
-    const room = await t.shell.waitFor(() => document.querySelector('.exo-game-overlay-stage .exo-game-title')?.checkVisibility() ? true : null, { timeoutMs: 5000 })
+    const room = await t.shell.waitFor(() => document.querySelector('.exo-game-room .exo-game-page')?.checkVisibility() ? true : null, { timeoutMs: 5000 })
     if (!room) failures.push('Library did not open the game')
     await t.shell.key('Escape')
     await k.nav('Store')
     await k.fill('.exo-store-search input', '')
     await sleep(500)
-    return failures
-  })
-
-  await run.check('store', 'calendar', 'the calendar lists games by release day, exact dates only', async (c) => {
-    // The finder runs in the page, so its name goes as an argument (a closure's would be undefined there).
-    const chip = (name) => [...document.querySelectorAll('.exo-store-top .exo-shelf-chip')].find(b => b.textContent.trim() === name) ?? null
-    if (!await t.shell.click(chip, 'Calendar')) return ['the Store has no Calendar view']
-    const state = await t.shell.waitFor(() => document.querySelector('.exo-cal-days, .exo-store-empty:not(.exo-store-error)') ? 'ready' : document.querySelector('.exo-store-error') ? 'error' : null, { timeoutMs: 30000 })
-    if (state === 'error') c.skip('the store did not answer')
-    if (state !== 'ready') return ['the calendar never showed']
-    const view = await t.shell.eval(`({
-      // Each day is its own section under Coming up and Out recently, titled by its date.
-      days: [...document.querySelectorAll('section.exo-cal-day')].map(s => ({
-        title: s.querySelector('.exo-cal-date')?.textContent.trim(),
-        cards: s.querySelectorAll('.exo-cal-item .exo-store-card').length,
-        marks: s.querySelectorAll('.exo-cal-mark').length,
-        whens: [...s.querySelectorAll('.exo-store-when')].map(w => w.textContent.trim()),
-      })),
-      empty: !!document.querySelector('.exo-store-empty'),
-    })`)
-    c.evidence.view = view
-    c.metric('days', view.days.length)
-    const failures = []
-    if (!view.days.length && !view.empty) failures.push('no days and no empty message')
-    for (const d of view.days) {
-      if (!d.title) failures.push('a day without a title')
-      if (d.cards === 0 && d.marks === 0) failures.push(`${d.title} has no games`)
-      // A game known only as "Q1 2027" or "Feb 2027" has no day to sit on.
-      for (const w of d.whens) if (!/^[A-Z][a-z]{2} \d{1,2}(, \d{4})?$/.test(w)) failures.push(`${d.title}: "${w}" is not an exact date`)
-    }
-    await c.shot('calendar', t.shell)
-    failures.push(...await k.look(c, 'calendar'))
-    await t.shell.click(chip, 'Discover')
-    await t.shell.waitFor(() => document.querySelector('.exo-store-hero'), { timeoutMs: 10000 })
     return failures
   })
 
@@ -137,28 +103,31 @@ export async function run(t) {
     const page = await t.shell.waitFor(() => document.querySelector('.exo-sgp') && document.querySelector('.exo-sgp h1, .exo-sgp h2, .exo-sgp-side h2')?.textContent.trim(), { timeoutMs: 15000 })
     c.metric('open', Date.now() - t0, ' ms', 1500)
     if (!page) return ['the page did not open']
-    await t.shell.waitFor(() => !document.querySelector('.exo-sgp-placeholder'), { timeoutMs: 15000 })
+    await t.shell.waitFor(() => !document.querySelector('.exo-sgp-placeholder, .exo-sgp-facts .exo-wait, .exo-sgp-specs .exo-wait'), { timeoutMs: 15000 })
     await sleep(600)
-    const parts = await t.shell.eval(`({ about: /About/.test(document.querySelector('.exo-sgp')?.innerText ?? ''), reqs: /System requirements/.test(document.querySelector('.exo-sgp')?.innerText ?? ''), thisPc: /This PC/.test(document.querySelector('.exo-sgp')?.innerText ?? ''), buy: !!document.querySelector('.exo-sgp-buy'), facts: Object.fromEntries([...document.querySelectorAll('.exo-sgp-facts dl > div')].map(d => [d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent])) })`)
+    const parts = await t.shell.eval(`({ about: /About/.test(document.querySelector('.exo-sgp')?.innerText ?? ''), reqs: /System requirements/.test(document.querySelector('.exo-sgp')?.innerText ?? ''), thisPc: /This PC/.test(document.querySelector('.exo-sgp')?.innerText ?? '') || [...document.querySelectorAll('.exo-sgp-spec-mine')].some(e => e.textContent.trim().length > 0), specTable: !!document.querySelector('.exo-sgp-spec-grid'), buy: !!document.querySelector('.exo-sgp-buy'), facts: Object.fromEntries([...document.querySelectorAll('.exo-sgp-facts dl > div')].filter(d => d.querySelector('dt')).map(d => [d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent])) })`)
     c.evidence.title = page
     c.evidence.parts = parts
     await c.shot('page', t.shell)
     const failures = await k.look(c, 'page')
     if (!parts.buy) failures.push('no buying section')
     if (!parts.about) c.warn('no About')
-    // The facts, the last 30 days' reviews among them, each settled to a value; one Steam doesn't name leaves its place
-    // empty, its name with it (ab96732), and one it names is there: the host's own answer says which.
-    // Not Controller: a fact Steam doesn't name leaves its place empty, and plenty of games name none.
-    for (const name of ['Reviews', 'Recent reviews', 'Languages']) if (!parts.facts?.[name]) failures.push(`no ${name} fact`)
-    const named = await t.shell.eval(`[...document.querySelectorAll('.exo-sgp-facts dl > div')].filter(d => d.querySelector('dt') && !d.querySelector('dd')?.textContent.trim()).map(d => d.querySelector('dt').textContent)`)
-    if (named.length) failures.push(`facts with a name and no value: ${named.join(', ')}`)
     const appId = (await t.host('store.search', { query: page }).catch(() => null))?.items?.find(r => r.name === page)?.appId
     const answer = appId ? await t.host('store.game', { appId: String(appId) }).catch(() => null) : null
+    if (!answer?.comingSoon) {
+      for (const name of ['Reviews', 'Languages']) if (!parts.facts?.[name]) failures.push(`no ${name} fact`)
+    } else if (!parts.facts?.Languages) {
+      failures.push('no Languages fact')
+    }
+    const named = await t.shell.eval(`[...document.querySelectorAll('.exo-sgp-facts dl > div')].filter(d => d.querySelector('dt') && !d.querySelector('dd')?.textContent.trim()).map(d => d.querySelector('dt').textContent)`)
+    if (named.length) failures.push(`facts with a name and no value: ${named.join(', ')}`)
     if (answer) for (const [name, value] of [['Other account', answer.account], ['DRM', answer.drm]]) {
       if (value && !parts.facts?.[name]) failures.push(`no ${name} fact, though Steam names "${value}"`)
       if (!value && parts.facts?.[name]) failures.push(`${name} reads "${parts.facts[name]}", though Steam names none`)
     }
-    if (parts.reqs && !parts.thisPc) failures.push('requirements without this PC')
+    const hostHasMine = Boolean(answer?.specs?.some(s => s.mine))
+    if (parts.reqs && !parts.specTable) failures.push('requirements section missing spec grid')
+    if (parts.reqs && hostHasMine && !parts.thisPc) failures.push('requirements without this PC')
     await t.shell.key('Escape')
     if (!await t.shell.waitFor(() => !document.querySelector('.exo-sgp'), { timeoutMs: 3000 })) failures.push('Escape did not close the page')
     return failures

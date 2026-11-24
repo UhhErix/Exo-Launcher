@@ -116,6 +116,34 @@ public static class ExoWin {
     }, IntPtr.Zero);
     return exact != IntPtr.Zero ? exact : (visible != IntPtr.Zero ? visible : (any != IntPtr.Zero ? any : fallback));
   }
+  [DllImport("user32.dll", SetLastError = true)] public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
+  [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr GetProcessWindowStation();
+  [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr GetThreadDesktop(uint tid);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentProcessId();
+  [DllImport("kernel32.dll", SetLastError = true)] public static extern bool ProcessIdToSessionId(uint pid, out uint sid);
+  [DllImport("kernel32.dll")] public static extern uint WTSGetActiveConsoleSessionId();
+  [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+  public static extern bool GetUserObjectInformation(IntPtr hObj, int nIndex, byte[] pvInfo, uint nLength, out uint need);
+  [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+  [DllImport("user32.dll", SetLastError = true)] public static extern bool CloseDesktop(IntPtr h);
+  public static string UserObjectName(IntPtr h) {
+    if (h == IntPtr.Zero) return null;
+    uint need = 0;
+    GetUserObjectInformation(h, 2, null, 0, out need);
+    if (need == 0) return null;
+    var buf = new byte[need];
+    if (!GetUserObjectInformation(h, 2, buf, need, out need)) return null;
+    return System.Text.Encoding.Unicode.GetString(buf).TrimEnd('\0');
+  }
+  public static string InputDesktopName(out int err) {
+    IntPtr h = OpenInputDesktop(0, false, 0x0001);
+    if (h == IntPtr.Zero) { err = Marshal.GetLastWin32Error(); return null; }
+    err = 0;
+    string name = UserObjectName(h);
+    CloseDesktop(h);
+    return name;
+  }
   public static List<IntPtr> Monitors() {
     var list = new List<IntPtr>();
     EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr h, IntPtr dc, ref RECT r, IntPtr d) => { list.Add(h); return true; }, IntPtr.Zero);
@@ -176,27 +204,153 @@ function Bring-Front($p) {
     Start-Sleep -Milliseconds 250
 }
 
+function Get-CaptureDiagnostics {
+    [uint32]$sid = 0
+    [ExoWin]::ProcessIdToSessionId([ExoWin]::GetCurrentProcessId(), [ref]$sid) | Out-Null
+    $inErr = 0
+    $inDesk = [ExoWin]::InputDesktopName([ref]$inErr)
+    [ordered]@{
+        sessionId = [int]$sid
+        activeConsoleSessionId = [int][ExoWin]::WTSGetActiveConsoleSessionId()
+        winSta = [ExoWin]::UserObjectName([ExoWin]::GetProcessWindowStation())
+        threadDesktop = [ExoWin]::UserObjectName([ExoWin]::GetThreadDesktop([ExoWin]::GetCurrentThreadId()))
+        inputDesktop = $inDesk
+        inputDesktopError = $inErr
+        logonUiRunning = @(Get-Process LogonUI -ErrorAction SilentlyContinue).Count -gt 0
+    }
+}
+
+function Save-PrintWindow([IntPtr]$hwnd, [string]$outPath, [uint32]$flags, $client) {
+    $wr = New-Object ExoWin+RECT
+    [ExoWin]::GetWindowRect($hwnd, [ref]$wr) | Out-Null
+    $ww = $wr.R - $wr.L; $wh = $wr.B - $wr.T
+    if ($ww -le 0 -or $wh -le 0 -or $client.w -le 0 -or $client.h -le 0) {
+        return @{ ok = $false; err = 0; message = "invalid window or client dimensions (${ww}x${wh}, client $($client.w)x$($client.h))" }
+    }
+    $clientOnly = ($flags -band 1) -ne 0
+    $bw = if ($clientOnly) { $client.w } else { $ww }
+    $bh = if ($clientOnly) { $client.h } else { $wh }
+    $full = New-Object System.Drawing.Bitmap $bw, $bh, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    try {
+        $g = [System.Drawing.Graphics]::FromImage($full)
+        try {
+            $hdc = $g.GetHdc()
+            try {
+                $ok = [ExoWin]::PrintWindow($hwnd, $hdc, $flags)
+                $err = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            } finally {
+                $g.ReleaseHdc($hdc)
+            }
+        } finally {
+            $g.Dispose()
+        }
+        if (-not $ok) {
+            return @{ ok = $false; err = $err; message = "PrintWindow(flags=$flags) returned false (Win32 error $err)" }
+        }
+        if ($clientOnly) {
+            $full.Save($outPath, [System.Drawing.Imaging.ImageFormat]::Png)
+            return @{ ok = $true; err = 0; message = $null }
+        }
+        $ox = [math]::Max(0, $client.x - $wr.L)
+        $oy = [math]::Max(0, $client.y - $wr.T)
+        $cw = [math]::Min($client.w, $bw - $ox)
+        $ch = [math]::Min($client.h, $bh - $oy)
+        if ($cw -le 0 -or $ch -le 0) {
+            return @{ ok = $false; err = 0; message = "client crop out of window bounds (offset ${ox},${oy} in ${bw}x${bh})" }
+        }
+        $cropped = New-Object System.Drawing.Bitmap $cw, $ch, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        try {
+            $gc = [System.Drawing.Graphics]::FromImage($cropped)
+            try {
+                $dst = New-Object System.Drawing.Rectangle 0, 0, $cw, $ch
+                $src = New-Object System.Drawing.Rectangle $ox, $oy, $cw, $ch
+                $gc.DrawImage($full, $dst, $src, [System.Drawing.GraphicsUnit]::Pixel)
+            } finally {
+                $gc.Dispose()
+            }
+            $cropped.Save($outPath, [System.Drawing.Imaging.ImageFormat]::Png)
+            return @{ ok = $true; err = 0; message = $null }
+        } finally {
+            $cropped.Dispose()
+        }
+    } finally {
+        $full.Dispose()
+    }
+}
+
 switch ($Command) {
     'window' { Window-Info (Get-ExoWindow) | ConvertTo-Json -Depth 5 -Compress }
     'monitors' { @([ExoWin]::Monitors() | ForEach-Object { Monitor-Info $_ }) | ConvertTo-Json -Depth 5 -Compress }
     'front' { $p = Get-ExoWindow; Bring-Front $p; Window-Info $p | ConvertTo-Json -Depth 5 -Compress }
     'capture' {
         $p = Get-ExoWindow; Bring-Front $p
+        $h = Get-ExoHwnd $p
         $info = Window-Info $p; $c = $info.client
-        $bmp = New-Object System.Drawing.Bitmap $c.w, $c.h
-        $g = [System.Drawing.Graphics]::FromImage($bmp)
-        $g.CopyFromScreen($c.x, $c.y, 0, 0, $bmp.Size); $g.Dispose()
-        $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
-        $info | ConvertTo-Json -Depth 5 -Compress
+        $diag = Get-CaptureDiagnostics
+        $copyErr = $null
+        try {
+            $bmp = New-Object System.Drawing.Bitmap $c.w, $c.h
+            try {
+                $g = [System.Drawing.Graphics]::FromImage($bmp)
+                try { $g.CopyFromScreen($c.x, $c.y, 0, 0, $bmp.Size) } finally { $g.Dispose() }
+                $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
+            } finally {
+                $bmp.Dispose()
+            }
+            $info.ok = $true
+            $info.captureMethod = 'CopyFromScreen'
+            $info.captureDiag = $diag
+            $info | ConvertTo-Json -Depth 6 -Compress
+            break
+        } catch {
+            $inner = $_.Exception.InnerException
+            $code = if ($inner -is [System.ComponentModel.Win32Exception]) { " (Win32 $($inner.NativeErrorCode))" } else { '' }
+            $copyErr = "$(if ($inner) { $inner.Message } else { $_.Exception.Message })$code"
+        }
+        $pw = Save-PrintWindow $h $Out 2 $c
+        if (-not $pw.ok) {
+            $pw3 = Save-PrintWindow $h $Out 3 $c
+            if ($pw3.ok) {
+                $info.ok = $true
+                $info.captureMethod = 'PrintWindowClient'
+                $info.copyError = $copyErr
+                $info.captureDiag = $diag
+                $info | ConvertTo-Json -Depth 6 -Compress
+                break
+            }
+            $info.ok = $false
+            $info.captureMethod = 'none'
+            $info.copyError = $copyErr
+            $info.printWindowError = "$($pw.message); $($pw3.message)"
+            $info.captureDiag = $diag
+            $info | ConvertTo-Json -Depth 6 -Compress
+            break
+        }
+        $info.ok = $true
+        $info.captureMethod = 'PrintWindow'
+        $info.copyError = $copyErr
+        $info.captureDiag = $diag
+        $info | ConvertTo-Json -Depth 6 -Compress
     }
     'click' {
         # Only onto Exo's own window: another window over it at that point (a game, another app's full screen) takes no click.
         $exo = Get-ExoWindow; $exoHwnd = Get-ExoHwnd $exo; $at = New-Object ExoWin+POINT; $at.X = $X; $at.Y = $Y
-        $top = [ExoWin]::GetAncestor([ExoWin]::WindowFromPoint($at), 2); [uint32]$owner = 0
+        $hit = [ExoWin]::WindowFromPoint($at)
+        $top = [ExoWin]::GetAncestor($hit, 2); [uint32]$owner = 0
         [ExoWin]::GetWindowThreadProcessId($top, [ref]$owner) | Out-Null
         $title = New-Object System.Text.StringBuilder 256; [ExoWin]::GetWindowText($top, $title, 256) | Out-Null
         $ours = ($top -eq $exoHwnd) -or (((Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName -eq 'msedgewebview2') -and ($title.ToString() -eq 'Exo Launcher'))
         if (-not $ours) { [ordered]@{ ok = $false; why = 'the window there is ' + (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName } | ConvertTo-Json -Compress; break }
+        $diag = Get-CaptureDiagnostics
+        if ($diag.threadDesktop -and $diag.inputDesktop -and ($diag.threadDesktop -ne $diag.inputDesktop)) {
+            [ordered]@{
+                ok = $false
+                nonInputDesktop = $true
+                why = "process desktop $($diag.winSta)\$($diag.threadDesktop) is not the active input desktop $($diag.winSta)\$($diag.inputDesktop); OS mouse input only targets the active input desktop"
+                diag = $diag
+            } | ConvertTo-Json -Depth 5 -Compress
+            break
+        }
         $was = New-Object ExoWin+POINT; [ExoWin]::GetCursorPos([ref]$was) | Out-Null
         [ExoWin]::SetCursorPos($X, $Y) | Out-Null; Start-Sleep -Milliseconds 80
         [ExoWin]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 50; [ExoWin]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)

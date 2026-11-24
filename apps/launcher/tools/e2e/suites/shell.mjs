@@ -1,6 +1,7 @@
 // The window and the Bar: how fast Exo starts, a clean start (log and console), the screen showing the whole page
 // (what 3.13.3 got wrong on 4K), the window filling its monitor, the Bar's parts, the window's own buttons.
 import { sleep } from '../cdp.mjs'
+import { classifyCaptureResult } from '../lib/capture.mjs'
 import { compare, cropFraction, readPng, shareNear } from '../lib/image.mjs'
 import { BAR_ROOMS, ROOMS } from '../lib/kit.mjs'
 
@@ -12,9 +13,17 @@ export async function screenMatchesPage(t, c, label) {
   await t.shell.screenshot(pagePath)
   let page = await readPng(pagePath)
   // Right after Exo starts or comes to the front, the screen can still be black for a moment: grab it again then.
-  let info, screen
+  let info, screen, method
   for (let tries = 1; ; tries++) {
-    info = await t.win.capture(screenPath)
+    const raw = await t.win.capture(screenPath)
+    const captured = classifyCaptureResult(raw)
+    if (!captured.ok) {
+      c.evidence[`${label}-capture`] = { reason: captured.reason, diag: captured.diag }
+      if (captured.skip) c.skip(captured.reason)
+      return [`${label}: screen capture failed: ${captured.reason}`]
+    }
+    info = captured.info
+    method = captured.method
     screen = await readPng(screenPath)
     if (tries === 3 || shareNear(screen, [0, 0, 0], 2) < 0.99 || shareNear(page, [0, 0, 0], 2) > 0.9) break
     c.evidence[`${label}-black`] = tries
@@ -29,7 +38,7 @@ export async function screenMatchesPage(t, c, label) {
     c.evidence[`${label}-offscreen`] = `only ${Math.round(f[2] * 100)}% x ${Math.round(f[3] * 100)}% of the window is on its monitor`
   }
   const d = compare(screen, page)
-  c.evidence[label] = { ...d, client: info.client }
+  c.evidence[label] = { ...d, client: info.client, method, ...(info.copyError ? { copyError: info.copyError, desktop: `${info.captureDiag?.winSta}\\${info.captureDiag?.threadDesktop}` } : {}) }
   const failures = []
   if (d.right > 30 || d.bottom > 30) failures.push(`${label}: the screen doesn't show the page's ${d.right > d.bottom ? 'right' : 'bottom'} side (edge difference ${Math.max(d.right, d.bottom)})`)
   else if (d.mean > 18) failures.push(`${label}: the screen differs from the page (mean ${d.mean})`)

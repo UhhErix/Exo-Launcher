@@ -29,13 +29,15 @@ export async function run(t) {
     c.metric('open', Date.now() - t0, ' ms', 500)
     const state = await t.shell.eval(`(() => {
       const sheet = document.querySelector('.exo-set-room > .exo-settings')
+      const inner = sheet.querySelector('.exo-settings-inner')
+      const nav = sheet.querySelector('.exo-settings-nav')
       const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--exo-scale')) || 1
       return {
         sections: [...sheet.querySelectorAll('.exo-set-section > .exo-set-section-head h2')].map(h => h.textContent.trim()),
-        nav: !!sheet.querySelector('nav'),
+        nav: !!nav && nav.getBoundingClientRect().width > 0,
         riotIdInStores: [...sheet.querySelectorAll('.exo-set-section')].some(s => /^Game stores/.test(s.querySelector('h2')?.textContent.trim() ?? '') && [...s.querySelectorAll('.exo-set-item-label')].some(l => l.textContent.trim() === 'Riot ID')),
-        width: Math.round(sheet.getBoundingClientRect().width),
-        max: Math.round(Math.min(1160 * scale, sheet.parentElement.clientWidth)),
+        width: Math.round((inner ?? sheet).getBoundingClientRect().width),
+        max: Math.round(Math.min(960 * scale, sheet.parentElement.clientWidth)),
       }
     })()`)
     c.evidence.state = state

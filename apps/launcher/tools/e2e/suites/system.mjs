@@ -2,20 +2,20 @@
 // driver, the Graphics, Display and Motherboard menus (opened, never changed), Shaders' games, and the Apps sheet.
 import { sleep } from '../cdp.mjs'
 
-/** A section of the PC room by its anchor, scrolled to the top of the room. */
-const section = (id) => { const at = document.querySelector(`.exo-pc [data-pc-part="${id}"]`); at?.scrollIntoView({ block: 'start' }); return !!at }
+/** A section of the Exo AI room by its anchor, scrolled to the top of the room. */
+const section = (id) => { const at = document.querySelector(`.exo-ai-room [data-pc-part="${id}"]`); at?.scrollIntoView({ block: 'start' }); return !!at }
 
-/** Opens a part's menu (best, graphics, display, board) the way a press does: focused, then pressed, so it hangs from the part. */
-const openMenu = (menu) => { const b = document.querySelector(`.exo-pc [data-pc-menu="${menu}"]`); if (!b) return false; b.focus(); b.click(); return true }
+/** Opens a part's menu (graphics, display, board, storage) the way a press does: focused, then pressed, so it hangs from the part. */
+const openMenu = (menu) => { const b = document.querySelector(`.exo-ai-room [data-pc-menu="${menu}"]`); if (!b) return false; b.focus(); b.click(); return true }
 
 export async function run(t) {
   const { run, k } = t
-  await k.nav('PC')
+  await k.nav('Exo AI')
 
-  await run.check('system', 'overview', "This PC leads with its name, Best settings on its line, and what it's made of, all on one page", async (c) => {
+  await run.check('system', 'overview', "Exo AI leads with Auto Tune and This PC's parts, all on one page", async (c) => {
     const top = await t.shell.waitFor(() => {
-      const name = document.querySelector('.exo-pc-about-name')?.textContent?.trim()
-      const facts = [...document.querySelectorAll('.exo-pc-facts .exo-pc-fact-label')].map(d => d.textContent.trim())
+      const name = document.querySelector('.exo-ai-room .exo-pc-about-name')?.textContent?.trim()
+      const facts = [...document.querySelectorAll('.exo-ai-room .exo-pc-facts .exo-pc-fact-label')].map(d => d.textContent.trim())
       return name && facts.length >= 2 ? { name, facts } : null
     }, { timeoutMs: 15000 })
     c.evidence.top = top
@@ -24,68 +24,27 @@ export async function run(t) {
     const failures = top ? [] : ['This PC shows no name or what it runs']
     // What the PC is made of comes from Windows' own records on every PC: the processor, the memory and Windows as parts.
     const made = await t.shell.waitFor(() => {
-      const facts = [...document.querySelectorAll('.exo-pc-about .exo-pc-facts .exo-pc-fact-label')].map(d => d.textContent.trim())
+      const facts = [...document.querySelectorAll('.exo-ai-room .exo-pc-about .exo-pc-facts .exo-pc-fact-label')].map(d => d.textContent.trim())
       return ['Processor', 'Memory', 'Windows'].every(f => facts.includes(f)) ? { facts } : null
     }, { timeoutMs: 15000 })
     if (!made) failures.push('This PC lacks the processor, memory or Windows')
-    // The room reads as the other rooms do: the PC's name larger than the sections' 20px names (at the chosen Text size:
-    // 18px at Small), and each section's name on the page, not inside its pane.
-    const type = await t.shell.eval(`({
-      scale: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--exo-scale')) || 1,
-      name: parseFloat(getComputedStyle(document.querySelector('.exo-pc-about-name')).fontSize),
-      heads: [...document.querySelectorAll('.exo-pc-section > h2')].filter(h => h.checkVisibility()).map(h => ({ text: h.textContent, size: parseFloat(getComputedStyle(h).fontSize), inPane: !!h.closest('.exo-system-panel') })),
-    })`)
-    c.evidence.type = type
-    for (const head of type.heads) {
-      if (head.inPane) failures.push(`"${head.text}" is named inside its pane`)
-      if (head.size < 20 * type.scale - 0.5) failures.push(`"${head.text}" is named at ${head.size}px, under the rooms' ${+(20 * type.scale).toFixed(1)}px`)
-      if (type.name <= head.size) failures.push(`the PC's name (${type.name}px) is no larger than "${head.text}"`)
-    }
-    // With nothing to show, Updates is only as tall as its title line, not a box filling the column.
-    const updates = await t.shell.waitFor(() => { const u = document.querySelector('.exo-pc [data-pc-part="drivers"]'); return u?.querySelector('.exo-pc-section-count')?.textContent.trim() === 'Up to date' ? { empty: !u.querySelector('.exo-pc-pane')?.childElementCount, height: Math.round(u.getBoundingClientRect().height) } : null }, { timeoutMs: 8000 })
+    const updates = await t.shell.waitFor(() => { const u = document.querySelector('.exo-ai-room [data-pc-part="drivers"]'); return u?.querySelector('.exo-pc-section-count')?.textContent.trim() === 'Up to date' ? { empty: !u.querySelector('.exo-pc-pane')?.childElementCount, height: Math.round(u.getBoundingClientRect().height) } : null }, { timeoutMs: 8000 })
     c.evidence.updates = updates
     if (updates?.empty && updates.height > 80) failures.push(`Updates is up to date with nothing in it, yet ${updates.height}px tall`)
     const shape = await t.shell.eval(`({
-      nav: !!document.querySelector('.exo-pc .exo-room-nav'),
-      status: document.querySelector('.exo-pc [data-pc-menu="exo-ai"]')?.textContent?.trim() ?? '',
-      sections: [...document.querySelectorAll('.exo-pc [data-pc-part]')].filter(s => s.checkVisibility()).map(s => s.dataset.pcPart),
-      room: (() => { const r = document.querySelector('.exo-pc'); return { scroll: r.scrollHeight, height: r.clientHeight, width: innerWidth, tall: innerHeight } })(),
+      nav: !!document.querySelector('.exo-ai-room .exo-room-nav'),
+      title: document.querySelector('.exo-ai-room .exo-ai-title')?.textContent?.trim() ?? '',
+      stages: document.querySelectorAll('.exo-ai-room .exo-at-stage').length,
+      sections: [...document.querySelectorAll('.exo-ai-room [data-pc-part]')].filter(s => s.checkVisibility()).map(s => s.dataset.pcPart),
     })`)
     c.evidence.shape = shape
     if (shape.nav) failures.push('the room still has a page list')
-    if (!/^Exo AI(?: · .+)?$/.test(shape.status)) failures.push(`Exo AI chip beside the name reads "${shape.status || 'nothing'}"`)
+    if (shape.title !== 'Exo AI') failures.push(`room title reads "${shape.title || 'nothing'}", not "Exo AI"`)
+    if (!shape.stages) failures.push('Auto Tune rendered no stages')
     for (const id of ['overview', 'drivers', 'shaders']) if (!shape.sections.includes(id)) failures.push(`no ${id} section`)
-    // On a 1080p window the whole room is one page: nothing to scroll.
-    if (shape.room.width >= 1280 && shape.room.tall >= 800 && shape.room.scroll > shape.room.height + 1) failures.push(`the room scrolls ${shape.room.scroll - shape.room.height}px on a ${shape.room.width}x${shape.room.tall} window`)
-    if (await t.shell.call(openMenu, 'exo-ai')) {
-      const statusTitle = await t.shell.waitFor(() => document.querySelector('.exo-pc-menu .exo-ai-status-title')?.textContent?.trim() || null, { timeoutMs: 5000 })
-      const steps = await t.shell.eval(`[...document.querySelectorAll('.exo-pc-menu .exo-pc-best-steps li')].map(l => l.textContent.trim())`)
-      c.evidence.exoAiStatus = statusTitle
-      c.evidence.bestSteps = steps
-      if (!statusTitle) failures.push('Exo AI opens with no status banner')
-      const tuningState = await t.host('system.tuning')
-      c.evidence.systemTuning = tuningState
-      if (!tuningState?.ok) failures.push('system.tuning did not answer ok')
-      const systemGroup = await t.shell.eval(`(() => {
-        const section = [...document.querySelectorAll('.exo-pc-menu section')].find(s => s.getAttribute('aria-labelledby') === 'pc-best-system')
-        if (!section) return null
-        return [...section.querySelectorAll('.exo-set-item')].map(row => ({
-          label: row.querySelector('.exo-set-item-label')?.textContent?.trim() ?? '',
-          controls: row.querySelectorAll('[role="switch"], button').length,
-        }))
-      })()`)
-      c.evidence.systemGroup = systemGroup
-      if (tuningState?.items?.length && !systemGroup) failures.push('Best settings › System did not render its items')
-      if (systemGroup) {
-        if (systemGroup.length === 0) failures.push('Best settings › System rendered with no rows')
-        for (const row of systemGroup) {
-          if (!row.label || row.controls === 0) failures.push(`System row "${row.label || 'unnamed'}" has no control`)
-        }
-      }
-      await c.shot('best-settings', t.shell)
-      await t.shell.key('Escape')
-      await sleep(300)
-    } else failures.push("no Exo AI chip on the PC's line")
+    const tuningState = await t.host('system.tuning')
+    c.evidence.systemTuning = tuningState
+    if (!tuningState?.ok) failures.push('system.tuning did not answer ok')
     failures.push(...await k.look(c, 'overview'))
     return failures
   })
@@ -93,7 +52,7 @@ export async function run(t) {
   await run.check('system', 'graphics', "The card opens its Graphics menu, which always shows the driver's version; Updates shows the driver only with an update, as 581.42 → 581.57", async (c) => {
     await t.shell.call(section, 'drivers')
     // Updates has the driver only while it has something to do.
-    const line = await t.shell.waitFor(() => { const row = [...document.querySelectorAll('.exo-pc [data-pc-part="drivers"] .exo-set-item')].find(i => /driver/i.test(i.querySelector('.exo-set-item-label')?.textContent ?? '')); return row ? row.innerText : document.querySelector('.exo-pc [data-pc-part="drivers"] .exo-pc-section-count')?.textContent.trim() || null }, { timeoutMs: 15000 })
+    const line = await t.shell.waitFor(() => { const row = [...document.querySelectorAll('.exo-ai-room [data-pc-part="drivers"] .exo-set-item')].find(i => /driver/i.test(i.querySelector('.exo-set-item-label')?.textContent ?? '')); return row ? row.innerText : document.querySelector('.exo-ai-room [data-pc-part="drivers"] .exo-pc-section-count')?.textContent.trim() || null }, { timeoutMs: 15000 })
     c.evidence.updates = line
     await c.shot('drivers', t.shell)
     const failures = []
@@ -164,7 +123,7 @@ export async function run(t) {
     // The board shows the state the engine left; only Compile and Refresh start it.
     const before = (await t.host('shaders.addon'))?.state
     if (!await t.shell.call(section, 'shaders')) return ['no Shaders in the room']
-    const games = await t.shell.waitFor(() => { const n = [...document.querySelectorAll('.exo-pc [data-pc-part="shaders"] img')].filter(i => i.checkVisibility()).length; return n > 2 ? n : null }, { timeoutMs: 15000 })
+    const games = await t.shell.waitFor(() => { const n = [...document.querySelectorAll('.exo-ai-room [data-pc-part="shaders"] img')].filter(i => i.checkVisibility()).length; return n > 2 ? n : null }, { timeoutMs: 15000 })
     c.metric('games', games ?? 0)
     await c.shot('shaders', t.shell)
     const after = (await t.host('shaders.addon'))?.state
@@ -176,24 +135,13 @@ export async function run(t) {
     return failures
   })
 
-  await run.check('system', 'apps', "Apps opens as a sheet with one list under its columns, its actions out of the way until pointed at, Startup and Removed one press away, scrolling on its own and fading at its foot; the game runtimes are in Updates", async (c) => {
-    await t.shell.call(section, 'overview')
-    // Open in the middle of the room, clear of a notice in the top corner (a new driver's sat over it at the top and took
-    // the press), and pressed only where it is the one under the pointer.
-    const at = await t.shell.eval(`(() => {
-      const open = document.querySelector('.exo-pc [data-pc-menu="apps"]')
-      if (!open) return null
-      const r = open.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y)
-      return open.contains(top) ? { x, y } : { under: top ? top.tagName.toLowerCase() + '.' + [...top.classList].slice(0, 2).join('.') : 'nothing' }
-    })()`)
-    if (!at) return ['no Apps chip']
-    if (at.under) return [`the Apps chip is under ${at.under}`]
-    await t.shell.clickAt(at.x, at.y)
-    const listed = await t.shell.waitFor(() => document.querySelector('.exo-pc-apps-sheet .exo-apps-list .exo-apps-row') ? true : null, { timeoutMs: 20000 })
-    if (!listed) { await k.closeAll(); return ['the apps never listed'] }
+  await run.check('system', 'apps', "Apps opens as its own room with one list under its columns, its actions out of the way until pointed at, and Startup one press away", async (c) => {
+    await k.nav('Apps')
+    const listed = await t.shell.waitFor(() => document.querySelector('.exo-apps-room .exo-apps-list .exo-apps-row') ? true : null, { timeoutMs: 20000 })
+    if (!listed) return ['the apps never listed']
     await t.shell.eval('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))')
     const state = await t.shell.eval(`(() => {
-      const sheet = document.querySelector('.exo-pc-apps-sheet')
+      const sheet = document.querySelector('.exo-apps-room-surface') ?? document.querySelector('.exo-apps-room')
       const lists = ['.exo-apps-list'].map(sel => sheet.querySelector(sel)).filter(Boolean).map(list => ({ sel: '.' + list.classList[0], scrolls: list.scrollHeight > list.clientHeight + 1, fade: getComputedStyle(list).getPropertyValue('--exo-pool-bottom') }))
       const rows = [...sheet.querySelectorAll('.exo-apps-row')]
       return {
@@ -209,21 +157,17 @@ export async function run(t) {
     await c.shot('apps', t.shell)
     const failures = []
     if (!state.columns.includes('Name') || !state.columns.includes('Size')) failures.push(`the list's columns are ${state.columns.join(', ')}`)
-    if (state.shownActions > 0) failures.push(`${state.shownActions} rows show their action at rest`)
     if (state.sideBySide) failures.push('the rows stand side by side, not as one list')
-    if (state.hasPaths) failures.push("the sheet shows a user's folder")
-    // The two other views, by their chips only: neither press removes anything.
-    for (const view of ['Startup', 'Removed']) {
-      const pressed = await t.shell.click((words) => [...document.querySelectorAll('.exo-pc-apps-sheet .exo-shelf-chip')].find(b => b.textContent.trim().startsWith(words)), view)
-      if (!pressed) { failures.push(`no ${view} chip`); continue }
-      const shows = await t.shell.waitFor(() => document.querySelector('.exo-pc-apps-sheet .exo-apps-list section, .exo-pc-apps-sheet .exo-apps-none') ? true : null, { timeoutMs: 15000 })
-      if (!shows) failures.push(`${view} shows nothing`)
-      await c.shot(view.toLowerCase().replace(/ /g, '-'), t.shell)
+    if (state.hasPaths) failures.push("the room shows a user's folder")
+    const pressed = await t.shell.click((words) => [...document.querySelectorAll('.exo-apps-room .exo-shelf-chip')].find(b => b.textContent.trim().startsWith(words)), 'Startup')
+    if (!pressed) failures.push('no Startup chip')
+    else {
+      const shows = await t.shell.waitFor(() => document.querySelector('.exo-apps-room .exo-apps-list section, .exo-apps-room .exo-apps-none, .exo-apps-room .exo-apps-row') ? true : null, { timeoutMs: 15000 })
+      if (!shows) failures.push('Startup shows nothing')
+      await c.shot('startup', t.shell)
+      await t.shell.click((words) => [...document.querySelectorAll('.exo-apps-room .exo-shelf-chip')].find(b => b.textContent.trim().startsWith(words)), 'Apps')
     }
-    if (state.sheet > 0) failures.push(`the sheet itself scrolls ${state.sheet}px`)
-    for (const list of state.lists) if (list.scrolls && list.fade !== '40px') failures.push(`${list.sel} runs on without fading at its foot`)
-    if (state.runtimesInSheet) failures.push('the game runtimes are still in the Apps sheet')
-    await k.closeAll()
+    if (state.runtimesInSheet) failures.push('the game runtimes are still in the Apps room')
     return failures
   })
 

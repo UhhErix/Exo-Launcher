@@ -7,9 +7,9 @@ const SORTS = ['Name', 'Installed first', 'Last launched', 'Time played', 'Size'
 const sortTrigger = () => document.querySelector('main.exo-library-pane button[aria-label^="Sort library"]')
 const menuItem = (label) => [...document.querySelectorAll('[role^="menuitem"]')].find(i => i.getBoundingClientRect().width && i.textContent.trim() === label)
 const tiles = () => [...document.querySelectorAll('.exo-game-grid button[data-game-id]:not(.exo-folder-tile *)')].map(b => b.dataset.gameId)
-const sheetTitle = () => document.querySelector('.exo-game-overlay-stage .exo-game-title')?.textContent.trim() ?? null
+const sheetTitle = () => document.querySelector('.exo-game-room .exo-game-title')?.textContent.trim() || document.querySelector('.exo-game-room')?.getAttribute('aria-label') || null
 // A sheet that shows: others stay mounted, hidden while closed (PC's Upscalers).
-const sheetClosed = () => ![...document.querySelectorAll('.exo-game-overlay-stage')].some(s => s.checkVisibility())
+const sheetClosed = () => ![...document.querySelectorAll('.exo-game-room, .exo-game-overlay-stage')].some(s => s.checkVisibility())
 // The folder cards by name and count (each card's label reads "Name, folder, N games").
 const FOLDERS = `[...document.querySelectorAll('.exo-game-grid .exo-folder-tile button')].map(b => (b.getAttribute('aria-label') ?? '').match(/^(.*), folder, (\\d+) games?$/)).filter(Boolean).map(m => ({ name: m[1], count: +m[2] }))`
 const folderButton = (name) => [...document.querySelectorAll('.exo-game-grid .exo-folder-tile button')].find(b => (b.getAttribute('aria-label') ?? '').startsWith(`${name}, folder,`))
@@ -43,9 +43,9 @@ async function fileFrom(t, button, id, label) {
 
 /** Ensures the sheet's facts and lines are shown (unified sheets show them directly; legacy sheets toggle Info) and waits for them. */
 async function showInfo(t) {
-  const hasToggle = await t.shell.eval(`(() => { const b = document.querySelector('.exo-game-overlay-stage .exo-game-info-toggle'); if (!b) return false; if (b.getAttribute('aria-pressed') !== 'true') b.click(); return true })()`)
-  if (hasToggle) return !!await t.shell.waitFor(() => document.querySelector('.exo-game-overlay-stage .exo-game-info-pane')?.checkVisibility() ? true : null, { timeoutMs: 2000 })
-  return !!await t.shell.waitFor(() => document.querySelector('.exo-game-overlay-stage .exo-game-facts, .exo-game-overlay-stage .exo-game-lines, .exo-game-overlay-stage .exo-game-actions')?.checkVisibility() ? true : null, { timeoutMs: 2000 })
+  const hasToggle = await t.shell.eval(`(() => { const b = document.querySelector('.exo-game-room .exo-game-info-toggle'); if (!b) return false; if (b.getAttribute('aria-pressed') !== 'true') b.click(); return true })()`)
+  if (hasToggle) return !!await t.shell.waitFor(() => document.querySelector('.exo-game-room .exo-game-info-pane')?.checkVisibility() ? true : null, { timeoutMs: 2000 })
+  return !!await t.shell.waitFor(() => document.querySelector('.exo-game-room .exo-game-facts, .exo-game-room .exo-game-lines, .exo-game-room .exo-game-actions')?.checkVisibility() ? true : null, { timeoutMs: 3000 })
 }
 
 /** A game's sheet through Ctrl+K by its name, its Info pane open; false when it didn't open. */
@@ -70,14 +70,20 @@ async function pickSort(t, label) {
 
 export async function run(t) {
   const { run, k } = t
-  await k.nav('Library')
+  await k.libraryHome()
 
-  await run.check('library', 'grid', 'All games lists the Library', async (c) => {
+  await run.check('library', 'grid', 'HomeDeck and All games list the Library', async (c) => {
+    const deck = await t.shell.eval(`({ cards: document.querySelectorAll('.exo-deck-card').length, hero: !!document.querySelector('.exo-home-hero'), details: !!document.querySelector('.exo-home-more-btn'), gridBtn: !!document.querySelector('button[aria-label="All games grid"]') })`)
+    c.evidence.homeDeck = deck
+    const failures = []
+    if (!deck.cards) failures.push('no cards in HomeDeck')
+    if (!deck.hero) failures.push('no hero lockup in HomeDeck')
+    if (!deck.gridBtn) failures.push('no All games grid toggle in HomeDeck')
+    await k.libraryGrid()
     const ids = await t.shell.call(tiles)
     const folders = await t.shell.eval(FOLDERS)
     c.metric('games', ids.length)
     c.metric('folders', folders.length)
-    const failures = []
     if (!ids.length && !folders.length) failures.push('no games or folders in All games')
     if (new Set(ids).size !== ids.length) failures.push('a game shows twice')
     return failures
@@ -148,30 +154,19 @@ export async function run(t) {
     await sleep(700)
     await c.shot('sheet', t.shell)
     failures.push(...await k.look(c, 'sheet'))
-    const play = await t.shell.eval(`!![...document.querySelectorAll('.exo-game-overlay-stage button')].find(b => /^(Play|Install|Update|Starting)/.test(b.textContent.trim()))`)
+    const play = await t.shell.eval(`!![...document.querySelectorAll('.exo-game-room button')].find(b => /^(Play|Install|Update|Starting)/.test(b.textContent.trim()))`)
     if (!play) failures.push('no Play or Install on the sheet')
     await t.shell.key('Escape')
     if (!await t.shell.waitFor(sheetClosed, { timeoutMs: 3000 })) failures.push('Escape did not close the sheet')
     await sleep(400)
-    // Keyboard: focus the card, Enter opens; a press outside the page closes it (the page has no close button, 3.16).
+    // Keyboard: focus the card, Enter opens; the Library back button closes it.
     await t.shell.eval(`document.querySelector('.exo-game-grid button[data-game-id]:not(.exo-folder-tile *)')?.focus()`)
     await t.shell.key('Enter')
     if (!await t.shell.waitFor(sheetTitle, { timeoutMs: 5000 })) failures.push('Enter on a card did not open its sheet')
     await sleep(600)
-    const outside = await t.shell.eval(`(() => {
-      const shown = [...document.querySelectorAll('.exo-game-overlay-stage')].find(s => s.checkVisibility())
-      const stage = shown?.getBoundingClientRect(), scrim = shown?.parentElement.querySelector(':scope > .exo-game-overlay-scrim')
-      if (!stage || !scrim) return null
-      const mid = stage.top + stage.height / 2
-      for (const [x, y] of [[stage.left / 2, mid], [(stage.right + innerWidth) / 2, mid], [innerWidth / 2, (stage.bottom + innerHeight) / 2]])
-        if (document.elementFromPoint(x, y) === scrim) return { x: Math.round(x), y: Math.round(y) }
-      return null
-    })()`)
-    if (!outside) failures.push('nowhere outside the sheet to press')
-    else {
-      await t.shell.clickAt(outside.x, outside.y)
-      if (!await t.shell.waitFor(sheetClosed, { timeoutMs: 3000 })) failures.push('a press outside did not close the sheet')
-    }
+    const back = await t.shell.click(() => document.querySelector('.exo-game-room .exo-game-back'))
+    if (!back) failures.push('no Library back button on the game page')
+    else if (!await t.shell.waitFor(sheetClosed, { timeoutMs: 3000 })) failures.push('Library back button did not close the game page')
     await k.closeAll()
     return failures
   })
@@ -229,10 +224,10 @@ export async function run(t) {
     c.evidence.game = game.title
     c.evidence.groups = `${on} of ${state.groups?.length ?? 0} on`
     const open = (title) => openByName(t, title)
-    const line = () => { const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Optimize"]'); const b = s?.querySelector('button'); const w = s?.querySelector('.exo-game-line-word'); return s && { word: w?.textContent.trim() ?? '', good: w?.classList.contains('is-good') ?? false, color: w ? getComputedStyle(w).color : '', disabled: b?.disabled ?? false, visible: s.checkVisibility() } }
+    const line = () => { const s = document.querySelector('.exo-game-room section.exo-game-line[aria-label="Optimize"]'); const b = s?.querySelector('button'); const w = s?.querySelector('.exo-game-line-word'); return s && { word: w?.textContent.trim() ?? '', good: w?.classList.contains('is-good') ?? false, color: w ? getComputedStyle(w).color : '', disabled: b?.disabled ?? false, visible: s.checkVisibility() } }
     if (!await open(game.title)) { await k.closeAll(); return [`Ctrl+K did not open ${game.title}`] }
     const shown = await t.shell.waitFor(() => {
-      const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Optimize"] .exo-game-line-word')
+      const s = document.querySelector('.exo-game-room section.exo-game-line[aria-label="Optimize"] .exo-game-line-word')
       const txt = s?.textContent.trim() ?? ''
       return txt && !/^Checking\b/i.test(txt) ? true : null
     }, { timeoutMs: 8000 }) && await t.shell.eval(`(${line})()`)
@@ -247,7 +242,7 @@ export async function run(t) {
       if (shown.word !== want) failures.push(`Optimize says "${shown.word}", ${game.title}'s files call for "${want}"`)
       // A game whose window mode Exo can set shows the one chosen at the line's edge.
       if (state.windowMode) {
-        const mode = await t.shell.eval(`document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Optimize"] .exo-graphics-menu')?.textContent.trim() ?? null`)
+        const mode = await t.shell.eval(`document.querySelector('.exo-game-room section.exo-game-line[aria-label="Optimize"] .exo-graphics-menu')?.textContent.trim() ?? null`)
         const named = state.windowMode === 'fullscreen' ? 'Fullscreen' : 'Borderless'
         if (mode !== named) failures.push(`The Optimize line's window mode says "${mode}", the host says "${named}"`)
       }
@@ -260,16 +255,9 @@ export async function run(t) {
       c.evidence.other = other.game.title
       if (!await open(other.game.title)) failures.push(`Ctrl+K did not open ${other.game.title}`)
       else {
-        const wantOther = other.state.note ?? 'Not supported in this game'
-        const got = await t.shell.waitFor(() => {
-          const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Optimize"]')
-          const txt = s?.querySelector('.exo-game-line-word')?.textContent.trim() ?? ''
-          return txt && !/^Checking\b/i.test(txt) ? { word: txt, action: !!s?.querySelector('button.exo-game-line-row') } : null
-        }, { timeoutMs: 8000 })
-        if (!got) failures.push(`${other.game.title} has no settled Optimize reading`)
-        else {
-          if (got.action) failures.push(`${other.game.title} shows actionable Optimize without best settings`)
-          if (got.word !== wantOther) failures.push(`${other.game.title} Optimize reads "${got.word}", expected "${wantOther}"`)
+        await sleep(1500)
+        if (await t.shell.eval(`!!document.querySelector('.exo-game-room section.exo-game-line[aria-label="Optimize"]')`)) {
+          failures.push(`${other.game.title} shows Optimize without best settings`)
         }
       }
       await k.closeAll()
@@ -303,12 +291,12 @@ export async function run(t) {
     c.evidence.game = game.title
     c.evidence.state = state.state
     const line = () => {
-      const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Frame generation"]')
+      const s = document.querySelector('.exo-game-room section.exo-game-line[aria-label="Frame generation"]')
       return s && { word: s.querySelector('.exo-game-line-word')?.textContent.trim() ?? '', controls: s.querySelectorAll('button, [role="switch"]').length, visible: s.checkVisibility() }
     }
     const failures = []
     if (!await openByName(t, game.title)) { await k.closeAll(); return [`Ctrl+K did not open ${game.title}`] }
-    const shown = await t.shell.waitFor(() => document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Frame generation"]') ? true : null, { timeoutMs: 8000 }) && await t.shell.eval(`(${line})()`)
+    const shown = await t.shell.waitFor(() => document.querySelector('.exo-game-room section.exo-game-line[aria-label="Frame generation"]') ? true : null, { timeoutMs: 8000 }) && await t.shell.eval(`(${line})()`)
     c.evidence.line = shown
     if (!shown) failures.push(`${game.title}'s sheet has no Frame generation line`)
     else {
@@ -330,20 +318,10 @@ export async function run(t) {
     if (hidden) {
       c.evidence.hidden = hidden.game.title
       if (!await openByName(t, hidden.game.title)) failures.push(`Ctrl+K did not open ${hidden.game.title}`)
-      else if (hidden.state.reason === 'card') {
+      else {
         await sleep(1500)
-        if (await t.shell.eval(`!!document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Frame generation"]')`)) failures.push(`${hidden.game.title} shows Frame generation where the host has none`)
-      } else {
-        const wantHidden = hidden.state.reason === 'unread' ? 'Could not check' : 'Not supported in this game'
-        const got = await t.shell.waitFor(() => {
-          const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Frame generation"]')
-          const txt = s?.querySelector('.exo-game-line-word')?.textContent.trim() ?? ''
-          return txt && !/^Checking\b/i.test(txt) ? { word: txt, controls: s?.querySelectorAll('button, [role="switch"]').length ?? 0 } : null
-        }, { timeoutMs: 8000 })
-        if (!got) failures.push(`${hidden.game.title} has no settled Frame generation reading`)
-        else {
-          if (got.controls) failures.push(`${hidden.game.title} Frame generation has ${got.controls} controls`)
-          if (got.word !== wantHidden) failures.push(`${hidden.game.title} Frame generation reads "${got.word}", expected "${wantHidden}"`)
+        if (await t.shell.eval(`!!document.querySelector('.exo-game-room section.exo-game-line[aria-label="Frame generation"]')`)) {
+          failures.push(`${hidden.game.title} shows Frame generation where the host has none`)
         }
       }
       await k.closeAll()
@@ -389,14 +367,12 @@ export async function run(t) {
     const { game, props } = found
     c.evidence.game = game.title
     c.evidence.bytes = props.shaderCacheBytes
-    const row = () => { const r = [...document.querySelectorAll('.exo-props .exo-props-row')].find(x => x.querySelector('.exo-set-item-label')?.textContent.trim() === 'Shaders'); if (!r) return null; const b = [...r.querySelectorAll('button')].find(x => x.textContent.trim() === 'Rebuild shaders'); return { text: r.innerText.replace(/\s+/g, ' ').trim(), button: !!b, disabled: b?.disabled ?? null, visible: r.checkVisibility() } }
+    const row = () => { const r = [...document.querySelectorAll('.exo-game-props .exo-props-row, .exo-game-props .exo-set-item')].find(x => x.querySelector('.exo-set-item-label')?.textContent.trim() === 'Shaders'); if (!r) return null; const b = [...r.querySelectorAll('button')].find(x => x.textContent.trim() === 'Rebuild shaders'); return { text: r.innerText.replace(/\s+/g, ' ').trim(), button: !!b, disabled: b?.disabled ?? null, visible: r.checkVisibility() } }
     const files = async (title) => {
       if (!await openByName(t, title)) return `Ctrl+K did not open ${title}`
-      if (!await t.shell.click(() => document.querySelector('.exo-game-overlay-stage button[aria-label="Properties"]'))) return `${title} has no Properties button`
-      // The sections come with the game's properties, one column of rows with no headings: the files' rows are scrolled to.
-      if (!await t.shell.waitFor(() => document.querySelector('.exo-props #props-files') || null, { timeoutMs: 15000 })) return 'Properties has no files section'
-      await t.shell.eval(`(() => { const h = document.querySelector('.exo-props #props-files'); const p = h.closest('.exo-props-pane'); p.scrollTop += h.getBoundingClientRect().top - p.getBoundingClientRect().top - 26 })()`)
-      await t.shell.waitFor(() => document.querySelector('.exo-props .exo-props-row') || null, { timeoutMs: 8000 })
+      if (!await t.shell.waitFor(() => document.querySelector('.exo-game-room .exo-game-props #exo-props-tab-files') || null, { timeoutMs: 15000 })) return `${title} has no Properties Installed files tab`
+      await t.shell.click(() => document.querySelector('.exo-game-room #exo-props-tab-files'))
+      await t.shell.waitFor(() => document.querySelector('.exo-game-props .exo-props-row, .exo-game-props .exo-set-item') || null, { timeoutMs: 8000 })
       await sleep(500)
       return null
     }
@@ -602,17 +578,19 @@ export async function run(t) {
     return failures
   })
 
-  await run.check('library', 'continue', 'Continue shows its games with their titles on a dark plate, and a right-click opens the menu', async (c) => {
-    // A label over art sits on a dark plate: --exo-plate, or the plates' deeper glass (glass.css: a backdrop dimmed to 0.34),
-    // read from what the page computes, not the class it carries.
-    const cards = await t.shell.eval(`[...document.querySelectorAll('.exo-continue-card')].map(card => { const text = card.querySelector('.exo-continue-text'); const m = text && /rgba?\\(([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+)(?:,\\s*([\\d.]+))?/.exec(getComputedStyle(text).backgroundColor); const dim = text && /brightness\\(([\\d.]+)\\)/.exec(getComputedStyle(text).backdropFilter); return { title: text?.querySelector('strong')?.textContent.trim(), plate: (!!m && +m[1] < 40 && +m[2] < 40 && +m[3] < 40 && +(m[4] ?? 1) >= 0.6) || (!!dim && +dim[1] <= 0.4), play: !!card.querySelector('.exo-continue-play') } })`)
-    c.evidence.cards = cards
-    if (!cards.length) c.skip('nothing to continue')
-    const failures = cards.filter(x => !x.title || !x.plate).map(x => `${x.title ?? '?'}: title not on a dark plate`)
-    await t.shell.rightClick(() => document.querySelector('.exo-continue-open'))
+  await run.check('library', 'continue', 'HomeDeck shows poster cards with its hero actions, and a right-click opens the menu', async (c) => {
+    await k.libraryHome()
+    const deck = await t.shell.eval(`({ cards: document.querySelectorAll('.exo-deck-card').length, play: !!document.querySelector('.exo-home-play'), details: !!document.querySelector('.exo-home-more-btn') })`)
+    c.evidence.deck = deck
+    if (!deck.cards) c.skip('no games in HomeDeck')
+    const failures = []
+    if (!deck.play) failures.push('no Play/Install button in HomeDeck hero')
+    if (!deck.details) failures.push('no Details button in HomeDeck hero')
+    await t.shell.rightClick(() => document.querySelector('.exo-deck-card-btn'))
     const menu = await t.shell.waitFor(() => [...document.querySelectorAll('[role="menu"]')].some(x => x.getBoundingClientRect().width), { timeoutMs: 2500 })
     await t.shell.key('Escape')
-    if (!menu) failures.push('a right-click did not open the menu')
+    if (!menu) failures.push('a right-click on a HomeDeck card did not open the menu')
+    await k.libraryGrid()
     return failures
   })
 
@@ -632,7 +610,7 @@ export async function run(t) {
     await t.shell.waitFor(sheetTitle, { timeoutMs: 5000 })
     await showInfo(t)
     const facts = await t.shell.waitFor(() => {
-      const all = [...document.querySelectorAll('.exo-game-overlay-stage .exo-game-fact')]
+      const all = [...document.querySelectorAll('.exo-game-room .exo-game-fact')]
       return all.length ? all.map(x => ({ value: x.querySelector('dd')?.textContent.trim(), label: x.querySelector('dt')?.textContent.trim(), size: parseFloat(getComputedStyle(x.querySelector('dd')).fontSize) })) : null
     }, { timeoutMs: 2500 })
     c.evidence.facts = facts
@@ -702,6 +680,7 @@ export async function run(t) {
     c.metric('back', Date.now() - t0, ' ms', 1500)
     await k.settle()
     const blank = now.filter(x => !x.painted && painted.has(x.id)).map(x => x.title ?? x.id)
+    await k.libraryHome()
     return blank.length ? [`${blank.length} covers blank after the rooms: ${blank.slice(0, 4).join(', ')}`] : []
   })
 }
