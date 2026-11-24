@@ -839,6 +839,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-display"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
 name = "exo-kit"
 version = "0.1.0"
 dependencies = [
