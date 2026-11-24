@@ -1031,15 +1031,6 @@ impl AppState {
             && !self.library_more_open
     }
 
-    pub fn open_mouse_panel(&mut self, dev_id: String) {
-        self.pc.selected_device_id = Some(dev_id);
-        self.pc.mouse_panel_open = true;
-        self.pc.mouse_panel_loading =
-            self.status != HostStatus::Standalone && self.pc.mouse_panel_error.is_none();
-        self.pc.mouse_panel_rect = None;
-        self.pc.mouse_panel_visible = false;
-    }
-
     pub fn retry_mouse_panel(&mut self) {
         if !self.pc.mouse_panel_open {
             return;

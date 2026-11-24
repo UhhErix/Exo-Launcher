@@ -5,6 +5,7 @@ mod captures;
 mod clients_gate;
 mod devices_audio;
 mod devices_controller;
+mod devices_mouse;
 mod discord;
 mod discord_admin;
 mod discord_chat;
@@ -1500,48 +1501,28 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.pc.keyboard_id = kb_id;
                 state.pc.devices = Some(list);
                 if scene == Some("pc-devices-mouse") {
-                    let probe = client.call_blocking::<_, exo_rpc::ActionResult>(
-                        exo_rpc::METHOD_HID_SEND_REPORT,
-                        &serde_json::json!({ "device": "probe", "reportId": 0, "data": "" }),
-                        Duration::from_secs(2),
-                    );
-                    let refusal = match probe {
-                        Ok(r) if !r.ok => r.message.filter(|m| m.contains("test instance")),
-                        Err(e) => {
-                            let s = e.to_string();
-                            s.contains("test instance").then(|| {
-                                s.rsplit_once(": ")
-                                    .map(|(_, tail)| tail.to_string())
-                                    .unwrap_or(s)
-                            })
-                        }
-                        _ => None,
-                    };
-                    let err_msg = if refusal.is_some() {
-                        refusal
-                    } else {
-                        match client.call_blocking::<_, exo_rpc::ActionResult>(
-                            exo_rpc::METHOD_MOUSE_PANEL_OPEN,
-                            &serde_json::json!({
-                                "ownerHwnd": 0,
-                                "x": 0.0,
-                                "y": 56.0,
-                                "width": 1920.0,
-                                "height": 1024.0,
-                                "visible": true,
-                            }),
-                            Duration::from_secs(3),
-                        ) {
-                            Ok(r) if r.ok => None,
-                            Ok(r) => Some(
-                                r.message
-                                    .unwrap_or_else(|| "Exo Mouse could not open.".into()),
-                            ),
-                            Err(e) => Some(e.to_string()),
-                        }
-                    };
+                    state.pc.mouse_panel_open = false;
                     state.pc.mouse_panel_loading = false;
-                    state.pc.mouse_panel_error = err_msg;
+                    state.pc.mouse_panel_error = None;
+                    if let Ok(reply) = client.call_blocking::<_, exo_rpc::MouseDataReply>(
+                        exo_rpc::METHOD_MOUSE_PROFILES_GET,
+                        &serde_json::json!({}),
+                        Duration::from_secs(3),
+                    ) && reply.ok
+                        && let Some(data) = reply.data
+                        && let Some(rules) = data.get("rules").and_then(|v| {
+                            serde_json::from_value::<
+                                Vec<exo_hid_devices::auto_profiles::GameProfileRule>,
+                            >(v.clone())
+                            .ok()
+                        })
+                        && !rules.is_empty()
+                    {
+                        state.pc.mouse_ui.game_rules = rules.clone();
+                        for r in rules {
+                            state.pc.mouse_ui.auto_engine.upsert_rule(r);
+                        }
+                    }
                 }
             }
             let kb_payload = match state.pc.keyboard_id.as_deref() {
@@ -2109,7 +2090,7 @@ fn select_device_by_kind(s: &mut AppState, kind: &str) {
             .map(|item| item.id.clone())
     {
         match kind {
-            "mouse" => s.open_mouse_panel(id),
+            "mouse" => s.open_mouse_page(id),
             "controller" => {
                 s.pc.selected_device_id = Some(id.clone());
                 s.open_controller_page(id);
@@ -5704,7 +5685,7 @@ mod motion_audit {
     }
 
     #[test]
-    fn devices_mouse_card_opens_hosted_panel_and_back_or_room_switch_closes_it() {
+    fn devices_mouse_card_opens_native_page_without_webview_and_exercises_controls() {
         let mut rt = Runtime::new(
             AppState::default(),
             shell::view,
@@ -5720,24 +5701,96 @@ mod motion_audit {
         rt.frame(1.0 / 60.0);
         rt.frame(2.0 / 60.0);
 
-        assert!(rt.state.pc.mouse_panel_open);
+        assert!(
+            !rt.state.pc.mouse_panel_open,
+            "native mouse page never opens WebView2"
+        );
+        assert_eq!(rt.state.pc.selected_device_id.as_deref(), Some("dev:mouse"));
         assert!(rt.find("dev-back").is_some(), "native Devices back button");
         assert!(
-            rt.find("mouse-panel-slot").is_some(),
-            "mouse panel layout slot"
-        );
-        let rect = rt
-            .state
-            .pc
-            .mouse_panel_rect
-            .expect("mouse panel rect from on_layout");
-        assert!(
-            rect[2] > 1000.0 && rect[3] > 600.0,
-            "unexpected slot size: {rect:?}"
+            rt.find("mouse-poll-8000").is_some(),
+            "native polling rate selector"
         );
         assert!(
-            rect[1] >= 80.0 && rect[1] < 140.0,
-            "slot should start below Bar and back header: {rect:?}"
+            rt.find("mouse-save-flash").is_some(),
+            "native onboard flash save button"
+        );
+
+        assert_eq!(rt.state.pc.mouse_ui.total_writes, 0);
+        for i in 0..20 {
+            rt.frame((3 + i) as f64 / 60.0);
+        }
+        assert_eq!(
+            rt.state.pc.mouse_ui.total_writes, 0,
+            "20 redraws with no user change must cause 0 HID writes"
+        );
+
+        let (px, py) = rt.find("mouse-poll-8000").expect("8000 Hz button");
+        rt.pointer_down(px, py);
+        rt.pointer_up(px, py);
+        rt.frame(23.0 / 60.0);
+        assert_eq!(
+            rt.state.pc.mouse_ui.total_writes, 1,
+            "one user change must cause exactly one write batch"
+        );
+        for i in 0..20 {
+            rt.frame((24 + i) as f64 / 60.0);
+        }
+        assert_eq!(
+            rt.state.pc.mouse_ui.total_writes, 1,
+            "20 redraws after user change must cause 0 extra writes"
+        );
+        assert_eq!(
+            rt.state
+                .pc
+                .mouse_ui
+                .active_device()
+                .expect("active mouse")
+                .config
+                .polling_hz,
+            8000
+        );
+
+        let (fx, fy) = rt.find("mouse-mock-0").expect("Finalmouse mock switcher");
+        rt.pointer_down(fx, fy);
+        rt.pointer_up(fx, fy);
+        rt.frame(4.0 / 60.0);
+        let (tx, ty) = rt
+            .find("mouse-tmr-l-UltraClick")
+            .expect("native TMR-DS click mode selector");
+        rt.pointer_down(tx, ty);
+        rt.pointer_up(tx, ty);
+        rt.frame(5.0 / 60.0);
+        assert_eq!(
+            rt.state
+                .pc
+                .mouse_ui
+                .active_device()
+                .expect("active Finalmouse")
+                .config
+                .click_mode_left,
+            exo_hid_devices::drivers::ClickMode::UltraClick
+        );
+
+        let (rx, ry) = rt.find("mouse-mock-1").expect("Razer mock switcher");
+        rt.pointer_down(rx, ry);
+        rt.pointer_up(rx, ry);
+        rt.frame(6.0 / 60.0);
+        let (rotx, roty) = rt
+            .find("mouse-rot-plus")
+            .expect("Razer sensor rotation +1 button");
+        rt.pointer_down(rotx, roty);
+        rt.pointer_up(rotx, roty);
+        rt.frame(7.0 / 60.0);
+        assert_eq!(
+            rt.state
+                .pc
+                .mouse_ui
+                .active_device()
+                .expect("active Razer")
+                .config
+                .sensor_rotation_deg,
+            -4
         );
 
         let blurs = rt
@@ -5745,36 +5798,39 @@ mod motion_audit {
             .iter()
             .filter(|i| i.params[1] == rune::render::KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "blur cap exceeded on mouse panel view: {blurs}");
-
-        assert!(rt.state.mouse_panel_should_be_visible());
-        rt.state.palette_open = true;
-        assert!(!rt.state.mouse_panel_should_be_visible());
-        rt.state.palette_open = false;
-        assert!(rt.state.mouse_panel_should_be_visible());
+        assert!(
+            blurs <= 4,
+            "blur cap exceeded on native mouse view: {blurs}"
+        );
 
         let (bx, by) = rt.find("dev-back").expect("back button");
         rt.pointer_down(bx, by);
         rt.pointer_up(bx, by);
-        rt.frame(3.0 / 60.0);
-        assert!(!rt.state.pc.mouse_panel_open);
+        rt.frame(8.0 / 60.0);
+        assert!(rt.state.pc.selected_device_id.is_none());
         assert!(
             rt.find("dev-card-dev:mouse").is_some(),
             "back returns to Devices cards"
         );
 
-        let (mx2, my2) = rt.find("dev-card-dev:mouse").expect("mouse card again");
-        rt.pointer_down(mx2, my2);
-        rt.pointer_up(mx2, my2);
-        rt.frame(4.0 / 60.0);
-        assert!(rt.state.pc.mouse_panel_open);
-        rt.state.switch_room(Room::Library);
-        assert!(!rt.state.pc.mouse_panel_open);
-
-        rt.state.switch_room(Room::Devices);
-        rt.state.open_mouse_panel("dev:mouse".into());
-        assert!(rt.state.dismiss_top_layer());
-        assert!(!rt.state.pc.mouse_panel_open);
+        for cycle in 0..3 {
+            let t0 = std::time::Instant::now();
+            rt.state.open_mouse_page("dev:mouse".into());
+            rt.frame((9 + cycle * 2) as f64 / 60.0);
+            let open_ms = t0.elapsed().as_secs_f64() * 1000.0;
+            assert!(
+                !rt.state.pc.mouse_panel_open,
+                "cycle {cycle} never opens WebView2"
+            );
+            assert!(
+                open_ms < 250.0,
+                "native mouse open frame should stay fast, got {open_ms:.2} ms"
+            );
+            println!("native_mouse_cycle={cycle} open_frame_ms={open_ms:.3}");
+            assert!(rt.state.dismiss_top_layer());
+            rt.frame((10 + cycle * 2) as f64 / 60.0);
+            assert!(rt.state.pc.selected_device_id.is_none());
+        }
     }
 
     #[test]

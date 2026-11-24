@@ -3147,6 +3147,10 @@ impl AppState {
             self.close_mouse_panel();
             return true;
         }
+        if self.room == Room::Devices && self.pc.selected_device_id.is_some() {
+            self.pc.selected_device_id = None;
+            return true;
+        }
         if self.room == Room::Settings {
             self.toggle_settings();
             return true;
