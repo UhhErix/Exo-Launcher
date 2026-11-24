@@ -69,6 +69,7 @@ mod shell;
 mod snip_editor;
 mod state;
 mod store;
+mod store_engine;
 mod store_media;
 mod store_page;
 mod video_decoder;
@@ -455,7 +456,18 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let music = s.music_tick(now);
     let pg = s.tick_power_guard(now);
     let hw = s.tick_hw_sensors(now);
-    focus_changed || notices || setup || island || lib || store || wp4 || hb || wp9 || music || pg || hw
+    focus_changed
+        || notices
+        || setup
+        || island
+        || lib
+        || store
+        || wp4
+        || hb
+        || wp9
+        || music
+        || pg
+        || hw
 }
 
 #[cfg(windows)]

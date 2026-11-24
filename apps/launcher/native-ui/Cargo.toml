@@ -12,6 +12,7 @@ members = [
     "crates/exo-sensors",
     "crates/exo-gpu",
     "crates/exo-present",
+    "crates/exo-stores",
     "crates/exo-ui",
     "crates/exo-shaders",
     "crates/exo-thermal",

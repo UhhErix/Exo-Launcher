@@ -101,6 +101,7 @@ pub struct StoreExtraState {
     pub warm_inflight: HashSet<String>,
     pub room_visible_since: Option<f64>,
     pub hover_warm: Option<(String, f64)>,
+    pub native_engine: crate::store_engine::NativeStoreEngineBridge,
 }
 
 impl Default for StoreExtraState {
@@ -152,6 +153,7 @@ impl Default for StoreExtraState {
             warm_inflight: HashSet::new(),
             room_visible_since: None,
             hover_warm: None,
+            native_engine: crate::store_engine::NativeStoreEngineBridge::default(),
         }
     }
 }
@@ -970,6 +972,7 @@ impl AppState {
             self.cancel_inflight("store.gameReviews");
         }
         self.store_stop_trailer();
+        self.store_ext.native_engine.leave_store_room();
         self.store_game = None;
         self.store_offers = None;
         self.store_ext.seed = None;
@@ -1020,6 +1023,11 @@ impl AppState {
         if self.store_ext.gg_opening {
             return;
         }
+        let _ = self.store_ext.native_engine.route_store_page(
+            exo_stores::webview_fallback::StoreOperation::DrmCheckoutPage,
+            "Store",
+            Some(&url),
+        );
         if self.status == HostStatus::Standalone {
             self.notice = Some(format!("Open: {url}"));
             return;
@@ -1365,6 +1373,14 @@ impl AppState {
 
     pub fn store_tick(&mut self, now: f64) -> bool {
         let mut changed = false;
+        let running_class = self
+            .games
+            .iter()
+            .find(|g| g.is_running)
+            .map(|g| g.anti_cheat_class);
+        self.store_ext
+            .native_engine
+            .sync_running_game_throttle(running_class);
 
         let current_q = self.store_query.text.trim().to_string();
         if current_q != self.store_ext.search_observed_query {
