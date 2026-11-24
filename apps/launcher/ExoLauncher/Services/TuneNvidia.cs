@@ -81,6 +81,15 @@ internal sealed unsafe class TuneNvidia : ITunePart, IDisposable
     private static nint Export(nint library, string name) =>
         NativeLibrary.TryGetExport(library, name, out var address) ? address : throw new TuneDriverException($"This driver has no {name}.");
 
+    internal static int? ReadOffset()
+    {
+        var opened = Open();
+        if (opened is null) return null;
+        var (library, device) = opened.Value;
+        try { return Range(library, device)?.Now; }
+        finally { Close(library); }
+    }
+
     private static (int Now, int Max)? Range(nint library, nint device)
     {
         if (!NativeLibrary.TryGetExport(library, "nvmlDeviceGetClockOffsets", out var get)) return null;
@@ -96,6 +105,8 @@ internal sealed unsafe class TuneNvidia : ITunePart, IDisposable
         var max = ((delegate* unmanaged[Cdecl]<nint, int, uint*, int>)Export(_library, "nvmlDeviceGetMaxClockInfo"))(_device, ClockGraphics, &highest);
         _cap = max == Success && highest > 0 ? Math.Min(peak, (int)highest) : peak;
     }
+
+    internal void RestoreCap(int cap) => _cap = Math.Max(0, cap);
 
     public void Apply(int depth)
     {

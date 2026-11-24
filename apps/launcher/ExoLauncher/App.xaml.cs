@@ -85,6 +85,7 @@ public partial class App : Application
             });
             return;
         }
+        ExoLauncher.Services.AutoTuneService.CheckAtStart();
         OpenMain();
     }
 

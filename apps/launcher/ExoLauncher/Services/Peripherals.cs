@@ -334,8 +334,8 @@ internal static partial class Peripherals
         return v switch
         {
             0x31E3 => new Known("keyboard", WootingSize(p)), // Wooting: every product a keyboard (its mouse collection is analog emulation)
-            0x03EB when p is 0xFF01 => new Known("keyboard", "tkl"), // Wooting One, on Atmel's ids
-            0x03EB when p is 0xFF02 => new Known("keyboard", "full"), // Wooting Two
+            0x03EB when p is 0xFF01 or 0x2402 => new Known("keyboard", "tkl"), // Wooting One, on Atmel's ids
+            0x03EB when p is 0xFF02 or 0x2403 => new Known("keyboard", "full"), // Wooting Two
             0x361D => new Known("mouse"), // Finalmouse: its receiver also has a keyboard collection
             0x046D when p is 0xC07D or 0xC084 or 0xC085 or 0xC088 or 0xC08B or 0xC08D or 0xC090 or 0xC091 or 0xC092 or 0xC094 or 0xC09D or 0xC332
                 => new Known("mouse"), // Logitech G mice on a cable
@@ -613,10 +613,11 @@ internal static partial class Peripherals
     /// answers 01 D1 DA 13 88 07, then 00 00 00 00 00 DC 03: ANSI with a split spacebar, which it has; byte 10 is 0).
     /// Null when the answer isn't the device config's.
     /// </summary>
-    internal static byte? LayoutByte(ReadOnlySpan<byte> answer) => answer switch
+    internal static byte? LayoutByte(ReadOnlySpan<byte> answer, bool v1 = false) => answer switch
     {
-        [0x01, 0xD1, 0xDA, 19, ..] when answer.Length > 12 => answer[12],
-        [0xD0, 0xDA, 19, ..] when answer.Length > 10 => answer[10],
+        [>= 0x01 and <= 0x06, 0xD1, 0xDA, 19, ..] when answer.Length > 12 => answer[12],
+        [0xD0, 0xDA, 19, ..] when v1 && answer.Length > 9 => answer[9],
+        [0xD0, 0xDA, 19, ..] when !v1 && answer.Length > 10 => answer[10],
         _ => null,
     };
 

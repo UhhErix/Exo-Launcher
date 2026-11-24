@@ -60,7 +60,7 @@ function stageReadySummary(
 
   return {
     cooling: powerDone && fanReady
-      ? 'Exo power plan, 0.5 ms timer & Autopilot active'
+      ? 'Exo power plan, 0.5 ms timer, Autopilot & GPU fan curve (active while Exo is open)'
       : 'Exo power plan, 0.5 ms timer, standby purge & Autopilot',
     graphics: graphicsPending
       ? 'Driver profile, refresh rate, HDR & frame generation'
@@ -126,7 +126,7 @@ async function runCoolingStage(state: PcState): Promise<{ status: AutoTuneStageS
   if (!ai.ok && ai.message) return { status: 'warn', detail: trimStop(ai.message) }
   return {
     status: 'done',
-    detail: ai.fans.supported ? 'Exo power plan, Autopilot & automatic GPU fans active' : 'Exo power plan & Autopilot active',
+    detail: ai.fans.supported ? 'Exo power plan, Autopilot & GPU fan curve active while Exo is open' : 'Exo power plan & Autopilot active',
   }
 }
 

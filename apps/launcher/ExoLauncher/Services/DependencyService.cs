@@ -14,6 +14,21 @@ public sealed partial class DependencyService
 {
     private static readonly string StagingRoot = Path.Combine(Path.GetTempPath(), "ExoLauncherDependencies");
 
+    private readonly Func<bool> _gameRunning;
+
+    public DependencyService() : this(IsGameRunning) { }
+
+    internal DependencyService(Func<bool> gameRunning) => _gameRunning = gameRunning;
+
+    internal static bool IsGameRunning()
+    {
+        if (DriverKeep.AnyGameRunning() || LeanSignal.Active) return true;
+        try { return MainWindow.RunningLibraryGames().Count > 0; }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException) { return false; }
+    }
+
+    internal static bool ShouldDeferForGame(bool gameRunning) => gameRunning;
+
     /// <summary>
     /// What the installed games need of the Other runtimes (XNA, OpenAL, PhysX), from the last list: few games do and
     /// each is a system-wide install, so "Install what's missing" leaves out the ones none of them names. Null: not known.
@@ -31,7 +46,7 @@ public sealed partial class DependencyService
         var (snapshot, needed) = await Task.Run(() => (WithGraphics(CurrentSnapshot()), installed is null ? null : NeededBy(installed)), ct).ConfigureAwait(false);
         _needed = needed ?? _needed;
         var statuses = Evaluate(snapshot, await dotnet.ConfigureAwait(false));
-        return new { ok = true, busy = _job is not null, items = statuses.Select(s => Shown(s, _needed)).ToArray() };
+        return new { ok = true, busy = _job is not null, deferred = HasDeferred, items = statuses.Select(s => Shown(s, _needed)).ToArray() };
     }
 
     /// <summary>Whether "Install what's missing" includes it: an Other runtime only when a game here needs it.</summary>

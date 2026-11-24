@@ -79,6 +79,83 @@ internal sealed record TunePartState
     public int? SecondsLeft { get; init; }
     /// <summary>What re-applies <see cref="Applied"/> at sign-in: see <see cref="ITunePart.SignIn"/>.</summary>
     public int[]? SignIn { get; init; }
+    public DateTimeOffset? AppliedAtUtc { get; init; }
+}
+
+internal enum TuneReapplyDecision { Apply, PauseAfterCrash, Skip }
+
+internal sealed record TuneCrashEvent(string Provider, int EventId, DateTimeOffset TimestampUtc);
+
+internal sealed record TuneReapplyVerdict(TuneReapplyDecision Decision, string? Reason);
+
+internal sealed record TuneVendorRules(
+    bool SurvivesExoClose,
+    bool SurvivesReboot,
+    bool SurvivesSleep,
+    bool SurvivesDriverReset,
+    bool NeedsResidentProcess,
+    bool UsesScheduledTask);
+
+internal static class TunePersistence
+{
+    internal const int CrashWindowMinutes = 10;
+    internal static readonly TimeSpan DefaultCrashWindow = TimeSpan.FromMinutes(CrashWindowMinutes);
+    internal const string PausedNote = "Tuning paused after a crash.";
+
+    internal static TuneVendorRules RulesFor(string partId) => partId switch
+    {
+        "nvidia" => new(SurvivesExoClose: true, SurvivesReboot: false, SurvivesSleep: false, SurvivesDriverReset: false, NeedsResidentProcess: false, UsesScheduledTask: true),
+        "radeon" => new(SurvivesExoClose: true, SurvivesReboot: true, SurvivesSleep: true, SurvivesDriverReset: false, NeedsResidentProcess: false, UsesScheduledTask: false),
+        "ryzen" => new(SurvivesExoClose: true, SurvivesReboot: false, SurvivesSleep: false, SurvivesDriverReset: true, NeedsResidentProcess: false, UsesScheduledTask: true),
+        "fans" => new(SurvivesExoClose: false, SurvivesReboot: false, SurvivesSleep: false, SurvivesDriverReset: false, NeedsResidentProcess: true, UsesScheduledTask: false),
+        _ => new(false, false, false, false, false, false),
+    };
+
+    internal static bool IsRelevantCrashEvent(string partId, TuneCrashEvent ev)
+    {
+        if (ev.Provider.Equals("Microsoft-Windows-Kernel-Power", StringComparison.OrdinalIgnoreCase) && ev.EventId == 41) return true;
+        if (ev.Provider.Equals("Microsoft-Windows-WER-SystemErrorReporting", StringComparison.OrdinalIgnoreCase) && ev.EventId == 1001) return true;
+        if (ev.Provider.Equals("EventLog", StringComparison.OrdinalIgnoreCase) && ev.EventId == 6008) return true;
+        if (ev.Provider.Equals("Microsoft-Windows-WHEA-Logger", StringComparison.OrdinalIgnoreCase)) return true;
+        if (partId is "nvidia" or "radeon" && ev.Provider.Equals("Display", StringComparison.OrdinalIgnoreCase) && ev.EventId == 4101) return true;
+        if (partId == "nvidia" && ev.Provider.Equals("nvlddmkm", StringComparison.OrdinalIgnoreCase) && ev.EventId is 13 or 14 or 153) return true;
+        if (partId == "radeon" && (ev.Provider.Equals("amdkmdag", StringComparison.OrdinalIgnoreCase) || ev.Provider.Equals("amduw23g", StringComparison.OrdinalIgnoreCase))) return true;
+        return false;
+    }
+
+    internal static TuneReapplyVerdict EvaluateReapply(
+        string partId,
+        string trigger,
+        bool testingMarkerPresent,
+        bool alreadyPaused,
+        bool uncleanApplyPending,
+        DateTimeOffset? lastAppliedUtc,
+        IReadOnlyList<TuneCrashEvent> recentEvents,
+        TimeSpan? crashWindow = null)
+    {
+        if (testingMarkerPresent) return new(TuneReapplyDecision.Skip, "Testing is in progress.");
+        if (string.Equals(trigger, "manual", StringComparison.OrdinalIgnoreCase)) return new(TuneReapplyDecision.Apply, null);
+        if (alreadyPaused) return new(TuneReapplyDecision.PauseAfterCrash, PausedNote);
+        if (uncleanApplyPending) return new(TuneReapplyDecision.PauseAfterCrash, PausedNote);
+
+        var window = crashWindow ?? DefaultCrashWindow;
+        if (lastAppliedUtc is { } appliedAt)
+        {
+            foreach (var ev in recentEvents)
+            {
+                if (!IsRelevantCrashEvent(partId, ev)) continue;
+                if (ev.TimestampUtc >= appliedAt && ev.TimestampUtc <= appliedAt + window)
+                    return new(TuneReapplyDecision.PauseAfterCrash, PausedNote);
+            }
+        }
+
+        var rules = RulesFor(partId);
+        if (rules.NeedsResidentProcess) return new(TuneReapplyDecision.Skip, "Requires Exo to stay open.");
+        if (trigger.Equals("logon", StringComparison.OrdinalIgnoreCase) && rules.SurvivesReboot) return new(TuneReapplyDecision.Skip, "Driver persists across reboots.");
+        if (trigger.Equals("wake", StringComparison.OrdinalIgnoreCase) && rules.SurvivesSleep) return new(TuneReapplyDecision.Skip, "Driver persists across sleep.");
+        if (trigger.Equals("tdr", StringComparison.OrdinalIgnoreCase) && rules.SurvivesDriverReset) return new(TuneReapplyDecision.Skip, "Unaffected by GPU driver reset.");
+        return new(TuneReapplyDecision.Apply, null);
+    }
 }
 
 internal sealed record TuneMarker(string Part, int Depth);
@@ -91,10 +168,11 @@ internal sealed record TuneMarker(string Part, int Depth);
 /// </summary>
 internal sealed class TuneStore(string folder)
 {
-    internal const string HeldFile = "held", ApplyingFile = "applying";
+    internal const string HeldFile = "held", ApplyingFile = "applying", AppliedAtFile = "applied-at.txt";
     private static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
     private string StatePath => Path.Combine(folder, "state.json");
     private string MarkerPath => Path.Combine(folder, "testing.json");
+    private string AppliedAtPath => Path.Combine(folder, AppliedAtFile);
 
     internal string Folder => folder;
 
@@ -154,6 +232,26 @@ internal sealed class TuneStore(string folder)
         DeletionGate.DeleteFile(Path.Combine(folder, ApplyingFile));
     }
 
+    internal void WriteAppliedAt(DateTimeOffset utc)
+    {
+        Directory.CreateDirectory(folder);
+        WriteThrough(AppliedAtPath, utc.ToUniversalTime().ToString("O"));
+    }
+
+    internal DateTimeOffset? ReadAppliedAt()
+    {
+        try
+        {
+            if (!File.Exists(AppliedAtPath)) return null;
+            return DateTimeOffset.TryParse(File.ReadAllText(AppliedAtPath).Trim(), null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed)
+                ? parsed.ToUniversalTime()
+                : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    internal void ClearAppliedAt() => DeletionGate.DeleteFile(AppliedAtPath);
+
     private static void WriteThrough(string path, string text)
     {
         using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 4096, FileOptions.WriteThrough);
@@ -198,12 +296,10 @@ internal sealed class TuneRunner(ITunePart part, ITuneTest test, ITuneHost host,
         if (held && state.Applied > 0)
             return state with
             {
-                Phase = "crashed",
-                Applied = 0,
-                SignIn = null,
-                Failed = state.Failed.Contains(state.Applied) ? state.Failed : [.. state.Failed, state.Applied],
-                Passed = [.. state.Passed.Where(passed => passed < state.Applied)],
-                Note = "Your PC crashed after tuning, so Exo stopped applying it. You're back at stock.",
+                Phase = "paused",
+                Testing = null,
+                SecondsLeft = null,
+                Note = TunePersistence.PausedNote,
             };
         return state;
     }
@@ -292,8 +388,10 @@ internal sealed class TuneRunner(ITunePart part, ITuneTest test, ITuneHost host,
                 _state = _state with { Failed = [.. _state.Failed, settled], Passed = [.. _state.Passed.Where(passed => passed < settled)] };
                 return BackToStock("The last measurement stopped: " + error);
             }
-            _state = _state with { After = new TuneMeasure(tuned.Score, _peak), Applied = settled, SignIn = part.SignIn(settled), Testing = null, SecondsLeft = null, Phase = "done" };
+            var appliedAt = DateTimeOffset.UtcNow;
+            _state = _state with { After = new TuneMeasure(tuned.Score, _peak), Applied = settled, SignIn = part.SignIn(settled), AppliedAtUtc = appliedAt, Testing = null, SecondsLeft = null, Phase = "done" };
             store.Save(part.Id, _state);
+            store.WriteAppliedAt(appliedAt);
             store.ClearMarker();
             host.Reapply();
             return _state;
@@ -310,12 +408,45 @@ internal sealed class TuneRunner(ITunePart part, ITuneTest test, ITuneHost host,
         }
     }
 
+    internal TunePartState Reapply()
+    {
+        var saved = store.Part(part.Id);
+        if (saved.Applied <= 0) return saved;
+        if (host.Refusal() is { } refused)
+        {
+            var blocked = saved with { Note = refused };
+            store.Save(part.Id, blocked);
+            return blocked;
+        }
+        try
+        {
+            store.ClearHeld();
+            if (part is TuneNvidia nvidia && saved.SignIn is [_, > 0 and var cap]) nvidia.RestoreCap(cap);
+            part.Apply(saved.Applied);
+            var appliedAt = DateTimeOffset.UtcNow;
+            var next = saved with { Phase = "done", Note = null, AppliedAtUtc = appliedAt, SignIn = saved.SignIn ?? part.SignIn(saved.Applied) };
+            store.Save(part.Id, next);
+            store.WriteAppliedAt(appliedAt);
+            host.Reapply();
+            return next;
+        }
+        catch (TuneDriverException ex)
+        {
+            AppLog.Warn("Auto tune: re-apply failed: " + ex.Message);
+            var failed = saved with { Phase = "paused", Note = ex.Message };
+            store.Save(part.Id, failed);
+            return failed;
+        }
+    }
+
     /// <summary>Back to stock in one press. The failed list stays, so a later run stays shallower.</summary>
     internal TunePartState Undo()
     {
         Reconcile(store);
+        store.ClearHeld();
+        store.ClearAppliedAt();
         part.Stock();
-        var next = store.Part(part.Id) with { Phase = "idle", Applied = 0, SignIn = null, Testing = null, SecondsLeft = null, Passed = [], Before = null, After = null, Note = null };
+        var next = store.Part(part.Id) with { Phase = "idle", Applied = 0, SignIn = null, AppliedAtUtc = null, Testing = null, SecondsLeft = null, Passed = [], Before = null, After = null, Note = null };
         store.Save(part.Id, next);
         host.Reapply();
         return next;

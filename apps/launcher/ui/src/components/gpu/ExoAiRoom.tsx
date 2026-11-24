@@ -439,6 +439,7 @@ export function ExoAiRoom({
                 onHealth={setHealth}
                 about={state.about}
                 runtimes={apps?.runtimes ?? null}
+                runtimesDeferred={apps?.runtimesDeferred ?? false}
               />
             </RightSection>
             <RightSection id="shaders" title="Shaders">

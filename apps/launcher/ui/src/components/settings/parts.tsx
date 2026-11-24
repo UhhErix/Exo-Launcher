@@ -73,7 +73,7 @@ function TruncatedLabel({ id, label }: { id?: string; label: string }) {
   )
 }
 
-export function Row({ label, labelId, detail, icon, stacked, truncateLabel, children, error }: {
+export function Row({ label, labelId, detail, icon, stacked, truncateLabel, children, error, errorDetail }: {
   label: string
   labelId?: string
   detail?: ReactNode
@@ -82,6 +82,7 @@ export function Row({ label, labelId, detail, icon, stacked, truncateLabel, chil
   truncateLabel?: boolean
   children?: ReactNode
   error?: string | null
+  errorDetail?: string | null
 }) {
   return (
     <div className={`exo-set-item${stacked ? ' is-stacked' : ''}`}>
@@ -93,7 +94,7 @@ export function Row({ label, labelId, detail, icon, stacked, truncateLabel, chil
         </div>
         {children ? <div className="exo-set-item-control">{children}</div> : null}
       </div>
-      {error ? <ErrorNote className="exo-set-error" message={error} /> : null}
+      {error ? <ErrorNote className="exo-set-error" message={error} detail={errorDetail} /> : null}
     </div>
   )
 }

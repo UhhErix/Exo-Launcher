@@ -327,6 +327,7 @@ function mockTune(p?: Record<string, unknown>) {
   if (p?.action === 'start') mockTuneReads[id] = 0
   if (p?.action === 'stop') delete mockTuneReads[id]
   if (p?.action === 'undo') { delete mockTuneReads[id]; mockTuneDone.delete(id) }
+  if (p?.action === 'reapply') { delete mockTuneReads[id]; mockTuneDone.add(id) }
   const gpu = mockGpu === 'amd' ? 'radeon' : 'nvidia'
   const words: Record<string, string> = {
     nvidia: 'Moves your card\u2019s clock up at each voltage and tests each step, about 40 minutes. It\u2019s outside NVIDIA\u2019s specifications, can void your warranty, and can crash your PC while it tests, so save your work first. Exo goes back to stock by itself if anything goes wrong.',
@@ -1943,10 +1944,16 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     ok: true,
     message: null,
     model: 'Wooting 60HE v2',
+    formFactor: '60',
     hallEffect: true,
+    hasRapidTrigger: true,
+    hasRgb: true,
     maxScanHz: 8000,
+    minActuationMm: 0.1,
+    maxActuationMm: 4.0,
     firmware: '2.15.0',
     layout: 'ANSI · Split spacebar',
+    layoutCode: 'ansi-split',
     activeProfile: 1,
     profiles: [
       { index: 0, name: 'Digital' },
@@ -1958,6 +1965,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     rapidTrigger: true,
     rapidTriggerMm: 0.15,
     tachyon: true,
+    rgbBrightness: 70,
     canWrite: true,
     wootilityInstalled: true,
     backgroundServiceRunning: true,
@@ -1966,10 +1974,16 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     ok: true,
     message: null,
     model: 'Wooting 60HE v2',
+    formFactor: '60',
     hallEffect: true,
+    hasRapidTrigger: true,
+    hasRgb: true,
     maxScanHz: 8000,
+    minActuationMm: 0.1,
+    maxActuationMm: 4.0,
     firmware: '2.15.0',
     layout: 'ANSI · Split spacebar',
+    layoutCode: 'ansi-split',
     activeProfile: Number((p as { slot?: number }).slot ?? 0),
     profiles: [
       { index: 0, name: 'Digital' },
@@ -1981,20 +1995,27 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     rapidTrigger: true,
     rapidTriggerMm: 0.15,
     tachyon: true,
+    rgbBrightness: 70,
     canWrite: true,
     wootilityInstalled: true,
     backgroundServiceRunning: true,
   }),
   'keyboard.settings': (p) => {
-    const patch = p as { actuationMm?: number; rapidTrigger?: boolean; rapidTriggerMm?: number; tachyon?: boolean }
+    const patch = p as { actuationMm?: number; rapidTrigger?: boolean; rapidTriggerMm?: number; tachyon?: boolean; rgbBrightness?: number }
     return {
       ok: true,
       message: null,
       model: 'Wooting 60HE v2',
+      formFactor: '60',
       hallEffect: true,
+      hasRapidTrigger: true,
+      hasRgb: true,
       maxScanHz: 8000,
+      minActuationMm: 0.1,
+      maxActuationMm: 4.0,
       firmware: '2.15.0',
       layout: 'ANSI · Split spacebar',
+      layoutCode: 'ansi-split',
       activeProfile: 1,
       profiles: [
         { index: 0, name: 'Digital' },
@@ -2006,6 +2027,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       rapidTrigger: patch.rapidTrigger ?? true,
       rapidTriggerMm: patch.rapidTriggerMm ?? 0.15,
       tachyon: patch.tachyon ?? true,
+      rgbBrightness: patch.rgbBrightness ?? 70,
       canWrite: true,
       wootilityInstalled: true,
       backgroundServiceRunning: true,
@@ -2051,10 +2073,16 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     ok: true,
     message: null,
     model: 'Wooting 60HE v2',
+    formFactor: '60',
     hallEffect: true,
+    hasRapidTrigger: true,
+    hasRgb: true,
     maxScanHz: 8000,
+    minActuationMm: 0.1,
+    maxActuationMm: 4.0,
     firmware: '2.15.0',
     layout: 'ANSI · Split spacebar',
+    layoutCode: 'ansi-split',
     activeProfile: 1,
     profiles: [
       { index: 0, name: 'Digital' },
@@ -2066,6 +2094,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     rapidTrigger: true,
     rapidTriggerMm: 0.15,
     tachyon: true,
+    rgbBrightness: 70,
     canWrite: true,
     wootilityInstalled: true,
     backgroundServiceRunning: true,

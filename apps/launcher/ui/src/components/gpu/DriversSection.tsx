@@ -111,7 +111,7 @@ async function runChipsetStep(
   return 'done'
 }
 
-export function DriversSection({ active, driver, onDriver, health, onHealth, about, runtimes }: {
+export function DriversSection({ active, driver, onDriver, health, onHealth, about, runtimes, runtimesDeferred = false }: {
   active: boolean
   driver: DriverState | null
   onDriver: (next: DriverState) => void
@@ -121,6 +121,7 @@ export function DriversSection({ active, driver, onDriver, health, onHealth, abo
   about: PcAbout | null
   /** The game runtimes as the room read them (runtimes.list); null until read. */
   runtimes: RuntimeItem[] | null
+  runtimesDeferred?: boolean
 }) {
   const [state, setState] = useState<DriversState | null>(null)
   const [unread, setUnread] = useState(false)
@@ -240,7 +241,7 @@ export function DriversSection({ active, driver, onDriver, health, onHealth, abo
       {rows.map(item => item.kind === 'bios' && item.source === 'ASUS' && (item.how !== 'none' || item.advised) ? <BiosRow key={item.id} item={item} /> : <DeviceRow key={item.id} item={item} step={steps[item.id]} disabled={working || !!state?.busy} onInstall={() => void install(item.id)} />)}
       <ControllerRows active={active} />
       <WindowsRow about={about} />
-      <Runtimes read={runtimes} />
+      <Runtimes read={runtimes} deferred={runtimesDeferred} />
     </>
   )
 }
@@ -269,15 +270,15 @@ function WindowsRow({ about }: { about: PcAbout | null }) {
 }
 
 /** The game runtimes and dependencies (Visual C++, DirectX, .NET and the rest), while one is missing or older. */
-function Runtimes({ read }: { read: RuntimeItem[] | null }) {
+function Runtimes({ read, deferred }: { read: RuntimeItem[] | null; deferred: boolean }) {
   const [items, setItems] = useState(read)
   useEffect(() => { if (read) setItems(read) }, [read])
   // Shown only while one is missing or older: runtimes at their newest aren't.
-  if (!items || !items.some(item => (item.state === 'missing' && item.bulk) || item.state === 'outdated')) return null
+  if (!items || (!deferred && !items.some(item => (item.state === 'missing' && item.bulk) || item.state === 'outdated'))) return null
   return (
     <section className="exo-pc-updates-part" aria-labelledby="pc-runtimes-title">
       <h3 id="pc-runtimes-title">Game runtimes</h3>
-      <RuntimesPanel items={items} onItems={setItems} />
+      <RuntimesPanel items={items} onItems={setItems} initialDeferred={deferred} />
     </section>
   )
 }

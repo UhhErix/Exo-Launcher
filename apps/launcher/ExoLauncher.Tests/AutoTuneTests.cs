@@ -211,11 +211,11 @@ public sealed class AutoTuneTests : IDisposable
     [Fact]
     public void HeldBySignInTurnsOffWhatWasAppliedAndFailsIt()
     {
-        var seen = TuneRunner.Recover("part", new TunePartState { Applied = 10, Passed = [5, 10] }, null, held: true);
-        Assert.Equal(0, seen.Applied);
-        Assert.Contains(10, seen.Failed);
-        Assert.DoesNotContain(10, seen.Passed);
-        Assert.Contains("crashed", seen.Note);
+        var seen = TuneRunner.Recover("part", new TunePartState { Applied = 10, SignIn = [10], Passed = [5, 10] }, null, held: true);
+        Assert.Equal("paused", seen.Phase);
+        Assert.Equal(10, seen.Applied);
+        Assert.Equal(new[] { 10 }, seen.SignIn);
+        Assert.Equal(TunePersistence.PausedNote, seen.Note);
     }
 
     [Fact]
@@ -238,7 +238,7 @@ public sealed class AutoTuneTests : IDisposable
     public void AWorkerAliveForAnotherPartDoesntHideACrashOnThisOne()
     {
         var saved = new TunePartState { Applied = 10 };
-        Assert.Equal("crashed", TuneRunner.Seen("part", saved, null, held: true, workerAlive: true).Phase);
+        Assert.Equal("paused", TuneRunner.Seen("part", saved, null, held: true, workerAlive: true).Phase);
     }
 
     [Fact]
@@ -485,16 +485,80 @@ public sealed class AutoTuneTests : IDisposable
     }
 
     [Fact]
-    public void TheScriptChecksEverythingBeforeItApplies()
+    public void TheScriptChecksBeforeItApplies()
     {
         var script = TuneSignIn.Script([120, 1935], [15], @"C:\Program Files\ExoLauncher Tune", @"C:\Users\O'Neil\Exo.exe");
         var apply = script.IndexOf("[ExoTune]::Nvidia(120, 1935)", StringComparison.Ordinal);
         Assert.True(apply > 0);
         Assert.Contains("[ExoTune]::Ryzen(15,", script);
         Assert.Contains("O''Neil", script);
-        foreach (var check in new[] { "testing.json", "\\held\")", "\\applying\") { Move-Item", "Id = 41", "WHEA-Logger", "Set-Content -LiteralPath \"$d\\applying\"" })
+        Assert.Contains("ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 41", script);
+        Assert.DoesNotContain("'Microsoft-Kernel-Power'", script);
+        Assert.Contains("last-run.txt", script);
+        var addType = script.IndexOf("Add-Type", StringComparison.Ordinal);
+        var markApplying = script.IndexOf("Set-Content -LiteralPath \"$d\\applying\"", StringComparison.Ordinal);
+        Assert.InRange(addType, 0, markApplying);
+        foreach (var check in new[] { "testing.json", "\\held\")", "\\applying\")", "Microsoft-Windows-Kernel-Power", "Id = 41", "Microsoft-Windows-WER-SystemErrorReporting", "WHEA-Logger", "Id = 18", "Display", "nvlddmkm", "applied-at.txt", "Set-Content -LiteralPath \"$d\\applying\"" })
             Assert.InRange(script.IndexOf(check, StringComparison.Ordinal), 0, apply);
+        Assert.Contains("nvmlShutdown", script);
+        Assert.Contains("Retry", script);
         Assert.True(script.IndexOf("Start-Sleep -Seconds 120", StringComparison.Ordinal) > apply);
+    }
+
+    [Fact]
+    public void ACrashOrFatalErrorSinceTheApplyHoldsButACorrectedOneDoesNot()
+    {
+        var script = TuneSignIn.Script([120, 0], null, @"C:\t", @"C:\e.exe");
+        Assert.Contains("ProviderName = 'Microsoft-Windows-WHEA-Logger'; Id = 18", script);
+        Assert.Contains("'power-loss'", script);
+        Assert.Contains("'whea-fatal'", script);
+        Assert.DoesNotContain("Id = @(", script);
+        Assert.DoesNotContain("Id = 19", script);
+        Assert.DoesNotContain("Id = 20", script);
+    }
+
+    [Fact]
+    public void AScriptErrorNotesItAndNeverHolds()
+    {
+        var script = TuneSignIn.Script([120, 0], null, @"C:\t", @"C:\e.exe");
+        var catchAt = script.LastIndexOf("} catch {", script.IndexOf("Remove-Item -LiteralPath \"$d\\applying\" -ErrorAction", StringComparison.Ordinal), StringComparison.Ordinal);
+        var exitAt = script.IndexOf("exit", catchAt, StringComparison.Ordinal);
+        Assert.True(catchAt > 0 && exitAt > catchAt);
+        var handler = script[catchAt..exitAt];
+        Assert.Contains("Remove-Item -LiteralPath \"$d\\applying\"", handler);
+        Assert.Contains("Note ('error: '", handler);
+        Assert.DoesNotContain("held", handler);
+    }
+
+    [Fact]
+    public void AnNvidiaApplyReadsTheOffsetBackAfterTheWaitAndWritesWhatTheDriverSays()
+    {
+        var script = TuneSignIn.Script([120, 1935], null, @"C:\t", @"C:\e.exe");
+        var wait = script.IndexOf("Start-Sleep -Seconds 120", StringComparison.Ordinal);
+        var read = script.IndexOf("[ExoTune]::NvidiaRead()", StringComparison.Ordinal);
+        Assert.True(wait > 0 && read > wait);
+        Assert.Contains("applied: driver reads ", script);
+        Assert.Contains("MHz (wanted 120)", script);
+        Assert.DoesNotContain("Keep(", script);
+        Assert.DoesNotContain("keep", script);
+        var ryzenOnly = TuneSignIn.Script(null, [10], @"C:\t", @"C:\e.exe");
+        Assert.DoesNotContain("[ExoTune]::NvidiaRead()", ryzenOnly);
+        Assert.Contains("Note 'applied'", ryzenOnly);
+    }
+
+    [Fact]
+    public void AnErrorNoteSaysWhatLanguageModeWindowsRanThePowerShellIn()
+    {
+        var script = TuneSignIn.Script([120, 0], null, @"C:\t", @"C:\e.exe");
+        Assert.Contains("$ExecutionContext.SessionState.LanguageMode", script);
+    }
+
+    [Fact]
+    public void TheStartLineSaysWhatTheDriverReadAgainstWhatWasApplied()
+    {
+        Assert.Equal("Auto tune: at start the driver reads 120 MHz, applied 120.", AutoTuneService.AtStart(120, 120));
+        Assert.Equal("Auto tune: at start the driver reads 0 MHz, applied 120.", AutoTuneService.AtStart(0, 120));
+        Assert.Equal("Auto tune: at start the driver's offset couldn't be read, applied 120.", AutoTuneService.AtStart(null, 120));
     }
 
     [Fact]
@@ -502,6 +566,7 @@ public sealed class AutoTuneTests : IDisposable
     {
         var script = TuneSignIn.Script(null, [10], "C:\\t", "C:\\e.exe");
         Assert.DoesNotContain("[ExoTune]::Nvidia(", script);
+        Assert.DoesNotContain("nvlddmkm", script);
     }
 
     [Fact]
@@ -510,12 +575,27 @@ public sealed class AutoTuneTests : IDisposable
     [Fact]
     public void TheTaskRunsAsSystemOnlyAtSignInAndOnWake()
     {
-        var xml = TuneSignIn.TaskXml(@"C:\Program Files\ExoLauncher Tune\apply.ps1");
+        var xml = TuneSignIn.TaskXml(@"C:\Program Files\ExoLauncher Tune\apply.ps1", includeTdr: true);
         Assert.Contains("S-1-5-18", xml);
         Assert.Contains("<LogonTrigger>", xml);
         Assert.Contains("Power-Troubleshooter", xml);
+        Assert.Contains("EventID=1]", xml);
+        Assert.Contains("EventID=4101", xml);
         Assert.DoesNotContain("<BootTrigger>", xml);
         Assert.Contains("IgnoreNew", xml);
+        Assert.Contains("<ExecutionTimeLimit>PT5M</ExecutionTimeLimit>", xml);
+
+        var ryzenOnly = TuneSignIn.TaskXml(@"C:\Program Files\ExoLauncher Tune\apply.ps1", includeTdr: false);
+        Assert.DoesNotContain("EventID=4101", ryzenOnly);
+    }
+
+    [Fact]
+    public void TheAppLogLineIsTheSignInScriptsLastLine()
+    {
+        Directory.CreateDirectory(_folder);
+        Assert.Null(TuneSignIn.LastRun(_folder));
+        File.WriteAllText(Path.Combine(_folder, TuneSignIn.LastRunFile), "2026-11-22T09:00:00 applied\n2026-11-23T09:00:00 held: the PC lost power or crashed since the apply\n\n");
+        Assert.Equal("2026-11-23T09:00:00 held: the PC lost power or crashed since the apply", TuneSignIn.LastRun(_folder));
     }
 
     [Theory]
@@ -602,5 +682,108 @@ public sealed class AutoTuneTests : IDisposable
         Assert.False(cpu.GetProperty("modes").GetBoolean());
         Assert.Equal("faster", cpu.GetProperty("mode").GetString());
         Assert.Equal("Close your game first.", cpu.GetProperty("blocked").GetString());
+    }
+
+    [Fact]
+    public void VendorPersistenceRulesMatchHardwareBehavior()
+    {
+        var nv = TunePersistence.RulesFor("nvidia");
+        Assert.True(nv.SurvivesExoClose);
+        Assert.False(nv.SurvivesReboot);
+        Assert.False(nv.SurvivesSleep);
+        Assert.False(nv.SurvivesDriverReset);
+        Assert.False(nv.NeedsResidentProcess);
+        Assert.True(nv.UsesScheduledTask);
+
+        var radeon = TunePersistence.RulesFor("radeon");
+        Assert.True(radeon.SurvivesExoClose);
+        Assert.True(radeon.SurvivesReboot);
+        Assert.True(radeon.SurvivesSleep);
+        Assert.False(radeon.SurvivesDriverReset);
+        Assert.False(radeon.UsesScheduledTask);
+
+        var ryzen = TunePersistence.RulesFor("ryzen");
+        Assert.True(ryzen.SurvivesExoClose);
+        Assert.False(ryzen.SurvivesReboot);
+        Assert.False(ryzen.SurvivesSleep);
+        Assert.True(ryzen.SurvivesDriverReset);
+        Assert.True(ryzen.UsesScheduledTask);
+
+        var fans = TunePersistence.RulesFor("fans");
+        Assert.False(fans.SurvivesExoClose);
+        Assert.True(fans.NeedsResidentProcess);
+        Assert.False(fans.UsesScheduledTask);
+    }
+
+    [Fact]
+    public void CrashGuardPausesOnlyOnRelevantEventsInsideWindow()
+    {
+        var applied = new DateTimeOffset(2026, 11, 23, 12, 0, 0, TimeSpan.Zero);
+
+        var kpInWindow = TunePersistence.EvaluateReapply("nvidia", "logon", false, false, false, applied,
+            [new TuneCrashEvent("Microsoft-Windows-Kernel-Power", 41, applied.AddMinutes(4))]);
+        Assert.Equal(TuneReapplyDecision.PauseAfterCrash, kpInWindow.Decision);
+        Assert.Equal(TunePersistence.PausedNote, kpInWindow.Reason);
+
+        var bsodInWindow = TunePersistence.EvaluateReapply("ryzen", "logon", false, false, false, applied,
+            [new TuneCrashEvent("Microsoft-Windows-WER-SystemErrorReporting", 1001, applied.AddMinutes(9))]);
+        Assert.Equal(TuneReapplyDecision.PauseAfterCrash, bsodInWindow.Decision);
+
+        var tdrNvidiaInWindow = TunePersistence.EvaluateReapply("nvidia", "tdr", false, false, false, applied,
+            [new TuneCrashEvent("Display", 4101, applied.AddMinutes(2))]);
+        Assert.Equal(TuneReapplyDecision.PauseAfterCrash, tdrNvidiaInWindow.Decision);
+
+        var tdrRyzenInWindow = TunePersistence.EvaluateReapply("ryzen", "logon", false, false, false, applied,
+            [new TuneCrashEvent("Display", 4101, applied.AddMinutes(2))]);
+        Assert.Equal(TuneReapplyDecision.Apply, tdrRyzenInWindow.Decision);
+
+        var crashOutsideWindow = TunePersistence.EvaluateReapply("nvidia", "logon", false, false, false, applied,
+            [new TuneCrashEvent("Microsoft-Windows-Kernel-Power", 41, applied.AddHours(3))]);
+        Assert.Equal(TuneReapplyDecision.Apply, crashOutsideWindow.Decision);
+
+        var tdrAfterWindow = TunePersistence.EvaluateReapply("nvidia", "tdr", false, false, false, applied,
+            [new TuneCrashEvent("Display", 4101, applied.AddMinutes(45))]);
+        Assert.Equal(TuneReapplyDecision.Apply, tdrAfterWindow.Decision);
+
+        var ryzenOnTdr = TunePersistence.EvaluateReapply("ryzen", "tdr", false, false, false, applied, []);
+        Assert.Equal(TuneReapplyDecision.Skip, ryzenOnTdr.Decision);
+
+        var radeonOnLogon = TunePersistence.EvaluateReapply("radeon", "logon", false, false, false, applied, []);
+        Assert.Equal(TuneReapplyDecision.Skip, radeonOnLogon.Decision);
+
+        var manualAfterPause = TunePersistence.EvaluateReapply("nvidia", "manual", false, alreadyPaused: true, uncleanApplyPending: true, applied,
+            [new TuneCrashEvent("Display", 4101, applied.AddMinutes(1))]);
+        Assert.Equal(TuneReapplyDecision.Apply, manualAfterPause.Decision);
+    }
+
+    [Fact]
+    public void OneClickReapplyRestoresPausedTuneAndClearsHeld()
+    {
+        var (part, _, host, runner) = Make(failAt: 20);
+        runner.Run();
+        Assert.Equal(10, part.Now);
+        File.WriteAllText(Path.Combine(_folder, TuneStore.HeldFile), "crash");
+
+        var seen = TuneRunner.Seen(part.Id, _store.Part(part.Id), _store.Marker(), _store.Held(), workerAlive: false);
+        Assert.Equal("paused", seen.Phase);
+        Assert.Equal(10, seen.Applied);
+        Assert.Equal(TunePersistence.PausedNote, seen.Note);
+
+        var view = System.Text.Json.JsonSerializer.SerializeToElement(TuneView.Of("nvidia", seen, driverReady: true, cores: 0, gameRunning: false));
+        Assert.Equal("paused", view.GetProperty("state").GetString());
+        Assert.True(view.GetProperty("canReapply").GetBoolean());
+        Assert.True(view.GetProperty("canUndo").GetBoolean());
+
+        part.Stock();
+        Assert.Equal(0, part.Now);
+        var beforeReapply = host.Reapplied;
+        var reapplied = runner.Reapply();
+        Assert.Equal("done", reapplied.Phase);
+        Assert.Equal(10, reapplied.Applied);
+        Assert.Equal(10, part.Now);
+        Assert.Null(reapplied.Note);
+        Assert.False(_store.Held());
+        Assert.NotNull(_store.ReadAppliedAt());
+        Assert.True(host.Reapplied > beforeReapply);
     }
 }
