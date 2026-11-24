@@ -28,6 +28,7 @@ param(
     [string]$Out,
     # Every assembly's version. Core's test hooks (SCSK_TEST_HOOKS) build in only under 0.0.0-internal, a plain build's.
     [string]$Version = '1.4.8-exo.1',
+    [string]$SymbolsOut,
     [switch]$SkipCli
 )
 
@@ -72,17 +73,58 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 $exoBuild = '-p:ExoBuild=true'
 
 # The service
-Invoke-Dotnet @('publish', (Join-Path $engine 'src\ExoShaders.Service\ExoShaders.Service.csproj'),
-    '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-o', $Out, '-p:DebugType=none', '-p:PublishReadyToRun=true', "-p:Version=$Version", '-p:IncludeSourceRevisionInInformationalVersion=false', $exoBuild)
+$svcProj = Join-Path $engine 'src\ExoShaders.Service\ExoShaders.Service.csproj'
+Invoke-Dotnet @('publish', $svcProj,
+    '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-o', $Out, '-p:DebugType=portable', '-p:CopyOutputSymbolsToPublishDirectory=false', '-p:PublishReadyToRun=false', "-p:Version=$Version", '-p:IncludeSourceRevisionInInformationalVersion=false', $exoBuild)
+if ($SymbolsOut) {
+    New-Item -ItemType Directory -Force $SymbolsOut | Out-Null
+    $svcBin = Join-Path $engine 'src\ExoShaders.Service\bin\Release\net10.0-windows\win-x64'
+    foreach ($pdb in 'ExoShaders.Service.pdb', 'SCSKiller.Core.pdb') {
+        $p = Join-Path $svcBin $pdb
+        if (Test-Path $p) { Copy-Item $p (Join-Path $SymbolsOut $pdb) -Force }
+    }
+}
 
 # The CLI the engine starts for the scheduled task and elevated driver settings: published into the same folder, so
 # all three programs run on one copy of the .NET runtime (same version, same SCSKiller.Core).
 if (-not $SkipCli) {
-    $cliProj = Join-Path $repo 'src\SCSKiller.Cli\SCSKiller.Cli.csproj'
-    Invoke-Dotnet @('publish', $cliProj, '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-o', $Out, '-p:DebugType=none', '-p:PublishReadyToRun=true', "-p:Version=$Version", '-p:IncludeSourceRevisionInInformationalVersion=false', $exoBuild)
-    # scskillerw.exe: the same program without a console window (what the scheduled task runs), same dependencies
-    Invoke-Dotnet @('publish', (Join-Path $engine 'src\SCSKiller.CliW\SCSKiller.CliW.csproj'),
-        '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-o', $Out, '-p:DebugType=none', '-p:PublishReadyToRun=true', "-p:Version=$Version", '-p:IncludeSourceRevisionInInformationalVersion=false', $exoBuild)
+    $svcRuntimeCfg = Get-Content (Join-Path $Out 'ExoShaders.Service.runtimeconfig.json') -Raw
+    $svcDepsJson = Get-Content (Join-Path $Out 'ExoShaders.Service.deps.json') -Raw | ConvertFrom-Json -AsHashtable
+    foreach ($cli in @(
+        @{ Proj = (Join-Path $repo 'src\SCSKiller.Cli\SCSKiller.Cli.csproj'); Name = 'scskiller' },
+        @{ Proj = (Join-Path $engine 'src\SCSKiller.CliW\SCSKiller.CliW.csproj'); Name = 'scskillerw' }
+    )) {
+        $tmpCli = Join-Path ([IO.Path]::GetTempPath()) ("exo-shaders-cli-" + $cli.Name + "-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        try {
+            Invoke-Dotnet @('publish', $cli.Proj, '-c', 'Release', '-r', 'win-x64', '--self-contained', 'false', '-o', $tmpCli, '-p:DebugType=portable', '-p:PublishReadyToRun=false', "-p:Version=$Version", '-p:IncludeSourceRevisionInInformationalVersion=false', $exoBuild)
+            Copy-Item (Join-Path $tmpCli ($cli.Name + '.exe')) $Out -Force
+            Copy-Item (Join-Path $tmpCli ($cli.Name + '.dll')) $Out -Force
+            if ($SymbolsOut -and (Test-Path (Join-Path $tmpCli ($cli.Name + '.pdb')))) {
+                Copy-Item (Join-Path $tmpCli ($cli.Name + '.pdb')) (Join-Path $SymbolsOut ($cli.Name + '.pdb')) -Force
+            }
+            Set-Content -Path (Join-Path $Out ($cli.Name + '.runtimeconfig.json')) -Value $svcRuntimeCfg -NoNewline -Encoding utf8NoBOM
+            $cliDeps = $svcDepsJson | ConvertTo-Json -Depth 12 | ConvertFrom-Json -AsHashtable
+            $cliKey = "$($cli.Name)/$Version"
+            $svcKey = "ExoShaders.Service/$Version"
+            foreach ($targetName in @($cliDeps['targets'].Keys)) {
+                $targetMap = $cliDeps['targets'][$targetName]
+                if ($targetMap.ContainsKey($svcKey)) {
+                    $entry = $targetMap[$svcKey]
+                    $entry['runtime'] = @{ ($cli.Name + '.dll') = @{} }
+                    $targetMap.Remove($svcKey)
+                    $targetMap[$cliKey] = $entry
+                }
+            }
+            if ($cliDeps['libraries'].ContainsKey($svcKey)) {
+                $libEntry = $cliDeps['libraries'][$svcKey]
+                $cliDeps['libraries'].Remove($svcKey)
+                $cliDeps['libraries'][$cliKey] = $libEntry
+            }
+            Set-Content -Path (Join-Path $Out ($cli.Name + '.deps.json')) -Value ($cliDeps | ConvertTo-Json -Depth 12) -NoNewline -Encoding utf8NoBOM
+        } finally {
+            if (Test-Path $tmpCli) { Remove-Item $tmpCli -Recurse -Force }
+        }
+    }
 }
 
 # Native files, in the app's layout

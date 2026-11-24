@@ -21,10 +21,11 @@ export const GUARDED = ['settings.json', 'web-client-preferences.json', 'window-
 export const TEST_INSTANCE = process.env.EXO_E2E_TEST_INSTANCE === '1'
 const TEST_SCRIPT = fileURLToPath(new URL('../../test-instance.ps1', import.meta.url))
 const WIN_SCRIPT = fileURLToPath(new URL('./win.ps1', import.meta.url))
-const TEST_EXE = fileURLToPath(new URL('../../ExoLauncher/bin/x64/Debug/net10.0-windows10.0.26100.0/win-x64/ExoLauncher.exe', import.meta.url))
+const TEST_EXE = process.env.EXO_E2E_TEST_EXE || fileURLToPath(new URL('../../ExoLauncher/bin/x64/Debug/net10.0-windows10.0.26100.0/win-x64/ExoLauncher.exe', import.meta.url))
 const TEST_FOLDER = process.env.EXO_E2E_TEST_FOLDER || join(process.env.TEMP, 'exo-e2e-test-instance')
 let test = null // { pid, port, dataDir } of the test instance this run started
 const q = (s) => String(s).replace(/'/g, "''")
+const activeLog = () => (TEST_INSTANCE && test?.dataDir ? join(test.dataDir, 'logs', 'app.log') : LOG)
 
 const pwsh = (script) => new Promise((resolve, reject) =>
   execFile('pwsh', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 90000 }, (e, out, err) => e ? reject(new Error((err || e.message).trim())) : resolve(out.trim())))
@@ -44,7 +45,7 @@ export async function close(timeoutSec = 40) {
   if (TEST_INSTANCE) {
     // The script closes that PID only (CloseMainWindow, then waits up to 40 s); the installed Exo is never matched.
     if (!test) return
-    await pwsh(`& '${q(TEST_SCRIPT)}' -Stop ${test.pid}`)
+    await pwsh(`& '${q(TEST_SCRIPT)}' -Stop ${test.pid} -Exe '${q(TEST_EXE)}'`)
     test = null
     await sleep(800)
     return
@@ -63,7 +64,7 @@ export async function launch({ port = null, env = {}, waitPage = true } = {}) {
     // The script picks its own debug port (returned), and the extra environment goes to the test instance.
     const startedAt = Date.now()
     const extra = Object.entries(env).map(([k, v]) => `'${q(k)}' = '${q(v)}'`).join('; ')
-    const out = await pwsh(`& '${q(TEST_SCRIPT)}' -Folder '${q(TEST_FOLDER)}' -Fresh -Env @{ ${extra} }`)
+    const out = await pwsh(`& '${q(TEST_SCRIPT)}' -Folder '${q(TEST_FOLDER)}' -Exe '${q(TEST_EXE)}' -Fresh -Env @{ ${extra} }`)
     test = JSON.parse(out.split(/\r?\n/).pop())
     if (!waitPage) return { startedAt, shell: null }
     return { startedAt, shell: await openShell(test.port, 90000) }
@@ -97,13 +98,13 @@ export async function attach(port) {
 
 /** The log's length now: pass it to logSince to read only what a step wrote. */
 export async function logMark() {
-  try { return (await stat(LOG)).size } catch { return 0 }
+  try { return (await stat(activeLog())).size } catch { return 0 }
 }
 
 /** app.log lines written since `mark`, as { at, level, text }. */
 export async function logSince(mark) {
   try {
-    const handle = await open(LOG, 'r')
+    const handle = await open(activeLog(), 'r')
     const size = (await handle.stat()).size
     const buffer = Buffer.alloc(Math.max(0, size - mark))
     await handle.read(buffer, 0, buffer.length, mark)

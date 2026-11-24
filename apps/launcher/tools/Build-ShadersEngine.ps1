@@ -19,7 +19,7 @@ $short = $commit.Substring(0, 12) + $(if ($dirty) { '-dirty' } else { '' })
 
 $stage = Join-Path ([IO.Path]::GetTempPath()) "exo-shaders-$($commit.Substring(0, 12))-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
 New-Item -ItemType Directory -Force $stage | Out-Null
-pwsh -NoProfile -File (Join-Path $shaders 'engine\build\publish-service.ps1') -Out (Join-Path $stage 'engine') | Out-Host
+pwsh -NoProfile -File (Join-Path $shaders 'engine\build\publish-service.ps1') -Out (Join-Path $stage 'engine') -SymbolsOut (Join-Path $stage 'symbols') | Out-Host
 if ($LASTEXITCODE) { throw "publish-service.ps1 failed ($LASTEXITCODE)." }
 foreach ($notice in 'LICENSE', 'LICENSE-EXCEPTION.txt', 'THIRD-PARTY-NOTICES.md') {
     Copy-Item (Join-Path $shaders "engine\$notice") (Join-Path $stage $notice) -Force

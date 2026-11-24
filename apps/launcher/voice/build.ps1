@@ -19,7 +19,8 @@ $here = $PSScriptRoot
 $src = Join-Path $here 'third_party'
 $downloads = Join-Path $here 'build\downloads'
 $out = Join-Path $here 'out'
-New-Item -ItemType Directory -Force -Path $src, $out | Out-Null
+$symbols = Join-Path $out 'symbols'
+New-Item -ItemType Directory -Force -Path $src, $out, $symbols | Out-Null
 
 $needMsvc = @('dave', 'opus', 'apm') | Where-Object { $Targets -contains $_ }
 if ($needMsvc) {
@@ -64,9 +65,14 @@ if ($Targets -contains 'dave') {
     $daveBuild = Join-Path $here 'build\dave'
     Invoke-Dev ("cmake -S `"$cpp`" -B `"$daveBuild`" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DTESTING=OFF " +
         "-DCMAKE_TOOLCHAIN_FILE=`"$vcpkg\scripts\buildsystems\vcpkg.cmake`" -DVCPKG_MANIFEST_MODE=OFF -DVCPKG_INSTALLED_DIR=`"$deps`" " +
-        "-DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded")
+        "-DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded " +
+        "-DCMAKE_C_FLAGS_RELEASE=`"/O2 /Ob2 /DNDEBUG /Zi /GL`" -DCMAKE_CXX_FLAGS_RELEASE=`"/O2 /Ob2 /DNDEBUG /Zi /GL`" " +
+        "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=`"/LTCG /OPT:REF /OPT:ICF /DEBUG:FULL /PDBALTPATH:dave.pdb`"")
     Invoke-Dev "cmake --build `"$daveBuild`" --target libdave"
-    Get-ChildItem $daveBuild -Recurse -Filter '*.dll' | Where-Object Name -match 'dave' | Select-Object -First 1 | Copy-Item -Destination (Join-Path $out 'dave.dll') -Force
+    $daveDll = Get-ChildItem $daveBuild -Recurse -Filter '*.dll' | Where-Object Name -match 'dave' | Select-Object -First 1
+    Copy-Item $daveDll.FullName (Join-Path $out 'dave.dll') -Force
+    $davePdb = [IO.Path]::ChangeExtension($daveDll.FullName, '.pdb')
+    if (Test-Path $davePdb) { Copy-Item $davePdb (Join-Path $symbols 'dave.pdb') -Force }
     Copy-Item (Join-Path $dave 'LICENSE') (Join-Path $out 'LICENSE-libdave.txt') -Force
 }
 
@@ -80,9 +86,12 @@ if ($Targets -contains 'opus') {
         '57ccf72fd7e9d55bedf2c7c6e858fc9c341a4321cf3f463e9e2d3d90743ac3f1' (Join-Path $downloads 'opus-source.tar.gz')
     Initialize-Source $opusArchive '57ccf72fd7e9d55bedf2c7c6e858fc9c341a4321cf3f463e9e2d3d90743ac3f1' $opusSrc @((Join-Path $here 'opus-downmix.patch'))
     $opusBuild = Join-Path $here 'build\opus'
-    Invoke-Dev "cmake -S `"$opusSrc`" -B `"$opusBuild`" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DOPUS_STATIC_RUNTIME=ON"
+    Invoke-Dev ("cmake -S `"$opusSrc`" -B `"$opusBuild`" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DOPUS_STATIC_RUNTIME=ON " +
+        "-DCMAKE_C_FLAGS_RELEASE=`"/O2 /Ob2 /DNDEBUG /Zi /GL`" " +
+        "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=`"/LTCG /OPT:REF /OPT:ICF /DEBUG:FULL /PDBALTPATH:opus.pdb`"")
     Invoke-Dev "cmake --build `"$opusBuild`" --target opus"
     Copy-Item (Join-Path $opusBuild 'opus.dll') $out -Force
+    if (Test-Path (Join-Path $opusBuild 'opus.pdb')) { Copy-Item (Join-Path $opusBuild 'opus.pdb') (Join-Path $symbols 'opus.pdb') -Force }
     Copy-Item (Join-Path $opusSrc 'COPYING') (Join-Path $out 'LICENSE-opus.txt') -Force
 }
 
@@ -100,12 +109,16 @@ if ($Targets -contains 'apm') {
         & (Join-Path $venv 'Scripts\python.exe') -m pip install -q --no-index --no-deps $wheel
         if ($LASTEXITCODE) { throw 'Meson did not install.' }
     }
+    $apmCache = Join-Path $here 'apm\subprojects\packagecache'
+    $null = Get-SourcePin 'wrapdb.mesonbuild.com/v2/abseil-cpp_20240722.0-3/get_patch' 5929 `
+        '12dd8df1488a314c53e3751abd2750cf233b830651d168b6a9f15e7d0cf71f7b' (Join-Path $apmCache 'abseil-cpp_20240722.0-3_patch.zip')
     $apmBuild = Join-Path $here 'build\apm'
     if (-not (Test-Path (Join-Path $apmBuild 'build.ninja'))) {
         Invoke-Dev "`"$meson`" setup `"$apmBuild`" `"$here\apm`" --backend=ninja -Dcpp_std=c++20 -Dwebrtc-audio-processing:cpp_std=c++20 -Dabseil-cpp:cpp_std=c++20"
     }
     Invoke-Dev "ninja -C `"$apmBuild`" exo_apm.dll"
     Copy-Item (Join-Path $apmBuild 'exo_apm.dll') $out -Force
+    if (Test-Path (Join-Path $apmBuild 'exo_apm.pdb')) { Copy-Item (Join-Path $apmBuild 'exo_apm.pdb') (Join-Path $symbols 'exo_apm.pdb') -Force }
     $wap = Join-Path $here 'apm\subprojects\webrtc-audio-processing'
     $apmLicenses = 'COPYING', 'webrtc\common_audio\third_party\ooura\LICENSE', 'webrtc\common_audio\third_party\spl_sqrt_floor\LICENSE',
         'webrtc\modules\third_party\fft\LICENSE', 'webrtc\third_party\pffft\LICENSE', 'webrtc\third_party\rnnoise\COPYING'
@@ -120,27 +133,54 @@ if ($Targets -contains 'dfn') {
     # ExoLauncher.exe); voice\build\dfn keeps the same file for the tests. Needs Rust (rustup, per user, MSVC toolchain); its
     # crates come from the archive's vendor\ folder, so the build runs cargo --offline.
     $dfn = Join-Path $here 'build\dfn\exo-deepfilter.dll'
+    $dfnPdb = Join-Path $here 'build\dfn\exo-deepfilter.pdb'
     New-Item -ItemType Directory -Force -Path (Split-Path $dfn) | Out-Null
     $dfnSrc = Join-Path $here 'build\dfn-src'
-    if (-not (Test-Path $dfn)) {
+    if (-not (Test-Path $dfn) -or -not (Test-Path $dfnPdb)) {
         $dfnArchive = Get-SourcePin 'exo/voice/DeepFilterNet/978576aa8400552a4ce9730838c635aa30db5e61/source.tar.gz' 131932063 `
             'c8331e97468fa2a4b10e476c453b556c12923353cbaeca6786502f1d9d582e3c' (Join-Path $downloads 'DeepFilterNet-source.tar.gz')
         Expand-SourceArchive $dfnArchive $dfnSrc
         Apply-SourcePatch $dfnSrc (Join-Path $here 'deepfilter\offline-vendor.patch')
         Add-Content (Join-Path $dfnSrc 'libDF\src\capi.rs') (Get-Content -Raw (Join-Path $here 'deepfilter\exo-capi.rs'))
+        $tractRs = Join-Path $dfnSrc 'libDF\src\tract.rs'
+        $tractText = Get-Content -Raw $tractRs
+        $tractTarget = "        Ok(Self {`n            config,`n            enc,`n            erb_dec,`n            df_dec,`n        })"
+        $tractReplacement = "        Ok(Self {`n            config,`n            enc: exo_unpack_fp16_onnx(enc),`n            erb_dec: exo_unpack_fp16_onnx(erb_dec),`n            df_dec: exo_unpack_fp16_onnx(df_dec),`n        })"
+        $tractNormalized = $tractText.Replace("`r`n", "`n")
+        if (-not $tractNormalized.Contains($tractTarget)) { throw 'libDF/src/tract.rs layout changed.' }
+        Set-Content -Path $tractRs -Value ($tractNormalized.Replace($tractTarget, $tractReplacement) + "`n" + (Get-Content -Raw (Join-Path $here 'deepfilter\exo-fp16.rs'))) -NoNewline
+        $llModel = Join-Path $dfnSrc 'models\DeepFilterNet3_ll_onnx.tar.gz'
+        python (Join-Path $here 'deepfilter\pack-fp16.py') $llModel $llModel
+        if ($LASTEXITCODE) { throw "DeepFilterNet FP16 model packing failed ($LASTEXITCODE)." }
         $cargo = Join-Path $env:USERPROFILE '.cargo\bin\cargo.exe'
         if (-not (Test-Path $cargo)) { $cargo = 'cargo' }
         Push-Location $dfnSrc
+        $prevLto = $env:CARGO_PROFILE_RELEASE_LTO
+        $prevOpt = $env:CARGO_PROFILE_RELEASE_OPT_LEVEL
+        $prevCgu = $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS
+        $prevDbg = $env:CARGO_PROFILE_RELEASE_DEBUG
         try {
-            & $cargo rustc --offline --manifest-path libDF\Cargo.toml --release --lib --no-default-features --features capi,default-model-ll --crate-type cdylib
+            $env:CARGO_PROFILE_RELEASE_LTO = 'thin'
+            $env:CARGO_PROFILE_RELEASE_OPT_LEVEL = 's'
+            $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = '1'
+            $env:CARGO_PROFILE_RELEASE_DEBUG = 'line-tables-only'
+            & $cargo rustc --offline --manifest-path libDF\Cargo.toml --release --lib --no-default-features --features capi,default-model-ll --crate-type cdylib -- -C link-arg=/DEBUG:FULL -C link-arg=/OPT:REF -C link-arg=/OPT:ICF -C link-arg=/PDBALTPATH:exo-deepfilter.pdb
             $code = $LASTEXITCODE
         } finally {
+            $env:CARGO_PROFILE_RELEASE_LTO = $prevLto
+            $env:CARGO_PROFILE_RELEASE_OPT_LEVEL = $prevOpt
+            $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = $prevCgu
+            $env:CARGO_PROFILE_RELEASE_DEBUG = $prevDbg
             Pop-Location
         }
         if ($code) { throw "DeepFilterNet build failed ($code)." }
         Copy-Item (Join-Path $dfnSrc 'target\release\df.dll') $dfn -Force
+        if (Test-Path (Join-Path $dfnSrc 'target\release\df.pdb')) {
+            Copy-Item (Join-Path $dfnSrc 'target\release\df.pdb') $dfnPdb -Force
+        }
     }
     Copy-Item $dfn (Join-Path $out 'exo-deepfilter.dll') -Force
+    if (Test-Path $dfnPdb) { Copy-Item $dfnPdb (Join-Path $symbols 'exo-deepfilter.pdb') -Force }
     if (Test-Path (Join-Path $dfnSrc 'LICENSE-MIT')) {
         Copy-Item (Join-Path $dfnSrc 'LICENSE-MIT') (Join-Path $out 'LICENSE-deepfilternet-mit.txt') -Force
         Copy-Item (Join-Path $dfnSrc 'LICENSE-APACHE') (Join-Path $out 'LICENSE-deepfilternet-apache.txt') -Force

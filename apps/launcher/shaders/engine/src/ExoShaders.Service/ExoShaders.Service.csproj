@@ -5,6 +5,7 @@
   <ItemGroup>
     <!-- ExoBuild: the Core compiles as the Exo build (local-only, App/ExoBuild.cs, EXO_BUILD) -->
     <ProjectReference Include="..\..\..\src\SCSKiller.Core\SCSKiller.Core.csproj" AdditionalProperties="ExoBuild=true" />
+    <ProjectReference Include="..\..\..\src\SCSKiller.Cli\SCSKiller.Cli.csproj" AdditionalProperties="ExoBuild=true" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -22,6 +23,18 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
     <!-- No window waits on a collection: blocking gen 2 collections, no background GC thread. Measured on a page visit
          (scan of 23 games): 142 MB peak private memory instead of 186 MB, the same CPU time. -->
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
@@ -37,5 +50,28 @@
     <InformationalVersion>1.4.8-exo.1</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
+
+  <ItemGroup>
+    <TrimmerRootAssembly Include="scskiller" />
+    <TrimmableAssembly Include="BouncyCastle.Cryptography" />
+    <TrimmableAssembly Include="CUE4Parse" />
+    <TrimmableAssembly Include="OggVorbisEncoder" />
+    <TrimmableAssembly Include="Fmod5Sharp" />
+    <TrimmableAssembly Include="VGAudio" />
+    <TrimmableAssembly Include="NAudio.Core" />
+    <TrimmableAssembly Include="Velopack" />
+    <TrimmableAssembly Include="Serilog" />
+    <TrimmableAssembly Include="MemoryPack.Core" />
+    <TrimmableAssembly Include="FixedMathSharp" />
+    <TrimmableAssembly Include="UE4Config" />
+    <TrimmableAssembly Include="Newtonsoft.Json" />
+  </ItemGroup>
+
+  <Target Name="TrimUnusedPublishFiles" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <_UnusedPublishFiles Include="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'Microsoft.DiaSymReader.Native.amd64.dll' or '%(Filename)%(Extension)' == 'mscordaccore.dll' or $([System.String]::Copy('%(Filename)%(Extension)').StartsWith('mscordaccore_', System.StringComparison.OrdinalIgnoreCase)) or '%(Filename)%(Extension)' == 'mscordbi.dll' or '%(Filename)%(Extension)' == 'createdump.exe'" />
+      <ResolvedFileToPublish Remove="@(_UnusedPublishFiles)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

@@ -1326,7 +1326,7 @@
     "shaders/build/cue4parse/build.ps1": 16,
     "shaders/build/cue4parse/strip.cs": 10,
     "shaders/build/test.ps1": 9,
-    "shaders/engine/build/publish-service.ps1": 36,
+    "shaders/engine/build/publish-service.ps1": 35,
     "shaders/engine/src/ExoShaders.Service/Consent.cs": 23,
     "shaders/engine/src/ExoShaders.Service/Fmt.cs": 21,
     "shaders/engine/src/ExoShaders.Service/GameView.cs": 58,

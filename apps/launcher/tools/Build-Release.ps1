@@ -100,6 +100,12 @@ foreach ($notice in 'LICENSE', 'LICENSE-EXCEPTION.txt', 'THIRD-PARTY-NOTICES.md'
     $source = Join-Path $shaders $notice
     if (Test-Path $source) { Copy-Item $source (Join-Path $addon $notice) -Force }
 }
+$symbolsDir = Join-Path $repo 'artifacts\symbols'
+New-Item -ItemType Directory -Force -Path $symbolsDir | Out-Null
+$shadersSymbols = Join-Path $shaders 'symbols'
+if (Test-Path $shadersSymbols) {
+    Copy-Item (Join-Path $shadersSymbols '*.pdb') $symbolsDir -Force -ErrorAction SilentlyContinue
+}
 Remove-Item $shaders -Recurse -Force
 
 # Exo Capture (MIT, capture\LICENSE, source in capture\; OBS hook files stay GPL-2.0-or-later): built here, under addons\capture.
@@ -125,7 +131,29 @@ $dead = $voice | Where-Object {
 if ($dead) { throw "These won't load: $($dead -join ', ')." }
 
 $artifacts = Join-Path $repo 'artifacts'
-New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
+New-Item -ItemType Directory -Force -Path $artifacts, $symbolsDir | Out-Null
+$hostBin = Split-Path -Parent $publish.FullName
+foreach ($pdbSrc in @(
+    (Join-Path $hostBin 'ExoLauncher.pdb'),
+    (Join-Path $repo 'ExoLauncher.SteamIpc\bin\x64\Release\native-publish\ExoLauncher.SteamIpc.pdb'),
+    (Join-Path $repo 'capture\out\ExoCapture.pdb')
+)) {
+    if (Test-Path $pdbSrc) { Copy-Item $pdbSrc $symbolsDir -Force }
+}
+$voiceSymbols = Join-Path $repo 'voice\out\symbols'
+if (Test-Path $voiceSymbols) {
+    Copy-Item (Join-Path $voiceSymbols '*.pdb') $symbolsDir -Force -ErrorAction SilentlyContinue
+}
+$strayPdbs = @(Get-ChildItem -Recurse -File -Filter '*.pdb' $publish.FullName)
+if ($strayPdbs.Count -gt 0) {
+    throw "Publish folder contains PDB files that belong in symbols only: $(($strayPdbs | ForEach-Object Name) -join ', ')"
+}
+$symbolsZip = Join-Path $artifacts 'ExoLauncher-symbols.zip'
+if (Test-Path $symbolsZip) { Remove-Item $symbolsZip -Force }
+$collectedPdbs = @(Get-ChildItem -File -Filter '*.pdb' $symbolsDir)
+if ($collectedPdbs.Count -gt 0) {
+    Compress-Archive -Path ($collectedPdbs | ForEach-Object FullName) -DestinationPath $symbolsZip -Force
+}
 $setup = Join-Path $artifacts 'ExoLauncher-Setup.exe'
 # Exo Setup's window (setup\): Exo's own screens in WebView2. It goes into the app as its uninstaller too.
 pwsh -NoProfile -File (Join-Path $repo 'setup\build.ps1')

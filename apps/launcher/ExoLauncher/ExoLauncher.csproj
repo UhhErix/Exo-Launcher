@@ -35,6 +35,13 @@
     <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
     <!-- No instrumented JIT tier: less JIT work at start and while idle. -->
     <TieredPGO>false</TieredPGO>
     <ApplicationIcon Condition="Exists('Assets\ExoLauncher.ico')">Assets\ExoLauncher.ico</ApplicationIcon>
@@ -159,10 +166,19 @@
   </PropertyGroup>
   <Target Name="BuildOnnxRuntime" AfterTargets="CopyFilesToOutputDirectory" Condition="'$(DesignTimeBuild)' != 'true'">
     <Error Condition="!Exists('$(_OnnxRuntime)')" Text="ONNX Runtime 1.31.1 is missing from the NuGet cache. Run: dotnet restore" />
-    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(OutDir)" />
+    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="PublishOnnxRuntime" AfterTargets="Publish" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(PublishDir)" />
+    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="TrimUnusedPublishFiles" AfterTargets="ComputeFilesToPublish" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_UnusedPublishFiles Include="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').EndsWith('.mui', System.StringComparison.OrdinalIgnoreCase)) and !$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('en-us\', System.StringComparison.OrdinalIgnoreCase))" />
+      <_UnusedPublishFiles Include="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'Microsoft.DiaSymReader.Native.amd64.dll' or '%(Filename)%(Extension)' == 'mscordaccore.dll' or $([System.String]::Copy('%(Filename)%(Extension)').StartsWith('mscordaccore_', System.StringComparison.OrdinalIgnoreCase)) or '%(Filename)%(Extension)' == 'mscordbi.dll' or '%(Filename)%(Extension)' == 'createdump.exe'" />
+      <_UnusedPublishFiles Include="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'Microsoft.UI.Xaml.winmd' or '%(Filename)%(Extension)' == 'Microsoft.UI.winmd' or '%(Filename)%(Extension)' == 'Microsoft.UI.Designer.dll' or '%(Filename)%(Extension)' == 'Microsoft.WindowsAppRuntime.Bootstrap.dll' or '%(Filename)%(Extension)' == 'WinUIEdit.dll' or '%(Filename)%(Extension)' == 'DWriteCore.dll'" />
+      <ResolvedFileToPublish Remove="@(_UnusedPublishFiles)" />
+    </ItemGroup>
   </Target>
 
   <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\capture\out\ExoCapture.exe')">
