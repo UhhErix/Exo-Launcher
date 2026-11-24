@@ -121,4 +121,80 @@ public sealed class DiscordCallTests
         transport.SendVideo(2, 101, true, 1, 0, [1, 2, 3]);
         transport.SendRtcp(new byte[12]);
     }
+
+    [Fact]
+    public void XChaChaMatchesCngAcrossSizesAndRejectsTampering()
+    {
+        var key = new byte[32];
+        var rng = new Random(1337);
+        rng.NextBytes(key);
+        Span<byte> nonce16 = stackalloc byte[16];
+        foreach (var aadLen in new[] { 0, 8, 12, 16, 20, 24 })
+        foreach (var plainLen in new[] { 0, 1, 15, 16, 17, 63, 64, 65, 128, 1200 })
+        {
+            var aad = new byte[aadLen];
+            var plain = new byte[plainLen];
+            rng.NextBytes(aad);
+            rng.NextBytes(plain);
+            var counter = (uint)(aadLen * 10000 + plainLen + 1);
+
+            var cipher = new byte[plainLen];
+            var tag = new byte[16];
+            VoiceTransport.XChaChaEncrypt(key, counter, aad, plain, cipher, tag);
+
+            nonce16.Clear();
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(nonce16, counter);
+            using var cng = new System.Security.Cryptography.ChaCha20Poly1305(VoiceTransport.HChaCha20(key, nonce16));
+            var expectedCipher = new byte[plainLen];
+            var expectedTag = new byte[16];
+            cng.Encrypt(new byte[12], plain, expectedCipher, expectedTag, aad);
+
+            Assert.Equal(expectedCipher, cipher);
+            Assert.Equal(expectedTag, tag);
+
+            var opened = new byte[plainLen];
+            Assert.True(VoiceTransport.XChaChaDecrypt(key, counter, aad, cipher, tag, opened));
+            Assert.Equal(plain, opened);
+
+            var badTag = (byte[])tag.Clone();
+            badTag[0] ^= 1;
+            Assert.False(VoiceTransport.XChaChaDecrypt(key, counter, aad, cipher, badTag, opened));
+        }
+    }
+
+    [Fact]
+    public unsafe void ZstdGatewayStreamDecodesMultiMessageFlushedStream()
+    {
+        var cctx = ZstdSharp.Unsafe.Methods.ZSTD_createCStream();
+        Assert.True(cctx is not null);
+        try
+        {
+            Assert.False(ZstdSharp.Unsafe.Methods.ZSTD_isError(ZstdSharp.Unsafe.Methods.ZSTD_initCStream(cctx, 3)));
+            using var decoder = new DiscordSession.ZstdGatewayStream();
+            var messages = new[]
+            {
+                """{"op":10,"d":{"heartbeat_interval":41250}}""",
+                """{"op":0,"t":"READY","s":1,"d":{"session_id":"abc","guilds":[{"id":"1","name":"Exo"},{"id":"2","name":"Exo"}]}}""",
+                """{"op":0,"t":"MESSAGE_CREATE","s":2,"d":{"id":"99","content":"hello zstd stream"}}""",
+            };
+            foreach (var msg in messages)
+            {
+                var raw = System.Text.Encoding.UTF8.GetBytes(msg);
+                var compressed = new byte[raw.Length + 256];
+                nuint written;
+                fixed (byte* src = raw)
+                fixed (byte* dst = compressed)
+                {
+                    var inp = new ZstdSharp.Unsafe.ZSTD_inBuffer_s { src = src, size = (nuint)raw.Length, pos = 0 };
+                    var outp = new ZstdSharp.Unsafe.ZSTD_outBuffer_s { dst = dst, size = (nuint)compressed.Length, pos = 0 };
+                    var rc = ZstdSharp.Unsafe.Methods.ZSTD_compressStream2(cctx, &outp, &inp, ZstdSharp.Unsafe.ZSTD_EndDirective.ZSTD_e_flush);
+                    Assert.False(ZstdSharp.Unsafe.Methods.ZSTD_isError(rc));
+                    written = outp.pos;
+                }
+                var decoded = decoder.Decompress(compressed.AsSpan(0, (int)written), 1 << 20);
+                Assert.Equal(msg, System.Text.Encoding.UTF8.GetString(decoded));
+            }
+        }
+        finally { ZstdSharp.Unsafe.Methods.ZSTD_freeCStream(cctx); }
+    }
 }

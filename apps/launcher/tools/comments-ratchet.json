@@ -874,7 +874,7 @@
     "ExoLauncher/Services/DiscordClient/Voice/VoiceInput.cs": 169,
     "ExoLauncher/Services/DiscordClient/Voice/VoiceLatency.cs": 13,
     "ExoLauncher/Services/DiscordClient/Voice/VoiceNative.cs": 18,
-    "ExoLauncher/Services/DiscordClient/Voice/VoiceTransport.cs": 50,
+    "ExoLauncher/Services/DiscordClient/Voice/VoiceTransport.cs": 48,
     "ExoLauncher/Services/DiscordClient/Voice/VoiceTune.cs": 27,
     "ExoLauncher/Services/DiscordClient/Voice/VoiceprintLearning.cs": 44,
     "ExoLauncher/Services/DiscordClient/Voice/WebRtcNoise.cs": 9,

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ExoLauncher.Helpers;
+using ZstdSharp.Unsafe;
 
 namespace ExoLauncher.Services.DiscordClient;
 
@@ -40,6 +41,7 @@ internal sealed partial class DiscordSession
     private string? _resumeUrl;
     private long? _seq;
     private bool _acked = true;
+    private bool _noCompress;
 
     internal DiscordCache Cache { get; } = new();
     internal DiscordRest Rest { get; }
@@ -365,12 +367,15 @@ internal sealed partial class DiscordSession
         using var connection = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
         var ready = false;
         var networkFailure = false;
+        var useZstd = !_noCompress;
+        using var zstd = useZstd ? new ZstdGatewayStream() : null;
         try
         {
-            await ws.ConnectAsync(new Uri((_resumeUrl ?? GatewayUrl) + "/?encoding=json&v=9"), connection.Token).ConfigureAwait(false);
+            var query = useZstd ? "/?encoding=json&v=9&compress=zstd-stream" : "/?encoding=json&v=9";
+            await ws.ConnectAsync(new Uri((_resumeUrl ?? GatewayUrl) + query), connection.Token).ConfigureAwait(false);
             while (ws.State == WebSocketState.Open)
             {
-                using var doc = await ReceiveAsync(ws, 256 << 20, connection.Token).ConfigureAwait(false);
+                using var doc = await ReceiveAsync(ws, 256 << 20, connection.Token, zstd).ConfigureAwait(false);
                 if (doc is null) break;
                 var root = doc.RootElement;
                 var op = root.GetProperty("op").GetInt32();
@@ -418,6 +423,11 @@ internal sealed partial class DiscordSession
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { return (null, ready, false); }
+        catch (InvalidDataException) when (useZstd)
+        {
+            _noCompress = true;
+            AppLog.Warn("Discord client: zstd-stream decode failed; falling back to uncompressed gateway.");
+        }
         catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or JsonException or IOException)
         {
             networkFailure = ex is WebSocketException or IOException or OperationCanceledException;
@@ -443,6 +453,10 @@ internal sealed partial class DiscordSession
         {
             case 4004: return ("signedOut", ready, false);
             case 4008: return (null, ready, true);
+            case 4002 when !ready && useZstd:
+                _noCompress = true;
+                AppLog.Warn("Discord client: gateway closed 4002 before READY with zstd-stream; falling back to uncompressed.");
+                break;
             case 4002 when !keyRefused && Environment.TickCount64 - _subscribedAt < 5000:
                 _noSubscribe = true;
                 AppLog.Info("Discord client: the gateway refused a channel subscription; not sending more.");
@@ -846,12 +860,13 @@ internal sealed partial class DiscordSession
     /// outgrows it) and parsed from there, the document taking a pooled copy of its own: a stream per message, grown and
     /// copied as it went (READY's on the large object heap) and read again to parse, was garbage at once.
     /// </summary>
-    internal static async Task<JsonDocument?> ReceiveAsync(ClientWebSocket ws, int maxBytes, CancellationToken ct)
+    internal static async Task<JsonDocument?> ReceiveAsync(ClientWebSocket ws, int maxBytes, CancellationToken ct, ZstdGatewayStream? zstd = null)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
         try
         {
             var count = 0;
+            WebSocketMessageType messageType;
             while (true)
             {
                 if (count == buffer.Length)
@@ -863,11 +878,15 @@ internal sealed partial class DiscordSession
                 }
                 var result = await ws.ReceiveAsync(buffer.AsMemory(count), ct).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close) return null;
+                messageType = result.MessageType;
                 count += result.Count;
                 if (count > maxBytes) throw new IOException("Gateway message too large.");
                 if (result.EndOfMessage) break;
             }
-            return Parse(buffer.AsSpan(0, count));
+            var payload = messageType == WebSocketMessageType.Binary && zstd is not null
+                ? zstd.Decompress(buffer.AsSpan(0, count), maxBytes)
+                : buffer.AsSpan(0, count);
+            return Parse(payload);
         }
         finally { ArrayPool<byte>.Shared.Return(buffer); }
 
@@ -875,6 +894,95 @@ internal sealed partial class DiscordSession
         {
             var reader = new Utf8JsonReader(json);
             return JsonDocument.ParseValue(ref reader);
+        }
+    }
+
+    internal sealed unsafe class ZstdGatewayStream : IDisposable
+    {
+        private ZSTD_DCtx_s* _dctx;
+        private byte[]? _outBuf;
+
+        internal ZstdGatewayStream()
+        {
+            _dctx = Methods.ZSTD_createDStream();
+            if (_dctx is null) throw new OutOfMemoryException("Zstd DStream allocation failed.");
+            var init = Methods.ZSTD_initDStream(_dctx);
+            if (Methods.ZSTD_isError(init))
+            {
+                Methods.ZSTD_freeDStream(_dctx);
+                _dctx = null;
+                throw new InvalidDataException("Zstd DStream initialization failed.");
+            }
+            _outBuf = ArrayPool<byte>.Shared.Rent(64 * 1024);
+        }
+
+        internal ReadOnlySpan<byte> Decompress(ReadOnlySpan<byte> compressed, int maxBytes)
+        {
+            if (_dctx is null || _outBuf is null) throw new ObjectDisposedException(nameof(ZstdGatewayStream));
+            var written = 0;
+            fixed (byte* src = compressed)
+            {
+                var input = new ZSTD_inBuffer_s { src = src, size = (nuint)compressed.Length, pos = 0 };
+                while (input.pos < input.size)
+                {
+                    if (written == _outBuf.Length) Grow(written, maxBytes);
+                    fixed (byte* dst = _outBuf)
+                    {
+                        var output = new ZSTD_outBuffer_s { dst = dst + written, size = (nuint)(_outBuf.Length - written), pos = 0 };
+                        var code = Methods.ZSTD_decompressStream(_dctx, &output, &input);
+                        if (Methods.ZSTD_isError(code)) throw new InvalidDataException("Zstd gateway decode failed.");
+                        written += (int)output.pos;
+                        if (written > maxBytes) throw new IOException("Gateway message too large.");
+                        if (output.pos == 0 && input.pos < input.size) Grow(written, maxBytes);
+                    }
+                }
+                while (written == _outBuf.Length)
+                {
+                    if (_outBuf.Length >= maxBytes)
+                    {
+                        byte probe = 0;
+                        var outProbe = new ZSTD_outBuffer_s { dst = &probe, size = 1, pos = 0 };
+                        var code = Methods.ZSTD_decompressStream(_dctx, &outProbe, &input);
+                        if (Methods.ZSTD_isError(code)) throw new InvalidDataException("Zstd gateway decode failed.");
+                        if (outProbe.pos > 0) throw new IOException("Gateway message too large.");
+                        break;
+                    }
+                    Grow(written, maxBytes);
+                    fixed (byte* dst = _outBuf)
+                    {
+                        var output = new ZSTD_outBuffer_s { dst = dst + written, size = (nuint)(_outBuf.Length - written), pos = 0 };
+                        var code = Methods.ZSTD_decompressStream(_dctx, &output, &input);
+                        if (Methods.ZSTD_isError(code)) throw new InvalidDataException("Zstd gateway decode failed.");
+                        written += (int)output.pos;
+                        if (output.pos == 0) break;
+                    }
+                }
+            }
+            return _outBuf.AsSpan(0, written);
+        }
+
+        private void Grow(int written, int maxBytes)
+        {
+            if (_outBuf!.Length >= maxBytes) throw new IOException("Gateway message too large.");
+            var nextLen = Math.Min(maxBytes, Math.Max(_outBuf.Length * 2, written + 1));
+            var bigger = ArrayPool<byte>.Shared.Rent(nextLen);
+            _outBuf.AsSpan(0, written).CopyTo(bigger);
+            ArrayPool<byte>.Shared.Return(_outBuf);
+            _outBuf = bigger;
+        }
+
+        public void Dispose()
+        {
+            if (_dctx is not null)
+            {
+                Methods.ZSTD_freeDStream(_dctx);
+                _dctx = null;
+            }
+            if (_outBuf is not null)
+            {
+                ArrayPool<byte>.Shared.Return(_outBuf);
+                _outBuf = null;
+            }
         }
     }
 }

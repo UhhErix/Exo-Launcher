@@ -26,6 +26,18 @@ internal sealed partial class DiscordRest : IDisposable
     private static readonly string LaunchId = Guid.NewGuid().ToString();
     private static readonly string HeartbeatSessionId = Guid.NewGuid().ToString();
     private static (int Build, string Encoded) _superPropertiesCache;
+    private static readonly Lazy<HttpClient> BuildHttp = new(CreateBuildHttp);
+
+    private static HttpClient CreateBuildHttp()
+    {
+        var http = ExoHttp.Create(TimeSpan.FromSeconds(20), new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        });
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        return http;
+    }
 
     // As Chrome talks to Discord: HTTP/2 on one warm connection (no new TLS handshake per call or after a minute idle)
     // and compressed answers (a page of messages is several times smaller). The connection is pinged while in use, so
@@ -113,8 +125,7 @@ internal sealed partial class DiscordRest : IDisposable
         }
         try
         {
-            using var http = ExoHttp.Create(TimeSpan.FromSeconds(20));
-            http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+            var http = BuildHttp.Value;
             var page = await http.GetStringAsync("https://discord.com/login", ct).ConfigureAwait(false);
             foreach (var script in ScriptRegex().Matches(page).Select(m => m.Groups[1].Value).Reverse().Take(8))
             {
