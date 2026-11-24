@@ -11,6 +11,7 @@ members = [
     "crates/exo-thermal",
     "crates/exo-display",
     "crates/exo-light",
+    "crates/exo-net-latency",
 ]
 
 [workspace.package]
