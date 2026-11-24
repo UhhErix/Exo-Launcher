@@ -1,5 +1,20 @@
 [
   {
+    "version": "3.30.2",
+    "items": [
+      {
+        "icon": "Scissors",
+        "title": "Reliable Snip and fullscreen captures",
+        "detail": "Fixes Snip showing a black screen by waiting for a live desktop frame and falling back cleanly through Windows Graphics Capture."
+      },
+      {
+        "icon": "Mouse",
+        "title": "Finalmouse TMR-DS Ultraclick & Intent Trigger",
+        "detail": "Adds Ultraclick mode and the Intent Trigger toggle for Finalmouse Starlight X (TMR-DS) in Devices › Mouse."
+      }
+    ]
+  },
+  {
     "version": "3.30.1",
     "items": [
       {

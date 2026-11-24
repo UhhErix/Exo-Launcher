@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.30.2 — November 24, 2026
+- **Snip and fullscreen captures no longer show a black screen.** Waits for a real desktop frame from Desktop Duplication, retries transient access errors, falls back cleanly through Windows Graphics Capture and GDI BitBlt while rejecting blank frames, and reports capture errors instead of opening an empty snip overlay. _Verified: on screen._
+- **Finalmouse Starlight X (TMR-DS) Ultraclick & Intent Trigger.** Adds Ultraclick mode and the Intent Trigger toggle to Devices › Mouse for Finalmouse TMR-DS mice (with firmware-version checks and profile persistence). _Checked in code only._
+
 ## 3.30.1 — November 24, 2026
 - **Complete all-in-one game runtime coverage, VC++ v14 14.52 & per-item repair.** Updates Visual C++ 2015–2026 (v14) to official Microsoft 14.52.37029.0, hardens Visual C++ 2005/2012/2013 detection across MSI product codes and registry views, maps Steamworks Common Redistributables (228980) depots (`.NET 3.5/4.x`, XNA 4.0, OpenAL, PhysX/PhysX Legacy) alongside Unreal Engine and Epic Games Launcher manifests, and enables per-item repair for installable runtimes. _Checked in code only._
 - **Controller page stays steady without scroll jumps.** Fixes the layout wrapper in Devices › Controller so the page measures its full container height accurately and stays steady without jumping. _Verified: end-to-end._
