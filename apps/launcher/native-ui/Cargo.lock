@@ -839,6 +839,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-controller"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "exo-display"
 version = "0.1.0"
 dependencies = [
@@ -861,6 +869,25 @@ dependencies = [
  "serde",
  "serde_json",
  "windows",
+]
+
+[[package]]
+name = "exo-macros"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "exo-macros-worker"
+version = "0.1.0"
+dependencies = [
+ "exo-macros",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -895,7 +922,9 @@ dependencies = [
 name = "exo-ui"
 version = "0.1.0"
 dependencies = [
+ "exo-controller",
  "exo-kit",
+ "exo-macros",
  "exo-rpc",
  "image",
  "rune",
