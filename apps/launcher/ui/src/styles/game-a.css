@@ -223,6 +223,50 @@
   color: var(--color-bad);
 }
 
+.exo-game-opt-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.exo-game-opt-change {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 4px var(--exo-panel-pad) 4px calc(var(--exo-panel-pad) + 14px);
+  border-top: var(--exo-hair) solid var(--exo-float-line);
+}
+
+.exo-game-opt-change-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.exo-game-opt-change-key {
+  color: var(--color-fg);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-medium);
+}
+
+.exo-game-opt-change-val {
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-game-opt-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
 .exo-game-props {
   --exo-float-line: var(--exo-line);
   outline: none;

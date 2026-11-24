@@ -32,6 +32,54 @@ internal static partial class GameSettings
     internal static string CallOfDutyPlayers =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Activision", "Call of Duty", "players");
 
+    internal static string CallOfDutyDocumentsPlayers =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Call of Duty", "players");
+
+    internal static bool IsCallOfDuty(Models.GameEntry game)
+    {
+        if (string.IsNullOrEmpty(game.Path)) return false;
+        if (game.Id == "steam:1938090") return true;
+        if (CallOfDutyProgram(game) is not null) return true;
+        try
+        {
+            return new[] { game.Path, Path.Combine(game.Path, "_retail_") }
+                .Where(Directory.Exists)
+                .SelectMany(Directory.EnumerateDirectories)
+                .Any(folder => CallOfDutyTitle().IsMatch(Path.GetFileName(folder)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    internal static string FindCallOfDutyConfig(IEnumerable<string>? roots = null)
+    {
+        var search = roots ?? [CallOfDutyPlayers, CallOfDutyDocumentsPlayers];
+        var candidates = new List<string>();
+        foreach (var root in search)
+        {
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
+            try
+            {
+                candidates.AddRange(Directory.EnumerateFiles(root, "s.1.0.cod*.txt"));
+                candidates.AddRange(Directory.EnumerateFiles(root, "options.4.cod*.cst"));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        return candidates
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault() ?? Path.Combine(CallOfDutyDocumentsPlayers, "options.4.cod24.cst");
+    }
+
+    internal static Profile CallOfDutyWarzone(Pc pc, string? configFile = null)
+    {
+        var filePath = configFile ?? FindCallOfDutyConfig();
+        return new("cod", "Call of Duty", filePath, file => CallOfDutyGroups(pc, file), ["cod", "ModernWarfare", "BlackOpsColdWar"],
+            null, ModernWarfare4Nvidia(), Program: CallOfDutyProgram, Mark: CallOfDutyMark, WindowMode: pc.Fullscreen ? Fullscreen : Borderless,
+            WindowLines: ["DisplayMode", "PreferredDisplayMode"], Helpers: ["bootstrapper", "CODBrokerService"],
+            InputLines: ["Resolution", "RefreshRate", "GPUName"], GameFacts: game => CallOfDutyFacts(game.Path),
+            CloudChanged: CallOfDutyCloudChanged, Advice: file => CallOfDutyAdvice(pc, file));
+    }
+
     /// <summary>
     /// Call of Duty's running marker: __cod in the install folder, holding the process id of the cod.exe that made it.
     /// The game deletes it as it quits; one left behind (a crash, a forced close) makes the next start ask to run in safe
@@ -221,7 +269,18 @@ internal static partial class GameSettings
         new("mw4", "Modern Warfare 4", Path.Combine(CallOfDutyPlayers, "s.1.0.cod26.txt"), file => CallOfDutyGroups(pc, file), ["cod"],
             () => PlayerFiles("cod26"), ModernWarfare4Nvidia(), Program: CallOfDutyProgram, Mark: CallOfDutyMark, WindowMode: pc.Fullscreen ? Fullscreen : Borderless,
             WindowLines: ["DisplayMode", "PreferredDisplayMode"], Helpers: ["bootstrapper", "CODBrokerService"],
-            InputLines: ["Resolution", "RefreshRate", "GPUName"], GameFacts: game => CallOfDutyFacts(game.Path), CloudChanged: CallOfDutyCloudChanged);
+            InputLines: ["Resolution", "RefreshRate", "GPUName"], GameFacts: game => CallOfDutyFacts(game.Path), CloudChanged: CallOfDutyCloudChanged,
+            Advice: file => CallOfDutyAdvice(pc, file));
+
+    internal static IReadOnlyList<string> CallOfDutyAdvice(Pc pc, SettingsFile? file)
+    {
+        List<string> notes = [];
+        var hasStreamingLine = file?.Settings.Any(line => line.Name is "TextureDownload") == true;
+        if ((pc.LowBandwidth || pc.VideoMemoryGb is <= 8.5) && !hasStreamingLine)
+            notes.Add("Set On-Demand Texture Streaming to Minimal in the game's graphics menu.");
+        notes.Add("Deferred Physics Quality stops at Low in the config file; set it to Off in-game if needed.");
+        return notes;
+    }
 
     /// <summary>What the game detected of this PC and what it recommended: GPUDriverVersion|LastUsedGPU|RecommendedSet; null when the file holds none of them.</summary>
     internal static string? CallOfDutyMark(SettingsFile file)
@@ -311,7 +370,7 @@ internal static partial class GameSettings
         List<Group> groups = [latency, Display(pc, ValueOf(file, "RefreshRate"))];
         if (pc.RenderThreads is { } threads)
             groups.Add(new("threads", $"{threads} render threads", [new("RendererWorkerCount", threads.ToString(CultureInfo.InvariantCulture))]));
-        var gpu = ValueOf(file, "GPUName");
+        var gpu = ValueOf(file, "GPUName") ?? pc.Gpu;
         groups.Add(new("picture", "No blur, steady resolution",
         [
             new("DynamicSceneResolution", "false"), new("NVIDIAImageScalingMP", "false"),
@@ -320,6 +379,25 @@ internal static partial class GameSettings
         ]));
         if (Upscaler(gpu, ValueOf(file, "Resolution")) is { } upscaler) groups.Add(upscaler);
         if (pc.VideoMemoryGb is { } memory) groups.Add(Memory(memory));
+        if (pc.LowBandwidth || pc.VideoMemoryGb is <= 8.5)
+            groups.Add(new("streaming", "On-demand texture streaming off",
+            [
+                new("TextureDownload", "false", Spare: true),
+                new("TextureDownload", "Minimal", Spare: true),
+                new("TextureDownloadLimitEnabled", "true", Spare: true),
+                new("TextureDownloadCacheSize", "16", Spare: true),
+            ]));
+        if (VrrFrameCap(pc) is { } cap)
+        {
+            var capText = cap.ToString(CultureInfo.InvariantCulture);
+            groups.Add(new("framecap", $"Frame cap at {capText} FPS for VRR",
+            [
+                new("CapFps", "true", Spare: true),
+                new("MaxFpsInGame", capText, Spare: true),
+                new("CustomFramerateLimit", "true", Spare: true),
+                new("GameplayCustomFramerateLimit", capText, Spare: true),
+            ]));
+        }
         groups.Add(new("clutter", "Blood and shell casings off",
             [new("ShowBlood", "false"), new("BloodLimit", "true"), new("ShowBrass", "false")]));
         // BenchmarKing's Competitive list, by the line that holds each: Shader Quality is by far the costliest (32% from Low
@@ -340,6 +418,7 @@ internal static partial class GameSettings
             new("BulletImpacts", "true"), new("PersistentDamageLayer", "true"),
             // Shaders keep preloading in the background: off (as two configs set it) means stutter while they compile.
             new("EnableOfflineGameUpdater", "true"),
+            new("ShaderPreload", "true", Spare: true),
         ]));
         // In the PC's file and each player's: the game takes the player's and copies it over the PC's.
         groups.Add(new("audio", "Footsteps over music", [
@@ -426,12 +505,15 @@ internal static partial class GameSettings
             return new("upscaler", "DLSS for your card", [
                 new("ResolutionMultiplier", "100"), new("DLSSSharpnessMP", "0.75"), new("AATechniquePreferredMP", "DLSS"), new("DLSSModeMP", "DLSS"), new("DLSSPerfModeMP", preset),
                 new("DLSSModelUI", rtx.Groups["series"].Value is "2" or "3" && height >= 1300 ? "CNN" : "TRANSFORMER"),
+                new("Upscaling", "NVIDIA DLSS", Spare: true),
             ]);
         if (RadeonRx().Match(gpu) is { Success: true } radeon && radeon.Groups["series"].Value is "7" or "9")
             return new("upscaler", "FSR for your card", [new("ResolutionMultiplier", "100"), new("AATechniquePreferredMP", "FSR AA"),
-                new("AMDSuperResolution2Quality", preset), new("AMDContrastAdaptiveSharpeningStrength", "0.75")]);
+                new("AMDSuperResolution2Quality", preset), new("AMDContrastAdaptiveSharpeningStrength", "0.75"),
+                new("Upscaling", "AMD FSR 3", Spare: true)]);
         if (gpu.Contains("Arc", StringComparison.OrdinalIgnoreCase))
-            return new("upscaler", "XeSS for your card", [new("ResolutionMultiplier", "100"), new("AATechniquePreferredMP", "XeSS"), new("XeSSQuality", preset)]);
+            return new("upscaler", "XeSS for your card", [new("ResolutionMultiplier", "100"), new("AATechniquePreferredMP", "XeSS"), new("XeSSQuality", preset),
+                new("Upscaling", "Intel XeSS", Spare: true)]);
         return null;
     }
 
@@ -451,7 +533,7 @@ internal static partial class GameSettings
 
     // 16x filtering keeps angled ground sharp and measured free (BenchmarKing).
     private static Group Textures(string quality, string memory) => new("memory", "Textures and video memory for your card",
-        [new("TextureQuality", quality), new("VideoMemoryScaleMP", memory), new("TextureFilter", "aniso 16x")]);
+        [new("TextureQuality", quality), new("VideoMemoryScaleMP", memory), new("VideoMemoryScale", memory, Spare: true), new("TextureFilter", "aniso 16x")]);
 
     [GeneratedRegex(@"RTX\s*(30[89]0|40[789]0|50[789]0)|RX\s*(79\d0|9070)", RegexOptions.IgnoreCase)]
     private static partial Regex StrongCard();
