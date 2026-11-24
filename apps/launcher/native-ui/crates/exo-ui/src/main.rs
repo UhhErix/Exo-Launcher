@@ -28,6 +28,7 @@ mod game_perf;
 mod game_props;
 mod gamepad;
 mod gifts;
+mod gpu_tuning;
 mod image_cache;
 mod island;
 mod key_modal;
@@ -44,6 +45,7 @@ mod pc_actions;
 mod pc_ai;
 mod pc_apps;
 mod pc_devices;
+mod pc_hdr;
 mod pc_menus;
 mod pc_state;
 mod pc_storage;
@@ -917,6 +919,13 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 Duration::from_secs(5),
             ) {
                 state.pc.hdr = Some(hdr);
+            }
+            if let Ok(tuning) = client.call_blocking::<_, exo_rpc::GpuManualTuningState>(
+                exo_rpc::METHOD_GPU_TUNING_STATE,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.pc.gpu_tuning_ui.sync_from_host(tuning, true);
             }
             if let Ok(v) = client.call_blocking::<_, serde_json::Value>(
                 exo_rpc::METHOD_SHADERS_ADDON,
@@ -2330,9 +2339,59 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.switch_room(state::Room::ExoAi);
         s.pc.part_menu = Some(pc_state::PcPartMenu::Graphics);
     }),
+    ("pc-gpu-tuning-nvidia", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.pc.gpu_tuning_ui
+            .sync_from_host(gpu_tuning::demo_nvidia_state(), true);
+        s.pc.part_menu = Some(pc_state::PcPartMenu::Graphics);
+    }),
+    ("pc-gpu-tuning-amd", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.pc.gpu_tuning_ui
+            .sync_from_host(gpu_tuning::demo_amd_rdna3_state(), true);
+        s.pc.part_menu = Some(pc_state::PcPartMenu::Graphics);
+    }),
+    ("pc-gpu-tuning-intel", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.pc.gpu_tuning_ui
+            .sync_from_host(gpu_tuning::demo_intel_arc_state(false), true);
+        s.pc.part_menu = Some(pc_state::PcPartMenu::Graphics);
+    }),
+    ("pc-gpu-tuning-locked", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.pc.gpu_tuning_ui
+            .sync_from_host(gpu_tuning::demo_locked_laptop_state(), true);
+        s.pc.part_menu = Some(pc_state::PcPartMenu::Graphics);
+    }),
     ("pc-menu-display", |s: &mut AppState| {
         s.switch_room(state::Room::ExoAi);
         s.pc.part_menu = Some(pc_state::PcPartMenu::Display);
+    }),
+    ("pc-hdr-internal", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.pc.hdr = Some(pc_hdr::demo_hdr_internal_state());
+        s.pc.part_menu = Some(pc_state::PcPartMenu::Display);
+    }),
+    ("pc-hdr-external", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.pc.hdr = Some(pc_hdr::demo_hdr_external_state());
+        s.pc.part_menu = Some(pc_state::PcPartMenu::Display);
+    }),
+    ("game-hdr-cursor", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.pc.hdr = Some(pc_hdr::demo_hdr_external_state());
+        s.game_page.hdr_game = Some(pc_hdr::demo_hdr_game_cursor_fix());
+        if let Some(id) = s.games.first().map(|g| g.id.clone()) {
+            s.open_game_id = Some(id);
+        }
+    }),
+    ("discord-voice-loudness", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.discord.settings_open = true;
+        s.discord.settings_page = crate::discord_state::DiscordSettingsPage::Voice;
+        s.discord.settings_ext.client.even_voices = true;
+        s.discord.settings_ext.client.voice_target_lufs = -18;
+        s.discord.settings_ext.client.mic_auto_gain = true;
     }),
     ("pc-apps", |s: &mut AppState| {
         s.switch_room(state::Room::Apps);

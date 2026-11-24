@@ -1603,6 +1603,10 @@ pub struct DiscordClientSettings {
     pub my_voice_seconds: Option<f64>,
     #[serde(default = "default_true")]
     pub even_voices: bool,
+    #[serde(default = "default_voice_target_lufs")]
+    pub voice_target_lufs: i32,
+    #[serde(default)]
+    pub mic_auto_gain: bool,
     #[serde(default = "default_true")]
     pub echo_cancellation: bool,
     #[serde(default = "default_true")]
@@ -1665,6 +1669,10 @@ fn default_sound_volume() -> i32 {
     60
 }
 
+fn default_voice_target_lufs() -> i32 {
+    -20
+}
+
 impl Default for DiscordClientSettings {
     fn default() -> Self {
         Self {
@@ -1676,6 +1684,8 @@ impl Default for DiscordClientSettings {
             my_voice_learned: None,
             my_voice_seconds: None,
             even_voices: true,
+            voice_target_lufs: -20,
+            mic_auto_gain: false,
             echo_cancellation: true,
             voice_focus: true,
             push_to_talk: false,

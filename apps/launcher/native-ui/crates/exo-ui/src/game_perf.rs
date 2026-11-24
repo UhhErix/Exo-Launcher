@@ -7,10 +7,11 @@ use exo_kit::{
     FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK,
     SelectTrigger, TRANSPARENT, amoled_card, bad, fg_faint, fg_muted, float_line, glass_rim_bottom,
     glass_rim_top, glass_still_control_fill, good, hover_fill, icon_chevron_right, icon_external,
-    pressed_fill, select_trigger, switch_pill, type_control, type_section, type_small, type_title,
+    pressed_fill, select_trigger, switch_pill, switch_pill_keyed, type_control, type_section,
+    type_small, type_title,
 };
 use exo_rpc::Game;
-use rune::{Cursor, El, col, el, row, text};
+use rune::{Cursor, El, Transition, col, el, row, text};
 
 fn word_color(word: &LineWord) -> rune::Color {
     if word.bad {
@@ -37,11 +38,14 @@ fn perf_reading_row(name: &str, word: Option<LineWord>, right: Option<El>) -> El
         .gap(3.0)
         .child(text(name.to_string()).font(type_section()).color(FG));
     if let Some(w) = word {
+        let txt = word_text(&w);
         copy = copy.child(
-            text(word_text(&w))
+            text(txt.clone())
+                .key(format!("{name}-word-{txt}"))
                 .font(type_small())
                 .color(word_color(&w))
-                .truncate(),
+                .truncate()
+                .transition(Transition::opacity()),
         );
     }
     el().w_full()
@@ -298,7 +302,8 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
         rows.push(crate::frame_cap_row::view(s, game));
     }
 
-    if s.pc.hdr.as_ref().is_some_and(|h| h.supported)
+    if let Some(ref screen) = s.pc.hdr
+        && screen.supported
         && let Some(ref hdr) = s.game_page.hdr_game
     {
         if !hdr.ok {
@@ -310,16 +315,18 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
         } else {
             let mode = hdr.mode.as_deref().unwrap_or("auto");
             let off = !s.settings.hdr_for_games && mode != "off";
-            let why = hdr.reason.as_deref().unwrap_or("");
-            let word = if let Some(ref err) = s.game_page.hdr_error {
-                Some(LineWord::bad(err.clone()))
-            } else if off {
-                Some(LineWord::plain(if why.is_empty() { "Off" } else { why }))
-            } else if !why.is_empty() {
-                Some(LineWord::plain(why))
-            } else {
-                None
-            };
+            let word = crate::pc_hdr::build_game_hdr_word(
+                hdr,
+                s.settings.hdr_for_games,
+                s.game_page.hdr_error.as_deref(),
+            )
+            .map(|(txt, is_bad)| {
+                if is_bad {
+                    LineWord::bad(txt)
+                } else {
+                    LineWord::plain(txt)
+                }
+            });
             let right = if off {
                 compact_still_button(
                     "gp-hdr-turn-on",
@@ -344,6 +351,28 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
                 )
             };
             rows.push(perf_reading_row("HDR", word, Some(right)));
+
+            if crate::pc_hdr::show_cursor_fix(screen, hdr) {
+                let gid = game.id.clone();
+                let next_fix = !hdr.cursor_fix;
+                let busy = s.game_page.hdr_busy;
+                let toggle = switch_pill_keyed(
+                    "gp-hdr-cursor-fix",
+                    "Match HDR cursor brightness",
+                    hdr.cursor_fix,
+                )
+                .disabled(busy)
+                .on_press(move |st: &mut AppState| {
+                    if !busy {
+                        st.set_game_hdr_cursor_fix(&gid, next_fix);
+                    }
+                });
+                rows.push(perf_reading_row(
+                    "Match HDR cursor brightness",
+                    Some(LineWord::plain(crate::pc_hdr::cursor_fix_word(hdr))),
+                    Some(toggle),
+                ));
+            }
         }
     }
 

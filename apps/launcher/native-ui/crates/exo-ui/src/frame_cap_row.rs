@@ -50,7 +50,12 @@ pub fn trigger_label(fc: Option<&GameFrameCap>) -> String {
     "Off".into()
 }
 
-pub fn summary_for(state: Option<&GameFrameCap>) -> (String, rune::Color) {
+pub fn summary_for(state: Option<&GameFrameCap>, error: Option<&str>) -> (String, rune::Color) {
+    if let Some(err) = error
+        && !err.is_empty()
+    {
+        return (curly(err), bad());
+    }
     let Some(fc) = state else {
         return ("Checking frame cap...".into(), fg_muted());
     };
@@ -105,7 +110,7 @@ pub fn summary_for(state: Option<&GameFrameCap>) -> (String, rune::Color) {
 
 pub fn view(s: &AppState, game: &Game) -> El {
     let fc = s.game_frame_cap.as_ref();
-    let (sub_text, sub_color) = summary_for(fc);
+    let (sub_text, sub_color) = summary_for(fc, s.frame_cap_error.as_deref());
     let has_menu = fc.is_some_and(|d| !d.tiers.is_empty() || !d.backends.is_empty());
 
     let right_control = if has_menu {
@@ -180,9 +185,19 @@ pub fn view(s: &AppState, game: &Game) -> El {
     container
 }
 
+fn section_heading(title: &'static str) -> El {
+    el().w_full()
+        .px(12.0)
+        .pt(6.0)
+        .pb(2.0)
+        .child(text(title).font(type_small()).color(fg_muted()))
+}
+
 fn build_menu(fc: &GameFrameCap, game: &Game) -> El {
     let mut menu_col = col().w_full().py(6.0).gap(2.0);
     let game_id = game.id.clone();
+
+    menu_col = menu_col.child(section_heading("Cap tiers"));
 
     for tier in &fc.tiers {
         let is_selected = fc.selected_tier == tier.id;
@@ -246,6 +261,59 @@ fn build_menu(fc: &GameFrameCap, game: &Game) -> El {
                 });
         }
         menu_col = menu_col.child(item);
+    }
+
+    if !fc.in_vrr_range {
+        for &fps in &fc.refresh_locked_caps {
+            if fc.tiers.iter().any(|t| t.cap_fps == Some(fps)) {
+                continue;
+            }
+            let is_selected = fc.selected_tier == "refresh" && fc.active_cap_fps == Some(fps);
+            let label = format!("Refresh lock · {fps} fps");
+            let hint = format!("{} Hz divisor", fc.refresh_hz.round() as i32);
+            let mut item = row()
+                .key(format!("gp-fc-refresh-{fps}"))
+                .w_full()
+                .min_h(34.0)
+                .px(12.0)
+                .py(6.0)
+                .gap(8.0)
+                .center_y()
+                .justify_between()
+                .radius(8.0)
+                .child(
+                    row()
+                        .gap(8.0)
+                        .center_y()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .children(is_selected.then(|| icon_check(13.0, good())))
+                        .child(
+                            text(label.clone())
+                                .font(type_control())
+                                .color(if fc.backend_available { FG } else { fg_muted() })
+                                .truncate(),
+                        ),
+                )
+                .child(text(hint).font(type_small()).color(fg_muted()));
+            if fc.backend_available {
+                let gid = game_id.clone();
+                item = item
+                    .role("button")
+                    .label(label)
+                    .focusable(true)
+                    .hit()
+                    .press_on_down()
+                    .hover(hover_fill())
+                    .press(pressed_fill())
+                    .motion(SPRING_QUICK)
+                    .on_press(move |s: &mut AppState| {
+                        s.frame_cap_menu_open = false;
+                        s.set_game_frame_cap(&gid, Some("refresh"), Some(fps), None);
+                    });
+            }
+            menu_col = menu_col.child(item);
+        }
     }
 
     if !fc.in_vrr_range
@@ -314,7 +382,83 @@ fn build_menu(fc: &GameFrameCap, game: &Game) -> El {
         .child(text("Off").font(type_control()).color(FG));
     menu_col = menu_col.child(off_row);
 
-    menu_col = menu_col.child(el().w_full().h(1.0).my(4.0).fill(hairline()));
+    if !fc.backends.is_empty() {
+        menu_col = menu_col
+            .child(el().w_full().h(1.0).my(4.0).fill(hairline()))
+            .child(section_heading("Limiter"));
+        let target_tier = if !fc.selected_tier.is_empty() && fc.selected_tier != "off" {
+            fc.selected_tier.clone()
+        } else {
+            "max".into()
+        };
+        for b in &fc.backends {
+            let is_active = b.id == fc.backend;
+            let label = curly(&b.label);
+            let hint = if b.available {
+                if b.per_game_native {
+                    "Per-game"
+                } else {
+                    "Session"
+                }
+            } else {
+                "Unavailable"
+            };
+            let mut item = row()
+                .key(format!("gp-fc-backend-{}", b.id))
+                .w_full()
+                .min_h(34.0)
+                .px(12.0)
+                .py(6.0)
+                .gap(8.0)
+                .center_y()
+                .justify_between()
+                .radius(8.0)
+                .child(
+                    row()
+                        .gap(8.0)
+                        .center_y()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .children(is_active.then(|| icon_check(13.0, good())))
+                        .child(
+                            text(label.clone())
+                                .font(type_control())
+                                .color(if b.available { FG } else { fg_muted() })
+                                .truncate(),
+                        ),
+                )
+                .child(text(hint).font(type_small()).color(fg_muted()));
+            if b.available {
+                let gid = game_id.clone();
+                let bid = b.id.clone();
+                let tier_for_b = target_tier.clone();
+                item = item
+                    .role("button")
+                    .label(label)
+                    .focusable(true)
+                    .hit()
+                    .press_on_down()
+                    .hover(hover_fill())
+                    .press(pressed_fill())
+                    .motion(SPRING_QUICK)
+                    .on_press(move |s: &mut AppState| {
+                        s.frame_cap_menu_open = false;
+                        s.set_game_frame_cap(&gid, Some(&tier_for_b), None, Some(&bid));
+                    });
+            }
+            menu_col = menu_col.child(item);
+        }
+    }
+
+    let has_ab_items = fc.ab.status == "running"
+        || (fc.backend_available && fc.tiers.len() >= 2)
+        || (fc.ab.status == "completed" && fc.ab.verdict.as_deref().is_some_and(|v| !v.is_empty()))
+        || (fc.ab.status == "cancelled" && fc.ab.reason.as_deref().is_some_and(|r| !r.is_empty()));
+    if has_ab_items {
+        menu_col = menu_col
+            .child(el().w_full().h(1.0).my(4.0).fill(hairline()))
+            .child(section_heading("A/B cap lab"));
+    }
     if fc.ab.status == "running" {
         let gid = game_id.clone();
         let cancel_label = format!(
@@ -389,22 +533,57 @@ fn build_menu(fc: &GameFrameCap, game: &Game) -> El {
         menu_col = menu_col.child(run_row);
     }
 
-    if !fc.suggestion.reason.is_empty() {
+    if fc.ab.status == "completed"
+        && let Some(ref verdict) = fc.ab.verdict
+        && !verdict.is_empty()
+    {
         menu_col = menu_col.child(
-            el().px(12.0).py(3.0).child(
-                text(curly(&fc.suggestion.reason))
-                    .font(type_small())
-                    .color(fg_muted()),
-            ),
+            el().px(12.0)
+                .py(3.0)
+                .child(text(curly(verdict)).font(type_small()).color(fg_muted())),
+        );
+    } else if fc.ab.status == "cancelled"
+        && let Some(ref reason) = fc.ab.reason
+        && !reason.is_empty()
+    {
+        menu_col = menu_col.child(
+            el().px(12.0)
+                .py(3.0)
+                .child(text(curly(reason)).font(type_small()).color(fg_muted())),
         );
     }
+
+    if !fc.suggestion.reason.is_empty() {
+        menu_col = menu_col
+            .child(el().w_full().h(1.0).my(4.0).fill(hairline()))
+            .child(section_heading("Exo AI suggestion"))
+            .child(
+                el().px(12.0).py(3.0).child(
+                    text(curly(&fc.suggestion.reason))
+                        .font(type_small())
+                        .color(fg_muted()),
+                ),
+            );
+    }
     if !fc.stutter.summary.is_empty() {
-        menu_col = menu_col.child(
-            el().px(12.0).py(3.0).child(
-                text(curly(&fc.stutter.summary))
-                    .font(type_small())
-                    .color(fg_muted()),
-            ),
+        menu_col = menu_col
+            .child(section_heading("Stutter attribution"))
+            .child(
+                el().px(12.0).py(3.0).child(
+                    text(curly(&fc.stutter.summary))
+                        .font(type_small())
+                        .color(fg_muted()),
+                ),
+            );
+    }
+    if !fc.backend_available
+        && let Some(ref note) = fc.backend_note
+        && !note.is_empty()
+    {
+        menu_col = menu_col.child(section_heading("Limiter note")).child(
+            el().px(12.0)
+                .py(3.0)
+                .child(text(curly(note)).font(type_small()).color(fg_muted())),
         );
     }
 
@@ -450,8 +629,11 @@ mod tests {
         assert!(redrew);
         let fc = s.game_frame_cap.as_ref().expect("frame cap state");
         assert_eq!(fc.ab.verdict.as_deref(), Some("B is smoother by 11.5%"));
-        let (word, _) = summary_for(Some(fc));
+        let (word, _) = summary_for(Some(fc), None);
         assert!(word.contains("B is smoother by 11.5%"));
+        let (err_word, err_col) = summary_for(Some(fc), Some("Could not save frame cap."));
+        assert_eq!(err_word, "Could not save frame cap.");
+        assert_eq!(err_col, bad());
     }
 
     #[test]

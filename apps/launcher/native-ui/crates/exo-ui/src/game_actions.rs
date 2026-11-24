@@ -1964,6 +1964,49 @@ impl AppState {
         let _ = (id, mode, epoch);
     }
 
+    pub fn set_game_hdr_cursor_fix(&mut self, id: &str, cursor_fix: bool) {
+        if self.status == HostStatus::Standalone {
+            if let Some(ref mut h) = self.game_page.hdr_game {
+                h.cursor_fix = cursor_fix;
+            }
+            return;
+        }
+        self.game_page.hdr_busy = true;
+        self.game_page.hdr_error = None;
+        let epoch = self.game_page.generation;
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let gid = id.to_string();
+            rpc.call::<_, HdrGame>(
+                METHOD_HDR_GAME,
+                &json!({ "id": gid, "cursorFix": cursor_fix }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        if s.game_page.generation != epoch {
+                            return;
+                        }
+                        s.game_page.hdr_busy = false;
+                        match res {
+                            Ok(answer) if answer.ok => {
+                                GamePageState::cache_put(
+                                    &mut s.game_page.hdr_game_cache,
+                                    gid,
+                                    answer.clone(),
+                                );
+                                s.game_page.hdr_game = Some(answer);
+                            }
+                            _ => {
+                                s.game_page.hdr_error = Some("Could not save. Try again.".into());
+                            }
+                        }
+                    });
+                },
+            );
+        }
+        #[cfg(not(windows))]
+        let _ = (id, cursor_fix, epoch);
+    }
+
     pub fn turn_on_hdr_for_games(&mut self) {
         self.game_page.hdr_error = None;
         if self.status == HostStatus::Standalone {
