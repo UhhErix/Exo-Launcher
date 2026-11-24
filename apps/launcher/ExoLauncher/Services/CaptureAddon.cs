@@ -63,8 +63,14 @@ internal sealed class CaptureAddon(Func<ProcessStartInfo?> getStartInfo) : IDisp
     private long _exitedAt;
     private long _nextId;
     private bool _disposed;
+    private bool _suspended;
     private int _restarts;
     private static readonly TimeSpan WriteTimeout = TimeSpan.FromSeconds(10);
+
+    internal bool IsSuspended
+    {
+        get { lock (_gate) return _suspended; }
+    }
 
     internal long? ReadyGeneration
     {
@@ -98,7 +104,7 @@ internal sealed class CaptureAddon(Func<ProcessStartInfo?> getStartInfo) : IDisp
         {
             // After a second crash it rests: nothing starts it again for 30 seconds (no crash loop), then what needs it
             // (Go Live, a recording, a page) may, so one bad moment doesn't leave it down until Exo restarts.
-            if (_disposed || _run is not null) return;
+            if (_disposed || _suspended || _run is not null) return;
             if (_restarts > 1 && Environment.TickCount64 - _exitedAt < 30_000) return;
             try
             {
@@ -268,10 +274,15 @@ internal sealed class CaptureAddon(Func<ProcessStartInfo?> getStartInfo) : IDisp
         run.Ended = true;
         foreach (var pending in run.Pending.Values) pending.Reply.TrySetException(Stopped());
         bool closing;
-        lock (_gate) closing = _disposed;
-        // Stdout can close before the process exits. Let it finish on stdin EOF; never kill a recording.
+        bool suspended;
+        lock (_gate)
+        {
+            closing = _disposed;
+            suspended = _suspended;
+        }
+        var stoppedByExo = closing || suspended;
         var process = run.Process;
-        if (!closing)
+        if (!stoppedByExo)
         {
             Report("exited", null);
             _ = Task.Run(() => CloseInputAsync(run, shutdown: false));
@@ -288,12 +299,23 @@ internal sealed class CaptureAddon(Func<ProcessStartInfo?> getStartInfo) : IDisp
         {
             _run = null;
             _exitedAt = Environment.TickCount64;
-            if (!_disposed) restart = ++_restarts == 1;
             closing = _disposed;
+            suspended = _suspended;
+            if (!closing && !suspended) restart = ++_restarts == 1;
         }
         process.Dispose();
         run.Completion.TrySetResult();
         if (closing) return;
+        if (suspended)
+        {
+            AppLog.Info("Capture add-on paused for driver install.");
+            return;
+        }
+        if (code == FailureReportRules.CaptureGpuUnavailableExitCode)
+        {
+            AppLog.Info("Capture add-on exited: capture unavailable on this GPU.");
+            return;
+        }
         AppLog.Warn("Capture add-on exited: code " + code + ".");
         if (FailureReportRules.IsCaptureCrash(code, stoppedByExo: false))
             CrashReport.Submit("CaptureCrash", "Exo Capture stopped with exit code " + code, "capture");
@@ -318,6 +340,34 @@ internal sealed class CaptureAddon(Func<ProcessStartInfo?> getStartInfo) : IDisp
         var node = message[name];
         message.Remove(name);
         return node;
+    }
+
+    internal void Suspend()
+    {
+        Run? run;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _suspended = true;
+            run = _run;
+            if (run is not null) run.Ended = true;
+        }
+        if (run is null) return;
+        foreach (var pending in run.Pending.Values) pending.Reply.TrySetException(Stopped());
+        _ = Task.Run(() => CloseInputAsync(run, shutdown: true));
+        if (!run.Completion.Task.Wait(TimeSpan.FromSeconds(5)))
+            AppLog.Warn("Capture add-on still closing before driver install.");
+    }
+
+    internal void Resume()
+    {
+        lock (_gate)
+        {
+            if (_disposed || !_suspended) return;
+            _suspended = false;
+            _restarts = 0;
+        }
+        Start();
     }
 
     /// <summary>Asks the add-on to finish a recording and exit; waits up to 10 seconds.</summary>

@@ -475,6 +475,36 @@ internal static partial class OfficialInstalledLibraries
             catch { /* skip */ }
         }
 
+        foreach (var hive in new[] { Microsoft.Win32.Registry.LocalMachine, Microsoft.Win32.Registry.CurrentUser })
+        foreach (var path in new[]
+                 {
+                     @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+                     @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                 })
+        {
+            try
+            {
+                using var key = hive.OpenSubKey(path);
+                if (key is null) continue;
+                foreach (var sub in key.GetSubKeyNames())
+                {
+                    try
+                    {
+                        using var game = key.OpenSubKey(sub);
+                        var publisher = game?.GetValue("Publisher") as string;
+                        if (publisher is null || !publisher.Contains("Paradox Interactive", StringComparison.OrdinalIgnoreCase)) continue;
+                        var title = game?.GetValue("DisplayName") as string ?? sub;
+                        if (IsParadoxClientName(title)) continue;
+                        var dir = game?.GetValue("InstallLocation") as string;
+                        if (string.IsNullOrWhiteSpace(dir)) continue;
+                        records.Add(new ParadoxInstallRecord(title, dir));
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
         return records;
     }
 

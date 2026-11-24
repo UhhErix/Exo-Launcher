@@ -456,7 +456,7 @@ internal static partial class OfficialInstalledLibraries
 
     private static IReadOnlyList<UbisoftInstallRecord> ReadUbisoftInstallRegistry()
     {
-        var records = new List<UbisoftInstallRecord>();
+        var byId = new Dictionary<string, UbisoftInstallRecord>(StringComparer.OrdinalIgnoreCase);
         foreach (var hive in new[] { Registry.LocalMachine, Registry.CurrentUser })
         foreach (var path in new[]
                  {
@@ -476,20 +476,57 @@ internal static partial class OfficialInstalledLibraries
                         var dir = game?.GetValue("InstallDir") as string
                                   ?? game?.GetValue("InstallDir", null)?.ToString();
                         if (string.IsNullOrWhiteSpace(dir)) continue;
-                        records.Add(new UbisoftInstallRecord(
+                        byId[id] = new UbisoftInstallRecord(
                             id,
                             dir,
                             null,
                             ReadRegistryFlag(game, "is_update_available")
                             || ReadRegistryFlag(game, "UpdateAvailable")
-                            || ReadRegistryFlag(game, "NeedUpdate")));
+                            || ReadRegistryFlag(game, "NeedUpdate"));
                     }
                     catch { /* skip one */ }
                 }
             }
             catch { /* hive unavailable */ }
         }
-        return records;
+        const string prefix = "Uplay Install ";
+        foreach (var hive in new[] { Registry.LocalMachine, Registry.CurrentUser })
+        foreach (var path in new[]
+                 {
+                     @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+                     @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                 })
+        {
+            try
+            {
+                using var key = hive.OpenSubKey(path);
+                if (key is null) continue;
+                foreach (var name in key.GetSubKeyNames())
+                {
+                    if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+                    var id = name[prefix.Length..].Trim();
+                    if (string.IsNullOrWhiteSpace(id)) continue;
+                    try
+                    {
+                        using var game = key.OpenSubKey(name);
+                        var title = game?.GetValue("DisplayName") as string;
+                        var dir = game?.GetValue("InstallLocation") as string;
+                        if (byId.TryGetValue(id, out var existing))
+                        {
+                            if (string.IsNullOrWhiteSpace(existing.Title) && !string.IsNullOrWhiteSpace(title))
+                                byId[id] = existing with { Title = title };
+                        }
+                        else if (!string.IsNullOrWhiteSpace(dir))
+                        {
+                            byId[id] = new UbisoftInstallRecord(id, dir, title, false);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+        return byId.Values.ToList();
     }
 
     private static string? FindXboxExecutable(string contentDir, XboxGameConfig? config, Func<string, bool> fileExists)
@@ -748,7 +785,8 @@ internal static partial class OfficialInstalledLibraries
                         using var game = key.OpenSubKey(name);
                         var dir = game?.GetValue("InstallFolder") as string
                                   ?? game?.GetValue("Install Path") as string
-                                  ?? game?.GetValue("InstallDir") as string;
+                                  ?? game?.GetValue("InstallDir") as string
+                                  ?? game?.GetValue("SetupPath") as string;
                         if (string.IsNullOrWhiteSpace(dir)) continue;
                         records.Add(new RockstarInstallRecord(name, dir));
                     }
@@ -756,6 +794,36 @@ internal static partial class OfficialInstalledLibraries
                 }
             }
             catch { /* hive unavailable */ }
+        }
+
+        foreach (var hive in new[] { Registry.LocalMachine, Registry.CurrentUser })
+        foreach (var path in new[]
+                 {
+                     @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+                     @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                 })
+        {
+            try
+            {
+                using var key = hive.OpenSubKey(path);
+                if (key is null) continue;
+                foreach (var sub in key.GetSubKeyNames())
+                {
+                    try
+                    {
+                        using var game = key.OpenSubKey(sub);
+                        var publisher = game?.GetValue("Publisher") as string;
+                        if (!string.Equals(publisher, "Rockstar Games", StringComparison.OrdinalIgnoreCase)) continue;
+                        var title = game?.GetValue("DisplayName") as string ?? sub;
+                        if (IsRockstarClientName(title)) continue;
+                        var dir = game?.GetValue("InstallLocation") as string;
+                        if (string.IsNullOrWhiteSpace(dir)) continue;
+                        records.Add(new RockstarInstallRecord(title, dir));
+                    }
+                    catch { }
+                }
+            }
+            catch { }
         }
 
         foreach (var root in new[]

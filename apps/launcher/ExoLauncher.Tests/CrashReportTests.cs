@@ -118,6 +118,28 @@ public sealed class CrashReportTests
     }
 
     [Fact]
+    public void TestRunWithoutCustomPosterNeverLeavesTheMachine()
+    {
+        Assert.False(CrashReport.MayLeave(disposable: false, testRun: true, customPoster: false, smokeAllowsSends: false, errorType: "UpdateFailure"));
+        Assert.True(CrashReport.MayLeave(disposable: false, testRun: true, customPoster: true, smokeAllowsSends: false, errorType: "UpdateFailure"));
+        Assert.True(CrashReport.MayLeave(disposable: false, testRun: false, customPoster: false, smokeAllowsSends: false, errorType: "UpdateFailure"));
+    }
+
+    [Fact]
+    public void FitExcerptPreservesErrorLineAtTopAndNewestLogTail()
+    {
+        var head = "Exo Launcher 3.29.0 · Windows 10.0.26200.0 · 2026-11-23 07:27 UTC\nError (exo ai): Its installer didn't start.\n\nExo's log (200 entries):";
+        var lines = Enumerable.Range(1, 200).Select(i => $"[2026-11-23T07:00:{i % 60:00}.0000000Z] WARN Entry {i}: " + new string('x', 80));
+        var full = head + "\n" + string.Join('\n', lines);
+
+        var fitted = CrashReport.FitExcerpt(full, 1200);
+        Assert.True(fitted.Length <= 1200);
+        Assert.StartsWith("Exo Launcher 3.29.0", fitted);
+        Assert.Contains("Error (exo ai): Its installer didn't start.", fitted);
+        Assert.Contains("WARN Entry 200:", fitted);
+    }
+
+    [Fact]
     public void WithoutANamedErrorTheTypeIsAppError()
     {
         // A log with no exception name in it (the sample log above has two, which would be picked first).
@@ -125,6 +147,27 @@ public sealed class CrashReportTests
         var report = AppLog.ReportFor("Something broke", "pc", quiet, Now, "3.24.1", "10.0.26300.0", UserName, Profile);
         var payload = CrashReport.Build("Something broke", report, "3.24.1", "10.0.26300.0", UserName, Profile, Machine);
         Assert.Equal("AppError", payload.ErrorType);
+    }
+
+    [Fact]
+    public void HandledWarnLogLinesDoNotOverrideAppErrorClassification()
+    {
+        var warns = new[]
+        {
+            "[2026-11-05T19:42:10.1230000Z] WARN Steam achievements: the signed-in read was not used (SteamAuthException); the local cache answers.",
+            "[2026-11-05T19:42:11.1230000Z] WARN Store check: HttpRequestException while refreshing.",
+        };
+        var report = AppLog.ReportFor("None of those are installed for you: choose Every account.", "library", warns, Now, "3.29.0", "10.0.26300.0", UserName, Profile);
+        var payload = CrashReport.Build("None of those are installed for you: choose Every account.", report, "3.29.0", "10.0.26300.0", UserName, Profile, Machine);
+        Assert.Equal("AppError", payload.ErrorType);
+
+        var withError = new[]
+        {
+            "[2026-11-05T19:42:12.1230000Z] ERROR Unhandled: NullReferenceException in worker.",
+        };
+        var errReport = AppLog.ReportFor("Something broke", "library", withError, Now, "3.29.0", "10.0.26300.0", UserName, Profile);
+        var errPayload = CrashReport.Build("Something broke", errReport, "3.29.0", "10.0.26300.0", UserName, Profile, Machine);
+        Assert.Equal("NullReferenceException", errPayload.ErrorType);
     }
 
     [Fact]

@@ -101,6 +101,9 @@ internal sealed class ChipsetUpdate(string vendor, ChipsetUpdate.IHost host, str
     private Status? _status;
     private bool _loaded;
     private Task? _running;
+    private DateTime? _lastFinishedUtc;
+    internal bool IsInstalling { get { lock (_gate) return _running is { IsCompleted: false }; } }
+    internal DateTime? LastFinishedUtc { get { lock (_gate) return _lastFinishedUtc; } }
     /// <summary>The newest package from the maker's page, kept 12 hours (beside the update's state) and retried as every version check is (<see cref="LatestCache{T}"/>).</summary>
     private readonly LatestCache<Package> _newest = new($"{GpuDriverUpdate.Maker(vendor)}'s chipset page", TimeSpan.FromHours(12), folder + "-newest.json");
 
@@ -127,7 +130,8 @@ internal sealed class ChipsetUpdate(string vendor, ChipsetUpdate.IHost host, str
 
     /// <summary>Why it can't install right now, or null.</summary>
     internal static string? Blocked(IHost host) =>
-        host.GameRunning() ? "A game is running" : host.InCall() ? "You're in a Discord call" : host.OnBattery() ? "Your PC is on battery" : null;
+        DriverInstallSignal.Installing || GpuDriverUpdate.Updating is not null ? "A graphics driver update is running"
+        : host.GameRunning() ? "A game is running" : host.InCall() ? "You're in a Discord call" : host.OnBattery() ? "Your PC is on battery" : null;
 
     /// <summary>
     /// After the installer: the version it left, its exit code and whether Windows marked a restart it hadn't before.
@@ -247,6 +251,7 @@ internal sealed class ChipsetUpdate(string vendor, ChipsetUpdate.IHost host, str
         }
         finally
         {
+            lock (_gate) _lastFinishedUtc = DateTime.UtcNow;
             try { DeletionGate.DeleteFile(package); DeletionGate.DeleteFile(package + ".part"); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug(log + "the installer wasn't removed: " + ex.Message); }
         }

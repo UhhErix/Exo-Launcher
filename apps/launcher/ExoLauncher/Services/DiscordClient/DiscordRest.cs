@@ -827,9 +827,12 @@ internal sealed partial class DiscordRest : IDisposable
     // The path without ids, so the log shows which call answered without whose channel it was.
     private static string Route(string path) => IdRegex().Replace(path.Split('?')[0], ":id");
 
+    internal static bool IsId(string? id) =>
+        id is { Length: > 0 and <= 20 } && id.All(char.IsAsciiDigit);
+
     /// <summary>A Discord snowflake id, or an exception: ids from the UI go into URLs.</summary>
     internal static string Id(string id) =>
-        id.Length is > 0 and <= 20 && id.All(char.IsAsciiDigit) ? id : throw new ArgumentException("Not a Discord id.");
+        IsId(id) ? id : throw new ArgumentException("Not a Discord id.");
 
     private static string Nonce() =>
         (((ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 1420070400000UL) << 22).ToString(System.Globalization.CultureInfo.InvariantCulture);

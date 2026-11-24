@@ -51,6 +51,8 @@ internal static class LocalOwnedSources
     internal static IReadOnlyList<GameEntry> Paradox() =>
         LocalOwnedCatalog.ParseNamedGameArray(
             FirstExistingText(
+                Roaming("Paradox Interactive", "launcher-v2", "game-data.json"),
+                Roaming("Paradox Interactive", "launcher", "game-data.json"),
                 Local("Paradox Interactive", "launcher-v2", "game-data.json"),
                 Local("Paradox Interactive", "launcher", "game-data.json")),
             StoreKind.Paradox,

@@ -27,6 +27,9 @@ internal static unsafe partial class Win32
     internal const uint WAIT_OBJECT_0 = 0, WAIT_TIMEOUT = 258, INFINITE = 0xFFFFFFFF;
     internal const uint CF_DIB = 8, CF_HDROP = 15, GMEM_MOVEABLE = 2;
     internal const uint CREATE_WAITABLE_TIMER_HIGH_RESOLUTION = 0x2, TIMER_ALL_ACCESS = 0x1F0003;
+    internal const uint SEM_FAILCRITICALERRORS = 0x0001, SEM_NOGPFAULTERRORBOX = 0x0002, SEM_NOOPENFILEERRORBOX = 0x8000;
+    internal const uint ErrorModeNoDialogs = SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX;
+    internal const uint WER_FAULT_REPORTING_NO_UI = 0x0020;
 
     [StructLayout(LayoutKind.Sequential)] internal struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] internal struct RECT
@@ -340,6 +343,15 @@ internal static unsafe partial class Win32
         var ex = (uint)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
         if ((ex & WS_EX_TOOLWINDOW) != 0 && (ex & 0x40000 /* WS_EX_APPWINDOW */) == 0) return false;
         return FrameBounds(hwnd) is { Width: > 1, Height: > 1 };
+    }
+
+    [LibraryImport("kernel32.dll")] internal static partial uint SetErrorMode(uint mode);
+    [LibraryImport("wer.dll")] internal static partial int WerSetFlags(uint flags);
+
+    internal static void SuppressErrorDialogs()
+    {
+        SetErrorMode(ErrorModeNoDialogs);
+        try { _ = WerSetFlags(WER_FAULT_REPORTING_NO_UI); } catch { }
     }
 
     internal static RECT VirtualScreen() => new()

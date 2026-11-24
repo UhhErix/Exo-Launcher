@@ -324,9 +324,10 @@ internal sealed class Duplicator
 {
     private static readonly Dictionary<nint, Duplicator> Opened = [];
     private static readonly Lock OpenGate = new();
-    private readonly GpuDevice _gpu;
+    private GpuDevice _gpu;
     private readonly nint _monitor;
     private readonly bool _wantHdr;
+    private bool _deviceLost;
     private IDXGIOutputDuplication? _duplication;
     private ID3D11Texture2D? _copy;
     private long _time;
@@ -379,6 +380,11 @@ internal sealed class Duplicator
     {
         _duplication?.Dispose();
         _duplication = null;
+        if (_deviceLost)
+        {
+            _gpu = GpuDevice.ForMonitor(_monitor);
+            _deviceLost = false;
+        }
         using var output = DuplicationSource.OutputOf(_gpu, _monitor, out var description) ?? throw new CaptureException("capture the screen (no output on this graphics card)");
         var c = description.DesktopCoordinates;
         Desktop = new Win32.RECT { Left = c.Left, Top = c.Top, Right = c.Right, Bottom = c.Bottom };
@@ -463,13 +469,26 @@ internal sealed class Duplicator
                     }
                     finally { _duplication.ReleaseFrame(); }
                 }
+                else if (GpuDevice.IsDeviceLost(hr.Code)) OnDeviceLost(hr.Code);
                 else if (hr.Code == unchecked((int)0x887A0026)) Reopen(); // DXGI_ERROR_ACCESS_LOST: a mode change or a full-screen switch
             }
+            catch (SharpGen.Runtime.SharpGenException ex) when (GpuDevice.IsDeviceLost(ex.HResult)) { OnDeviceLost(ex.HResult); }
             catch (SharpGen.Runtime.SharpGenException) { _duplication?.Dispose(); _duplication = null; }
             catch (CaptureException) { _duplication = null; }
             pointer = new PointerState(_pointerVisible, _pointerX, _pointerY, _pointerShape);
             return _copy is null ? null : new Frame(_copy, _time, null, false);
         }
+    }
+
+    private void OnDeviceLost(int hresult)
+    {
+        Host.Log($"Desktop duplication lost GPU device (hr=0x{hresult:X8}); resetting device.");
+        _duplication?.Dispose();
+        _duplication = null;
+        _copy?.Dispose();
+        _copy = null;
+        _deviceLost = true;
+        GpuDevice.Invalidate(_gpu.Luid);
     }
 
     private unsafe void UpdatePointerShape(uint bufferSize)

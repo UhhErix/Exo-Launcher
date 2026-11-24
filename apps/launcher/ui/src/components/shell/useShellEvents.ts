@@ -1,4 +1,4 @@
-import { useEffect, type MutableRefObject } from 'react'
+import { startTransition, useEffect, type MutableRefObject } from 'react'
 import { openCaptures } from '../../lib/capture'
 import { setPendingOpen } from '../../lib/discord'
 import { host, onHostEvent, type Game, type InstallProgress, type PausedDownload, type StoreStatus } from '../../lib/host'
@@ -225,7 +225,7 @@ export function useShellHostEvents({
         setGames([])
         return
       }
-      setGames((prev) => mergeLibraryUpdate(prev, d.games!, selectedIdRef.current))
+      startTransition(() => setGames((prev) => mergeLibraryUpdate(prev, d.games!, selectedIdRef.current)))
     })
     return () => {
       progressFlush.cancel()
