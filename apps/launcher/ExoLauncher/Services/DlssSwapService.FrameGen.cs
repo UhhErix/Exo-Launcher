@@ -187,6 +187,16 @@ public sealed partial class DlssSwapService
     /// <summary>Swapped in tests: the NVIDIA driver's frame caps; null where there is no NVIDIA driver to ask.</summary>
     internal IFrameGenDriver? FrameGenDriver { get; init; } = NvidiaFrameGenDriver.Instance;
 
+    internal static Func<string, string?> FrameGenConsentLookup { get; set; } = _ => null;
+
+    private static bool FrameGenRiskAccepted(GameEntry game, string? antiCheat, string? explicitConsent)
+    {
+        if (antiCheat is null) return true;
+        if (string.Equals(explicitConsent, antiCheat, StringComparison.OrdinalIgnoreCase)) return true;
+        var saved = FrameGenConsentLookup(game.Id);
+        return string.Equals(saved, antiCheat, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>The version a tag names: "v1.5.0-hotfix.1" is 1.5.0.</summary>
     internal static Version? TagVersion(string? tag)
     {
@@ -633,21 +643,17 @@ public sealed partial class DlssSwapService
 
     internal static string? FrameGenPath(FrameGenCard? card, FrameGenGame game, GameEntry? entry)
     {
-        if (game.AntiCheat is not null)
-        {
-            if (game.OwnFrameGen || (card is { DlssFrameGen: true } && game.DlssFrameGen)) return "native";
-            return FrameGenAntiCheat.Evaluate(entry, game.AntiCheat) == FrameGenAntiCheatVerdict.DllSafe ? "optifg" : null;
-        }
         if (card is null)
-            return game.OwnFrameGen ? "native" : null;
+            return game.OwnFrameGen ? "native" : "optifg";
         if (card.DlssFrameGen)
         {
             if (game.DlssFrameGen || game.OwnFrameGen) return "native";
-            if (game.HasUpscaler && game.Api is "dx12" or "vulkan") return "optifg";
-            return null;
+            return "optifg";
         }
         if (card.Dlssg)
         {
+            if (game.OwnFrameGen && (game.AntiCheat is not null || (entry is not null && GameSettings.IsWutheringWavesEntry(entry))))
+                return "native";
             if (game.DlssFrameGen)
             {
                 if (!game.Vulkan && game.Api != "dx11" && game.Streamline is >= 2 && game.DlssgMajor >= 310 && !game.NoDlssgHere && !game.VersionDllTaken)
@@ -658,13 +664,27 @@ public sealed partial class DlssSwapService
                 return "fsr";
             }
             if (game.OwnFrameGen) return "native";
-            if (game.HasUpscaler && game.Api is "dx12" or "vulkan") return "optifg";
-            return null;
+            return "optifg";
         }
         if (game.OwnFrameGen) return "native";
         if (game.DlssFrameGen) return "fsr";
-        if (game.HasUpscaler && game.Api is "dx12" or "vulkan") return "optifg";
-        return null;
+        return "optifg";
+    }
+
+    internal static string? FrameGenModFallbackPath(FrameGenCard? card, FrameGenGame game)
+    {
+        if (card is { DlssFrameGen: true })
+            return game.DlssFrameGen ? null : "optifg";
+        if (card is { Dlssg: true } && game.DlssFrameGen)
+        {
+            if (!game.Vulkan && game.Api != "dx11" && game.Streamline is >= 2 && game.DlssgMajor >= 310 && !game.NoDlssgHere && !game.VersionDllTaken)
+                return "dlss";
+            if (!game.DlssFailed && !game.NoMfgHere)
+                return "mfg";
+            return "fsr";
+        }
+        if (game.DlssFrameGen) return "fsr";
+        return "optifg";
     }
 
     internal static string? FrameGenPackageLabel(string? path, string? modName = null) => path switch
@@ -775,7 +795,7 @@ public sealed partial class DlssSwapService
             exe,
             dlssg.Count > 0,
             dlssg.Select(dll => TryParseVersion(dll.CurrentVersion)?.Major).Max(),
-            rows.Any(dll => OwnFile(dll, OwnFrameGenFiles)),
+            rows.Any(dll => OwnFile(dll, OwnFrameGenFiles)) || GameSettings.IsWutheringWaves(game),
             found.Interposers.Select(path => TryParseVersion(FileVersion(path))?.Major).Max(),
             vulkan,
             other,
@@ -955,7 +975,7 @@ public sealed partial class DlssSwapService
     public sealed record FrameGenStatus(
         string State, string? Path = null, string? Version = null,
         string? Session = null, string? Mod = null, string? AntiCheat = null, string? Note = null, string? Reason = null,
-        string? Package = null, bool CanToggle = false);
+        string? Package = null, bool CanToggle = false, string? RiskWarning = null, bool RiskAccepted = false);
 
     private static readonly ConcurrentDictionary<string, string> FrameGenNotes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -1017,7 +1037,12 @@ public sealed partial class DlssSwapService
     {
         var wanted = FrameGenPath(card, layout, game);
         var native = card is { DlssFrameGen: true } && (layout.DlssFrameGen || layout.OwnFrameGen) || (wanted == "native");
-        var facts = new FrameGenFacts(true, wanted, Note: note, Native: native);
+        var antiCheat = layout.AntiCheat;
+        var riskAccepted = antiCheat is not null && FrameGenRiskAccepted(game, antiCheat, null);
+        var riskWarning = antiCheat is null ? null : FrameGenAntiCheat.ConfirmationWarning(game, antiCheat);
+        var fallbackPath = wanted == "native" ? FrameGenModFallbackPath(card, layout) : null;
+        var facts = new FrameGenFacts(true, wanted, Note: note, Native: native, AntiCheat: antiCheat,
+            RiskWarning: riskWarning, RiskAccepted: riskAccepted, FallbackPath: fallbackPath);
         if (layout.Installed is { } install && FrameGenModNamed(install.Mod) is { } mod)
         {
             var damage = FrameGenDamage(layout.Folder!, install)?.Reason;
@@ -1025,18 +1050,15 @@ public sealed partial class DlssSwapService
             {
                 Record = mod.Name, RecordInput = install.Input, Out = install.Out, Damage = damage,
                 DlssgGone = install.Input != "upscaler" && layout.DlssgGone,
-                TakeOut = install.Out ? null : FrameGenTakeOut(card, mod, layout.AntiCheat, layout.Folder!, install, wanted, layout.DlssgGone),
+                TakeOut = install.Out ? null : FrameGenTakeOut(card, mod, antiCheat, layout.Folder!, install, wanted, layout.DlssgGone, riskAccepted),
             };
         }
-        if (wanted is null && layout.AntiCheat is { } blockedAc)
-            return facts with { AntiCheat = blockedAc, NeverAllowed = NeverAllowed(game, blockedAc), AntiCheatSentence = FrameGenAntiCheat.UnavailableMessage(game, blockedAc) };
         if (wanted is null or "native" || layout.Folder is null) return facts with { Folder = layout.Folder is not null };
         if (layout.OtherMod is { } other) return facts with { OtherMod = other };
-        if (layout.AntiCheat is { } antiCheat)
-            return facts with { AntiCheat = antiCheat, NeverAllowed = NeverAllowed(game, antiCheat), AntiCheatSentence = FrameGenAntiCheat.UnavailableMessage(game, antiCheat) };
         var targetMod = FrameGenModForPath(wanted);
         return facts with
         {
+            NeverAllowed = antiCheat is not null && NeverAllowed(game, antiCheat),
             KeptOff = FrameGenKeptOffHere(game.Id, layout.Folder),
             Unoffered = targetMod is null ? null : UnofferedReason(targetMod),
         };
@@ -1083,7 +1105,8 @@ public sealed partial class DlssSwapService
         bool Readable, string? Wanted = null, string? Record = null, bool Out = false, string? Damage = null, string? TakeOut = null,
         bool DlssgGone = false, bool Folder = true, string? OtherMod = null, string? AntiCheat = null, bool NeverAllowed = false,
         string? KeptOff = null, string? Unoffered = null, string? Note = null, bool Pending = false, string? AntiCheatSentence = null,
-        bool Native = false, string? Unread = null, string? RecordInput = null);
+        bool Native = false, string? Unread = null, string? RecordInput = null, string? RiskWarning = null, bool RiskAccepted = false,
+        string? FallbackPath = null);
 
     internal sealed record FrameGenVerdict(FrameGenStatus Status, FrameGenNext Next = FrameGenNext.Nothing);
 
@@ -1097,20 +1120,24 @@ public sealed partial class DlssSwapService
             var pkg = FrameGenPackageLabel(path, record);
             if (f.Pending) return new(new("note", Path: path, Note: Coming(f.TakeOut ?? f.Note), Package: pkg));
             if (f.Out) return new(new("broken", Path: path, Note: f.Note, Reason: "replaced", Package: pkg), f.Damage == "replaced" ? FrameGenNext.Nothing : FrameGenNext.FinishOff);
-            if (f.TakeOut is not null) return new(new("on", Path: path, Note: f.Note, Package: pkg, CanToggle: true), FrameGenNext.TakeOut);
+            if (f.TakeOut is not null) return new(new("on", Path: path, Note: f.Note, Package: pkg, CanToggle: true, AntiCheat: f.AntiCheat, RiskWarning: f.RiskWarning, RiskAccepted: f.RiskAccepted), FrameGenNext.TakeOut);
             var reason = f.Damage ?? (f.DlssgGone ? "gone" : null);
             var next = reason switch { "replaced" => FrameGenNext.KeepOff, "removed" => FrameGenNext.PutBack, null => FrameGenNext.Forget, _ => FrameGenNext.Nothing };
-            return new(new(reason is null ? "on" : "broken", Path: path, Note: f.Note, Reason: reason, Package: pkg, CanToggle: reason is null), next);
+            return new(new(reason is null ? "on" : "broken", Path: path, Note: f.Note, Reason: reason, Package: pkg, CanToggle: reason is null, AntiCheat: f.AntiCheat, RiskWarning: f.RiskWarning, RiskAccepted: f.RiskAccepted), next);
         }
         if (f.Wanted is null)
-        {
-            if (f.AntiCheat is { } blockedAc) return new(new("note", AntiCheat: blockedAc, Note: f.Note ?? f.AntiCheatSentence ?? FrameGenAntiCheat.UnavailableMessage(null, blockedAc)));
             return f.Native && f.Note is null ? new(new("native")) : hidden;
+        if (f.Wanted == "native")
+        {
+            if (f.Note is not null) return hidden;
+            if (f.FallbackPath is { } fb && f.Folder)
+                return new(new("native", Path: fb, Package: FrameGenPackageLabel(fb), AntiCheat: f.AntiCheat, CanToggle: true, RiskWarning: f.RiskWarning, RiskAccepted: f.RiskAccepted));
+            return new(new("native"));
         }
-        if (f.Wanted == "native") return f.Note is null ? new(new("native")) : hidden;
         if (!f.Folder) return hidden;
         if (f.OtherMod is { } other) return new(new("mod", Mod: NamedMod(other)));
-        if (f.AntiCheat is { } antiCheat) return new(new("note", AntiCheat: antiCheat, Note: f.Note ?? f.AntiCheatSentence ?? FrameGenAntiCheat.UnavailableMessage(null, antiCheat)));
+        if (f.AntiCheat is { } antiCheat)
+            return new(new("off", Path: f.Wanted, AntiCheat: antiCheat, Note: f.Note, Package: FrameGenPackageLabel(f.Wanted), CanToggle: true, RiskWarning: f.RiskWarning ?? FrameGenAntiCheat.ConfirmationWarning(null, antiCheat), RiskAccepted: f.RiskAccepted));
         if (f.KeptOff is { } kept) return new(new("broken", Path: f.Wanted, Note: f.Note, Reason: kept, Package: FrameGenPackageLabel(f.Wanted), CanToggle: true));
         if (f.Unoffered is { } unavailable) return new(new("note", Note: unavailable, Package: FrameGenPackageLabel(f.Wanted)));
         return new(new("off", Path: f.Wanted, Note: f.Note, Package: FrameGenPackageLabel(f.Wanted), CanToggle: true), FrameGenNext.PutIn);
@@ -1125,15 +1152,15 @@ public sealed partial class DlssSwapService
 
     /// <summary>Why Exo's frame generation can no longer stay in a game, or null.</summary>
     /// <param name="gone">The game no longer ships DLSS frame generation (<see cref="FrameGenGame.DlssgGone"/>).</param>
-    internal static string? FrameGenTakeOut(FrameGenCard? card, FrameGenMod mod, string? antiCheat, string folder, FrameGenInstall install, string? wanted, bool gone = false)
+    internal static string? FrameGenTakeOut(FrameGenCard? card, FrameGenMod mod, string? antiCheat, string folder, FrameGenInstall install, string? wanted, bool gone = false, bool antiCheatAccepted = false)
     {
-        if (card is null) return "Taken out: this graphics card can't run it";
+        if (card is null && install.Auto) return "Taken out: this graphics card can't run it";
         if (mod == OptiScaler && wanted == "dlss" && install.Input != "upscaler") return "Taken out: this card uses DLSS Frame Generation";
-        if (card.MultiFrame && !(mod == OptiScaler && install.Input == "upscaler")) return "Taken out: this card has DLSS Multi Frame Generation";
-        if (card.DlssFrameGen && !(mod == OptiScaler && install.Input == "upscaler") && mod != MfgUnlocker) return "Taken out: this card has DLSS Frame Generation";
+        if (card is { MultiFrame: true } && !(mod == OptiScaler && install.Input == "upscaler")) return "Taken out: this card has DLSS Multi Frame Generation";
+        if (card is { DlssFrameGen: true } && !(mod == OptiScaler && install.Input == "upscaler") && mod != MfgUnlocker) return "Taken out: this card has DLSS Frame Generation";
         if (mod == DlssgSm86 && card is not { Vendor: "nvidia", Series: 20 or 30 }) return "Taken out: this card uses a different frame generation";
         if (mod == MfgUnlocker && card is not { Vendor: "nvidia", Series: >= 20 and <= 40 }) return "Taken out: this card uses a different frame generation";
-        if (antiCheat is not null)
+        if (antiCheat is not null && !antiCheatAccepted)
             return AntiCheatCheck.TakenOut(antiCheat);
         if (FrameGenGameUpdated(folder, install)) return "Taken out: the game updated";
         if (gone && install.Input != "upscaler") return DlssgGoneNote;
@@ -1156,10 +1183,10 @@ public sealed partial class DlssSwapService
     }
 
     /// <summary>Why frame generation can't go into the game now, or null.</summary>
-    private static string? FrameGenRefusal(GameEntry game, FrameGenGame layout, string? path)
+    private static string? FrameGenRefusal(GameEntry game, FrameGenGame layout, string? path, bool auto = true, string? acceptedAntiCheat = null)
     {
-        if (layout.AntiCheat is { } antiCheat)
-            return FrameGenAntiCheat.UnavailableMessage(game, antiCheat);
+        if (layout.AntiCheat is { } antiCheat && (auto || !FrameGenRiskAccepted(game, antiCheat, acceptedAntiCheat)))
+            return FrameGenAntiCheat.ConfirmationWarning(game, antiCheat);
         if (layout.Installed is { Out: true }) return "A mod is already in this game, so Exo leaves it alone.";
         if (layout.Installed is not null) return null;
         if (path == "native") return "This game has frame generation of its own. Turn it on in the game's settings.";
@@ -1176,17 +1203,19 @@ public sealed partial class DlssSwapService
     /// fetched and checked, then the refusals again under the game's write lock from a fresh walk. Best settings calls this
     /// (<see cref="FrameGenEverywhereAsync"/>), so the game's first session has to prove it.
     /// </summary>
-    internal async Task<(bool Ok, string Message)> FrameGenOnAsync(GameEntry game, string? gpu, CancellationToken ct, bool auto = true)
+    internal async Task<(bool Ok, string Message)> FrameGenOnAsync(GameEntry game, string? gpu, CancellationToken ct, bool auto = true, string? acceptedAntiCheat = null)
     {
         var root = ResolveInstallRoot(game.Path);
         if (root is null) return (false, "The install folder is unavailable.");
         if (IsWindowsAppsPath(root)) return (false, StoreLockedMessage);
         var card = FrameGenCardFor(gpu);
+        var effectiveCard = card ?? (auto ? null : new FrameGenCard("other", 0));
         var layout = ReadFrameGenGame(game, root, ScanAndStore(game, ct), ct);
         var path = layout.Installed is null ? FrameGenPath(card, layout, game) : null;
-        if (FrameGenRefusal(game, layout, path) is { } refused) return (false, refused);
+        if (!auto && path == "native" && FrameGenModFallbackPath(card, layout) is { } fb) path = fb;
+        if (FrameGenRefusal(game, layout, path, auto, acceptedAntiCheat) is { } refused) return (false, refused);
         if (layout.Installed is not null) return (true, "Already on.");
-        if (card is null) return (false, "This graphics card can't run frame generation from a mod.");
+        if (effectiveCard is null) return (false, "This graphics card can't run frame generation from a mod.");
         var mod = FrameGenModForPath(path);
         if (mod is null) return (false, "This game has no frame generation mod route.");
         if (UnofferedReason(mod) is { } unavailable) return (false, unavailable);
@@ -1208,18 +1237,19 @@ public sealed partial class DlssSwapService
         (bool Ok, string Message) result;
         using (var mutation = AcquireMutationGate(game))
             lock (mutation.Sync)
-                result = FrameGenOnLocked(game, root, card, mod, release, source, auto);
+                result = FrameGenOnLocked(game, root, effectiveCard, mod, release, source, auto, acceptedAntiCheat);
         ScanAndStore(game);
         return result;
     }
 
     private (bool Ok, string Message) FrameGenOnLocked(
-        GameEntry game, string root, FrameGenCard card, FrameGenMod mod, FrameGenRelease release, string source, bool auto)
+        GameEntry game, string root, FrameGenCard card, FrameGenMod mod, FrameGenRelease release, string source, bool auto, string? acceptedAntiCheat = null)
     {
         if (IsGameRunning(game, root)) return (false, GameRunningMessage);
         var fresh = ReadFrameGenGame(game, root, ScanGame(game), CancellationToken.None);
-        var path = FrameGenPath(card, fresh, game);
-        if (FrameGenRefusal(game, fresh, path) is { } refused) return (false, refused);
+        var path = FrameGenPath(card.Vendor == "other" ? null : card, fresh, game);
+        if (!auto && path == "native" && FrameGenModFallbackPath(card.Vendor == "other" ? null : card, fresh) is { } fb) path = fb;
+        if (FrameGenRefusal(game, fresh, path, auto, acceptedAntiCheat) is { } refused) return (false, refused);
         if (fresh.Installed is not null) return (true, "Already on.");
         if (FrameGenModForPath(path) != mod) return (false, "The game changed. Try again.");
         var folder = fresh.Folder!;
@@ -1284,7 +1314,7 @@ public sealed partial class DlssSwapService
     }
 
     internal async Task<(bool Ok, string Message)> FrameGenSetAsync(
-        GameEntry game, string? gpu, bool enabled, CancellationToken ct)
+        GameEntry game, string? gpu, bool enabled, bool acceptRisk, string? shownAntiCheat, CancellationToken ct)
     {
         if (!enabled)
         {
@@ -1294,8 +1324,13 @@ public sealed partial class DlssSwapService
         }
         ForgetReplaced(game.Id);
         ChangeFrameGenMemory(game.Id, memory => memory with { KeptOff = null, PutBack = 0 });
-        return await FrameGenOnAsync(game, gpu, ct, auto: false).ConfigureAwait(false);
+        var accepted = acceptRisk ? shownAntiCheat : null;
+        return await FrameGenOnAsync(game, gpu, ct, auto: false, acceptedAntiCheat: accepted).ConfigureAwait(false);
     }
+
+    internal Task<(bool Ok, string Message)> FrameGenSetAsync(
+        GameEntry game, string? gpu, bool enabled, CancellationToken ct) =>
+        FrameGenSetAsync(game, gpu, enabled, acceptRisk: false, shownAntiCheat: null, ct);
 
     /// <summary>The release's files this card needs: a Radeon's or Arc's extras only there, a license text where the release has it.</summary>
     private static IEnumerable<FrameGenFileSpec> FrameGenSpecs(FrameGenMod mod, FrameGenCard? card, string source) =>
@@ -1902,7 +1937,8 @@ public sealed partial class DlssSwapService
             gone = layout.DlssgGone;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug("Frame generation take-out check: " + ex.Message); }
-        return FrameGenTakeOut(FrameGenCardFor(gpu), mod, antiCheat, folder, install, wanted, gone);
+        var accepted = antiCheat is not null && FrameGenRiskAccepted(game, antiCheat, null);
+        return FrameGenTakeOut(FrameGenCardFor(gpu), mod, antiCheat, folder, install, wanted, gone, accepted);
     }
 
     /// <summary>The driver's global frame cap as it is now: moved into OptiScaler's ini and off in the game's profile, or back where it was.</summary>

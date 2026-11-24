@@ -18,7 +18,7 @@ function brokenWord(state: FrameGenMod): LineWord {
 
 export function frameGenWord(state: FrameGenMod): LineWord | null {
   if (state.state === 'hidden') return { text: state.reason === 'unread' ? 'Could not check' : 'Not supported in this game' }
-  if (state.state === 'native') return { text: 'Built into the game' }
+  if (state.state === 'native') return { text: state.package ? `Built into the game · ${curly(state.package)}` : 'Built into the game' }
   if (state.state === 'mod') return { text: curly(state.mod ?? 'A mod') }
   if (state.state === 'note') return { text: curly(state.note ?? '') }
   if (state.state === 'broken') return brokenWord(state)

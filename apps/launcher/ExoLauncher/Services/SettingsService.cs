@@ -180,6 +180,7 @@ public sealed class SettingsService
         loaded.PreferredGameSources = NormalizePreferredGameSources(loaded.PreferredGameSources);
         loaded.LastPlayed = CopyStrings(loaded.LastPlayed);
         loaded.UpscalerAntiCheatConsent = CopyStrings(loaded.UpscalerAntiCheatConsent);
+        loaded.FrameGenAntiCheatConsent = CopyStrings(loaded.FrameGenAntiCheatConsent);
         loaded.HdrGameModes = CopyStrings(loaded.HdrGameModes);
         loaded.NvidiaColor = CopyStrings(loaded.NvidiaColor);
         loaded.SdrGammaBefore = CopyStrings(loaded.SdrGammaBefore);
@@ -671,6 +672,25 @@ public sealed class SettingsService
         });
     }
 
+    public string? FrameGenConsent(string gameId)
+    {
+        lock (_stateGate)
+            return _current.FrameGenAntiCheatConsent.TryGetValue(gameId, out var antiCheat) ? antiCheat : null;
+    }
+
+    public void SetFrameGenConsent(string gameId, string? antiCheat)
+    {
+        if (string.IsNullOrWhiteSpace(gameId) || gameId.Length > 512 || gameId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            if (antiCheat is null) settings.FrameGenAntiCheatConsent.Remove(gameId);
+            else settings.FrameGenAntiCheatConsent[gameId] = antiCheat;
+            if (settings.FrameGenAntiCheatConsent.Count > 1_000)
+                throw new InvalidDataException("Too many frame generation consents are saved.");
+        });
+    }
+
     /// <summary>"auto", "on" or "off" for HDR while this game runs.</summary>
     public string HdrGameMode(string gameId)
     {
@@ -1010,6 +1030,7 @@ public sealed class SettingsService
         Recent = source.Recent.ToList(),
         LastPlayed = CopyStrings(source.LastPlayed),
         UpscalerAntiCheatConsent = CopyStrings(source.UpscalerAntiCheatConsent),
+        FrameGenAntiCheatConsent = CopyStrings(source.FrameGenAntiCheatConsent),
         HdrGameModes = CopyStrings(source.HdrGameModes),
         NvidiaColor = CopyStrings(source.NvidiaColor),
         NvidiaGsync = source.NvidiaGsync,

@@ -1881,7 +1881,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     const id = String(p?.id)
     if (mockRiotPartial) return { ok: true, state: 'broken', path: 'dlss', package: 'DLSSG SM86', version: 'DLSSG SM86 0.4.2', reason: 'replaced', mod: 'UE4SS' }
     if (mockGpu || !/cyberpunk|control|rivals/.test(id)) return { ok: true, state: 'hidden' }
-    if (id.includes('rivals')) return { ok: true, state: 'note', antiCheat: 'NetEase anti-cheat', note: "Frame generation isn't available here: NetEase anti-cheat", canToggle: false }
+    if (id.includes('rivals')) return { ok: true, state: 'off', path: 'optifg', package: 'OptiScaler FG', antiCheat: 'NetEase anti-cheat', riskWarning: 'Marvel Rivals runs NetEase anti-cheat. A mod loading into it can get the account banned.', riskAccepted: false, canToggle: true }
     return id.includes('control')
       ? { ok: true, state: 'on', path: 'fsr', package: 'OptiScaler', version: 'OptiScaler v0.9.5', canToggle: true }
       : { ok: true, state: 'on', path: 'dlss', package: 'DLSSG SM86', version: 'DLSSG SM86 0.4.2', session: 'ran', canToggle: true }

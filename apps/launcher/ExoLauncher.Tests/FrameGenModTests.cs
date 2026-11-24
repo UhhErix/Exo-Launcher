@@ -373,8 +373,8 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.Equal("native", FrameGenPath(FrameGenCardFor("NVIDIA GeForce RTX 5090"), Game()));
         Assert.Equal("fsr", FrameGenPath(FrameGenCardFor("AMD Radeon RX 6600"), Game()));
         Assert.Equal("native", FrameGenPath(FrameGenCardFor("AMD Radeon RX 6600"), Game(own: true)));
-        Assert.Null(FrameGenPath(rtx30, Game(dlssg: false)));
-        Assert.Null(FrameGenPath(null, Game()));
+        Assert.Equal("optifg", FrameGenPath(rtx30, Game(dlssg: false)));
+        Assert.Equal("optifg", FrameGenPath(null, Game()));
     }
 
     /// <summary>
@@ -839,9 +839,9 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.False(refused.Ok);
         Assert.Equal(before, Snapshot());
         var status = State(service, gpu);
-        Assert.Equal(("note", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
-        Assert.Equal("Frame generation isn't available here: Easy Anti-Cheat", status.Note);
-        Assert.False(status.CanToggle);
+        Assert.Equal(("off", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
+        Assert.Contains("Easy Anti-Cheat", status.RiskWarning);
+        Assert.True(status.CanToggle);
         Assert.Equal(FrameGenNext.Nothing, Next(service, gpu));
     }
 
@@ -859,8 +859,9 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.False((await On(service)).Ok);
 
         Assert.Equal(before, Snapshot());
-        Assert.Equal(("note", (string?)null), (State(service).State, State(service).Path));
-        Assert.Equal("Frame generation isn't available here: Easy Anti-Cheat", State(service).Note);
+        Assert.Equal(("off", "Easy Anti-Cheat"), (State(service).State, State(service).AntiCheat));
+        Assert.Contains("Easy Anti-Cheat", State(service).RiskWarning);
+        Assert.Equal(FrameGenNext.Nothing, Next(service));
     }
 
     [Fact]
@@ -984,9 +985,9 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.False(refused.Ok);
         Assert.Equal(before, Snapshot());
         var status = State(service);
-        Assert.Equal(("note", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
-        Assert.Equal("Frame generation isn't available here: Easy Anti-Cheat", status.Note);
-        Assert.False(status.CanToggle);
+        Assert.Equal(("off", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
+        Assert.Contains("Easy Anti-Cheat", status.RiskWarning);
+        Assert.True(status.CanToggle);
     }
 
     [Fact]
@@ -999,12 +1000,13 @@ public sealed partial class FrameGenModTests : IDisposable
 
         Assert.False((await On(service)).Ok);
         Assert.Equal(before, Snapshot());
-        Assert.Equal(("note", "Frame generation isn't available here: Riot Vanguard"), (State(service).State, State(service).Note));
+        Assert.Equal(("off", "Frame Gen Test runs Riot Vanguard. A mod loading into it can get the account banned."), (State(service).State, State(service).RiskWarning));
+        Assert.Equal(FrameGenNext.Nothing, Next(service));
     }
 
     [Theory]
     [InlineData("NVIDIA GeForce RTX 5090", "native")]
-    [InlineData("Intel(R) UHD Graphics 770", "hidden")]
+    [InlineData("Intel(R) UHD Graphics 770", "off")]
     public async Task CardsWithMultiFrameGenerationOrNoModGetNothing(string gpu, string expectedState)
     {
         UnrealGame();
@@ -1772,9 +1774,9 @@ public sealed partial class FrameGenModTests : IDisposable
 
         var status = State(service, gpu);
 
-        Assert.Equal(("note", DlssgGoneNote), (status.State, status.Note));
+        Assert.Equal(("off", DlssgGoneNote), (status.State, status.Note));
         Assert.Equal(expected, Snapshot());
-        Assert.Equal("hidden", State(service, gpu).State);
+        Assert.Equal(("off", "optifg"), (State(service, gpu).State, State(service, gpu).Path));
     }
 
     [Fact]
@@ -1849,7 +1851,7 @@ public sealed partial class FrameGenModTests : IDisposable
 
         Assert.Equal(before, Snapshot());
         var status = State(service);
-        Assert.Equal(("note", (string?)null), (status.State, status.Path));
+        Assert.Equal(("off", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
         Assert.Contains("Easy Anti-Cheat", status.Note);
     }
 
@@ -1887,8 +1889,8 @@ public sealed partial class FrameGenModTests : IDisposable
             Assert.False((await On(service)).Ok);
             Assert.Equal(before, Snapshot());
             var backStatus = State(service);
-            Assert.Equal(("note", "Easy Anti-Cheat"), (backStatus.State, backStatus.AntiCheat));
-            Assert.Equal("Frame generation isn't available here: Easy Anti-Cheat", backStatus.Note);
+            Assert.Equal(("off", "Easy Anti-Cheat"), (backStatus.State, backStatus.AntiCheat));
+            Assert.Contains("Easy Anti-Cheat", backStatus.RiskWarning);
             // Nothing in: taking out again is a no-op.
             Assert.Equal((true, false), AntiCheatBackOn(service) is var (ok2, removed2, _) ? (ok2, removed2) : default);
 
@@ -2180,8 +2182,52 @@ public sealed partial class FrameGenModTests : IDisposable
 
         var status = State(service, Rtx3070);
         Assert.Equal("native", status.State);
-        Assert.Null(status.AntiCheat);
+        Assert.Equal("dlss", status.Path);
+        Assert.True(status.CanToggle);
+        Assert.Contains("Anti-Cheat Expert", status.RiskWarning);
         Assert.Equal(FrameGenNext.Nothing, Next(service, Rtx3070));
         Assert.Equal(before, Snapshot());
+    }
+
+    [Fact]
+    public async Task ExplicitRiskConfirmationAllowsInstallingIntoAntiCheatGameAndTurnsOffByteIdentically()
+    {
+        UnrealGame();
+        Put(@"EasyAntiCheat\EasyAntiCheat_EOS_Setup.exe", Pe(300));
+        var before = Snapshot();
+        var service = Service(dlssgOffered: true);
+
+        Assert.Equal(0, await BestSettingsPass(service, Rtx3070));
+        Assert.Equal(before, Snapshot());
+
+        var unconfirmed = await service.FrameGenSetAsync(_game, Rtx3070, enabled: true, acceptRisk: false, shownAntiCheat: null, CancellationToken.None);
+        Assert.False(unconfirmed.Ok);
+        Assert.Equal("Frame Gen Test runs Easy Anti-Cheat. A mod loading into it can get the account banned.", unconfirmed.Message);
+        Assert.Equal(before, Snapshot());
+
+        var priorLookup = FrameGenConsentLookup;
+        try
+        {
+            string? consented = null;
+            FrameGenConsentLookup = id => id == _game.Id ? consented : null;
+            consented = "Easy Anti-Cheat";
+
+            var confirmed = await service.FrameGenSetAsync(_game, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: "Easy Anti-Cheat", CancellationToken.None);
+            Assert.True(confirmed.Ok, confirmed.Message);
+            var onStatus = State(service, Rtx3070);
+            Assert.Equal("on", onStatus.State);
+            Assert.True(onStatus.RiskAccepted);
+
+            service.FrameGenAtLaunch(_game, Rtx3070);
+            Assert.Equal("on", State(service, Rtx3070).State);
+
+            var off = await service.FrameGenSetAsync(_game, Rtx3070, enabled: false, acceptRisk: false, shownAntiCheat: null, CancellationToken.None);
+            Assert.True(off.Ok, off.Message);
+            Assert.Equal(before, Snapshot());
+        }
+        finally
+        {
+            FrameGenConsentLookup = priorLookup;
+        }
     }
 }

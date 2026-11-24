@@ -552,6 +552,7 @@ public sealed class AppSettings
     /// it refuses Riot games and Riot Vanguard.
     /// </summary>
     public Dictionary<string, string> UpscalerAntiCheatConsent { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> FrameGenAntiCheatConsent { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>The Library's folders, in their order on the grid (<see cref="LibraryFolder"/>).</summary>
     public List<LibraryFolder> LibraryFolders { get; set; } = [];
     /// <summary>Games hidden from the Library (card ids): out of its grid, Continue and folders; Library's Hidden view lists them.</summary>

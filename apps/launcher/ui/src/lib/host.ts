@@ -115,6 +115,8 @@ export type FrameGenMod = {
   session?: 'ran' | null
   mod?: string | null
   antiCheat?: string | null
+  riskWarning?: string | null
+  riskAccepted?: boolean
   note?: string | null
   reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
   canToggle?: boolean
@@ -2792,8 +2794,8 @@ export const host = {
     rawCall<{ ok: boolean; message?: string }>('dlss.consent', { id, allow, ...(allow && antiCheat ? { antiCheat } : {}) }),
   /** The game's Frame generation line. */
   dlssFrameGen: (id: string) => rawCall<FrameGenMod>('dlss.frameGen', { id }, 60_000),
-  dlssFrameGenSet: (id: string, enabled: boolean) =>
-    rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled }, 10 * 60_000),
+  dlssFrameGenSet: (id: string, enabled: boolean, consent?: { acceptRisk?: boolean; antiCheat?: string | null }) =>
+    rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled, ...(consent?.acceptRisk ? { acceptRisk: true, ...(consent.antiCheat ? { antiCheat: consent.antiCheat } : {}) } : {}) }, 10 * 60_000),
   dlssNewer: () => rawCall<{ ok: boolean; items: { family: string; version: string }[] }>('dlss.newer', {}, 15_000),
   dlssDownloadNewer: () => rawCall<{ ok: boolean; message?: string | null }>('dlss.downloadNewer', {}, 10 * 60_000),
   shadersStatus: (id: string) => rawCall<ShaderStatus>('shaders.status', { id }),

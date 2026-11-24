@@ -402,7 +402,7 @@ public sealed class PcMatrixTests
         // an RTX 50 have NVIDIA's own, so no mod.
         foreach (var (own, vulkan) in new[] { (false, false), (true, false), (false, true) })
         {
-            var expected = card is null ? (own ? "native" : null)
+            var expected = card is null ? (own ? "native" : "optifg")
                 : series >= 40 ? "native"
                 : series is >= 20 && !vulkan ? "dlss"
                 : series is >= 20 && vulkan ? "mfg"

@@ -80,12 +80,14 @@ export function FrameGenModRow({ gameId }: { gameId: string }) {
   const [state, setState] = useState<FrameGenMod | null>(() => modRead.get(gameId))
   const [busy, setBusy] = useState<'on' | 'off' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingRisk, setConfirmingRisk] = useState(false)
 
   useEffect(() => {
     let live = true
     setState(modRead.get(gameId))
     setBusy(null)
     setError(null)
+    setConfirmingRisk(false)
     host.dlssFrameGen(gameId).then(answer => {
       if (!live) return
       modRead.set(gameId, answer)
@@ -94,14 +96,14 @@ export function FrameGenModRow({ gameId }: { gameId: string }) {
     return () => { live = false }
   }, [gameId])
 
-  if (!state) return null
+  if (!state) return <GameReading name="Frame generation" word={null} waiting />
   if (!state.ok) return <GameReading name="Frame generation" word={{ text: 'Could not check', bad: true }} />
-  if (state.state === 'hidden') return null
 
-  const toggle = (enabled: boolean) => {
+  const runSet = (enabled: boolean, acceptRisk = false) => {
     setBusy(enabled ? 'on' : 'off')
     setError(null)
-    host.dlssFrameGenSet(gameId, enabled)
+    setConfirmingRisk(false)
+    host.dlssFrameGenSet(gameId, enabled, acceptRisk ? { acceptRisk: true, antiCheat: state.antiCheat } : undefined)
       .then(answer => {
         if (!answer.ok) {
           setError((answer.message ?? 'Could not update. Try again.').replace(/'/g, '’'))
@@ -118,15 +120,36 @@ export function FrameGenModRow({ gameId }: { gameId: string }) {
       .finally(() => setBusy(null))
   }
 
+  const toggle = (enabled: boolean) => {
+    if (enabled && state.antiCheat && !state.riskAccepted) {
+      setError(null)
+      setConfirmingRisk(true)
+      return
+    }
+    runSet(enabled, false)
+  }
+
+  const warningText = (state.riskWarning ?? `${state.antiCheat ?? 'Anti-cheat'} is active. A mod loading into it can get the account banned.`).replace(/'/g, '’')
   const word: LineWord | null = busy
     ? { text: busy === 'on' ? 'Installing' : 'Turning off', working: true }
-    : error
-      ? { text: error, bad: true }
-      : frameGenWord(state)
+    : confirmingRisk
+      ? { text: warningText, bad: true }
+      : error
+        ? { text: error, bad: true }
+        : frameGenWord(state)
 
   return (
     <GameReading name="Frame generation" word={word}>
-      {state.canToggle ? (
+      {confirmingRisk ? (
+        <span className="exo-game-line-actions">
+          <button type="button" className="exo-set-btn is-compact" onClick={() => setConfirmingRisk(false)}>
+            Cancel
+          </button>
+          <button type="button" className="exo-set-btn is-compact" onClick={() => runSet(true, true)}>
+            Turn on anyway
+          </button>
+        </span>
+      ) : state.canToggle ? (
         <Switch checked={state.state === 'on'} disabled={busy !== null} label="Frame generation" onChange={toggle} />
       ) : null}
     </GameReading>
