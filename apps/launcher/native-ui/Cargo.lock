@@ -981,6 +981,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-upscale"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "exo-rpc",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

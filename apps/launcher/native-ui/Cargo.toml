@@ -15,6 +15,7 @@ members = [
     "crates/exo-net-latency",
     "crates/exo-flow",
     "crates/exo-autopilot",
+    "crates/exo-upscale",
 ]
 
 [workspace.package]

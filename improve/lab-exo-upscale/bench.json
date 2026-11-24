@@ -1,0 +1,74 @@
+{
+  "nvidiaDrsProbe": {
+    "nvidiaGpuDetected": true,
+    "adapterName": "NVIDIA GeForce RTX 3070",
+    "nvapiLoaded": true,
+    "driverVersion": 62135,
+    "driverBranch": "r621_20",
+    "supportsNgxOverride": true
+  },
+  "drsPlanCompetitivePvp": {
+    "acSafe": true,
+    "touchesGameFiles": false,
+    "preset": "transformer_k",
+    "writes": [
+      {
+        "settingId": 283385345,
+        "settingHex": "0x10E41E01",
+        "name": "DLSS Super Resolution override",
+        "value": 1
+      },
+      {
+        "settingId": 283385331,
+        "settingHex": "0x10E41DF3",
+        "name": "DLSS Super Resolution preset",
+        "value": 11
+      },
+      {
+        "settingId": 283385350,
+        "settingHex": "0x10E41E06",
+        "name": "Streamline DLSS override",
+        "value": 1
+      },
+      {
+        "settingId": 283385346,
+        "settingHex": "0x10E41E02",
+        "name": "DLSS Ray Reconstruction override",
+        "value": 1
+      },
+      {
+        "settingId": 283385335,
+        "settingHex": "0x10E41DF7",
+        "name": "DLSS Ray Reconstruction preset",
+        "value": 5
+      }
+    ]
+  },
+  "mock50GameScanMs": 143.48,
+  "mock50GameDllsFound": 63,
+  "realSignedDllChecked": "C:\\Windows\\System32\\nvapi64.dll",
+  "realSignedDllPublisher": "NVIDIA Corporation",
+  "realSignedDllVersion": "32.0.16.2135",
+  "realSignedDllVerifyMs": 308.57,
+  "realSignedDllValid": true,
+  "tampered1byteRejected": true,
+  "crashOrphanRecovery100pct": true,
+  "localManifestIntegrityOk": true,
+  "upstreamSources": [
+    {
+      "vendor": "nvidia",
+      "repo": "NVIDIA/DLSS",
+      "apiUrl": "https://api.github.com/repos/NVIDIA/DLSS/releases"
+    },
+    {
+      "vendor": "amd",
+      "repo": "GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+      "apiUrl": "https://api.github.com/repos/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/releases"
+    },
+    {
+      "vendor": "intel",
+      "repo": "intel/xess",
+      "apiUrl": "https://api.github.com/repos/intel/xess/releases"
+    }
+  ]
+}
