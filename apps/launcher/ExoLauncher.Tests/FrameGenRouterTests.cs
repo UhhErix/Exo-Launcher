@@ -478,6 +478,82 @@ public sealed class FrameGenRouterTests
         Assert.DoesNotContain(riotGame.Routes, r => r.Id == RouteExternalExoFlow);
     }
 
+    [Fact]
+    public void ExoFgBridgeReplacesDlssgSm86OnRtx20And30UnderSharedAntiCheatClass()
+    {
+        var rtx2080 = FrameGenGpu.From("nvidia", "NVIDIA GeForce RTX 2080 Ti");
+        var unknownAc = new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Unknown, (string?)null, "unknown");
+        var baseDlssgGame = new FrameGenGameInput(
+            GameId: "steam:814380",
+            Title: "Sekiro: Shadows Die Twice",
+            Installed: true,
+            Readable: true,
+            IsWutheringWaves: false,
+            IsRiot: false,
+            AntiCheat: NoAntiCheat,
+            AllowsPlacedMods: true,
+            ShipsDlssFg: true,
+            ShipsFsrFg: false,
+            ShipsXessFg: false,
+            ShipsXessFgDll: false,
+            ModStatus: new DlssSwapService.FrameGenStatus("off", Path: "dlss"),
+            FluidFacts: SinglePlayerFacts("Sekiro: Shadows Die Twice"),
+            ExoFgBridgeAvailable: true);
+
+        var rtx3070Clean = Decide(Rtx3070(), baseDlssgGame);
+        AssertAllRouteMetadataPresent(rtx3070Clean);
+        Assert.Equal(RouteModExoFgBridge, rtx3070Clean.BestRouteId);
+        Assert.DoesNotContain(rtx3070Clean.Routes, r => r.Id == RouteModDlssg);
+        Assert.False(rtx3070Clean.Routes[0].RequiresRiskConfirm);
+
+        var rtx2080Clean = Decide(rtx2080, baseDlssgGame);
+        Assert.Equal(RouteModExoFgBridge, rtx2080Clean.BestRouteId);
+
+        var offlineMode = Decide(Rtx3070(), baseDlssgGame with
+        {
+            GameId = "steam:3472040",
+            Title = "NBA 2K26",
+            AntiCheat = OfflineWithoutAc,
+            FluidFacts = SinglePlayerFacts("NBA 2K26"),
+        });
+        Assert.Equal(RouteModExoFgBridge, offlineMode.BestRouteId);
+        Assert.Equal("offline", offlineMode.Routes[0].AntiCheatVerdict);
+        Assert.Equal(AntiCheatClass.OfflineOneTimeNote("NBA 2K26"), offlineMode.Routes[0].AntiCheatNote);
+
+        var pveOptIn = Decide(Rtx3070(), baseDlssgGame with
+        {
+            GameId = "steam:2074920",
+            Title = "The First Descendant",
+            AntiCheat = EacAntiCheat,
+            AllowsPlacedMods = false,
+            FluidFacts = SinglePlayerFacts("The First Descendant"),
+        });
+        var pveRoute = Assert.Single(pveOptIn.Routes, r => r.Id == RouteModExoFgBridge);
+        Assert.True(pveRoute.RequiresRiskConfirm);
+        Assert.Equal("confirm", pveRoute.AntiCheatVerdict);
+
+        var pvpBlocked = Decide(Rtx3070(), baseDlssgGame with
+        {
+            GameId = "steam:1172470",
+            Title = "Apex Legends",
+            AntiCheat = EacAntiCheat,
+            AllowsPlacedMods = false,
+            FluidFacts = SinglePlayerFacts("Apex Legends"),
+        });
+        Assert.DoesNotContain(pveOptIn.Routes, r => r.Id == RouteModDlssg);
+        Assert.DoesNotContain(pvpBlocked.Routes, r => r.Id == RouteModExoFgBridge);
+
+        var unknownBlocked = Decide(Rtx3070(), baseDlssgGame with
+        {
+            GameId = "steam:9999998",
+            Title = "Mystery Online Title",
+            AntiCheat = unknownAc,
+            AllowsPlacedMods = false,
+            FluidFacts = SinglePlayerFacts("Mystery Online Title"),
+        });
+        Assert.DoesNotContain(unknownBlocked.Routes, r => r.Id == RouteModExoFgBridge);
+    }
+
     private static void AssertAllRouteMetadataPresent(FrameGenDecision decision)
     {
         Assert.NotEmpty(decision.Word);

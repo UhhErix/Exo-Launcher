@@ -15,6 +15,7 @@ internal static class FrameGenRouter
     internal const string RouteNativeFsr = "native_fsr";
     internal const string RouteNativeXess = "native_xess";
     internal const string RouteModOptiScaler = "mod_optiscaler";
+    internal const string RouteModExoFgBridge = "mod_exo_fg_bridge";
     internal const string RouteModDlssg = "mod_dlssg";
     internal const string RouteModMfg = "mod_mfg";
     internal const string RouteModOther = "mod_other";
@@ -181,7 +182,8 @@ internal static class FrameGenRouter
         string? UserSelectedRoute = null,
         bool Dx12Mode = true,
         bool ExoFlowAvailable = false,
-        bool ExoFlowEnabled = false);
+        bool ExoFlowEnabled = false,
+        bool ExoFgBridgeAvailable = false);
 
     internal sealed record FrameGenRoute(
         string Id,
@@ -445,7 +447,10 @@ internal static class FrameGenRouter
 
         var (id, defaultLabel) = mod.Path switch
         {
-            "dlss" => (RouteModDlssg, "DLSSG SM86"),
+            "exo_fg_bridge" => (RouteModExoFgBridge, "Exo FG Bridge (FSR 3.1)"),
+            "dlss" => input.ExoFgBridgeAvailable
+                ? (RouteModExoFgBridge, "Exo FG Bridge (FSR 3.1)")
+                : (RouteModDlssg, "DLSSG SM86"),
             "mfg" => (RouteModMfg, "MFG Unlocker"),
             "optifg" => (RouteModOptiScaler, "OptiScaler FG"),
             _ => (RouteModOptiScaler, "OptiScaler"),
@@ -494,14 +499,17 @@ internal static class FrameGenRouter
         if (string.IsNullOrWhiteSpace(path))
         {
             path = gpu.Vendor == "nvidia" && gpu.Series is 20 or 30 && input.ShipsDlssFg
-                ? "dlss"
+                ? (input.ExoFgBridgeAvailable ? "exo_fg_bridge" : "dlss")
                 : input.ShipsDlssFg
                     ? "fsr"
                     : "optifg";
         }
         var (id, defaultLabel) = path switch
         {
-            "dlss" => (RouteModDlssg, "DLSSG SM86"),
+            "exo_fg_bridge" => (RouteModExoFgBridge, "Exo FG Bridge (FSR 3.1)"),
+            "dlss" => input.ExoFgBridgeAvailable
+                ? (RouteModExoFgBridge, "Exo FG Bridge (FSR 3.1)")
+                : (RouteModDlssg, "DLSSG SM86"),
             "mfg" => (RouteModMfg, "MFG Unlocker"),
             "optifg" => (RouteModOptiScaler, "OptiScaler FG"),
             _ => (RouteModOptiScaler, "OptiScaler"),

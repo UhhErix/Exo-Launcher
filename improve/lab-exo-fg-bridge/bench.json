@@ -1,0 +1,50 @@
+{
+  "resolution": "2560x1440",
+  "gpuName": "NVIDIA GeForce RTX 3070",
+  "vendorId": 4318,
+  "nvidiaSmArchTested": 86,
+  "bridgeDllPath": "C:\\Users\\Erix\\orca\\workspaces\\Exo-Launcher\\lab-web-in-rune\\apps\\launcher\\native-ui\\target\\release\\exo_fg_bridge.dll",
+  "bridgeDllLoaded": true,
+  "bridgeAbiVersion": 1,
+  "rtx30DlssgToFsr31Enabled": true,
+  "dxgiProxyProbe": {
+    "systemDxgiResolved": true,
+    "systemDxgiPath": "C:\\WINDOWS\\System32\\dxgi.dll",
+    "zeroImgui": true,
+    "zeroIniConfig": true
+  },
+  "baselineVramMb": 0.0,
+  "activeVramMb": 72.42,
+  "vramDeltaMb": 72.42,
+  "beforeNative1x": {
+    "baseFrames": 210,
+    "outputFrames": 210,
+    "effectiveFps": 98.45,
+    "outputFrameTimeAvgMs": 10.158,
+    "outputFrameTimeP50Ms": 10.025,
+    "outputFrameTimeP95Ms": 10.609,
+    "outputFrameTimeP99Ms": 12.772,
+    "gpuSceneRenderAvgMs": 9.831,
+    "gpuBridgeSynthAvgMs": 0.0,
+    "bridgeCAbiOverheadUs": 0.0,
+    "renderToPresentLatencyMs": 10.158
+  },
+  "afterExoFgBridge2x": {
+    "baseFrames": 210,
+    "outputFrames": 420,
+    "effectiveFps": 193.71,
+    "outputFrameTimeAvgMs": 5.162,
+    "outputFrameTimeP50Ms": 5.077,
+    "outputFrameTimeP95Ms": 5.314,
+    "outputFrameTimeP99Ms": 5.782,
+    "gpuSceneRenderAvgMs": 9.831,
+    "gpuBridgeSynthAvgMs": 0.087,
+    "bridgeCAbiOverheadUs": 2.776,
+    "renderToPresentLatencyMs": 20.572
+  },
+  "fpsGainRatio": 1.97,
+  "addedLatencyMs": 10.414,
+  "addedLatencyBaseFrames": 1.03,
+  "sessionModsCrashRecovery100pct": true,
+  "desktopLockedNote": "Workstation desktop was locked (GetForegroundWindow == 0), so live interactive no-AC game capture is recorded as follow-up; GPU measurements ran live on the RTX 3070 via the offline 1440p DX12 MV harness loading exo_fg_bridge.dll."
+}
