@@ -41,25 +41,23 @@ Every dependency row carries a `Direction` tag:
 
 ## Before / After Measurements (This PC, `feat/native-polish-2`)
 
-| Metric | Before (`feat/native-polish-2`) | After (PRs #158 / #162 / #198) | Delta | Notes |
+| Metric | Before (`ebf0e04f` polish-2 tip) | After (`ebf0e04f` + PR #158) | Delta | Notes |
 | --- | --- | --- | --- | --- |
-| App memory — `exo` host (`tools/measure-memory.ps1`, 3m idle) | `179.0 MB` WS / `189.8 MB` Private | `226.7 MB` WS / `139.9 MB` Private | `+47.7 MB` WS / `-50.0 MB` Priv | `187.7M/199.0M` → `237.7M/146.6M` B (`EXO_UI=web`) |
-| App memory — `webview` children (6 processes) | `260.9 MB` WS / `186.4 MB` Private | `306.8 MB` WS / `151.0 MB` Private | `+45.9 MB` WS / `-35.4 MB` Priv | `273.6M/195.4M` → `321.7M/158.3M` B |
-| App memory — Total (7 processes, `Complete: true`) | `439.9 MB` WS / `376.2 MB` Private | `533.5 MB` WS / `290.8 MB` Private | `+93.6 MB` WS / `-85.4 MB` Priv | Before: `ffa6acab`; After: `03bd51f6` + PR #158 (incl. polish-2 trim) |
-| Startup — `window-constructed` / `webview-core-ready` | `103 ms` / `722 ms` | `120 ms` / `631 ms` | `+17 ms` / `-91 ms` | Isolated Release publish (`-Fresh`, `test-instance.ps1`) |
-| Startup — `webview-navigation-complete` | `952 ms` | `696 ms` | `-256 ms` | First navigation complete |
-| `ExoLauncher` Release publish (`onnxruntime.dll` delta) | `17,253,728 B` (`16.45 MB`) | `20,602,168 B` (`19.65 MB`) | `+3,348,440 B` (`+3.19 MB`) | Total publish on `03bd51f6` + PR #158: `272,235,876 B` (`237,204,324 B` excl. `exo-ui.exe`) |
+| App memory — `EXO_UI=web` total (3-run median, 3m idle, 7 procs) | `533.5 MB` WS / `294.2 MB` Private | `530.3 MB` WS / `295.4 MB` Private | `-3.2 MB` WS / `+1.2 MB` Priv | Mean: `537.9/297.5` → `533.0/295.0 MB` (`-4.9/-2.5 MB`). `exo` median `220.1/143.4` → `223.3/145.7 MB`; `webview` `313.4/150.8` → `311.4/149.9 MB`. |
+| App memory — `EXO_UI=native` total (3-run median, 3m idle, 2 procs) | `387.5 MB` WS / `379.3 MB` Private | `388.7 MB` WS / `381.9 MB` Private | `+1.2 MB` WS / `+2.6 MB` Priv | `exo` `214.1/128.1` → `232.4/146.7 MB`, `exo-ui` `173.2/251.2` → `157.8/235.5 MB`; 3-round native bisect (`A` vs `WV2` vs `SQL` vs `B`) confirmed Gen2 GC variance (`exo` medians: `A 253.2/175.6`, `WV2 251.6/167.7`, `SQL 227.5/147.6`, `B 236.8/156.2 MB`). |
+| Startup — `EXO_UI=web` `webview-core-ready` / `navigation-complete` (3-run median) | `399 ms` / `468 ms` | `366 ms` / `447 ms` | `-33 ms` / `-21 ms` | Isolated Release publish (`-Fresh`, `test-instance.ps1`, 3 interleaved pairs) |
+| `ExoLauncher` Release publish (PR #158 with ORT held at `1.31.1`) | `259,892,673 B` (`247.85 MB`) | `259,905,932 B` (`247.87 MB`) | `+13,259 B` (`+12.9 KB`) | Holding ORT `1.32.0` avoids `+3,348,440 B` (`+3.19 MB` raw / `+0.85 MB` gzip, 0 CVEs). |
 | `ExoSetup.exe` (`setup/build.ps1`) | `1,084,928 B` | `1,086,464 B` | `+1,536 B` | Links `WebView2LoaderStatic.lib 1.0.4370.26` |
-| `OBS` win-capture 6 files (`capture/third_party/obs/`) | `1,079,056 B` (`32.2.2`) | `1,079,568 B` (`33.0.3`) | `+512 B` | All 6 Authenticode-verified (`OBS Project, LLC`) |
-| `exo-ui.exe` release binary (`native-ui`, apples-to-apples on `071f1052`) | `35,031,552 B` (`33.41 MB`) | `35,036,160 B` (`33.41 MB`) | `+4,608 B` (`+0.013%`) | `cargo build --release --locked --bin exo-ui` (Rune pin untouched at `caaa6a71`) |
+| `OBS` win-capture 6 files (`capture/third_party/obs/`) | `1,079,056 B` (`32.2.2`) | `1,079,568 B` (`33.0.3`) | `+512 B` | All 6 Authenticode-verified (`OBS Project, LLC`, merged in #198) |
+| `exo-ui.exe` release binary (`native-ui`, apples-to-apples on `071f1052`) | `35,031,552 B` (`33.41 MB`) | `35,036,160 B` (`33.41 MB`) | `+4,608 B` (`+0.013%`) | `cargo build --release --locked --bin exo-ui` (Rune pin untouched, merged in #162) |
 
-### Pull Requests Retargeted to `feat/native-polish-2` (Not Merged)
+### Pull Requests Retargeted to `feat/native-polish-2`
 
-- **PR #155** (`chore/deps-npm`): Full dependency inventory (`improve/deps-inventory.md` with `KEEP` / `REPLACE-WITH-BETTER` / `BUILD-OWN` + v3.30.3 CVE audit) + JS/TS updates (`ui`, `mouse`, `tools/exo-agent-kit`, `cloud/{account,covers,riot}`)
-- **PR #158** (`chore/deps-dotnet`, HEAD `890c8293`): `.NET` / NuGet host (`ExoLauncher`, `ExoLauncher.Host`, `ExoLauncher.Tests`), `setup/third_party/wv2` WebView2 `1.0.4370.26`, `Microsoft.Data.Sqlite 11.0.0`, `ONNX Runtime 1.32.0`, `sherpa-onnx 2.0.3`, `ExoCapture.Tests`
-- **PR #162** (`chore/deps-native-ui`, HEAD `1fdf460a`): `native-ui/Cargo.lock` updates (`ahash 0.8.13`, `crc32fast 1.5.6`, `litrs 1.1.0`, `zerocopy 0.8.65`, `zlib-rs 0.6.9`, 4 unused crates pruned); Rune pin untouched
-- **PR #195** (`chore/deps-shaders`, HEAD `8f163ef6`): Exo Shaders NuGet updates (`ValvePak 7.2.0.221`, `Microsoft.Bcl.Memory 11.0.0`, `Tmds.DBus.Protocol 0.95.2`, `Velopack 1.2.161`, `SCSKiller.Tests` test SDK/runner) + `shaders/global.json`
-- **PR #198** (`chore/deps-native-pins`, HEAD `626349ab`): OBS capture hook `33.0.3`, `Microsoft.GameInput 4.1.315`, `OptiScaler v0.9.5`, `MFG-Unlocker v1.7.2`
+- **PR #155** (`chore/deps-npm`, merged `b3a1520c`): Full dependency inventory (`improve/deps-inventory.md`) + JS/TS updates
+- **PR #158** (`chore/deps-dotnet`): `.NET` / NuGet host (`ExoLauncher`, `ExoLauncher.Host`), `setup/third_party/wv2` WebView2 `1.0.4370.26`, `Microsoft.Data.Sqlite 11.0.0`, `Microsoft.Windows.SDK.BuildTools.MSIX 1.7.261119100`, `sherpa-onnx 2.0.3`, `ExoCapture.Tests` (ONNX Runtime held at `1.31.1` due to `+3.19 MB` DLL size regression)
+- **PR #162** (`chore/deps-native-ui`, merged `f0c42c2d`): `native-ui/Cargo.lock` updates; Rune pin untouched
+- **PR #195** (`chore/deps-shaders`, merged `be13fb90`): Exo Shaders NuGet updates + `shaders/global.json`
+- **PR #198** (`chore/deps-native-pins`, merged `ebf0e04f`): OBS capture hook `33.0.3`, `Microsoft.GameInput 4.1.315`, `OptiScaler v0.9.5`, `MFG-Unlocker v1.7.2`
 
 ---
 
@@ -134,7 +132,7 @@ Every dependency row carries a `Direction` tag:
 | `SQLitePCLRaw.bundle_e_sqlite3` | `ExoLauncher`, `ExoLauncher.Host` | `3.0.5` | `3.0.5` | 0 | 2026-07-27 | — | Apache-2.0 | **KEEP** | — | **Current** |
 | `ZstdSharp.Port` | `ExoLauncher`, `ExoLauncher.Host`, `tools/AppFiles` | `0.8.8` | `0.8.8` | 0 | 2026-04-29 | — | MIT | **BUILD-OWN** | Being replaced by native Rust `exo-delta` (`#196`, `-83.3%` update wire size). | **Current** |
 | `org.k2fsa.sherpa.onnx.runtime.win-x64` | `ExoLauncher.Host` (removed from `ExoLauncher` on `polish-2`) | `2.0.2` | `2.0.3` | 1 patch | 2026-11-22 | `[<3d]` | Apache-2.0 | **BUILD-OWN** | Replaced in `ExoLauncher` on `polish-2` by `exo_voice_ml.dll` + direct `onnxruntime.dll`; bumped to `2.0.3` in `ExoLauncher.Host` until removed there too. | **Updated** (PR #158) |
-| `Microsoft.ML.OnnxRuntime` | `ExoLauncher`, `ExoLauncher.Host`, `ExoLauncher.Tests` | `1.31.1` | `1.32.0` | 1 minor | 2026-11-13 | — | MIT | **KEEP** | Single shared native ML runtime for `exo_voice_ml.dll` (DPDFNet + VoxLock + TitaNet). | **Updated** (PR #158) |
+| `Microsoft.ML.OnnxRuntime` | `ExoLauncher`, `ExoLauncher.Host`, `ExoLauncher.Tests` | `1.31.1` | `1.32.0` | 1 minor | 2026-11-13 | — | MIT | **KEEP** | `1.32.0` grows `onnxruntime.dll` by `+3,348,440 B` (`+3.19 MB` / `+19.4%` raw: `16.45 → 19.65 MB`; `+890,140 B` / `+0.85 MB` / `+13.7%` gzip) with 0 CVEs fixed and no idle memory/startup benefit. | **Held back** (`1.31.1`; size regression) |
 | `Microsoft.NET.Test.Sdk` | `ExoLauncher.Tests`, `ExoLauncher.Host.Tests`, `ExoCapture.Tests` | `18.12.0` / `18.11.0` | `18.12.0` | 0 / 1 minor | 2026-11-11 | — | MIT | **KEEP** | Aligns `ExoCapture.Tests` with `18.12.0`. | **Updated** (PR #158) |
 | `xunit.v3` | `ExoLauncher.Tests`, `ExoLauncher.Host.Tests`, `ExoCapture.Tests` | `4.0.3` / `4.0.2` | `4.0.3` | 0 / 1 patch | 2026-11-09 | — | Apache-2.0 | **KEEP** | Aligns `ExoCapture.Tests` with `4.0.3`. | **Updated** (PR #158) |
 | `xunit.runner.visualstudio` | `ExoLauncher.Tests`, `ExoLauncher.Host.Tests`, `ExoCapture.Tests` | `4.0.1` | `4.0.1` | 0 | 2026-10-09 | — | Apache-2.0 | **KEEP** | — | **Current** |
