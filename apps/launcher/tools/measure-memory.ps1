@@ -4,6 +4,7 @@
 param(
     [string]$Label = '',
     [int]$ExoProcessId = 0,
+    [int]$UiProcessId = 0,
     [ValidateRange(1, 60)][int]$SampleSeconds = 5,
     [string]$OutputPath = ''
 )
@@ -70,7 +71,6 @@ $hosts = @(Get-Process ExoLauncher -ErrorAction Stop | Where-Object { -not $ExoP
 if ($hosts.Count -ne 1) { throw 'Select one running Exo instance with -ExoProcessId.' }
 $main = $hosts[0]
 $mainWindow = [ExoResourceWindows]::MainWindow($main.Id, $main.MainWindowHandle)
-if ($mainWindow -eq [IntPtr]::Zero) { throw 'Exo has no main window; wait until startup completes.' }
 $mainStarted = $main.StartTime.ToUniversalTime().Ticks
 $all = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, ExecutablePath, CreationDate)
 $byId = @{}
@@ -97,36 +97,29 @@ function Get-TreeIds([int]$RootId) {
 $issues = [Collections.Generic.List[string]]::new()
 $membership = @{}
 $membership[$main.Id] = 'exo'
-$keys = @{ 'Discord.exe' = 'discord' }
-$owned = @([ExoResourceWindows]::OwnedProcesses($mainWindow) | Sort-Object -Unique)
+if ($UiProcessId -gt 0 -and $byId.ContainsKey($UiProcessId)) {
+    $membership[$UiProcessId] = 'exo-ui'
+}
+$owned = if ($mainWindow -ne [IntPtr]::Zero) { @([ExoResourceWindows]::OwnedProcesses($mainWindow) | Sort-Object -Unique) } else { @() }
 $hostedTrees = [Collections.Generic.HashSet[int]]::new()
-foreach ($rootId in $owned) {
-    $root = $byId[[int]$rootId]
-    if (-not $root -or -not $keys.ContainsKey($root.Name)) { continue }
-    $key = $keys[$root.Name]
-    $membership[[int]$rootId] = $key
-    $tree = @(Get-TreeIds ([int]$rootId))
-    foreach ($childId in $tree) { [void]$hostedTrees.Add($childId) }
-    if (-not $root.ExecutablePath) { $issues.Add("$key install path is unreadable; descendants are excluded."); continue }
-    $directory = if ($root.ExecutablePath -match '^(.*?\\WindowsApps\\[^\\]+)\\') { $Matches[1] } else { [IO.Path]::GetDirectoryName($root.ExecutablePath) }
-    $prefix = $directory.TrimEnd('\') + '\'
-    foreach ($candidateId in ($tree | Sort-Object -Unique)) {
-        $candidate = $byId[$candidateId]
-        if (-not $candidate) { $issues.Add("$key membership changed during capture."); continue }
-        $path = $candidate.ExecutablePath
-        if (-not $path) { $issues.Add("$key process $candidateId path is unreadable."); continue }
-        if ($path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-            if ($membership.ContainsKey($candidateId) -and $membership[$candidateId] -ne $key) { $issues.Add("Process $candidateId appears in multiple cohorts."); continue }
-            $membership[$candidateId] = $key
-        }
-    }
+$nativeCohorts = @{
+    'exo-ui.exe'             = 'exo-ui'
+    'ExoCapture.exe'         = 'capture'
+    'ExoShaders.Service.exe' = 'shaders'
 }
 foreach ($candidateId in @(Get-TreeIds $main.Id)) {
     if ($hostedTrees.Contains($candidateId) -or $membership.ContainsKey($candidateId)) { continue }
     $candidate = $byId[$candidateId]
+    if ($nativeCohorts.ContainsKey($candidate.Name)) {
+        $membership[$candidateId] = $nativeCohorts[$candidate.Name]
+        continue
+    }
     if ($candidate.Name -ne 'msedgewebview2.exe') { continue }
     if (-not $candidate.ExecutablePath) { $issues.Add("WebView process $candidateId path is unreadable."); continue }
     if ($candidate.ExecutablePath -match '\\Microsoft\\EdgeWebView\\Application\\') { $membership[$candidateId] = 'webview' }
+}
+if ($mainWindow -eq [IntPtr]::Zero -and -not ($membership.Values -contains 'exo-ui')) {
+    throw 'Exo has no main window and no native exo-ui process; wait until startup completes.'
 }
 function Read-Members {
     foreach ($memberId in ($membership.Keys | Sort-Object)) {
@@ -171,7 +164,7 @@ $rows = @($after | ForEach-Object {
 $main.Refresh()
 if ($main.HasExited -or $main.StartTime.ToUniversalTime().Ticks -ne $mainStarted) { throw 'Exo exited or restarted during measurement.' }
 $mainWindowAfter = [ExoResourceWindows]::MainWindow($main.Id, $main.MainWindowHandle)
-$ownedAfter = @([ExoResourceWindows]::OwnedProcesses($mainWindowAfter) | Sort-Object -Unique)
+$ownedAfter = if ($mainWindowAfter -ne [IntPtr]::Zero) { @([ExoResourceWindows]::OwnedProcesses($mainWindowAfter) | Sort-Object -Unique) } else { @() }
 if (($owned -join ',') -ne ($ownedAfter -join ',')) { $issues.Add('Owned windows changed during measurement; repeat in a stable room.') }
 $allAfter = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CreationDate)
 foreach ($entry in $allAfter) {
