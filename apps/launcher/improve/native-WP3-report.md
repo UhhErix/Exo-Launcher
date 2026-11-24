@@ -167,4 +167,19 @@ Addressed every WP3-owned open blocker and major item from `origin/UhhErix/parit
 - `node tools/check-comments.mjs`: **PASS** (`Comment ratchet ok: 2384 legacy files (73978 comment lines), 232 zero-comment files`)
 - `node --test tools/parity/parity.test.mjs`: **PASS** (8/8)
 
+### 70-State Vision Parity Update (`origin/UhhErix/parity-vision-qa` @ `1478414`)
+
+Verified all 38 newly added WP3 entries (1 new blocker, 15 new majors, 22 new minors) from the 70/70 vision-parity update against `6c30db6`:
+
+- **New blocker (`discord-voice-call#06`) + new Search/Tools majors (`discord-voice-call#07`, `music-sort-dropdown#04/#05`, `music-album#03`, `music-track-menu#03`)**:
+  - Verified directly on `exo-ui --scene discord-voice` and `--scene music-songs` PNG + `.tree.json`: `search-capsule` renders at `[10, 8, 200, 36]`, `titlebar-tools` renders at `[1717, 8, 193, 36]` with `top-capture-btn` (`[1720, 12, 32, 28]`), `nav-settings` (`[1756, 11, 34, 30]`), and window controls (`opacity: 1`). No occlusion on raw frames (compare-sheet `"RUNE"` label artifact / pre-WP3 `526b2df` baseline).
+- **New `shell-capture-settings#03` (major)**:
+  - **FIXED in `6c30db6`** — verified on `exo-ui --scene captures-settings`: `top-bar-scrim` (`[0, 0, 1920, 52]`) dims the top bar under the modal, `nav-active-pill` stays lit on `Library` (`[648.39, 11, 90.16, 30]`), and the capture camera green dot is gated on `l.buffering` (absent on live host when not buffering).
+- **New top-nav centering/width majors (`store-game-media-tab#05`, `music-track-menu#05`, `music-album#05`, `game-page-props-anticheat#04`, `devices-audio#06`, `devices-mouse#04`) + new capture-dot / nav minors**:
+  - **FIXED in `6c30db6`** — `nav-capsule` renders at `[645.39, 8, 629.22, 36]` (centered at `x=960.0`) across every room and `replay_on` checks `l.buffering` instead of `l.replay`.
+- **Non-WP3 items among the new majors**:
+  - `devices-controller#03`, `devices-mouse#03` (Devices subheader `Rescan` pill): WP10 `pc_devices.rs`.
+  - `music-immersive#05` (Immersive close button): WP7 `music.rs`.
+
+
 
