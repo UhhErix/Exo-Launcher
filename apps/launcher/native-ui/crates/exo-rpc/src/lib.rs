@@ -1,3 +1,4 @@
+pub mod anticheat;
 pub mod base64;
 pub mod device_types;
 pub mod discord_chat_types;
@@ -12,6 +13,7 @@ pub mod remote_art;
 pub mod settings_types;
 pub mod types;
 
+pub use anticheat::AntiCheatClass;
 pub use device_types::{
     AudioEndpoint, AudioFormatInfo, AudioFormatOption, AudioFormatsReply, AudioReadReply,
     AudioVoiceInfo, ButtonBounce, ButtonCheck, ControllerCalibrateReply, ControllerCalibration,

@@ -87,4 +87,21 @@ public sealed class AntiCheatClassTests
         Assert.Equal(DllModPolicy.Allowed, AntiCheatClass.DllPolicyFor(acClass));
         Assert.True(AntiCheatClass.AllowsAutoInstallDll(acClass));
     }
+
+    [Fact]
+    public void WireClassMapsAllFourHostContractValues()
+    {
+        var val = Make("riot:valorant", "VALORANT", StoreKind.Riot);
+        var wuwa = Make("steam:3513350", "Wuthering Waves");
+        var elden = Make("steam:1245620", "ELDEN RING");
+        var clean = Make("steam:3669870", "CONTROL Resonant");
+        var unscanned = Make("steam:999991", "Mystery Indie");
+
+        Assert.Equal("competitivePvpOnline", AntiCheatClass.WireClass(val, null));
+        Assert.Equal("onlineNonCompetitivePve", AntiCheatClass.WireClass(wuwa, new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Anti-Cheat Expert"], "test")));
+        Assert.Equal("offlineAntiCheat", AntiCheatClass.WireClass(elden, new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["Easy Anti-Cheat"], "test")));
+        Assert.Equal("offlineAntiCheat", AntiCheatClass.WireClass(clean, AntiCheatCheck.Answer.Clean));
+        Assert.Equal("unknown", AntiCheatClass.WireClass(unscanned, null));
+        Assert.Equal("unknown", AntiCheatClass.WireClass(unscanned, new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Unknown, [], AntiCheatCheck.Unreadable)));
+    }
 }

@@ -3,6 +3,9 @@ resolver = "3"
 members = [
     "crates/exo-rpc",
     "crates/exo-kit",
+    "crates/exo-macros",
+    "crates/exo-macros-worker",
+    "crates/exo-controller",
     "crates/exo-ui",
     "crates/exo-shaders",
     "crates/exo-thermal",

@@ -31,7 +31,8 @@
         "isAddPortable": false,
         "isRunning": false,
         "canStop": false,
-        "tags": []
+        "tags": [],
+        "antiCheatClass": "unknown"
       },
       {
         "id": "gog:1308320804",
@@ -59,7 +60,8 @@
         "isAddPortable": false,
         "isRunning": false,
         "canStop": false,
-        "tags": []
+        "tags": [],
+        "antiCheatClass": "unknown"
       }
     ],
     "count": 2,

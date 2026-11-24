@@ -1582,6 +1582,7 @@ export interface Game {
   canStop?: boolean
   /** Genres and modes from Steam's own record of the game (racing, co-op, ...); none for a game Steam doesn't know. */
   tags?: string[]
+  antiCheatClass?: 'competitivePvpOnline' | 'onlineNonCompetitivePve' | 'offlineAntiCheat' | 'unknown'
 }
 
 export interface InstallProgress {

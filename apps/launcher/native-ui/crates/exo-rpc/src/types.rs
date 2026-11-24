@@ -97,6 +97,8 @@ pub struct Game {
     pub launch_target: Option<String>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub includes: Vec<GameInclude>,
+    #[serde(default)]
+    pub anti_cheat_class: crate::anticheat::AntiCheatClass,
     #[serde(default, deserialize_with = "null_as_default")]
     pub variants: Vec<GameVariant>,
     #[serde(default)]

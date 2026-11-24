@@ -34,6 +34,7 @@ mod island;
 mod key_modal;
 mod library;
 mod library_state;
+mod macros;
 mod media_state;
 mod menus;
 mod music;

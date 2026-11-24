@@ -118,6 +118,41 @@ internal static class AntiCheatClass
         return GameAntiCheatClass.CompetitivePvpOnline;
     }
 
+    internal static string WireClass(GameEntry game, AntiCheatCheck.Answer? cachedAnswer)
+    {
+        if (AntiCheatCheck.IsRiot(game) || cachedAnswer is { Names: var names } && names.Contains(DlssSwapService.RiotVanguard))
+            return "competitivePvpOnline";
+
+        if (cachedAnswer is { Kind: AntiCheatCheck.Kind.None } clean)
+        {
+            return ToWire(Classify(game, clean));
+        }
+
+        if (!string.IsNullOrEmpty(game.Id) && ById.TryGetValue(game.Id, out var byId))
+            return ToWire(byId);
+
+        var key = StoreService.TitleKey(game.Title ?? "");
+        if (key.Length > 0 && ByTitle.TryGetValue(key, out var byTitle))
+            return ToWire(byTitle);
+
+        if (key.StartsWith("callofduty", StringComparison.Ordinal) || key.StartsWith("battlefield", StringComparison.Ordinal))
+            return "competitivePvpOnline";
+
+        if (cachedAnswer is null || cachedAnswer.Value.Kind == AntiCheatCheck.Kind.Unknown)
+        {
+            return AntiCheatCheck.Quick(game) is not null ? "competitivePvpOnline" : "unknown";
+        }
+
+        return ToWire(Classify(game, cachedAnswer.Value));
+    }
+
+    private static string ToWire(GameAntiCheatClass acClass) => acClass switch
+    {
+        GameAntiCheatClass.NoAntiCheat or GameAntiCheatClass.OfflineAntiCheat => "offlineAntiCheat",
+        GameAntiCheatClass.OnlineNonCompetitivePve => "onlineNonCompetitivePve",
+        _ => "competitivePvpOnline",
+    };
+
     internal static DllModPolicy DllPolicyFor(GameAntiCheatClass acClass) => acClass switch
     {
         GameAntiCheatClass.NoAntiCheat => DllModPolicy.Allowed,
