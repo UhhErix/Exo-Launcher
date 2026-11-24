@@ -26,7 +26,7 @@ fn sec_head_with_action(title: &str, action: Option<El>) -> El {
     let mut r = row()
         .w_full()
         .min_h(28.0)
-        .px(18.0)
+        .px(2.0)
         .center_y()
         .justify_between()
         .child(

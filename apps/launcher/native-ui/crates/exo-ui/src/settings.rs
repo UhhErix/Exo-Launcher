@@ -2,8 +2,8 @@ use crate::pc_state::SettingsSection;
 use crate::settings_account::account_section;
 use crate::settings_privacy::{backup_section, privacy_section};
 use crate::settings_state::{
-    CHANGELOG_URL, DOWNLOAD_HOURS, LICENSES_URL, OBS_OVERLAY_URL, PRIVACY_URL, SUPPORT_URL,
-    download_hours_label, search_settings,
+    CHANGELOG_URL, DOWNLOAD_HOURS, OBS_OVERLAY_URL, PRIVACY_URL, SUPPORT_URL, download_hours_label,
+    search_settings,
 };
 use crate::settings_stores::{shaders_section, stores_section};
 use crate::state::{AppState, InputMode, OpenDropdown};
@@ -11,10 +11,9 @@ use exo_kit::{
     BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL,
     SPRING_QUICK, SelectTrigger, TRANSPARENT, amoled_card, bad, fg_muted, float_line,
     glass_control_fill, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline,
-    hover_fill, icon_chevron_left, icon_close, icon_download, icon_folder, icon_info, icon_library,
-    icon_music, icon_search, icon_sliders, icon_sparkles, icon_trophy, pressed_fill, progress_bar,
-    scaled, select_trigger, selected_fill, slider_track, store_logo, switch_pill, type_body,
-    type_control, type_page, type_section, type_small,
+    hover_fill, icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_music,
+    icon_search, icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled, select_trigger,
+    slider_track, switch_pill, type_body, type_control, type_page, type_section, type_small,
 };
 use rune::{
     Cursor, El, Phase, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text,
@@ -207,7 +206,7 @@ fn section_head(title: &str) -> El {
     row()
         .w_full()
         .min_h(28.0)
-        .px(18.0)
+        .px(2.0)
         .center_y()
         .justify_between()
         .child(
@@ -388,7 +387,13 @@ fn section_downloads(s: &AppState) -> El {
             .on_press(move |s: &mut AppState| s.wp4_set_upscaler_anticheat(!upscaler_ac)),
         ));
 
-    col().w_full().gap(24.0).child(card)
+    col().w_full().gap(24.0).child(
+        col()
+            .w_full()
+            .gap(8.0)
+            .child(section_head("Downloads"))
+            .child(card),
+    )
 }
 
 fn section_in_game(s: &AppState) -> El {
@@ -502,26 +507,58 @@ fn section_in_game(s: &AppState) -> El {
         )
 }
 
+fn yt_notification_label(raw: &str) -> &'static str {
+    match raw {
+        "allow" => "Allow",
+        "block" => "Block",
+        _ => "Ask",
+    }
+}
+
+fn next_yt_notification(raw: &str) -> &'static str {
+    match raw {
+        "ask" => "allow",
+        "allow" => "block",
+        _ => "ask",
+    }
+}
+
 fn section_music(s: &AppState) -> El {
     let current = s.media.music_service.label();
-    let logo_id = match s.media.music_service.id() {
-        "apple" => "apple-music",
-        other => other,
-    };
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
-    let card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+    let mut card = amoled_card(RADIUS_CARD).w_full().child(set_row(
         "Music service",
-        Some("Active source for the Music room and top-bar mini player"),
         None,
+        s.wp4.web_prefs_error.as_deref(),
         is_highlighted(s, "music-service"),
         select_trigger(
             SelectTrigger::new("set-music-service-select", "Music service", current)
-                .leading(store_logo(logo_id, 15.0))
                 .open(s.open_dropdown == Some(OpenDropdown::MusicService))
                 .gamepad_focus(gamepad_focus),
             |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::MusicService),
         ),
     ));
+    if s.media.music_service == crate::media_state::MusicService::YouTube {
+        let notif = s
+            .wp4
+            .web_prefs
+            .as_ref()
+            .map(|p| p.notifications.as_str())
+            .filter(|v| !v.is_empty())
+            .unwrap_or("ask");
+        let next = next_yt_notification(notif);
+        card = card
+            .child(el().w_full().h(1.0).fill(hairline()))
+            .child(set_row(
+                "YouTube Music notifications",
+                None,
+                None,
+                false,
+                set_btn("set-yt-notifications", yt_notification_label(notif), None)
+                    .disabled(s.wp4.web_prefs_saving)
+                    .on_press(move |s: &mut AppState| s.wp4_set_web_notifications(next)),
+            ));
+    }
     col().w_full().gap(24.0).child(card)
 }
 
@@ -536,12 +573,13 @@ fn about_link(
         .focusable(true)
         .hit()
         .cursor(Cursor::Pointer)
-        .px(10.0)
-        .py(6.0)
-        .radius(RADIUS_SMALL)
+        .h(32.0)
+        .px(4.0)
+        .center_y()
+        .radius(6.0)
         .hover(hover_fill())
         .on_press(on_press)
-        .child(text(label).font(type_body()).color(FG))
+        .child(text(label).font(type_body()).color(fg_muted()))
 }
 
 fn section_about(s: &AppState) -> El {
@@ -572,8 +610,7 @@ fn section_about(s: &AppState) -> El {
         .update_note
         .as_ref()
         .filter(|n| !n.error)
-        .map(|n| n.text.clone())
-        .or_else(|| s.pc.update_check.as_ref().and_then(|u| u.message.clone()));
+        .map(|n| n.text.clone());
     let upd_err = s
         .wp4
         .update_note
@@ -583,12 +620,13 @@ fn section_about(s: &AppState) -> El {
 
     let mut card = amoled_card(RADIUS_CARD).w_full().child(set_row(
         &upd_title,
-        upd_status_note.as_deref(),
+        None,
         upd_err,
         is_highlighted(s, "about-updates"),
         row()
-            .gap(8.0)
+            .gap(10.0)
             .center_y()
+            .children(upd_status_note.map(|note| text(note).font(type_body()).color(fg_muted())))
             .children((!upd_avail).then(|| {
                 set_btn(
                     "set-check-upd",
@@ -638,34 +676,13 @@ fn section_about(s: &AppState) -> El {
             .on_press(|s: &mut AppState| s.wp4_clear_caches()),
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
-        .child(set_row(
-            "Setup",
-            Some(&s.setup.summary()),
-            None,
-            false,
-            set_btn(
-                "set-resume-setup",
-                "Resume setup",
-                Some(icon_sparkles(13.0, FG)),
-            )
-            .on_press(|s: &mut AppState| s.setup_resume()),
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(set_row(
-            "Diagnostic logs",
-            Some("Open the local Exo Launcher log folder"),
-            None,
-            false,
-            set_btn("set-open-logs", "Open logs", Some(icon_folder(13.0, FG)))
-                .on_press(|s: &mut AppState| s.open_app_logs()),
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
         .child(
             row()
                 .w_full()
-                .px(12.0)
-                .py(10.0)
-                .gap(6.0)
+                .px(14.0)
+                .py(12.0)
+                .gap(20.0)
+                .center_y()
                 .flex_wrap()
                 .child(about_link(
                     "set-about-report",
@@ -686,11 +703,6 @@ fn section_about(s: &AppState) -> El {
                     "set-about-privacy",
                     "Privacy",
                     |s: &mut AppState| s.wp4_open_url(PRIVACY_URL),
-                ))
-                .child(about_link(
-                    "set-about-licenses",
-                    "Licenses",
-                    |s: &mut AppState| s.wp4_open_url(LICENSES_URL),
                 ))
                 .child(about_link(
                     "set-about-support",
@@ -844,7 +856,7 @@ pub fn view(s: &AppState) -> El {
                     .gap(10.0)
                     .center_y()
                     .radius(RADIUS_SMALL)
-                    .fill(if active { selected_fill() } else { TRANSPARENT })
+                    .fill(if active { FG.alpha(0.08) } else { TRANSPARENT })
                     .hover(hover_fill())
                     .press(pressed_fill())
                     .motion(SPRING_QUICK)
@@ -860,7 +872,7 @@ pub fn view(s: &AppState) -> El {
                             .color(if active { FG } else { fg_muted() }),
                     );
                 if active {
-                    item = item.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+                    item = item.border(1.0, hairline());
                 }
                 item
             }))
@@ -868,16 +880,15 @@ pub fn view(s: &AppState) -> El {
 
     let sidebar = col()
         .key("settings-sidebar")
-        .w(scaled(232.0))
+        .w(scaled(280.0))
         .h_full()
         .py(24.0)
-        .pl(0.0)
-        .pr(20.0)
+        .px(16.0)
         .gap(14.0)
         .border_sides([0.0, 1.0, 0.0, 0.0], float_line())
         .child(row().child(back_btn))
         .child(
-            row().h(scaled(42.0)).px(12.0).center_y().child(
+            row().h(scaled(42.0)).px(8.0).center_y().child(
                 text("Settings")
                     .key("settings-sidebar-title")
                     .font(type_page())
@@ -901,8 +912,8 @@ pub fn view(s: &AppState) -> El {
         .key("settings-scroll")
         .grow(1.0)
         .min_w(0.0)
-        .max_w(scaled(952.0))
         .h_full()
+        .items_center()
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
@@ -911,13 +922,14 @@ pub fn view(s: &AppState) -> El {
                 .key(format!("settings-pane-{:?}", s.pc.settings_section))
                 .transition(Transition::offset(0.0, 6.0).combined(Transition::opacity()))
                 .w_full()
+                .max_w(scaled(960.0))
                 .pt(24.0)
+                .px(36.0)
                 .pb(48.0)
                 .child(
                     row()
                         .key("settings-page-title")
                         .h(scaled(42.0))
-                        .px(18.0)
                         .center_y()
                         .child(
                             text(title)
@@ -934,17 +946,13 @@ pub fn view(s: &AppState) -> El {
         .w_full()
         .h_full()
         .pt(52.0)
-        .px(16.0)
         .fill(BG)
-        .items_center()
         .child(
             row()
                 .key("settings-shell")
                 .w_full()
-                .max_w(scaled(1220.0))
                 .h_full()
                 .items_start()
-                .gap(36.0)
                 .child(sidebar)
                 .child(right_col),
         )
@@ -985,16 +993,29 @@ mod tests {
         let (shell_rect, _) = rt.presented("settings-shell").expect("settings-shell");
         let (sidebar_rect, _) = rt.presented("settings-sidebar").expect("settings-sidebar");
         let (scroll_rect, _) = rt.presented("settings-scroll").expect("settings-scroll");
+        let (pane_rect, _) = rt
+            .presented("settings-pane-General")
+            .expect("settings-pane-General");
 
         assert!(
-            (shell_rect[2] - 1220.0).abs() <= 1.0,
-            "expected centered 1220px settings shell, got {}",
+            (shell_rect[2] - 1920.0).abs() <= 1.0,
+            "expected full-width 1920px settings shell, got {}",
             shell_rect[2]
         );
-        let gutter = scroll_rect[0] - (sidebar_rect[0] + sidebar_rect[2]);
         assert!(
-            (gutter - 36.0).abs() <= 1.0,
-            "expected 36px sidebar-to-content gutter, got {gutter}"
+            sidebar_rect[0].abs() <= 1.0 && (sidebar_rect[2] - 280.0).abs() <= 1.0,
+            "expected left-docked 280px sidebar at x=0, got {:?}",
+            sidebar_rect
+        );
+        assert!(
+            (scroll_rect[0] - 280.0).abs() <= 1.0 && (scroll_rect[2] - 1640.0).abs() <= 1.0,
+            "expected right scroll pane at x=280 w=1640, got {:?}",
+            scroll_rect
+        );
+        assert!(
+            (pane_rect[0] - 620.0).abs() <= 1.0 && (pane_rect[2] - 960.0).abs() <= 1.0,
+            "expected centered 960px settings inner pane at x=620, got {:?}",
+            pane_rect
         );
 
         let (title_rect, _) = rt
@@ -1011,15 +1032,18 @@ mod tests {
             .expect("set-label-Last backup");
 
         assert!(
-            (title_rect[0] - row1_rect[0]).abs() <= 1.0,
-            "page title x={} missed row label x={}",
-            title_rect[0],
-            row1_rect[0]
+            (title_rect[0] - 656.0).abs() <= 1.5,
+            "expected page title at x=656, got {}",
+            title_rect[0]
         );
         assert!(
-            (sec_rect[0] - row1_rect[0]).abs() <= 1.0,
-            "section head x={} missed row label x={}",
-            sec_rect[0],
+            (sec_rect[0] - 658.0).abs() <= 1.5,
+            "expected section head at x=658, got {}",
+            sec_rect[0]
+        );
+        assert!(
+            (row1_rect[0] - 674.0).abs() <= 1.5,
+            "expected row label at x=674 (656+18), got {}",
             row1_rect[0]
         );
         assert!(

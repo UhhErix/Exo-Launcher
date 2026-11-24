@@ -133,25 +133,6 @@ impl SetupFlow {
             .position(|st| *st != StageState::Done)
             .unwrap_or(DONE_STAGE)
     }
-
-    pub fn summary(&self) -> String {
-        let done = self.states[..DONE_STAGE]
-            .iter()
-            .filter(|st| **st == StageState::Done)
-            .count();
-        let skipped = self.states[..DONE_STAGE]
-            .iter()
-            .filter(|st| **st == StageState::Skipped)
-            .count();
-        if done == 0 && skipped == 0 {
-            return "Not started".into();
-        }
-        if skipped == 0 {
-            format!("{done} of {DONE_STAGE} steps done")
-        } else {
-            format!("{done} of {DONE_STAGE} done · {skipped} skipped")
-        }
-    }
 }
 
 impl AppState {
