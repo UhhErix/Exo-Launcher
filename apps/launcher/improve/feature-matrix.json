@@ -9,11 +9,11 @@
   ],
   "totals": {
     "overall": {
-      "DONE": 106,
+      "DONE": 109,
       "PARTIAL": 57,
       "MISSING": 71,
       "BROKEN": 4,
-      "total": 238
+      "total": 241
     },
     "byRoom": {
       "Shell & Bar": {
@@ -59,11 +59,11 @@
         "total": 21
       },
       "Exo AI / PC": {
-        "DONE": 21,
+        "DONE": 24,
         "PARTIAL": 0,
         "MISSING": 0,
         "BROKEN": 0,
-        "total": 21
+        "total": 24
       },
       "Apps": {
         "DONE": 12,
@@ -2110,9 +2110,10 @@
       "rpc": [
         "system.about",
         "system.drives",
-        "system.tuning"
+        "system.tuning",
+        "system.health"
       ],
-      "notes": "PC overview grid with PCIe/cable/netlink/Secure Boot/TPM/drive verdicts and Motherboard BIOS/Recovery/Secure Boot/TPM/Memory integrity rows with vendor hints.",
+      "notes": "PC overview grid with PCIe/cable/netlink/Secure Boot/TPM/drive verdicts, OverviewHealthRows (gpupref/cpumicrocode/ryzenbranch/gpusched/winupdate), CPU/RAM notes, and Motherboard BIOS/Recovery/Secure Boot/TPM/Memory integrity rows with 11 BIOS vendor hints.",
       "workPackage": "WP9"
     },
     {
@@ -2126,7 +2127,7 @@
         "autopilot.state",
         "autopilot.set"
       ],
-      "notes": "Autopilot pause/resume, Memory Integrity, per-app rules, live telemetry, and expandable session reports.",
+      "notes": "Autopilot pause/resume (with Autopilot paused header status), Memory Integrity, Standby memory purge, Background downloads pause, CPU sets, Win11 24H2+ global timer pacing, game priority/core parking, per-app rules, live telemetry, and expandable session reports.",
       "workPackage": "WP9"
     },
     {
@@ -2138,9 +2139,10 @@
       "nativeRef": "exo-ui/src/pc_menus.rs:1169",
       "rpc": [
         "system.tune",
-        "system.health"
+        "system.health",
+        "system.tuning"
       ],
-      "notes": "Network & System tuning groups with Put back undo, connection/latency checks, and restart-required indicators.",
+      "notes": "Network & System tuning groups with Put back undo, Retired playbook tweaks migration (system.tuning migrate + post-revert summary notice), connection/latency checks, and restart-required indicators.",
       "workPackage": "WP9"
     },
     {
@@ -2249,7 +2251,7 @@
       "rpc": [
         "system.health"
       ],
-      "notes": "Sequential Use best settings runner inside Motherboard menu.",
+      "notes": "Sequential Use best settings runner inside Motherboard menu (including SSD TRIM and cpumicrocode/ryzenbranch SetupRows actions).",
       "workPackage": "WP9"
     },
     {
@@ -2346,6 +2348,45 @@
       "nativeRef": "exo-ui/src/pc_menus.rs:2272",
       "rpc": [],
       "notes": "Full anchored Graphics, Display, and Motherboard part menus with complete host actions and Esc/backdrop dismiss.",
+      "workPackage": "WP9"
+    },
+    {
+      "id": "exo-ai-pc-22",
+      "room": "Exo AI / PC",
+      "feature": "GPU activity (per-process VRAM, shared memory, engine slices)",
+      "status": "DONE",
+      "reactRef": "components/gpu/GpuProcessesSection.tsx:1",
+      "nativeRef": "exo-ui/src/pc_ai.rs:2080",
+      "rpc": [
+        "gpu.processes"
+      ],
+      "notes": "GPU activity card in Exo AI room with 3-second polling, Refresh button, per-process VRAM/shared memory metrics, engine slices, and multi-adapter subtitle.",
+      "workPackage": "WP9"
+    },
+    {
+      "id": "exo-ai-pc-23",
+      "room": "Exo AI / PC",
+      "feature": "Per-game QoS (DSCP 46) toggles",
+      "status": "DONE",
+      "reactRef": "components/gpu/QosGroup.tsx:1",
+      "nativeRef": "exo-ui/src/pc_menus.rs:1460",
+      "rpc": [
+        "system.qos"
+      ],
+      "notes": "Per-game QoS (DSCP 46) section inside Motherboard menu toggling Windows QoS policies per installed game.",
+      "workPackage": "WP9"
+    },
+    {
+      "id": "exo-ai-pc-24",
+      "room": "Exo AI / PC",
+      "feature": "Overlay advisor (detect, turn off, put back)",
+      "status": "DONE",
+      "reactRef": "components/gpu/OverlayAdvisorGroup.tsx:1",
+      "nativeRef": "exo-ui/src/pc_menus.rs:1520",
+      "rpc": [
+        "system.overlays"
+      ],
+      "notes": "Overlays advisor section inside Motherboard menu showing active/off status badges with Turn off and Put back actions.",
       "workPackage": "WP9"
     },
     {
@@ -4252,6 +4293,9 @@
         "exo-ai-pc-19",
         "exo-ai-pc-20",
         "exo-ai-pc-21",
+        "exo-ai-pc-22",
+        "exo-ai-pc-23",
+        "exo-ai-pc-24",
         "apps-02",
         "apps-04",
         "apps-05",

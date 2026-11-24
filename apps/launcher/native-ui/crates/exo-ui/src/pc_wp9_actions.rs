@@ -11,9 +11,9 @@ use exo_rpc::{
     AutopilotSetReply, AutopilotState, BiosUpdateReply, CompressActReply, CompressAllReply,
     CompressList, CompressSettingsReply, CompressState, DevicesListReply, DisplayState,
     DriverProgress, DriverState, DriverStep, DriversState, DrivesReply, ExoAiState,
-    FpsCounterReply, GpuDriverInstallEvent, GpuProfile, InstallerCacheCleanReply,
-    InstallerCacheReply, InterruptsState, JunkCleanReply, JunkScanReply, KeepStatus,
-    LauncherSettings, METHOD_APPS_ALLOW_EDGE, METHOD_APPS_CLEAN, METHOD_APPS_CONFIRM,
+    FpsCounterReply, GpuDriverInstallEvent, GpuProcessesState, GpuProfile,
+    InstallerCacheCleanReply, InstallerCacheReply, InterruptsState, JunkCleanReply, JunkScanReply,
+    KeepStatus, LauncherSettings, METHOD_APPS_ALLOW_EDGE, METHOD_APPS_CLEAN, METHOD_APPS_CONFIRM,
     METHOD_APPS_INSTALLER_CACHE, METHOD_APPS_INSTALLER_CACHE_CLEAN, METHOD_APPS_LEAVE,
     METHOD_APPS_LIST, METHOD_APPS_OPEN_DEFAULTS, METHOD_APPS_PACKAGE_ADD_BACK,
     METHOD_APPS_PACKAGES, METHOD_APPS_PACKAGES_PLAN, METHOD_APPS_PACKAGES_REMOVE,
@@ -22,15 +22,15 @@ use exo_rpc::{
     METHOD_COMPRESS_ACT, METHOD_COMPRESS_ALL, METHOD_COMPRESS_LIST, METHOD_COMPRESS_SETTINGS,
     METHOD_CONTROLLER_READ, METHOD_DEVICES_LIST, METHOD_EXO_AI_SET, METHOD_FPS_COUNTER,
     METHOD_GPU_AFMF3, METHOD_GPU_CONTROL_PANEL, METHOD_GPU_DISPLAY, METHOD_GPU_DRIVER,
-    METHOD_GPU_PROFILE, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN, METHOD_KEEP_STATUS,
-    METHOD_REPLACED_REMOVE, METHOD_RUNTIMES_CANCEL, METHOD_RUNTIMES_INSTALL, METHOD_RUNTIMES_LIST,
-    METHOD_SETTINGS_SET, METHOD_SHADERS_CALL, METHOD_SHADERS_PREPARE_CANCEL,
-    METHOD_SHADERS_REBUILD, METHOD_STARTUP_CLEAN, METHOD_STARTUP_RESTORE,
-    METHOD_SYSTEM_DRIVERS, METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_HEALTH, METHOD_SYSTEM_INTERRUPTS,
-    METHOD_SYSTEM_TUNE, METHOD_SYSTEM_TUNING, METHOD_WEB_PREFERENCES_GET,
-    METHOD_WEB_PREFERENCES_SET, PcHealth, RestorePointReply, RuntimesInstallReply,
-    RuntimesListReply, RuntimesProgress, ShaderRebuild, StartupListReply, SystemTuningState,
-    WebClientOptions,
+    METHOD_GPU_PROCESSES, METHOD_GPU_PROFILE, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN,
+    METHOD_KEEP_STATUS, METHOD_REPLACED_REMOVE, METHOD_RUNTIMES_CANCEL, METHOD_RUNTIMES_INSTALL,
+    METHOD_RUNTIMES_LIST, METHOD_SETTINGS_SET, METHOD_SHADERS_CALL, METHOD_SHADERS_PREPARE_CANCEL,
+    METHOD_SHADERS_REBUILD, METHOD_STARTUP_CLEAN, METHOD_STARTUP_RESTORE, METHOD_SYSTEM_DRIVERS,
+    METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_HEALTH, METHOD_SYSTEM_INTERRUPTS, METHOD_SYSTEM_OVERLAYS,
+    METHOD_SYSTEM_QOS, METHOD_SYSTEM_TUNE, METHOD_SYSTEM_TUNING, METHOD_WEB_PREFERENCES_GET,
+    METHOD_WEB_PREFERENCES_SET, OverlayAdvisorState, PcHealth, QosState, RestorePointReply,
+    RuntimesInstallReply, RuntimesListReply, RuntimesProgress, ShaderRebuild, StartupListReply,
+    SystemTuningState, WebClientOptions,
 };
 use serde_json::{Value, json};
 use std::collections::HashSet;
@@ -294,7 +294,213 @@ impl AppState {
                     }
                 }
             });
+            self.load_gpu_processes();
+            self.load_system_qos();
+            self.load_system_overlays();
         }
+    }
+
+    pub fn load_gpu_processes(&mut self) {
+        if self.pc.gpu_processes_busy {
+            return;
+        }
+        self.pc.gpu_processes_last_poll = self.clock_now();
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            self.pc.gpu_processes_busy = true;
+            rpc.call::<_, GpuProcessesState>(
+                METHOD_GPU_PROCESSES,
+                &json!({ "limit": 8 }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.pc.gpu_processes_busy = false;
+                        if let Ok(next) = res {
+                            s.pc.gpu_processes = Some(next);
+                        }
+                    });
+                },
+            );
+        }
+    }
+
+    pub fn load_system_qos(&mut self) {
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, QosState>(METHOD_SYSTEM_QOS, &json!({}), move |res| {
+                if let Ok(next) = res {
+                    handle.update(move |s, _| s.pc.qos_state = Some(next));
+                }
+            });
+        }
+    }
+
+    pub fn toggle_system_qos(&mut self, game_id: &str, on: bool) {
+        if self.pc.qos_busy.is_some() {
+            return;
+        }
+        self.pc.qos_busy = Some(game_id.to_string());
+        self.pc.qos_error = None;
+        let gid = game_id.to_string();
+        let action = if on { "on" } else { "off" };
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let gid_err = gid.clone();
+            rpc.call::<_, QosState>(
+                METHOD_SYSTEM_QOS,
+                &json!({ "action": action, "gameId": gid }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.pc.qos_busy = None;
+                        match res {
+                            Ok(next) => {
+                                if !next.ok {
+                                    let msg = trim_stop(next.message.as_deref().unwrap_or(""));
+                                    s.pc.qos_error = Some((
+                                        gid_err,
+                                        if msg.is_empty() {
+                                            "Not changed. Try again.".into()
+                                        } else {
+                                            msg
+                                        },
+                                    ));
+                                }
+                                s.pc.qos_state = Some(next);
+                            }
+                            Err(_) => {
+                                s.pc.qos_error = Some((gid_err, "Not changed. Try again.".into()));
+                            }
+                        }
+                    });
+                },
+            );
+        } else {
+            self.pc.qos_busy = None;
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (gid, action);
+            self.pc.qos_busy = None;
+        }
+    }
+
+    pub fn load_system_overlays(&mut self) {
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, OverlayAdvisorState>(METHOD_SYSTEM_OVERLAYS, &json!({}), move |res| {
+                if let Ok(next) = res {
+                    handle.update(move |s, _| s.pc.overlays_state = Some(next));
+                }
+            });
+        }
+    }
+
+    pub fn run_system_overlay_action(&mut self, id: &str, action: &str) {
+        if self.pc.overlays_busy.is_some() {
+            return;
+        }
+        self.pc.overlays_busy = Some(id.to_string());
+        self.pc.overlays_error = None;
+        let oid = id.to_string();
+        let act = action.to_string();
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let oid_err = oid.clone();
+            rpc.call::<_, OverlayAdvisorState>(
+                METHOD_SYSTEM_OVERLAYS,
+                &json!({ "action": act, "id": oid }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.pc.overlays_busy = None;
+                        match res {
+                            Ok(next) => {
+                                if !next.ok {
+                                    let msg = trim_stop(next.message.as_deref().unwrap_or(""));
+                                    s.pc.overlays_error = Some((
+                                        oid_err,
+                                        if msg.is_empty() {
+                                            "Not changed. Try again.".into()
+                                        } else {
+                                            msg
+                                        },
+                                    ));
+                                }
+                                s.pc.overlays_state = Some(next);
+                            }
+                            Err(_) => {
+                                s.pc.overlays_error =
+                                    Some((oid_err, "Not changed. Try again.".into()));
+                            }
+                        }
+                    });
+                },
+            );
+        } else {
+            self.pc.overlays_busy = None;
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (oid, act);
+            self.pc.overlays_busy = None;
+        }
+    }
+
+    pub fn run_system_tuning_migrate(&mut self) {
+        if self.pc.tuning_busy.is_some() {
+            return;
+        }
+        self.pc.tuning_busy = Some("migrate".into());
+        self.pc.tuning_error = None;
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, SystemTuningState>(
+                METHOD_SYSTEM_TUNING,
+                &json!({ "action": "migrate" }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.pc.tuning_busy = None;
+                        match res {
+                            Ok(next) => {
+                                if !next.ok {
+                                    let msg = trim_stop(next.message.as_deref().unwrap_or(""));
+                                    s.pc.tuning_error = Some((
+                                        "migrate".into(),
+                                        if msg.is_empty() {
+                                            "Not changed. Try again.".into()
+                                        } else {
+                                            msg
+                                        },
+                                    ));
+                                }
+                                s.pc.tuning = Some(next);
+                                s.refresh_auto_tune_stages_if_idle();
+                            }
+                            Err(_) => {
+                                s.pc.tuning_error =
+                                    Some(("migrate".into(), "Not changed. Try again.".into()));
+                            }
+                        }
+                    });
+                },
+            );
+        } else {
+            self.pc.tuning_busy = None;
+        }
+        #[cfg(not(windows))]
+        {
+            self.pc.tuning_busy = None;
+        }
+    }
+
+    pub fn pc_wp9_tick(&mut self, now: f64) -> bool {
+        if self.room == Room::ExoAi
+            && !self.pc.exo_ai_storage_open
+            && self.status != HostStatus::Standalone
+            && !self.pc.gpu_processes_busy
+            && now - self.pc.gpu_processes_last_poll >= 3.0
+        {
+            self.load_gpu_processes();
+        }
+        false
     }
 
     pub fn run_auto_tune_pipeline(&mut self) {

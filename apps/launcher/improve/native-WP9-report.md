@@ -78,3 +78,24 @@ Branch: `UhhErix/native-WP9` (base `feat/native-polish-2`, merged `6158403` from
   - **0** missing PC / Storage / Apps / Exo AI / Shaders RPC methods session-wide (including `system.tune`, `shaders.call`, `apps.list`, `apps.icons`, `apps.installerCache`, `apps.packages`, `apps.tidy`, `junk.scan`, `keep.status`, `runtimes.list`, `system.drivers`, `system.health`, `system.interrupts`, `gpu.display`, `gpu.driver`, `controller.read`, `devices.list`, `web.preferences.get`, `web.preferences.set`).
   - **0** missing PC / Storage / Apps / Exo AI / Shaders static push-event handlers in `exo-rpc`.
 
+## Follow-up: `perf-os-tweaks` (`f197ca7`), `perf-hw-phase1` (`f2d3797`), `perf-ai-bugs` (`f233547`)
+
+- Fast-forwarded to `origin/feat/native-polish-2` (`a78c217`), keeping Rune pins untouched (`e1379c0a`).
+- Added native 1:1 parity across `exo-rpc` (`lib.rs`, `pc_types.rs`) and `exo-ui` (`pc_state.rs`, `pc_wp9_actions.rs`, `pc_menus.rs`, `pc_ai.rs`, `main.rs`) for every new host RPC and field:
+  - `gpu.processes` (`GpuProcessesSection` / `GPU activity` card in `pc_ai.rs` with 3-second polling while in Exo AI, `Refresh` button, per-process VRAM/shared memory metrics, engine slices, and multi-adapter subtitle).
+  - `system.qos` (`Per-game QoS (DSCP 46)` section in Motherboard menu toggling per-game QoS policies).
+  - `system.overlays` (`Overlays` advisor section in Motherboard menu with active/off badges and `Turn off` / `Put back` actions).
+  - `system.tuning` `migrate` action & `Retired playbook tweaks` row (`Revert now` button + post-revert `migration.summary` notice).
+  - Extended `autopilot.state` fields (`standbyPurge`, `cpuSets`, `timerGlobal.neededForWin11`/`enabled` for Win11 24H2+, `downloadsPaused`, `gamePriority`, `keepGameMode`, `coreParking`) + `Autopilot paused` header status + `Standby memory purge` & `Background downloads` rows.
+  - `system.health` `winupdate` action, `cpumicrocode` BIOS page + `ryzenbranch` Windows Update in `SetupRows` and `OverviewHealthRows`, processor/memory overview notes, all 11 BIOS vendor hints, and SSD TRIM (`trim`) in `best_steps_list`.
+  - Fixed `state.rs::apply_settings` to accept boolean `tourSeen: true` in addition to integer `>= 1` so `tools/rpc-parity/run.mjs` drives native cleanly without sticking on Setup.
+  - Updated `apps/launcher/improve/feature-matrix.json` and `apps/launcher/improve/feature-matrix.md` (`Exo AI / PC`: 24/24 `DONE`, adding `exo-ai-pc-22`, `exo-ai-pc-23`, `exo-ai-pc-24`).
+- Gates (fresh post-edit runs):
+  - `cargo fmt --check`: PASS (exit 0)
+  - `cargo clippy --workspace --locked -- -D warnings`: PASS (exit 0, 0 warnings)
+  - `cargo test --workspace --locked`: PASS (exit 0 — `exo-kit`: 4 passed; `exo-rpc`: 26 passed, 1 ignored; `exo-ui`: 123 passed, including new `perf_os_tweaks_migration_qos_overlays_and_autopilot_fields_render` and `perf_hw_phase1_gpu_processes_and_overview_health_rows_render`)
+  - `cargo build --release --locked -p exo-ui`: PASS (exit 0, Rune pin `e1379c0a`)
+  - Comment ban check on all touched Rust files: PASS (0 prose comments added)
+  - Visual parity snaps (`pc`, `pc-menu-board` at `1920x1080` scale 1 against repo-built Debug `ExoLauncher.exe` + temp data copy): visually verified `GPU activity` card, Autopilot CPU Sets + Win11 24H2+ summary, and `Standby memory purge` with zero overlap/clipping.
+  - Live `node tools/rpc-parity/run.mjs --only=startup,room-pc,room-pc-apps,settings-general,settings-ingame,settings-music` (18/18 web, 18/18 native, `chatty=0`): **0** `reactOnly` for `gpu.processes`, `system.qos`, `system.overlays`, `system.health`, `system.tuning`, `autopilot.state`, and all other PC / Exo AI / Apps / Shaders methods.
+

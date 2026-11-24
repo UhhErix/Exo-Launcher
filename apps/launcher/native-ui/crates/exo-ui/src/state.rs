@@ -1466,9 +1466,7 @@ impl AppState {
         let tour_seen = settings
             .ui_prefs
             .get("tourSeen")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0)
-            >= 1;
+            .is_some_and(|v| v.as_bool().unwrap_or(false) || v.as_i64().unwrap_or(0) >= 1);
         let raw = settings
             .ui_prefs
             .get("setupProgress")

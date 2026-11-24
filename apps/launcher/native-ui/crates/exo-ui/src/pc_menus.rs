@@ -1,6 +1,6 @@
 use crate::pc_state::{
-    AutoTuneStageStatus, PcPartMenu, any_restart_required, best_steps_list, bios_vendor_hints,
-    trim_stop,
+    AutoTuneStageStatus, PcPartMenu, any_restart_required, autopilot_active_summary,
+    best_steps_list, bios_vendor_hints, trim_stop,
 };
 use crate::state::{AppState, Room};
 use exo_kit::{
@@ -1292,30 +1292,12 @@ fn board_menu_body(s: &AppState) -> El {
 
     if let Some(ref ap) = s.pc.autopilot {
         body = body.child(group_head("Autopilot"));
-        let mut ap_parts = vec![
-            "Gives your game priority while it runs, throttles background hogs, and keeps cores awake.".to_string(),
-        ];
-        if ap.game_mode.off {
-            ap_parts.push("Windows Game Mode off.".into());
-        } else if let Some(ref kept) = ap.game_mode.kept_on {
-            ap_parts.push(format!("Windows Game Mode stays on ({kept})."));
-        }
-        if ap.mouse_accel.as_ref().is_some_and(|m| m.off) {
-            ap_parts.push("Mouse acceleration off (1:1).".into());
-        }
-        if !ap.cpu.is_empty() {
-            ap_parts.push(ap.cpu.clone());
-        }
         body = body.child(menu_row(
             "Autopilot",
-            Some(ap_parts.join(" ")),
+            Some(autopilot_active_summary(ap)),
             s.pc.autopilot_error.clone(),
             status_badge(
-                if ap.on {
-                    "Active".into()
-                } else {
-                    "Paused".into()
-                },
+                if ap.on { "Active".into() } else { "Off".into() },
                 if ap.on {
                     BadgeTone::Good
                 } else {
@@ -1332,6 +1314,60 @@ fn board_menu_body(s: &AppState) -> El {
                 Some(now.did.join(" · ")),
                 None,
                 row(),
+            ));
+        }
+
+        if let Some(ref dl) = ap.downloads_paused
+            && dl.active
+        {
+            let mut parts = Vec::new();
+            if dl.jobs > 0 {
+                parts.push(format!(
+                    "{} background download job{}",
+                    dl.jobs,
+                    if dl.jobs == 1 { "" } else { "s" }
+                ));
+            }
+            if !dl.services.is_empty() {
+                parts.push(dl.services.join(", "));
+            }
+            let detail = if parts.is_empty() {
+                "Background Windows downloads paused while playing.".into()
+            } else {
+                format!("Paused while playing: {}.", parts.join(" · "))
+            };
+            body = body.child(menu_row(
+                "Background downloads",
+                Some(detail),
+                None,
+                status_badge("Paused".into(), BadgeTone::Good),
+            ));
+        }
+
+        if let Some(ref sp) = ap.standby_purge {
+            let detail = if sp.available {
+                "Clears cached standby memory during play if free memory drops under 1 GB.".into()
+            } else {
+                sp.reason
+                    .clone()
+                    .unwrap_or_else(|| "Unavailable without administrator permission.".into())
+            };
+            body = body.child(menu_row(
+                "Standby memory purge",
+                Some(detail),
+                None,
+                status_badge(
+                    if sp.available {
+                        "Ready".into()
+                    } else {
+                        "Unavailable".into()
+                    },
+                    if sp.available {
+                        BadgeTone::Good
+                    } else {
+                        BadgeTone::Neutral
+                    },
+                ),
             ));
         }
 
@@ -1545,6 +1581,18 @@ fn board_menu_body(s: &AppState) -> El {
                         row()
                     }
                 }
+                "cpumicrocode" => {
+                    if let Some(url) = item.url.clone() {
+                        menu_btn("hp-cpumicrocode".into(), "BIOS page", false, false, false)
+                            .on_press(move |s: &mut AppState| s.open_external_url(&url))
+                    } else {
+                        row()
+                    }
+                }
+                "ryzenbranch" => {
+                    menu_btn("hp-winupdate".into(), "Windows Update", false, false, false)
+                        .on_press(|s: &mut AppState| s.run_health_action("winupdate"))
+                }
                 "gpusched" => menu_btn("hp-gpusched".into(), "Open Settings", false, false, false)
                     .on_press(|s: &mut AppState| s.run_health_action("gpusched")),
                 _ => row(),
@@ -1742,9 +1790,157 @@ fn board_menu_body(s: &AppState) -> El {
         }
     }
 
+    if let Some(ref qos) = s.pc.qos_state
+        && !qos.games.is_empty()
+    {
+        body = body.child(group_head("Per-game QoS (DSCP 46)"));
+        if !qos.note.is_empty() {
+            body = body.child(
+                el().w_full().pb(6.0).child(
+                    text(qos.note.clone())
+                        .font(type_small())
+                        .color(fg_muted())
+                        .wrap(),
+                ),
+            );
+        }
+        let qbusy = s.pc.qos_busy.is_some();
+        for game in &qos.games {
+            let gid = game.game_id.clone();
+            let next_on = !game.enabled;
+            let det = if game.enabled {
+                format!("DSCP 46 active for {}", game.exe_name)
+            } else {
+                format!("Opt-in DSCP 46 policy for {}", game.exe_name)
+            };
+            let err =
+                s.pc.qos_error
+                    .as_ref()
+                    .filter(|(k, _)| k == &game.game_id)
+                    .map(|(_, e)| e.clone());
+            body = body.child(menu_row(
+                game.title.clone(),
+                Some(det),
+                err,
+                menu_switch(
+                    format!("pc-best-qos-{}", game.game_id),
+                    game.title.clone(),
+                    game.enabled,
+                    qbusy,
+                )
+                .on_press(move |s: &mut AppState| s.toggle_system_qos(&gid, next_on)),
+            ));
+        }
+    }
+
+    if let Some(ref ov) = s.pc.overlays_state
+        && !ov.items.is_empty()
+    {
+        body = body.child(group_head("Overlays"));
+        let obusy = s.pc.overlays_busy.is_some();
+        for item in &ov.items {
+            let mut det_parts = Vec::new();
+            if !item.cost.is_empty() {
+                det_parts.push(item.cost.as_str());
+            }
+            if !item.detail.is_empty() {
+                det_parts.push(item.detail.as_str());
+            }
+            if let Some(ref steps) = item.manual_steps
+                && !steps.is_empty()
+            {
+                det_parts.push(steps.as_str());
+            }
+            let detail = (!det_parts.is_empty()).then(|| det_parts.join(" · "));
+            let err =
+                s.pc.overlays_error
+                    .as_ref()
+                    .filter(|(k, _)| k == &item.id)
+                    .map(|(_, e)| e.clone());
+            let mut ctrl = row().gap(6.0).center_y();
+            if item.enabled && item.can_toggle {
+                let oid = item.id.clone();
+                ctrl = ctrl.child(
+                    menu_btn(
+                        format!("ov-off-{}", item.id),
+                        "Turn off",
+                        false,
+                        false,
+                        obusy,
+                    )
+                    .on_press(move |s: &mut AppState| s.run_system_overlay_action(&oid, "off")),
+                );
+            }
+            if !item.enabled && item.can_undo {
+                let oid = item.id.clone();
+                ctrl = ctrl.child(
+                    menu_btn(
+                        format!("ov-restore-{}", item.id),
+                        "Put back",
+                        false,
+                        false,
+                        obusy,
+                    )
+                    .on_press(move |s: &mut AppState| s.run_system_overlay_action(&oid, "restore")),
+                );
+            }
+            let badge_label = if item.enabled {
+                "On"
+            } else if item.status == "unknown" {
+                "Check"
+            } else {
+                "Off"
+            };
+            ctrl = ctrl.child(status_badge(
+                badge_label.into(),
+                if !item.enabled {
+                    BadgeTone::Good
+                } else {
+                    BadgeTone::Neutral
+                },
+            ));
+            body = body.child(menu_row(item.name.clone(), detail, err, ctrl));
+        }
+    }
+
     if let Some(ref tuning) = s.pc.tuning {
         body = body.child(group_head("System"));
         let busy = s.pc.tuning_busy.is_some();
+        if let Some(ref mig) = tuning.migration {
+            if mig.pending {
+                let err =
+                    s.pc.tuning_error
+                        .as_ref()
+                        .filter(|(k, _)| k == "migrate")
+                        .map(|(_, e)| e.clone());
+                body = body.child(menu_row(
+                    "Retired playbook tweaks",
+                    (!mig.summary.is_empty()).then(|| mig.summary.clone()),
+                    err,
+                    menu_btn(
+                        "sys-tuning-migrate".into(),
+                        if s.pc.tuning_busy.as_deref() == Some("migrate") {
+                            "Reverting…"
+                        } else {
+                            "Revert now"
+                        },
+                        true,
+                        false,
+                        busy,
+                    )
+                    .on_press(|s: &mut AppState| s.run_system_tuning_migrate()),
+                ));
+            } else if !mig.reverted.is_empty() && !mig.summary.is_empty() {
+                body = body.child(
+                    el().w_full().py(6.0).child(
+                        text(mig.summary.clone())
+                            .font(type_small())
+                            .color(fg_muted())
+                            .wrap(),
+                    ),
+                );
+            }
+        }
         for item in tuning.items.iter().filter(|i| {
             i.key != "integrity" && i.key != "mouseAccel" && (i.key != "vrr" || i.can_undo)
         }) {

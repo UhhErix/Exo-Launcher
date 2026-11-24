@@ -118,12 +118,11 @@ fn gamepad_prompt_bar() -> El {
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     cx.reduced_motion(s.settings.reduce_motion);
     set_text_scale(s.text_scale());
-    let has_modal_scrim =
-        s.palette_open
-            || s.key_modal_open
-            || s.store_ext.lightbox_index.is_some()
-            || s.wp4.report_open
-            || s.wp4_is_account_sheet_open();
+    let has_modal_scrim = s.palette_open
+        || s.key_modal_open
+        || s.store_ext.lightbox_index.is_some()
+        || s.wp4.report_open
+        || s.wp4_is_account_sheet_open();
     let budget = BlurBudget::compute(s, !s.notices.is_empty());
     cx.set_titlebar(exo_titlebar());
     cx.caption_color(if has_modal_scrim {

@@ -50,26 +50,29 @@ pub use pc_types::{
     Afmf3State, AppAutoCleared, AppCleanReply, AppConfirmReply, AppFind, AppLeftover, AppSkip,
     AppUndoReply, AppsIconsReply, AppsListReply, AppsPackagesPlanReply, AppsPackagesRemoveReply,
     AppsPackagesReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutoTuneState,
-    AutopilotFinding, AutopilotGameMode, AutopilotLive, AutopilotMemoryIntegrity,
-    AutopilotMouseAccel, AutopilotNow, AutopilotReport, AutopilotSetReply, AutopilotStandbyPurge,
-    AutopilotState, BackupDay, BackupNote, BackupOffer, BackupStatus, BiosStaged, BiosUpdateReply,
-    ClientsEpic, ClientsStatus, ClientsSteam, ColorControl, CompressActReply, CompressAllReply,
-    CompressList, CompressListGame, CompressSettings, CompressSettingsReply, DevicesImageReply,
-    DevicesListReply, DisplayAdjust, DisplayBest, DisplayDdc, DisplayScreen, DisplayState,
-    DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
-    DriveVendor, DriveVerdict, DriveVolume, DriverAdvised, DriverEntry, DriverEntryAdvised,
-    DriverLatest, DriverProgress, DriverSkipped, DriverState, DriverStep, DriversState,
-    DrivesReply, EqHeadphone, EqStateReply, ExoAiFans, ExoAiGaming, ExoAiState, FpsCounterReply,
-    GpuFeature, GpuProfile, GpuProfileItem, GpuProfileScreen, HdrState, InstalledAppItem,
-    InstallerCacheCleanReply, InstallerCacheReply, InterruptDevice, InterruptsState,
-    KeyboardBackupResult, KeyboardBackupSummary, KeyboardBackupsReply, KeyboardProfileSlot,
-    KeyboardReadReply, LatencyReport, LatencySample, NetCheck, NetSample, OutputColor, PcHealth,
-    PcHealthItem, PeripheralCard, PeripheralPort, RestorePointReply, RuntimeItem, RuntimeResult,
-    RuntimesInstallReply, RuntimesListReply, RuntimesProgress, ShaderEstimate, ShaderPrepareGame,
-    ShaderRebuild, ShaderSnapGame, ShadersAddonStatus, ShadersEstimatesReply,
-    ShadersPrepareGamesReply, ShadersSnapshot, StartupItem, StartupListReply, StartupRemovedItem,
-    SystemAbout, SystemTuningState, TuneMeasure, TunePart, TuningItem, UpdateCheckReply,
-    UpdateProgress, WindowsApp, WindowsAppLine, WindowsReleaseInfo,
+    AutopilotDownloadsPaused, AutopilotFinding, AutopilotGameMode, AutopilotLive,
+    AutopilotMemoryIntegrity, AutopilotMouseAccel, AutopilotNow, AutopilotReport,
+    AutopilotSetReply, AutopilotStandbyPurge, AutopilotState, AutopilotTimerGlobal, BackupDay,
+    BackupNote, BackupOffer, BackupStatus, BiosStaged, BiosUpdateReply, ClientsEpic, ClientsStatus,
+    ClientsSteam, ColorControl, CompressActReply, CompressAllReply, CompressList, CompressListGame,
+    CompressSettings, CompressSettingsReply, DevicesImageReply, DevicesListReply, DisplayAdjust,
+    DisplayBest, DisplayDdc, DisplayScreen, DisplayState, DriveFix, DriveGameEntry, DriveHealth,
+    DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp, DriveVendor, DriveVerdict, DriveVolume,
+    DriverAdvised, DriverEntry, DriverEntryAdvised, DriverLatest, DriverProgress, DriverSkipped,
+    DriverState, DriverStep, DriversState, DrivesReply, EqHeadphone, EqStateReply, ExoAiFans,
+    ExoAiGaming, ExoAiState, FpsCounterReply, GpuAdapterUsage, GpuEngineSlice, GpuFeature,
+    GpuProcessUsage, GpuProcessesState, GpuProfile, GpuProfileItem, GpuProfileScreen,
+    GpuUsageAnswer, HdrState, InstalledAppItem, InstallerCacheCleanReply, InstallerCacheReply,
+    InterruptDevice, InterruptsState, KeyboardBackupResult, KeyboardBackupSummary,
+    KeyboardBackupsReply, KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample,
+    NetCheck, NetSample, OutputColor, OverlayAdvisorItem, OverlayAdvisorState, PcHealth,
+    PcHealthItem, PeripheralCard, PeripheralPort, QosGame, QosState, RestorePointReply,
+    RuntimeItem, RuntimeResult, RuntimesInstallReply, RuntimesListReply, RuntimesProgress,
+    ShaderEstimate, ShaderPrepareGame, ShaderRebuild, ShaderSnapGame, ShadersAddonStatus,
+    ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot, StartupItem,
+    StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuneMeasure, TunePart,
+    TuningItem, TuningMigration, UpdateCheckReply, UpdateProgress, WindowsApp, WindowsAppLine,
+    WindowsReleaseInfo,
 };
 pub use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -215,6 +218,7 @@ pub const METHOD_GPU_AFMF3: &str = "gpu.afmf3";
 pub const METHOD_GPU_CONTROL_PANEL: &str = "gpu.controlPanel";
 pub const METHOD_GPU_DISPLAY: &str = "gpu.display";
 pub const METHOD_GPU_DRIVER: &str = "gpu.driver";
+pub const METHOD_GPU_PROCESSES: &str = "gpu.processes";
 pub const METHOD_GPU_PROFILE: &str = "gpu.profile";
 pub const METHOD_HDR_STATE: &str = "hdr.state";
 pub const METHOD_JUNK_CLEAN: &str = "junk.clean";
@@ -293,6 +297,8 @@ pub const METHOD_SYSTEM_DRIVERS: &str = "system.drivers";
 pub const METHOD_SYSTEM_DRIVES: &str = "system.drives";
 pub const METHOD_SYSTEM_HEALTH: &str = "system.health";
 pub const METHOD_SYSTEM_INTERRUPTS: &str = "system.interrupts";
+pub const METHOD_SYSTEM_OVERLAYS: &str = "system.overlays";
+pub const METHOD_SYSTEM_QOS: &str = "system.qos";
 pub const METHOD_SYSTEM_TUNE: &str = "system.tune";
 pub const METHOD_SYSTEM_TUNING: &str = "system.tuning";
 pub const METHOD_WEB_PREFERENCES_GET: &str = "web.preferences.get";
@@ -462,6 +468,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GPU_CONTROL_PANEL,
     METHOD_GPU_DISPLAY,
     METHOD_GPU_DRIVER,
+    METHOD_GPU_PROCESSES,
     METHOD_GPU_PROFILE,
     METHOD_HDR_STATE,
     METHOD_JUNK_CLEAN,
@@ -596,6 +603,8 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SYSTEM_DRIVES,
     METHOD_SYSTEM_HEALTH,
     METHOD_SYSTEM_INTERRUPTS,
+    METHOD_SYSTEM_OVERLAYS,
+    METHOD_SYSTEM_QOS,
     METHOD_SYSTEM_TUNE,
     METHOD_SYSTEM_TUNING,
     METHOD_WEB_PREFERENCES_GET,
