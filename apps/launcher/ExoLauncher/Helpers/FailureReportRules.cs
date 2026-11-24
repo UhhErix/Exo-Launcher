@@ -71,7 +71,7 @@ public static class FailureReportRules
     /// or the network's, and an HTTP failure is some other server's; none of those is reported. Everything else is.
     /// </summary>
     public static bool IsHostCallBug(Exception ex) =>
-        ex is not (InvalidOperationException or InvalidDataException or OperationCanceledException or TimeoutException
+        ex is not (UserFacingException or InvalidOperationException or InvalidDataException or OperationCanceledException or TimeoutException
             or HttpRequestException or System.Net.Sockets.SocketException);
 
     /// <summary>

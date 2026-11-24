@@ -11,6 +11,82 @@ export async function run(t) {
   const { run, k } = t
   const rounds = t.quick ? 2 : 4
 
+  await run.check('perf', 'webview-teardown', 'ephemeral WebView2 hosts release their processes and working set within 5 s across 3 open/close cycles', async (c) => {
+    await t.win.front()
+    await k.nav('Library')
+    await sleep(2500)
+    const wvStats = async () => {
+      const p = await t.win.proc()
+      const wv = p.byName.msedgewebview2 ?? { count: 0, workingSetMB: 0 }
+      return { count: wv.count ?? 0, workingSetMB: wv.workingSetMB ?? 0 }
+    }
+    const waitReturn = async (targetCount, timeoutMs = 5000) => {
+      const started = Date.now()
+      await sleep(300)
+      let last = await wvStats()
+      while (last.count > targetCount && Date.now() - started < timeoutMs) {
+        await sleep(300)
+        last = await wvStats()
+      }
+      if (last.count > targetCount) last = await wvStats()
+      return { ...last, ms: Date.now() - started }
+    }
+    const triggerGifts = () => t.shell.eval(`new Promise((resolve, reject) => {
+      const wv = window.chrome.webview, id = crypto.randomUUID()
+      const timer = setTimeout(() => { wv.removeEventListener('message', on); reject(new Error('gifts.changed timeout')) }, 120000)
+      function on(e) {
+        let d = e.data; try { if (typeof d === 'string') d = JSON.parse(d) } catch { return }
+        if (d && d.event === 'gifts.changed') { clearTimeout(timer); wv.removeEventListener('message', on); resolve(d.data) }
+      }
+      wv.addEventListener('message', on)
+      wv.postMessage(JSON.stringify({ version: 1, id, method: 'gifts.list', params: { force: true } }))
+    })`)
+
+    const base = await wvStats()
+    const failures = []
+    const authRounds = []
+    for (let i = 0; i < 3; i++) {
+      const signIn = t.exo.host(t.shell, 'gifts.steamSignIn', {}, 60000).catch(() => ({ ok: false }))
+      const spawnStart = Date.now()
+      let peak = base
+      while (Date.now() - spawnStart < 20000) {
+        peak = await wvStats()
+        if (peak.count >= base.count + 3) break
+        await sleep(300)
+      }
+      const closeStart = Date.now()
+      while (Date.now() - closeStart < 5000) {
+        const res = await t.win.closeTitle('Sign in to Steam')
+        if (res.closed > 0) break
+        await sleep(250)
+      }
+      await signIn
+      const after = await waitReturn(base.count, 5000)
+      authRounds.push({ peak, after })
+      if (after.count > base.count) failures.push(`StoreAuthWindow round ${i + 1}: ${after.count} WebView2 processes remained after 5 s (baseline ${base.count})`)
+    }
+
+    const giftsRounds = []
+    for (let i = 0; i < 3; i++) {
+      await triggerGifts()
+      const after = await waitReturn(base.count, 5000)
+      giftsRounds.push(after)
+      if (after.count > base.count) failures.push(`StoreGifts round ${i + 1}: ${after.count} WebView2 processes remained after 5 s (baseline ${base.count})`)
+    }
+
+    const end = await waitReturn(base.count, 5000)
+    const wsDelta = +(end.workingSetMB - base.workingSetMB).toFixed(1)
+    c.evidence.baseline = base
+    c.evidence.authRounds = authRounds
+    c.evidence.giftsRounds = giftsRounds
+    c.evidence.end = end
+    c.metric('webview.count.delta', end.count - base.count, '')
+    c.metric('webview.ws.delta', wsDelta, ' MB', 10)
+    if (end.count > base.count) failures.push(`msedgewebview2 count stayed at ${end.count} (baseline ${base.count})`)
+    if (wsDelta > 10) failures.push(`msedgewebview2 WS grew by ${wsDelta} MB (limit +10 MB)`)
+    return failures
+  })
+
   await run.check('perf', 'room-switch', 'every room comes up quickly, every time', async (c) => {
     const times = {}
     for (let r = 0; r < rounds; r++) for (const room of [...ROOMS.slice(1), 'Library']) (times[room] ??= []).push(await k.nav(room))

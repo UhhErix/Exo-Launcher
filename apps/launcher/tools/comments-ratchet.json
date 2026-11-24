@@ -1076,7 +1076,7 @@
     "ExoLauncher/Services/SteamSignIn/SteamSignInService.cs": 30,
     "ExoLauncher/Services/SteamSignIn/SteamWebApi.cs": 28,
     "ExoLauncher/Services/SteamSignIn/SteamWebsiteToken.cs": 14,
-    "ExoLauncher/Services/StoreAuthWindow.cs": 47,
+    "ExoLauncher/Services/StoreAuthWindow.cs": 42,
     "ExoLauncher/Services/StoreGifts.cs": 48,
     "ExoLauncher/Services/StoreLinks.cs": 18,
     "ExoLauncher/Services/StorePackages.cs": 40,

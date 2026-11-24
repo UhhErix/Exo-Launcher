@@ -781,19 +781,39 @@ internal sealed partial class MusicEngineService
     private async Task InitializeMusicWebAsync(MusicWebHostWindow host, string service)
     {
         var initTimer = Stopwatch.StartNew();
-        var environment = await WebViewEnvironmentFactory.GetAsync();
-        var envMs = initTimer.ElapsedMilliseconds;
-        if (_musicWebClosed || !ReferenceEquals(_musicHost, host)) return;
-        var controller = await environment.CreateCoreWebView2ControllerAsync(
-            CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)host.Handle),
-            WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
-        var coreMs = initTimer.ElapsedMilliseconds;
-        if (_musicWebClosed || !ReferenceEquals(_musicHost, host))
+        WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? lease = null;
+        CoreWebView2Environment environment;
+        long envMs;
+        long coreMs;
+        try
         {
-            try { controller.Close(); } catch { }
-            return;
+            lease = await WebViewEnvironmentFactory.AcquireAsync();
+            environment = lease.Environment;
+            envMs = initTimer.ElapsedMilliseconds;
+            if (_musicWebClosed || !ReferenceEquals(_musicHost, host))
+            {
+                lease.Dispose();
+                return;
+            }
+            var controller = await environment.CreateCoreWebView2ControllerAsync(
+                CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)host.Handle),
+                WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
+            coreMs = initTimer.ElapsedMilliseconds;
+            if (_musicWebClosed || !ReferenceEquals(_musicHost, host))
+            {
+                try { controller.Close(); } catch { }
+                lease.Dispose();
+                return;
+            }
+            var ownedLease = lease;
+            lease = null;
+            host.AttachController(controller, visible: true, environmentLease: ownedLease);
         }
-        host.AttachController(controller, visible: true);
+        catch
+        {
+            lease?.Dispose();
+            throw;
+        }
         var core = host.Core!;
         WebViewEnvironmentFactory.LogEmbeddedProfileOnce(core);
         WebViewWindowHider.Hide(core.BrowserProcessId);
@@ -958,6 +978,7 @@ internal sealed partial class MusicEngineService
             var deferral = e.GetDeferral();
             var popupTimer = Stopwatch.StartNew();
             MusicWebHostWindow? child = null;
+            WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? popupLease = null;
             var popupDismissed = false;
             try
             {
@@ -986,24 +1007,30 @@ internal sealed partial class MusicEngineService
                 {
                     window.Show(activate: false);
                 }
-                var controller = await environment.CreateCoreWebView2ControllerAsync(
+                popupLease = WebViewEnvironmentFactory.TryAcquire(environment) ?? await WebViewEnvironmentFactory.AcquireAsync();
+                var popupEnv = popupLease.Environment;
+                var controller = await popupEnv.CreateCoreWebView2ControllerAsync(
                     CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)window.Handle),
-                    WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
+                    WebViewEnvironmentFactory.EmbeddedControllerOptions(popupEnv));
                 var ensureMs = popupTimer.ElapsedMilliseconds;
                 if (popupDismissed || _musicWebClosed || _musicWebService != service || generation != _musicWebGeneration)
                 {
                     try { controller.Close(); } catch { }
+                    popupLease.Dispose();
+                    popupLease = null;
                     window.Close();
                     return;
                 }
-                window.AttachController(controller, visible: true);
+                var ownedPopupLease = popupLease;
+                popupLease = null;
+                window.AttachController(controller, visible: true, environmentLease: ownedPopupLease);
                 var popupCore = window.Core!;
                 _musicPopouts[window] = popupCore;
                 _ = WebExtensions.AttachAsync(popupCore, MusicWebPolicy.Label(service), window.Handle);
                 if (popupDismissed || _musicWebClosed || _musicWebService != service || generation != _musicWebGeneration) { window.Close(); return; }
                 await SetMusicMotionPreferenceAsync(popupCore);
                 if (popupDismissed || _musicWebClosed || _musicWebService != service || generation != _musicWebGeneration) { window.Close(); return; }
-                ConfigureMusicCore(popupCore, environment, window, service, popup: true);
+                ConfigureMusicCore(popupCore, popupEnv, window, service, popup: true);
                 await popupCore.AddScriptToExecuteOnDocumentCreatedAsync(EmbeddedClientPresentation.Script);
                 void UpdatePopupActivity(bool force = false)
                 {
@@ -1033,6 +1060,7 @@ internal sealed partial class MusicEngineService
             {
                 var dismissed = popupDismissed;
                 try { child?.Close(); } catch { }
+                try { popupLease?.Dispose(); } catch { }
                 if (!dismissed && generation == _musicWebGeneration)
                     PublishMusicStatus(service, "error", "The player's window could not open. Try opening it in your browser.");
             }

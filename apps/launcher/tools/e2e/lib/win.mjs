@@ -37,6 +37,7 @@ export const win = {
   maximize: () => run('maximize'),
   restore: () => run('restore'),
   proc: () => run('proc'),
+  closeTitle: (name) => run('closeTitle', { Name: name }),
   udp: () => run('udp'),
   /** Visible windows on a monitor belonging to processes with this name: { running, shown }. */
   shown: (name) => run('shown', { Name: name }),

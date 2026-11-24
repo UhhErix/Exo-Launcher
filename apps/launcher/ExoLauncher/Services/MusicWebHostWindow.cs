@@ -37,6 +37,7 @@ internal sealed class MusicWebHostWindow
     private nint _hwnd;
     private CoreWebView2Controller? _controller;
     private CoreWebView2? _core;
+    private IDisposable? _environmentLease;
     private bool _closed;
 
     internal nint Handle => _hwnd;
@@ -108,10 +109,11 @@ internal sealed class MusicWebHostWindow
         return new MusicWebHostWindow(hwnd);
     }
 
-    internal void AttachController(CoreWebView2Controller controller, bool visible)
+    internal void AttachController(CoreWebView2Controller controller, bool visible, IDisposable? environmentLease = null)
     {
         _controller = controller;
         _core = controller.CoreWebView2;
+        _environmentLease = environmentLease;
         try { controller.DefaultBackgroundColor = Color.FromArgb(255, 0, 0, 0); } catch { }
         SyncBounds();
         try { controller.IsVisible = visible; } catch { }
@@ -144,11 +146,12 @@ internal sealed class MusicWebHostWindow
         if (_closed) return;
         _closed = true;
         var controller = _controller;
+        var lease = Interlocked.Exchange(ref _environmentLease, null);
         _controller = null;
         _core = null;
         if (controller is not null)
         {
-            try { controller.Close(); } catch { }
+            WebViewEnvironmentLifetime.CloseAndRelease(controller);
         }
         var hwnd = _hwnd;
         if (hwnd != 0)
@@ -157,6 +160,7 @@ internal sealed class MusicWebHostWindow
             Instances.Remove(hwnd);
             try { DestroyWindow(hwnd); } catch { }
         }
+        try { lease?.Dispose(); } catch { }
         Closed?.Invoke();
     }
 
@@ -212,12 +216,14 @@ internal sealed class MusicWebHostWindow
                 {
                     host._closed = true;
                     var controller = host._controller;
+                    var lease = Interlocked.Exchange(ref host._environmentLease, null);
                     host._controller = null;
                     host._core = null;
                     if (controller is not null)
                     {
-                        try { controller.Close(); } catch { }
+                        WebViewEnvironmentLifetime.CloseAndRelease(controller);
                     }
+                    try { lease?.Dispose(); } catch { }
                     try { host.Closed?.Invoke(); } catch { }
                 }
             }

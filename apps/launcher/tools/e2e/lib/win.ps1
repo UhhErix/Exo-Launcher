@@ -82,6 +82,21 @@ public static class ExoWin {
     }, IntPtr.Zero);
     return list;
   }
+  public static int CloseByTitle(int targetPid, string title) {
+    int closed = 0;
+    var sb = new System.Text.StringBuilder(256);
+    EnumWindows((h, l) => {
+      uint pid; GetWindowThreadProcessId(h, out pid);
+      if ((int)pid != targetPid) return true;
+      sb.Clear(); GetWindowText(h, sb, sb.Capacity);
+      if (sb.ToString() == title) {
+        PostMessage(h, 0x0010, IntPtr.Zero, IntPtr.Zero);
+        closed++;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return closed;
+  }
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
   /** Exo Capture's snip overlay once it shows: { at (Unix ms), hwnd }, or null after the timeout. */
@@ -164,7 +179,11 @@ function Get-ExoHwnd($p) {
 function Get-ExoWindow {
     $exe = Join-Path $env:LOCALAPPDATA 'ExoLauncher\app\ExoLauncher.exe'
     $procs = @(Get-Process ExoLauncher -ErrorAction SilentlyContinue)
-    $ordered = @($procs | Where-Object { $_.Path -eq $exe }) + @($procs | Where-Object { $_.Path -ne $exe })
+    $ordered = if ($env:EXO_E2E_TEST_INSTANCE -eq '1') {
+        @($procs | Where-Object { $_.Path -ne $exe })
+    } else {
+        @($procs | Where-Object { $_.Path -eq $exe }) + @($procs | Where-Object { $_.Path -ne $exe })
+    }
     foreach ($p in $ordered) {
         if ([ExoWin]::MainWindow($p.Id, $p.MainWindowHandle) -ne [IntPtr]::Zero) { return $p }
     }
@@ -385,7 +404,7 @@ switch ($Command) {
         $procs = @($tree | ForEach-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
         $byName = [ordered]@{}
         foreach ($g in ($procs | Group-Object Name)) {
-            $byName[$g.Name] = [ordered]@{ cpuSeconds = [math]::Round(($g.Group | Measure-Object -Property CPU -Sum).Sum, 3); workingSetMB = [math]::Round(($g.Group | Measure-Object -Property WorkingSet64 -Sum).Sum / 1MB, 1) }
+            $byName[$g.Name] = [ordered]@{ count = $g.Count; cpuSeconds = [math]::Round(($g.Group | Measure-Object -Property CPU -Sum).Sum, 3); workingSetMB = [math]::Round(($g.Group | Measure-Object -Property WorkingSet64 -Sum).Sum / 1MB, 1) }
         }
         [ordered]@{
             pid = $exo.Id; count = $procs.Count
@@ -395,6 +414,10 @@ switch ($Command) {
             names = @($procs | Group-Object Name | ForEach-Object { "$($_.Name) x$($_.Count)" })
             byName = $byName
         } | ConvertTo-Json -Depth 5 -Compress
+    }
+    'closeTitle' {
+        $exo = Get-ExoWindow
+        [ordered]@{ closed = [ExoWin]::CloseByTitle($exo.Id, $Name) } | ConvertTo-Json -Compress
     }
     'udp' { $p = Get-ExoWindow; [ordered]@{ count = @(Get-NetUDPEndpoint -OwningProcess $p.Id -ErrorAction SilentlyContinue).Count } | ConvertTo-Json -Compress }
     'shown' {

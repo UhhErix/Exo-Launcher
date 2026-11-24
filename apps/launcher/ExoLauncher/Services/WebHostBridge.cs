@@ -380,6 +380,7 @@ public sealed partial class WebHostBridge
             DiscordClient.DiscordSession.VideoFrame -= PostVideoFrame;
         }
         StopGiftsTimer();
+        _gifts.Close();
         DetachAppsCache();
         UnwatchDevices();
         UnwatchEq();
