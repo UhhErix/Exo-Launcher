@@ -54,6 +54,7 @@ mod pc_menus;
 mod pc_state;
 mod pc_storage;
 mod pc_wp9_actions;
+mod power_guard;
 mod report;
 mod select_bar;
 mod settings;
@@ -438,7 +439,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let hb = s.tick_shell_heartbeat(now, tx);
     let wp9 = s.pc_wp9_tick(now);
     let music = s.music_tick(now);
-    focus_changed || notices || setup || island || lib || store || wp4 || hb || wp9 || music
+    let pg = s.tick_power_guard(now);
+    focus_changed || notices || setup || island || lib || store || wp4 || hb || wp9 || music || pg
 }
 
 #[cfg(windows)]

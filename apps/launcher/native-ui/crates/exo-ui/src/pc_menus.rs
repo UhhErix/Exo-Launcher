@@ -549,7 +549,9 @@ fn graphics_menu_body(s: &AppState) -> El {
 
     body = body
         .child(group_head("Manual tuning"))
-        .child(crate::gpu_tuning::view(s));
+        .child(crate::gpu_tuning::view(s))
+        .child(group_head("Power guard"))
+        .child(crate::power_guard::view(s));
 
     if s.settings.frame_gen_everywhere_card {
         let on = s.settings.frame_gen_everywhere;

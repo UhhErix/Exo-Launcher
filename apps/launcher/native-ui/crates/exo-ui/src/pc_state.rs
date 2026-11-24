@@ -531,6 +531,7 @@ pub struct SettingsAndPcState {
     pub controller_ui: crate::devices_controller::ControllerLabState,
     pub gpu_tuning_ui: crate::gpu_tuning::GpuManualTuningUiState,
     pub hdr_ui: crate::pc_hdr::HdrCalibrationUiState,
+    pub power_guard_ui: Box<crate::power_guard::PowerGuardUiState>,
 }
 
 impl SettingsAndPcState {
@@ -1305,6 +1306,7 @@ impl SettingsAndPcState {
             controller_ui: crate::devices_controller::ControllerLabState::demo(),
             gpu_tuning_ui: crate::gpu_tuning::GpuManualTuningUiState::demo(),
             hdr_ui: crate::pc_hdr::HdrCalibrationUiState::default(),
+            power_guard_ui: Box::default(),
         }
     }
 
@@ -1478,6 +1480,7 @@ impl SettingsAndPcState {
             controller_ui: crate::devices_controller::ControllerLabState::default(),
             gpu_tuning_ui: crate::gpu_tuning::GpuManualTuningUiState::default(),
             hdr_ui: crate::pc_hdr::HdrCalibrationUiState::default(),
+            power_guard_ui: Box::default(),
         }
     }
 }

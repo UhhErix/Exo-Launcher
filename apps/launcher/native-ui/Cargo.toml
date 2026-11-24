@@ -7,6 +7,7 @@ members = [
     "crates/exo-macros",
     "crates/exo-macros-worker",
     "crates/exo-controller",
+    "crates/exo-power-guard",
     "crates/exo-ui",
     "crates/exo-shaders",
     "crates/exo-thermal",

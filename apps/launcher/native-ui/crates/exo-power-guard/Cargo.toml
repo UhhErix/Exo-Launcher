@@ -1,0 +1,6 @@
+[package]
+name = "exo-power-guard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Cross-vendor user-mode GPU power, thermal, and 12V-2x6 connector guard for Exo Launcher"

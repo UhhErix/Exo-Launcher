@@ -2500,13 +2500,13 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             row()
                 .key("exo-ai-grid")
                 .w_full()
-                .grow(1.0)
                 .min_h(0.0)
                 .items_start()
                 .gap(10.0)
                 .child(left_col)
                 .child(right_col),
         )
+        .child(crate::power_guard::card_view(s))
 }
 
 pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
