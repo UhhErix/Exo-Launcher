@@ -91,6 +91,24 @@ internal sealed class AutopilotNative : IAutopilotSystem
 
     public bool OnBattery() => _power.Battery();
 
+    public IReadOnlyList<CpuSetInfo> CpuSets() => AutopilotCpuSets.ReadSystemCpuSets();
+
+    public uint[]? ReadCpuSets(int pid, long created)
+    {
+        var handle = Open(pid, created, QueryLimited);
+        if (handle == 0) return null;
+        try { return AutopilotCpuSets.GetDefaultCpuSets(handle); }
+        finally { CloseHandle(handle); }
+    }
+
+    public bool WriteCpuSets(int pid, long created, uint[]? ids)
+    {
+        var handle = Open(pid, created, QueryLimited | SetInformation);
+        if (handle == 0) return false;
+        try { return AutopilotCpuSets.SetDefaultCpuSets(handle, ids); }
+        finally { CloseHandle(handle); }
+    }
+
     /// <summary>The process, opened only if it is still the one that started at <paramref name="created"/> (a FILETIME); 0 otherwise.</summary>
     private static nint Open(int pid, long created, uint access)
     {
@@ -130,14 +148,23 @@ internal sealed class AutopilotNative : IAutopilotSystem
     private bool _highResTimer;
     private uint _ntTimerResolution;
 
+    internal const uint TargetTimerResolution100Ns = 5070u;
+
+    internal static uint ChooseTimerResolution(uint minRes, uint maxRes)
+    {
+        if (maxRes == 0) return TargetTimerResolution100Ns;
+        var target = Math.Max(maxRes, TargetTimerResolution100Ns);
+        return minRes > 0 && target > minRes ? maxRes : target;
+    }
+
     public void BeginHighResTimer()
     {
         lock (_timerLock)
         {
             if (_highResTimer) return;
-            if (NtQueryTimerResolution(out _, out var maxRes, out _) == 0)
+            if (NtQueryTimerResolution(out var minRes, out var maxRes, out _) == 0)
             {
-                var target = maxRes > 0 ? Math.Max(maxRes, 5000u) : 5000u;
+                var target = ChooseTimerResolution(minRes, maxRes);
                 if (NtSetTimerResolution(target, true, out _) == 0)
                 {
                     _ntTimerResolution = target;
@@ -204,8 +231,17 @@ internal static class Autopilot
 
     internal static AutopilotSettings Settings => LiveSettings(App.Services.Settings.Current.Autopilot);
 
+    private static readonly Lazy<CcdLayout?> CachedCcd = new(() =>
+    {
+        try { return CcdLayout.Of(MouseCore.Sampler.ReadTopology()); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+    });
+
     internal static AutopilotEngine Engine { get; } = new(new AutopilotNative(), Journal, () => Settings, () => Cpu.Value,
-        look => new Timer(_ => look(), null, AutopilotEngine.LookEveryMs, AutopilotEngine.LookEveryMs));
+        look => new Timer(_ => look(), null, AutopilotEngine.LookEveryMs, AutopilotEngine.LookEveryMs),
+        ccdLayout: () => CachedCcd.Value);
+
+    internal static CcdLayout? Layout => CachedCcd.Value;
 
     internal static AutopilotGameMode GameMode { get; } = new(UserRegistry.Shared, Journal, () => WindowsGameMode.Shared.State, WindowsGameMode.Off, WindowsGameMode.On);
 
@@ -221,6 +257,8 @@ internal static class Autopilot
         AutopilotWatch.Shared.Did = Engine.Did;
         try { Engine.Recover(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Autopilot: recovery failed: " + ex.GetType().Name); }
+        try { GameSessionDownloadPause.Shared.Recover(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Download pause: recovery failed: " + ex.GetType().Name); }
         HandGameMode();
         HandMouseAccel();
     }
@@ -281,6 +319,8 @@ internal static class Autopilot
     {
         try { Engine.End(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Autopilot: ending failed: " + ex.GetType().Name); }
+        try { GameSessionDownloadPause.Shared.SetGaming(false); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Download pause: restore failed: " + ex.GetType().Name); }
     }
 
     /// <summary>The uninstaller: every change goes back, Game Mode and mouse acceleration included, before Exo's own keeper gives its value back.</summary>

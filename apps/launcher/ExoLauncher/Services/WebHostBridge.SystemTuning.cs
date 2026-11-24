@@ -17,6 +17,7 @@ public sealed partial class WebHostBridge
         {
             "apply" => await Task.Run(() => SystemTuning.Shared.ApplyAsync(), ct).ConfigureAwait(false),
             "playbook" => await Task.Run(SystemTuning.Shared.ApplyPlaybookAsync, ct).ConfigureAwait(false),
+            "migrate" => await Task.Run(SystemTuning.Shared.MigrateAsync, ct).ConfigureAwait(false),
             "on" => item is null ? "Exo doesn't know that setting." : await Task.Run(() => SystemTuning.Shared.ApplyAsync([item]), ct).ConfigureAwait(false),
             "latency" => await Task.Run(SystemTuning.Shared.LatencyAsync, ct).ConfigureAwait(false),
             "off" => item is null ? "Exo doesn't know that setting." : await Task.Run(() => SystemTuning.Shared.TurnOffAsync(item), ct).ConfigureAwait(false),
@@ -31,6 +32,7 @@ public sealed partial class WebHostBridge
             applied = state.Applied,
             restart = state.Restart,
             latency = after is null ? null : new { before = LatencyOf(before), after = LatencyOf(after), said },
+            migration = state.Migration is { } mig ? new { pending = mig.Pending, keys = mig.Keys, summary = mig.Summary, reverted = mig.Reverted, restart = mig.Restart } : null,
             items = state.Items.Select(i => new { key = i.Key, label = i.Label, detail = i.Detail, on = i.On, canUndo = i.CanUndo, off = i.Off, optIn = i.OptIn, restart = i.Restart, needsRestart = i.NeedsRestart, blocked = i.Blocked }).ToList(),
         };
     }

@@ -299,6 +299,7 @@ internal static class PlayerData
         new("exo-network-tune.json", "NetworkTune", Why.ThisPc, "network adapter values before Exo tuned them"),
         new("exo-power-plan.json", "PowerPlan", Why.ThisPc, "the power plan before Exo's"),
         new("exo-system-tuning.json", "SystemTuning", Why.ThisPc, "this PC's Windows settings before Best settings › System, the items turned off, and the last two latency checks"),
+        new("exo-download-pause.json", "GameSessionDownloadPause", Why.ThisPc, "BITS jobs and Windows Update services paused during a game session so they restore after a crash"),
         new(".latency.json", "SystemTuning", Why.ThisPc, "a temporary DPC and ISR latency check answer file written in the Windows temp folder"),
         new("exo-shared.json", "WebViewHostProfile", Why.ThisPc, "marks the shared WebView profile"),
         new("exo-snapshot.json", "ShadersAddon", Why.ThisPc, "the shader engine's last state"),
