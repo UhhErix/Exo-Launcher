@@ -41,6 +41,13 @@ internal sealed class StoreGifts
 
     internal Snapshot Last { get; private set; } = new([], false);
 
+    internal void Close()
+    {
+        var signIn = _signIn;
+        _signIn = null;
+        try { signIn?.Close(); } catch { }
+    }
+
     /// <summary>Every gift waiting on both stores. UI thread only.</summary>
     internal async Task<Snapshot> ReadAsync(nint owner, CancellationToken ct)
     {
@@ -318,38 +325,74 @@ internal sealed class StoreGifts
     /// <summary>A hidden page on the gifts profile, owned by Exo's window.</summary>
     private sealed class Page : IDisposable
     {
-        private readonly CoreWebView2Controller _controller;
+        private CoreWebView2Controller? _controller;
+        private CoreWebView2Environment? _environment;
+        private uint _browserPid;
+        private Windows.Foundation.TypedEventHandler<CoreWebView2, CoreWebView2NewWindowRequestedEventArgs>? _onNewWindow;
+        private Windows.Foundation.TypedEventHandler<CoreWebView2, CoreWebView2WebResourceRequestedEventArgs>? _onWebResource;
 
-        private Page(CoreWebView2Controller controller) => _controller = controller;
+        private Page(
+            CoreWebView2Controller controller,
+            CoreWebView2Environment environment,
+            uint browserPid,
+            Windows.Foundation.TypedEventHandler<CoreWebView2, CoreWebView2NewWindowRequestedEventArgs> onNewWindow,
+            Windows.Foundation.TypedEventHandler<CoreWebView2, CoreWebView2WebResourceRequestedEventArgs> onWebResource)
+        {
+            _controller = controller;
+            _environment = environment;
+            _browserPid = browserPid;
+            _onNewWindow = onNewWindow;
+            _onWebResource = onWebResource;
+        }
 
-        private CoreWebView2 Core => _controller.CoreWebView2;
+        private CoreWebView2 Core => (_controller ?? throw new ObjectDisposedException(nameof(Page))).CoreWebView2;
 
         internal string? Source => Core.Source;
 
         internal static async Task<Page> OpenAsync(nint owner)
         {
+            await WebViewEnvironmentLifetime.WaitForFolderExitAsync(ProfileFolder).ConfigureAwait(true);
             Directory.CreateDirectory(ProfileFolder);
             // The sign-in window opens this profile too: the same options let both share one browser.
-            var environment = await CoreWebView2Environment.CreateWithOptionsAsync(
-                WebViewRuntimeLocator.ResolveBrowserExecutableFolder(),
-                ProfileFolder,
-                new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = false });
-            var controller = await environment.CreateCoreWebView2ControllerAsync(
-                CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)owner));
-            controller.IsVisible = false;
-            var core = controller.CoreWebView2;
-            core.Settings.AreHostObjectsAllowed = false;
-            core.Settings.IsWebMessageEnabled = false;
-            core.Settings.AreDevToolsEnabled = false;
-            core.Settings.AreDefaultScriptDialogsEnabled = false;
-            core.Settings.IsStatusBarEnabled = false;
-            core.NewWindowRequested += (_, e) => UiGuard.Run(() => e.Handled = true);
-            // No one sees this page: a link from it to another app is refused and logged, never asked.
-            WebPageGuard.Attach(core, "Gifts");
-            foreach (var kind in new[] { CoreWebView2WebResourceContext.Image, CoreWebView2WebResourceContext.Media, CoreWebView2WebResourceContext.Font })
-                core.AddWebResourceRequestedFilter("*", kind);
-            core.WebResourceRequested += (_, e) => UiGuard.Run(() => e.Response = environment.CreateWebResourceResponse(null, 204, "No Content", ""));
-            return new Page(controller);
+            CoreWebView2Environment? environment = null;
+            CoreWebView2Controller? controller = null;
+            uint browserPid = 0;
+            try
+            {
+                environment = await CoreWebView2Environment.CreateWithOptionsAsync(
+                    WebViewRuntimeLocator.ResolveBrowserExecutableFolder(),
+                    ProfileFolder,
+                    new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = false });
+                controller = await environment.CreateCoreWebView2ControllerAsync(
+                    CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)owner));
+                controller.IsVisible = false;
+                var core = controller.CoreWebView2;
+                WebViewEnvironmentLifetime.ApplyLowMemoryTarget(core);
+                browserPid = core.BrowserProcessId;
+                core.Settings.AreHostObjectsAllowed = false;
+                core.Settings.IsWebMessageEnabled = false;
+                core.Settings.AreDevToolsEnabled = false;
+                core.Settings.AreDefaultScriptDialogsEnabled = false;
+                core.Settings.IsStatusBarEnabled = false;
+                Windows.Foundation.TypedEventHandler<CoreWebView2, CoreWebView2NewWindowRequestedEventArgs> onNewWindow =
+                    (_, e) => UiGuard.Run(() => e.Handled = true);
+                core.NewWindowRequested += onNewWindow;
+                // No one sees this page: a link from it to another app is refused and logged, never asked.
+                WebPageGuard.Attach(core, "Gifts");
+                foreach (var kind in new[] { CoreWebView2WebResourceContext.Image, CoreWebView2WebResourceContext.Media, CoreWebView2WebResourceContext.Font })
+                    core.AddWebResourceRequestedFilter("*", kind);
+                var envForHandler = environment;
+                Windows.Foundation.TypedEventHandler<CoreWebView2, CoreWebView2WebResourceRequestedEventArgs> onWebResource =
+                    (_, e) => UiGuard.Run(() => e.Response = envForHandler.CreateWebResourceResponse(null, 204, "No Content", ""));
+                core.WebResourceRequested += onWebResource;
+                return new Page(controller, environment, browserPid, onNewWindow, onWebResource);
+            }
+            catch
+            {
+                try { WebViewEnvironmentLifetime.CloseAndRelease(controller); } catch { }
+                _ = WebViewEnvironmentLifetime.Release(environment, browserPid, ProfileFolder);
+                throw;
+            }
         }
 
         /// <summary>Navigates, then waits for a finished page <paramref name="arrived"/> accepts (redirects and script hops on the way).</summary>
@@ -416,6 +459,30 @@ internal sealed class StoreGifts
                 Core.CookieManager.DeleteCookie(cookie);
         }
 
-        public void Dispose() => _controller.Close();
+        public void Dispose()
+        {
+            var controller = _controller;
+            var environment = _environment;
+            var browserPid = _browserPid;
+            var onNewWindow = _onNewWindow;
+            var onWebResource = _onWebResource;
+            _controller = null;
+            _environment = null;
+            _browserPid = 0;
+            _onNewWindow = null;
+            _onWebResource = null;
+            if (controller is not null)
+            {
+                try
+                {
+                    var core = controller.CoreWebView2;
+                    if (onNewWindow is not null) core.NewWindowRequested -= onNewWindow;
+                    if (onWebResource is not null) core.WebResourceRequested -= onWebResource;
+                }
+                catch { }
+                WebViewEnvironmentLifetime.CloseAndRelease(controller);
+            }
+            _ = WebViewEnvironmentLifetime.Release(environment, browserPid, ProfileFolder);
+        }
     }
 }

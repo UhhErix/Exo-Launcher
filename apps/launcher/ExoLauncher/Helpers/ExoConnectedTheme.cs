@@ -229,6 +229,11 @@ internal static class ExoConnectedTheme
 
         var (width, height) = size ?? (mark.Width, mark.Height);
         Place(window, width, height + Band);
+        window.Closed += (_, _) =>
+        {
+            try { root.Children.Clear(); } catch { }
+            try { window.Content = null; } catch { }
+        };
         _ = SetIconAsync(window, service);
     }
 

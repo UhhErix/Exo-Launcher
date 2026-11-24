@@ -376,19 +376,25 @@ internal sealed partial class MusicEngineService
         };
         ForegroundWatcher.Asked(label + "'s sign-in window");
         window.Show(activate: true);
+        WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? lease = null;
         try
         {
-            var environment = await WebViewEnvironmentFactory.GetAsync();
+            lease = await WebViewEnvironmentFactory.AcquireAsync();
+            var environment = lease.Environment;
             var controller = await environment.CreateCoreWebView2ControllerAsync(
                 CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)window.Handle),
                 WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
             if (closed || _musicWebService != service || generation != _musicWebGeneration)
             {
                 try { controller.Close(); } catch { }
+                lease.Dispose();
+                lease = null;
                 window.Close();
                 return new { ok = false, message = label + " could not start sign-in. Try again." };
             }
-            window.AttachController(controller, visible: true);
+            var ownedLease = lease;
+            lease = null;
+            window.AttachController(controller, visible: true, environmentLease: ownedLease);
             var core = window.Core!;
             _musicPopouts[window] = core;
             var finished = false;
@@ -412,6 +418,7 @@ internal sealed partial class MusicEngineService
         {
             AppLog.Warn(label + " sign-in window could not open: " + error.GetType().Name);
             try { window.Close(); } catch { }
+            try { lease?.Dispose(); } catch { }
             return new { ok = false, message = label + " could not start sign-in. Try again." };
         }
     }

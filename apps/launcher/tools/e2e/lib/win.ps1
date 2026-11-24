@@ -82,6 +82,54 @@ public static class ExoWin {
     }, IntPtr.Zero);
     return list;
   }
+  private delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int obj, int child, uint thread, uint time);
+  [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr mod, WinEventProc proc, uint pid, uint tid, uint flags);
+  [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
+  [DllImport("user32.dll")] private static extern bool GetMessage(out MSG msg, IntPtr hwnd, uint min, uint max);
+  [DllImport("user32.dll")] private static extern UIntPtr SetTimer(IntPtr hwnd, UIntPtr id, uint ms, IntPtr proc);
+  [DllImport("user32.dll")] private static extern bool KillTimer(IntPtr hwnd, UIntPtr id);
+  [DllImport("user32.dll")] private static extern void PostQuitMessage(int code);
+  [StructLayout(LayoutKind.Sequential)] private struct MSG { public IntPtr hwnd; public uint msg; public IntPtr w; public IntPtr l; public uint time; public POINT pt; }
+  public static int CloseByTitle(int targetPid, string title, int timeoutMs) {
+    int closed = CloseByTitleOnce(targetPid, title);
+    if (closed > 0 || timeoutMs <= 0) return closed;
+    WinEventProc cb = (hook, ev, h, obj, child, tid, time) => {
+      if (obj != 0) return;
+      int n = CloseByTitleOnce(targetPid, title);
+      if (n > 0) { closed += n; PostQuitMessage(0); }
+    };
+    IntPtr hook = SetWinEventHook(0x8002, 0x800C, IntPtr.Zero, cb, (uint)targetPid, 0, 0);
+    UIntPtr timer = SetTimer(IntPtr.Zero, UIntPtr.Zero, (uint)timeoutMs, IntPtr.Zero);
+    try {
+      closed = CloseByTitleOnce(targetPid, title);
+      if (closed == 0) {
+        MSG msg;
+        while (GetMessage(out msg, IntPtr.Zero, 0, 0)) {
+          if (msg.msg == 0x0113) { closed = CloseByTitleOnce(targetPid, title); break; }
+        }
+      }
+    } finally {
+      if (timer != UIntPtr.Zero) KillTimer(IntPtr.Zero, timer);
+      if (hook != IntPtr.Zero) UnhookWinEvent(hook);
+      GC.KeepAlive(cb);
+    }
+    return closed;
+  }
+  private static int CloseByTitleOnce(int targetPid, string title) {
+    int closed = 0;
+    var sb = new System.Text.StringBuilder(256);
+    EnumWindows((h, l) => {
+      uint pid; GetWindowThreadProcessId(h, out pid);
+      if ((int)pid != targetPid) return true;
+      sb.Clear(); GetWindowText(h, sb, sb.Capacity);
+      if (sb.ToString() == title) {
+        PostMessage(h, 0x0010, IntPtr.Zero, IntPtr.Zero);
+        closed++;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return closed;
+  }
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
   /** Exo Capture's snip overlay once it shows: { at (Unix ms), hwnd }, or null after the timeout. */
@@ -136,7 +184,11 @@ function Get-ExoHwnd($p) {
 function Get-ExoWindow {
     $exe = Join-Path $env:LOCALAPPDATA 'ExoLauncher\app\ExoLauncher.exe'
     $procs = @(Get-Process ExoLauncher -ErrorAction SilentlyContinue)
-    $ordered = @($procs | Where-Object { $_.Path -eq $exe }) + @($procs | Where-Object { $_.Path -ne $exe })
+    $ordered = if ($env:EXO_E2E_TEST_INSTANCE -eq '1') {
+        @($procs | Where-Object { $_.Path -ne $exe })
+    } else {
+        @($procs | Where-Object { $_.Path -eq $exe }) + @($procs | Where-Object { $_.Path -ne $exe })
+    }
     foreach ($p in $ordered) {
         if ([ExoWin]::MainWindow($p.Id, $p.MainWindowHandle) -ne [IntPtr]::Zero) { return $p }
     }
@@ -231,7 +283,7 @@ switch ($Command) {
         $procs = @($tree | ForEach-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
         $byName = [ordered]@{}
         foreach ($g in ($procs | Group-Object Name)) {
-            $byName[$g.Name] = [ordered]@{ cpuSeconds = [math]::Round(($g.Group | Measure-Object -Property CPU -Sum).Sum, 3); workingSetMB = [math]::Round(($g.Group | Measure-Object -Property WorkingSet64 -Sum).Sum / 1MB, 1) }
+            $byName[$g.Name] = [ordered]@{ count = $g.Count; cpuSeconds = [math]::Round(($g.Group | Measure-Object -Property CPU -Sum).Sum, 3); workingSetMB = [math]::Round(($g.Group | Measure-Object -Property WorkingSet64 -Sum).Sum / 1MB, 1) }
         }
         [ordered]@{
             pid = $exo.Id; count = $procs.Count
@@ -241,6 +293,59 @@ switch ($Command) {
             names = @($procs | Group-Object Name | ForEach-Object { "$($_.Name) x$($_.Count)" })
             byName = $byName
         } | ConvertTo-Json -Depth 5 -Compress
+    }
+    'closeTitle' {
+        $exo = Get-ExoWindow
+        [ordered]@{ closed = [ExoWin]::CloseByTitle($exo.Id, $Name, $W) } | ConvertTo-Json -Compress
+    }
+    'waitWebview' {
+        $exo = Get-ExoWindow
+        $timeoutMs = if ($H -gt 0) { $H } else { 5000 }
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        function Get-TreeWv([int]$rootPid) {
+            $all = Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name
+            $tree = @($rootPid); $grew = $true
+            while ($grew) {
+                $kids = @($all | Where-Object { $tree -contains $_.ParentProcessId -and $tree -notcontains $_.ProcessId } | ForEach-Object ProcessId)
+                $grew = $kids.Count -gt 0
+                $tree += $kids
+            }
+            @($tree | ForEach-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue } | Where-Object { $_.ProcessName -eq 'msedgewebview2' })
+        }
+        $wv = Get-TreeWv $exo.Id
+        if ($Name -eq 'atMost') {
+            while ($wv.Count -gt $W -and $sw.ElapsedMilliseconds -lt $timeoutMs) {
+                $rem = [int][Math]::Max(1, $timeoutMs - $sw.ElapsedMilliseconds)
+                $handles = @($wv | ForEach-Object { try { $_.SafeHandle } catch { $null } } | Where-Object { $_ -ne $null })
+                if ($handles.Count -gt 0) {
+                    $waitables = @($wv | ForEach-Object { $_.WaitForExitAsync() })
+                    [Threading.Tasks.Task]::WhenAny($waitables).Wait($rem) | Out-Null
+                } else {
+                    break
+                }
+                $wv = Get-TreeWv $exo.Id
+            }
+        } else {
+            if ($wv.Count -lt $W) {
+                $evName = 'ExoWvSpawn_' + [guid]::NewGuid().ToString('N')
+                Register-CimIndicationEvent -Query "SELECT * FROM __InstanceCreationEvent WITHIN 0.25 WHERE TargetInstance ISA 'Win32_Process' AND TargetInstance.Name = 'msedgewebview2.exe'" -SourceIdentifier $evName | Out-Null
+                try {
+                    $wv = Get-TreeWv $exo.Id
+                    while ($wv.Count -lt $W -and $sw.ElapsedMilliseconds -lt $timeoutMs) {
+                        $remSec = [Math]::Max(1, [int][Math]::Ceiling(($timeoutMs - $sw.ElapsedMilliseconds) / 1000.0))
+                        $ev = Wait-Event -SourceIdentifier $evName -Timeout $remSec
+                        if ($null -eq $ev) { break }
+                        Remove-Event -EventIdentifier $ev.EventIdentifier -ErrorAction SilentlyContinue
+                        $wv = Get-TreeWv $exo.Id
+                    }
+                } finally {
+                    Unregister-Event -SourceIdentifier $evName -ErrorAction SilentlyContinue
+                    Remove-Event -SourceIdentifier $evName -ErrorAction SilentlyContinue
+                }
+            }
+        }
+        $wsMb = [math]::Round((($wv | Measure-Object -Property WorkingSet64 -Sum).Sum) / 1MB, 1)
+        [ordered]@{ count = $wv.Count; workingSetMB = $wsMb; ms = [int]$sw.ElapsedMilliseconds } | ConvertTo-Json -Compress
     }
     'udp' { $p = Get-ExoWindow; [ordered]@{ count = @(Get-NetUDPEndpoint -OwningProcess $p.Id -ErrorAction SilentlyContinue).Count } | ConvertTo-Json -Compress }
     'shown' {
