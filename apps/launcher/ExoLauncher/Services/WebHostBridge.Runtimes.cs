@@ -13,32 +13,39 @@ public sealed partial class WebHostBridge
     private Task<object> RuntimesListAsync(CancellationToken ct) =>
         _services.Dependencies.ListAsync([.. _services.Library.AllSourceEntries().Where(game => game.Installed)], ct);
 
+    private void PostRuntimeProgress(DependencyService.Progress progress) => PostEvent("runtimes.progress", new
+    {
+        phase = progress.Phase,
+        id = progress.Id,
+        name = progress.Name,
+        index = progress.Index,
+        count = progress.Count,
+        bytes = progress.Bytes,
+        total = progress.Total,
+        doneBytes = progress.DoneBytes,
+        allBytes = progress.AllBytes,
+    });
+
+    private void PostRuntimeDone(DependencyService.Result result) => PostEvent("runtimes.done", RuntimeResultDto(result));
+
+    private static object RuntimeResultDto(DependencyService.Result result) => new
+    {
+        ok = result.Ok,
+        message = result.Message,
+        declined = result.Declined,
+        canceled = result.Canceled,
+        deferred = result.Deferred,
+        results = result.Results.Select(r => new { id = r.Id, name = r.Name, outcome = r.Outcome, message = r.Message, code = r.Code, detail = r.Detail }),
+        items = result.Items,
+    };
+
     private async Task<object> RuntimesInstallAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
         var ids = hasParams && p.TryGetProperty("ids", out var list) && list.ValueKind == JsonValueKind.Array
             ? list.EnumerateArray().Where(id => id.ValueKind == JsonValueKind.String).Select(id => id.GetString()!).Take(64).ToArray()
             : null;
         var mode = ReadString(p, hasParams, "mode") ?? "missing";
-        var result = await _services.Dependencies.InstallAsync(ids, mode, progress => PostEvent("runtimes.progress", new
-        {
-            phase = progress.Phase,
-            id = progress.Id,
-            name = progress.Name,
-            index = progress.Index,
-            count = progress.Count,
-            bytes = progress.Bytes,
-            total = progress.Total,
-            doneBytes = progress.DoneBytes,
-            allBytes = progress.AllBytes,
-        }), ct).ConfigureAwait(false);
-        return new
-        {
-            ok = result.Ok,
-            message = result.Message,
-            declined = result.Declined,
-            canceled = result.Canceled,
-            results = result.Results.Select(r => new { id = r.Id, name = r.Name, outcome = r.Outcome, message = r.Message, code = r.Code, detail = r.Detail }),
-            items = result.Items,
-        };
+        var result = await _services.Dependencies.InstallAsync(ids, mode, PostRuntimeProgress, ct).ConfigureAwait(false);
+        return RuntimeResultDto(result);
     }
 }

@@ -47,7 +47,8 @@ public sealed partial class MainWindow
         var taskbarCreated = RegisterWindowMessage("TaskbarCreated");
         _displayChangeProc = (hwnd, message, wParam, lParam, id, data) =>
         {
-            if (message == WmDisplayChange) { SyncHdrSoon(); NvidiaTrayIcon.DisplayChanged(); }
+            if (message == WmDisplayChange) { SyncHdrSoon(); NvidiaTrayIcon.DisplayChanged(); ExoAiCoordinator.Shared.OnSystemResume(); }
+            else if (message == WmPowerBroadcast && (wParam == PbtApmResumeAutomatic || wParam == PbtApmResumeSuspend)) ExoAiCoordinator.Shared.OnSystemResume();
             else if (message == taskbarCreated && taskbarCreated != 0) NvidiaTrayIcon.Soon();
             else if (message == WmNcDestroy) RemoveWindowSubclass(hwnd, _displayChangeProc!, id);
             return DefSubclassProc(hwnd, message, wParam, lParam);
@@ -383,8 +384,9 @@ public sealed partial class MainWindow
         catch { }
         try { RestoreHdr(); } catch { }
     }
-    private const uint WmDisplayChange = 0x007E, WmNcDestroy = 0x0082;
-    private delegate nint SubclassProc(nint hwnd, uint message, nuint wParam, nint lParam, nuint subclassId, nuint refData);
+    private const uint WmDisplayChange = 0x007E, WmNcDestroy = 0x0082, WmPowerBroadcast = 0x0218;
+    private const nuint PbtApmResumeSuspend = 0x0007, PbtApmResumeAutomatic = 0x0012;
+    private delegate nint SubclassProc(nint hwnd, uint message, nuint wParam, nuint lParam, nuint subclassId, nuint refData);
     [System.Runtime.InteropServices.DllImport("comctl32.dll")]
     private static extern bool SetWindowSubclass(nint hwnd, SubclassProc callback, nuint subclassId, nuint refData);
     [System.Runtime.InteropServices.DllImport("comctl32.dll")]

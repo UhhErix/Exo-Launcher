@@ -809,7 +809,7 @@ export type AutoTuneMode = 'cooler' | 'faster'
 export type TuneMeasure = { score: number; peakC?: number | null }
 export type TunePart = {
   id: 'nvidia' | 'radeon' | 'ryzen'
-  state: 'ready' | 'needs-driver' | 'testing' | 'tuned' | 'crashed'
+  state: 'ready' | 'needs-driver' | 'testing' | 'tuned' | 'crashed' | 'paused'
   /** Whether Cooler and Faster are a choice: a graphics card's. */
   modes: boolean
   mode: AutoTuneMode
@@ -824,6 +824,7 @@ export type TunePart = {
   warning?: string | null
   minutes: number
   canUndo: boolean
+  canReapply?: boolean
   blocked?: string | null
 }
 export type AutoTune = { ok: boolean; message?: string | null; parts: TunePart[] }
@@ -1350,6 +1351,7 @@ export interface RuntimeResult {
   outcome: 'installed' | 'newer' | 'restart' | 'failed'
   message: string
   code?: number | null
+  detail?: string | null
 }
 
 export interface RuntimesInstallResponse {
@@ -1357,6 +1359,7 @@ export interface RuntimesInstallResponse {
   message?: string | null
   declined?: boolean
   canceled?: boolean
+  deferred?: boolean
   results: RuntimeResult[]
   items?: RuntimeItem[] | null
 }
@@ -1976,6 +1979,7 @@ export interface HostEventMap {
   'bios.progress': { share: number }
   /** A runtimes.install moved on: a download's bytes, a check, or the next installer in Windows' run. */
   'runtimes.progress': RuntimesProgress
+  'runtimes.done': RuntimesInstallResponse
   /** The programs read behind apps.list's kept answer differ from it: apps.list answers the new list. */
   'apps.changed': Record<string, never>
   /** This PC's account session was written or removed (a sign-in or sign-out, a deleted account, a session the service ended): read exoAccount.overview again. */
@@ -2665,7 +2669,7 @@ export const host = {
   /** Edge Update may install Edge again (asked in Exo's window): Exo told it not to when Edge was removed. */
   appsAllowEdge: () => rawCall<{ ok: boolean; message?: string | null }>('apps.allowEdge', {}, 5 * 60_000),
   /** Game runtimes: every one that applies to this PC, its version and the newest. */
-  runtimesList: () => rawCall<{ ok: boolean; busy?: boolean; items: RuntimeItem[] }>('runtimes.list', {}, 30_000),
+  runtimesList: () => rawCall<{ ok: boolean; busy?: boolean; deferred?: boolean; items: RuntimeItem[] }>('runtimes.list', {}, 30_000),
   /** missing: what isn't here (or the named ids); update: that and every older one; repair: every Visual C++ again. One Windows prompt. */
   runtimesInstall: (mode: 'missing' | 'update' | 'repair', ids?: string[]) =>
     rawCall<RuntimesInstallResponse>('runtimes.install', ids?.length ? { mode, ids } : { mode }, 120 * 60_000),
@@ -3105,7 +3109,7 @@ export const host = {
   /** PC › Overview: what this PC is (processor, memory, drives, board, BIOS, Windows, security, connection). */
   systemAbout: () => rawCall<PcAbout>('system.about', {}, 15_000),
   /** PC > Auto tune: what's tunable and where it stands; start, stop or undo one part. Off until pressed. */
-  systemTune: (action?: 'start' | 'stop' | 'undo', part?: TunePart['id'], mode?: AutoTuneMode) =>
+  systemTune: (action?: 'start' | 'stop' | 'undo' | 'reapply', part?: TunePart['id'], mode?: AutoTuneMode) =>
     rawCall<AutoTune>('system.tune', action ? { action, part, mode } : {}, 45_000),
   /** PC › Autopilot: the game being watched now and the session reports kept on this PC, newest first. */
   autopilotState: () => rawCall<AutopilotState>('autopilot.state', {}, 15_000),

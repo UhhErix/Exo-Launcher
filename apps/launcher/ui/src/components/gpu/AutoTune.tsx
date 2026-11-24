@@ -8,7 +8,7 @@ import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Progress } from '../ui/Progress'
 
-type TuneAction = 'start' | 'stop' | 'undo'
+type TuneAction = 'start' | 'stop' | 'undo' | 'reapply'
 
 type Press = {
   onPress: () => Promise<unknown>
@@ -106,6 +106,32 @@ function openPawnIo() {
   host.openUrl('https://pawnio.eu').catch((e: unknown) => report(e, 'AutoTune.pawnio'))
 }
 
+function hardwareFallbackDetail(part: TunePart): string | null {
+  if (part.blocked) return part.blocked
+  if (part.state === 'paused') return part.note ?? 'Tuning paused after a crash'
+  if (part.state === 'crashed') return 'Returned to stock after instability'
+  return null
+}
+
+function HardwareActions({ part, tuneLabel, press }: { part: TunePart; tuneLabel: string; press: (action: TuneAction) => Press }) {
+  const ready = part.state === 'ready' || part.state === 'crashed'
+  const paused = part.state === 'paused'
+  return (
+    <div className="exo-at-hw-actions">
+      {part.state === 'tuned' ? <State on>Tuned</State> : null}
+      {paused ? <State>Paused</State> : null}
+      {part.state === 'needs-driver'
+        ? <button type="button" className="exo-set-btn" onClick={openPawnIo}>Get PawnIO</button>
+        : null}
+      {paused && part.canReapply ? (
+        <ActionButton className="exo-set-btn is-primary" disabled={!!part.blocked} timeoutMs={null} {...press('reapply')}>Re-apply</ActionButton>
+      ) : null}
+      {ready ? <TuneButton warned={!!part.warning} blocked={!!part.blocked} label={tuneLabel} press={press('start')} /> : null}
+      <EndButton part={part} press={press} />
+    </div>
+  )
+}
+
 function HardwareRow({ part, name, error, onAct, onSettled, onFailed }: {
   part: TunePart
   name: string
@@ -115,13 +141,12 @@ function HardwareRow({ part, name, error, onAct, onSettled, onFailed }: {
   onFailed: (text: string) => void
 }) {
   const press = (action: TuneAction) => makePress(action, onAct, onSettled, onFailed)
-  const ready = part.state === 'ready' || part.state === 'crashed'
   const isCpu = part.id === 'ryzen'
   const roleLabel = isCpu ? 'CPU undervolt (Curve Optimizer)' : 'GPU overclock & undervolt'
   const tuneLabel = isCpu ? 'Tune CPU' : 'Tune GPU'
   const testingLabel = `${part.testing ?? 'Testing'}${part.minutesLeft ? ` · about ${part.minutesLeft} min left` : ''}`
   const metrics = part.state === 'tuned' ? tuneMetrics(part.applied, part.before, part.after) : []
-  const fallbackDetail = part.blocked ?? (part.state === 'crashed' ? 'Returned to stock after instability' : null)
+  const fallbackDetail = hardwareFallbackDetail(part)
 
   return (
     <div className="exo-at-hw-row">
@@ -133,14 +158,7 @@ function HardwareRow({ part, name, error, onAct, onSettled, onFailed }: {
             <span className="exo-at-hw-name">{name}</span>
           </div>
         </div>
-        <div className="exo-at-hw-actions">
-          {part.state === 'tuned' ? <State on>Tuned</State> : null}
-          {part.state === 'needs-driver'
-            ? <button type="button" className="exo-set-btn" onClick={openPawnIo}>Get PawnIO</button>
-            : null}
-          {ready ? <TuneButton warned={!!part.warning} blocked={!!part.blocked} label={tuneLabel} press={press('start')} /> : null}
-          <EndButton part={part} press={press} />
-        </div>
+        <HardwareActions part={part} tuneLabel={tuneLabel} press={press} />
       </div>
 
       {part.state === 'testing' ? (

@@ -105,6 +105,8 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameSessionCompleted += SteamOnlineAfterFamily;
         _services.Launcher.GameLaunching += ApplyGameProfile;
         _services.Launcher.LaunchNotice += OnLaunchNotice;
+        _services.Dependencies.DeferredProgress += PostRuntimeProgress;
+        _services.Dependencies.DeferredCompleted += PostRuntimeDone;
     }
 
     /// <summary>
@@ -379,6 +381,8 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameLaunching -= OnGameLaunchingAllowance;
         _services.Launcher.GameSessionCompleted -= OnGameSessionEndedScan;
         _services.Launcher.GameLaunchFailed -= OnGameSessionEndedScan;
+        _services.Dependencies.DeferredProgress -= PostRuntimeProgress;
+        _services.Dependencies.DeferredCompleted -= PostRuntimeDone;
         FpsCounter.Stop();
     }
 

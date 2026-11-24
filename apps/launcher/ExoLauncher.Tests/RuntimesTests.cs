@@ -410,6 +410,164 @@ public sealed class RuntimesTests : IDisposable
     public void ExitCodesReadAsPlainWords(int code, string expected) => Assert.Contains(expected, Words(code));
 
     [Fact]
+    public void SanitizeDetailStripsUserPathsAndSecrets()
+    {
+        var raw = "FileNotFoundException (hr=0x80070002): Could not find 'C:\\Users\\Alice\\AppData\\Local\\Temp\\ExoLauncherDependencies\\abc\\dotnet10-x64.exe' with Bearer secret-token-123\r\n";
+        var clean = SanitizeDetail(
+            raw,
+            stagePath: @"C:\Users\Alice\AppData\Local\Temp\ExoLauncherDependencies\abc",
+            tempRoot: @"C:\Users\Alice\AppData\Local\Temp",
+            userProfile: @"C:\Users\Alice",
+            userName: "Alice");
+        Assert.NotNull(clean);
+        Assert.DoesNotContain("Alice", clean);
+        Assert.DoesNotContain("secret-token-123", clean);
+        Assert.Contains(@"%TEMP%\ExoLauncherDependencies", clean);
+        Assert.DoesNotContain('\n', clean);
+    }
+
+    [Fact]
+    public void StepErrorsCarryRealExceptionDetailAndSpecificMessage()
+    {
+        var rt = Find("dotnet10-x64")!;
+        var step = new Step(rt, false, "https://builds.dotnet.microsoft.com/x.exe", null, new string('A', 128), 0, "10.0.15");
+        var before = Evaluate(Pc(x64: ["10.0.10"]));
+        var encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("Win32Exception (win32=32): The process cannot access the file because it is being used by another process"));
+        var codes = new Dictionary<string, int>(StringComparer.Ordinal);
+        var errors = new Dictionary<string, string>(StringComparer.Ordinal);
+        ParseResultLines(["start dotnet10-x64", $"err dotnet10-x64 {encoded}", "done dotnet10-x64 -1002"], new HashSet<string> { "dotnet10-x64" }, null, codes, errors);
+
+        var outcome = Outcome(step, before, before, codes, errors);
+        Assert.Equal("failed", outcome.Outcome);
+        Assert.Equal(-1002, outcome.Code);
+        Assert.Contains("Blocked by a running app", outcome.Message);
+        Assert.NotNull(outcome.Detail);
+        Assert.Contains("Win32Exception (win32=32)", outcome.Detail);
+    }
+
+    [Theory]
+    [InlineData("FileNotFoundException (hr=0x80070002): Staged installer file not found.", "file is missing")]
+    [InlineData("Win32Exception (win32=32): sharing violation", "Blocked by a running app")]
+    [InlineData("UnauthorizedAccessException (hr=0x80070005): Access to the path is denied.", "Blocked by Windows or security software")]
+    [InlineData("Win32Exception (win32=740): The requested operation requires elevation.", "Windows permission is needed")]
+    [InlineData("InvalidOperationException (hr=0x80131509): Unexpected", "Its installer didn't start.")]
+    public void DescribeFailureMapsKnownMinus1002Causes(string detail, string expected) =>
+        Assert.Contains(expected, DescribeFailure(-1002, detail));
+
+    [Fact]
+    public async Task DeferralHoldsWhileGameRunsAndCanBeCanceled()
+    {
+        Assert.True(ShouldDeferForGame(gameRunning: true));
+        Assert.False(ShouldDeferForGame(gameRunning: false));
+
+        var running = true;
+        var service = new DependencyService(() => running);
+        var result = await service.InstallAsync(null, "update", null, CancellationToken.None);
+        Assert.True(result.Ok);
+        Assert.True(result.Deferred);
+        Assert.Equal(DeferredMessage, result.Message);
+        Assert.True(service.HasDeferred);
+
+        var canceled = service.Cancel();
+        Assert.False(service.HasDeferred);
+        var ok = canceled.GetType().GetProperty("ok")?.GetValue(canceled);
+        Assert.Equal(true, ok);
+    }
+
+    [Fact]
+    public void PatchUpdateResolvesDotnet10And8UrlsAndPlan()
+    {
+        const string indexJson = """
+            { "releases-index": [
+              { "channel-version": "10.0", "latest-release": "10.0.15", "support-phase": "active" },
+              { "channel-version": "8.0", "latest-release": "8.0.34", "support-phase": "eol" }
+            ] }
+            """;
+        var x64Hash10 = new string('a', 128);
+        var x86Hash10 = new string('b', 128);
+        var x64Hash8 = new string('c', 128);
+        var rel10Json = $$"""
+            { "release": { "release-version": "10.0.15", "windowsdesktop": { "version": "10.0.15", "files": [
+              { "name": "windowsdesktop-runtime-win-x64.exe", "rid": "win-x64", "url": "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe", "hash": "{{x64Hash10}}" },
+              { "name": "windowsdesktop-runtime-win-x86.exe", "rid": "win-x86", "url": "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x86.exe", "hash": "{{x86Hash10}}" }
+            ] } } }
+            """;
+        var rel8Json = $$"""
+            { "release": { "release-version": "8.0.34", "windowsdesktop": { "version": "8.0.34", "files": [
+              { "name": "windowsdesktop-runtime-win-x64.exe", "rid": "win-x64", "url": "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.34/windowsdesktop-runtime-8.0.34-win-x64.exe", "hash": "{{x64Hash8}}" }
+            ] } } }
+            """;
+
+        var channels = ParseDotnetIndex(indexJson);
+        Assert.Equal(["10.0", "8.0"], channels.Select(c => c.Channel));
+        var r10 = ParseDotnetRelease(rel10Json, endOfSupport: false)!;
+        var r8 = ParseDotnetRelease(rel8Json, endOfSupport: true)!;
+        var map = new Dictionary<string, DotnetRelease>(StringComparer.Ordinal)
+        {
+            ["10-x64"] = r10,
+            ["10-x86"] = r10,
+            ["8-x64"] = r8,
+        };
+
+        var statuses = Evaluate(Pc(x64: ["10.0.10", "8.0.26"]), map, now: new DateTime(2026, 11, 23));
+        Assert.Equal(State.Outdated, Of(statuses, "dotnet10-x64").State);
+        Assert.Equal("10.0.15", Of(statuses, "dotnet10-x64").Latest);
+        Assert.Equal(State.Missing, Of(statuses, "dotnet10-x86").State);
+        Assert.Equal(State.Outdated, Of(statuses, "dotnet8-x64").State);
+        Assert.Equal("8.0.34", Of(statuses, "dotnet8-x64").Latest);
+
+        var plan = Plan(statuses, "update", null, new HashSet<string>()).Where(s => s.Runtime.Id.StartsWith("dotnet", StringComparison.Ordinal)).ToList();
+        Assert.Equal(["dotnet10-x64", "dotnet10-x86", "dotnet8-x64"], plan.Select(s => s.Runtime.Id));
+
+        var step10x64 = ToStep(Of(statuses, "dotnet10-x64"), repair: false, map);
+        Assert.Equal("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe", step10x64.Url);
+        Assert.Equal(x64Hash10.ToUpperInvariant(), step10x64.Sha512);
+
+        var step10x86 = ToStep(Of(statuses, "dotnet10-x86"), repair: false, map);
+        Assert.Equal("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x86.exe", step10x86.Url);
+
+        var step8x64 = ToStep(Of(statuses, "dotnet8-x64"), repair: false, map);
+        Assert.Equal("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.34/windowsdesktop-runtime-8.0.34-win-x64.exe", step8x64.Url);
+        Assert.Equal(x64Hash8.ToUpperInvariant(), step8x64.Sha512);
+    }
+
+    [Fact]
+    public void ScriptCapturesRealExceptionInResultsForMissingInstaller()
+    {
+        var stage = Path.Combine(_folder, "stage-ps");
+        Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(stage, "results.txt"), "");
+        var rt = Find("dotnet10-x64")!;
+        var rawScript = Script(stage, [(rt, false, Path.Combine(stage, "dotnet10-x64.exe"), new string('0', 64))]);
+        var runnableScript = rawScript
+            .Replace("$w = Join-Path $env:SystemRoot ('Temp\\ExoRuntimes-' + [Guid]::NewGuid().ToString('N'))",
+                "$w = Join-Path $s 'work'", StringComparison.Ordinal)
+            .Replace("[void][IO.Directory]::CreateDirectory($w, $acl)",
+                "[void][IO.Directory]::CreateDirectory($w)", StringComparison.Ordinal);
+        var scriptPath = Path.Combine(stage, "run.ps1");
+        File.WriteAllText(scriptPath, runnableScript);
+
+        var ps = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+        using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ps,
+            $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{scriptPath}\"")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+        })!;
+        Assert.True(proc.WaitForExit(15_000));
+        var lines = File.ReadAllLines(Path.Combine(stage, "results.txt"));
+        var codes = new Dictionary<string, int>(StringComparer.Ordinal);
+        var errors = new Dictionary<string, string>(StringComparer.Ordinal);
+        ParseResultLines(lines, new HashSet<string> { "dotnet10-x64" }, null, codes, errors, stage);
+        Assert.Equal(-1003, codes["dotnet10-x64"]);
+        Assert.True(errors.ContainsKey("dotnet10-x64"));
+        Assert.Contains("FileNotFoundException", errors["dotnet10-x64"]);
+        Assert.Contains("file is missing", DescribeFailure(-1003, errors["dotnet10-x64"]));
+    }
+
+    [Fact]
     public void TheElevatedScriptReportsFailureDetailsAndDistinctCodes()
     {
         var dotnet = Find("dotnet10-x64")!;
