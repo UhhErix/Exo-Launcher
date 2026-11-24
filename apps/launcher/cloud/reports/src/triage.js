@@ -58,10 +58,51 @@ export function dailyMessage(digest, failed, held, day) {
     text: `${digest?.text ?? ''}${lines.length ? (digest ? '\n' : '') + lines.join('\n') + '\n' : ''}`,
   }
 }
+export function trimExcerpt(text, maxChars) {
+  if (typeof text !== 'string' || text.length <= maxChars) return text ?? ''
+  const lines = text.split('\n')
+  const headCap = Math.max(64, Math.floor(maxChars / 2))
+  const headLines = []
+  let idx = 0
+  let headLen = 0
+  let sawError = false
+  while (idx < lines.length) {
+    const line = lines[idx]
+    if (/^\[\d/.test(line)) break
+    if (headLen + line.length + 1 > headCap && headLines.length > 0) break
+    headLines.push(line)
+    headLen += line.length + 1
+    idx++
+    if (/^Error \(/.test(line)) {
+      sawError = true
+      while (idx < lines.length && lines[idx].trim() !== '' && !/^\[\d/.test(lines[idx])) {
+        if (headLen + lines[idx].length + 1 > headCap) break
+        headLines.push(lines[idx])
+        headLen += lines[idx].length + 1
+        idx++
+      }
+      break
+    }
+  }
+  const head = headLines.join('\n').trimEnd()
+  if (!sawError || !head || idx >= lines.length) {
+    return '…' + text.slice(-(maxChars - 1))
+  }
+  const marker = '\n…\n'
+  const tailBudget = maxChars - head.length - marker.length
+  if (tailBudget <= 0) return head.slice(0, maxChars)
+  const tail = lines.slice(idx).join('\n')
+  if (tail.length <= tailBudget) return `${head}\n${tail}`
+  const cut = tail.length - tailBudget
+  const nl = tail.indexOf('\n', cut)
+  const kept = nl >= 0 && nl + 1 < tail.length ? tail.slice(nl + 1) : tail.slice(cut)
+  return `${head}${marker}${kept}`
+}
+
 export function alertOf(report, total) {
   const app = APP_NAMES[report.app] ?? report.app
   const what = total === 1 ? 'new error' : `${total} reports`
-  const excerpt = report.excerpt.length > EXCERPT_CHARS ? '…' + report.excerpt.slice(-EXCERPT_CHARS) : report.excerpt
+  const excerpt = trimExcerpt(report.excerpt, EXCERPT_CHARS)
   return {
     subject: `${app} ${report.version}: ${report.errorType} (${what})`,
     text: `${app} ${report.version} on Windows ${report.osBuild}\n${report.errorType}: ${what} in this version\n\n${excerpt}\n`,
@@ -113,6 +154,6 @@ export function isDiscordWebhook(url) {
 
 export function discordBody({ subject, text }) {
   const room = 1900 - subject.length
-  const body = text.length > room ? '…' + text.slice(-room) : text
+  const body = text.length > room ? trimExcerpt(text, room) : text
   return { content: `**${subject}**\n\`\`\`\n${body.replaceAll('```', "'''")}\n\`\`\``, allowed_mentions: { parse: [] } }
 }

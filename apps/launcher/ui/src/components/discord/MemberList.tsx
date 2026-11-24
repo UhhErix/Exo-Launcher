@@ -3,6 +3,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { host, onHostEvent } from '../../lib/host'
 import { report } from '../../lib/report'
 import { avatarHashOf, type DiscordMemberList } from '../../lib/discord'
+import { isDiscordSnowflake } from '../../lib/discordSnowflake'
 import { Avatar, RoleIcon } from './presence'
 import { showProfile } from './extras'
 import { Nameplate, StyledName, legibleColor } from './collectibles'
@@ -40,12 +41,14 @@ export function MemberList({ guildId, channelId }: { guildId: string; /** The te
   const [tries, setTries] = useState(0)
 
   useEffect(() => {
+    if (!isDiscordSnowflake(guildId)) return
     let live = true
     let waiting: number | undefined
     let last = 0
+    const safeChannel = isDiscordSnowflake(channelId) ? channelId : null
     const load = () => {
       last = Date.now()
-      host.discordMembers(guildId, undefined, channelId).then(next => {
+      host.discordMembers(guildId, undefined, safeChannel).then(next => {
         keepShown(guildId, next)
         if (live) { asked.current = null; setList(current => next.items.length || !current ? next : current) }
       })
@@ -75,7 +78,7 @@ export function MemberList({ guildId, channelId }: { guildId: string; /** The te
 
   function onScroll(event: React.UIEvent<HTMLElement>) {
     const el = event.currentTarget
-    if (!list) return
+    if (!list || !isDiscordSnowflake(guildId)) return
     // The rows in view, each counted as a member's (a group's label is near enough).
     const at = Math.floor(el.scrollTop / ROW)
     const end = Math.min(list.rows ?? list.items.length, at + Math.ceil(el.clientHeight / ROW) + 1)

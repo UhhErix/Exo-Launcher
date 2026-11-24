@@ -401,4 +401,33 @@ public sealed class GpuDriverUpdateTests
     [InlineData(true, false, 0, 3600, "TimedOut")]
     public void AmdInstallEndsOnlyWhenItsProcessesHaveSettled(bool running, bool finished, double quiet, double elapsed, string state) =>
         Assert.Equal(state, GpuDriverUpdate.AmdInstallState(running, finished, S(quiet), S(elapsed)).ToString());
+
+    [Fact]
+    public void OutcomeHandlesAmdCode182AccuratelyForInstalledUnchangedAndChanged()
+    {
+        var installedNew = GpuDriverUpdate.Outcome(Amd, 182, null, "26.10.1", "26.9.2");
+        Assert.True(installedNew.Ok);
+        Assert.Contains("26.10.1 installed", installedNew.Message);
+        Assert.Contains("code 182", installedNew.Message);
+
+        var unchanged = GpuDriverUpdate.Outcome(Amd, 182, null, "26.9.2", "26.9.2");
+        Assert.False(unchanged.Ok);
+        Assert.Contains("code 182", unchanged.Message);
+        Assert.Contains("unchanged", unchanged.Message);
+
+        var changedOther = GpuDriverUpdate.Outcome(Amd, 182, null, "26.9.5", "26.9.2");
+        Assert.False(changedOther.Ok);
+        Assert.Contains("now 26.9.5", changedOther.Message);
+        Assert.DoesNotContain("unchanged", changedOther.Message);
+    }
+
+    [Fact]
+    public void ChipsetHoldReasonWaitsWhileInstallingAndDuringSettleWindow()
+    {
+        var now = new DateTime(2026, 11, 23, 12, 0, 0, DateTimeKind.Utc);
+        Assert.Equal("Waiting for the chipset driver update to finish", GpuDriverUpdate.ChipsetHoldReason(true, null, now));
+        Assert.Equal("Waiting for the chipset driver update to settle", GpuDriverUpdate.ChipsetHoldReason(false, now.AddSeconds(-4), now));
+        Assert.Null(GpuDriverUpdate.ChipsetHoldReason(false, now.AddSeconds(-15), now));
+        Assert.Null(GpuDriverUpdate.ChipsetHoldReason(false, null, now));
+    }
 }

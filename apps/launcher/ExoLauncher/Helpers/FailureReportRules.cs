@@ -8,22 +8,48 @@ namespace ExoLauncher.Helpers;
 /// </summary>
 public static class FailureReportRules
 {
+    public const int CaptureGpuUnavailableExitCode = 78;
+
     /// <summary>
     /// An Exo Capture exit is a crash when Exo did not stop it itself and it exited with a non-zero code.
     /// </summary>
-    public static bool IsCaptureCrash(int exitCode, bool stoppedByExo) => !stoppedByExo && exitCode != 0;
+    public static bool IsCaptureCrash(int exitCode, bool stoppedByExo) =>
+        !stoppedByExo && exitCode != 0 && exitCode != CaptureGpuUnavailableExitCode;
 
     /// <summary>
     /// A store launch that failed for the user: not a stop, not a dependency or offline prompt.
     /// </summary>
-    public static bool IsStoreLaunchFailure(bool ok, bool stopRequested, bool needsDependencies, bool offlinePrompt) =>
-        !ok && !stopRequested && !needsDependencies && !offlinePrompt;
+    public static bool IsStoreLaunchFailure(bool ok, bool stopRequested, bool needsDependencies, bool offlinePrompt, string? message = null) =>
+        !ok && !stopRequested && !needsDependencies && !offlinePrompt && !IsExpectedStoreFailure(message);
 
     /// <summary>
     /// A store install that failed on its own. A user cancel or pause is not a failure.
     /// </summary>
     public static bool IsStoreInstallFailure(bool ok, string message, bool cancelRequested) =>
-        !ok && !cancelRequested && message is not ("Canceled." or "Paused.");
+        !ok && !cancelRequested && message is not ("Canceled." or "Paused.") && !IsExpectedStoreFailure(message);
+
+    public static bool IsExpectedStoreFailure(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+        return message.Contains("canceled", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("cancelled", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("paused", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("sign in", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("sign-in", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("signed out", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("offline", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("no internet", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("timed out", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("did not answer", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("could not be reached", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("is not installed", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("is updating", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("disk space", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("free space", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsDiscordGatewayReportable(int? lastCloseCode, bool networkFailure) =>
+        !networkFailure && lastCloseCode is not null;
 
     /// <summary>
     /// A host call from the page that failed in a way nobody planned for: a bug, not an answer. Handlers throw
@@ -54,8 +80,12 @@ public static class FailureReportRules
     /// <summary>
     /// The generic reason for a failed update download, with the HTTP status when the server gave one.
     /// </summary>
-    public static string UpdateDownloadReason(Exception ex) =>
-        ex is HttpRequestException { StatusCode: { } status }
+    public static string UpdateDownloadReason(Exception ex, Uri? uri = null)
+    {
+        var baseReason = ex is HttpRequestException { StatusCode: { } status }
             ? $"Update download failed (HTTP {(int)status})"
             : "Update download failed";
+        if (uri is null || string.IsNullOrWhiteSpace(uri.AbsolutePath)) return baseReason;
+        return $"{baseReason} on {uri.AbsolutePath}";
+    }
 }

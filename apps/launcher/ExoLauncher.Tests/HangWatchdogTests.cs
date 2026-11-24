@@ -169,4 +169,11 @@ public sealed class HangWatchdogTests
         Assert.Equal((HangWatchdog.PageWatchState.Reported, false), HangWatchdog.PageCheck(Page(uiAnswering: false, reported: true)));
         Assert.Equal((HangWatchdog.PageWatchState.Disarmed, false), HangWatchdog.PageCheck(Page(armed: false, silent: 60)));
     }
+
+    [Fact]
+    public void UnattachedPageDuringSlowStartupIsNeverReportedAsHang()
+    {
+        var input = new HangWatchdog.PageWatchInput(Armed: true, UiAnswering: true, BeatSinceArm: false, LastBeatVisible: true, Silent: TimeSpan.FromSeconds(16), Reported: false, PageAttached: false);
+        Assert.Equal((HangWatchdog.PageWatchState.Disarmed, false), HangWatchdog.PageCheck(input));
+    }
 }

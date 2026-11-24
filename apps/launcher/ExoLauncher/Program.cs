@@ -17,6 +17,11 @@ public static class Program
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SetCurrentProcessExplicitAppUserModelID(string appID);
 
+    [DllImport("kernel32.dll")]
+    private static extern uint SetErrorMode(uint uMode);
+
+    private const uint ErrorModeNoDialogs = 0x0001 | 0x0002 | 0x8000;
+
     public const string AppUserModelId = "ImAvgErix.ExoLauncher";
 
     /// <summary>The arguments this launch runs with (its own, or what a launch during an update kept for it).</summary>
@@ -26,6 +31,7 @@ public static class Program
     public static void Main(string[] args)
     {
         StartupTiming.Begin();
+        SetErrorMode(ErrorModeNoDialogs);
         // Windows 11 only. Uninstall cleanup still runs on an older Windows, so an old copy can be removed.
         if (!args.Contains("--uninstall-cleanup", StringComparer.OrdinalIgnoreCase) && !WindowsRequirement.Supports(Environment.OSVersion.Version.Build))
         {

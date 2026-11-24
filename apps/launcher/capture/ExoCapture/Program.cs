@@ -6,6 +6,7 @@ using ExoCapture.Native;
 
 // Exo Capture: started hidden by Exo (Services/CaptureAddon.cs), which speaks to it over stdin and stdout (CONTRACT.md).
 // `ExoCapture.exe --check <file>...` reads clips back through Windows' decoder (the self-test of what it writes).
+Win32.SuppressErrorDialogs();
 Win32.SetProcessDpiAwarenessContext(-4); // per-monitor v2: the snip and desktop duplication see real pixels
 Vortice.MediaFoundation.MediaFactory.MFStartup(true).CheckError();
 AppDomain.CurrentDomain.UnhandledException += (_, e) => Host.Log("Exo Capture could not start: " + e.ExceptionObject);
@@ -25,9 +26,13 @@ catch (Exception ex)
 }
 
 var gpu = "";
-try { using var probe = ExoCapture.Gpu.GpuDevice.Create(); gpu = probe.Name; } catch (CaptureException) { }
+try { gpu = ExoCapture.Gpu.GpuDevice.Shared().Name; }
+catch (Exception ex) when (ex is CaptureException or SharpGen.Runtime.SharpGenException)
+{
+    Host.Log($"Capture unavailable on this GPU (hr=0x{ex.HResult:X8}): {ex.Message}");
+}
 var ready = controller.Ready();
-Host.Log($"Exo Capture on {gpu}, encoder {ready.Str("encoder") ?? "chosen at the first capture"}, codec {ready.Str("codec") ?? (ready.Bool("av1", false) ? "AV1" : ready.Bool("hevc", false) ? "HEVC" : "H.264")}");
+Host.Log($"Exo Capture on {(string.IsNullOrEmpty(gpu) ? "unavailable GPU" : gpu)}, encoder {ready.Str("encoder") ?? "chosen at the first capture"}, codec {ready.Str("codec") ?? (ready.Bool("av1", false) ? "AV1" : ready.Bool("hevc", false) ? "HEVC" : "H.264")}");
 Host.Event("ready", ready);
 
 var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
