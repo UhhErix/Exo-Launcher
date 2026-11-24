@@ -7,8 +7,8 @@ use crate::game_perf::performance_card;
 use crate::game_props::{artwork_tools, properties_card};
 use crate::state::{AppState, InputMode, title_hue};
 use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_FLIGHT, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, float_line,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    SPRING_FLIGHT, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, float_line,
     glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, hover_fill,
     icon_chevron_left, icon_download, icon_external, icon_folder, icon_pause, icon_play, icon_stop,
     icon_users, pressed_fill, scaled, store_logo, store_logo_or_fallback, surface_card,
@@ -119,7 +119,7 @@ fn game_store_pill(
             }
             btn
         });
-        return Some(
+        return Some(apply_glass(
             row()
                 .key("gp-sources-pill")
                 .h(34.0)
@@ -127,34 +127,32 @@ fn game_store_pill(
                 .gap(2.0)
                 .center_y()
                 .radius(RADIUS_PILL)
-                .fill(glass_control_fill())
-                .backdrop_blur(GLASS_CONTROL_SIGMA)
-                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                 .children(pills),
-        );
+            ExoGlass::ClearMedia,
+            false,
+        ));
     }
 
     if game.is_add_portable {
         return None;
     }
 
-    Some(
+    Some(apply_glass(
         row()
             .h(34.0)
             .px(12.0)
             .gap(8.0)
             .center_y()
             .radius(RADIUS_PILL)
-            .fill(glass_control_fill())
-            .backdrop_blur(GLASS_CONTROL_SIGMA)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .child(store_logo_or_fallback(&game.store, 15.0))
             .child(
                 text(game.store_display())
                     .font(type_control())
                     .color(fg_muted()),
             ),
-    )
+        ExoGlass::ClearMedia,
+        false,
+    ))
 }
 
 fn primary_pill(key: &'static str, label: String, icon: Option<El>) -> El {
@@ -487,33 +485,33 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
             ],
         );
 
-    let mut back_btn = row()
-        .key("gp-back")
-        .role("button")
-        .label("Library")
-        .cursor(Cursor::Pointer)
-        .focusable(true)
-        .hit()
-        .press_on_down()
-        .press_scale(PRESS_SCALE)
-        .h(34.0)
-        .pl(10.0)
-        .pr(14.0)
-        .gap(6.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .hover(hover_fill())
-        .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .motion(SPRING_QUICK)
-        .on_press_tx(|st: &mut AppState, tx| {
-            st.input_mode = InputMode::Pointer;
-            st.close_game_page_tx(tx);
-        })
-        .child(icon_chevron_left(16.0, FG))
-        .child(text("Library").font(type_control()).color(FG));
+    let mut back_btn = apply_glass(
+        row()
+            .key("gp-back")
+            .role("button")
+            .label("Library")
+            .cursor(Cursor::Pointer)
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .h(34.0)
+            .pl(10.0)
+            .pr(14.0)
+            .gap(6.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press_tx(|st: &mut AppState, tx| {
+                st.input_mode = InputMode::Pointer;
+                st.close_game_page_tx(tx);
+            })
+            .child(icon_chevron_left(16.0, FG))
+            .child(text("Library").font(type_control()).color(FG)),
+        ExoGlass::ClearMedia,
+        true,
+    );
     if gamepad_focus {
         back_btn = back_btn.focus_ring(2.0, 3.0, FG);
     }
@@ -672,18 +670,17 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
     let stats_area = if !stat_items.is_empty() || drive_slowed {
         let mut c = col().gap(10.0).items_end();
         if !stat_items.is_empty() {
-            c = c.child(
+            c = c.child(apply_glass(
                 row()
                     .py(14.0)
                     .px(4.0)
                     .items_start()
                     .radius(RADIUS_PANEL)
                     .continuous_corners()
-                    .fill(glass_control_fill())
-                    .backdrop_blur(GLASS_CONTROL_SIGMA)
-                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                     .children(stat_items),
-            );
+                ExoGlass::ClearMedia,
+                false,
+            ));
         }
         if drive_slowed {
             c = c.child(
@@ -808,6 +805,7 @@ mod tests {
         state.open_game_page("demo:cyberpunk");
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
@@ -817,13 +815,15 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
+        assert_eq!(blurs, 0);
+        let glass_shapes = rt.liquid_glass_frame().shapes.len();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "Game page exceeded EXO_MAX_BACKDROP_BLURS: {blurs}"
+            glass_shapes <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Game page exceeded EXO_MAX_BACKDROP_BLURS: {glass_shapes}"
         );
         assert!(
-            blurs >= 8,
-            "Game page should render real Liquid Glass across top bar and hero controls, got {blurs}"
+            glass_shapes >= 8,
+            "Game page should render real Liquid Glass across top bar and hero controls, got {glass_shapes}"
         );
 
         let (perf_rect, _) = rt

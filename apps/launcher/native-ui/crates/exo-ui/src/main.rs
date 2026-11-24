@@ -2687,7 +2687,8 @@ fn cursor_css_name(c: rune::Cursor) -> &'static str {
 }
 
 fn collect_backdrop_blurs(rt: &rune::Runtime<AppState>) -> Vec<serde_json::Value> {
-    rt.instances
+    let mut out: Vec<serde_json::Value> = rt
+        .instances
         .iter()
         .filter(|i| i.params[1] == rune::render::KIND_BACKDROP_BLUR)
         .map(|i| {
@@ -2699,9 +2700,23 @@ fn collect_backdrop_blurs(rt: &rune::Runtime<AppState>) -> Vec<serde_json::Value
                     (i.rect[3] * 10.0).round() / 10.0,
                 ],
                 "sigma": (i.params[0] * 10.0).round() / 10.0,
+                "kind": "backdrop_blur",
             })
         })
-        .collect()
+        .collect();
+    for sh in &rt.liquid_glass_frame().shapes {
+        out.push(serde_json::json!({
+            "rect": [
+                (sh.rect[0] * 10.0).round() / 10.0,
+                (sh.rect[1] * 10.0).round() / 10.0,
+                (sh.rect[2] * 10.0).round() / 10.0,
+                (sh.rect[3] * 10.0).round() / 10.0,
+            ],
+            "sigma": (sh.tone[3] * 10.0).round() / 10.0,
+            "kind": "liquid_glass",
+        }));
+    }
+    out
 }
 
 fn parse_size_arg(args: &[String]) -> (f32, f32) {
@@ -2876,7 +2891,11 @@ fn popover_trace_sample(rt: &rune::Runtime<AppState>, frame: usize) -> serde_jso
         rt.instances.iter().any(|i| {
             i.params[1] == rune::render::KIND_BACKDROP_BLUR
                 && (0..4).all(|k| (i.rect[k] - rect[k]).abs() < 1.5)
-        })
+        }) || rt
+            .liquid_glass_frame()
+            .shapes
+            .iter()
+            .any(|sh| (0..4).all(|k| (sh.rect[k] - rect[k]).abs() < 1.5))
     });
     serde_json::json!({
         "frame": frame,
@@ -2935,6 +2954,7 @@ fn run_parity_probe(
         text,
     );
     rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+    rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
     rt.frame(0.0);
     if rt.state.palette_open {
         rt.update(|s, tx| {
@@ -3164,6 +3184,7 @@ fn main() {
 
     let mut app = App::new(spec)
         .args(rune_args)
+        .glass(exo_kit::EXO_GLASS_POLICY)
         .max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS)
         .titlebar(exo_titlebar())
         .on_rest(AppState::on_rest)
@@ -3282,7 +3303,7 @@ mod tests {
     use crate::state::{LibraryChip, LibrarySort, Room};
     use rune::{
         Cursor, Env, Mods, Runtime,
-        render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END, KIND_SEGMENT},
+        render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END, KIND_LIQUID_GLASS, KIND_SEGMENT},
     };
 
     #[test]
@@ -3294,6 +3315,7 @@ mod tests {
             Env::new(true, 1.0),
         );
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.frame(0.0);
 
         let blurs = rt
@@ -3301,9 +3323,11 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
+        assert_eq!(blurs, 0);
+        let glass_shapes = rt.liquid_glass_frame().shapes.len();
         assert!(
-            (2..=exo_kit::EXO_MAX_BACKDROP_BLURS).contains(&blurs),
-            "expected 2..={} floating glass surfaces within EXO_MAX_BACKDROP_BLURS, got {blurs}",
+            (2..=exo_kit::EXO_MAX_BACKDROP_BLURS).contains(&glass_shapes),
+            "expected 2..={} floating glass surfaces within EXO_MAX_BACKDROP_BLURS, got {glass_shapes}",
             exo_kit::EXO_MAX_BACKDROP_BLURS
         );
         let strokes = rt
@@ -3382,6 +3406,7 @@ mod tests {
         assert_eq!(rt.state.settings.start_with_windows, !before);
 
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.update(|s, _| s.switch_room(Room::ExoAi));
         rt.frame(2.0 / 60.0);
         assert_eq!(rt.state.pc.pc_tab, pc_state::PcTab::ExoAi);
@@ -3615,6 +3640,7 @@ mod tests {
             Env::new(true, 1.0),
         );
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.frame(0.0);
         assert!(rt.find("music-mini-player").is_some());
         let blurs = rt
@@ -3817,6 +3843,7 @@ mod tests {
             s.join_discord_voice(Some("g-exo"), "vc-lounge");
         });
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.frame(0.0);
         assert!(rt.find("dc-voice-stage").is_some());
         assert!(rt.find("dc-stream-theater").is_some());
@@ -3978,37 +4005,44 @@ mod tests {
             setup(&mut state);
             let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
             rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+            rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
             rt.frame(0.0);
             rt.frame(1.0 / 60.0);
-            let blur_rects: Vec<[f32; 4]> = rt
+            let adhoc_blurs = rt
                 .instances
                 .iter()
                 .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
-                .map(|i| i.rect)
+                .count();
+            assert_eq!(adhoc_blurs, 0, "{label}: unexpected ad-hoc backdrop_blur");
+            let glass_rects: Vec<[f32; 4]> = rt
+                .liquid_glass_frame()
+                .shapes
+                .iter()
+                .map(|sh| sh.rect)
                 .collect();
+            let glass_draws = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
+                .count();
             assert!(
-                blur_rects.len() <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-                "{label}: emitted {} backdrop blurs (cap {})",
-                blur_rects.len(),
+                glass_draws <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+                "{label}: emitted {glass_draws} liquid glass draws (cap {})",
                 exo_kit::EXO_MAX_BACKDROP_BLURS
             );
             if let Some(key) = expected_overlay {
                 let (rect, _) = rt
                     .presented(key)
                     .unwrap_or_else(|| panic!("{label}: overlay {key} not presented"));
-                let hit = blur_rects
-                    .iter()
-                    .take(exo_kit::EXO_MAX_BACKDROP_BLURS)
-                    .any(|r| {
-                        (r[0] - rect[0]).abs() < 2.0
-                            && (r[1] - rect[1]).abs() < 2.0
-                            && (r[2] - rect[2]).abs() < 2.0
-                            && (r[3] - rect[3]).abs() < 2.0
-                    });
+                let hit = glass_rects.iter().any(|r| {
+                    (r[0] - rect[0]).abs() < 2.0
+                        && (r[1] - rect[1]).abs() < 2.0
+                        && (r[2] - rect[2]).abs() < 2.0
+                        && (r[3] - rect[3]).abs() < 2.0
+                });
                 assert!(
                     hit,
-                    "{label}: overlay {key} rect {rect:?} missing from first {} blur slots: {blur_rects:?}",
-                    exo_kit::EXO_MAX_BACKDROP_BLURS
+                    "{label}: overlay {key} rect {rect:?} missing from liquid glass shapes: {glass_rects:?}"
                 );
             }
             rt
@@ -4251,6 +4285,7 @@ mod tests {
             setup(&mut state);
             let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
             rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+            rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
             rt.poll = Some(poll_state);
             rt.frame(0.0);
             let blur_count = rt
@@ -4378,36 +4413,41 @@ mod tests {
             .presented(key)
             .unwrap_or_else(|| panic!("{phase}: {key} not presented"));
         let mut open_layers: Vec<([f32; 4], f32)> = Vec::new();
-        let mut total_blurs = 0usize;
+        let mut total_glass_draws = 0usize;
         let mut matched_layers: Option<Vec<([f32; 4], f32)>> = None;
-        let mut blur_rects: Vec<[f32; 4]> = Vec::new();
+        let mut glass_rects: Vec<[f32; 4]> = Vec::new();
+        let shapes = &rt.liquid_glass_frame().shapes;
         for inst in &rt.instances {
             let kind = inst.params[1];
             if kind == KIND_LAYER {
                 open_layers.push((inst.rect, inst.fill[3]));
             } else if kind == KIND_LAYER_END {
                 open_layers.pop();
-            } else if kind == KIND_BACKDROP_BLUR {
-                total_blurs += 1;
-                blur_rects.push(inst.rect);
-                if (inst.rect[0] - rect[0]).abs() < 4.0
-                    && (inst.rect[1] - rect[1]).abs() < 4.0
-                    && (inst.rect[2] - rect[2]).abs() < 4.0
-                    && (inst.rect[3] - rect[3]).abs() < 4.0
-                {
-                    matched_layers = Some(open_layers.clone());
+            } else if kind == KIND_LIQUID_GLASS {
+                total_glass_draws += 1;
+                let first = inst.params[2].max(0.0).round() as usize;
+                let count = inst.uv[0].max(1.0).round() as usize;
+                for sh in shapes.iter().skip(first).take(count) {
+                    glass_rects.push(sh.rect);
+                    if (sh.rect[0] - rect[0]).abs() < 4.0
+                        && (sh.rect[1] - rect[1]).abs() < 4.0
+                        && (sh.rect[2] - rect[2]).abs() < 4.0
+                        && (sh.rect[3] - rect[3]).abs() < 4.0
+                    {
+                        matched_layers = Some(open_layers.clone());
+                    }
                 }
             }
         }
         assert!(
-            total_blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "{phase}: emitted {total_blurs} blurs (cap {})",
+            total_glass_draws <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "{phase}: emitted {total_glass_draws} liquid glass draws (cap {})",
             exo_kit::EXO_MAX_BACKDROP_BLURS
         );
         assert_eq!(
             matched_layers,
             Some(Vec::new()),
-            "{phase}: {key} blur must be emitted at layer_depth 0 (outside fading ancestor layers), got {matched_layers:?}; key rect {rect:?}, blur rects {blur_rects:?}"
+            "{phase}: {key} liquid glass must be emitted at layer_depth 0 (outside fading ancestor layers), got {matched_layers:?}; key rect {rect:?}, glass rects {glass_rects:?}"
         );
     }
 
@@ -4417,6 +4457,7 @@ mod tests {
         state.media.playback = None;
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.on_key = Some(on_key);
         rt.frame(0.0);
         rt.frame(0.5);
@@ -4541,6 +4582,7 @@ mod tests {
             Env::new(true, 1.0),
         );
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.on_key = Some(on_key);
         rt.frame(0.0);
         rt.frame(0.5);
@@ -4692,6 +4734,7 @@ mod tests {
             Env::new(true, 1.0),
         );
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.on_key = Some(on_key);
         rt.frame(0.0);
         rt.frame(0.5);
@@ -5642,5 +5685,129 @@ mod motion_audit {
         s.sync_collapsed_categories(&chans);
         assert!(!s.discord.collapsed_categories.contains("cat-open"));
         assert!(s.discord.collapsed_categories.contains("cat-staff"));
+    }
+
+    #[test]
+    fn liquid_glass_bar_grouping_interactive_reduced_motion_and_a11y() {
+        use rune::render::{KIND_BACKDROP_BLUR, KIND_LIQUID_GLASS};
+        let mut state = AppState::default();
+        state.palette_open = false;
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let adhoc = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert_eq!(adhoc, 0, "expected zero ad-hoc backdrop_blur instances");
+
+        let bar_container = rt
+            .instances
+            .iter()
+            .find(|i| {
+                i.params[1] == KIND_LIQUID_GLASS
+                    && i.uv[0] >= 3.0
+                    && (i.uv[1] - exo_kit::GLASS_CONTAINER_SPACING).abs() < 0.5
+            })
+            .expect("top-bar glass_container must group Bar capsules into one draw");
+        assert!(
+            bar_container.uv[0] >= 3.0,
+            "Bar container should hold >=3 pills, got {}",
+            bar_container.uv[0]
+        );
+
+        let (sx, sy) = rt.find("search-capsule").expect("search-capsule");
+        rt.pointer_move(sx, sy);
+        rt.pointer_down(sx, sy);
+        for step in 2..=6 {
+            rt.frame(step as f64 / 60.0);
+        }
+        let search_shape_live = rt
+            .liquid_glass_frame()
+            .shapes
+            .iter()
+            .find(|sh| sh.rect[0] < 30.0 && sh.rect[1] < 20.0)
+            .expect("search-capsule liquid glass shape");
+        assert!(
+            search_shape_live.glow[3] > 0.0,
+            "interactive search-capsule must emit touch glow on press"
+        );
+        rt.pointer_up(sx, sy);
+        rt.frame(7.0 / 60.0);
+
+        rt.update(|s, _| s.settings.reduce_motion = true);
+        rt.set_system_reduced_motion(true);
+        rt.frame(8.0 / 60.0);
+        rt.settle_all();
+        rt.frame(9.0 / 60.0);
+        rt.pointer_move(sx, sy);
+        rt.pointer_down(sx, sy);
+        for step in 10..=14 {
+            rt.frame(step as f64 / 60.0);
+        }
+        let search_shape_rm = rt
+            .liquid_glass_frame()
+            .shapes
+            .iter()
+            .find(|sh| sh.rect[0] < 30.0 && sh.rect[1] < 20.0)
+            .expect("search-capsule liquid glass shape under reduced motion");
+        assert_eq!(
+            search_shape_rm.glow[3], 0.0,
+            "touch glow must be disabled under reduced motion"
+        );
+        rt.pointer_up(sx, sy);
+
+        rt.update(|s, _| s.settings.reduce_motion = false);
+        rt.set_system_reduced_motion(false);
+        rt.set_system_reduced_transparency(true);
+        rt.frame(15.0 / 60.0);
+        assert!(!rt.glass_on());
+        assert!(
+            rt.liquid_glass_frame()
+                .shapes
+                .iter()
+                .all(|sh| ((sh.light[1] as u32) & 16) != 0)
+        );
+
+        rt.set_system_reduced_transparency(false);
+        rt.set_system_increased_contrast(true);
+        rt.frame(16.0 / 60.0);
+        assert!(!rt.glass_on());
+        assert!(
+            rt.liquid_glass_frame()
+                .shapes
+                .iter()
+                .all(|sh| ((sh.light[1] as u32) & 32) != 0)
+        );
+
+        rt.set_system_increased_contrast(false);
+        rt.set_glass_tier_override(Some(rune::GlassTier::Solid));
+        rt.frame(17.0 / 60.0);
+        assert_eq!(rt.glass_tier(), rune::GlassTier::Solid);
+        assert!(rt.liquid_glass_frame().shapes.is_empty());
+
+        rt.set_glass_tier_override(None);
+        rt.update(|s, _| {
+            s.capture_menu_open = true;
+            s.palette_open = true;
+            s.push_notice("Glass active", state::NoticeTone::Good);
+        });
+        rt.frame(18.0 / 60.0);
+        let max_draws = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
+            .count();
+        assert!(
+            max_draws <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "stacked bar+menu+modal+notice draws ({max_draws}) exceeded cap {}",
+            exo_kit::EXO_MAX_BACKDROP_BLURS
+        );
+        assert!(rt.liquid_glass_frame().shapes.len() >= 6);
     }
 }

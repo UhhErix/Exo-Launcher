@@ -4,11 +4,11 @@ use crate::discord_chat_state::{
 };
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_BASE, SPRING_QUICK, bad, fg_faint, fg_muted, glass_button, glass_control_fill,
-    glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_check, icon_close,
-    icon_hash, icon_plus, icon_search, icon_star, icon_trash, modal_card_transition,
-    modal_scrim_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, switch_pill,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted, glass_button,
+    glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill,
+    icon_check, icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_trash,
+    modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, switch_pill,
     type_body, type_control, type_label, type_section, type_small,
 };
 use exo_rpc::{DiscordMessage, DiscordReaction};
@@ -1524,19 +1524,18 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
             ),
     );
 
-    let mut scrim = el()
+    let _ = blur;
+    let card = apply_glass(card, ExoGlass::Sheet, false)
+        .modal(true, |s: &mut AppState| {
+            s.discord.chat.apps.active_modal = None
+        })
+        .modal_scrim(scrim_fill());
+    let host = el()
         .key("dc-app-modal-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(scrim_fill())
         .center()
-        .hit()
-        .on_press(|s: &mut AppState| s.discord.chat.apps.active_modal = None)
-        .transition(modal_scrim_transition())
-        .child(card.hit().on_press(|_: &mut AppState| {}));
-    if blur {
-        scrim = scrim.backdrop_blur(12.0);
-    }
-    Some(scrim)
+        .child(card);
+    Some(host)
 }
 
 pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
@@ -1741,18 +1740,17 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
                 ),
         );
 
-    let mut scrim = el()
+    let _ = blur;
+    let card = apply_glass(card, ExoGlass::Sheet, false)
+        .modal(true, |s: &mut AppState| {
+            s.discord.chat.reactors_dialog = None
+        })
+        .modal_scrim(scrim_fill());
+    let host = el()
         .key("dc-reactors-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(scrim_fill())
         .center()
-        .hit()
-        .on_press(|s: &mut AppState| s.discord.chat.reactors_dialog = None)
-        .transition(modal_scrim_transition())
-        .child(card.hit().on_press(|_: &mut AppState| {}));
-    if blur {
-        scrim = scrim.backdrop_blur(12.0);
-    }
+        .child(card);
     let _ = (icon_check, pressed_fill);
-    Some(scrim)
+    Some(host)
 }

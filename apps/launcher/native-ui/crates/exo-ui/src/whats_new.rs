@@ -7,11 +7,11 @@ use exo_kit::{
     icon_key, icon_library, icon_mic, icon_monitor, icon_mouse, icon_music, icon_notes, icon_play,
     icon_refresh, icon_scissors, icon_search, icon_server, icon_settings, icon_shield,
     icon_sparkles, icon_store, icon_trash, icon_volume, icon_zap, modal_card_transition,
-    modal_scrim_transition, primary_button, primary_button_dyn, progress_bar, scaled,
-    selected_fill, type_body, type_section, type_small, type_title,
+    primary_button, primary_button_dyn, progress_bar, scaled, selected_fill, type_body,
+    type_section, type_small, type_title,
 };
 use exo_rpc::{HostEvent, UpdateProgress};
-use rune::{Cursor, El, ScrollSpec, Transition, col, el, row, text};
+use rune::{El, ScrollSpec, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::sync::OnceLock;
 
@@ -1067,15 +1067,9 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
+        .modal(false, |s: &mut AppState| s.close_whats_new())
+        .modal_scrim(BG.alpha(0.56))
         .child(card_inner);
-
-    let scrim = el()
-        .key("whats-new-scrim")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.56))
-        .hit()
-        .cursor(Cursor::Default)
-        .transition(modal_scrim_transition());
 
     let host = col()
         .key("whats-new-host")
@@ -1084,7 +1078,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
         .transition(Transition::none())
         .child(card);
 
-    vec![scrim, host]
+    vec![host]
 }
 
 pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
@@ -1169,15 +1163,9 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
+        .modal(false, |s: &mut AppState| s.set_aside_update_sheet())
+        .modal_scrim(BG.alpha(0.56))
         .child(inner);
-
-    let scrim = el()
-        .key("update-sheet-scrim")
-        .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.56))
-        .hit()
-        .cursor(Cursor::Default)
-        .transition(modal_scrim_transition());
 
     let host = col()
         .key("update-sheet-host")
@@ -1186,7 +1174,7 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         .transition(Transition::none())
         .child(card);
 
-    vec![scrim, host]
+    vec![host]
 }
 
 #[cfg(test)]

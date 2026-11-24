@@ -7,12 +7,11 @@ use crate::pc_state::{
 use crate::pc_storage::{exo_ai_storage_view, format_gb_short};
 use crate::state::{AppState, HostStatus, title_hue};
 use exo_kit::{
-    BG, BadgeTone, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, bad, fg_faint, fg_muted, float_line, glass_button, glass_control_fill,
-    glass_rim_bottom, glass_rim_top, good, hover_fill, icon_app_window, icon_check, icon_cpu,
-    icon_hard_drive, icon_monitor, pressed_fill, primary_button, progress_bar, scaled,
-    status_badge, surface_card, type_body, type_control, type_page, type_section, type_small,
-    type_title, warn,
+    BG, BadgeTone, ExoGlass, FG, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, bad, exo_glass, fg_faint, fg_muted, float_line, glass_button, good, hover_fill,
+    icon_app_window, icon_check, icon_cpu, icon_hard_drive, icon_monitor, pressed_fill,
+    primary_button, progress_bar, scaled, status_badge, surface_card, type_body, type_control,
+    type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{DriverEntry, RuntimeItem, RuntimesProgress, TunePart};
 use rune::{Cursor, El, SurfaceFit, TextStyle, col, el, oklch, row, text};
@@ -1417,11 +1416,9 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     .px(14.0)
                     .center()
                     .radius(RADIUS_PILL)
-                    .fill(glass_control_fill())
-                    .backdrop_blur(GLASS_CONTROL_SIGMA)
+                    .liquid_glass(exo_glass(ExoGlass::Control, true))
                     .hover(hover_fill())
                     .press(pressed_fill())
-                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                     .motion(SPRING_QUICK)
                     .on_press(|s: &mut AppState| s.run_auto_tune_pipeline())
                     .child(text("Run again").font(type_control()).color(FG)),
@@ -1483,11 +1480,9 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .gap(6.0)
                         .center_y()
                         .radius(RADIUS_PILL)
-                        .fill(glass_control_fill())
-                        .backdrop_blur(GLASS_CONTROL_SIGMA)
+                        .liquid_glass(exo_glass(ExoGlass::Control, true))
                         .hover(hover_fill())
                         .press(pressed_fill())
-                        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                         .motion(SPRING_QUICK)
                         .on_press(|s: &mut AppState| {
                             s.pc.exo_ai_storage_open = true;
@@ -2553,11 +2548,16 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
+        assert_eq!(blurs, 0);
+        let glass_shapes = rt.liquid_glass_frame().shapes.len();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "Exo AI exceeded EXO_MAX_BACKDROP_BLURS: {blurs}"
+            glass_shapes <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Exo AI exceeded EXO_MAX_BACKDROP_BLURS: {glass_shapes}"
         );
-        assert!(blurs >= 3, "Exo AI should render Liquid Glass, got {blurs}");
+        assert!(
+            glass_shapes >= 3,
+            "Exo AI should render Liquid Glass, got {glass_shapes}"
+        );
 
         let (auto_title, _) = rt
             .presented("exo-ai-auto-tune-title")

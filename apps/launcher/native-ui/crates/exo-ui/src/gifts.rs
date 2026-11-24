@@ -2,10 +2,9 @@ use crate::image_cache::CacheRoom;
 use crate::library_state::gift_key;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_QUICK,
-    bad, fg_muted, glass_control_fill, glass_panel_opt, glass_rim, glass_rim_bottom, glass_rim_top,
-    good, hover_fill, icon_gift, popover_transition, pressed_fill, surface_card, type_control,
-    type_section, type_small,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_QUICK, apply_glass,
+    bad, fg_muted, glass_control_fill, glass_panel_opt, glass_rim, good, hover_fill, icon_gift,
+    popover_transition, pressed_fill, surface_card, type_control, type_section, type_small,
 };
 use exo_rpc::StoreGift;
 use rune::{Align, Cursor, El, ScrollSpec, Side, SurfaceFit, Tx, col, el, row, text};
@@ -17,7 +16,7 @@ pub fn gifts_pill(s: &AppState) -> Option<El> {
     }
     let count = shown.len();
     let label = format!("{count} {}", if count == 1 { "Gift" } else { "Gifts" });
-    Some(
+    Some(apply_glass(
         row()
             .key("home-gifts-pill")
             .role("button")
@@ -26,17 +25,13 @@ pub fn gifts_pill(s: &AppState) -> Option<El> {
             .focusable(true)
             .hit()
             .press_on_down()
-            .press_scale(PRESS_SCALE)
             .h(34.0)
             .px(12.0)
             .gap(7.0)
             .center_y()
             .radius(RADIUS_PILL)
-            .fill(glass_control_fill())
-            .backdrop_blur(GLASS_CONTROL_SIGMA)
             .hover(hover_fill())
             .press(pressed_fill())
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .motion(SPRING_QUICK)
             .on_press(|s: &mut AppState| {
                 s.lib.gifts_open = !s.lib.gifts_open;
@@ -46,7 +41,9 @@ pub fn gifts_pill(s: &AppState) -> Option<El> {
             .child(el().size(6.0, 6.0).radius(3.0).fill(good()))
             .child(icon_gift(14.0, FG))
             .child(text(label).font(type_small()).color(FG)),
-    )
+        ExoGlass::Tinted(good().alpha(0.32)),
+        true,
+    ))
 }
 
 pub fn gifts_popover_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {

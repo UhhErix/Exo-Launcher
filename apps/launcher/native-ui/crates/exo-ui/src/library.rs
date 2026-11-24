@@ -9,15 +9,15 @@ use crate::state::{
     library_chip_options, now_unix_ms, title_hue,
 };
 use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, exo_play_button,
-    fg_faint, fg_muted, glass_button, glass_control_fill, glass_icon_circle, glass_icon_circle_opt,
-    glass_panel_fill, glass_panel_opt, glass_plate_fill, glass_rim, glass_rim_bottom,
-    glass_rim_top, glass_still_control_fill, good, hover_fill, icon_check, icon_chevron_left,
-    icon_chevron_right, icon_close, icon_download, icon_filter, icon_grid, icon_more_horiz,
-    icon_play, icon_plus, icon_search, icon_stop, popover_transition, pressed_fill, primary_button,
-    progress_bar, select_trigger, store_logo, surface_card, type_body, type_control,
-    type_first_run, type_section, type_small, type_title, warn,
+    fg_faint, fg_muted, glass_button, glass_icon_circle, glass_icon_circle_opt, glass_panel_fill,
+    glass_panel_opt, glass_plate_fill, glass_rim, glass_rim_bottom, glass_rim_top,
+    glass_still_control_fill, good, hover_fill, icon_check, icon_chevron_left, icon_chevron_right,
+    icon_close, icon_download, icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus,
+    icon_search, icon_stop, popover_transition, pressed_fill, primary_button, progress_bar,
+    select_trigger, store_logo, surface_card, type_body, type_control, type_first_run,
+    type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, InstallProgress};
 use rune::{
@@ -605,9 +605,9 @@ fn install_banner(s: &AppState) -> Option<El> {
             .center_y()
             .radius(RADIUS_PANEL)
             .continuous_corners()
-            .fill(glass_control_fill())
-            .backdrop_blur(GLASS_CONTROL_SIGMA)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+            .liquid_glass(
+                ExoGlass::ClearMedia.to_liquid_glass(false, exo_kit::glass_accessibility()),
+            )
             .child(
                 col()
                     .gap(5.0)
@@ -938,9 +938,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             .gap(8.0)
             .center_y()
             .radius(RADIUS_PILL)
-            .fill(glass_control_fill())
-            .backdrop_blur(GLASS_CONTROL_SIGMA)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+            .liquid_glass(ExoGlass::Control.to_liquid_glass(false, exo_kit::glass_accessibility()))
             .child(icon_search(14.0, fg_muted()))
             .child(
                 text_input(&s.library_search, type_small())
@@ -1204,11 +1202,9 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
         .hover(hover_fill())
         .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
         .on_press(|s: &mut AppState| {
             s.library_all_games = false;
@@ -1535,10 +1531,10 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                     .px(16.0)
                     .center_y()
                     .radius(RADIUS_PILL)
-                    .fill(glass_control_fill())
-                    .backdrop_blur(GLASS_CONTROL_SIGMA)
+                    .liquid_glass(
+                        ExoGlass::Control.to_liquid_glass(true, exo_kit::glass_accessibility()),
+                    )
                     .hover(hover_fill())
-                    .border(1.0, glass_rim())
                     .on_press(|s: &mut AppState| s.visible_limit += 96)
                     .child(
                         text(format!("Show more ({remaining} remaining)"))
@@ -1658,6 +1654,7 @@ mod tests {
             Env::new(true, 1.0),
         );
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
@@ -1667,37 +1664,31 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
+        assert_eq!(deck_blurs, 0);
+        let deck_shapes = rt.liquid_glass_frame().shapes.len();
         assert!(
-            deck_blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "Library HomeDeck exceeded EXO_MAX_BACKDROP_BLURS: {deck_blurs}"
+            deck_shapes <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Library HomeDeck exceeded EXO_MAX_BACKDROP_BLURS: {deck_shapes}"
         );
         assert!(
-            deck_blurs >= 8,
-            "Library HomeDeck should render real Liquid Glass across top bar and hero controls, got {deck_blurs}"
+            deck_shapes >= 8,
+            "Library HomeDeck should render real Liquid Glass across top bar and hero controls, got {deck_shapes}"
         );
 
         rt.update(|s, _| s.capture_menu_open = true);
         rt.frame(2.0 / 60.0);
-        let frame0_blurs = rt
-            .instances
-            .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
-            .count();
+        let frame0_shapes = rt.liquid_glass_frame().shapes.len();
         assert!(
-            frame0_blurs > deck_blurs,
-            "Captures popover must render Liquid Glass on frame 0 (deck={deck_blurs}, frame0={frame0_blurs})"
+            frame0_shapes > deck_shapes,
+            "Captures popover must render Liquid Glass on frame 0 (deck={deck_shapes}, frame0={frame0_shapes})"
         );
         rt.settle_all();
         rt.frame(3.0 / 60.0);
 
-        let cap_blurs = rt
-            .instances
-            .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
-            .count();
+        let cap_shapes = rt.liquid_glass_frame().shapes.len();
         assert!(
-            cap_blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "Captures popover exceeded EXO_MAX_BACKDROP_BLURS: {cap_blurs}"
+            cap_shapes <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Captures popover exceeded EXO_MAX_BACKDROP_BLURS: {cap_shapes}"
         );
 
         let (btn_rect, _) = rt

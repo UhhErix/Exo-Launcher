@@ -1,11 +1,11 @@
 use crate::devices_audio::device_btn;
 use crate::state::{AppState, HostStatus};
 use exo_kit::{
-    BG, BadgeTone, FG, GLASS_PANEL_SIGMA, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SHEET,
-    RADIUS_SMALL, SPRING_QUICK, bad, fg_faint, fg_muted, filter_pill, float_line,
-    glass_control_fill, glass_panel_fill, glass_rim, good, hairline, hover_fill, icon_close,
-    icon_pin, icon_plus, icon_search, primary_button, scaled, status_badge, type_body,
-    type_control, type_page, type_section, type_small, type_title,
+    BG, BadgeTone, ExoGlass, FG, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SHEET, RADIUS_SMALL,
+    SPRING_QUICK, bad, exo_glass, fg_faint, fg_muted, filter_pill, float_line, glass_control_fill,
+    glass_rim, good, hairline, hover_fill, icon_close, icon_pin, icon_plus, icon_search,
+    primary_button, scaled, status_badge, type_body, type_control, type_page, type_section,
+    type_small, type_title,
 };
 use exo_rpc::{
     ActionResult, METHOD_NOTES_ACT, METHOD_NOTES_LIST, METHOD_NOTES_OPEN, METHOD_NOTES_PENDING,
@@ -2593,9 +2593,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
             .padding(6.0)
             .gap(2.0)
             .radius(RADIUS_PANEL)
-            .fill(glass_panel_fill())
-            .backdrop_blur(GLASS_PANEL_SIGMA)
-            .border(1.0, glass_rim())
+            .liquid_glass(exo_glass(ExoGlass::Menu, false))
             .children(more_items.into_iter().map(|(id, label)| {
                 row()
                     .key(format!("notes-more-{id}"))
@@ -2654,9 +2652,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
             .padding(6.0)
             .gap(2.0)
             .radius(RADIUS_PANEL)
-            .fill(glass_panel_fill())
-            .backdrop_blur(GLASS_PANEL_SIGMA)
-            .border(1.0, glass_rim())
+            .liquid_glass(exo_glass(ExoGlass::Menu, false))
             .children(entries.into_iter().map(|(id, label, danger)| {
                 let k_act = k.clone();
                 let nm = doc_name.clone();
@@ -2760,9 +2756,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .padding(6.0)
                 .gap(2.0)
                 .radius(RADIUS_PANEL)
-                .fill(glass_panel_fill())
-                .backdrop_blur(GLASS_PANEL_SIGMA)
-                .border(1.0, glass_rim())
+                .liquid_glass(exo_glass(ExoGlass::Popover, false))
                 .child(
                     el().px(10.0).py(4.0).child(
                         text(format!("Spelling of {}", spell.word))
@@ -2793,9 +2787,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         .padding(20.0)
                         .gap(14.0)
                         .radius(RADIUS_SHEET)
-                        .fill(glass_panel_fill())
-                        .backdrop_blur(GLASS_PANEL_SIGMA)
-                        .border(1.0, glass_rim())
+                        .liquid_glass(exo_glass(ExoGlass::Sheet, false))
                         .child(
                             text(format!("Save changes to {name}?"))
                                 .font(type_section())

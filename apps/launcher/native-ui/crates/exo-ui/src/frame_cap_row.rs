@@ -1,10 +1,9 @@
 use crate::events::HostEventKind;
 use crate::state::AppState;
 use exo_kit::{
-    FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, SPRING_QUICK, bad, fg_muted, float_line,
-    glass_control_fill, glass_rim_bottom, glass_rim_top, glass_still_panel_fill, good, hairline,
-    hover_fill, icon_check, icon_chevron_down, pressed_fill, type_control, type_section,
-    type_small,
+    ExoGlass, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, SPRING_QUICK, apply_glass, bad, fg_muted,
+    float_line, glass_control_fill, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill,
+    icon_check, icon_chevron_down, pressed_fill, type_control, type_section, type_small,
 };
 use exo_rpc::{Game, GameFrameCap, HostEvent};
 use rune::{El, col, el, row, text};
@@ -587,15 +586,19 @@ fn build_menu(fc: &GameFrameCap, game: &Game) -> El {
         );
     }
 
-    el().key("gp-fc-menu")
-        .w_full()
-        .mt(6.0)
-        .px(4.0)
-        .py(4.0)
-        .radius(RADIUS_CARD)
-        .fill(glass_still_panel_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(menu_col)
+    apply_glass(
+        el().key("gp-fc-menu")
+            .w_full()
+            .mt(6.0)
+            .px(4.0)
+            .py(4.0)
+            .radius(RADIUS_CARD)
+            .continuous_corners()
+            .clip_rounded(RADIUS_CARD)
+            .child(menu_col),
+        ExoGlass::Menu,
+        false,
+    )
 }
 
 #[cfg(test)]

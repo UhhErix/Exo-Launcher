@@ -1,10 +1,9 @@
 use crate::components::popover_transition_from;
+use crate::glass::{ExoGlass, apply_glass};
 use crate::icons::{icon_check, icon_chevron_right};
 use crate::tokens::{
-    FG, GLASS_PANEL_SIGMA, RADIUS_CARD, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, fg_faint,
-    fg_muted, glass_panel_fill, glass_panel_shadow_color, glass_rim_bottom, glass_rim_top,
-    glass_still_panel_fill, hairline, hover_fill, pressed_fill, subtle_fill, type_control,
-    type_label, type_small,
+    FG, RADIUS_CARD, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, hairline,
+    hover_fill, pressed_fill, subtle_fill, type_control, type_label, type_small,
 };
 use rune::{Align, Cursor, El, Key, Side, Tx, Vec2, col, el, row, text};
 use std::rc::Rc;
@@ -121,8 +120,8 @@ pub struct ContextMenuSpec<S: 'static> {
     pub on_submenu: MenuSubmenuCb<S>,
 }
 
-fn glass_menu_surface(key: String, width: f32, blur: bool, origin: Vec2) -> El {
-    let mut panel = col()
+fn glass_menu_surface(key: String, width: f32, _blur: bool, origin: Vec2) -> El {
+    let panel = col()
         .key(key)
         .min_w(width)
         .px(6.0)
@@ -133,18 +132,8 @@ fn glass_menu_surface(key: String, width: f32, blur: bool, origin: Vec2) -> El {
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(0.0, 40.0, glass_panel_shadow_color())
         .transition(popover_transition_from(origin));
-    if blur {
-        panel = panel.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
-    panel
+    apply_glass(panel, ExoGlass::Menu, false)
 }
 
 fn keycap_badge(hint: String) -> El {

@@ -1,10 +1,9 @@
 use crate::library_state::format_bytes_short;
 use crate::state::{AppState, InputMode};
 use exo_kit::{
-    BG, FG, GLASS_PANEL_SIGMA, MenuAnchor, MenuEntry, MenuItem, RADIUS_PILL, SPRING_BASE,
-    context_menu_layers, float_line, glass_button, glass_panel_fill, glass_rim_bottom,
-    glass_rim_top, icon_eye, icon_eye_off, icon_folder, icon_folder_plus, icon_trash,
-    primary_button, type_control,
+    ExoGlass, FG, MenuAnchor, MenuEntry, MenuItem, RADIUS_PILL, SPRING_BASE, apply_glass,
+    context_menu_layers, float_line, glass_button, icon_eye, icon_eye_off, icon_folder,
+    icon_folder_plus, icon_trash, primary_button, type_control,
 };
 use rune::{Align, El, Side, Tx, el, row, text};
 use std::rc::Rc;
@@ -54,30 +53,28 @@ pub fn select_bar_overlay(s: &AppState, blur: bool) -> Vec<El> {
         hide_btn = hide_btn.opacity(0.42);
     }
 
-    let mut bar = row()
-        .key("library-select-bar")
-        .role("toolbar")
-        .label("Selected games")
-        .h(52.0)
-        .pl(20.0)
-        .pr(10.0)
-        .gap(6.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(glass_panel_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(12.0, 32.0, BG.alpha(0.55))
-        .motion(SPRING_BASE)
-        .child(
-            el().min_w(96.0)
-                .pr(6.0)
-                .child(text(count_label).font(type_control()).color(FG)),
-        )
-        .child(hide_btn);
-
-    if blur {
-        bar = bar.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    let mut bar = apply_glass(
+        row()
+            .key("library-select-bar")
+            .role("toolbar")
+            .label("Selected games")
+            .h(52.0)
+            .pl(20.0)
+            .pr(10.0)
+            .gap(6.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .motion(SPRING_BASE)
+            .child(
+                el().min_w(96.0)
+                    .pr(6.0)
+                    .child(text(count_label).font(type_control()).color(FG)),
+            )
+            .child(hide_btn),
+        ExoGlass::Bar,
+        false,
+    );
 
     if !hidden_view {
         let mut folder_btn = glass_button(

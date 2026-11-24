@@ -2,13 +2,12 @@ use crate::discord::avatar_box;
 use crate::discord_chat;
 use crate::state::{AppState, ContextMenuTarget, HostStatus};
 use exo_kit::{
-    BG, FG, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, filter_pill, glass_button,
-    glass_panel_fill, glass_rim_bottom, glass_rim_top, glass_still_control_fill,
-    glass_still_panel_fill, good, hairline, hover_fill, icon_check, icon_chevron_right, icon_close,
-    icon_plus, icon_search, icon_settings, modal_card_transition, modal_scrim_transition,
-    pressed_fill, primary_button, scrim_fill, selected_fill, type_body, type_control, type_label,
-    type_section, type_small, type_title,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, filter_pill,
+    glass_button, glass_still_control_fill, good, hairline, hover_fill, icon_check,
+    icon_chevron_right, icon_close, icon_plus, icon_search, icon_settings, modal_card_transition,
+    modal_scrim_transition, pressed_fill, primary_button, scrim_fill, selected_fill, type_body,
+    type_control, type_label, type_section, type_small, type_title,
 };
 use exo_rpc::{
     ActionResult, DiscordAdminReply, DiscordChannel, DiscordChannels, DiscordEventEntry,
@@ -3021,24 +3020,19 @@ pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
 }
 
 fn glass_dialog_frame(key: &str, w: f32, blur: bool) -> El {
-    let mut box_el = col()
-        .key(key)
-        .w(w)
-        .padding(20.0)
-        .gap(12.0)
-        .radius(RADIUS_PANEL)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .transition(modal_card_transition())
-        .hit();
-    if blur {
-        box_el = box_el.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
-    box_el
+    let _ = blur;
+    apply_glass(
+        col()
+            .key(key)
+            .w(w)
+            .padding(20.0)
+            .gap(12.0)
+            .radius(RADIUS_PANEL)
+            .transition(modal_card_transition())
+            .hit(),
+        ExoGlass::Sheet,
+        false,
+    )
 }
 
 fn modal_header(title: &str, close_key: &str, on_close: impl Fn(&mut AppState) + 'static) -> El {
@@ -4177,13 +4171,11 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
         .w(820.0)
         .h(600.0)
         .radius(RADIUS_PANEL)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
+        .modal(true, |s: &mut AppState| {
+            s.discord.admin.channel_settings_id = None
+        })
+        .modal_scrim(scrim_fill())
         .hit()
         .child(nav)
         .child(
@@ -4214,22 +4206,12 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
                         .child(icon_close(14.0, FG)),
                 ),
         );
-    if blur {
-        sheet = sheet.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    sheet = apply_glass(sheet, ExoGlass::Sheet, false);
 
     el().key("dc-chset-layer")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .center()
-        .child(
-            el().key("dc-chset-scrim")
-                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-                .fill(scrim_fill())
-                .hit()
-                .press_on_down()
-                .transition(modal_scrim_transition())
-                .on_press(|s: &mut AppState| s.discord.admin.channel_settings_id = None),
-        )
         .child(sheet)
 }
 
@@ -4588,13 +4570,11 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
         .w(880.0)
         .h(640.0)
         .radius(RADIUS_PANEL)
-        .fill(if blur {
-            glass_panel_fill()
-        } else {
-            glass_still_panel_fill()
-        })
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
+        .modal(true, |s: &mut AppState| {
+            s.discord.admin.server_settings_guild_id = None
+        })
+        .modal_scrim(scrim_fill())
         .hit()
         .child(nav)
         .child(
@@ -4627,22 +4607,12 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
                         .child(icon_close(14.0, FG)),
                 ),
         );
-    if blur {
-        sheet = sheet.backdrop_blur(GLASS_PANEL_SIGMA);
-    }
+    let _ = blur;
+    sheet = apply_glass(sheet, ExoGlass::Sheet, false);
 
     el().key("dc-srvset-layer")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .center()
-        .child(
-            el().key("dc-srvset-scrim")
-                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-                .fill(scrim_fill())
-                .hit()
-                .press_on_down()
-                .transition(modal_scrim_transition())
-                .on_press(|s: &mut AppState| s.discord.admin.server_settings_guild_id = None),
-        )
         .child(sheet)
 }
 

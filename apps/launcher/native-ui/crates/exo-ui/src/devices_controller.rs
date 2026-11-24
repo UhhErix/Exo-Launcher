@@ -4,10 +4,10 @@ use crate::devices_audio::{
 };
 use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
-    BadgeTone, FG, GLASS_PANEL_SIGMA, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, bad, fg_faint,
-    fg_muted, float_line, glass_panel_fill, glass_rim, good, hairline, icon_gamepad,
-    modal_card_transition, modal_scrim_transition, primary_button, progress_bar, scaled,
-    scrim_fill, status_badge, type_body, type_small, type_title,
+    BadgeTone, ExoGlass, FG, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, bad, exo_glass, fg_faint,
+    fg_muted, float_line, glass_rim, good, hairline, icon_gamepad, modal_card_transition,
+    modal_scrim_transition, primary_button, progress_bar, scaled, scrim_fill, status_badge,
+    type_body, type_small, type_title,
 };
 use exo_rpc::{
     ButtonCheck, ControllerCalibrateReply, ControllerGameProfile, ControllerGameProfilesReply,
@@ -2320,9 +2320,7 @@ fn calibrate_dialog_overlay(s: &AppState, card: &PeripheralCard, edge: bool) -> 
         .padding(24.0)
         .gap(16.0)
         .radius(RADIUS_SHEET)
-        .fill(glass_panel_fill())
-        .backdrop_blur(GLASS_PANEL_SIGMA)
-        .border(1.0, glass_rim())
+        .liquid_glass(exo_glass(ExoGlass::Sheet, false))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .child(text(title).font(type_title()).color(FG))
@@ -2448,9 +2446,7 @@ fn profile_editor_overlay(s: &AppState) -> Option<El> {
             .padding(24.0)
             .gap(14.0)
             .radius(RADIUS_SHEET)
-            .fill(glass_panel_fill())
-            .backdrop_blur(GLASS_PANEL_SIGMA)
-            .border(1.0, glass_rim())
+            .liquid_glass(exo_glass(ExoGlass::Sheet, false))
             .motion(SPRING_BASE)
             .child(
                 text(format!(
@@ -2627,9 +2623,7 @@ fn profile_editor_overlay(s: &AppState) -> Option<El> {
         .padding(24.0)
         .gap(14.0)
         .radius(RADIUS_SHEET)
-        .fill(glass_panel_fill())
-        .backdrop_blur(GLASS_PANEL_SIGMA)
-        .border(1.0, glass_rim())
+        .liquid_glass(exo_glass(ExoGlass::Sheet, false))
         .motion(SPRING_BASE)
         .child(
             text(if ed.is_new {

@@ -1,11 +1,10 @@
 use crate::events::EventRegistry;
 use crate::state::{AppState, NoticeTone};
 use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_BASE, SPRING_QUICK,
-    TRANSPARENT, bad, fg_muted, glass_button, glass_control_fill, glass_panel_opt,
-    glass_rim_bottom, glass_rim_top, good, hover_fill, modal_card_transition,
-    modal_scrim_transition, pressed_fill, primary_button_dyn, store_logo, type_body, type_section,
-    type_small,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_BASE, SPRING_QUICK, TRANSPARENT,
+    apply_glass, bad, fg_muted, glass_button, glass_panel_opt, glass_rim_bottom, glass_rim_top,
+    good, hover_fill, modal_card_transition, pressed_fill, primary_button_dyn, store_logo,
+    type_body, type_section, type_small,
 };
 use exo_rpc::{ActionResult, KeyPreview, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW};
 use rune::{Cursor, El, Key, Transition, Tx, col, edit_access, el, row, text, text_input};
@@ -215,17 +214,18 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         })
         .on_submit(|s: &mut AppState, tx| s.activate_key_with_store(tx));
 
-    let input_box = row()
-        .w_full()
-        .h(32.0)
-        .px(12.0)
-        .center_y()
-        .cursor(Cursor::Text)
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(input);
+    let input_box = apply_glass(
+        row()
+            .w_full()
+            .h(32.0)
+            .px(12.0)
+            .center_y()
+            .cursor(Cursor::Text)
+            .radius(RADIUS_PILL)
+            .child(input),
+        ExoGlass::Control,
+        false,
+    );
 
     let mut chips = row().gap(6.0).center_y();
     for (id, label) in KEY_STORES {
@@ -354,16 +354,9 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .label("Activate key")
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
+        .modal(true, |s: &mut AppState| s.close_key_modal())
+        .modal_scrim(BG.alpha(0.52))
         .child(content);
-
-    let scrim = el()
-        .key("key-modal-scrim")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.52))
-        .hit()
-        .cursor(Cursor::Default)
-        .transition(modal_scrim_transition())
-        .on_press(|s: &mut AppState| s.close_key_modal());
 
     let host = col()
         .key("key-modal-host")
@@ -372,7 +365,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .transition(Transition::none())
         .child(card);
 
-    vec![scrim, host]
+    vec![host]
 }
 
 #[cfg(test)]

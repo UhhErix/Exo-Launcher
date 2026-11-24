@@ -3,11 +3,11 @@ use crate::discord_chat_state::ProfileTab;
 use crate::discord_md;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, bad, danger_button, fg_faint, fg_muted, glass_button, glass_control_fill,
-    glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_check,
-    icon_close, icon_external, icon_hash, icon_plus, icon_search, icon_trash, icon_user_plus,
-    icon_users, modal_card_transition, modal_scrim_transition, primary_button, scrim_fill,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_QUICK, apply_glass, bad, danger_button, fg_faint, fg_muted, glass_button,
+    glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hex,
+    hover_fill, icon_check, icon_close, icon_external, icon_hash, icon_plus, icon_search,
+    icon_trash, icon_user_plus, icon_users, modal_card_transition, primary_button, scrim_fill,
     subtle_fill, switch_pill, type_body, type_control, type_label, type_section, type_small,
 };
 use exo_rpc::{DiscordMessage, DiscordPoll};
@@ -62,19 +62,14 @@ fn modal_wrap(
     card: El,
     on_close: impl Fn(&mut AppState) + 'static,
 ) -> El {
-    let mut scrim = el()
-        .key(key)
+    let _ = blur;
+    let card = apply_glass(card, ExoGlass::Sheet, false)
+        .modal(true, on_close)
+        .modal_scrim(scrim_fill());
+    el().key(key)
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(scrim_fill())
         .center()
-        .hit()
-        .on_press(on_close)
-        .transition(modal_scrim_transition())
-        .child(card.hit().on_press(|_: &mut AppState| {}));
-    if blur {
-        scrim = scrim.backdrop_blur(12.0);
-    }
-    scrim
+        .child(card)
 }
 
 fn choice_pill(key: String, label: &str, active: bool) -> El {

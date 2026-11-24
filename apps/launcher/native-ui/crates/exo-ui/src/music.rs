@@ -1,13 +1,12 @@
 use crate::media_state::{MusicNav, MusicPanel, MusicRoomState};
 use crate::state::{AppState, Room};
 use exo_kit::{
-    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
-    RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, bad, fg_faint, fg_muted,
-    glass_capsule, glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good,
-    hover_fill, icon_back, icon_close, icon_home, icon_maximize, icon_more_horiz, icon_music,
-    icon_pause, icon_play, icon_plus, icon_search, icon_skip_back, icon_skip_forward,
-    icon_sparkles, icon_volume, icon_volume_low, icon_volume_off, pressed_fill, primary_button,
-    slider_track,
+    BG, ExoGlass, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted,
+    glass_capsule, glass_rim, good, hover_fill, icon_back, icon_close, icon_home, icon_maximize,
+    icon_more_horiz, icon_music, icon_pause, icon_play, icon_plus, icon_search, icon_skip_back,
+    icon_skip_forward, icon_sparkles, icon_volume, icon_volume_low, icon_volume_off, pressed_fill,
+    primary_button, slider_track,
 };
 use exo_rpc::{PlayerCard, PlayerSection, PlayerTrack, format_duration_ms};
 use rune::{
@@ -1395,30 +1394,23 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         .child(immerse_btn)
         .child(more_btn);
 
-    let overlay_open = s.capture_menu_open
-        || s.palette_open
-        || s.key_modal_open
-        || s.props_open
-        || s.setup.beat.is_some();
-
-    let mut pill = row()
-        .key("music-transport-bar")
-        .w_full()
-        .max_w(1040.0)
-        .h(64.0)
-        .pl(10.0)
-        .pr(14.0)
-        .gap(16.0)
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .center_y()
-        .child(left)
-        .child(center)
-        .child(right);
-    if !overlay_open {
-        pill = pill.backdrop_blur(GLASS_CONTROL_SIGMA);
-    }
+    let pill = apply_glass(
+        row()
+            .key("music-transport-bar")
+            .w_full()
+            .max_w(1040.0)
+            .h(64.0)
+            .pl(10.0)
+            .pr(14.0)
+            .gap(16.0)
+            .radius(RADIUS_PILL)
+            .center_y()
+            .child(left)
+            .child(center)
+            .child(right),
+        ExoGlass::Bar,
+        false,
+    );
 
     row()
         .pin(Some(SIDEBAR_W + 2.0 * GAP), None, Some(GAP), Some(18.0))
