@@ -60,12 +60,12 @@ All required gates ran after final edits and passed with exit code 0:
 
 ## Follow-Up Pass (Merge `feat/native-polish-2` + Vision-Parity Blockers & Majors)
 
-### 1. Branch Integration (`d1aabf6`)
-- Merged `origin/feat/native-polish-2` (`acf8655`, including WP1, WP4, WP5, WP11, perf branches, and `EventRegistry` in `crates/exo-ui/src/events.rs`) into `UhhErix/native-WP6`.
+### 1. Branch Integration (`d1aabf6` → `4d0c4a5`)
+- Merged `origin/feat/native-polish-2` through `a78c217` (including WP1, WP4, WP5, WP9, WP11, perf branches, and `EventRegistry` in `crates/exo-ui/src/events.rs`) into `UhhErix/native-WP6`.
 - Preserved `EventRegistry` and every handler from both sides (`register_shell`, `register_library`, `register_media`, `register_discord` incl. all 8 WP6 Discord/Friends push events, `register_pc`, `register_store`, `register_game`, `register_wp4_events`).
 - Preserved all 8 Rune fork pins at `e6c0716a660a97576b3e3951973c599b82bd11e7` in `Cargo.toml` / `Cargo.lock`.
 - Deduplicated `OpenUrlReply` (using `game_types::OpenUrlReply`) and `AppState::open_external_url` (using `game_actions.rs`).
-- Preserved merged `feature-matrix.json` / `feature-matrix.md` counts (WP1 + WP4 + WP5 + all 16 WP6 rows DONE).
+- Preserved merged `feature-matrix.json` / `feature-matrix.md` counts (WP1 + WP4 + WP5 + WP9 + all 16 WP6 rows DONE: `DONE: 122, PARTIAL: 50, MISSING: 62, BROKEN: 4`, Discord `25/45`).
 
 ### 2. Vision-Parity Fixes (`origin/UhhErix/parity-vision-qa:apps/launcher/improve/vision-parity.md`)
 - **`discord-dm` & `discord-dm-context-menu` active DM & preview (blockers):** Added `AppState::default_dm_id()` preferring the first pinned DM (`settings.ui_prefs["discordPinnedDms"]` + local overrides) over the first unpinned DM across `discord_state.rs` and `main.rs` preload; added `backfill_dm_line()` + `dm_preview_from_message()` and reversed `discord.messages` preload order in `main.rs` so pinned DM rows immediately display their last-message preview line; removed redundant `"Online"` subtext fallback from `dm_subtitle`.
@@ -80,7 +80,7 @@ All required gates ran after final edits and passed with exit code 0:
 ### 3. Follow-Up Gates (Fresh)
 - `cargo fmt --check` — **PASS** (exit 0)
 - `cargo clippy --workspace -- -D warnings` — **PASS** (exit 0)
-- `cargo test --workspace` — **PASS** (exit 0: `exo-kit` 4/4, `exo-rpc` 25/25 + 1 ignored live test, `exo-ui` 126/126 incl. new `default_dm_prefers_pinned_and_backfills_preview_and_formats_time` and link/channel markdown test)
+- `cargo test --workspace` — **PASS** (exit 0: `exo-kit` 4/4, `exo-rpc` 26/26 + 1 ignored live test, `exo-ui` 132/132 incl. new `default_dm_prefers_pinned_and_backfills_preview_and_formats_time` and link/channel markdown test)
 - `cargo build --release -p exo-ui` — **PASS** (exit 0)
 - `node apps/launcher/tools/check-comments.mjs` — **0 Rust / `native-ui` violations** (only the 12 pre-existing JSX baseline files from commit `526b2df` report stale ratchet entries because `ui/node_modules` is absent in this Orca worktree; `comments-ratchet.json` left untouched)
 - Visual parity re-snaps (`discord-messages`, `discord-server`, `discord-profile`, `discord-picker` at 1920×1080 scale 1) — visually verified clean.
