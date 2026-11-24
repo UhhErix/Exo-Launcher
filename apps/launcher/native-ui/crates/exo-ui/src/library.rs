@@ -24,6 +24,8 @@ use rune::{
     Align, Cursor, El, Side, SurfaceFit, TextStyle, Tx, col, edit_access, el, oklch, row, text,
     text_input,
 };
+use std::borrow::Cow;
+use std::rc::Rc;
 
 const HOME_EDGE: f32 = 32.0;
 const DECK_CARD_W: f32 = 224.0;
@@ -323,6 +325,7 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .on_hover(move |s: &mut AppState| {
             if s.selected_game_id.as_deref() != Some(id_hover.as_str()) {
                 s.selected_game_id = Some(id_hover.clone());
+                s.schedule_home_deck_extras(id_hover.clone());
             }
         })
         .on_hover_change(move |s: &mut AppState, inside, _| {
@@ -1046,23 +1049,33 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
     let trimmed_query = s.library_search.text.trim();
 
     let lower = if deck_total > 0 {
-        let scroll_x = s.deck_scroll.get().offset[0].max(0.0);
-        let stride = DECK_CARD_W + 14.0;
-        let first_visible = (scroll_x / stride).floor() as usize;
-        let load_start = first_visible.saturating_sub(4);
-        let load_end = (first_visible + 14).min(deck_total);
-        let deck_cards: Vec<El> = deck_games
-            .iter()
-            .enumerate()
-            .map(|(idx, g)| {
-                let active = active_id.as_deref() == Some(g.id.as_str());
-                let load_cover = active || (idx >= load_start && idx < load_end);
-                deck_poster_card(g, active, load_cover, s, scale)
-            })
-            .collect();
+        let deck_games_rc = Rc::new(deck_games);
+        let deck_ids_rc: Rc<Vec<String>> =
+            Rc::new(deck_games_rc.iter().map(|g| g.id.clone()).collect());
+        let deck_version = deck_ids_rc.as_ref().clone();
+        let deck_keys = Rc::clone(&deck_ids_rc);
+        let deck_build = Rc::clone(&deck_games_rc);
+        let active_for_build = active_id.clone();
 
         let (can_prev, can_next) = s.deck_can_page(deck_total);
         let deck_scroll = s.deck_scroll.clone();
+
+        let strip = row()
+            .key("home-deck-virtual-cols")
+            .h_full()
+            .gap(14.0)
+            .items_end()
+            .virtual_cols(
+                deck_total,
+                DECK_CARD_W,
+                move |_s: &AppState, i| Cow::Owned(format!("tile-{}", deck_keys[i])),
+                move |s: &AppState, i| {
+                    let g = &deck_build[i];
+                    let active = active_for_build.as_deref() == Some(g.id.as_str());
+                    deck_poster_card(g, active, true, s, scale)
+                },
+            )
+            .virtual_cols_version(deck_version);
 
         let track = row()
             .key("home-deck-track")
@@ -1071,7 +1084,6 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             .pt(12.0)
             .pb(6.0)
             .px(HOME_EDGE)
-            .gap(14.0)
             .items_end()
             .scroll_x()
             .on_scroll_offset(move |pos| deck_scroll.set(pos))
@@ -1081,7 +1093,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
                 if can_next { 44.0 } else { 0.0 },
                 0.0,
             )
-            .children(deck_cards);
+            .child(strip);
 
         let mut deck_rail = el().w_full().h(DECK_CARD_H + 18.0).child(track);
 

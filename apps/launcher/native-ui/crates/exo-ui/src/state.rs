@@ -14,11 +14,11 @@ use exo_rpc::{
     ExoAccountState, Game, GameExtras, GameProperties, GameRunStateEvent, HostEvent,
     InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
     LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_INSTALL,
-    METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_STOP,
-    METHOD_GAME_UPDATE, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW, METHOD_LIBRARY_REFRESH,
-    METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback,
-    MusicVolumeEvent, ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame, StoreHome,
-    StoreOtherOffers, StoreShelf, StoreTile, remote_art,
+    METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE,
+    METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET,
+    METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback, MusicVolumeEvent, ShellBootstrap,
+    StoreArt, StoreChangedEvent, StoreGame, StoreHome, StoreOtherOffers, StoreShelf, StoreTile,
+    remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -1232,6 +1232,7 @@ impl AppState {
             self.close_captures();
         }
         match room {
+            Room::Library => self.on_library_room_enter(),
             Room::Store => {
                 if !self.store_loading {
                     self.load_store_home(false);
@@ -1251,7 +1252,6 @@ impl AppState {
             Room::Devices => self.load_pc_tab(crate::pc_state::PcTab::Devices),
             Room::ExoAi => self.load_pc_tab(crate::pc_state::PcTab::ExoAi),
             Room::Apps => self.load_pc_tab(crate::pc_state::PcTab::Apps),
-            _ => {}
         }
     }
 
@@ -3055,10 +3055,6 @@ impl AppState {
         self.game_action(METHOD_GAME_LAUNCH, id, "Launching", "Launched");
     }
 
-    pub fn stop_game(&mut self, id: &str) {
-        self.game_action(METHOD_GAME_STOP, id, "Stopping", "Stopped");
-    }
-
     pub fn install_game(&mut self, id: &str) {
         self.game_action(
             METHOD_GAME_INSTALL,
@@ -3188,7 +3184,7 @@ impl AppState {
         self.apply_library(boot.library);
         self.apply_music_playback(boot.music_playback.playback);
         self.discord.status = boot.discord_status;
-        self.load_gifts(false);
+        self.warm_library_on_startup();
         match self.room {
             Room::Discord if !self.discord.loaded => self.load_discord_room(),
             Room::Music => self.load_music_room(),

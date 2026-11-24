@@ -7,12 +7,13 @@ use crate::state::{
 };
 use exo_kit::normalize_folder_color;
 use exo_rpc::{
-    ActionResult, FolderArtReply, Game, GameGetReply, HostEvent, LibraryFolder, LibraryPayload,
-    LibraryRefreshAllReply, METHOD_ACCOUNTS_LIST, METHOD_ACCOUNTS_SWITCH, METHOD_GAME_GET,
-    METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
-    METHOD_GIFTS_ANSWER, METHOD_GIFTS_LIST, METHOD_LIBRARY_FOLDER_ART, METHOD_LIBRARY_REFRESH,
-    METHOD_LIBRARY_REFRESH_ALL, METHOD_SETTINGS_SET, METHOD_SHELL_PICK_PROGRAM, PickPathReply,
-    RiotSavedAccount, StoreAccountsReply, StoreGift, StoreGifts, UninstallReply, base64,
+    ActionResult, FolderArtReply, Game, GameExtras, GameGetReply, HostEvent, LibraryFolder,
+    LibraryPayload, LibraryRefreshAllReply, METHOD_ACCOUNTS_LIST, METHOD_ACCOUNTS_SWITCH,
+    METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH, METHOD_GAME_STOP,
+    METHOD_GAME_UNINSTALL, METHOD_GIFTS_ANSWER, METHOD_GIFTS_LIST, METHOD_LIBRARY_FOLDER_ART,
+    METHOD_LIBRARY_REFRESH, METHOD_LIBRARY_REFRESH_ALL, METHOD_SETTINGS_SET,
+    METHOD_SHELL_PICK_PROGRAM, PickPathReply, RiotSavedAccount, StoreAccountsReply, StoreGift,
+    StoreGifts, UninstallReply, base64,
 };
 use rune::{DropReorder, Image, Key, KeyEvent, Pixels, ReorderAxis, TextEdit, Tx};
 use serde_json::json;
@@ -185,6 +186,8 @@ pub struct LibraryExtraState {
     pub grid_intended_col: Option<usize>,
     pub adding_portable: bool,
     pub folder_seq: u64,
+    pub home_extras_pending_id: Option<String>,
+    pub home_extras_due_secs: f64,
 }
 
 impl Default for LibraryExtraState {
@@ -225,6 +228,8 @@ impl Default for LibraryExtraState {
             grid_intended_col: None,
             adding_portable: false,
             folder_seq: 1,
+            home_extras_pending_id: None,
+            home_extras_due_secs: 0.0,
         }
     }
 }
@@ -242,7 +247,12 @@ pub fn register_library_wp2_events(state: &mut AppState) {
             return false;
         };
         if !go.title.trim().is_empty() {
-            s.lib.optimize_held_titles.insert(go.title);
+            let title = go.title;
+            s.lib.optimize_held_titles.insert(title.clone());
+            s.push_notice(
+                format!("{title} is running. Exo will optimize it once it closes."),
+                NoticeTone::Neutral,
+            );
         }
         true
     });
@@ -251,7 +261,12 @@ pub fn register_library_wp2_events(state: &mut AppState) {
             return false;
         };
         if !go.title.trim().is_empty() {
-            s.lib.optimize_held_titles.remove(&go.title);
+            let title = go.title;
+            s.lib.optimize_held_titles.remove(&title);
+            s.push_notice(
+                format!("{title}'s update reset its settings. Exo optimized it again."),
+                NoticeTone::Good,
+            );
         }
         true
     });
@@ -1815,6 +1830,56 @@ impl AppState {
         }
     }
 
+    pub fn warm_library_on_startup(&mut self) {
+        self.load_gifts(false);
+        self.load_riot_accounts();
+        self.warm_home_deck_extras();
+    }
+
+    pub fn on_library_room_enter(&mut self) {
+        self.load_gifts(false);
+        self.warm_home_deck_extras();
+    }
+
+    pub fn schedule_home_deck_extras(&mut self, id: String) {
+        self.lib.home_extras_pending_id = Some(id);
+        self.lib.home_extras_due_secs = self.clock_secs_now() + 0.24;
+    }
+
+    pub fn warm_home_deck_extras(&mut self) {
+        if self.room != Room::Library || self.library_all_games || self.open_game_id.is_some() {
+            return;
+        }
+        let deck = self.home_deck_games();
+        let focused = self
+            .selected_game_id
+            .as_deref()
+            .and_then(|id| deck.iter().find(|g| g.id == id))
+            .or_else(|| deck.first())
+            .map(|g| g.id.clone());
+        if let Some(id) = focused {
+            self.fetch_home_deck_extras(&id);
+        }
+    }
+
+    fn fetch_home_deck_extras(&mut self, id: &str) {
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let gid = id.to_string();
+            rpc.call::<_, GameExtras>(METHOD_GAME_EXTRAS, &json!({ "id": gid }), move |res| {
+                if let Ok(extras) = res {
+                    handle.update(move |s, _| {
+                        if s.open_game_id.as_deref() == Some(gid.as_str()) {
+                            s.game_extras = Some(extras);
+                        }
+                    });
+                }
+            });
+        }
+        #[cfg(not(windows))]
+        let _ = id;
+    }
+
     pub fn load_gifts(&mut self, force: bool) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
@@ -2263,6 +2328,14 @@ impl AppState {
             self.lib.covers_shining_until = 0.0;
             changed = true;
         }
+        if self.lib.home_extras_due_secs > 0.0
+            && now >= self.lib.home_extras_due_secs
+            && let Some(id) = self.lib.home_extras_pending_id.take()
+        {
+            self.lib.home_extras_due_secs = 0.0;
+            self.fetch_home_deck_extras(&id);
+            changed = true;
+        }
         if self.status == HostStatus::Connected
             && !self.refreshing
             && !self.games.iter().any(|g| g.is_running)
@@ -2445,6 +2518,7 @@ pub fn handle_library_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
                 let next_idx = (cur as isize + delta).rem_euclid(deck.len() as isize) as usize;
                 let next_id = deck[next_idx].id.clone();
                 s.selected_game_id = Some(next_id.clone());
+                s.schedule_home_deck_extras(next_id.clone());
                 tx.scroll_into_view(format!("tile-{next_id}"));
                 return true;
             }
@@ -2785,5 +2859,23 @@ mod tests {
         assert_eq!(z, 2.0);
         assert_eq!(x, 0.0);
         assert!((y - 450.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn home_deck_extras_debounce_flushes_after_240ms() {
+        let mut s = AppState::with_demo_games();
+        s.schedule_home_deck_extras("demo:cyberpunk".into());
+        assert_eq!(
+            s.lib.home_extras_pending_id.as_deref(),
+            Some("demo:cyberpunk")
+        );
+        assert!(!s.tick_library(0.10));
+        assert_eq!(
+            s.lib.home_extras_pending_id.as_deref(),
+            Some("demo:cyberpunk")
+        );
+        assert!(s.tick_library(0.30));
+        assert!(s.lib.home_extras_pending_id.is_none());
+        assert_eq!(s.lib.home_extras_due_secs, 0.0);
     }
 }

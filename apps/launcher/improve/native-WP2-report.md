@@ -1,8 +1,8 @@
 # WP2 Report — Library: Folders, Select Mode, Gifts, Shelves, Drag and Drop
 
-- **Branch:** `UhhErix/native-WP2` (based on `feat/native-polish-2` @ `5790322`)
-- **Rune fork pin commit:** `f62929b` — all 8 Rune git deps in `apps/launcher/native-ui/Cargo.toml` (+ `Cargo.lock`) pinned to `exo-inputs` @ `be0700fa3c2e4d6cfa8a93ea4e1662b750210a29` in a single standalone commit.
-- **Scope:** All 15 WP2 items in `apps/launcher/improve/feature-matrix.md` and `apps/launcher/improve/feature-matrix.json` — **15/15 DONE**, plus fixed the existing hidden-games filter bug in `state.rs`.
+- **Branch:** `UhhErix/native-WP2` (merged `origin/feat/native-polish-2` @ `9820672` in `a9be3e2`)
+- **Rune fork pin commit:** `5e687e5` — all 8 Rune git deps in `apps/launcher/native-ui/Cargo.toml` (+ `Cargo.lock`) pinned to `exo-inputs` @ `e6c0716a660a97576b3e3951973c599b82bd11e7` in one isolated commit.
+- **Scope:** All 15 WP2 items in `apps/launcher/improve/feature-matrix.md` and `apps/launcher/improve/feature-matrix.json` — **15/15 DONE**, plus merged `feat/native-polish-2`, adopted `virtual_cols`, and closed all Library RPC & push-event parity gaps.
 
 ## Item-by-Item Status & Verification
 
@@ -41,12 +41,25 @@
 - **Live interactive E2E check:** Executed a scripted `exo-ui.exe --pipe <temp-pipe>` session against the temp host exercising HomeDeck More → `Refresh library` → `Select games` → `Select all` → `Add to folder` → `New folder` → `Create` → Filter (`Installed` → `Clear all`) → Sort (`Hidden games` → `All games`), exiting cleanly with code `0`.
 - **Unverified / Note:** The React WebView2 CDP pass in `tools/parity/run.mjs` timed out (`app.exo-launcher.local page not reachable on 127.0.0.1:<port>`) without disturbing the owner's running Exo instance (never touched per instructions), so automated pixel-diff scoring against live WebView2 could not run in this environment; all React parity checks were verified directly against `apps/launcher/ui/src` source + CSS tokens and visual inspection of native 1920×1080 captures.
 
+## Follow-Up Integration Pass (`e6c0716a`, `virtual_cols`, & WP11 RPC Parity)
+
+1. **Merged `origin/feat/native-polish-2` (`a9be3e2`):** Reconciled `EventRegistry` (`events.rs`) and WP1's typed `GameOptimizeEvent` so all WP2 push events (`gifts.changed`, `game.optimizeHeld`, `game.optimizedAgain`) register cleanly through `AppState::register_event` with zero `state.rs` match arms.
+2. **Isolated Rune `e6c0716a` pin (`5e687e5`):**
+   - Migrated HomeDeck horizontal poster strip (`library.rs::view_home_deck`) to `El::virtual_cols` + `virtual_cols_version`, preserving `tile-{id}` keys and passing `library_cover_flight_nav_pill_and_deck_motion_gate` and `phase2_game_page_store_tour_key_modal_and_gamepad`.
+   - Evaluated `rune::ImageCanvas`: it is an 8-handle freeform annotation/crop box over a fitted image (for Captures), whereas React's `FolderCropper.tsx` is a pan-and-zoom fixed 2:3 cover preview behind a tinted folder glass flap; kept the React 1:1 `FolderCropper` implementation in `folders.rs`.
+3. **WP11 `tools/rpc-parity` results (Library / folders / gifts / select / refresh):**
+   - Ran `node tools/rpc-parity/run.mjs --only=startup,room-store,room-library,game-page` against `ExoLauncher.exe` (Debug build with `EXO_RPC_TRACE`) and release `exo-ui.exe`.
+   - Added `warm_library_on_startup()` (`gifts.list`, `accounts.list`, `game.extras`) in `apply_bootstrap`, `on_library_room_enter()` (`gifts.list`, `game.extras`) in `switch_room(Room::Library)`, and 240ms debounced `schedule_home_deck_extras()` on HomeDeck card focus changes (matching `HomeDeck.tsx:235-241` and `GiftsShelf.tsx:93`).
+   - **Verified live trace (`startup.jsonl`):** `gifts.list` (ok, 95ms), `accounts.list` (ok, 52ms), and `game.extras` (ok, 40ms) all recorded; `startup` Library-owned missing RPCs = **0** (native `shell.bootstrap` replaces `library.get`/`settings.get`/`art.base`).
+   - **Static & observed push-event parity:** `gifts.changed`, `game.optimizeHeld`, and `game.optimizedAgain` all handled in `exo-rpc` + `EventRegistry` (total static unhandled push events dropped **45 → 39**, with **0** unhandled Library/folders/gifts/select/refresh events).
+
 ## Verification Gates
 
 All gates ran fresh after the final edit:
 - `cargo fmt --check`: **PASS (0)**
 - `cargo clippy --workspace -- -D warnings`: **PASS (0)**
-- `cargo test --workspace`: **PASS (0)** — 4 `exo-kit` + 22 `exo-rpc` + 86 `exo-ui` = **112 passed, 0 failed**
+- `cargo test --workspace`: **PASS (0)** — 4 `exo-kit` + 22 `exo-rpc` + 110 `exo-ui` = **136 passed, 0 failed**
 - `cargo build --release -p exo-ui`: **PASS (0)**
-- `node apps/launcher/tools/check-comments.mjs`: **PASS (0)**
 - `node --test apps/launcher/tools/parity/parity.test.mjs`: **PASS (0)** — 8/8 passed
+- `node --test apps/launcher/tools/rpc-parity/parity.test.mjs`: **PASS (0)** — 4/4 passed
+- `node apps/launcher/tools/check-comments.mjs`: **0 violations in all WP2 files** (only the 12 upstream TSX entries from `526b2df` report stale because `ui/node_modules` is absent in this worktree; `comments-ratchet.json` untouched).
