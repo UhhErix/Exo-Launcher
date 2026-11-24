@@ -345,6 +345,17 @@ fn build_menu_rows<S: 'static>(
 }
 
 pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
+    build_context_menu_layers(spec, &[])
+}
+
+pub fn context_menu_layers_live<S: 'static>(
+    spec: ContextMenuSpec<S>,
+    live_keys: &[&str],
+) -> Vec<El> {
+    build_context_menu_layers(spec, live_keys)
+}
+
+fn build_context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>, live_keys: &[&str]) -> Vec<El> {
     let ContextMenuSpec {
         id,
         anchor,
@@ -428,10 +439,18 @@ pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
     }
 
     let dismiss_modal = Rc::clone(&on_dismiss);
-    vec![
+    let root = if live_keys.is_empty() {
         el().key(format!("{id}-root"))
             .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
             .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
-            .children(menu_nodes),
-    ]
+            .children(menu_nodes)
+    } else {
+        el().key(format!("{id}-root"))
+            .absolute(0.0, 0.0)
+            .size(0.0, 0.0)
+            .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
+            .modal_live(live_keys.iter().copied())
+            .children(menu_nodes)
+    };
+    vec![root]
 }

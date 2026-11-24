@@ -1,7 +1,7 @@
 use crate::state::{AppState, ContextMenuTarget, InputMode, MiniBarSlot, Room};
 use crate::{
-    captures, discord, game_page, key_modal, library, menus, music, notice, palette, pc, settings,
-    setup, store,
+    captures, discord, discord_voice, game_page, key_modal, library, menus, music, notice, palette,
+    pc, settings, setup, store,
 };
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
@@ -425,6 +425,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             ],
         );
 
+    let island_call = discord_voice::island_call_capsule(s, budget.top_bar_nav);
     let top_bar = el()
         .key("top-bar")
         .window_drag()
@@ -449,8 +450,10 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             row()
                 .pin(Some(0.0), Some(8.0), Some(0.0), None)
                 .h(36.0)
+                .gap(8.0)
                 .justify_center()
                 .center_y()
+                .children(island_call)
                 .child(nav),
         )
         .child(
@@ -543,6 +546,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     if !s.media.captures_open && s.room == Room::Discord {
         root = root.children(discord::overlay_layers(s, budget.overlay));
+    }
+    if let Some(ring) = discord_voice::incoming_call_overlay(s, budget.overlay) {
+        root = root.child(ring);
     }
     if s.capture_menu_open {
         root = root.children(captures::popover_layers(s, budget.overlay));

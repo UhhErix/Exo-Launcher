@@ -172,7 +172,7 @@ Totals: DONE 9, PARTIAL 16, MISSING 20, BROKEN 0 (of 45).
 | Emoji picker, GIF picker, sticker picker | components/discord/Composer.tsx:5 | — | MISSING | rpc: discord.emojis, discord.gifs, discord.stickers, discord.emojiFavorites, discord.gifFavorites. None of these RPCs called. |
 | Reactions: add, remove, who reacted | components/discord/Message.tsx:414 | exo-ui/src/discord_chat.rs:469 | PARTIAL | rpc: discord.react. discord.reactors never called. |
 | Message menu (reply, edit, pin, copy, delete, report, forward) | components/discord/Message.tsx:1 | exo-ui/src/menus.rs:1173† | PARTIAL | No Forward, Create thread, Report. |
-| Threads and forum channels | components/discord/Forum.tsx:4 | — | MISSING | rpc: discord.thread, discord.threads.  |
+| Threads and forum channels | components/discord/Forum.tsx:4 | exo-ui/src/discord_admin.rs:2027 | DONE | rpc: discord.thread, discord.threads. Forum view, tag filter, New post composer, active threads in sidebar. |
 | Polls (create, vote, results) | components/discord/PollCreator.tsx:23 | — | MISSING | rpc: discord.poll. discord.pollVote event not handled. |
 | Message search (filters) | components/discord/SearchBar.tsx:1 | — | MISSING | rpc: discord.search.  |
 | Pins panel | components/discord/ChatHeader.tsx:1 | exo-ui/src/discord_chat.rs:946 | PARTIAL | rpc: discord.pins.  |
@@ -180,31 +180,31 @@ Totals: DONE 9, PARTIAL 16, MISSING 20, BROKEN 0 (of 45).
 | Saved messages | components/discord/MessageTools.tsx:1 | — | MISSING | rpc: discord.saved.  |
 | Member list (roles, status, presence) | components/discord/MemberList.tsx:1 | exo-ui/src/discord.rs:1246 | DONE | rpc: discord.members.  |
 | User profile popover/card (roles, mutual, note, badges) | components/discord/profileParts.tsx:1 | exo-ui/src/discord.rs:1419 | PARTIAL | rpc: discord.profile. No roles editor, mutual servers/friends tabs. |
-| User menu (message, call, nickname, timeout, kick/ban, report) | components/discord/UserMenu.tsx:71 | exo-ui/src/menus.rs:1288† | PARTIAL | No change nickname, timeout, transfer ownership, report. |
+| User menu (message, call, nickname, timeout, kick/ban, report) | components/discord/UserMenu.tsx:71 | exo-ui/src/menus.rs:1502 | DONE | rpc: discord.admin, discord.report. Full nickname, timeout, kick, ban, transfer ownership, report parity. |
 | Status menu (online / idle / dnd / invisible / custom) | components/discord/MeMenus.tsx:1 | exo-ui/src/discord.rs:1435 | DONE | rpc: discord.setStatus, discord.status.  |
 | Voice channel join / leave / mute / deafen | components/discord/voice.tsx:31 | exo-ui/src/discord_voice.rs:2 | DONE | rpc: discord.voice.  |
-| Voice call stage (tiles, speaking ring, blurred avatar backdrop, Members column, fit-to-stage solo tile) | components/discord/voice.tsx:262 | exo-ui/src/discord_voice.rs:686 | PARTIAL | rpc: discord.voice. Missing backdrop, right Members column, solo tile sizing; speaking ring unverified (room-discord report). |
-| Camera and screen share (Go Live picker, preview, stream sound) | components/discord/GoLivePicker.tsx:1 | exo-ui/src/discord_voice.rs:229 | PARTIAL | rpc: discord.golive, discord.stream, discord.camera. Popover position wrong; no "Change what you share", hide preview. |
-| Stage channels (start, audience, move to audience) | components/discord/voice.tsx:367 | — | MISSING |  |
-| Soundboard + call songs | components/discord/voice.tsx:213 | — | MISSING | rpc: discord.soundboard, discord.sound, discord.callSongs. discord.callSong event not handled. |
-| Mic test / monitor | components/discord/settings/VoicePage.tsx:253 | — | MISSING | rpc: discord.micTest, discord.micMonitor. discord.micLevel event not handled. |
-| Incoming-call ring / call UI over any room | components/shell/ExoIslandCall.tsx:20 | — | MISSING | rpc: discord.call. discord.call / discord.tts events not handled. |
-| Server menu (invite, create channel/category/event, notifications, leave) | components/discord/ServerMenu.tsx:1 | exo-ui/src/menus.rs:1092† | PARTIAL | Missing create category/event, privacy settings, per-server profile, report. |
-| Channel menu (mute, mark read, edit, delete, copy link) | components/discord/Channels.tsx:20 | exo-ui/src/menus.rs:960† | PARTIAL | Channel status items skipped. |
-| Server settings (overview, roles, emoji, moderation, automod, onboarding, guide) | components/discord/ServerSettings.tsx:45 | — | MISSING | rpc: discord.admin. 10+ settings pages: settingsRoles, settingsExpressions, settingsModeration, settingsAutomod, settingsOnboarding, settingsGuide, settingsAccess, settingsRoleLinks, settingsPages, ServerSettings. None natively. |
-| Channel settings (overview, permissions, slowmode) | components/discord/ChannelSettings.tsx:34 | — | MISSING | rpc: discord.admin.  |
-| Server pages (events, resources, get started, members) | components/discord/serverPages.tsx:1 | — | MISSING | rpc: discord.admin. events.tsx: create/start/edit/cancel events. |
+| Voice call stage (tiles, speaking ring, blurred avatar backdrop, Members column, fit-to-stage solo tile) | components/discord/voice.tsx:262 | exo-ui/src/discord_voice.rs:26 | DONE | rpc: discord.voice. fit_tiles 16:9 sizing, El::blur(36.0) avatar backdrop, inset speaking ring, Members column. |
+| Camera and screen share (Go Live picker, preview, stream sound) | components/discord/GoLivePicker.tsx:1 | exo-ui/src/discord_voice.rs:658 | DONE | rpc: discord.golive, discord.stream, discord.camera. 2-step Go Live picker, preview, Hide/Show preview, Change what you share. |
+| Stage channels (start, audience, move to audience) | components/discord/voice.tsx:367 | exo-ui/src/discord_voice.rs:1872 | DONE | rpc: discord.voice. StageBanner, StageAudience, invite/move to audience, request to speak. |
+| Soundboard + call songs | components/discord/voice.tsx:213 | exo-ui/src/discord_voice.rs:1124 | DONE | rpc: discord.soundboard, discord.sound, discord.callSongs + discord.callSong event. |
+| Mic test / monitor | components/discord/settings/VoicePage.tsx:253 | exo-ui/src/discord_settings.rs:1639 | DONE | rpc: discord.micTest, discord.micMonitor + discord.micLevel event. |
+| Incoming-call ring / call UI over any room | components/shell/ExoIslandCall.tsx:20 | exo-ui/src/discord_voice.rs:2634 | DONE | rpc: discord.call, discord.ring + discord.call / discord.tts events. |
+| Server menu (invite, create channel/category/event, notifications, leave) | components/discord/ServerMenu.tsx:1 | exo-ui/src/menus.rs:1117 | DONE | rpc: discord.server, discord.admin, discord.report. Full ServerMenu parity. |
+| Channel menu (mute, mark read, edit, delete, copy link) | components/discord/Channels.tsx:20 | exo-ui/src/menus.rs:948 | DONE | rpc: discord.channel, discord.server, discord.admin. Includes Set/Clear voice channel status. |
+| Server settings (overview, roles, emoji, moderation, automod, onboarding, guide) | components/discord/ServerSettings.tsx:45 | exo-ui/src/discord_admin.rs:1555 | DONE | rpc: discord.admin. All 23 permission-gated server settings sections. |
+| Channel settings (overview, permissions, slowmode) | components/discord/ChannelSettings.tsx:34 | exo-ui/src/discord_admin.rs:1434 | DONE | rpc: discord.admin. Overview, slowmode, voice limits, tri-state permissions, delete. |
+| Server pages (events, resources, get started, members) | components/discord/serverPages.tsx:1 | exo-ui/src/discord_admin.rs:2305 | DONE | rpc: discord.admin, discord.server. Server Guide, Events dialog, Browse channels, Members. |
 | Invite dialog | components/discord/InviteDialog.tsx:30 | — | MISSING | rpc: discord.admin.  |
-| Shop (collectibles, bundles, payment) | components/discord/ShopPage.tsx:124 | exo-ui/src/discord.rs:3434 | PARTIAL | rpc: discord.shop. Placeholder title only. |
-| User settings: Account / Profile | components/discord/settings/AccountPages.tsx:1 | exo-ui/src/discord.rs:3871† | PARTIAL | rpc: discord.account, discord.userSettings. discord.userSettings event not handled. |
-| User settings: Voice and video (devices, volumes, noise suppression, echo, AGC) | components/discord/settings/VoicePage.tsx:19 | — | PARTIAL | rpc: discord.clientSettings. clientSettings noise suppression / echo / AGC not wired (room-discord report). |
-| User settings: Notifications / App / Privacy / Keybinds | components/discord/settings/AppPages.tsx:1 | — | MISSING | rpc: discord.userSettings, discord.account. discord.keybind event not handled (global push-to-talk). |
-| Report message/user/server | components/discord/Report.tsx:2 | — | MISSING | rpc: discord.report.  |
+| Shop (collectibles, bundles, payment) | components/discord/ShopPage.tsx:124 | exo-ui/src/discord_admin.rs:2754 | DONE | rpc: discord.shop. Catalog tabs, search, collection, equip/remove, checkout. |
+| User settings: Account / Profile | components/discord/settings/AccountPages.tsx:1 | exo-ui/src/discord_settings.rs:1187 | DONE | rpc: discord.account, discord.userSettings + discord.userSettings event. |
+| User settings: Voice and video (devices, volumes, noise suppression, echo, AGC) | components/discord/settings/VoicePage.tsx:19 | exo-ui/src/discord_settings.rs:1639 | DONE | rpc: discord.audio, discord.clientSettings, discord.myVoice. |
+| User settings: Notifications / App / Privacy / Keybinds | components/discord/settings/AppPages.tsx:1 | exo-ui/src/discord_settings.rs:2311 | DONE | rpc: discord.userSettings, discord.account, discord.sound, discord.clientSettings + discord.keybind event. |
+| Report message/user/server | components/discord/Report.tsx:2 | exo-ui/src/discord_admin.rs:1868 | DONE | rpc: discord.report. Dynamic decision tree with breadcrumbs, free text, block/ignore/delete. |
 | Link rows / image & file viewer, fileText, image save | components/discord/extras.tsx:1 | — | MISSING | rpc: discord.image, discord.fileText.  |
-| Colors / font / Streamer mode | components/discord/DiscordClient.tsx:1 | — | MISSING | rpc: discord.colors, discord.font. discord.colors event not handled. |
+| Colors / font / Streamer mode | components/discord/DiscordClient.tsx:1 | exo-ui/src/discord_settings.rs:793 | DONE | rpc: discord.colors, discord.font + discord.colors event. |
 | Interactions (slash commands, bot apps, buttons) | components/discord/Composer.tsx:443 | — | MISSING | rpc: discord.apps, discord.interaction. discord.interaction event not handled. |
 | Mentionable autocomplete | components/discord/Composer.tsx:32 | — | MISSING | rpc: discord.mentionable.  |
-| Top-bar cursor over open menu | components/discord/Chat.tsx:1 | — | PARTIAL | Blocked on a Rune change (room-discord report). |
+| Top-bar cursor over open menu | components/discord/Chat.tsx:1 | exo-kit/src/menu.rs:351 | DONE | Resolved via Rune El::modal_live(["top-bar"]) in context_menu_layers_live. |
 
 ## Music
 
@@ -681,26 +681,26 @@ Owns: discord.rs, discord_state.rs, discord_voice.rs, discord_voice_state.rs (+ 
 
 Depends on: Needs WP3 events.rs for discord.call / callSong / micLevel / keybind / tts / userSettings events and the Island hook. Rune fork: backdrop blur sampling of avatar for call stage; cursor under menu (room-discord report).
 
-- `discord-13` [MISSING] Threads and forum channels
-- `discord-21` [PARTIAL] User menu (message, call, nickname, timeout, kick/ban, report)
-- `discord-24` [PARTIAL] Voice call stage (tiles, speaking ring, blurred avatar backdrop, Members column, fit-to-stage solo tile)
-- `discord-25` [PARTIAL] Camera and screen share (Go Live picker, preview, stream sound)
-- `discord-26` [MISSING] Stage channels (start, audience, move to audience)
-- `discord-27` [MISSING] Soundboard + call songs
-- `discord-28` [MISSING] Mic test / monitor
-- `discord-29` [MISSING] Incoming-call ring / call UI over any room
-- `discord-30` [PARTIAL] Server menu (invite, create channel/category/event, notifications, leave)
-- `discord-31` [PARTIAL] Channel menu (mute, mark read, edit, delete, copy link)
-- `discord-32` [MISSING] Server settings (overview, roles, emoji, moderation, automod, onboarding, guide)
-- `discord-33` [MISSING] Channel settings (overview, permissions, slowmode)
-- `discord-34` [MISSING] Server pages (events, resources, get started, members)
-- `discord-36` [PARTIAL] Shop (collectibles, bundles, payment)
-- `discord-37` [PARTIAL] User settings: Account / Profile
-- `discord-38` [PARTIAL] User settings: Voice and video (devices, volumes, noise suppression, echo, AGC)
-- `discord-39` [MISSING] User settings: Notifications / App / Privacy / Keybinds
-- `discord-40` [MISSING] Report message/user/server
-- `discord-42` [MISSING] Colors / font / Streamer mode
-- `discord-45` [PARTIAL] Top-bar cursor over open menu
+- `discord-13` [DONE] Threads and forum channels (`exo-ui/src/discord_admin.rs:2027`)
+- `discord-21` [DONE] User menu (message, call, nickname, timeout, kick/ban, report) (`exo-ui/src/menus.rs:1502`)
+- `discord-24` [DONE] Voice call stage (tiles, speaking ring, blurred avatar backdrop, Members column, fit-to-stage solo tile) (`exo-ui/src/discord_voice.rs:26`)
+- `discord-25` [DONE] Camera and screen share (Go Live picker, preview, stream sound) (`exo-ui/src/discord_voice.rs:658`)
+- `discord-26` [DONE] Stage channels (start, audience, move to audience) (`exo-ui/src/discord_voice.rs:1872`)
+- `discord-27` [DONE] Soundboard + call songs (`exo-ui/src/discord_voice.rs:1124`)
+- `discord-28` [DONE] Mic test / monitor (`exo-ui/src/discord_settings.rs:1639`)
+- `discord-29` [DONE] Incoming-call ring / call UI over any room (`exo-ui/src/discord_voice.rs:2634`)
+- `discord-30` [DONE] Server menu (invite, create channel/category/event, notifications, leave) (`exo-ui/src/menus.rs:1117`)
+- `discord-31` [DONE] Channel menu (mute, mark read, edit, delete, copy link) (`exo-ui/src/menus.rs:948`)
+- `discord-32` [DONE] Server settings (overview, roles, emoji, moderation, automod, onboarding, guide) (`exo-ui/src/discord_admin.rs:1555`)
+- `discord-33` [DONE] Channel settings (overview, permissions, slowmode) (`exo-ui/src/discord_admin.rs:1434`)
+- `discord-34` [DONE] Server pages (events, resources, get started, members) (`exo-ui/src/discord_admin.rs:2305`)
+- `discord-36` [DONE] Shop (collectibles, bundles, payment) (`exo-ui/src/discord_admin.rs:2754`)
+- `discord-37` [DONE] User settings: Account / Profile (`exo-ui/src/discord_settings.rs:1187`)
+- `discord-38` [DONE] User settings: Voice and video (devices, volumes, noise suppression, echo, AGC) (`exo-ui/src/discord_settings.rs:1639`)
+- `discord-39` [DONE] User settings: Notifications / App / Privacy / Keybinds (`exo-ui/src/discord_settings.rs:2311`)
+- `discord-40` [DONE] Report message/user/server (`exo-ui/src/discord_admin.rs:1868`)
+- `discord-42` [DONE] Colors / font / Streamer mode (`exo-ui/src/discord_settings.rs:793`)
+- `discord-45` [DONE] Top-bar cursor over open menu (`exo-kit/src/menu.rs:351`)
 
 #### WP8 Music room completion (L, 16 items)
 

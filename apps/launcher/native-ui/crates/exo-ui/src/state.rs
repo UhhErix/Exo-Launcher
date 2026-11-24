@@ -1099,6 +1099,9 @@ impl AppState {
         if self.room == Room::Devices && room != Room::Devices && self.pc.mouse_panel_open {
             self.close_mouse_panel();
         }
+        if self.room == Room::Discord && room != Room::Discord && self.discord.signin.is_some() {
+            self.cancel_discord_signin();
+        }
         if self.room != Room::Settings && room == Room::Settings {
             self.prev_room = self.room;
         }
@@ -1154,6 +1157,16 @@ impl AppState {
         self.library_add_open = false;
         self.open_dropdown = None;
         self.discord.status_menu_open = matches!(target, ContextMenuTarget::DiscordStatusMenu);
+        if let ContextMenuTarget::DiscordMember {
+            ref user_id,
+            guild_id: Some(ref gid),
+            ..
+        } = target
+        {
+            let uid = user_id.clone();
+            let gid = gid.clone();
+            self.fetch_discord_person(&gid, &uid);
+        }
         self.context_menu = Some(ContextMenuState {
             target,
             x,
@@ -2512,12 +2525,15 @@ impl AppState {
             self.props_open = false;
             return true;
         }
+        if self.room == Room::Discord && self.discord.admin.dismiss_top() {
+            return true;
+        }
         if self.room == Room::Discord && self.discord.custom_status_open {
             self.discord.custom_status_open = false;
             return true;
         }
         if self.room == Room::Discord && self.discord.settings_open {
-            self.discord.settings_open = false;
+            self.close_discord_settings_clean();
             return true;
         }
         if self.room == Room::Discord && self.discord.status_menu_open {

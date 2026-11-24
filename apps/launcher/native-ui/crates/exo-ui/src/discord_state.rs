@@ -1,20 +1,23 @@
+use crate::discord_admin::DiscordAdminState;
 use crate::discord_chat_state::{ChatDrawer, DiscordChatState};
+use crate::discord_settings::DiscordSettingsState;
 use crate::discord_voice_state::DiscordVoiceUiState;
 use crate::state::{AppState, ContextMenuTarget, HostStatus, Room};
 use exo_rpc::discord_types::{DISCORD_SNAPSHOT_VERSION, DiscordDiskSnapshot, DiscordRestricted};
 use exo_rpc::{
     ActionResult, DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel,
-    DiscordChannels, DiscordDm, DiscordDmMember, DiscordFriend, DiscordFriendActionReply,
-    DiscordFriendsReply, DiscordGuild, DiscordHome, DiscordMe, DiscordMember, DiscordMemberItem,
-    DiscordMemberList, DiscordPresenceEvent, DiscordRailItem, DiscordRich, DiscordSignInStep,
-    DiscordStateEvent, DiscordStatus, DiscordUnreadChannel, DiscordUnreadEvent,
-    DiscordUnreadsReply, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
-    METHOD_DISCORD_ACCOUNTS, METHOD_DISCORD_CHANNEL, METHOD_DISCORD_CHANNELS,
-    METHOD_DISCORD_CLIENT_SETTINGS, METHOD_DISCORD_FRIEND, METHOD_DISCORD_FRIENDS,
-    METHOD_DISCORD_HOME, METHOD_DISCORD_MARK_READ, METHOD_DISCORD_MEMBERS,
-    METHOD_DISCORD_MESSAGE_ACTION, METHOD_DISCORD_RING, METHOD_DISCORD_SERVER,
-    METHOD_DISCORD_SET_STATUS, METHOD_DISCORD_SIGN_IN, METHOD_DISCORD_SIGN_OUT,
-    METHOD_DISCORD_STATUS, METHOD_DISCORD_UNREADS, METHOD_DISCORD_VIEW, METHOD_DISCORD_VOICE,
+    DiscordChannels, DiscordDm, DiscordDmLineEvent, DiscordDmMember, DiscordFriend,
+    DiscordFriendActionReply, DiscordFriendsReply, DiscordGuild, DiscordHome, DiscordMe,
+    DiscordMember, DiscordMemberItem, DiscordMemberList, DiscordNoticeEvent,
+    DiscordNotifyClearEvent, DiscordOpenEvent, DiscordPresenceEvent, DiscordRailItem, DiscordRich,
+    DiscordSignInStep, DiscordStateEvent, DiscordStatus, DiscordTtsEvent, DiscordUnreadChannel,
+    DiscordUnreadEvent, DiscordUnreadsReply, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
+    FriendsBadgeReply, METHOD_DISCORD_ACCOUNTS, METHOD_DISCORD_CHANNEL, METHOD_DISCORD_CHANNELS,
+    METHOD_DISCORD_FRIEND, METHOD_DISCORD_FRIENDS, METHOD_DISCORD_HOME, METHOD_DISCORD_MARK_READ,
+    METHOD_DISCORD_MEMBERS, METHOD_DISCORD_MESSAGE_ACTION, METHOD_DISCORD_RING,
+    METHOD_DISCORD_SERVER, METHOD_DISCORD_SET_STATUS, METHOD_DISCORD_SIGN_IN,
+    METHOD_DISCORD_SIGN_OUT, METHOD_DISCORD_STATUS, METHOD_DISCORD_STREAM, METHOD_DISCORD_UNREADS,
+    METHOD_DISCORD_VIEW, METHOD_DISCORD_VOICE, METHOD_FRIENDS_BADGE,
 };
 use rune::TextEdit;
 use serde_json::json;
@@ -102,43 +105,51 @@ impl DiscordFriendsTab {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiscordSettingsPage {
+    Account,
+    Profiles,
     Voice,
     Chat,
     Notifications,
     Privacy,
-    Account,
     Keybinds,
+    ConnectedApps,
 }
 
 impl DiscordSettingsPage {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 8] = [
+        Self::Account,
+        Self::Profiles,
         Self::Voice,
         Self::Chat,
         Self::Notifications,
         Self::Privacy,
-        Self::Account,
         Self::Keybinds,
+        Self::ConnectedApps,
     ];
 
     pub fn key(self) -> &'static str {
         match self {
+            Self::Account => "dc-set-nav-account",
+            Self::Profiles => "dc-set-nav-profiles",
             Self::Voice => "dc-set-nav-voice",
             Self::Chat => "dc-set-nav-chat",
             Self::Notifications => "dc-set-nav-notifications",
             Self::Privacy => "dc-set-nav-privacy",
-            Self::Account => "dc-set-nav-account",
             Self::Keybinds => "dc-set-nav-keybinds",
+            Self::ConnectedApps => "dc-set-nav-apps",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
+            Self::Account => "Account",
+            Self::Profiles => "Profiles",
             Self::Voice => "Voice and video",
             Self::Chat => "Chat",
             Self::Notifications => "Notifications",
             Self::Privacy => "Privacy",
-            Self::Account => "Account",
             Self::Keybinds => "Keybinds",
+            Self::ConnectedApps => "Connected apps",
         }
     }
 }
@@ -180,9 +191,6 @@ pub struct DiscordState {
     pub ignored_users: HashSet<String>,
     pub chat_compact: bool,
     pub show_embeds: bool,
-    pub notify_desktop: bool,
-    pub notify_sounds: bool,
-    pub allow_server_dms: bool,
     pub developer_mode: bool,
     pub search_query: TextEdit,
     pub dm_search_query: TextEdit,
@@ -190,6 +198,9 @@ pub struct DiscordState {
     pub revealed_spoilers: HashSet<String>,
     pub chat: DiscordChatState,
     pub voice_ui: DiscordVoiceUiState,
+    pub settings_ext: DiscordSettingsState,
+    pub admin: DiscordAdminState,
+    pub friends_badge_count: i32,
     pub loaded: bool,
     pub warmed: bool,
     pub snapshot_hydrated: bool,
@@ -248,9 +259,6 @@ impl DiscordState {
             ignored_users: HashSet::new(),
             chat_compact: false,
             show_embeds: true,
-            notify_desktop: true,
-            notify_sounds: true,
-            allow_server_dms: true,
             developer_mode: true,
             search_query: TextEdit::default(),
             dm_search_query: TextEdit::default(),
@@ -258,6 +266,9 @@ impl DiscordState {
             revealed_spoilers: HashSet::new(),
             chat: DiscordChatState::empty(),
             voice_ui: DiscordVoiceUiState::empty(),
+            settings_ext: DiscordSettingsState::empty(),
+            admin: DiscordAdminState::empty(),
+            friends_badge_count: 0,
             loaded: false,
             warmed: false,
             snapshot_hydrated: false,
@@ -433,6 +444,7 @@ impl DiscordState {
                     banner: None,
                     in_voice: 3,
                     owner: true,
+                    ..Default::default()
                 },
                 DiscordGuild {
                     id: "g-fps".into(),
@@ -444,6 +456,7 @@ impl DiscordState {
                     banner: None,
                     in_voice: 2,
                     owner: false,
+                    ..Default::default()
                 },
                 DiscordGuild {
                     id: "g-hw".into(),
@@ -455,6 +468,7 @@ impl DiscordState {
                     banner: None,
                     in_voice: 0,
                     owner: false,
+                    ..Default::default()
                 },
                 DiscordGuild {
                     id: "g-indie".into(),
@@ -466,6 +480,7 @@ impl DiscordState {
                     banner: None,
                     in_voice: 1,
                     owner: false,
+                    ..Default::default()
                 },
             ],
             rail: vec![
@@ -599,6 +614,10 @@ impl DiscordState {
                 can_manage_events: false,
                 rows: None,
                 threads: Vec::new(),
+                features: Vec::new(),
+                opt_in: false,
+                moderation: None,
+                roles: HashMap::new(),
                 channels: vec![
                     DiscordChannel {
                         id: "cat-core".into(),
@@ -938,8 +957,13 @@ impl AppState {
                         s.discord.loaded = true;
                         if signed_out {
                             s.clear_discord_snapshot();
+                            if s.room == Room::Discord && s.discord.signin.is_none() {
+                                s.start_discord_signin();
+                            }
                         } else if ready && !already_refreshed {
                             s.refresh_discord_home();
+                            s.load_discord_user_settings();
+                            s.load_discord_call_songs();
                         }
                     }
                 },
@@ -955,15 +979,36 @@ impl AppState {
             );
             self.call_host_async(
                 METHOD_DISCORD_VOICE,
-                json!({}),
+                json!({ "action": "state" }),
                 |s, res: Result<DiscordVoiceReply, String>| {
                     if let Ok(rep) = res
                         && let Some(v) = rep.voice
                     {
-                        s.discord.voice = v;
+                        s.handle_discord_voice(v);
                     }
                 },
             );
+            self.call_host_async(
+                METHOD_DISCORD_STREAM,
+                json!({ "action": "state" }),
+                |s, res: Result<serde_json::Value, String>| {
+                    if let Ok(v) = res
+                        && let Some(st) = v.get("state").and_then(|x| x.as_str())
+                    {
+                        s.discord.voice_ui.golive_state = st.to_string();
+                    }
+                },
+            );
+            self.call_host_async(
+                METHOD_FRIENDS_BADGE,
+                json!({}),
+                |s, res: Result<FriendsBadgeReply, String>| {
+                    if let Ok(rep) = res {
+                        s.discord.friends_badge_count = rep.count;
+                    }
+                },
+            );
+            self.load_discord_client_settings();
         }
     }
 
@@ -1183,38 +1228,8 @@ impl AppState {
 
     pub fn open_discord_settings(&mut self, page: DiscordSettingsPage) {
         self.close_context_menu();
-        self.discord.settings_page = page;
-        self.discord.settings_open = true;
         self.discord.custom_status_open = false;
-        self.load_discord_audio();
-    }
-
-    pub fn close_discord_settings(&mut self) {
-        self.discord.settings_open = false;
-    }
-
-    pub fn save_discord_custom_status(&mut self, text: String) {
-        self.discord.custom_status_open = false;
-        let trimmed = text.trim().to_string();
-        self.discord.custom_status = if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.clone())
-        };
-        if self.status != HostStatus::Connected {
-            return;
-        }
-        let payload = if trimmed.is_empty() {
-            json!({ "customStatus": null })
-        } else {
-            json!({ "customStatus": { "text": trimmed } })
-        };
-        #[cfg(windows)]
-        self.call_host_async(
-            METHOD_DISCORD_CLIENT_SETTINGS,
-            payload,
-            |_s, _res: Result<serde_json::Value, String>| {},
-        );
+        self.open_discord_settings_on(page, None);
     }
 
     pub fn is_dm_pinned(&self, dm_id: &str) -> bool {
@@ -1529,6 +1544,7 @@ impl AppState {
     pub fn open_discord_guild(&mut self, guild_id: &str) {
         self.discord.place = DiscordPlace::Servers;
         self.discord.active_guild_id = Some(guild_id.to_string());
+        self.discord.admin.active_server_page = None;
         self.discord.shop_open = false;
         self.discord.inbox_open = false;
         self.discord.chat.reply_to = None;
@@ -1551,6 +1567,7 @@ impl AppState {
             self.discord.active_channel_id = None;
         }
         self.load_discord_guild(guild_id, true);
+        self.load_discord_guild_colors(guild_id);
     }
 
     pub fn load_discord_guild(&mut self, guild_id: &str, select_default: bool) {
@@ -1599,6 +1616,23 @@ impl AppState {
                 json!({ "guildId": gid_m, "channelId": open_ch }),
                 move |s, res: Result<DiscordMemberList, String>| {
                     if let Ok(list) = res {
+                        let fonts: Vec<&'static str> = list
+                            .items
+                            .iter()
+                            .filter_map(|m| match m {
+                                Some(exo_rpc::DiscordMemberItem::Member(member)) => member
+                                    .look
+                                    .as_ref()
+                                    .and_then(|l| l.name_style.as_ref())
+                                    .and_then(|ns| {
+                                        crate::discord_settings::discord_font_family(ns.font)
+                                    }),
+                                _ => None,
+                            })
+                            .collect();
+                        for f in fonts {
+                            s.load_discord_font(f);
+                        }
                         s.discord.members_by_guild.insert(gid_m, list);
                     }
                 },
@@ -1607,12 +1641,21 @@ impl AppState {
     }
 
     pub fn open_discord_channel(&mut self, channel_id: &str) {
+        self.discord.admin.active_server_page = None;
         self.discord.active_channel_id = Some(channel_id.to_string());
         self.discord.chat.reply_to = None;
         self.discord.chat.editing = None;
         self.discord.chat.drawer = ChatDrawer::None;
-        self.notify_discord_view(channel_id);
-        self.load_discord_messages(channel_id, None);
+        let is_forum = self
+            .discord
+            .active_channel()
+            .is_some_and(|c| c.kind == "forum" || matches!(c.channel_type, 15 | 16));
+        if is_forum {
+            self.load_discord_forum(channel_id, false);
+        } else {
+            self.notify_discord_view(channel_id);
+            self.load_discord_messages(channel_id, None);
+        }
         if let Some(gid) = self.discord.active_guild_id.clone() {
             self.refresh_discord_members(&gid);
         }
@@ -1879,6 +1922,9 @@ impl AppState {
         } else if ev.state == "signedOut" {
             self.discord.status.signed_in = false;
             self.clear_discord_snapshot();
+            if self.room == Room::Discord && self.discord.signin.is_none() {
+                self.start_discord_signin();
+            }
         }
         if became_ready {
             if self.room == Room::Discord {
@@ -2029,7 +2075,92 @@ impl AppState {
     }
 
     pub fn handle_discord_voice(&mut self, voice: DiscordVoice) {
+        let prev_channel = self.discord.voice.channel_id.clone();
+        let prev_state = self.discord.voice.state.clone();
+        if voice.state == "connected" && self.discord.voice_ui.voice_connected_since.is_none() {
+            self.discord.voice_ui.voice_connected_since = Some(Instant::now());
+        }
+        if voice.state == "off" || voice.channel_id != prev_channel {
+            self.discord.speaking.clear();
+        }
+        if voice.state == "off" {
+            self.discord.voice_ui.voice_connected_since = None;
+            self.discord.voice_ui.watching_stream = None;
+            self.discord.voice_ui.fullscreen_stream = false;
+            if prev_state != "off"
+                && let Some(ref msg) = voice.message
+            {
+                self.discord.voice_ui.voice_error = Some(msg.clone());
+            }
+        }
+        if let Some(ref rung) = voice.ringing
+            && self.discord.voice_ui.ringing_channel_id.is_none()
+        {
+            self.discord.voice_ui.ringing_channel_id = Some(rung.clone());
+        }
         self.discord.voice = voice;
+    }
+
+    pub fn handle_discord_dm_line(&mut self, ev: DiscordDmLineEvent) -> bool {
+        if let Some(dm) = self
+            .discord
+            .home
+            .dms
+            .iter_mut()
+            .find(|d| d.id == ev.channel_id)
+        {
+            dm.line = ev.line;
+            if ev.at.is_some() {
+                dm.last_at = ev.at;
+            }
+            return self.room == Room::Discord;
+        }
+        false
+    }
+
+    pub fn handle_discord_open(&mut self, ev: DiscordOpenEvent) -> bool {
+        self.switch_room(Room::Discord);
+        if let Some(gid) = ev.guild_id {
+            self.open_discord_guild(&gid);
+            if let Some(name) = ev.name.as_deref()
+                && ev.parent_id.is_some()
+            {
+                self.open_discord_thread(&ev.channel_id, name, false);
+            } else {
+                self.open_discord_channel(&ev.channel_id);
+            }
+        } else {
+            self.open_discord_dm(&ev.channel_id);
+        }
+        true
+    }
+
+    pub fn handle_discord_notify(&mut self, ev: DiscordNoticeEvent) -> bool {
+        if self.discord.settings_ext.streamer_mode {
+            return false;
+        }
+        let place = ev
+            .place
+            .as_deref()
+            .or(ev.server.as_deref())
+            .map(|p| format!(" ({p})"))
+            .unwrap_or_default();
+        self.notice = Some(format!("{}{place}: {}", ev.author, ev.body));
+        true
+    }
+
+    pub fn handle_discord_notify_clear(&mut self, _ev: DiscordNotifyClearEvent) -> bool {
+        false
+    }
+
+    pub fn handle_discord_tts(&mut self, ev: DiscordTtsEvent) -> bool {
+        if !self.discord.settings_ext.user.enable_tts_command
+            || self.discord.settings_ext.streamer_mode
+        {
+            return false;
+        }
+        self.notice = Some(format!("{} says: {}", ev.name, ev.text));
+        true
     }
 
     pub fn handle_discord_speaking(&mut self, user_id: &str, speaking: bool) {

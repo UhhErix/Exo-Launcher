@@ -9,20 +9,38 @@ pub mod remote_art;
 pub mod types;
 
 pub use discord_types::{
-    DiscordAccountItem, DiscordAccountsReply, DiscordAttachment, DiscordAudioDevice,
-    DiscordAudioReply, DiscordChangedEvent, DiscordChannel, DiscordChannels, DiscordDm,
-    DiscordDmMember, DiscordEmbed, DiscordEmbedAuthor, DiscordEmbedField, DiscordEmbedFooter,
-    DiscordEmbedMedia, DiscordEmbedProvider, DiscordFriend, DiscordFriendActionReply,
+    DiscordAccount, DiscordAccountItem, DiscordAccountReply, DiscordAccountSettings,
+    DiscordAccountsReply, DiscordAdminMfa, DiscordAdminReply, DiscordAttachment,
+    DiscordAudioDevice, DiscordAudioReply, DiscordAudioUser, DiscordAuthorizedApp,
+    DiscordCallEvent, DiscordCallSong, DiscordCallSongsReply, DiscordChangedEvent, DiscordChannel,
+    DiscordChannels, DiscordClientSettings, DiscordColorsReply, DiscordConnection,
+    DiscordCustomStatus, DiscordDm, DiscordDmLineEvent, DiscordDmMember, DiscordEmbed,
+    DiscordEmbedAuthor, DiscordEmbedField, DiscordEmbedFooter, DiscordEmbedMedia,
+    DiscordEmbedProvider, DiscordEvent, DiscordEventEntityMeta, DiscordEventEntry,
+    DiscordFontReply, DiscordForumTag, DiscordFriend, DiscordFriendActionReply,
     DiscordFriendsReply, DiscordGoLiveReply, DiscordGoLiveStateEvent, DiscordGoLiveStatsEvent,
-    DiscordGuild, DiscordHome, DiscordMe, DiscordMember, DiscordMemberItem, DiscordMemberList,
-    DiscordMessage, DiscordMessageEvent, DiscordMessageMember, DiscordMessageRef,
-    DiscordMessagesReply, DiscordMyVoiceReply, DiscordPinsReply, DiscordPrep, DiscordPresenceEvent,
-    DiscordRailItem, DiscordReaction, DiscordReactionEmoji, DiscordReactionEvent, DiscordRich,
-    DiscordSearchReply, DiscordSearchResult, DiscordSendReply, DiscordSignInStep, DiscordSoundItem,
-    DiscordSoundboardReply, DiscordStateEvent, DiscordStatus, DiscordThreadSummary,
-    DiscordTypingEvent, DiscordUnreadChannel, DiscordUnreadEvent, DiscordUnreadsReply,
-    DiscordUploadReply, DiscordUser, DiscordVideoEvent, DiscordVideoFrame, DiscordVideoFrameMeta,
-    DiscordVoice, DiscordVoiceMember, DiscordVoiceReply, GoLiveSource,
+    DiscordGuide, DiscordGuideAction, DiscordGuideEmoji, DiscordGuideWelcome, DiscordGuild,
+    DiscordGuildSoundboard, DiscordHome, DiscordKeybind, DiscordMe, DiscordMember,
+    DiscordMemberItem, DiscordMemberList, DiscordMemberRow, DiscordMemberRowInner,
+    DiscordMemberSearch, DiscordMessage, DiscordMessageEvent, DiscordMessageMember,
+    DiscordMessageRef, DiscordMessagesReply, DiscordMicHeard, DiscordMicLevel,
+    DiscordMicMonitorReply, DiscordModeration, DiscordMyVoiceReply, DiscordNoticeEvent,
+    DiscordNotifyClearEvent, DiscordOpenEvent, DiscordPaymentChoice, DiscordPinsReply, DiscordPrep,
+    DiscordPresenceEvent, DiscordRailItem, DiscordReaction, DiscordReactionEmoji,
+    DiscordReactionEvent, DiscordReportButton, DiscordReportElement, DiscordReportMenu,
+    DiscordReportNode, DiscordReportReply, DiscordResource, DiscordRich, DiscordRole,
+    DiscordRoleBrief, DiscordRoleIcon, DiscordSearchReply, DiscordSearchResult, DiscordSendReply,
+    DiscordServerReply, DiscordServerTagOption, DiscordSession, DiscordShopCatalog,
+    DiscordShopCategory, DiscordShopCountryPrices, DiscordShopItem, DiscordShopPrice,
+    DiscordShopPriceEntry, DiscordShopProduct, DiscordShopReply, DiscordShopStyles,
+    DiscordShopTierPrices, DiscordSignInStep, DiscordSoundItem, DiscordSoundboardReply,
+    DiscordStateEvent, DiscordStatus, DiscordThread, DiscordThreadCreateReply,
+    DiscordThreadCreated, DiscordThreadMetadata, DiscordThreadOwner, DiscordThreadSummary,
+    DiscordThreadsReply, DiscordTtsEvent, DiscordTypingEvent, DiscordUnreadChannel,
+    DiscordUnreadEvent, DiscordUnreadsReply, DiscordUploadReply, DiscordUser,
+    DiscordUserSettingsReply, DiscordVideoEvent, DiscordVideoFrame, DiscordVideoFrameMeta,
+    DiscordVoice, DiscordVoiceMember, DiscordVoiceReply, DiscordVoiceStages, FriendsBadgeReply,
+    GoLiveSource,
 };
 pub use events::{
     AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
@@ -97,15 +115,20 @@ pub const METHOD_CAPTURE_SETTINGS: &str = "capture.settings";
 pub const METHOD_CAPTURE_STATUS: &str = "capture.status";
 pub const METHOD_DEVICES_IMAGE: &str = "devices.image";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
+pub const METHOD_DISCORD_ACCOUNT: &str = "discord.account";
 pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
 pub const METHOD_DISCORD_ACK: &str = "discord.ack";
+pub const METHOD_DISCORD_ADMIN: &str = "discord.admin";
 pub const METHOD_DISCORD_AUDIO: &str = "discord.audio";
+pub const METHOD_DISCORD_CALL_SONGS: &str = "discord.callSongs";
 pub const METHOD_DISCORD_CAMERA: &str = "discord.camera";
 pub const METHOD_DISCORD_CHANNEL: &str = "discord.channel";
 pub const METHOD_DISCORD_CHANNELS: &str = "discord.channels";
 pub const METHOD_DISCORD_CLIENT_SETTINGS: &str = "discord.clientSettings";
+pub const METHOD_DISCORD_COLORS: &str = "discord.colors";
 pub const METHOD_DISCORD_DELETE: &str = "discord.delete";
 pub const METHOD_DISCORD_EDIT: &str = "discord.edit";
+pub const METHOD_DISCORD_FONT: &str = "discord.font";
 pub const METHOD_DISCORD_FRIEND: &str = "discord.friend";
 pub const METHOD_DISCORD_FRIENDS: &str = "discord.friends";
 pub const METHOD_DISCORD_GOLIVE: &str = "discord.golive";
@@ -114,24 +137,33 @@ pub const METHOD_DISCORD_MARK_READ: &str = "discord.markRead";
 pub const METHOD_DISCORD_MEMBERS: &str = "discord.members";
 pub const METHOD_DISCORD_MESSAGE_ACTION: &str = "discord.messageAction";
 pub const METHOD_DISCORD_MESSAGES: &str = "discord.messages";
+pub const METHOD_DISCORD_MIC_MONITOR: &str = "discord.micMonitor";
+pub const METHOD_DISCORD_MIC_TEST: &str = "discord.micTest";
 pub const METHOD_DISCORD_MY_VOICE: &str = "discord.myVoice";
 pub const METHOD_DISCORD_PINS: &str = "discord.pins";
 pub const METHOD_DISCORD_REACT: &str = "discord.react";
+pub const METHOD_DISCORD_REPORT: &str = "discord.report";
 pub const METHOD_DISCORD_RING: &str = "discord.ring";
 pub const METHOD_DISCORD_SEARCH: &str = "discord.search";
 pub const METHOD_DISCORD_SEND: &str = "discord.send";
 pub const METHOD_DISCORD_SERVER: &str = "discord.server";
 pub const METHOD_DISCORD_SET_STATUS: &str = "discord.setStatus";
+pub const METHOD_DISCORD_SHOP: &str = "discord.shop";
 pub const METHOD_DISCORD_SIGN_IN: &str = "discord.signIn";
 pub const METHOD_DISCORD_SIGN_OUT: &str = "discord.signOut";
+pub const METHOD_DISCORD_SOUND: &str = "discord.sound";
 pub const METHOD_DISCORD_SOUNDBOARD: &str = "discord.soundboard";
 pub const METHOD_DISCORD_STATUS: &str = "discord.status";
 pub const METHOD_DISCORD_STREAM: &str = "discord.stream";
+pub const METHOD_DISCORD_THREAD: &str = "discord.thread";
+pub const METHOD_DISCORD_THREADS: &str = "discord.threads";
 pub const METHOD_DISCORD_TYPING: &str = "discord.typing";
 pub const METHOD_DISCORD_UNREADS: &str = "discord.unreads";
 pub const METHOD_DISCORD_UPLOAD: &str = "discord.upload";
+pub const METHOD_DISCORD_USER_SETTINGS: &str = "discord.userSettings";
 pub const METHOD_DISCORD_VIEW: &str = "discord.view";
 pub const METHOD_DISCORD_VOICE: &str = "discord.voice";
+pub const METHOD_FRIENDS_BADGE: &str = "friends.badge";
 pub const METHOD_EQ: &str = "eq";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
 pub const METHOD_BACKUP_STATUS: &str = "backup.status";
@@ -232,15 +264,20 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_CAPTURE_STATUS,
     METHOD_DEVICES_IMAGE,
     METHOD_DEVICES_LIST,
+    METHOD_DISCORD_ACCOUNT,
     METHOD_DISCORD_ACCOUNTS,
     METHOD_DISCORD_ACK,
+    METHOD_DISCORD_ADMIN,
     METHOD_DISCORD_AUDIO,
+    METHOD_DISCORD_CALL_SONGS,
     METHOD_DISCORD_CAMERA,
     METHOD_DISCORD_CHANNEL,
     METHOD_DISCORD_CHANNELS,
     METHOD_DISCORD_CLIENT_SETTINGS,
+    METHOD_DISCORD_COLORS,
     METHOD_DISCORD_DELETE,
     METHOD_DISCORD_EDIT,
+    METHOD_DISCORD_FONT,
     METHOD_DISCORD_FRIEND,
     METHOD_DISCORD_FRIENDS,
     METHOD_DISCORD_GOLIVE,
@@ -249,24 +286,33 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DISCORD_MEMBERS,
     METHOD_DISCORD_MESSAGE_ACTION,
     METHOD_DISCORD_MESSAGES,
+    METHOD_DISCORD_MIC_MONITOR,
+    METHOD_DISCORD_MIC_TEST,
     METHOD_DISCORD_MY_VOICE,
     METHOD_DISCORD_PINS,
     METHOD_DISCORD_REACT,
+    METHOD_DISCORD_REPORT,
     METHOD_DISCORD_RING,
     METHOD_DISCORD_SEARCH,
     METHOD_DISCORD_SEND,
     METHOD_DISCORD_SERVER,
     METHOD_DISCORD_SET_STATUS,
+    METHOD_DISCORD_SHOP,
     METHOD_DISCORD_SIGN_IN,
     METHOD_DISCORD_SIGN_OUT,
+    METHOD_DISCORD_SOUND,
     METHOD_DISCORD_SOUNDBOARD,
     METHOD_DISCORD_STATUS,
     METHOD_DISCORD_STREAM,
+    METHOD_DISCORD_THREAD,
+    METHOD_DISCORD_THREADS,
     METHOD_DISCORD_TYPING,
     METHOD_DISCORD_UNREADS,
     METHOD_DISCORD_UPLOAD,
+    METHOD_DISCORD_USER_SETTINGS,
     METHOD_DISCORD_VIEW,
     METHOD_DISCORD_VOICE,
+    METHOD_FRIENDS_BADGE,
     METHOD_EQ,
     METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_STATE,
@@ -1153,6 +1199,87 @@ fn parse_event(
                 .unwrap_or_default();
             Ok(HostEvent::DiscordGoLiveViewers(ids))
         }
+        "discord.call" => Ok(serde_json::from_str::<DiscordCallEvent>(data_raw)
+            .map(HostEvent::DiscordCall)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.callSong" => Ok(serde_json::from_str::<DiscordCallSong>(data_raw)
+            .map(HostEvent::DiscordCallSong)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.camera" => {
+            #[derive(Deserialize)]
+            struct CameraWire<'a> {
+                #[serde(borrow)]
+                state: Cow<'a, str>,
+            }
+            Ok(serde_json::from_str::<CameraWire<'_>>(data_raw)
+                .map(|c| HostEvent::DiscordCamera {
+                    state: c.state.into_owned(),
+                })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "discord.colors" => {
+            #[derive(Deserialize)]
+            struct ColorsWire<'a> {
+                #[serde(rename = "guildId", borrow)]
+                guild_id: Cow<'a, str>,
+            }
+            Ok(serde_json::from_str::<ColorsWire<'_>>(data_raw)
+                .map(|c| HostEvent::DiscordColors {
+                    guild_id: c.guild_id.into_owned(),
+                })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "discord.dmLine" => Ok(serde_json::from_str::<DiscordDmLineEvent>(data_raw)
+            .map(HostEvent::DiscordDmLine)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.keybind" => {
+            #[derive(Deserialize)]
+            struct KeybindWire<'a> {
+                #[serde(borrow)]
+                action: Cow<'a, str>,
+            }
+            Ok(serde_json::from_str::<KeybindWire<'_>>(data_raw)
+                .map(|k| HostEvent::DiscordKeybind {
+                    action: k.action.into_owned(),
+                })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "discord.micLevel" => Ok(serde_json::from_str::<DiscordMicLevel>(data_raw)
+            .map(HostEvent::DiscordMicLevel)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.notify" => Ok(serde_json::from_str::<DiscordNoticeEvent>(data_raw)
+            .map(|ev| HostEvent::DiscordNotify(Box::new(ev)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.notifyClear" => Ok(serde_json::from_str::<DiscordNotifyClearEvent>(data_raw)
+            .map(HostEvent::DiscordNotifyClear)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.open" => Ok(serde_json::from_str::<DiscordOpenEvent>(data_raw)
+            .map(HostEvent::DiscordOpen)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.tts" => Ok(serde_json::from_str::<DiscordTtsEvent>(data_raw)
+            .map(HostEvent::DiscordTts)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.userSettings" => Ok(serde_json::from_str::<Value>(data_raw)
+            .map(HostEvent::DiscordUserSettings)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.video.keyframe" => {
+            #[derive(Deserialize)]
+            struct KeyframeWire<'a> {
+                #[serde(borrow)]
+                source: Cow<'a, str>,
+            }
+            Ok(serde_json::from_str::<KeyframeWire<'_>>(data_raw)
+                .map(|k| HostEvent::DiscordVideoKeyframe {
+                    source: k.source.into_owned(),
+                })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "discord.interaction" => Ok(serde_json::from_str::<Value>(data_raw)
+            .map(HostEvent::DiscordInteraction)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.pollVote" => Ok(serde_json::from_str::<Value>(data_raw)
+            .map(HostEvent::DiscordPollVote)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "binaryFrame" => {
             let meta_str = meta_raw.unwrap_or("null");
             let b64 = serde_json::from_str::<Cow<'_, str>>(data_raw).ok();
@@ -1335,7 +1462,8 @@ mod tests {
 
     #[test]
     fn parses_all_newly_wired_host_events() {
-        let cases: &[(&[u8], fn(HostEvent) -> bool)] = &[
+        type EventCase = (&'static [u8], fn(HostEvent) -> bool);
+        let cases: &[EventCase] = &[
             (
                 br#"{"event":"music.volume","data":{"level":0.42,"source":"app"}}"#,
                 |ev| matches!(ev, HostEvent::MusicVolume(v) if (v.level - 0.42).abs() < 1e-6 && v.source == "app"),

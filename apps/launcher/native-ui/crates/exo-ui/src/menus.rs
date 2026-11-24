@@ -1,3 +1,4 @@
+use crate::discord_admin::{MemberDialogKind, ReportTarget, ServerSection, TIMEOUT_DURATIONS};
 use crate::discord_state::DiscordSettingsPage;
 use crate::discord_voice_state::VoicePanel;
 use crate::shell::room_icon;
@@ -6,12 +7,12 @@ use crate::state::{
 };
 use exo_kit::{
     ContextMenuSpec, FG, MenuAnchor, MenuEntry, MenuItem, SelectMenuSpec, SelectOption, bad,
-    context_menu_layers, fg_faint, icon_bell_off, icon_camera, icon_chat, icon_check, icon_copy,
-    icon_download, icon_edit, icon_flag, icon_folder, icon_forward, icon_gamepad, icon_key,
-    icon_link, icon_pin, icon_play, icon_record_dot, icon_refresh, icon_replay, icon_reply,
-    icon_scissors, icon_search, icon_settings, icon_sliders, icon_smile, icon_sparkles, icon_stop,
-    icon_store, icon_trash, icon_user, icon_user_plus, icon_volume, icon_wrench,
-    select_menu_layers, store_logo,
+    context_menu_layers, context_menu_layers_live, fg_faint, icon_bell_off, icon_camera, icon_chat,
+    icon_check, icon_copy, icon_download, icon_edit, icon_flag, icon_folder, icon_forward,
+    icon_gamepad, icon_key, icon_link, icon_pin, icon_play, icon_record_dot, icon_refresh,
+    icon_replay, icon_reply, icon_scissors, icon_search, icon_settings, icon_sliders, icon_smile,
+    icon_sparkles, icon_stop, icon_store, icon_trash, icon_user, icon_user_plus, icon_volume,
+    icon_wrench, select_menu_layers, store_logo,
 };
 use rune::{Align, El, Side, TextEdit, Tx};
 use serde_json::json;
@@ -956,18 +957,38 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
         } => {
             let link = format!("https://discord.com/channels/{guild_id}/{channel_id}");
             let is_voice = matches!(kind.as_str(), "voice" | "stage");
+            let ch_info = s
+                .discord
+                .channels_by_guild
+                .get(&guild_id)
+                .and_then(|c| c.channels.iter().find(|x| x.id == channel_id));
+            let ch_status = ch_info.and_then(|c| c.status.clone());
+            let can_set_status = ch_info.is_some_and(|c| c.can_set_status);
+            let ch_name = ch_info
+                .map(|c| c.name.clone())
+                .unwrap_or_else(|| "channel".into());
+            let guild_name = s
+                .discord
+                .home
+                .guilds
+                .iter()
+                .find(|g| g.id == guild_id)
+                .map(|g| g.name.clone())
+                .unwrap_or_else(|| "Server".into());
             let mut items = vec![
                 MenuEntry::item(
                     MenuItem::new("dc-ch-read", "Mark as read")
                         .disabled(!unread)
                         .on_select({
                             let cid = channel_id.clone();
-                            move |s: &mut AppState, _| s.discord_channel_action(&cid, "markRead")
+                            move |s: &mut AppState, _| s.discord_channel_action(&cid, "read")
                         }),
                 ),
                 MenuEntry::item(MenuItem::new("dc-ch-invite", "Invite people").on_select({
                     let cid = channel_id.clone();
-                    move |s: &mut AppState, _| s.discord_channel_action(&cid, "invite")
+                    let gname = guild_name.clone();
+                    let cname = ch_name.clone();
+                    move |s: &mut AppState, _| s.open_discord_invite_dialog(&gname, &cid, &cname)
                 })),
                 MenuEntry::item(MenuItem::new("dc-ch-link", "Copy link").on_select(
                     move |s: &mut AppState, tx| {
@@ -977,6 +998,26 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                 )),
                 MenuEntry::Separator,
             ];
+            if is_voice && (can_set_status || ch_status.is_some()) {
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-ch-vstatus", "Set channel status").on_select({
+                        let cid = channel_id.clone();
+                        let cur = ch_status.clone();
+                        move |s: &mut AppState, _| {
+                            s.open_voice_status_dialog(&cid, cur.as_deref());
+                        }
+                    }),
+                ));
+                if ch_status.is_some() {
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-ch-vstatus-clear", "Clear channel status").on_select({
+                            let cid = channel_id.clone();
+                            move |s: &mut AppState, _| s.save_discord_voice_status(&cid, "")
+                        }),
+                    ));
+                }
+                items.push(MenuEntry::Separator);
+            }
             if muted {
                 items.push(MenuEntry::item(
                     MenuItem::new("dc-ch-unmute", "Unmute channel").on_select({
@@ -1004,10 +1045,7 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                     items.push(MenuEntry::item(
                         MenuItem::new("dc-ch-edit", "Edit channel").on_select({
                             let cid = channel_id.clone();
-                            move |s: &mut AppState, _| {
-                                s.open_discord_channel(&cid);
-                                s.notice = Some("Channel editing opens in Discord".into());
-                            }
+                            move |s: &mut AppState, _| s.open_channel_settings(&cid)
                         }),
                     ));
                 }
@@ -1078,24 +1116,45 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
         }
         ContextMenuTarget::DiscordServer {
             guild_id,
-            name: _,
+            name,
             muted,
             owner,
             icon: _,
         } => {
             let hide_muted = s.discord.hide_muted_guilds.contains(&guild_id);
+            let chans = s.discord.channels_by_guild.get(&guild_id);
+            let can_manage = chans.is_some_and(|c| c.can_manage);
+            let can_events = chans.is_some_and(|c| c.can_manage_events);
+            let show_all = chans.is_some_and(|c| !c.opt_in);
+            let has_guide = chans.and_then(|c| c.rows.as_ref()).is_some_and(|r| r.guide);
+            let invite_ch = chans.and_then(|c| {
+                c.channels
+                    .iter()
+                    .find(|x| {
+                        s.discord.active_channel_id.as_deref() == Some(x.id.as_str())
+                            && x.kind != "category"
+                    })
+                    .or_else(|| c.channels.iter().find(|x| x.kind == "text"))
+                    .cloned()
+            });
             let mut items = vec![
                 MenuEntry::item(MenuItem::new("dc-srv-read", "Mark as read").on_select({
                     let gid = guild_id.clone();
                     move |s: &mut AppState, _| s.discord_mark_guild_read(&gid)
                 })),
                 MenuEntry::item(
-                    MenuItem::new("dc-srv-invite", "Invite people")
+                    MenuItem::new("dc-srv-invite", "Invite to server")
                         .icon(icon_user_plus(15.0, FG))
                         .on_select({
                             let gid = guild_id.clone();
+                            let gname = name.clone();
+                            let ich = invite_ch.clone();
                             move |s: &mut AppState, _| {
-                                s.discord_server_action("invite", json!({ "guildId": gid }));
+                                if let Some(ref c) = ich {
+                                    s.open_discord_invite_dialog(&gname, &c.id, &c.name);
+                                } else {
+                                    s.discord_server_action("invite", json!({ "guildId": gid }));
+                                }
                             }
                         }),
                 ),
@@ -1134,8 +1193,122 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                         move |s: &mut AppState, _| s.toggle_hide_muted_guild(&gid)
                     }),
             ));
+            if has_guide {
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-srv-show-all", "Show all channels")
+                        .checked(show_all)
+                        .on_select({
+                            let gid = guild_id.clone();
+                            move |s: &mut AppState, _| s.discord_show_all_channels(&gid, !show_all)
+                        }),
+                ));
+            }
             items.push(MenuEntry::Separator);
+            if let Some(mod_flags) = chans.and_then(|c| c.moderation.as_ref()) {
+                let feats = chans.map(|c| c.features.as_slice()).unwrap_or(&[]);
+                let sec_entries: Vec<MenuEntry<AppState>> = ServerSection::ALL
+                    .into_iter()
+                    .filter(|sec| sec.shown(mod_flags, feats))
+                    .map(|sec| {
+                        let gid = guild_id.clone();
+                        let gname = name.clone();
+                        MenuEntry::item(
+                            MenuItem::new(format!("dc-srv-sec-{}", sec.id()), sec.label())
+                                .on_select(move |s: &mut AppState, _| {
+                                    s.open_server_settings(&gid, &gname, sec);
+                                }),
+                        )
+                    })
+                    .collect();
+                if !sec_entries.is_empty() {
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-srv-settings", "Server settings")
+                            .icon(icon_settings(15.0, FG))
+                            .submenu(sec_entries),
+                    ));
+                }
+            }
+            items.push(MenuEntry::item(
+                MenuItem::new("dc-srv-privacy", "Privacy settings").on_select({
+                    let gid = guild_id.clone();
+                    move |s: &mut AppState, _| {
+                        s.discord.admin.server_privacy_guild = Some(gid.clone());
+                    }
+                }),
+            ));
+            items.push(MenuEntry::item(
+                MenuItem::new("dc-srv-profile", "Edit per-server profile").on_select({
+                    let gid = guild_id.clone();
+                    move |s: &mut AppState, _| {
+                        s.open_discord_settings_on(
+                            DiscordSettingsPage::Profiles,
+                            Some(gid.clone()),
+                        );
+                    }
+                }),
+            ));
+            if can_manage || can_events {
+                items.push(MenuEntry::Separator);
+                if can_manage {
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-srv-new-ch", "Create channel").on_select({
+                            let gid = guild_id.clone();
+                            move |s: &mut AppState, _| {
+                                s.open_create_channel_dialog(&gid, None, false);
+                            }
+                        }),
+                    ));
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-srv-new-cat", "Create category").on_select({
+                            let gid = guild_id.clone();
+                            move |s: &mut AppState, _| {
+                                s.open_create_channel_dialog(&gid, None, true);
+                            }
+                        }),
+                    ));
+                }
+                if can_events {
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-srv-new-ev", "Create event").on_select({
+                            let gid = guild_id.clone();
+                            move |s: &mut AppState, _| s.open_discord_events(&gid, true)
+                        }),
+                    ));
+                }
+            }
+            let in_folder = s
+                .discord
+                .home
+                .rail
+                .iter()
+                .any(|r| r.id.is_some() && r.guild_ids.iter().any(|g| g == &guild_id));
+            let move_modes: Vec<(&'static str, &'static str)> = if in_folder {
+                vec![
+                    ("folderFirst", "First in folder"),
+                    ("folderLast", "Last in folder"),
+                    ("listFirst", "First in list"),
+                    ("listLast", "Last in list"),
+                    ("noFolder", "No folder"),
+                ]
+            } else {
+                vec![("listFirst", "First in list"), ("listLast", "Last in list")]
+            };
+            let move_entries = move_modes
+                .into_iter()
+                .map(|(m, lbl)| {
+                    let gid = guild_id.clone();
+                    MenuEntry::item(
+                        MenuItem::new(format!("dc-srv-mv-{m}"), lbl)
+                            .on_select(move |s: &mut AppState, _| s.discord_move_server(&gid, m)),
+                    )
+                })
+                .collect();
+            items.push(MenuEntry::Separator);
+            items.push(MenuEntry::item(
+                MenuItem::new("dc-srv-move", "Move to").submenu(move_entries),
+            ));
             if !owner {
+                items.push(MenuEntry::Separator);
                 items.push(MenuEntry::item(
                     MenuItem::new("dc-srv-leave", "Leave server")
                         .danger()
@@ -1146,22 +1319,46 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                             }
                         }),
                 ));
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-srv-report", "Report server")
+                        .icon(icon_flag(15.0, bad()))
+                        .danger()
+                        .on_select({
+                            let gid = guild_id.clone();
+                            let gname = name.clone();
+                            move |s: &mut AppState, _| {
+                                let mut ids = std::collections::HashMap::new();
+                                ids.insert("guild_id".into(), gid.clone());
+                                s.open_discord_report(ReportTarget {
+                                    kind: "guild".into(),
+                                    ids,
+                                    preview_name: gname.clone(),
+                                    preview_text: None,
+                                    user_id: None,
+                                    can_delete: false,
+                                });
+                            }
+                        }),
+                ));
             }
-            items.push(MenuEntry::item(
-                MenuItem::new("dc-srv-copy-id", "Copy server ID")
-                    .icon(icon_copy(15.0, FG))
-                    .on_select(move |s: &mut AppState, tx| {
-                        tx.copy(guild_id.clone());
-                        s.notice = Some("Copied server ID".into());
-                    }),
-            ));
+            if s.discord.developer_mode {
+                items.push(MenuEntry::Separator);
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-srv-copy-id", "Copy server ID")
+                        .icon(icon_copy(15.0, FG))
+                        .on_select(move |s: &mut AppState, tx| {
+                            tx.copy(guild_id.clone());
+                            s.notice = Some("Copied server ID".into());
+                        }),
+                ));
+            }
             items
         }
         ContextMenuTarget::DiscordMessage {
             channel_id,
             guild_id,
             message_id,
-            author_id: _,
+            author_id,
             author_name,
             content,
             mine,
@@ -1227,9 +1424,12 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                 MenuItem::new("dc-msg-copy-text", "Copy text")
                     .icon(icon_copy(15.0, FG))
                     .disabled(content.trim().is_empty())
-                    .on_select(move |s: &mut AppState, tx| {
-                        tx.copy(content.clone());
-                        s.notice = Some("Copied message text".into());
+                    .on_select({
+                        let copy_body = content.clone();
+                        move |s: &mut AppState, tx| {
+                            tx.copy(copy_body.clone());
+                            s.notice = Some("Copied message text".into());
+                        }
                     }),
             ));
             items.push(MenuEntry::item(
@@ -1262,6 +1462,33 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                         }),
                 ));
             }
+            if !mine {
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-msg-report", "Report message")
+                        .icon(icon_flag(15.0, bad()))
+                        .danger()
+                        .on_select({
+                            let cid = channel_id.clone();
+                            let mid = message_id.clone();
+                            let aid = author_id.clone();
+                            let aname = author_name.clone();
+                            let body = content.clone();
+                            move |s: &mut AppState, _| {
+                                let mut ids = std::collections::HashMap::new();
+                                ids.insert("channel_id".into(), cid.clone());
+                                ids.insert("message_id".into(), mid.clone());
+                                s.open_discord_report(ReportTarget {
+                                    kind: "message".into(),
+                                    ids,
+                                    preview_name: aname.clone(),
+                                    preview_text: Some(body.clone()),
+                                    user_id: Some(aid.clone()),
+                                    can_delete: false,
+                                });
+                            }
+                        }),
+                ));
+            }
             items.push(MenuEntry::item(
                 MenuItem::new("dc-msg-copy-id", "Copy message ID")
                     .icon(icon_copy(15.0, FG))
@@ -1273,12 +1500,13 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
             items
         }
         ContextMenuTarget::DiscordMember {
-            guild_id: _,
+            guild_id,
             user_id,
             name,
             username,
             in_voice,
         } => {
+            let is_me = s.discord.home.me.as_ref().is_some_and(|m| m.id == user_id);
             let is_friend = s
                 .discord
                 .friends
@@ -1297,6 +1525,10 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                 .filter(|u| !u.is_empty())
                 .unwrap_or(&name)
                 .to_string();
+            let mod_flags = guild_id
+                .as_deref()
+                .and_then(|gid| s.discord.channels_by_guild.get(gid))
+                .and_then(|c| c.moderation.as_ref());
 
             let mut items = vec![
                 MenuEntry::item(
@@ -1397,6 +1629,126 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                     move |s: &mut AppState, _| s.discord_friend_action("block", &u)
                 }),
             ));
+            if !is_me {
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-mem-report", "Report")
+                        .icon(icon_flag(15.0, bad()))
+                        .danger()
+                        .on_select({
+                            let u = user_id.clone();
+                            let nm = name.clone();
+                            let h = handle.clone();
+                            move |s: &mut AppState, _| {
+                                let mut ids = std::collections::HashMap::new();
+                                ids.insert("reported_user_id".into(), u.clone());
+                                s.open_discord_report(ReportTarget {
+                                    kind: "user".into(),
+                                    ids,
+                                    preview_name: nm.clone(),
+                                    preview_text: Some(format!("@{h}")),
+                                    user_id: Some(u.clone()),
+                                    can_delete: false,
+                                });
+                            }
+                        }),
+                ));
+            }
+            if let Some(ref gid) = guild_id
+                && let Some(mf) = mod_flags
+            {
+                let has_mod = mf.manage_nicknames || mf.timeout || mf.kick || mf.ban || mf.owner;
+                if has_mod {
+                    items.push(MenuEntry::Separator);
+                }
+                if mf.manage_nicknames || is_me {
+                    let g = gid.clone();
+                    let u = user_id.clone();
+                    let nm = name.clone();
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-mem-nick", "Change nickname").on_select(
+                            move |s: &mut AppState, _| {
+                                s.open_member_admin_dialog(MemberDialogKind::Nick, &g, &u, &nm);
+                            },
+                        ),
+                    ));
+                }
+                if !is_me && mf.timeout {
+                    let to_entries: Vec<MenuEntry<AppState>> = TIMEOUT_DURATIONS
+                        .into_iter()
+                        .map(|(secs, lbl)| {
+                            let g = gid.clone();
+                            let u = user_id.clone();
+                            MenuEntry::item(
+                                MenuItem::new(format!("dc-mem-to-{secs}"), lbl).on_select(
+                                    move |s: &mut AppState, _| {
+                                        s.run_discord_member_mod(
+                                            "timeout",
+                                            &g,
+                                            &u,
+                                            json!({ "seconds": secs }),
+                                        );
+                                    },
+                                ),
+                            )
+                        })
+                        .chain(std::iter::once(MenuEntry::item(
+                            MenuItem::new("dc-mem-to-clear", "Remove timeout").on_select({
+                                let g = gid.clone();
+                                let u = user_id.clone();
+                                move |s: &mut AppState, _| {
+                                    s.run_discord_member_mod(
+                                        "timeout",
+                                        &g,
+                                        &u,
+                                        json!({ "seconds": 0 }),
+                                    );
+                                }
+                            }),
+                        )))
+                        .collect();
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-mem-timeout", "Timeout")
+                            .danger()
+                            .submenu(to_entries),
+                    ));
+                }
+                if !is_me && mf.kick {
+                    let g = gid.clone();
+                    let u = user_id.clone();
+                    let nm = name.clone();
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-mem-kick", "Kick").danger().on_select(
+                            move |s: &mut AppState, _| {
+                                s.open_member_admin_dialog(MemberDialogKind::Kick, &g, &u, &nm);
+                            },
+                        ),
+                    ));
+                }
+                if !is_me && mf.ban {
+                    let g = gid.clone();
+                    let u = user_id.clone();
+                    let nm = name.clone();
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-mem-ban", "Ban").danger().on_select(
+                            move |s: &mut AppState, _| {
+                                s.open_member_admin_dialog(MemberDialogKind::Ban, &g, &u, &nm);
+                            },
+                        ),
+                    ));
+                }
+                if !is_me && mf.owner {
+                    let g = gid.clone();
+                    let u = user_id.clone();
+                    let nm = name.clone();
+                    items.push(MenuEntry::item(
+                        MenuItem::new("dc-mem-transfer", "Transfer ownership")
+                            .danger()
+                            .on_select(move |s: &mut AppState, _| {
+                                s.open_member_admin_dialog(MemberDialogKind::Transfer, &g, &u, &nm);
+                            }),
+                    ));
+                }
+            }
             items.push(MenuEntry::Separator);
             items.push(MenuEntry::item(
                 MenuItem::new("dc-mem-copy-user", "Copy username")
@@ -1406,97 +1758,84 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                         s.notice = Some("Copied username".into());
                     }),
             ));
-            items.push(MenuEntry::item(
-                MenuItem::new("dc-mem-copy-id", "Copy user ID")
-                    .icon(icon_copy(15.0, FG))
-                    .on_select(move |s: &mut AppState, tx| {
-                        tx.copy(user_id.clone());
-                        s.notice = Some("Copied user ID".into());
-                    }),
-            ));
+            if s.discord.developer_mode {
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-mem-copy-id", "Copy user ID")
+                        .icon(icon_copy(15.0, FG))
+                        .on_select(move |s: &mut AppState, tx| {
+                            tx.copy(user_id.clone());
+                            s.notice = Some("Copied user ID".into());
+                        }),
+                ));
+            }
             items
         }
         ContextMenuTarget::DiscordGoLiveMenu => {
             let active = matches!(
                 s.discord.voice_ui.golive_state.as_str(),
-                "live" | "starting"
+                "live" | "connecting" | "starting"
             );
-            let cur_h = s.discord.voice_ui.golive_height;
-            let cur_fps = s.discord.voice_ui.golive_fps;
-            let sound_on = s.discord.voice_ui.golive_sound;
-            let quality_entries = [
-                (720, 30, "720p · 30 fps"),
-                (720, 60, "720p · 60 fps"),
-                (1080, 30, "1080p · 30 fps"),
-                (1080, 60, "1080p · 60 fps"),
-                (0, 60, "Source · 60 fps"),
-            ]
-            .into_iter()
-            .map(|(h, fps, label)| {
-                MenuEntry::item(
-                    MenuItem::new(format!("dc-gl-q-{h}-{fps}"), label)
-                        .checked(cur_h == h && cur_fps == fps)
-                        .on_select(move |s: &mut AppState, _| {
-                            s.discord.voice_ui.golive_height = h;
-                            s.discord.voice_ui.golive_fps = fps;
-                        }),
-                )
-            })
-            .collect();
-            vec![
-                MenuEntry::item(
+            let shown = s.discord.voice_ui.golive_preview_shown;
+            let mut items = Vec::new();
+            if active {
+                items.push(MenuEntry::item(
                     MenuItem::new(
-                        "dc-gl-picker",
-                        if active {
-                            "Change window or screen"
+                        "dc-gl-preview-toggle",
+                        if shown {
+                            "Hide preview"
                         } else {
-                            "Share screen"
+                            "Show preview"
                         },
                     )
-                    .icon(icon_camera(15.0, FG))
-                    .on_select(|s: &mut AppState, _| s.open_voice_panel(VoicePanel::GoLive)),
-                ),
-                MenuEntry::item(
-                    MenuItem::new("dc-gl-quality", "Stream quality")
-                        .icon(icon_sliders(15.0, FG))
-                        .submenu(quality_entries),
-                ),
-                MenuEntry::item(
-                    MenuItem::new("dc-gl-audio", "Share system audio")
-                        .icon(icon_volume(15.0, FG))
-                        .checked(sound_on)
-                        .on_select(move |s: &mut AppState, _| {
-                            s.discord.voice_ui.golive_sound = !sound_on;
-                        }),
-                ),
-                MenuEntry::Separator,
-                MenuEntry::item(
+                    .on_select(move |s: &mut AppState, _| {
+                        s.discord.voice_ui.golive_preview_shown = !shown;
+                    }),
+                ));
+            }
+            items.push(MenuEntry::item(
+                MenuItem::new(
+                    "dc-gl-picker",
+                    if active {
+                        "Change what you share"
+                    } else {
+                        "Share screen"
+                    },
+                )
+                .icon(icon_camera(15.0, FG))
+                .on_select(|s: &mut AppState, _| s.open_voice_panel(VoicePanel::GoLive)),
+            ));
+            if active {
+                items.push(MenuEntry::Separator);
+                items.push(MenuEntry::item(
                     MenuItem::new("dc-gl-stop", "Stop streaming")
                         .danger()
-                        .disabled(!active)
                         .on_select(|s: &mut AppState, _| s.stop_discord_golive()),
-                ),
-            ]
+                ));
+            }
+            items
         }
     };
 
-    context_menu_layers(ContextMenuSpec {
-        id: menu_id,
-        anchor,
-        width,
-        blur,
-        submenu_blur,
-        open_submenu: cm.open_submenu,
-        return_focus,
-        gamepad_focus,
-        entries,
-        on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.close_context_menu()),
-        on_submenu: Rc::new(|s: &mut AppState, idx: Option<usize>, _: &mut Tx| {
-            if let Some(ref mut cm) = s.context_menu {
-                cm.open_submenu = idx;
-            }
-        }),
-    })
+    context_menu_layers_live(
+        ContextMenuSpec {
+            id: menu_id,
+            anchor,
+            width,
+            blur,
+            submenu_blur,
+            open_submenu: cm.open_submenu,
+            return_focus,
+            gamepad_focus,
+            entries,
+            on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.close_context_menu()),
+            on_submenu: Rc::new(|s: &mut AppState, idx: Option<usize>, _: &mut Tx| {
+                if let Some(ref mut cm) = s.context_menu {
+                    cm.open_submenu = idx;
+                }
+            }),
+        },
+        &["top-bar"],
+    )
 }
 
 pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
