@@ -37,7 +37,6 @@ pub struct ShellChromeState {
     pub mini_last_audible: f32,
     pub room_history: Vec<Room>,
     pub room_history_index: usize,
-    pub last_heartbeat_at: Option<f64>,
     pub shell_ready_sent: bool,
     pub usable_logged: bool,
     pub settings_open_count: u32,
@@ -62,7 +61,6 @@ impl Default for ShellChromeState {
             mini_last_audible: 0.25,
             room_history: vec![Room::Library],
             room_history_index: 0,
-            last_heartbeat_at: None,
             shell_ready_sent: false,
             usable_logged: false,
             settings_open_count: 0,
@@ -272,26 +270,7 @@ impl AppState {
         );
     }
 
-    pub fn tick_shell_heartbeat(&mut self, now: f64, tx: &mut rune::Tx) -> bool {
-        if self.status != crate::state::HostStatus::Connected {
-            return false;
-        }
-        let due = match self.chrome.last_heartbeat_at {
-            None => true,
-            Some(last) => now - last >= 1.0,
-        };
-        if due {
-            self.chrome.last_heartbeat_at = Some(now);
-            #[cfg(windows)]
-            self.call_host_async(
-                "shell.heartbeat",
-                json!({ "visible": true }),
-                |_, _: Result<Value, String>| {},
-            );
-        }
-        if let Some(last) = self.chrome.last_heartbeat_at {
-            tx.wake_at(last + 1.0);
-        }
+    pub fn tick_shell_heartbeat(&mut self, _now: f64, _tx: &mut rune::Tx) -> bool {
         false
     }
 
@@ -1374,7 +1353,6 @@ mod tests {
 
         let mut tx = rune::Tx::default();
         assert!(!s.tick_shell_heartbeat(5.0, &mut tx));
-        assert!(s.chrome.last_heartbeat_at.is_none());
     }
 
     #[test]
