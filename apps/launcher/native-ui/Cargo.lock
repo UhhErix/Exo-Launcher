@@ -865,6 +865,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-thermal"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
 name = "exo-ui"
 version = "0.1.0"
 dependencies = [
