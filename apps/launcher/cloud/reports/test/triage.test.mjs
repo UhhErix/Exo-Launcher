@@ -165,6 +165,23 @@ test('a Discord alert fits in one message and cannot close its own code block', 
   assert.equal(body.content.split('```').length, 3, 'one code block')
 })
 
+test('alertOf and discordBody always keep the Error line at the top even when the log is long', async () => {
+  const { env, posts } = makeEnv()
+  const lines = Array.from({ length: 35 }, (_, i) => `[2026-11-23T07:00:${String(i % 60).padStart(2, '0')}.000Z] WARN Store layout not recognized: entry ${i} ` + 'x'.repeat(60))
+  const longExcerpt = [
+    'Exo Launcher 3.29.0 · Windows 10.0.26200.0 · 2026-11-23 07:27 UTC',
+    "Error (exo ai): Its installer didn't start.",
+    '',
+    `Exo's log (${lines.length} entries):`,
+    ...lines,
+  ].join('\n')
+  assert.equal((await send(env, { ...sample, version: '3.29.0', errorType: 'AppError', excerpt: longExcerpt })).status, 202)
+  const text = contentOf(posts[0])
+  assert.ok(text.length <= 2000, String(text.length))
+  assert.match(text, /Error \(exo ai\): Its installer didn't start\./)
+  assert.match(text, /entry 34/)
+})
+
 test("the digest lists yesterday's groups, most reports first, and marks the ones that are new", async () => {
   const db = fakeD1()
   const now = Date.UTC(2026, 10, 10, 4, 20)

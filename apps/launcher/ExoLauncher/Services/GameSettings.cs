@@ -491,6 +491,8 @@ internal static partial class GameSettings
     // ------------------------------------------------------------------ on this PC
 
     private static readonly Lock Gate = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> MissingLogged = new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> UnsupportedFormatLogged = new(StringComparer.Ordinal);
     private static string Folder => Path.Combine(PathHelper.AppDataDir, "game-settings");
     private static string KeptPath => Path.Combine(Folder, "kept.json");
     private static string WindowModesPath => Path.Combine(Folder, "window-modes.json");
@@ -621,12 +623,25 @@ internal static partial class GameSettings
             }
             var kept = KeptOf(profile.Id);
             var groups = profile.Groups(files[0].File).Where(g => groupId is null || g.Id == groupId).ToList();
+            if (on && !files.Any(open => groups.Any(g => Targets(open.File, g).Count > 0)))
+            {
+                if (UnsupportedFormatLogged.TryAdd(profile.Id + "|" + files[0].Path, true))
+                    AppLog.Info($"Game settings: {profile.Title}: this version's settings file isn't supported yet; no settings were changed.");
+                return false;
+            }
             var writes = Edits(files, groups, on, kept, allOfThem: groupId is null);
             if (Commit(profile, writes, kept) is not Committed.Written) return false;
             if (writes.Count > 0)
                 AppLog.Info($"Game settings: {profile.Title}: {(groupId ?? "all")} {(on ? "on" : "off")}, {writes.Sum(w => w.Edits.Count)} lines in {writes.Count} files.");
             if (on && Missing(profile, files) is { Count: > 0 } missing)
-                AppLog.Warn($"Game settings: {profile.Title}: {missing.Count} settings aren't in its file, so the line won't say Applied: {string.Join(", ", missing)}.");
+            {
+                var summary = string.Join(", ", missing);
+                if (!MissingLogged.TryGetValue(profile.Id, out var prev) || !string.Equals(prev, summary, StringComparison.Ordinal))
+                {
+                    MissingLogged[profile.Id] = summary;
+                    AppLog.Warn($"Game settings: {profile.Title}: {missing.Count} settings aren't in its file, so the line won't say Applied: {summary}.");
+                }
+            }
             var ids = groups.Select(g => g.Id).ToList();
             var keeping = LoadKeeping(profile)?.Groups ?? [];
             List<string> stays = on ? [.. keeping.Union(ids)] : groupId is null ? [] : [.. keeping.Except(ids)];

@@ -69,29 +69,96 @@ internal sealed class GpuDevice : IDisposable
     /// <summary>The device for the card that drives a monitor.</summary>
     internal static GpuDevice ForMonitor(nint monitor) => Shared(LuidOfMonitor(monitor));
 
+    internal readonly record struct AdapterInfo(long Luid, string Name, bool Software);
+
+    internal static int? SelectAdapterIndex(IReadOnlyList<AdapterInfo> adapters, long? requestedLuid, out bool fellBackToDefault)
+    {
+        fellBackToDefault = false;
+        if (requestedLuid is long want)
+        {
+            for (var i = 0; i < adapters.Count; i++)
+                if (!adapters[i].Software && adapters[i].Luid == want)
+                    return i;
+        }
+        for (var i = 0; i < adapters.Count; i++)
+        {
+            if (!adapters[i].Software)
+            {
+                fellBackToDefault = requestedLuid is not null;
+                return i;
+            }
+        }
+        return null;
+    }
+
+    internal static bool ShouldRetryWithout11_1(int hresult) => hresult == unchecked((int)0x80070057);
+
+    internal static string FormatCreateFailure(string adapterName, int hresult, DeviceCreationFlags flags, ReadOnlySpan<FeatureLevel> levels) =>
+        $"Capture unavailable on this GPU: adapter={adapterName}, hr=0x{hresult:X8}, flags={flags}, levels={string.Join(",", levels.ToArray())}.";
+
     /// <summary>The card the main screen is on (it composes the desktop), else the first hardware one.</summary>
     internal static GpuDevice Create(long? luid = null)
     {
         using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
-        IDXGIAdapter1? chosen = null;
-        for (uint i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+        var adapters = new List<IDXGIAdapter1>();
+        var infos = new List<AdapterInfo>();
+        try
         {
-            var desc = adapter.Description1;
-            var id = ((long)desc.Luid.HighPart << 32) | desc.Luid.LowPart;
-            if ((desc.Flags & AdapterFlags.Software) != 0) { adapter.Dispose(); continue; }
-            if (luid is long want ? id == want : chosen is null) { chosen?.Dispose(); chosen = adapter; if (luid is not null) break; }
-            else adapter.Dispose();
+            for (uint i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+            {
+                var desc = adapter.Description1;
+                var id = ((long)desc.Luid.HighPart << 32) | desc.Luid.LowPart;
+                var software = (desc.Flags & AdapterFlags.Software) != 0;
+                adapters.Add(adapter);
+                infos.Add(new AdapterInfo(id, desc.Description.Trim(), software));
+            }
+            var chosenIndex = SelectAdapterIndex(infos, luid, out var fellBack);
+            if (chosenIndex is null)
+            {
+                var seen = infos.Count == 0 ? "none" : string.Join(", ", infos.Select(a => a.Name));
+                Host.Log($"Capture unavailable on this GPU: no hardware DXGI adapter found (adapters={seen}).");
+                throw new CaptureException("Capture unavailable on this GPU.");
+            }
+            var chosen = adapters[chosenIndex.Value];
+            var chosenInfo = infos[chosenIndex.Value];
+            adapters[chosenIndex.Value] = null!;
+            if (fellBack)
+                Host.Log($"Requested GPU adapter LUID 0x{luid!.Value:X16} not found; retrying with default adapter {chosenInfo.Name}.");
+            var flags = DeviceCreationFlags.BgraSupport | DeviceCreationFlags.VideoSupport;
+            FeatureLevel[] levels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0];
+            var hr = D3D11.D3D11CreateDevice(chosen, DriverType.Unknown, flags, levels, out ID3D11Device device, out ID3D11DeviceContext context);
+            if ((hr.Failure || device is null || context is null) && ShouldRetryWithout11_1(hr.Code))
+            {
+                Host.Log(FormatCreateFailure(chosenInfo.Name, hr.Code, flags, levels));
+                levels = [FeatureLevel.Level_11_0];
+                hr = D3D11.D3D11CreateDevice(chosen, DriverType.Unknown, flags, levels, out device, out context);
+            }
+            if (hr.Failure || device is null || context is null)
+            {
+                Host.Log(FormatCreateFailure(chosenInfo.Name, hr.Code, flags, levels));
+                device?.Dispose();
+                context?.Dispose();
+                chosen.Dispose();
+                throw new CaptureException("Capture unavailable on this GPU.");
+            }
+            try
+            {
+                return new GpuDevice(chosen, device, context);
+            }
+            catch (Exception ex) when (ex is SharpGen.Runtime.SharpGenException or COMException)
+            {
+                Host.Log($"Capture unavailable on this GPU: adapter={chosenInfo.Name}, hr=0x{ex.HResult:X8}, flags={flags}, levels={string.Join(",", levels)}.");
+                context.Dispose();
+                device.Dispose();
+                chosen.Dispose();
+                throw new CaptureException("Capture unavailable on this GPU.");
+            }
         }
-        if (chosen is null) throw new CaptureException("Capture could not start on this PC's graphics card.");
-        var flags = DeviceCreationFlags.BgraSupport | DeviceCreationFlags.VideoSupport;
-        FeatureLevel[] levels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0];
-        var hr = D3D11.D3D11CreateDevice(chosen, DriverType.Unknown, flags, levels, out ID3D11Device device, out ID3D11DeviceContext context);
-        if (hr.Failure || device is null || context is null)
+        finally
         {
-            chosen.Dispose();
-            throw new CaptureException("Capture could not start on this PC's graphics card.");
+            foreach (var adapter in adapters)
+                adapter?.Dispose();
         }
-        return new GpuDevice(chosen, device, context);
     }
 
     /// <summary>The adapter's LUID that owns a monitor, so a capture of that screen runs on the card that draws it.</summary>

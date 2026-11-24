@@ -93,4 +93,75 @@ public sealed class CaptureReliabilityTests
         Assert.Single(logs);
         Assert.Contains("0x80070005", logs[0]);
     }
+
+    [Fact]
+    public void SelectAdapterIndexMatchesLuidFallsBackOnStaleLuidAndSkipsSoftwareAdapters()
+    {
+        GpuDevice.AdapterInfo[] adapters =
+        [
+            new(0x1001, "Microsoft Basic Render Driver", Software: true),
+            new(0x2002, "Intel UHD Graphics", Software: false),
+            new(0x3003, "NVIDIA GeForce RTX 4090", Software: false),
+        ];
+
+        Assert.Equal(2, GpuDevice.SelectAdapterIndex(adapters, 0x3003, out var exactFallback));
+        Assert.False(exactFallback);
+
+        Assert.Equal(1, GpuDevice.SelectAdapterIndex(adapters, 0x9999, out var staleFallback));
+        Assert.True(staleFallback);
+
+        Assert.Equal(1, GpuDevice.SelectAdapterIndex(adapters, null, out var defaultFallback));
+        Assert.False(defaultFallback);
+
+        GpuDevice.AdapterInfo[] softwareOnly = [new(0x1001, "Microsoft Basic Display Adapter", Software: true)];
+        Assert.Null(GpuDevice.SelectAdapterIndex(softwareOnly, null, out var softwareFallback));
+        Assert.False(softwareFallback);
+        Assert.Null(GpuDevice.SelectAdapterIndex([], 0x1001, out _));
+    }
+
+    [Fact]
+    public void GpuDeviceCreateFailureDiagnosticsAndFeatureLevelRetryAreFormatted()
+    {
+        Assert.True(GpuDevice.ShouldRetryWithout11_1(unchecked((int)0x80070057)));
+        Assert.False(GpuDevice.ShouldRetryWithout11_1(unchecked((int)0x887A0005)));
+
+        var line = GpuDevice.FormatCreateFailure(
+            "Microsoft Basic Display Adapter",
+            unchecked((int)0x887A0004),
+            Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.VideoSupport,
+            [Vortice.Direct3D.FeatureLevel.Level_11_1, Vortice.Direct3D.FeatureLevel.Level_11_0]);
+        Assert.Contains("Microsoft Basic Display Adapter", line);
+        Assert.Contains("0x887A0004", line);
+        Assert.Contains("VideoSupport", line);
+        Assert.Contains("Level_11_1", line);
+        Assert.Contains("Level_11_0", line);
+    }
+
+    [Fact]
+    public void ProbeCodecAvailabilityNeverThrowsLogsOnceAndRecoversWhenGpuReturns()
+    {
+        var logs = new List<string>();
+        string? error = null;
+        var logged = false;
+
+        Assert.False(Controller.ProbeCodecAvailability(
+            () => throw new CaptureException("Capture unavailable on this GPU."),
+            logs.Add,
+            ref error,
+            ref logged));
+        Assert.Equal("Capture unavailable on this GPU.", error);
+        Assert.True(logged);
+        Assert.Single(logs);
+
+        Assert.False(Controller.ProbeCodecAvailability(
+            () => throw new CaptureException("Capture unavailable on this GPU."),
+            logs.Add,
+            ref error,
+            ref logged));
+        Assert.Single(logs);
+
+        Assert.True(Controller.ProbeCodecAvailability(() => true, logs.Add, ref error, ref logged));
+        Assert.Null(error);
+        Assert.False(logged);
+    }
 }

@@ -1,6 +1,7 @@
 import { GitHubError, gitHubOf } from './github.js'
 import { fingerprintOf, signatureOf } from './fingerprint.js'
 import { utcDay } from './telemetry-store.js'
+import { trimExcerpt } from './triage.js'
 
 export const THRESHOLDS = [10, 100, 1000]
 export const DAILY = { crash: 50, user: 100, sync: 2000 }
@@ -129,7 +130,7 @@ async function diagnosisOf(env, report) {
         max_tokens: 180,
         messages: [
           { role: 'system', content: 'You triage crash reports for Exo, a Windows 11 app (a .NET host with a WebView2 React page). From the error type and the end of the log, say in at most three short plain lines: what most likely broke, which part of the app, and how bad it is for the user. Only what the log supports; say "not clear from the log" otherwise. No preamble.' },
-          { role: 'user', content: `${report.app} ${report.version}, Windows ${report.osBuild}\n${report.errorType}\n\n${report.excerpt.slice(-3000)}` },
+          { role: 'user', content: `${report.app} ${report.version}, Windows ${report.osBuild}\n${report.errorType}\n\n${trimExcerpt(report.excerpt, 3000)}` },
         ],
       }),
       new Promise((resolve) => setTimeout(() => resolve(null), 8000)),

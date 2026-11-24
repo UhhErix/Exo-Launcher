@@ -92,11 +92,52 @@ public static partial class CrashReport
     /// The report for an error, as the service takes it. <paramref name="report"/> is <see cref="AppLog.ReportFor"/>'s
     /// text (already free of the Windows user name and profile folder); <paramref name="error"/> names the error's type.
     /// </summary>
+    internal static string FitExcerpt(string text, int maxLength)
+    {
+        if (text.Length <= maxLength) return text;
+        var lines = text.Split('\n');
+        var headLines = new List<string>();
+        var idx = 0;
+        var headCap = Math.Max(64, maxLength / 2);
+        var headLen = 0;
+        while (idx < lines.Length)
+        {
+            var line = lines[idx];
+            if (line.Length > 1 && line[0] == '[' && char.IsAsciiDigit(line[1])) break;
+            if (headLen + line.Length + 1 > headCap && headLines.Count > 0) break;
+            headLines.Add(line);
+            headLen += line.Length + 1;
+            idx++;
+            if (line.StartsWith("Error (", StringComparison.Ordinal))
+            {
+                while (idx < lines.Length && !string.IsNullOrWhiteSpace(lines[idx]) && !(lines[idx].Length > 1 && lines[idx][0] == '[' && char.IsAsciiDigit(lines[idx][1])))
+                {
+                    if (headLen + lines[idx].Length + 1 > headCap) break;
+                    headLines.Add(lines[idx]);
+                    headLen += lines[idx].Length + 1;
+                    idx++;
+                }
+                break;
+            }
+        }
+        var head = string.Join('\n', headLines).TrimEnd('\n');
+        if (head.Length == 0 || idx >= lines.Length) return text[..maxLength];
+        const string marker = "\n…\n";
+        var tailBudget = maxLength - head.Length - marker.Length;
+        if (tailBudget <= 0) return head.Length > maxLength ? head[..maxLength] : head;
+        var tail = string.Join('\n', lines[idx..]);
+        if (tail.Length <= tailBudget) return head + "\n" + tail;
+        var cut = tail.Length - tailBudget;
+        var nl = tail.IndexOf('\n', cut);
+        var kept = nl >= 0 && nl + 1 < tail.Length ? tail[(nl + 1)..] : tail[cut..];
+        return head + marker + kept;
+    }
+
     internal static Payload Build(string error, string report, string version, string windows, string userName, string profile, string machineName, string? kind = null)
     {
-        var raw = report.Length > MaxExcerpt * 4 ? report[..(MaxExcerpt * 4)] : report;
+        var raw = FitExcerpt(report, MaxExcerpt * 4);
         var excerpt = Scrub(raw, userName, profile, machineName);
-        if (excerpt.Length > MaxExcerpt) excerpt = excerpt[..MaxExcerpt];
+        if (excerpt.Length > MaxExcerpt) excerpt = FitExcerpt(excerpt, MaxExcerpt);
         excerpt = string.Join('\n', excerpt.Split('\n').Select(line => Personal.Any(p => p.IsMatch(line)) ? "<removed>" : line));
         // A known kind (Hang, WebView2Crash, ...) is the type; otherwise the error's own name, as before.
         var type = kind is { Length: > 0 } ? kind : ErrorName().Match(error + "\n" + raw) is { Success: true } named ? named.Value : "AppError";
@@ -163,6 +204,9 @@ public static partial class CrashReport
     internal static bool MayLeave(bool disposable, bool smokeAllowsSends, string errorType) =>
         !disposable || (smokeAllowsSends && errorType.Contains("SmokeTest", StringComparison.Ordinal));
 
+    internal static bool MayLeave(bool disposable, bool testRun, bool customPoster, bool smokeAllowsSends, string errorType) =>
+        (!testRun || customPoster) && MayLeave(disposable, smokeAllowsSends, errorType);
+
     /// <summary>
     /// One send, told apart: <see cref="SendOutcome.Refused"/> when the daily limits (or this error's repeat today) stop it
     /// before anything is posted, <see cref="SendOutcome.Blocked"/> when this is a disposable host without the smoke
@@ -176,7 +220,7 @@ public static partial class CrashReport
         try
         {
 
-            if (!MayLeave(HostMode.IsDisposable, SmokeAllowsSends, payload.ErrorType))
+            if (!MayLeave(HostMode.IsDisposable, HostMode.TestRun, Poster != PostBodyAsync, SmokeAllowsSends, payload.ErrorType))
             {
                 AppLog.Info("Crash report: not sent by a test instance.");
                 return SendOutcome.Blocked;
@@ -188,7 +232,7 @@ public static partial class CrashReport
                 return SendOutcome.Failed;
             }
             var body = ToJson(payload with { InstallId = install });
-            if (!CrashReportLimiter.TryReserve(payload.ErrorType, CrashReportLimit.SignatureOf(payload.Excerpt), DateTime.UtcNow, out key))
+            if (!CrashReportLimiter.TryReserve(payload.ErrorType, CrashReportLimit.SignatureOf(payload.Excerpt), DateTime.UtcNow, out key, payload.Version))
             {
                 AppLog.Info("Crash report: held by the daily limit.");
                 return SendOutcome.Refused;
