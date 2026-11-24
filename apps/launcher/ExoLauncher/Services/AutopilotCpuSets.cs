@@ -136,6 +136,28 @@ internal static class AutopilotCpuSets
         }
     }
 
+    internal static bool PinCurrentThreadToBackgroundCores()
+    {
+        if (HostMode.IsDisposable) return false;
+        try
+        {
+            var sets = ReadSystemCpuSets();
+            var ids = BackgroundSetIds(sets, PowerProfiles.CpuClass.Unknown);
+            if (ids.Length == 0) return false;
+            return SetThreadSelectedCpuSets(GetCurrentThread(), ids, (uint)ids.Length);
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern nint GetCurrentThread();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetThreadSelectedCpuSets(nint thread, [In] uint[]? cpuSetIds, uint cpuSetIdCount);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetSystemCpuSetInformation(IntPtr information, uint bufferLength, out uint returnedLength, IntPtr process, uint flags);
 

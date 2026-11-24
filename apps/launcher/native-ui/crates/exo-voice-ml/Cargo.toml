@@ -1,0 +1,9 @@
+[package]
+name = "exo-voice-ml"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "exo_voice_ml"
+crate-type = ["cdylib", "rlib"]

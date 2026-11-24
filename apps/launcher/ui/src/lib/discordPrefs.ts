@@ -119,7 +119,13 @@ export type DiscordAccountAction = 'me' | 'name' | 'profile' | 'avatar' | 'banne
 export type DiscordClientSettings = {
   inputProfile: 'exo' | 'custom'
   noiseSuppression: boolean
-  noiseSuppressionKind?: 'exo' | 'ai' | 'standard'
+  noiseSuppressionKind?: 'exo' | 'exo-dfn3' | 'ai' | 'standard'
+  voiceTier?: 'auto' | 'cpu' | 'hq'
+  voiceIsolation?: boolean
+  loopbackEchoCancellation?: boolean
+  voiceModelReady?: boolean
+  voiceHqModelReady?: boolean
+  voiceIsolationReady?: boolean
   /** The same on everyone else's voice in a call, each their own; off by default. */
   othersNoiseSuppression: boolean
   /** Only My Voice: voices that aren't the learned one are held back in calls (needs myVoiceLearned). */

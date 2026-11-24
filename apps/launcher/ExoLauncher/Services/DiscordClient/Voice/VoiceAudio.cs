@@ -36,6 +36,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
     private int _handlerFailed;
     private bool _live;
     private EchoCanceller? _echo;
+    private LoopbackEchoReference? _loopback;
     private volatile bool _onHead; // the speakers open now are headphones or a headset
     // The frames the microphone's thread has cut and the voice thread hasn't run yet: each with when its first sample
     // was captured and when it was whole. One writer (the capture thread) and one reader (the voice thread).
@@ -81,6 +82,8 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
             LiveAudio.Begin();
         }
         if (capture && render) _echo ??= EchoCanceller.Create();
+        if (capture && VoiceProcessing.Current.LoopbackEcho && _echo is not null)
+            _loopback ??= new LoopbackEchoReference(frame => _echo?.Render(frame, Deafened));
         if (capture)
         {
             _voice ??= new Thread(Hand) { IsBackground = true, Name = "Exo voice", Priority = ThreadPriority.Highest };
@@ -94,6 +97,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
     private void Hand()
     {
         using var mmcss = MmcssTask.Join();
+        AutopilotCpuSets.PinCurrentThreadToBackgroundCores();
         WaitHandle[] waits = [_cut, _stop.Token.WaitHandle];
         while (!_stop.IsCancellationRequested)
         {
@@ -124,7 +128,8 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
 
     private void CancelEcho(float[] frame)
     {
-        var cancel = _echo is not null && !_onHead && VoiceProcessing.Current.EchoCancellation;
+        var processing = VoiceProcessing.Current;
+        var cancel = _echo is not null && (!_onHead || processing.LoopbackEcho) && processing.EchoCancellation;
         if (_echo is not null && (cancel != EchoCancelling || !_echoSaid))
         {
             (EchoCancelling, _echoSaid) = (cancel, true);
@@ -298,7 +303,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
             var format = Format();
             var processing = VoiceProcessing.Current;
             // Exo's noise suppression, when it can run; when it can't (its model not fetched yet), Windows' own takes over.
-            var exoCleans = processing.NoiseSuppression && (NoiseSuppressorDownload.Ready());
+            var exoCleans = processing.NoiseSuppression && (VoiceModels.BaselineReady() || NoiseSuppressorDownload.Ready());
             // The microphone raw: no Windows or driver "enhancements" and nothing an Equalizer APO chain (Lucid Voice) adds,
             // so Exo's noise suppression gets the voice as it is. A mic that can't give raw sound comes as Windows has it.
             // Not while Windows' noise suppression stands in: a raw stream skips it.
@@ -656,6 +661,8 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
         if (_voice is { IsAlive: true } voice) voice.Join(1000);
         // The wake event the microphone's thread sets and the voice thread waits on, once both are gone.
         if (_capture is not { IsAlive: true } && _voice is not { IsAlive: true }) _cut.Dispose();
+        _loopback?.Dispose();
+        _loopback = null;
         _echo?.Dispose();
         if (_live)
         {

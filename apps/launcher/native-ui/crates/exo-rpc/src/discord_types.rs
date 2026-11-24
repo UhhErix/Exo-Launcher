@@ -1599,6 +1599,18 @@ pub struct DiscordClientSettings {
     pub noise_suppression: bool,
     #[serde(default)]
     pub noise_suppression_kind: Option<String>,
+    #[serde(default = "default_voice_tier")]
+    pub voice_tier: String,
+    #[serde(default)]
+    pub voice_isolation: bool,
+    #[serde(default)]
+    pub loopback_echo_cancellation: bool,
+    #[serde(default)]
+    pub voice_model_ready: Option<bool>,
+    #[serde(default)]
+    pub voice_hq_model_ready: Option<bool>,
+    #[serde(default)]
+    pub voice_isolation_ready: Option<bool>,
     #[serde(default)]
     pub others_noise_suppression: bool,
     #[serde(default)]
@@ -1679,12 +1691,22 @@ fn default_voice_target_lufs() -> i32 {
     -20
 }
 
+fn default_voice_tier() -> String {
+    "auto".into()
+}
+
 impl Default for DiscordClientSettings {
     fn default() -> Self {
         Self {
             input_profile: "exo".into(),
             noise_suppression: true,
             noise_suppression_kind: Some("exo".into()),
+            voice_tier: "auto".into(),
+            voice_isolation: false,
+            loopback_echo_cancellation: false,
+            voice_model_ready: None,
+            voice_hq_model_ready: None,
+            voice_isolation_ready: None,
             others_noise_suppression: false,
             only_my_voice: false,
             my_voice_learned: None,

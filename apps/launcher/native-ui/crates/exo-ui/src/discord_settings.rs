@@ -191,10 +191,23 @@ pub fn mic_advice(level: &DiscordMicLevel) -> Option<&'static str> {
 
 pub fn suppression_detail(stage: &str) -> Option<&'static str> {
     match stage {
+        "exo-v2" => Some("Exo AI Gaming active (low CPU)"),
+        "exo-hq" => Some("Exo AI 48 kHz Studio active"),
+        "voxlock" => Some("VoxLock voice isolation active"),
+        "on" => Some("DeepFilterNet 3 fallback active"),
+        "light" => Some("Low-load mode active"),
         "missing" => Some("Not available"),
         "mic" => Some("Your microphone already does this"),
         "windows" => Some("Windows is doing this"),
         _ => None,
+    }
+}
+
+pub fn normalize_voice_tier(tier: &str) -> &'static str {
+    match tier {
+        "cpu" => "cpu",
+        "hq" | "studio" | "48k" => "hq",
+        _ => "auto",
     }
 }
 
@@ -1688,9 +1701,12 @@ fn voice_page(s: &AppState) -> El {
         "none"
     } else if client.noise_suppression_kind.as_deref() == Some("standard") {
         "standard"
+    } else if client.noise_suppression_kind.as_deref() == Some("exo-dfn3") {
+        "exo-dfn3"
     } else {
         "exo"
     };
+    let tier_val = normalize_voice_tier(&client.voice_tier);
 
     let mut page = col()
         .w_full()
@@ -1815,6 +1831,11 @@ fn voice_page(s: &AppState) -> El {
         .map(|l| db_fill_ratio(l.after))
         .unwrap_or(0.0);
     let meter_voiced = ext.mic_level.as_ref().is_some_and(|l| l.voiced);
+    let meter_db = ext
+        .mic_level
+        .as_ref()
+        .map(|l| format!("{:.0} dBFS", l.after.clamp(-100.0, 0.0)))
+        .unwrap_or_else(|| "Idle".into());
     let advice = ext.mic_level.as_ref().and_then(mic_advice);
     page = page.child(
         col()
@@ -1830,21 +1851,27 @@ fn voice_page(s: &AppState) -> El {
                     .center_y()
                     .child(text("Input level").font(type_body()).color(FG))
                     .child(
-                        text(if let Some(a) = advice {
-                            a.to_string()
-                        } else if meter_voiced {
-                            "Speaking".into()
-                        } else {
-                            "Listening".into()
-                        })
-                        .font(type_label())
-                        .color(if advice.is_some() {
-                            warn()
-                        } else if meter_voiced {
-                            good()
-                        } else {
-                            fg_muted()
-                        }),
+                        row()
+                            .gap(10.0)
+                            .center_y()
+                            .child(text(meter_db).font(type_label()).color(fg_muted()))
+                            .child(
+                                text(if let Some(a) = advice {
+                                    a.to_string()
+                                } else if meter_voiced {
+                                    "Speaking".into()
+                                } else {
+                                    "Listening".into()
+                                })
+                                .font(type_label())
+                                .color(if advice.is_some() {
+                                    warn()
+                                } else if meter_voiced {
+                                    good()
+                                } else {
+                                    fg_muted()
+                                }),
+                            ),
                     ),
             )
             .child(
@@ -1878,10 +1905,18 @@ fn voice_page(s: &AppState) -> El {
             "Voice cleanup",
             ext.mic_level
                 .as_ref()
-                .and_then(|l| suppression_detail(&l.stages.suppression)),
+                .and_then(|l| suppression_detail(&l.stages.suppression))
+                .or(
+                    if sup_val == "exo" && client.voice_model_ready == Some(false) {
+                        Some("Downloading voice add-on; DeepFilterNet 3 standing in")
+                    } else {
+                        None
+                    },
+                ),
             sup_val,
             vec![
-                ("exo", "Exo Voice"),
+                ("exo", "Exo AI"),
+                ("exo-dfn3", "DeepFilterNet 3"),
                 ("standard", "Standard"),
                 ("none", "None"),
             ],
@@ -1896,7 +1931,30 @@ fn voice_page(s: &AppState) -> El {
             },
         ));
 
+    if sup_val == "exo" {
+        page = page.child(choice_row(
+            "dc-set-voice-tier",
+            "Processing tier",
+            Some(match tier_val {
+                "cpu" => "Pinned off game cores, under 20% of one core",
+                "hq" => "48 kHz Studio; steps down if a game needs the GPU",
+                _ => "48 kHz Studio when idle, low CPU in games",
+            }),
+            tier_val,
+            vec![
+                ("auto", "Auto"),
+                ("cpu", "Low CPU"),
+                ("hq", "48 kHz Studio"),
+            ],
+            |s, next| {
+                s.save_discord_client_settings(json!({ "voiceTier": next }));
+            },
+        ));
+    }
+
     let only_my = client.only_my_voice;
+    let voice_iso = client.voice_isolation;
+    let loopback_ec = client.loopback_echo_cancellation;
     let learned = client
         .my_voice_learned
         .unwrap_or(s.discord.voice_ui.my_voice_learned);
@@ -1904,12 +1962,27 @@ fn voice_page(s: &AppState) -> El {
     page = page.child(toggle_row(
         "dc-set-only-my-voice",
         "Only my voice",
-        None,
+        Some("Uses your TitaNet voiceprint to block other voices in the room"),
         only_my,
         move |s: &mut AppState| {
             s.save_discord_client_settings(json!({ "onlyMyVoice": !only_my }));
         },
     ));
+    if only_my {
+        page = page.child(toggle_row(
+            "dc-set-voice-isolation",
+            "Separate overlapping voices",
+            Some(if client.voice_isolation_ready == Some(false) {
+                "VoxLock INT8 add-on downloads lazily when enabled"
+            } else {
+                "VoxLock INT8 target-speaker isolation"
+            }),
+            voice_iso,
+            move |s: &mut AppState| {
+                s.save_discord_client_settings(json!({ "voiceIsolation": !voice_iso }));
+            },
+        ));
+    }
     if only_my || learned {
         page = page.child(value_row(
             "Your voice",
@@ -1928,6 +2001,15 @@ fn voice_page(s: &AppState) -> El {
             }),
         ));
     }
+    page = page.child(toggle_row(
+        "dc-set-loopback-echo",
+        "Game audio echo cancellation",
+        Some("Removes speaker bleed using system audio loopback"),
+        loopback_ec,
+        move |s: &mut AppState| {
+            s.save_discord_client_settings(json!({ "loopbackEchoCancellation": !loopback_ec }));
+        },
+    ));
 
     let even_v = client.even_voices;
     let target_lufs = clamp_voice_target_lufs(client.voice_target_lufs);
