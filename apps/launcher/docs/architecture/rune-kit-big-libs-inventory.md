@@ -2,7 +2,7 @@
 
 ## Architecture
 
-- **Generic upstream-friendly crate:** `crates/rune-ui` on `UhhErix/rune` (`feat/rune-kit-big-libs` -> `exo`, PR #5, pinned rev `c73c6f51c4a49b866e115c33cc77a8c99f2c7ad8`).
+- **Generic upstream-friendly crate:** `crates/rune-ui` on `UhhErix/rune` (`exo` branch, PR #5 merged as `24e165628b5e1a59c9febda9430e3579ac7d1536`).
 - **Exo theme layer:** `apps/launcher/native-ui/crates/exo-kit/src/ui_theme.rs` layers Void (`#000`), Goeist typography, Liquid Glass (`ExoGlass`), damped springs (`SPRING_PRESS/QUICK/BASE/MOVE/FLIGHT`), and `FocusRingPolicy::SubtleFill` (no white selection outline) on top of `rune_ui::UiTheme`.
 - **Native gallery:** `examples/ui-gallery` (in `UhhErix/rune`) and `crates/exo-kit/examples/exo_gallery.rs` (Exo Void + Goeist + Liquid Glass gallery).
 
