@@ -22,11 +22,25 @@ fn read_sig_file(path: &str) -> Result<[u8; 64], String> {
     decode_hex::<64>(text).map_err(|e| e.to_string())
 }
 
+fn resolve_sign_seed(args: &[String]) -> Result<Option<[u8; 32]>, String> {
+    if let Some(var_name) = arg_val(args, "--sign-key-env") {
+        let hex = env::var(&var_name)
+            .map_err(|_| format!("signing key env var '{var_name}' is not set"))?;
+        let seed = decode_hex::<32>(hex.trim()).map_err(|e| e.to_string())?;
+        return Ok(Some(seed));
+    }
+    if let Some(seed_hex) = arg_val(args, "--sign-key-hex") {
+        let seed = decode_hex::<32>(&seed_hex).map_err(|e| e.to_string())?;
+        return Ok(Some(seed));
+    }
+    Ok(None)
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         eprintln!(
-            "usage:\n  exo-delta bench <old_dir> <new_dir> [level]\n  exo-delta build-delta <old_dir> <new_dir> <out_pack> [--level N] [--sign-key-hex HEX] [--sig-out PATH]\n  exo-delta build-full <new_dir> <out_pack> [--level N] [--sign-key-hex HEX] [--sig-out PATH]\n  exo-delta apply <base_dir> <pack> <out_dir> [--sig PATH --pubkey-hex HEX]\n  exo-delta verify <dir> <pack> [--sig PATH --pubkey-hex HEX]"
+            "usage:\n  exo-delta bench <old_dir> <new_dir> [level]\n  exo-delta build-delta <old_dir> <new_dir> <out_pack> [--level N] [--sign-key-env VAR | --sign-key-hex HEX] [--sig-out PATH]\n  exo-delta build-full <new_dir> <out_pack> [--level N] [--sign-key-env VAR | --sign-key-hex HEX] [--sig-out PATH]\n  exo-delta sign <pack> (--sign-key-env VAR | --sign-key-hex HEX) [--sig-out PATH]\n  exo-delta apply <base_dir> <pack> <out_dir> [--sig PATH --pubkey-hex HEX]\n  exo-delta verify <dir> <pack> [--sig PATH --pubkey-hex HEX]"
         );
         std::process::exit(2);
     }
@@ -97,8 +111,7 @@ fn run(args: &[String]) -> Result<(), String> {
                     build_delta_pack(&PathBuf::from(&args[2]), &PathBuf::from(&args[3]), level)
                         .map_err(|e| e.to_string())?;
                 fs::write(&args[4], &pack).map_err(|e| e.to_string())?;
-                if let Some(seed_hex) = arg_val(args, "--sign-key-hex") {
-                    let seed = decode_hex::<32>(&seed_hex).map_err(|e| e.to_string())?;
+                if let Some(seed) = resolve_sign_seed(args)? {
                     let (sig, pubkey) = sign_pack(&pack, &seed).map_err(|e| e.to_string())?;
                     let sig_path =
                         arg_val(args, "--sig-out").unwrap_or_else(|| format!("{}.sig", args[4]));
@@ -128,8 +141,7 @@ fn run(args: &[String]) -> Result<(), String> {
                 let (pack, stats) =
                     build_full_pack(&PathBuf::from(&args[2]), level).map_err(|e| e.to_string())?;
                 fs::write(&args[3], &pack).map_err(|e| e.to_string())?;
-                if let Some(seed_hex) = arg_val(args, "--sign-key-hex") {
-                    let seed = decode_hex::<32>(&seed_hex).map_err(|e| e.to_string())?;
+                if let Some(seed) = resolve_sign_seed(args)? {
                     let (sig, pubkey) = sign_pack(&pack, &seed).map_err(|e| e.to_string())?;
                     let sig_path =
                         arg_val(args, "--sig-out").unwrap_or_else(|| format!("{}.sig", args[3]));
@@ -143,6 +155,22 @@ fn run(args: &[String]) -> Result<(), String> {
                     stats.total_files,
                     encode_hex(&stats.tree_blake3)
                 );
+                Ok(())
+            }
+        }
+        "sign" => {
+            if args.len() < 3 {
+                Err("sign requires <pack> (--sign-key-env VAR | --sign-key-hex HEX)".into())
+            } else {
+                let seed = resolve_sign_seed(args)?.ok_or_else(|| {
+                    "sign requires --sign-key-env VAR or --sign-key-hex HEX".to_string()
+                })?;
+                let pack = fs::read(&args[2]).map_err(|e| e.to_string())?;
+                let (sig, pubkey) = sign_pack(&pack, &seed).map_err(|e| e.to_string())?;
+                let sig_path =
+                    arg_val(args, "--sig-out").unwrap_or_else(|| format!("{}.sig", args[2]));
+                fs::write(&sig_path, encode_hex(&sig)).map_err(|e| e.to_string())?;
+                println!("signed={} pubkey={}", sig_path, encode_hex(&pubkey));
                 Ok(())
             }
         }

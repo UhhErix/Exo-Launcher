@@ -52,6 +52,23 @@ fn resolve_root(args: &[String]) -> Result<InstallRoot, String> {
     }
 }
 
+fn install_from_pack_file(
+    root: &InstallRoot,
+    pack_path: &Path,
+    sig_path: Option<&Path>,
+    version: &str,
+    trusted_pk: &[u8; 32],
+) -> Result<exo_installer::swap::SwapResult, String> {
+    let bytes = fs::read(pack_path).map_err(|e| e.to_string())?;
+    let sig_file =
+        sig_path.ok_or_else(|| "unsigned pack refused: --sig is required".to_string())?;
+    let sig_path_str = sig_file
+        .to_str()
+        .ok_or_else(|| "invalid sig path".to_string())?;
+    let sig = read_sig(sig_path_str)?;
+    stage_and_swap(root, &bytes, version, Some((&sig, trusted_pk))).map_err(|e| e.to_string())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -126,13 +143,16 @@ fn main() {
         if has_flag(&args, "--install") || has_flag(&args, "--update") {
             let root = resolve_root(&args)?;
             let version = arg_val(&args, "--version").unwrap_or_else(|| "4.0.0".to_string());
-            let (pack_bytes, sig_pair) = if let Some(pack_path) = arg_val(&args, "--pack") {
-                let bytes = fs::read(&pack_path).map_err(|e| e.to_string())?;
-                let sig_path = arg_val(&args, "--sig")
-                    .ok_or("unsigned pack refused: --sig is required".to_string())?;
-                let sig = read_sig(&sig_path)?;
+            let swap = if let Some(pack_path) = arg_val(&args, "--pack") {
+                let sig_path = arg_val(&args, "--sig").map(PathBuf::from);
                 let pk = resolve_trusted_pubkey(&args, &root)?;
-                (bytes, Some((sig, pk)))
+                install_from_pack_file(
+                    &root,
+                    &PathBuf::from(pack_path),
+                    sig_path.as_deref(),
+                    &version,
+                    &pk,
+                )?
             } else {
                 let exe = env::current_exe().map_err(|e| e.to_string())?;
                 let emb = read_embedded_payload(&exe)
@@ -143,16 +163,14 @@ fn main() {
                 } else {
                     resolve_trusted_pubkey(&args, &root)?
                 };
-                (emb.pack, Some((emb.signature, trusted_pk)))
+                stage_and_swap(
+                    &root,
+                    &emb.pack,
+                    &version,
+                    Some((&emb.signature, &trusted_pk)),
+                )
+                .map_err(|e| e.to_string())?
             };
-
-            let swap = stage_and_swap(
-                &root,
-                &pack_bytes,
-                &version,
-                sig_pair.as_ref().map(|(s, p)| (s, p)),
-            )
-            .map_err(|e| e.to_string())?;
 
             let installed_bytes: u64 = walk_size(&root.app_dir());
             let self_exe =
@@ -379,19 +397,36 @@ mod tests {
         assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
 
         let (v2_delta, _) = build_delta_pack(&v1_src, &v2_src, 6).unwrap();
+        let (v2_valid_sig, _) = sign_pack(&v2_delta, &trusted_seed).unwrap();
         let (wrong_sig, _) = sign_pack(&v2_delta, &wrong_seed).unwrap();
+        let pack_file = v2_src.join("delta.exopack");
+        fs::write(&pack_file, &v2_delta).unwrap();
 
         let unsigned_err = stage_and_swap(&root, &v2_delta, "4.0.1", None).unwrap_err();
         assert!(matches!(
             unsigned_err,
             exo_installer::InstallError::SafetyRefusal(_)
         ));
+        let unsigned_file_err =
+            install_from_pack_file(&root, &pack_file, None, "4.0.1", &trusted_pubkey).unwrap_err();
+        assert!(unsigned_file_err.contains("unsigned pack refused"));
         assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
         assert_eq!(
             fs::read(root.app_dir().join("ExoLauncher.exe")).unwrap(),
             b"v1-trusted-binary"
         );
 
+        let wrong_sig_file = v2_src.join("wrong.sig");
+        fs::write(&wrong_sig_file, encode_hex(&wrong_sig)).unwrap();
+        let wrong_key_file_err = install_from_pack_file(
+            &root,
+            &pack_file,
+            Some(&wrong_sig_file),
+            "4.0.1",
+            &trusted_pubkey,
+        )
+        .unwrap_err();
+        assert!(!wrong_key_file_err.is_empty());
         let wrong_key_err = stage_and_swap(
             &root,
             &v2_delta,
@@ -403,6 +438,58 @@ mod tests {
             wrong_key_err,
             exo_installer::InstallError::Delta(exo_delta::DeltaError::SignatureInvalid(_))
         ));
+        assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
+        assert_eq!(
+            fs::read(root.app_dir().join("ExoLauncher.exe")).unwrap(),
+            b"v1-trusted-binary"
+        );
+
+        let trunc_hex_sig_file = v2_src.join("trunc-hex.sig");
+        let full_hex = encode_hex(&v2_valid_sig);
+        fs::write(&trunc_hex_sig_file, &full_hex[..64]).unwrap();
+        let trunc_hex_err = install_from_pack_file(
+            &root,
+            &pack_file,
+            Some(&trunc_hex_sig_file),
+            "4.0.1",
+            &trusted_pubkey,
+        )
+        .unwrap_err();
+        assert!(!trunc_hex_err.is_empty());
+        assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
+        assert_eq!(
+            fs::read(root.app_dir().join("ExoLauncher.exe")).unwrap(),
+            b"v1-trusted-binary"
+        );
+
+        let trunc_raw_sig_file = v2_src.join("trunc-raw.sig");
+        fs::write(&trunc_raw_sig_file, &v2_valid_sig[..32]).unwrap();
+        let trunc_raw_err = install_from_pack_file(
+            &root,
+            &pack_file,
+            Some(&trunc_raw_sig_file),
+            "4.0.1",
+            &trusted_pubkey,
+        )
+        .unwrap_err();
+        assert!(!trunc_raw_err.is_empty());
+        assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
+        assert_eq!(
+            fs::read(root.app_dir().join("ExoLauncher.exe")).unwrap(),
+            b"v1-trusted-binary"
+        );
+
+        let empty_sig_file = v2_src.join("empty.sig");
+        fs::write(&empty_sig_file, b"").unwrap();
+        let empty_sig_err = install_from_pack_file(
+            &root,
+            &pack_file,
+            Some(&empty_sig_file),
+            "4.0.1",
+            &trusted_pubkey,
+        )
+        .unwrap_err();
+        assert!(!empty_sig_err.is_empty());
         assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
         assert_eq!(
             fs::read(root.app_dir().join("ExoLauncher.exe")).unwrap(),
