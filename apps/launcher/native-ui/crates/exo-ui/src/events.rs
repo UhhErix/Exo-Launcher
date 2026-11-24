@@ -34,6 +34,14 @@ pub enum HostEventKind {
     DiscordGoLive,
     DiscordGoLiveStats,
     DiscordGoLiveViewers,
+    DiscordCall,
+    DiscordCallSong,
+    DiscordCamera,
+    DiscordKeybind,
+    DiscordMicLevel,
+    DiscordTts,
+    DiscordUserSettings,
+    DiscordVideoKeyframe,
     DevicesChanged,
     AppsChanged,
     MusicVolume,
@@ -100,6 +108,14 @@ impl HostEventKind {
             HostEvent::DiscordGoLive(_) => Self::DiscordGoLive,
             HostEvent::DiscordGoLiveStats(_) => Self::DiscordGoLiveStats,
             HostEvent::DiscordGoLiveViewers(_) => Self::DiscordGoLiveViewers,
+            HostEvent::DiscordCall(_) => Self::DiscordCall,
+            HostEvent::DiscordCallSong(_) => Self::DiscordCallSong,
+            HostEvent::DiscordCamera { .. } => Self::DiscordCamera,
+            HostEvent::DiscordKeybind { .. } => Self::DiscordKeybind,
+            HostEvent::DiscordMicLevel(_) => Self::DiscordMicLevel,
+            HostEvent::DiscordTts(_) => Self::DiscordTts,
+            HostEvent::DiscordUserSettings(_) => Self::DiscordUserSettings,
+            HostEvent::DiscordVideoKeyframe { .. } => Self::DiscordVideoKeyframe,
             HostEvent::DevicesChanged => Self::DevicesChanged,
             HostEvent::AppsChanged => Self::AppsChanged,
             HostEvent::MusicVolume(_) => Self::MusicVolume,
@@ -375,14 +391,14 @@ fn register_discord(reg: &mut EventRegistry) {
             return false;
         };
         state.handle_discord_voice(v);
-        state.room == Room::Discord
+        true
     });
     reg.on(HostEventKind::DiscordSpeaking, |state, ev| {
         let HostEvent::DiscordSpeaking { user_id, speaking } = ev else {
             return false;
         };
         state.handle_discord_speaking(&user_id, speaking);
-        state.room == Room::Discord
+        state.room == Room::Discord || state.discord.voice.state != "off"
     });
     reg.on(HostEventKind::DiscordMessage, |state, ev| {
         let HostEvent::DiscordMessage(msg) = ev else {
@@ -418,7 +434,7 @@ fn register_discord(reg: &mut EventRegistry) {
         let HostEvent::DiscordColors { guild_id } = ev else {
             return false;
         };
-        state.handle_discord_colors(&guild_id)
+        state.handle_discord_colors(&guild_id) | state.handle_discord_colors_event(&guild_id)
     });
     reg.on(HostEventKind::DiscordOpen, |state, ev| {
         let HostEvent::DiscordOpen(op) = ev else {
@@ -488,6 +504,52 @@ fn register_discord(reg: &mut EventRegistry) {
         state.handle_discord_golive_viewers(ids);
         state.room == Room::Discord
     });
+    reg.on(HostEventKind::DiscordCall, |state, ev| {
+        let HostEvent::DiscordCall(call) = ev else {
+            return false;
+        };
+        state.handle_discord_call_event(call);
+        true
+    });
+    reg.on(HostEventKind::DiscordCallSong, |state, ev| {
+        let HostEvent::DiscordCallSong(song) = ev else {
+            return false;
+        };
+        state.handle_discord_call_song(song);
+        state.room == Room::Discord || state.discord.voice.state != "off"
+    });
+    reg.on(HostEventKind::DiscordCamera, |state, ev| {
+        let HostEvent::DiscordCamera { state: cam_state } = ev else {
+            return false;
+        };
+        state.handle_discord_camera_event(&cam_state);
+        state.room == Room::Discord
+    });
+    reg.on(HostEventKind::DiscordKeybind, |state, ev| {
+        let HostEvent::DiscordKeybind { action } = ev else {
+            return false;
+        };
+        state.handle_discord_keybind(&action)
+    });
+    reg.on(HostEventKind::DiscordMicLevel, |state, ev| {
+        let HostEvent::DiscordMicLevel(lvl) = ev else {
+            return false;
+        };
+        state.handle_discord_mic_level(lvl)
+    });
+    reg.on(HostEventKind::DiscordTts, |state, ev| {
+        let HostEvent::DiscordTts(t) = ev else {
+            return false;
+        };
+        state.handle_discord_tts(t)
+    });
+    reg.on(HostEventKind::DiscordUserSettings, |state, ev| {
+        let HostEvent::DiscordUserSettings(patch) = ev else {
+            return false;
+        };
+        state.handle_discord_user_settings_event(&patch)
+    });
+    reg.on(HostEventKind::DiscordVideoKeyframe, |_state, _ev| false);
 }
 
 fn register_pc(reg: &mut EventRegistry) {

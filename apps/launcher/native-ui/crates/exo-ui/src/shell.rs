@@ -2,9 +2,9 @@ use crate::events::EventRegistry;
 use crate::gamepad::GamepadKind;
 use crate::state::{AppState, ContextMenuTarget, HostStatus, InputMode, MiniBarSlot, Room};
 use crate::{
-    boot, captures, clients_gate, discord, downloads, game_page, gamepad, island, key_modal,
-    library, menus, music, notice, palette, pc, report, settings, settings_account, setup, store,
-    store_media, whats_new,
+    boot, captures, clients_gate, discord, discord_voice, downloads, game_page, gamepad, island,
+    key_modal, library, menus, music, notice, palette, pc, report, settings, settings_account,
+    setup, store, store_media, whats_new,
 };
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
@@ -1068,6 +1068,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             ],
         );
 
+    let island_call = discord_voice::island_call_capsule(s, budget.top_bar_nav);
     let top_bar = el()
         .key("top-bar")
         .window_drag()
@@ -1098,8 +1099,10 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             row()
                 .pin(Some(0.0), Some(8.0), Some(0.0), None)
                 .h(36.0)
+                .gap(8.0)
                 .justify_center()
                 .center_y()
+                .children(island_call)
                 .child(nav),
         )
         .child(
@@ -1202,6 +1205,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     if !s.media.captures_open && s.room == Room::Discord {
         root = root.children(discord::overlay_layers(s, budget.overlay));
+    }
+    if let Some(ring) = discord_voice::incoming_call_overlay(s, budget.overlay) {
+        root = root.child(ring);
     }
     if s.capture_menu_open {
         root = root.children(captures::popover_layers(s, budget.overlay));

@@ -8,9 +8,9 @@
     "wooting-native 57db49a"
   ],
   "totals": {
-    "DONE": 155,
-    "PARTIAL": 33,
-    "MISSING": 48,
+    "DONE": 175,
+    "PARTIAL": 24,
+    "MISSING": 37,
     "BROKEN": 2,
     "total": 238
   },
@@ -1307,14 +1307,14 @@
       "id": "discord-13",
       "room": "Discord",
       "feature": "Threads and forum channels",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/Forum.tsx:4",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_admin.rs:2027",
       "rpc": [
         "discord.thread",
         "discord.threads"
       ],
-      "notes": "",
+      "notes": "Forum post list, tag filter, search, New post composer, archived toggle, and sidebar active thread rows under parent channels.",
       "workPackage": "WP7"
     },
     {
@@ -1413,11 +1413,14 @@
       "id": "discord-21",
       "room": "Discord",
       "feature": "User menu (message, call, nickname, timeout, kick/ban, report)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/UserMenu.tsx:71",
-      "nativeRef": "exo-ui/src/menus.rs:1288†",
-      "rpc": [],
-      "notes": "No change nickname, timeout, transfer ownership, report.",
+      "nativeRef": "exo-ui/src/menus.rs:1502",
+      "rpc": [
+        "discord.admin",
+        "discord.report"
+      ],
+      "notes": "Full UserMenu parity: profile, message, call, friend/block/ignore, report, change nickname, timeout durations/clear, kick, ban (with delete history), transfer ownership, Developer Mode ID.",
       "workPackage": "WP7"
     },
     {
@@ -1451,142 +1454,153 @@
       "id": "discord-24",
       "room": "Discord",
       "feature": "Voice call stage (tiles, speaking ring, blurred avatar backdrop, Members column, fit-to-stage solo tile)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/voice.tsx:262",
-      "nativeRef": "exo-ui/src/discord_voice.rs:686",
+      "nativeRef": "exo-ui/src/discord_voice.rs:26",
       "rpc": [
         "discord.voice"
       ],
-      "notes": "Missing backdrop, right Members column, solo tile sizing; speaking ring unverified (room-discord report).",
+      "notes": "fit_tiles 16:9 dynamic grid/solo sizing, blurred avatar backdrop via El::blur(36.0), inset 2px speaking ring respecting per-user mute, right Members column.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-25",
       "room": "Discord",
       "feature": "Camera and screen share (Go Live picker, preview, stream sound)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/GoLivePicker.tsx:1",
-      "nativeRef": "exo-ui/src/discord_voice.rs:229",
+      "nativeRef": "exo-ui/src/discord_voice.rs:658",
       "rpc": [
         "discord.golive",
         "discord.stream",
         "discord.camera"
       ],
-      "notes": "Popover position wrong; no \"Change what you share\", hide preview.",
+      "notes": "2-step Go Live popover anchored over Share, Step 2 preview + quality/fps/sound/Go Live, self stream tile with Hide/Show preview, Change what you share, Stop streaming, camera event handling.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-26",
       "room": "Discord",
       "feature": "Stage channels (start, audience, move to audience)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/voice.tsx:367",
-      "nativeRef": null,
-      "rpc": [],
-      "notes": "",
+      "nativeRef": "exo-ui/src/discord_voice.rs:1872",
+      "rpc": [
+        "discord.voice"
+      ],
+      "notes": "StageBanner (start/edit/end stage, request/cancel to speak, join stage), StageAudience with Invite to speak / Bring to stage, and Move to audience on speaker tiles.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-27",
       "room": "Discord",
       "feature": "Soundboard + call songs",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/voice.tsx:213",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_voice.rs:1124",
       "rpc": [
         "discord.soundboard",
         "discord.sound",
         "discord.callSongs"
       ],
-      "notes": "discord.callSong event not handled.",
+      "notes": "Soundboard popover with search, local mute/volume, multi-guild sections, action:'list'; Call Songs chips synced via discord.callSongs + discord.callSong push event.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-28",
       "room": "Discord",
       "feature": "Mic test / monitor",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/settings/VoicePage.tsx:253",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_settings.rs:1639",
       "rpc": [
         "discord.micTest",
         "discord.micMonitor"
       ],
-      "notes": "discord.micLevel event not handled.",
+      "notes": "Live mic level meter, voiced/gate indicator, mic advice, and Hear yourself monitor toggle via discord.micTest / discord.micMonitor + discord.micLevel event.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-29",
       "room": "Discord",
       "feature": "Incoming-call ring / call UI over any room",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/shell/ExoIslandCall.tsx:20",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_voice.rs:2634",
       "rpc": [
         "discord.call"
       ],
-      "notes": "discord.call / discord.tts events not handled.",
+      "notes": "Exo Island call capsule in shell top bar over any room + incoming call overlay with Answer / Video / Decline via discord.call / discord.ring / discord.tts events.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-30",
       "room": "Discord",
       "feature": "Server menu (invite, create channel/category/event, notifications, leave)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/ServerMenu.tsx:1",
-      "nativeRef": "exo-ui/src/menus.rs:1092†",
-      "rpc": [],
-      "notes": "Missing create category/event, privacy settings, per-server profile, report.",
+      "nativeRef": "exo-ui/src/menus.rs:1117",
+      "rpc": [
+        "discord.server",
+        "discord.admin",
+        "discord.report"
+      ],
+      "notes": "Invite dialog, Show all channels, Server settings submenu, Privacy settings, Per-server profile, Create channel/category/event, Move to rail/folder submenu, Report server, Leave server.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-31",
       "room": "Discord",
       "feature": "Channel menu (mute, mark read, edit, delete, copy link)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/Channels.tsx:20",
-      "nativeRef": "exo-ui/src/menus.rs:960†",
-      "rpc": [],
-      "notes": "Channel status items skipped.",
+      "nativeRef": "exo-ui/src/menus.rs:948",
+      "rpc": [
+        "discord.channel",
+        "discord.server",
+        "discord.admin"
+      ],
+      "notes": "Includes Set/Clear voice channel status, Mark read, Invite dialog, Copy link, Mute, Notifications, Edit channel settings, Delete channel, Copy ID.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-32",
       "room": "Discord",
       "feature": "Server settings (overview, roles, emoji, moderation, automod, onboarding, guide)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/ServerSettings.tsx:45",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_admin.rs:1555",
       "rpc": [
         "discord.admin"
       ],
-      "notes": "10+ settings pages: settingsRoles, settingsExpressions, settingsModeration, settingsAutomod, settingsOnboarding, settingsGuide, settingsAccess, settingsRoleLinks, settingsPages, ServerSettings. None natively.",
+      "notes": "Full permission-gated Server Settings modal covering all 23 React server sections (Profile, Tag, Engagement, Boost, Emoji, Stickers, Soundboard, Members, Roles, Invites, Access, Integrations, AppDirectory, Safety, AutoMod, AuditLog, Bans, Community, Onboarding, Guide, Discovery, Template, Delete).",
       "workPackage": "WP7"
     },
     {
       "id": "discord-33",
       "room": "Discord",
       "feature": "Channel settings (overview, permissions, slowmode)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/ChannelSettings.tsx:34",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_admin.rs:1434",
       "rpc": [
         "discord.admin"
       ],
-      "notes": "",
+      "notes": "Overview (name, topic, slowmode stops, age-restricted, voice bitrate & user limit), tri-state Permissions overwrites, and Delete confirm.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-34",
       "room": "Discord",
       "feature": "Server pages (events, resources, get started, members)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/serverPages.tsx:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_admin.rs:2305",
       "rpc": [
-        "discord.admin"
+        "discord.admin",
+        "discord.server"
       ],
-      "notes": "events.tsx: create/start/edit/cancel events.",
+      "notes": "Server Guide (welcome, tasks, resources with side preview), Events dialog (list, RSVP, start/end/cancel, create), Browse channels opt-in, and Members page with search & prune.",
       "workPackage": "WP7"
     },
     {
@@ -1606,67 +1620,71 @@
       "id": "discord-36",
       "room": "Discord",
       "feature": "Shop (collectibles, bundles, payment)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/ShopPage.tsx:124",
-      "nativeRef": "exo-ui/src/discord.rs:3434",
+      "nativeRef": "exo-ui/src/discord_admin.rs:2754",
       "rpc": [
         "discord.shop"
       ],
-      "notes": "Placeholder title only.",
+      "notes": "Catalog tabs (Featured, Avatar decorations, Profile effects, Nameplates, Your collection), search, product detail dialog, equip/remove, payment picker & checkout.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-37",
       "room": "Discord",
       "feature": "User settings: Account / Profile",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/settings/AccountPages.tsx:1",
-      "nativeRef": "exo-ui/src/discord.rs:3871†",
+      "nativeRef": "exo-ui/src/discord_settings.rs:1187",
       "rpc": [
         "discord.account",
         "discord.userSettings"
       ],
-      "notes": "discord.userSettings event not handled.",
+      "notes": "Account overview, MFA & Logged-in devices session revoke, User & per-server Profile editor, server tags, Custom status modal, and live discord.userSettings event sync.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-38",
       "room": "Discord",
       "feature": "User settings: Voice and video (devices, volumes, noise suppression, echo, AGC)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/settings/VoicePage.tsx:19",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_settings.rs:1639",
       "rpc": [
-        "discord.clientSettings"
+        "discord.audio",
+        "discord.clientSettings",
+        "discord.myVoice"
       ],
-      "notes": "clientSettings noise suppression / echo / AGC not wired (room-discord report).",
+      "notes": "Input/output devices, piecewise volume curves, mic test/monitor, voice cleanup (Auto/Custom), noise suppression, echo, AGC, sensitivity, Only my voice, PTT, attenuation, screen share defaults.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-39",
       "room": "Discord",
       "feature": "User settings: Notifications / App / Privacy / Keybinds",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/settings/AppPages.tsx:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_settings.rs:2311",
       "rpc": [
         "discord.userSettings",
-        "discord.account"
+        "discord.account",
+        "discord.sound",
+        "discord.clientSettings"
       ],
-      "notes": "discord.keybind event not handled (global push-to-talk).",
+      "notes": "Notifications + 13 call sound previews, Chat/Display/Zoom/TTS/Streamer Mode, Privacy, Keybinds with live VK capture & discord.keybind event, and Connected apps.",
       "workPackage": "WP7"
     },
     {
       "id": "discord-40",
       "room": "Discord",
       "feature": "Report message/user/server",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/Report.tsx:2",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_admin.rs:1868",
       "rpc": [
         "discord.report"
       ],
-      "notes": "",
+      "notes": "Dynamic decision-tree Report modal for messages, users, and servers with breadcrumbs, multi-select, free_text, block/ignore/delete actions, and submit.",
       "workPackage": "WP7"
     },
     {
@@ -1687,14 +1705,14 @@
       "id": "discord-42",
       "room": "Discord",
       "feature": "Colors / font / Streamer mode",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/discord/DiscordClient.tsx:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/discord_settings.rs:793",
       "rpc": [
         "discord.colors",
         "discord.font"
       ],
-      "notes": "discord.colors event not handled.",
+      "notes": "Guild colors fetch & discord.colors push event, DisplayNameFont -> discord.font preload, role color styles (username/dot/hidden), Streamer Mode banner & toggle.",
       "workPackage": "WP7"
     },
     {
@@ -1728,11 +1746,11 @@
       "id": "discord-45",
       "room": "Discord",
       "feature": "Top-bar cursor over open menu",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/discord/Chat.tsx:1",
-      "nativeRef": null,
+      "nativeRef": "exo-kit/src/menu.rs:351",
       "rpc": [],
-      "notes": "Blocked on a Rune change (room-discord report).",
+      "notes": "Resolved via Rune El::modal_live([\"top-bar\"]) in context_menu_layers_live; verified 10/10 top-bar pointer cursor probes across status, DM, and channel menus in live parity.",
       "workPackage": "WP7"
     },
     {

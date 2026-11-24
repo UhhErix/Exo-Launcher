@@ -4,11 +4,13 @@ mod boot;
 mod captures;
 mod clients_gate;
 mod discord;
+mod discord_admin;
 mod discord_chat;
 mod discord_chat_state;
 mod discord_md;
 mod discord_pickers;
 mod discord_search;
+mod discord_settings;
 mod discord_state;
 mod discord_threads;
 mod discord_voice;
@@ -153,7 +155,55 @@ fn step_discord_channel(s: &mut AppState, dir: isize, unread_only: bool) -> bool
     true
 }
 
+fn key_to_vk(key: &Key) -> Option<u32> {
+    match key {
+        Key::Escape => Some(27),
+        Key::Enter => Some(13),
+        Key::Tab => Some(9),
+        Key::Backspace => Some(8),
+        Key::Delete => Some(46),
+        Key::Left => Some(37),
+        Key::Up => Some(38),
+        Key::Right => Some(39),
+        Key::Down => Some(40),
+        Key::Home => Some(36),
+        Key::End => Some(35),
+        Key::PageUp => Some(33),
+        Key::PageDown => Some(34),
+        Key::Function(n) if (1..=24).contains(n) => Some(111 + u32::from(*n)),
+        Key::Text(t) => {
+            let ch = t.chars().next()?.to_ascii_uppercase();
+            if ch == ' ' {
+                Some(32)
+            } else if ch.is_ascii_alphanumeric() {
+                Some(ch as u32)
+            } else {
+                match ch {
+                    ';' => Some(186),
+                    '=' => Some(187),
+                    ',' => Some(188),
+                    '-' => Some(189),
+                    '.' => Some(190),
+                    '/' => Some(191),
+                    '`' => Some(192),
+                    '[' => Some(219),
+                    '\\' => Some(220),
+                    ']' => Some(221),
+                    '\'' => Some(222),
+                    _ => None,
+                }
+            }
+        }
+        _ => None,
+    }
+}
+
 fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if s.discord.settings_ext.recording_keybind.is_some()
+        && let Some(vk) = key_to_vk(&ev.key)
+    {
+        return s.record_discord_keybind_vk(vk);
+    }
     if s.driver_install_overlay_visible() {
         if ev.key == Key::Escape {
             return s.dismiss_top_layer();
@@ -1467,8 +1517,8 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     &serde_json::json!({}),
                     Duration::from_secs(6),
                 ) {
-                    state.discord.active_dm_id = home.dms.first().map(|d| d.id.clone());
                     state.discord.home = home;
+                    state.discord.active_dm_id = state.default_dm_id();
                 }
                 if let Ok(fr) = client.call_blocking::<_, exo_rpc::DiscordFriendsReply>(
                     exo_rpc::METHOD_DISCORD_FRIENDS,
@@ -1509,24 +1559,35 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                             .home
                             .dms
                             .iter()
-                            .find(|d| d.id == dm_id)
+                            .find(|d| d.id == dm_id && !d.group)
                             .and_then(|d| d.user_id.clone())
-                            && let Ok(prof) = client
+                        {
+                            if let Ok(prof) = client
                                 .call_blocking::<_, exo_rpc::DiscordProfileReply>(
                                     exo_rpc::METHOD_DISCORD_PROFILE,
                                     &serde_json::json!({ "userId": uid }),
-                                    Duration::from_secs(5),
+                                    Duration::from_secs(6),
                                 )
-                        {
-                            if let Some(ref n) = prof.note {
-                                state.discord.chat.dm_sidebar_note_uid = Some(uid.clone());
-                                state.discord.chat.dm_sidebar_note.text = n.clone();
+                                && prof.ok
+                            {
+                                state.discord.profile_note_user = Some(uid.clone());
+                                state.discord.profile_note_input =
+                                    rune::TextEdit::new(prof.note.as_deref().unwrap_or(""));
+                                state
+                                    .discord
+                                    .chat
+                                    .dm_profile_cache
+                                    .insert(format!("{uid}:"), prof.clone());
+                                state.discord.profiles_by_user.insert(uid.clone(), prof);
                             }
-                            state
-                                .discord
-                                .chat
-                                .dm_profile_cache
-                                .insert(format!("{uid}:"), prof);
+                            if let Ok(mf) = client.call_blocking::<_, exo_rpc::DiscordProfileReply>(
+                                exo_rpc::METHOD_DISCORD_PROFILE,
+                                &serde_json::json!({ "userId": uid, "mutualFriends": true }),
+                                Duration::from_secs(6),
+                            ) && let Some(friends) = mf.friends
+                            {
+                                state.discord.mutual_friends_by_user.insert(uid, friends);
+                            }
                         }
                     }
                 }
@@ -1554,6 +1615,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                                 .or_else(|| chans.channels.iter().find(|c| c.kind != "category"))
                                 .map(|c| c.id.clone())
                         };
+                        state.sync_collapsed_categories(&chans);
                         state.discord.channels_by_guild.insert(gid.clone(), chans);
                         if let Some(cid) = first_cid {
                             state.discord.active_channel_id = Some(cid.clone());
@@ -2654,6 +2716,7 @@ fn run_parity_probe(
         "command-palette",
         "pc-part-menu",
         "library-filter-pop",
+        "dc-golive-panel",
     ];
     let legacy_menu_prefixes = ["dc-status-menu", "dc-menu"];
     let mut menu_items: Vec<String> = Vec::new();
@@ -5059,5 +5122,240 @@ mod motion_audit {
         if let Some(p) = s.media.playback.as_ref() {
             assert_eq!(p.position_ms, Some(42_000));
         }
+    }
+
+    #[test]
+    fn wp7_top_bar_cursor_stays_pointer_over_open_discord_menus() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_guild("g-exo");
+            s.open_discord_channel("ch-general");
+        });
+        rt.frame(0.0);
+
+        for target in [
+            crate::state::ContextMenuTarget::DiscordStatusMenu,
+            crate::state::ContextMenuTarget::DiscordChannel {
+                channel_id: "ch-general".into(),
+                name: "general".into(),
+                guild_id: "g-exo".into(),
+                kind: "text".into(),
+                unread: false,
+                muted: false,
+                can_edit: true,
+                can_manage: true,
+            },
+            crate::state::ContextMenuTarget::DiscordDm {
+                dm_id: "dm-aria".into(),
+                user_id: Some("u-aria".into()),
+                name: "Aria".into(),
+                username: Some("aria".into()),
+                unread: false,
+                muted: false,
+                group: false,
+            },
+        ] {
+            rt.update(|s, _| s.open_context_menu(target.clone(), 420.0, 320.0));
+            for _ in 0..20 {
+                rt.frame(1.0 / 60.0);
+            }
+            let (nx, ny) = rt.find("nav-library").expect("nav-library");
+            rt.pointer_move(nx, ny);
+            rt.frame(1.0 / 60.0);
+            assert_eq!(
+                rt.cursor(),
+                rune::Cursor::Pointer,
+                "nav-library should keep pointer cursor over {target:?}"
+            );
+            let (sx, sy) = rt.find("search-capsule").expect("search-capsule");
+            rt.pointer_move(sx, sy);
+            rt.frame(1.0 / 60.0);
+            assert_eq!(
+                rt.cursor(),
+                rune::Cursor::Pointer,
+                "search-capsule should keep pointer cursor over {target:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn wp7_event_registry_handles_all_new_discord_push_events() {
+        let mut s = AppState::default();
+        s.switch_room(Room::Discord);
+
+        s.apply_host_event(exo_rpc::HostEvent::DiscordCall(exo_rpc::DiscordCallEvent {
+            channel_id: "dm-aria".into(),
+            ringing: true,
+        }));
+        assert_eq!(
+            s.discord.voice_ui.ringing_channel_id.as_deref(),
+            Some("dm-aria")
+        );
+
+        s.apply_host_event(exo_rpc::HostEvent::DiscordCall(exo_rpc::DiscordCallEvent {
+            channel_id: "dm-aria".into(),
+            ringing: false,
+        }));
+        assert!(s.discord.voice_ui.ringing_channel_id.is_none());
+
+        s.apply_host_event(exo_rpc::HostEvent::DiscordCallSong(
+            exo_rpc::DiscordCallSong {
+                user_id: "u2".into(),
+                name: "Aria".into(),
+                avatar: None,
+                rich: Some(exo_rpc::DiscordRich {
+                    name: "Spotify".into(),
+                    details: Some("Synthwave".into()),
+                    state: Some("Artist".into()),
+                    ..Default::default()
+                }),
+                paused: false,
+            },
+        ));
+        assert_eq!(s.discord.voice_ui.call_songs.len(), 1);
+
+        s.apply_host_event(exo_rpc::HostEvent::DiscordCamera {
+            state: "live".into(),
+        });
+        assert!(s.discord.voice_ui.camera_on);
+
+        s.apply_host_event(exo_rpc::HostEvent::DiscordColors {
+            guild_id: "g-exo".into(),
+        });
+
+        s.apply_host_event(exo_rpc::HostEvent::DiscordKeybind {
+            action: "TOGGLE_STREAMER_MODE".into(),
+        });
+        assert!(s.discord.settings_ext.streamer_mode);
+
+        s.apply_host_event(exo_rpc::HostEvent::DiscordMicLevel(
+            exo_rpc::DiscordMicLevel {
+                level: 0.55,
+                voiced: true,
+                ..Default::default()
+            },
+        ));
+        assert!(
+            s.discord
+                .settings_ext
+                .mic_level
+                .as_ref()
+                .is_some_and(|m| m.voiced)
+        );
+
+        s.apply_host_event(exo_rpc::HostEvent::DiscordUserSettings(
+            serde_json::json!({ "developerMode": true, "messageDisplayCompact": true }),
+        ));
+        assert!(s.discord.developer_mode);
+        assert!(s.discord.chat_compact);
+    }
+
+    #[test]
+    fn wp7_voice_island_incoming_call_golive_and_settings_render_cleanly() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Library);
+            s.discord.voice_ui.ringing_channel_id = Some("dm-aria".into());
+        });
+        rt.frame(0.0);
+        assert!(
+            rt.find("dc-incoming-call").is_some(),
+            "incoming call overlay over Library"
+        );
+
+        rt.update(|s, _| {
+            s.discord.voice_ui.ringing_channel_id = None;
+            s.discord.voice.state = "connected".into();
+            s.discord.voice.channel_id = Some("ch-voice".into());
+            s.discord.voice.guild_id = Some("g-exo".into());
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(
+            rt.find("exo-island-call").is_some(),
+            "Exo Island call capsule in top bar over Library"
+        );
+
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_settings(crate::discord_state::DiscordSettingsPage::Account);
+        });
+        rt.frame(2.0 / 60.0);
+        assert!(rt.find("dc-settings-modal").is_some());
+        for page in [
+            crate::discord_state::DiscordSettingsPage::Profiles,
+            crate::discord_state::DiscordSettingsPage::Voice,
+            crate::discord_state::DiscordSettingsPage::Notifications,
+            crate::discord_state::DiscordSettingsPage::Chat,
+            crate::discord_state::DiscordSettingsPage::Privacy,
+            crate::discord_state::DiscordSettingsPage::Keybinds,
+            crate::discord_state::DiscordSettingsPage::ConnectedApps,
+        ] {
+            rt.update(|s, _| s.open_discord_settings(page));
+            rt.frame(3.0 / 60.0);
+            assert!(rt.find("dc-settings-modal").is_some());
+        }
+        assert!(rt.state.dismiss_top_layer());
+        assert!(!rt.state.discord.settings_open);
+
+        rt.update(|s, _| {
+            s.discord.shop_open = true;
+        });
+        rt.frame(4.0 / 60.0);
+        assert!(rt.find("dc-shop-view").is_some());
+    }
+
+    #[test]
+    fn wp7_pinned_dm_selected_first_and_categories_sync_collapsed() {
+        let mut s = AppState::default();
+        s.discord.home.dms = vec![
+            exo_rpc::DiscordDm {
+                id: "dm-colton".into(),
+                name: "Colton".into(),
+                ..Default::default()
+            },
+            exo_rpc::DiscordDm {
+                id: "dm-lazy".into(),
+                name: "lazy".into(),
+                ..Default::default()
+            },
+        ];
+        s.settings
+            .ui_prefs
+            .insert("discordPinnedDms".into(), serde_json::json!(["dm-lazy"]));
+        assert_eq!(s.default_dm_id().as_deref(), Some("dm-lazy"));
+
+        let chans = exo_rpc::DiscordChannels {
+            channels: vec![
+                exo_rpc::DiscordChannel {
+                    id: "cat-open".into(),
+                    name: "COMMUNITY".into(),
+                    kind: "category".into(),
+                    collapsed: false,
+                    ..Default::default()
+                },
+                exo_rpc::DiscordChannel {
+                    id: "cat-staff".into(),
+                    name: "STAFF".into(),
+                    kind: "category".into(),
+                    collapsed: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        s.sync_collapsed_categories(&chans);
+        assert!(!s.discord.collapsed_categories.contains("cat-open"));
+        assert!(s.discord.collapsed_categories.contains("cat-staff"));
     }
 }

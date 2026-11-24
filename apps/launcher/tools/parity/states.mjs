@@ -1223,9 +1223,9 @@ export const STATES = [
       openSelector: '.exo-dc-settings, [role="dialog"]',
     },
     native: {
-      scene: 'discord',
+      scene: 'discord-voice',
       script: [{ t: 0.1, type: 'tap', fromReactTarget: true }],
-      expect: { room: 'Discord' },
+      expect: { room: 'Discord', discordSettingsOpen: true },
     },
   },
   {

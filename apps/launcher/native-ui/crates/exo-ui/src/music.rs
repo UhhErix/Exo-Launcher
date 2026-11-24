@@ -1433,23 +1433,6 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
     let artist = pb.map(|p| p.artist.as_str()).unwrap_or("");
     let album = pb.map(|p| p.album.as_str()).unwrap_or("");
 
-    let close_btn = el()
-        .key("music-immersion-close")
-        .role("button")
-        .label("Exit full screen")
-        .focusable(true)
-        .hit()
-        .press_on_down()
-        .pin(None, Some(64.0), Some(24.0), None)
-        .size(36.0, 36.0)
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .hover(hover_fill())
-        .center()
-        .on_press(|s: &mut AppState| s.media.music_immersion = false)
-        .child(icon_close(16.0, FG));
-
     let stage = col()
         .w_full()
         .h_full()
@@ -1482,7 +1465,6 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         .h_full()
         .fill(BG)
         .child(stage)
-        .child(close_btn)
         .child(
             row()
                 .pin(Some(GAP), None, Some(GAP), Some(18.0))

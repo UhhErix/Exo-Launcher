@@ -555,8 +555,6 @@ pub struct DiscordChatState {
     pub inbox: InboxState,
     pub profile_dialog: Option<ProfileDialogState>,
     pub dm_profile_cache: HashMap<String, DiscordProfileReply>,
-    pub dm_sidebar_note_uid: Option<String>,
-    pub dm_sidebar_note: TextEdit,
     pub create_dm: Option<CreateDmState>,
     pub invite_dialog: Option<InviteDialogState>,
     pub forward_dialog: Option<ForwardDialogState>,
@@ -606,8 +604,6 @@ impl DiscordChatState {
             inbox: InboxState::default(),
             profile_dialog: None,
             dm_profile_cache: HashMap::new(),
-            dm_sidebar_note_uid: None,
-            dm_sidebar_note: TextEdit::default(),
             create_dm: None,
             invite_dialog: None,
             forward_dialog: None,
@@ -1486,65 +1482,23 @@ impl AppState {
             }
         }
         for pid in &pinned_ids {
-            if self.discord.home.dms.iter().any(|d| d.id == *pid) {
+            if self
+                .discord
+                .home
+                .dms
+                .iter()
+                .any(|d| d.id == *pid && !d.request && !d.spam)
+            {
                 return Some(pid.clone());
             }
         }
-        self.discord.home.dms.first().map(|d| d.id.clone())
-    }
-
-    pub fn ensure_dm_profile_loaded(&mut self, dm_id: &str) {
-        let Some(uid) = self
-            .discord
+        self.discord
             .home
             .dms
             .iter()
-            .find(|d| d.id == dm_id)
-            .and_then(|d| d.user_id.clone())
-        else {
-            return;
-        };
-        let cache_key = format!("{uid}:");
-        let cached_note = self
-            .discord
-            .chat
-            .dm_profile_cache
-            .get(&cache_key)
-            .and_then(|c| c.note.clone())
-            .unwrap_or_default();
-        if self.discord.chat.dm_sidebar_note_uid.as_deref() != Some(uid.as_str()) {
-            self.discord.chat.dm_sidebar_note_uid = Some(uid.clone());
-            let mut te = TextEdit::default();
-            te.text = cached_note;
-            self.discord.chat.dm_sidebar_note = te;
-        }
-        if !self.discord.chat.dm_profile_cache.contains_key(&cache_key) {
-            self.fetch_user_profile(&uid, None);
-        }
-    }
-
-    pub fn save_dm_sidebar_note(&mut self, user_id: &str) {
-        let note = self.discord.chat.dm_sidebar_note.text.clone();
-        let cache_key = format!("{user_id}:");
-        if let Some(entry) = self.discord.chat.dm_profile_cache.get_mut(&cache_key) {
-            entry.note = Some(note.clone());
-        }
-        if self.status != HostStatus::Connected {
-            self.notice = Some("Note saved".into());
-            return;
-        }
-        #[cfg(windows)]
-        self.call_host_async(
-            METHOD_DISCORD_PROFILE,
-            json!({ "action": "note", "userId": user_id, "note": note }),
-            |s, res: Result<ActionResult, String>| {
-                if let Ok(rep) = res
-                    && !rep.ok
-                {
-                    s.notice = Some(rep.message.unwrap_or_else(|| "Couldn't save note.".into()));
-                }
-            },
-        );
+            .find(|d| !d.request && !d.spam)
+            .or_else(|| self.discord.home.dms.first())
+            .map(|d| d.id.clone())
     }
 
     pub fn load_discord_messages(&mut self, channel_id: &str, before: Option<&str>) {
@@ -5592,6 +5546,45 @@ fn guess_mime(name: &str) -> &'static str {
     }
 }
 
+pub fn dm_preview_from_message(msg: &DiscordMessage) -> Option<String> {
+    let text = msg.content.trim();
+    if !text.is_empty() {
+        let first = text.lines().next().unwrap_or(text).trim();
+        if !first.is_empty() {
+            return Some(first.to_string());
+        }
+    }
+    if let Some(att) = msg.attachments.first() {
+        return Some(if att.is_image() {
+            "Sent an image".into()
+        } else if att
+            .content_type
+            .as_deref()
+            .is_some_and(|ct| ct.starts_with("video/"))
+        {
+            "Sent a video".into()
+        } else {
+            att.filename.clone()
+        });
+    }
+    if let Some(st) = msg.sticker_items.first() {
+        return Some(st.name.clone());
+    }
+    if let Some(em) = msg.embeds.first() {
+        if let Some(ref t) = em.title
+            && !t.trim().is_empty()
+        {
+            return Some(t.trim().to_string());
+        }
+        if let Some(ref d) = em.description
+            && !d.trim().is_empty()
+        {
+            return Some(d.trim().to_string());
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5968,43 +5961,4 @@ mod tests {
         assert_eq!(morning.time_short_12h(), "12:18 AM");
         assert_eq!(morning.day_label(), "November 14, 2026");
     }
-}
-
-pub fn dm_preview_from_message(msg: &DiscordMessage) -> Option<String> {
-    let text = msg.content.trim();
-    if !text.is_empty() {
-        let first = text.lines().next().unwrap_or(text).trim();
-        if !first.is_empty() {
-            return Some(first.to_string());
-        }
-    }
-    if let Some(att) = msg.attachments.first() {
-        return Some(if att.is_image() {
-            "Sent an image".into()
-        } else if att
-            .content_type
-            .as_deref()
-            .is_some_and(|ct| ct.starts_with("video/"))
-        {
-            "Sent a video".into()
-        } else {
-            att.filename.clone()
-        });
-    }
-    if let Some(st) = msg.sticker_items.first() {
-        return Some(st.name.clone());
-    }
-    if let Some(em) = msg.embeds.first() {
-        if let Some(ref t) = em.title
-            && !t.trim().is_empty()
-        {
-            return Some(t.trim().to_string());
-        }
-        if let Some(ref d) = em.description
-            && !d.trim().is_empty()
-        {
-            return Some(d.trim().to_string());
-        }
-    }
-    None
 }

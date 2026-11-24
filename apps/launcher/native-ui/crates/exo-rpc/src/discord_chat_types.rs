@@ -577,17 +577,6 @@ pub struct DiscordProfileReply {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscordAdminReply {
-    #[serde(default)]
-    pub ok: bool,
-    #[serde(default)]
-    pub message: Option<String>,
-    #[serde(default)]
-    pub data: Option<Value>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
 pub struct DiscordRoleChoice {
     #[serde(default)]
     pub id: String,
@@ -652,15 +641,6 @@ pub struct DiscordMentionableReply {
     pub roles: Vec<DiscordMentionRole>,
     #[serde(default)]
     pub channels: Vec<DiscordMentionChannel>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscordColorsReply {
-    #[serde(default)]
-    pub colors: HashMap<String, Option<String>>,
-    #[serde(default)]
-    pub avatars: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -1008,17 +988,6 @@ pub struct DiscordInteractionEvent {
     pub choices: Option<Vec<DiscordAppChoice>>,
     #[serde(default)]
     pub modal: Option<DiscordAppModal>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscordReportReply {
-    #[serde(default)]
-    pub ok: bool,
-    #[serde(default)]
-    pub message: Option<String>,
-    #[serde(default)]
-    pub menu: Option<Value>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

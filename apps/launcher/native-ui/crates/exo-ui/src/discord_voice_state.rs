@@ -3,13 +3,15 @@ use crate::video_decoder::{
     VideoPacket, VideoStreamHandle, VideoStreamStats, make_demo_stream_pixels,
 };
 use exo_rpc::{
-    ActionResult, DiscordAudioDevice, DiscordAudioReply, DiscordGoLiveReply,
-    DiscordGoLiveStateEvent, DiscordGoLiveStatsEvent, DiscordMyVoiceReply, DiscordSoundItem,
-    DiscordSoundboardReply, DiscordVideoEvent, DiscordVideoFrame, GoLiveSource,
-    METHOD_DISCORD_AUDIO, METHOD_DISCORD_CAMERA, METHOD_DISCORD_GOLIVE, METHOD_DISCORD_MY_VOICE,
-    METHOD_DISCORD_SOUNDBOARD, METHOD_DISCORD_STREAM, METHOD_DISCORD_VOICE,
+    ActionResult, DiscordAudioDevice, DiscordAudioReply, DiscordCallEvent, DiscordCallSong,
+    DiscordCallSongsReply, DiscordGoLiveReply, DiscordGoLiveStateEvent, DiscordGoLiveStatsEvent,
+    DiscordGuildSoundboard, DiscordMyVoiceReply, DiscordSoundItem, DiscordSoundboardReply,
+    DiscordVideoEvent, DiscordVideoFrame, GoLiveSource, METHOD_DISCORD_AUDIO,
+    METHOD_DISCORD_CALL_SONGS, METHOD_DISCORD_CAMERA, METHOD_DISCORD_GOLIVE,
+    METHOD_DISCORD_MY_VOICE, METHOD_DISCORD_RING, METHOD_DISCORD_SOUNDBOARD, METHOD_DISCORD_STREAM,
+    METHOD_DISCORD_VOICE,
 };
-use rune::Pixels;
+use rune::{Pixels, TextEdit};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
@@ -61,6 +63,12 @@ pub struct DiscordVoiceUiState {
     pub golive_viewers: Vec<String>,
     pub golive_sources: Vec<GoLiveSource>,
     pub golive_selected_source: Option<String>,
+    pub golive_step_chosen: Option<GoLiveSource>,
+    pub golive_preview_thumb: Option<String>,
+    pub golive_preview_shown: bool,
+    pub golive_capture_mode: Option<String>,
+    pub golive_service_disabled: bool,
+    pub golive_error: Option<String>,
     pub golive_tab: GoLiveTab,
     pub golive_height: i32,
     pub golive_fps: i32,
@@ -69,11 +77,22 @@ pub struct DiscordVoiceUiState {
     pub camera_on: bool,
     pub soundboard_defaults: Vec<DiscordSoundItem>,
     pub soundboard_guild: Vec<DiscordSoundItem>,
+    pub soundboard_guilds: Vec<DiscordGuildSoundboard>,
+    pub soundboard_query: TextEdit,
+    pub soundboard_error: Option<String>,
     pub soundboard_loading: bool,
+    pub call_songs: Vec<DiscordCallSong>,
+    pub ringing_channel_id: Option<String>,
     pub audio: Option<DiscordAudioReply>,
     pub my_voice_learned: bool,
     pub user_mix: HashMap<String, UserAudioMix>,
     pub stage_requested: bool,
+    pub stage_editing_mode: Option<&'static str>,
+    pub stage_topic_input: TextEdit,
+    pub stage_end_confirm: bool,
+    pub stage_error: Option<String>,
+    pub voice_error: Option<String>,
+    pub stage_size: (f32, f32),
     pub voice_connected_since: Option<Instant>,
 }
 
@@ -93,6 +112,12 @@ impl DiscordVoiceUiState {
             golive_viewers: Vec::new(),
             golive_sources: Vec::new(),
             golive_selected_source: None,
+            golive_step_chosen: None,
+            golive_preview_thumb: None,
+            golive_preview_shown: true,
+            golive_capture_mode: None,
+            golive_service_disabled: false,
+            golive_error: None,
             golive_tab: GoLiveTab::Applications,
             golive_height: 1080,
             golive_fps: 60,
@@ -101,11 +126,22 @@ impl DiscordVoiceUiState {
             camera_on: false,
             soundboard_defaults: Vec::new(),
             soundboard_guild: Vec::new(),
+            soundboard_guilds: Vec::new(),
+            soundboard_query: TextEdit::default(),
+            soundboard_error: None,
             soundboard_loading: false,
+            call_songs: Vec::new(),
+            ringing_channel_id: None,
             audio: None,
             my_voice_learned: false,
             user_mix: HashMap::new(),
             stage_requested: false,
+            stage_editing_mode: None,
+            stage_topic_input: TextEdit::default(),
+            stage_end_confirm: false,
+            stage_error: None,
+            voice_error: None,
+            stage_size: (0.0, 0.0),
             voice_connected_since: None,
         }
     }
@@ -120,7 +156,9 @@ impl DiscordVoiceUiState {
                 kind: "window".into(),
                 title: "Counter-Strike 2".into(),
                 app: Some("cs2.exe".into()),
-                game: true,
+                icon: None,
+                thumb: None,
+                game: Some("Counter-Strike 2".into()),
                 width: 2560,
                 height: 1440,
                 hz: 240,
@@ -131,7 +169,9 @@ impl DiscordVoiceUiState {
                 kind: "screen".into(),
                 title: "Display 1 (Primary)".into(),
                 app: None,
-                game: false,
+                icon: None,
+                thumb: None,
+                game: None,
                 width: 2560,
                 height: 1440,
                 hz: 240,
@@ -330,8 +370,15 @@ impl AppState {
         }
         self.discord.voice_ui.panel = panel;
         match panel {
-            VoicePanel::GoLive => self.load_golive_sources(),
-            VoicePanel::Soundboard => self.load_discord_soundboard(),
+            VoicePanel::GoLive => {
+                self.discord.voice_ui.golive_step_chosen = None;
+                self.discord.voice_ui.golive_error = None;
+                self.load_golive_sources();
+            }
+            VoicePanel::Soundboard => {
+                self.load_discord_soundboard();
+                self.load_discord_audio();
+            }
             VoicePanel::Audio => self.load_discord_audio(),
             VoicePanel::None => {}
         }
@@ -353,15 +400,18 @@ impl AppState {
                         let first = rep
                             .sources
                             .iter()
-                            .find(|src| src.game)
+                            .find(|src| src.game.is_some())
                             .or_else(|| rep.sources.first())
                             .map(|src| src.id.clone());
+                        s.discord.voice_ui.golive_capture_mode = rep.capture_mode;
+                        s.discord.voice_ui.golive_service_disabled = rep.service_disabled;
                         s.discord.voice_ui.golive_sources = rep.sources;
+                        s.discord.voice_ui.golive_error = None;
                         if s.discord.voice_ui.golive_selected_source.is_none() {
                             s.discord.voice_ui.golive_selected_source = first;
                         }
                     } else if let Some(msg) = rep.message {
-                        s.notice = Some(msg);
+                        s.discord.voice_ui.golive_error = Some(msg);
                     }
                 }
             },
@@ -392,6 +442,7 @@ impl AppState {
                 height: if height == 0 { 1440 } else { height },
                 fps: fps as f64,
                 bitrate: 6200.0,
+                max: Some(8_000_000.0),
                 codec: Some("h265".into()),
                 sound: if sound {
                     Some("Game audio".into())
@@ -482,18 +533,26 @@ impl AppState {
         #[cfg(windows)]
         self.call_host_async(
             METHOD_DISCORD_SOUNDBOARD,
-            json!({ "guildId": gid }),
+            json!({ "action": "list", "guildId": gid }),
             |s, res: Result<DiscordSoundboardReply, String>| {
                 s.discord.voice_ui.soundboard_loading = false;
-                if let Ok(rep) = res
-                    && rep.ok
-                {
-                    if let Some(d) = rep.defaults {
-                        s.discord.voice_ui.soundboard_defaults = d;
+                match res {
+                    Ok(rep) if rep.ok => {
+                        s.discord.voice_ui.soundboard_defaults = rep.defaults;
+                        s.discord.voice_ui.soundboard_guild = rep.guild;
+                        s.discord.voice_ui.soundboard_guilds = rep
+                            .guilds
+                            .into_iter()
+                            .filter(|g| !g.items.is_empty())
+                            .collect();
+                        s.discord.voice_ui.soundboard_error = None;
                     }
-                    if let Some(g) = rep.guild {
-                        s.discord.voice_ui.soundboard_guild = g;
+                    Ok(rep) => {
+                        s.discord.voice_ui.soundboard_error = rep
+                            .message
+                            .or_else(|| Some("Discord didn't answer.".into()));
                     }
+                    Err(e) => s.discord.voice_ui.soundboard_error = Some(e),
                 }
             },
         );
@@ -625,32 +684,6 @@ impl AppState {
         );
     }
 
-    pub fn toggle_discord_stage_speak(&mut self, guild_id: &str, channel_id: &str) {
-        let request = !self.discord.voice_ui.stage_requested;
-        self.discord.voice_ui.stage_requested = request;
-        if self.status != HostStatus::Connected {
-            return;
-        }
-        #[cfg(windows)]
-        self.call_host_async(
-            METHOD_DISCORD_VOICE,
-            json!({
-                "action": "stage",
-                "guildId": guild_id,
-                "channelId": channel_id,
-                "requestToSpeak": request,
-            }),
-            |s, res: Result<ActionResult, String>| {
-                if let Ok(rep) = res
-                    && !rep.ok
-                    && let Some(msg) = rep.message
-                {
-                    s.notice = Some(msg);
-                }
-            },
-        );
-    }
-
     fn _forget_discord_my_voice_unused(&mut self) {
         self.discord.voice_ui.my_voice_learned = false;
         if self.status != HostStatus::Connected {
@@ -760,6 +793,168 @@ impl AppState {
                 self.open_discord_dm(&cid);
             }
         }
+    }
+
+    pub fn pick_golive_source(&mut self, source: GoLiveSource) {
+        self.discord.voice_ui.golive_selected_source = Some(source.id.clone());
+        self.discord.voice_ui.golive_preview_thumb = source.thumb.clone();
+        let src_id = source.id.clone();
+        self.discord.voice_ui.golive_step_chosen = Some(source);
+        self.discord.voice_ui.golive_error = None;
+        if self.status == HostStatus::Connected {
+            #[cfg(windows)]
+            self.call_host_async(
+                METHOD_DISCORD_GOLIVE,
+                json!({ "action": "preview", "source": src_id, "width": 960 }),
+                |s, res: Result<DiscordGoLiveReply, String>| {
+                    if let Ok(rep) = res
+                        && rep.ok
+                        && rep.thumb.is_some()
+                    {
+                        s.discord.voice_ui.golive_preview_thumb = rep.thumb;
+                    }
+                },
+            );
+        }
+    }
+
+    pub fn load_discord_call_songs(&mut self) {
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        #[cfg(windows)]
+        self.call_host_async(
+            METHOD_DISCORD_CALL_SONGS,
+            json!({}),
+            |s, res: Result<DiscordCallSongsReply, String>| {
+                if let Ok(rep) = res {
+                    s.discord.voice_ui.call_songs = rep
+                        .songs
+                        .into_iter()
+                        .filter(|song| song.rich.is_some() || song.paused)
+                        .collect();
+                }
+            },
+        );
+    }
+
+    pub fn handle_discord_call_event(&mut self, ev: DiscordCallEvent) {
+        if ev.ringing {
+            self.discord.voice_ui.ringing_channel_id = Some(ev.channel_id);
+        } else if self.discord.voice_ui.ringing_channel_id.as_deref()
+            == Some(ev.channel_id.as_str())
+        {
+            self.discord.voice_ui.ringing_channel_id = None;
+        }
+    }
+
+    pub fn handle_discord_call_song(&mut self, song: DiscordCallSong) {
+        let keep = song.rich.is_some() || song.paused;
+        self.discord
+            .voice_ui
+            .call_songs
+            .retain(|x| x.user_id != song.user_id);
+        if keep {
+            self.discord.voice_ui.call_songs.push(song);
+        }
+    }
+
+    pub fn handle_discord_camera_event(&mut self, cam_state: &str) {
+        self.discord.voice_ui.camera_on = matches!(cam_state, "live" | "connecting");
+        if cam_state == "live" {
+            self.play_discord_ui_sound("camera_on", false);
+        } else if cam_state == "off" {
+            self.play_discord_ui_sound("camera_off", false);
+        }
+    }
+
+    pub fn decline_discord_call(&mut self, channel_id: &str) {
+        if self.discord.voice_ui.ringing_channel_id.as_deref() == Some(channel_id) {
+            self.discord.voice_ui.ringing_channel_id = None;
+        }
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        #[cfg(windows)]
+        self.call_host_async(
+            METHOD_DISCORD_RING,
+            json!({ "channelId": channel_id, "decline": true }),
+            |_s, _res: Result<ActionResult, String>| {},
+        );
+    }
+
+    pub fn set_discord_stage_state(
+        &mut self,
+        guild_id: &str,
+        channel_id: &str,
+        user_id: Option<&str>,
+        suppress: Option<bool>,
+        request_to_speak: Option<bool>,
+    ) {
+        if let Some(req) = request_to_speak {
+            self.discord.voice_ui.stage_requested = req;
+        }
+        self.discord.voice_ui.stage_error = None;
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        let mut body = json!({
+            "action": "stage",
+            "guildId": guild_id,
+            "channelId": channel_id,
+        });
+        if let Some(uid) = user_id {
+            body["userId"] = json!(uid);
+        }
+        if let Some(sup) = suppress {
+            body["suppress"] = json!(sup);
+        }
+        if let Some(req) = request_to_speak {
+            body["requestToSpeak"] = json!(req);
+        }
+        #[cfg(windows)]
+        self.call_host_async(
+            METHOD_DISCORD_VOICE,
+            body,
+            |s, res: Result<ActionResult, String>| {
+                if let Ok(rep) = res
+                    && !rep.ok
+                {
+                    s.discord.voice_ui.stage_error = rep
+                        .message
+                        .or_else(|| Some("Discord didn't update the stage.".into()));
+                }
+            },
+        );
+    }
+
+    pub fn manage_discord_stage(&mut self, action: &str, channel_id: &str, topic: Option<String>) {
+        self.discord.voice_ui.stage_error = None;
+        self.discord.voice_ui.stage_end_confirm = false;
+        if self.status != HostStatus::Connected {
+            self.discord.voice_ui.stage_editing_mode = None;
+            return;
+        }
+        let mut body = json!({ "action": action, "channelId": channel_id });
+        if let Some(t) = topic {
+            body["topic"] = json!(t);
+        }
+        #[cfg(windows)]
+        self.call_host_async(
+            METHOD_DISCORD_VOICE,
+            body,
+            |s, res: Result<ActionResult, String>| match res {
+                Ok(rep) if rep.ok => {
+                    s.discord.voice_ui.stage_editing_mode = None;
+                }
+                Ok(rep) => {
+                    s.discord.voice_ui.stage_error = rep
+                        .message
+                        .or_else(|| Some("Discord didn't update the stage.".into()));
+                }
+                Err(e) => s.discord.voice_ui.stage_error = Some(e),
+            },
+        );
     }
 
     pub fn voice_duration_label(&self) -> Option<String> {

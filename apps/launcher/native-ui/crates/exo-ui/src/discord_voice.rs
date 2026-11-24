@@ -2,21 +2,81 @@ use crate::discord::avatar_box;
 use crate::discord_chat;
 use crate::discord_state::DiscordSettingsPage;
 use crate::discord_voice_state::{GoLiveTab, VoicePanel};
-use crate::state::{AppState, ContextMenuTarget};
+use crate::state::{AppState, ContextMenuTarget, Room};
 use exo_kit::{
     BG, FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
     RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, fg_faint, fg_muted,
     filter_pill, glass_button, glass_control_fill, glass_panel_fill, glass_rim_bottom,
     glass_rim_top, glass_still_control_fill, glass_still_panel_fill, good, hairline, hover_fill,
-    icon_app_window, icon_chat, icon_close, icon_hand, icon_headphones, icon_headphones_off,
-    icon_lock, icon_maximize, icon_mic, icon_mic_off, icon_monitor, icon_music, icon_phone_off,
-    icon_screen_share, icon_settings, icon_video, icon_volume, icon_volume_off, pressed_fill,
-    primary_button, subtle_fill, type_body, type_control, type_label, type_section, type_small,
-    type_title, warn,
+    icon_app_window, icon_chat, icon_chevron_left, icon_close, icon_hand, icon_headphones,
+    icon_headphones_off, icon_lock, icon_maximize, icon_mic, icon_mic_off, icon_monitor,
+    icon_music, icon_phone, icon_phone_off, icon_screen_share, icon_search, icon_settings,
+    icon_video, icon_volume, icon_volume_off, pressed_fill, primary_button, subtle_fill, type_body,
+    type_control, type_label, type_section, type_small, type_title, warn,
 };
-use exo_rpc::{DiscordChannel, DiscordVoiceMember};
-use rune::{Color, Cursor, El, ScrollSpec, SpringPair, SurfaceFit, Transition, col, el, row, text};
+use exo_rpc::{
+    DiscordChannel, DiscordGoLiveStatsEvent, DiscordSoundItem, DiscordVoiceMember, GoLiveSource,
+};
+use rune::{
+    Color, Cursor, El, ScrollSpec, SpringPair, SurfaceFit, TextEdit, Transition, col, edit_access,
+    el, row, text, text_input,
+};
 use serde_json::json;
+
+pub fn fit_tiles(width: f32, height: f32, count: usize, gap: f32) -> f32 {
+    if count == 0 || width <= 0.0 || height <= 0.0 {
+        return 320.0;
+    }
+    let mut best = 0.0_f32;
+    for cols in 1..=count {
+        let rows = count.div_ceil(cols);
+        let cw = (width - gap * (cols.saturating_sub(1) as f32)) / (cols as f32);
+        let ch = (height - gap * (rows.saturating_sub(1) as f32)) / (rows as f32) * (16.0 / 9.0);
+        best = best.max(cw.min(ch));
+    }
+    best.min(1280.0).floor().max(120.0)
+}
+
+fn format_golive_stats(st: &DiscordGoLiveStatsEvent) -> String {
+    let codec = st
+        .codec
+        .as_deref()
+        .filter(|c| !c.is_empty())
+        .map(|c| format!("{c} · "))
+        .unwrap_or_default();
+    let rate = if let Some(max) = st.max.filter(|&m| m > 0.0) {
+        format!("up to {:.1} Mbps", max / 1_000_000.0)
+    } else {
+        format!("{:.1} Mbps", st.bitrate / 1_000_000.0)
+    };
+    let sound = st
+        .sound
+        .as_deref()
+        .filter(|x| !x.is_empty())
+        .map(|x| format!(" · {x}"))
+        .unwrap_or_default();
+    format!(
+        "{}×{} · {:.0} fps · {codec}{rate}{sound}",
+        st.width, st.height, st.fps
+    )
+}
+
+fn screen_meta(src: &GoLiveSource) -> Option<String> {
+    if src.kind != "screen" {
+        return None;
+    }
+    let mut parts = Vec::new();
+    if src.width > 0 && src.height > 0 {
+        parts.push(format!("{}×{}", src.width, src.height));
+    }
+    if src.hz > 0 {
+        parts.push(format!("{} Hz", src.hz));
+    }
+    if src.primary {
+        parts.push("Primary".into());
+    }
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
 
 fn overlay_transition() -> Transition {
     let enter = Transition::offset(0.0, 10.0)
@@ -284,10 +344,17 @@ fn participant_tile(
     guild_id: Option<&str>,
     m: &DiscordVoiceMember,
     compact: bool,
-    solo: bool,
+    tile_w: f32,
+    can_demote: Option<(String, String)>,
     scale: f32,
 ) -> El {
-    let speaking = s.discord.speaking.contains(&m.id);
+    let muted_by_you = s
+        .discord
+        .voice_ui
+        .user_mix
+        .get(&m.id)
+        .is_some_and(|mix| mix.muted);
+    let speaking = s.discord.speaking.contains(&m.id) && !muted_by_you;
     let is_watching = s.discord.voice_ui.watching_stream.as_deref() == Some(m.id.as_str());
     let uid_watch = m.id.clone();
     let ctx_target = ContextMenuTarget::DiscordMember {
@@ -298,19 +365,25 @@ fn participant_tile(
         in_voice: true,
     };
 
-    let (tile_w, tile_h) = if compact {
+    let (w, h) = if compact {
         (216.0, 122.0)
-    } else if solo {
-        (1240.0, 697.5)
     } else {
-        (320.0, 180.0)
+        (tile_w, (tile_w * 9.0 / 16.0).round())
     };
-    let av_size = if compact { 46.0 } else { 72.0 };
+    let av_size = if compact {
+        46.0
+    } else if w >= 600.0 {
+        112.0
+    } else {
+        72.0
+    };
 
     let mut tile = el()
         .key(format!("dc-stage-tile-{}", m.id))
+        .size(w, h)
         .radius(RADIUS_PANEL)
-        .fill(if speaking { good().alpha(0.06) } else { BG })
+        .clip_rounded(RADIUS_PANEL)
+        .fill(BG)
         .motion(SPRING_QUICK)
         .hit()
         .cursor(Cursor::Pointer)
@@ -318,13 +391,23 @@ fn participant_tile(
             s.open_context_menu(ctx_target.clone(), p.x, p.y);
         });
 
-    tile = tile.size(tile_w, tile_h);
+    if let Some(av_url) = m.avatar.as_deref()
+        && let Some(img) = s.discord_remote_image_sized(av_url, 128.0, scale)
+    {
+        tile = tile
+            .child(
+                el().pin(Some(-24.0), Some(-24.0), Some(-24.0), Some(-24.0))
+                    .pixels_fit(img.pixels(), SurfaceFit::Fill)
+                    .blur(36.0)
+                    .opacity(0.42),
+            )
+            .child(
+                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .fill(BG.alpha(0.48)),
+            );
+    }
 
-    tile = if speaking {
-        tile.border(2.0, good())
-    } else {
-        tile.border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-    };
+    tile = tile.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
 
     let mut center_col = col().w_full().h_full().center().gap(10.0).child(avatar_box(
         s,
@@ -400,6 +483,17 @@ fn participant_tile(
         );
     }
 
+    if let Some((gid_d, cid_d)) = can_demote {
+        let uid_d = m.id.clone();
+        center_col = center_col.child(
+            glass_button("dc-demote", "Move to audience", None)
+                .key(format!("dc-demote-{}", m.id))
+                .on_press(move |s: &mut AppState| {
+                    s.set_discord_stage_state(&gid_d, &cid_d, Some(&uid_d), Some(true), None);
+                }),
+        );
+    }
+
     tile = tile.child(center_col);
 
     if m.stream {
@@ -417,22 +511,154 @@ fn participant_tile(
     let mut badge = row()
         .pin(Some(14.0), None, None, Some(12.0))
         .h(22.0)
+        .px(8.0)
         .gap(6.0)
         .center_y()
+        .radius(RADIUS_PILL)
+        .fill(BG.alpha(0.60))
         .child(text(m.name.clone()).font(type_small()).color(FG).truncate());
 
     if m.deaf || m.server_deaf {
         badge = badge.child(icon_headphones_off(12.0, bad()));
-    } else if m.mute || m.server_mute {
+    } else if m.mute || m.server_mute || muted_by_you {
         badge = badge.child(icon_mic_off(12.0, warn()));
     }
 
-    tile.child(badge)
+    tile = tile.child(badge);
+
+    if speaking {
+        tile = tile.child(
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .radius(RADIUS_PANEL)
+                .border(2.0, good()),
+        );
+    }
+
+    tile
+}
+
+fn my_stream_tile(s: &AppState, members: &[DiscordVoiceMember], tile_w: f32, scale: f32) -> El {
+    let tile_h = (tile_w * 9.0 / 16.0).round();
+    let title = s
+        .discord
+        .voice_ui
+        .golive_title
+        .clone()
+        .unwrap_or_else(|| "Your stream".into());
+    let stats_line = s
+        .discord
+        .voice_ui
+        .golive_stats
+        .as_ref()
+        .map(format_golive_stats);
+    let viewers: Vec<&DiscordVoiceMember> = s
+        .discord
+        .voice_ui
+        .golive_viewers
+        .iter()
+        .filter_map(|id| members.iter().find(|m| &m.id == id))
+        .collect();
+
+    let mut tile = el()
+        .key("dc-my-stream-tile")
+        .size(tile_w, tile_h)
+        .radius(RADIUS_PANEL)
+        .clip_rounded(RADIUS_PANEL)
+        .fill(BG)
+        .border(1.0, good().alpha(0.45));
+
+    if let Some(me_id) = s.discord.home.me.as_ref().map(|m| m.id.as_str())
+        && let Some((px, _)) = s.discord.voice_ui.stream_pixels_for(me_id)
+    {
+        tile = tile.child(
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .pixels_fit(&px, SurfaceFit::Fit),
+        );
+    } else {
+        tile = tile.child(
+            col()
+                .w_full()
+                .h_full()
+                .center()
+                .gap(8.0)
+                .child(icon_screen_share(28.0, good()))
+                .child(text(title.clone()).font(type_section()).color(FG)),
+        );
+    }
+
+    tile = tile.child(
+        row()
+            .pin(None, Some(10.0), Some(10.0), None)
+            .gap(6.0)
+            .child(
+                glass_button("dc-mystream-hide", "Hide preview", None).on_press(
+                    |s: &mut AppState| {
+                        s.discord.voice_ui.golive_preview_shown = false;
+                    },
+                ),
+            )
+            .child(
+                glass_button(
+                    "dc-mystream-stop",
+                    "Stop streaming",
+                    Some(icon_close(12.0, bad())),
+                )
+                .on_press(|s: &mut AppState| s.stop_discord_golive()),
+            ),
+    );
+
+    let badge_text = match stats_line {
+        Some(st) => format!("{title} · {st}"),
+        None => title,
+    };
+    tile = tile.child(
+        row()
+            .pin(Some(12.0), None, None, Some(10.0))
+            .px(10.0)
+            .py(4.0)
+            .radius(RADIUS_PILL)
+            .fill(BG.alpha(0.72))
+            .child(text(badge_text).font(type_label()).color(FG).truncate()),
+    );
+
+    if !viewers.is_empty() {
+        let mut vrow = row()
+            .pin(None, None, Some(12.0), Some(10.0))
+            .px(8.0)
+            .py(4.0)
+            .gap(4.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(BG.alpha(0.72));
+        for v in viewers.iter().take(3) {
+            vrow = vrow.child(avatar_box(
+                s,
+                v.avatar.as_deref(),
+                &v.name,
+                20.0,
+                10.0,
+                None,
+                false,
+                scale,
+            ));
+        }
+        if viewers.len() > 3 {
+            vrow = vrow.child(
+                text(format!("+{}", viewers.len() - 3))
+                    .font(type_label())
+                    .color(fg_muted()),
+            );
+        }
+        tile = tile.child(vrow);
+    }
+
+    tile
 }
 
 fn golive_modal(s: &AppState, blur: bool) -> El {
     let mut modal = col()
         .key("dc-golive-panel")
+        .role("menu")
         .w(900.0)
         .h(620.0)
         .padding(20.0)
@@ -452,7 +678,7 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
 
     let close = el()
         .key("dc-gl-close")
-        .role("button")
+        .role("menuitem")
         .label("Close")
         .cursor(Cursor::Pointer)
         .focusable(true)
@@ -465,8 +691,194 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::None))
         .child(icon_close(15.0, fg_muted()));
 
+    if let Some(chosen) = s.discord.voice_ui.golive_step_chosen.as_ref() {
+        let title = chosen.game.as_deref().unwrap_or(&chosen.title).to_string();
+        let cur_h = s.discord.voice_ui.golive_height;
+        let max_fps = if chosen.hz >= 15 { chosen.hz + 1 } else { 240 };
+        let rates: Vec<i32> = [15, 30, 60, 120]
+            .into_iter()
+            .filter(|&r| r <= max_fps)
+            .collect();
+        let cur_fps = s
+            .discord
+            .voice_ui
+            .golive_fps
+            .min(*rates.last().unwrap_or(&60));
+        let sound_on = s.discord.voice_ui.golive_sound;
+        let res_note = if cur_h > 0 && chosen.height > 0 && cur_h > chosen.height {
+            let what = if chosen.kind == "screen" {
+                "screen"
+            } else {
+                "window"
+            };
+            Some(format!(
+                "Your {what} is {}p, so this streams at {}p.",
+                chosen.height, chosen.height
+            ))
+        } else {
+            None
+        };
+        let sound_desc = if chosen.kind == "window" {
+            format!(
+                "Sends {}'s sound only.",
+                chosen
+                    .app
+                    .as_deref()
+                    .filter(|a| !a.is_empty())
+                    .unwrap_or("this app")
+            )
+        } else {
+            "Sends everything your PC plays, except Exo and the call.".into()
+        };
+
+        let head = row()
+            .w_full()
+            .gap(10.0)
+            .center_y()
+            .child(
+                el().key("dc-gl-back")
+                    .role("button")
+                    .label("Pick something else")
+                    .cursor(Cursor::Pointer)
+                    .hit()
+                    .size(30.0, 30.0)
+                    .radius(RADIUS_PILL)
+                    .hover(hover_fill())
+                    .center()
+                    .on_press(|s: &mut AppState| s.discord.voice_ui.golive_step_chosen = None)
+                    .child(icon_chevron_left(16.0, FG)),
+            )
+            .child(if chosen.kind == "screen" {
+                icon_monitor(18.0, FG)
+            } else {
+                icon_app_window(18.0, FG)
+            })
+            .child(
+                text(title)
+                    .font(type_section())
+                    .color(FG)
+                    .grow(1.0)
+                    .truncate(),
+            )
+            .child(close);
+
+        let mut res_row = row().gap(6.0).wrap();
+        for (h, lbl) in [
+            (720, "720p"),
+            (1080, "1080p"),
+            (1440, "1440p"),
+            (0, "Source"),
+        ] {
+            res_row = res_row.child(
+                filter_pill(format!("dc-gl-res-{h}"), lbl, cur_h == h)
+                    .on_press(move |s: &mut AppState| s.discord.voice_ui.golive_height = h),
+            );
+        }
+
+        let mut fps_row = row().gap(6.0).wrap();
+        for r in rates {
+            fps_row = fps_row.child(
+                filter_pill(format!("dc-gl-fps-{r}"), format!("{r} fps"), cur_fps == r)
+                    .on_press(move |s: &mut AppState| s.discord.voice_ui.golive_fps = r),
+            );
+        }
+
+        let preview_box = el()
+            .grow(1.0)
+            .h(360.0)
+            .radius(RADIUS_CARD)
+            .fill(BG)
+            .border(1.0, hairline())
+            .center()
+            .child(
+                col()
+                    .center()
+                    .gap(8.0)
+                    .child(if chosen.kind == "screen" {
+                        icon_monitor(36.0, fg_muted())
+                    } else {
+                        icon_app_window(36.0, fg_muted())
+                    })
+                    .child(
+                        text(chosen.title.clone())
+                            .font(type_body())
+                            .color(fg_muted()),
+                    )
+                    .children(
+                        screen_meta(chosen).map(|m| text(m).font(type_label()).color(fg_faint())),
+                    ),
+            );
+
+        let options = col()
+            .w(340.0)
+            .gap(14.0)
+            .child(
+                col()
+                    .gap(6.0)
+                    .child(text("Resolution").font(type_control()).color(FG))
+                    .child(res_row)
+                    .children(res_note.map(|n| text(n).font(type_label()).color(fg_muted()))),
+            )
+            .child(
+                col()
+                    .gap(6.0)
+                    .child(text("Frame rate").font(type_control()).color(FG))
+                    .child(fps_row),
+            )
+            .child(
+                row()
+                    .w_full()
+                    .py(6.0)
+                    .justify_between()
+                    .center_y()
+                    .gap(12.0)
+                    .child(
+                        col()
+                            .grow(1.0)
+                            .gap(2.0)
+                            .child(text("Stream sound").font(type_control()).color(FG))
+                            .child(text(sound_desc).font(type_label()).color(fg_muted())),
+                    )
+                    .child(
+                        switch_pill("dc-gl-sound", "Stream sound", sound_on).on_press(
+                            |s: &mut AppState| {
+                                s.discord.voice_ui.golive_sound = !s.discord.voice_ui.golive_sound;
+                            },
+                        ),
+                    ),
+            )
+            .children(
+                s.discord
+                    .voice_ui
+                    .golive_error
+                    .as_ref()
+                    .map(|e| text(e.clone()).font(type_small()).color(bad())),
+            )
+            .child(
+                primary_button(
+                    "dc-gl-start",
+                    "Go Live",
+                    Some(icon_screen_share(14.0, PRIMARY_FG)),
+                )
+                .on_press(|s: &mut AppState| {
+                    s.discord.voice_ui.golive_preview_shown = true;
+                    s.start_discord_golive();
+                }),
+            );
+
+        return modal.child(head).child(
+            row()
+                .w_full()
+                .grow(1.0)
+                .gap(18.0)
+                .child(preview_box)
+                .child(options),
+        );
+    }
+
     let tab = s.discord.voice_ui.golive_tab;
     let tabs = row()
+        .w_full()
         .gap(6.0)
         .center_y()
         .child(
@@ -475,10 +887,14 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
                 "Applications",
                 tab == GoLiveTab::Applications,
             )
+            .role("menuitem")
+            .label("Applications")
             .on_press(|s: &mut AppState| s.discord.voice_ui.golive_tab = GoLiveTab::Applications),
         )
         .child(
             filter_pill("dc-gl-tab-screens", "Screens", tab == GoLiveTab::Screens)
+                .role("menuitem")
+                .label("Screens")
                 .on_press(|s: &mut AppState| s.discord.voice_ui.golive_tab = GoLiveTab::Screens),
         )
         .child(el().grow(1.0))
@@ -488,23 +904,88 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         )
         .child(close);
 
-    let want_kind = match tab {
-        GoLiveTab::Applications => "window",
-        GoLiveTab::Screens => "screen",
-    };
-    let filtered: Vec<_> = s
+    let game_src = s
         .discord
         .voice_ui
         .golive_sources
         .iter()
-        .filter(|src| src.kind == want_kind)
+        .find(|src| src.game.is_some());
+    let want_kind = match tab {
+        GoLiveTab::Applications => "window",
+        GoLiveTab::Screens => "screen",
+    };
+    let filtered: Vec<&GoLiveSource> = s
+        .discord
+        .voice_ui
+        .golive_sources
+        .iter()
+        .filter(|src| {
+            src.kind == want_kind
+                && !(tab == GoLiveTab::Applications && game_src.is_some_and(|g| g.id == src.id))
+        })
         .collect();
 
+    let mut body = col().w_full().gap(12.0);
+    if s.discord.voice_ui.golive_service_disabled
+        || s.discord.voice_ui.golive_capture_mode.as_deref() == Some("dxgi")
+    {
+        body = body.child(
+            text(if s.discord.voice_ui.golive_service_disabled {
+                "Using screen compatibility mode (Windows Capture Service is disabled)."
+            } else {
+                "Using screen compatibility mode."
+            })
+            .font(type_label())
+            .color(fg_muted()),
+        );
+    }
+
+    if tab == GoLiveTab::Applications
+        && let Some(game) = game_src
+    {
+        let g_clone = game.clone();
+        let g_name = game.game.clone().unwrap_or_else(|| game.title.clone());
+        body = body.child(
+            row()
+                .key("dc-gl-game-banner")
+                .role("button")
+                .label(format!("Stream {g_name}"))
+                .cursor(Cursor::Pointer)
+                .hit()
+                .w_full()
+                .padding(12.0)
+                .gap(12.0)
+                .center_y()
+                .radius(RADIUS_CARD)
+                .fill(BG.alpha(0.60))
+                .border(1.0, hairline())
+                .hover(hover_fill())
+                .on_press(move |s: &mut AppState| s.pick_golive_source(g_clone.clone()))
+                .child(icon_app_window(22.0, FG))
+                .child(
+                    col()
+                        .grow(1.0)
+                        .gap(2.0)
+                        .child(text("Game").font(type_label()).color(fg_muted()))
+                        .child(text(g_name).font(type_section()).color(FG)),
+                )
+                .child(
+                    row()
+                        .h(28.0)
+                        .px(12.0)
+                        .center()
+                        .radius(RADIUS_PILL)
+                        .fill(FG)
+                        .child(text("Stream").font(type_control()).color(PRIMARY_FG)),
+                ),
+        );
+    }
+
     let mut grid = row().w_full().gap(10.0).flex_wrap();
-    if s.discord.voice_ui.golive_loading {
+    if s.discord.voice_ui.golive_loading && s.discord.voice_ui.golive_sources.is_empty() {
         grid = grid.child(
             el().w_full().py(28.0).center().child(
-                text("Scanning windows and screens…")
+                text("Finding your windows…")
                     .font(type_small())
                     .color(fg_muted()),
             ),
@@ -512,60 +993,54 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
     } else if filtered.is_empty() {
         grid = grid.child(
             el().w_full().py(28.0).center().child(
-                text(if tab == GoLiveTab::Applications {
-                    "No capturable application windows found."
-                } else {
-                    "No screens found."
-                })
+                text(s.discord.voice_ui.golive_error.as_deref().unwrap_or(
+                    if tab == GoLiveTab::Applications {
+                        if game_src.is_some() {
+                            "No other windows to share."
+                        } else {
+                            "No windows to share."
+                        }
+                    } else {
+                        "No screens found."
+                    },
+                ))
                 .font(type_small())
                 .color(fg_muted()),
             ),
         );
     } else {
         for src in filtered {
-            let selected =
-                s.discord.voice_ui.golive_selected_source.as_deref() == Some(src.id.as_str());
-            let sid = src.id.clone();
-            let mut card = col()
+            let src_clone = src.clone();
+            let meta = screen_meta(src);
+            let card = col()
                 .key(format!("dc-gl-src-{}", src.id))
                 .role("button")
-                .label(src.title.clone())
+                .label(format!("Share {}", src.title))
                 .cursor(Cursor::Pointer)
                 .focusable(true)
                 .hit()
                 .press_on_down()
                 .press_scale(PRESS_SCALE)
-                .w(166.0)
-                .padding(12.0)
+                .w(204.0)
+                .padding(10.0)
                 .gap(8.0)
                 .radius(RADIUS_CARD)
-                .fill(if selected {
-                    FG.alpha(0.12)
-                } else {
-                    BG.alpha(0.56)
-                })
+                .fill(BG.alpha(0.56))
+                .border(1.0, hairline())
                 .hover(hover_fill())
                 .motion(SPRING_QUICK)
-                .on_press(move |s: &mut AppState| {
-                    s.discord.voice_ui.golive_selected_source = Some(sid.clone());
-                });
-            card = if selected {
-                card.border(1.5, FG)
-            } else {
-                card.border(1.0, hairline())
-            };
-            card = card
+                .on_press(move |s: &mut AppState| s.pick_golive_source(src_clone.clone()))
                 .child(
                     el().w_full()
-                        .h(68.0)
+                        .h(96.0)
                         .radius(RADIUS_SMALL)
                         .fill(BG)
                         .border(1.0, hairline())
                         .center()
                         .child(if src.kind == "screen" {
-                            icon_monitor(22.0, if selected { FG } else { fg_muted() })
+                            icon_monitor(26.0, fg_muted())
                         } else {
-                            icon_app_window(22.0, if selected { FG } else { fg_muted() })
+                            icon_app_window(26.0, fg_muted())
                         }),
                 )
                 .child(
@@ -575,7 +1050,7 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
                         .truncate(),
                 )
                 .child(
-                    text(src.app.clone().unwrap_or_else(|| {
+                    text(meta.or_else(|| src.app.clone()).unwrap_or_else(|| {
                         if src.kind == "screen" {
                             "Display"
                         } else {
@@ -591,141 +1066,73 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         }
     }
 
-    let cur_h = s.discord.voice_ui.golive_height;
-    let cur_fps = s.discord.voice_ui.golive_fps;
-    let sound_on = s.discord.voice_ui.golive_sound;
+    modal.child(tabs).child(
+        col()
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(body.child(grid)),
+    )
+}
 
-    let quality_row = row()
-        .w_full()
-        .justify_between()
-        .center_y()
-        .gap(12.0)
-        .child(
-            col()
-                .gap(6.0)
-                .child(text("Resolution").font(type_label()).color(fg_muted()))
-                .child(
-                    row()
-                        .gap(6.0)
-                        .child(
-                            filter_pill("dc-gl-720", "720p", cur_h == 720).on_press(
-                                |s: &mut AppState| s.discord.voice_ui.golive_height = 720,
-                            ),
-                        )
-                        .child(
-                            filter_pill("dc-gl-1080", "1080p", cur_h == 1080).on_press(
-                                |s: &mut AppState| s.discord.voice_ui.golive_height = 1080,
-                            ),
-                        )
-                        .child(
-                            filter_pill("dc-gl-src", "Source", cur_h == 0)
-                                .on_press(|s: &mut AppState| s.discord.voice_ui.golive_height = 0),
-                        ),
-                ),
-        )
-        .child(
-            col()
-                .gap(6.0)
-                .child(text("Frame rate").font(type_label()).color(fg_muted()))
-                .child(
-                    row()
-                        .gap(6.0)
-                        .child(
-                            filter_pill("dc-gl-30", "30 fps", cur_fps == 30)
-                                .on_press(|s: &mut AppState| s.discord.voice_ui.golive_fps = 30),
-                        )
-                        .child(
-                            filter_pill("dc-gl-60", "60 fps", cur_fps == 60)
-                                .on_press(|s: &mut AppState| s.discord.voice_ui.golive_fps = 60),
-                        ),
-                ),
-        );
-
-    let audio_row = row()
-        .w_full()
-        .py(6.0)
-        .justify_between()
-        .center_y()
-        .child(
-            col()
-                .gap(2.0)
-                .child(text("Share system audio").font(type_body()).color(FG))
-                .child(
-                    text("Include audio from the shared window or screen")
-                        .font(type_label())
-                        .color(fg_muted()),
-                ),
-        )
-        .child(
-            switch_pill("dc-gl-sound", "Share system audio", sound_on).on_press(
-                |s: &mut AppState| {
-                    s.discord.voice_ui.golive_sound = !s.discord.voice_ui.golive_sound
-                },
-            ),
-        );
-
-    let active = matches!(
-        s.discord.voice_ui.golive_state.as_str(),
-        "live" | "connecting" | "starting"
-    );
-    let footer = row()
-        .w_full()
-        .justify_between()
-        .center_y()
-        .child(if active {
-            glass_button(
-                "dc-gl-stop",
-                "Stop streaming",
-                Some(icon_close(13.0, bad())),
-            )
-            .on_press(|s: &mut AppState| s.stop_discord_golive())
-        } else {
-            el()
-        })
-        .child(
+fn soundboard_section(heading: &str, items: &[&DiscordSoundItem]) -> El {
+    let mut grid = row().w_full().gap(8.0).flex_wrap();
+    for sound in items {
+        let s_clone = (*sound).clone();
+        let label = sound.name.clone();
+        let disabled = sound.available == Some(false);
+        grid = grid.child(
             row()
-                .gap(8.0)
+                .key(format!("dc-sb-{}", sound.sound_id))
+                .role("button")
+                .label(label.clone())
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .press_scale(PRESS_SCALE)
+                .w(112.0)
+                .h(38.0)
+                .px(10.0)
+                .gap(6.0)
                 .center_y()
+                .radius(RADIUS_CARD)
+                .fill(BG.alpha(0.56))
+                .border(1.0, hairline())
+                .hover(hover_fill())
+                .press(pressed_fill())
+                .motion(SPRING_QUICK)
+                .on_press(move |s: &mut AppState| {
+                    if !disabled {
+                        s.play_discord_sound(&s_clone);
+                    }
+                })
+                .child(icon_music(12.0, fg_muted()))
                 .child(
-                    glass_button("dc-gl-cancel", "Cancel", None)
-                        .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::None)),
-                )
-                .child(
-                    primary_button(
-                        "dc-gl-start",
-                        if active { "Switch stream" } else { "Go Live" },
-                        Some(icon_screen_share(14.0, PRIMARY_FG)),
-                    )
-                    .on_press(|s: &mut AppState| s.start_discord_golive()),
+                    text(label)
+                        .font(type_small())
+                        .color(if disabled { fg_faint() } else { FG })
+                        .truncate(),
                 ),
         );
-
-    modal
-        .child(tabs)
-        .child(
-            col()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(grid),
-        )
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(quality_row)
-        .child(audio_row)
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(footer)
+    }
+    col()
+        .w_full()
+        .gap(6.0)
+        .child(text(heading).font(type_label()).color(fg_muted()))
+        .child(grid)
 }
 
 fn soundboard_popover(s: &AppState, blur: bool) -> El {
     let mut card = col()
         .key("dc-soundboard-panel")
-        .w(380.0)
-        .max_h(440.0)
+        .w(420.0)
+        .max_h(480.0)
         .padding(16.0)
-        .gap(12.0)
+        .gap(10.0)
         .radius(20.0)
         .fill(if blur {
             glass_panel_fill()
@@ -739,16 +1146,118 @@ fn soundboard_popover(s: &AppState, blur: bool) -> El {
         card = card.backdrop_blur(GLASS_PANEL_SIGMA);
     }
 
+    let sb_muted = s
+        .discord
+        .voice_ui
+        .audio
+        .as_ref()
+        .is_some_and(|a| a.soundboard_muted);
+    let sb_vol = if sb_muted {
+        0
+    } else {
+        s.discord
+            .voice_ui
+            .audio
+            .as_ref()
+            .map(|a| a.soundboard_volume.round() as i32)
+            .unwrap_or(100)
+    };
+
     let header = row()
         .w_full()
-        .justify_between()
+        .gap(8.0)
         .center_y()
         .child(
             row()
-                .gap(8.0)
+                .grow(1.0)
+                .h(32.0)
+                .px(10.0)
+                .gap(6.0)
                 .center_y()
-                .child(icon_music(16.0, FG))
-                .child(text("Soundboard").font(type_section()).color(FG)),
+                .radius(RADIUS_PILL)
+                .fill(BG)
+                .border(1.0, hairline())
+                .child(icon_search(13.0, fg_muted()))
+                .child(
+                    text_input(&s.discord.voice_ui.soundboard_query, type_small())
+                        .key("dc-sb-search")
+                        .placeholder("Filter sounds", fg_muted())
+                        .grow(1.0)
+                        .color(FG)
+                        .single_line()
+                        .on_edit(edit_access(|s: &mut AppState| {
+                            &mut s.discord.voice_ui.soundboard_query
+                        })),
+                ),
+        )
+        .child(
+            row()
+                .gap(4.0)
+                .center_y()
+                .child(
+                    el().key("dc-sb-mute")
+                        .role("button")
+                        .label(if sb_muted {
+                            "Unmute soundboard"
+                        } else {
+                            "Mute soundboard"
+                        })
+                        .cursor(Cursor::Pointer)
+                        .hit()
+                        .size(28.0, 28.0)
+                        .radius(RADIUS_PILL)
+                        .hover(hover_fill())
+                        .center()
+                        .on_press(move |s: &mut AppState| {
+                            s.set_discord_audio(json!({ "soundboardMuted": !sb_muted }));
+                        })
+                        .child(if sb_muted || sb_vol == 0 {
+                            icon_volume_off(14.0, fg_muted())
+                        } else {
+                            icon_volume(14.0, FG)
+                        }),
+                )
+                .child(
+                    el().key("dc-sb-vol-dn")
+                        .cursor(Cursor::Pointer)
+                        .hit()
+                        .size(22.0, 22.0)
+                        .radius(RADIUS_PILL)
+                        .hover(hover_fill())
+                        .center()
+                        .on_press(move |s: &mut AppState| {
+                            let next = (sb_vol - 15).max(0);
+                            if next == 0 {
+                                s.set_discord_audio(json!({ "soundboardMuted": true }));
+                            } else {
+                                s.set_discord_audio(
+                                    json!({ "soundboardVolume": next, "soundboardMuted": false }),
+                                );
+                            }
+                        })
+                        .child(text("−").font(type_small()).color(FG)),
+                )
+                .child(
+                    text(format!("{sb_vol}%"))
+                        .font(type_label())
+                        .color(fg_muted()),
+                )
+                .child(
+                    el().key("dc-sb-vol-up")
+                        .cursor(Cursor::Pointer)
+                        .hit()
+                        .size(22.0, 22.0)
+                        .radius(RADIUS_PILL)
+                        .hover(hover_fill())
+                        .center()
+                        .on_press(move |s: &mut AppState| {
+                            let next = (sb_vol + 15).min(100);
+                            s.set_discord_audio(
+                                json!({ "soundboardVolume": next, "soundboardMuted": false }),
+                            );
+                        })
+                        .child(text("+").font(type_small()).color(FG)),
+                ),
         )
         .child(
             el().key("dc-sb-close")
@@ -766,71 +1275,90 @@ fn soundboard_popover(s: &AppState, blur: bool) -> El {
                 .child(icon_close(14.0, fg_muted())),
         );
 
-    let mut pads = row().w_full().gap(8.0).flex_wrap();
-    if s.discord.voice_ui.soundboard_loading {
-        pads = pads.child(
+    let q = s
+        .discord
+        .voice_ui
+        .soundboard_query
+        .text
+        .trim()
+        .to_lowercase();
+    let keep = |item: &&DiscordSoundItem| q.is_empty() || item.name.to_lowercase().contains(&q);
+    let guild_items: Vec<_> = s
+        .discord
+        .voice_ui
+        .soundboard_guild
+        .iter()
+        .filter(keep)
+        .collect();
+    let default_items: Vec<_> = s
+        .discord
+        .voice_ui
+        .soundboard_defaults
+        .iter()
+        .filter(keep)
+        .collect();
+    let other_guilds: Vec<(&str, Vec<&DiscordSoundItem>)> = s
+        .discord
+        .voice_ui
+        .soundboard_guilds
+        .iter()
+        .map(|g| {
+            (
+                g.name.as_str(),
+                g.items.iter().filter(keep).collect::<Vec<_>>(),
+            )
+        })
+        .filter(|(_, items)| !items.is_empty())
+        .collect();
+
+    let mut content = col().w_full().gap(12.0);
+    if let Some(ref err) = s.discord.voice_ui.soundboard_error {
+        content = content.child(text(err.clone()).font(type_small()).color(bad()));
+    }
+    if s.discord.voice_ui.soundboard_loading
+        && guild_items.is_empty()
+        && default_items.is_empty()
+        && other_guilds.is_empty()
+    {
+        content = content.child(
             el().w_full()
                 .py(24.0)
                 .center()
                 .child(text("Loading sounds…").font(type_small()).color(fg_muted())),
         );
     } else {
-        let all: Vec<_> = s
-            .discord
-            .voice_ui
-            .soundboard_guild
-            .iter()
-            .chain(s.discord.voice_ui.soundboard_defaults.iter())
-            .collect();
-        if all.is_empty() {
-            pads = pads.child(
+        if !guild_items.is_empty() {
+            content = content.child(soundboard_section("This server", &guild_items));
+        }
+        for (gname, items) in &other_guilds {
+            content = content.child(soundboard_section(gname, items));
+        }
+        if !default_items.is_empty() {
+            content = content.child(soundboard_section("Discord", &default_items));
+        }
+        if guild_items.is_empty() && other_guilds.is_empty() && default_items.is_empty() {
+            content = content.child(
                 el().w_full().py(24.0).center().child(
-                    text("No soundboard sounds available.")
-                        .font(type_small())
-                        .color(fg_muted()),
+                    text(if !q.is_empty() {
+                        "No sounds match that filter."
+                    } else {
+                        "No sounds available here."
+                    })
+                    .font(type_small())
+                    .color(fg_muted()),
                 ),
             );
-        } else {
-            for sound in all {
-                let s_clone = sound.clone();
-                let label = sound.name.clone();
-                pads = pads.child(
-                    row()
-                        .key(format!("dc-sb-{}", sound.sound_id))
-                        .role("button")
-                        .label(label.clone())
-                        .cursor(Cursor::Pointer)
-                        .focusable(true)
-                        .hit()
-                        .press_on_down()
-                        .press_scale(PRESS_SCALE)
-                        .w(108.0)
-                        .h(38.0)
-                        .px(10.0)
-                        .gap(6.0)
-                        .center_y()
-                        .radius(RADIUS_CARD)
-                        .fill(BG.alpha(0.56))
-                        .border(1.0, hairline())
-                        .hover(hover_fill())
-                        .press(pressed_fill())
-                        .motion(SPRING_QUICK)
-                        .on_press(move |s: &mut AppState| s.play_discord_sound(&s_clone))
-                        .child(icon_music(12.0, fg_muted()))
-                        .child(text(label).font(type_small()).color(FG).truncate()),
-                );
-            }
         }
     }
 
     card.child(header).child(
         col()
             .w_full()
-            .max_h(340.0)
+            .max_h(360.0)
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
-            .child(pads),
+            .child(content),
     )
 }
 
@@ -1217,7 +1745,7 @@ pub fn voice_stage_view(
         );
     }
     let members = roster.as_slice();
-    let is_stage = ch.channel_type == 13 || ch.stage_topic.is_some();
+    let _is_stage = ch.channel_type == 13 || ch.stage_topic.is_some();
     let is_golive = matches!(
         s.discord.voice_ui.golive_state.as_str(),
         "live" | "connecting" | "starting"
@@ -1317,46 +1845,255 @@ pub fn voice_stage_view(
         .pb(63.0)
         .gap(14.0);
 
+    let is_stage = ch.channel_type == 13 || ch.kind == "stage" || ch.stage_topic.is_some();
+    let speakers: Vec<&DiscordVoiceMember> = if is_stage {
+        members.iter().filter(|m| !m.suppress).collect()
+    } else {
+        members.iter().collect()
+    };
+    let mut audience: Vec<&DiscordVoiceMember> = if is_stage {
+        members.iter().filter(|m| m.suppress).collect()
+    } else {
+        Vec::new()
+    };
+    audience.sort_by_key(|m| if m.request_to_speak.is_some() { 0 } else { 1 });
+    let me_id = s.discord.home.me.as_ref().map(|m| m.id.as_str());
+    let me_member = me_id.and_then(|id| members.iter().find(|m| m.id == id));
+    let raising_count = audience
+        .iter()
+        .filter(|m| m.request_to_speak.is_some())
+        .count();
+    let can_moderate = is_stage && ch.can_moderate_stage;
+
     if is_stage {
         let topic = ch
             .stage_topic
             .clone()
-            .unwrap_or_else(|| "Stage channel".into());
+            .or_else(|| ch.topic.clone())
+            .unwrap_or_else(|| ch.name.clone());
         let gid_s = guild_id.unwrap_or("").to_string();
         let cid_s = ch.id.clone();
+        let mut banner = col()
+            .key("dc-stage-banner")
+            .w_full()
+            .px(14.0)
+            .py(10.0)
+            .gap(8.0)
+            .radius(RADIUS_CARD)
+            .fill(BG)
+            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+
+        let info_row = row().w_full().justify_between().center_y().gap(10.0).child(
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(
+                    row()
+                        .px(8.0)
+                        .py(3.0)
+                        .radius(RADIUS_PILL)
+                        .fill(if ch.stage_topic.is_some() {
+                            good().alpha(0.18)
+                        } else {
+                            glass_still_control_fill()
+                        })
+                        .child(
+                            text(if ch.stage_topic.is_some() {
+                                "Live stage"
+                            } else {
+                                "Stage"
+                            })
+                            .font(type_label())
+                            .color(if ch.stage_topic.is_some() { good() } else { FG }),
+                        ),
+                )
+                .child(text(topic).font(type_section()).color(FG).truncate())
+                .children((raising_count > 0).then(|| {
+                    text(format!("{raising_count} waiting to speak"))
+                        .font(type_small())
+                        .color(fg_muted())
+                })),
+        );
+
+        if let Some(mode) = s.discord.voice_ui.stage_editing_mode {
+            let cid_go = cid_s.clone();
+            let act = if mode == "start" {
+                "stageStart"
+            } else {
+                "stageEdit"
+            };
+            banner = banner.child(info_row).child(
+                row()
+                    .w_full()
+                    .gap(8.0)
+                    .center_y()
+                    .child(
+                        text_input(&s.discord.voice_ui.stage_topic_input, type_body())
+                            .key("dc-stage-topic-in")
+                            .placeholder("What's this stage about?", fg_muted())
+                            .grow(1.0)
+                            .h(34.0)
+                            .px(10.0)
+                            .radius(RADIUS_SMALL)
+                            .fill(BG)
+                            .border(1.0, hairline())
+                            .color(FG)
+                            .single_line()
+                            .on_edit(edit_access(|s: &mut AppState| {
+                                &mut s.discord.voice_ui.stage_topic_input
+                            })),
+                    )
+                    .child(
+                        primary_button(
+                            "dc-stage-topic-go",
+                            if mode == "start" { "Start" } else { "Save" },
+                            None,
+                        )
+                        .on_press(move |s: &mut AppState| {
+                            let val = s.discord.voice_ui.stage_topic_input.text.trim().to_string();
+                            if !val.is_empty() {
+                                s.manage_discord_stage(act, &cid_go, Some(val));
+                            }
+                        }),
+                    )
+                    .child(
+                        glass_button("dc-stage-topic-cancel", "Cancel", None).on_press(
+                            |s: &mut AppState| s.discord.voice_ui.stage_editing_mode = None,
+                        ),
+                    ),
+            );
+        } else {
+            let mut actions = row().gap(8.0).center_y();
+            if in_this_voice && let Some(me_m) = me_member {
+                if me_m.suppress {
+                    let req = me_m.request_to_speak.is_some() || s.discord.voice_ui.stage_requested;
+                    let (g1, c1) = (gid_s.clone(), cid_s.clone());
+                    actions = actions.child(
+                        glass_button(
+                            "dc-stage-rts",
+                            if req {
+                                "Lower hand"
+                            } else {
+                                "Request to speak"
+                            },
+                            Some(icon_hand(14.0, FG)),
+                        )
+                        .on_press(move |s: &mut AppState| {
+                            s.set_discord_stage_state(&g1, &c1, None, None, Some(!req));
+                        }),
+                    );
+                    if can_moderate {
+                        let (g2, c2) = (gid_s.clone(), cid_s.clone());
+                        actions = actions.child(
+                            primary_button("dc-stage-join", "Join stage", None).on_press(
+                                move |s: &mut AppState| {
+                                    s.set_discord_stage_state(&g2, &c2, None, Some(false), None);
+                                },
+                            ),
+                        );
+                    }
+                } else {
+                    let (g3, c3) = (gid_s.clone(), cid_s.clone());
+                    actions = actions.child(
+                        glass_button("dc-stage-to-aud", "Move to audience", None).on_press(
+                            move |s: &mut AppState| {
+                                s.set_discord_stage_state(&g3, &c3, None, Some(true), None);
+                            },
+                        ),
+                    );
+                }
+            }
+            if can_moderate {
+                if ch.stage_topic.is_some() {
+                    let existing = ch.stage_topic.clone().unwrap_or_default();
+                    let cid_end = cid_s.clone();
+                    actions =
+                        actions.child(glass_button("dc-stage-edit", "Edit topic", None).on_press(
+                            move |s: &mut AppState| {
+                                s.discord.voice_ui.stage_topic_input = TextEdit::new(&existing);
+                                s.discord.voice_ui.stage_editing_mode = Some("edit");
+                            },
+                        ));
+                    if s.discord.voice_ui.stage_end_confirm {
+                        actions = actions.child(
+                            primary_button("dc-stage-end-yes", "End stage?", None).on_press(
+                                move |s: &mut AppState| {
+                                    s.manage_discord_stage("stageEnd", &cid_end, None)
+                                },
+                            ),
+                        );
+                    } else {
+                        actions = actions.child(
+                            glass_button("dc-stage-end", "End stage", None).on_press(
+                                |s: &mut AppState| s.discord.voice_ui.stage_end_confirm = true,
+                            ),
+                        );
+                    }
+                } else {
+                    let init = ch.topic.clone().unwrap_or_default();
+                    actions = actions.child(
+                        primary_button("dc-stage-start", "Start stage", None).on_press(
+                            move |s: &mut AppState| {
+                                s.discord.voice_ui.stage_topic_input = TextEdit::new(&init);
+                                s.discord.voice_ui.stage_editing_mode = Some("start");
+                            },
+                        ),
+                    );
+                }
+            }
+            banner = banner.child(info_row.child(actions));
+        }
+
+        stage_inner = stage_inner.child(banner);
+    }
+
+    if !is_stage
+        && let Some(ref act) = ch.activity
+        && !act.is_empty()
+    {
         stage_inner = stage_inner.child(
             row()
                 .w_full()
                 .px(14.0)
-                .py(10.0)
-                .justify_between()
+                .py(8.0)
+                .gap(8.0)
                 .center_y()
                 .radius(RADIUS_CARD)
                 .fill(BG)
-                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-                .child(
-                    col()
-                        .gap(2.0)
-                        .child(text(topic).font(type_section()).color(FG))
-                        .child(
-                            text(format!("{} in stage", members.len()))
-                                .font(type_small())
-                                .color(fg_muted()),
-                        ),
-                )
-                .child(
-                    glass_button(
-                        "dc-stage-rts",
-                        if s.discord.voice_ui.stage_requested {
-                            "Lower hand"
-                        } else {
-                            "Request to speak"
-                        },
-                        Some(icon_hand(14.0, FG)),
-                    )
-                    .on_press(move |s: &mut AppState| s.toggle_discord_stage_speak(&gid_s, &cid_s)),
-                ),
+                .border(1.0, hairline())
+                .child(text("Activity").font(type_label()).color(fg_muted()))
+                .child(text(act.clone()).font(type_control()).color(FG)),
         );
+    }
+
+    if !s.discord.voice_ui.call_songs.is_empty() && in_this_voice {
+        let mut songs_row = row().w_full().gap(8.0).wrap().center_y();
+        for cs in &s.discord.voice_ui.call_songs {
+            if let Some(ref r) = cs.rich
+                && let Some(ref details) = r.details
+            {
+                let artist = r.state.as_deref().unwrap_or("");
+                let line = if artist.is_empty() {
+                    format!("{}: {details}", cs.name)
+                } else {
+                    format!("{}: {details} — {artist}", cs.name)
+                };
+                songs_row = songs_row.child(
+                    row()
+                        .key(format!("dc-callsong-{}", cs.user_id))
+                        .px(10.0)
+                        .py(5.0)
+                        .gap(6.0)
+                        .center_y()
+                        .radius(RADIUS_PILL)
+                        .fill(glass_still_control_fill())
+                        .border(1.0, hairline())
+                        .child(icon_music(12.0, good()))
+                        .child(text(line).font(type_label()).color(FG).truncate()),
+                );
+            }
+        }
+        stage_inner = stage_inner.child(songs_row);
     }
 
     if is_golive {
@@ -1421,7 +2158,9 @@ pub fn voice_stage_view(
     }
 
     let watching_any = s.discord.voice_ui.watching_stream.is_some();
-    if members.is_empty() && !watching_any {
+    let show_my_stream = is_golive && in_this_voice && s.discord.voice_ui.golive_preview_shown;
+    let total_tiles = speakers.len() + usize::from(show_my_stream);
+    if total_tiles == 0 && !watching_any {
         stage_inner = stage_inner.child(
             col()
                 .w_full()
@@ -1438,22 +2177,60 @@ pub fn voice_stage_view(
                 )
                 .child(text(ch.name.clone()).font(type_title()).color(FG))
                 .child(
-                    text("No one is here yet.")
-                        .font(type_body())
-                        .color(fg_muted()),
+                    text(if is_stage && !audience.is_empty() {
+                        "No one is speaking yet."
+                    } else {
+                        "No one is here yet."
+                    })
+                    .font(type_body())
+                    .color(fg_muted()),
                 ),
         );
     } else if !s.discord.voice_ui.fullscreen_stream {
-        let solo = members.len() == 1 && !watching_any;
-        let mut tiles = row().w_full().gap(14.0).flex_wrap().justify_center();
-        for m in members {
-            tiles = tiles.child(participant_tile(s, guild_id, m, watching_any, solo, scale));
+        let (sw, sh) = s.discord.voice_ui.stage_size;
+        let dyn_w = if sw > 0.0 && sh > 0.0 {
+            fit_tiles(sw, sh, total_tiles.max(1), 12.0)
+        } else if total_tiles == 1 && !watching_any {
+            1240.0
+        } else {
+            320.0
+        };
+        let mut tiles = row().w_full().gap(12.0).flex_wrap().justify_center();
+        for m in &speakers {
+            let demote = if can_moderate && in_this_voice && Some(m.id.as_str()) != me_id {
+                guild_id.map(|g| (g.to_string(), ch.id.clone()))
+            } else {
+                None
+            };
+            tiles = tiles.child(participant_tile(
+                s,
+                guild_id,
+                m,
+                watching_any,
+                dyn_w,
+                demote,
+                scale,
+            ));
+        }
+        if show_my_stream {
+            tiles = tiles.child(my_stream_tile(s, members, dyn_w, scale));
         }
         stage_inner = stage_inner.child(
             col()
+                .key("dc-stage-tiles-wrap")
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
+                .on_layout(|s: &mut AppState, r| {
+                    if r[2] > 0.0 && r[3] > 0.0 {
+                        let next = (r[2], r[3]);
+                        if (s.discord.voice_ui.stage_size.0 - next.0).abs() > 2.0
+                            || (s.discord.voice_ui.stage_size.1 - next.1).abs() > 2.0
+                        {
+                            s.discord.voice_ui.stage_size = next;
+                        }
+                    }
+                })
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
@@ -1464,6 +2241,110 @@ pub fn voice_stage_view(
                         .min_h(if watching_any { 0.0 } else { 420.0 })
                         .center()
                         .child(tiles),
+                ),
+        );
+    }
+
+    if is_stage && !audience.is_empty() {
+        let mut aud_list = row().w_full().gap(8.0).flex_wrap();
+        for m in &audience {
+            let raising = m.request_to_speak.is_some();
+            let uid = m.id.clone();
+            let gid_i = guild_id.unwrap_or("").to_string();
+            let cid_i = ch.id.clone();
+            aud_list = aud_list.child(
+                row()
+                    .key(format!("dc-stage-aud-{}", m.id))
+                    .px(10.0)
+                    .py(6.0)
+                    .gap(8.0)
+                    .center_y()
+                    .radius(RADIUS_PILL)
+                    .fill(BG)
+                    .border(
+                        1.0,
+                        if raising {
+                            warn().alpha(0.55)
+                        } else {
+                            hairline()
+                        },
+                    )
+                    .child(avatar_box(
+                        s,
+                        m.avatar.as_deref(),
+                        &m.name,
+                        24.0,
+                        12.0,
+                        None,
+                        false,
+                        scale,
+                    ))
+                    .child(text(m.name.clone()).font(type_small()).color(FG))
+                    .children((can_moderate && in_this_voice).then(|| {
+                        glass_button(
+                            "dc-stage-inv",
+                            if raising {
+                                "Invite to speak"
+                            } else {
+                                "Bring to stage"
+                            },
+                            None,
+                        )
+                        .key(format!("dc-stage-inv-{}", m.id))
+                        .on_press(move |s: &mut AppState| {
+                            s.set_discord_stage_state(
+                                &gid_i,
+                                &cid_i,
+                                Some(&uid),
+                                Some(false),
+                                None,
+                            );
+                        })
+                    })),
+            );
+        }
+        stage_inner = stage_inner.child(
+            col()
+                .key("dc-stage-audience")
+                .w_full()
+                .gap(6.0)
+                .child(
+                    text(format!("Audience · {}", audience.len()))
+                        .font(type_label())
+                        .color(fg_muted()),
+                )
+                .child(aud_list),
+        );
+    }
+
+    if let Some(err) = s.discord.voice_ui.voice_error.as_ref().or(s
+        .discord
+        .voice_ui
+        .stage_error
+        .as_ref())
+    {
+        stage_inner = stage_inner.child(
+            row()
+                .w_full()
+                .px(12.0)
+                .py(8.0)
+                .justify_between()
+                .center_y()
+                .radius(RADIUS_SMALL)
+                .fill(bad().alpha(0.14))
+                .border(1.0, bad().alpha(0.35))
+                .child(text(err.clone()).font(type_small()).color(FG))
+                .child(
+                    el().key("dc-voice-err-x")
+                        .cursor(Cursor::Pointer)
+                        .hit()
+                        .size(22.0, 22.0)
+                        .center()
+                        .on_press(|s: &mut AppState| {
+                            s.discord.voice_ui.voice_error = None;
+                            s.discord.voice_ui.stage_error = None;
+                        })
+                        .child(icon_close(12.0, FG)),
                 ),
         );
     }
@@ -1584,9 +2465,9 @@ pub fn voice_stage_view(
             .child(
                 bar_word_btn(
                     "dc-voice-share",
-                    "Share",
+                    if is_golive { "Live" } else { "Share" },
                     if is_golive {
-                        "Stream options"
+                        "Your stream"
                     } else {
                         "Share your screen"
                     },
@@ -1602,7 +2483,13 @@ pub fn voice_stage_view(
                     ),
                     94.0,
                 )
-                .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::GoLive))
+                .on_press(move |s: &mut AppState| {
+                    if is_golive {
+                        s.open_context_menu(ContextMenuTarget::DiscordGoLiveMenu, 952.0, 940.0);
+                    } else {
+                        s.open_voice_panel(VoicePanel::GoLive);
+                    }
+                })
                 .on_secondary_press(|s: &mut AppState, p, _| {
                     s.open_context_menu(ContextMenuTarget::DiscordGoLiveMenu, p.x, p.y);
                 }),
@@ -1747,4 +2634,316 @@ pub fn voice_stage_view(
         .gap(12.0)
         .child(voice_pane)
         .child(chat_pane)
+}
+
+pub fn island_call_capsule(s: &AppState, blur: bool) -> Option<El> {
+    if s.room == Room::Discord || s.discord.voice.state == "off" {
+        return None;
+    }
+    let connected = s.discord.voice.state == "connected";
+    let muted = s.discord.voice.muted;
+    let deaf = s.discord.voice.deafened;
+    let streaming = s.discord.voice_ui.golive_state != "off";
+    let channel_label = s.discord.voice_channel_label();
+    let members: Vec<DiscordVoiceMember> = if let Some(ref gid) = s.discord.voice.guild_id
+        && let Some(ref cid) = s.discord.voice.channel_id
+    {
+        s.discord
+            .channels_by_guild
+            .get(gid)
+            .and_then(|c| c.channels.iter().find(|x| &x.id == cid))
+            .and_then(|c| c.members.clone())
+            .unwrap_or_default()
+    } else if let Some(ref cid) = s.discord.voice.channel_id {
+        s.discord
+            .home
+            .dms
+            .iter()
+            .find(|d| &d.id == cid)
+            .and_then(|d| d.call.clone())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    let mut faces = row().gap(3.0).center_y();
+    for m in members.iter().take(4) {
+        let sp = s.discord.speaking.contains(&m.id)
+            && !s
+                .discord
+                .voice_ui
+                .user_mix
+                .get(&m.id)
+                .is_some_and(|x| x.muted);
+        faces = faces.child(avatar_box(
+            s,
+            m.avatar.as_deref(),
+            &m.name,
+            20.0,
+            10.0,
+            None,
+            sp,
+            1.0,
+        ));
+    }
+    if members.len() > 4 {
+        faces = faces.child(
+            text(format!("+{}", members.len() - 4))
+                .font(type_label())
+                .color(fg_muted()),
+        );
+    }
+
+    let mut pill = row()
+        .key("exo-island-call")
+        .h(36.0)
+        .pl(10.0)
+        .pr(6.0)
+        .gap(8.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(if blur {
+            glass_control_fill()
+        } else {
+            glass_still_control_fill()
+        })
+        .border_gradient(
+            1.0,
+            if !s.discord.speaking.is_empty() {
+                good().alpha(0.65)
+            } else {
+                glass_rim_top()
+            },
+            glass_rim_bottom(),
+        )
+        .child(
+            row()
+                .key("exo-island-call-open")
+                .role("button")
+                .label("Open Discord call")
+                .cursor(Cursor::Pointer)
+                .hit()
+                .gap(6.0)
+                .center_y()
+                .on_press(|s: &mut AppState| s.open_active_voice_channel())
+                .child(el().size(7.0, 7.0).radius(4.0).fill(if connected {
+                    good()
+                } else {
+                    warn()
+                }))
+                .child(
+                    text(if connected {
+                        channel_label
+                    } else {
+                        "Connecting".into()
+                    })
+                    .font(type_control())
+                    .color(FG)
+                    .max_w(120.0)
+                    .truncate(),
+                ),
+        )
+        .children((!members.is_empty()).then_some(faces))
+        .children(streaming.then(|| {
+            row()
+                .px(6.0)
+                .py(2.0)
+                .radius(RADIUS_PILL)
+                .fill(bad())
+                .child(text("Live").font(type_label()).color(FG))
+        }))
+        .children(
+            s.voice_duration_label()
+                .map(|d| text(d).font(type_label()).color(fg_muted())),
+        )
+        .child(
+            el().key("exo-island-mute")
+                .role("button")
+                .label(if muted { "Unmute" } else { "Mute" })
+                .cursor(Cursor::Pointer)
+                .hit()
+                .size(26.0, 26.0)
+                .radius(RADIUS_PILL)
+                .fill(if muted {
+                    bad().alpha(0.22)
+                } else {
+                    Color::TRANSPARENT
+                })
+                .hover(hover_fill())
+                .center()
+                .on_press(|s: &mut AppState| s.toggle_discord_mute())
+                .child(if muted {
+                    icon_mic_off(14.0, bad())
+                } else {
+                    icon_mic(14.0, FG)
+                }),
+        )
+        .child(
+            el().key("exo-island-deaf")
+                .role("button")
+                .label(if deaf { "Undeafen" } else { "Deafen" })
+                .cursor(Cursor::Pointer)
+                .hit()
+                .size(26.0, 26.0)
+                .radius(RADIUS_PILL)
+                .fill(if deaf {
+                    bad().alpha(0.22)
+                } else {
+                    Color::TRANSPARENT
+                })
+                .hover(hover_fill())
+                .center()
+                .on_press(|s: &mut AppState| s.toggle_discord_deafen())
+                .child(if deaf {
+                    icon_headphones_off(14.0, bad())
+                } else {
+                    icon_headphones(14.0, FG)
+                }),
+        )
+        .child(
+            el().key("exo-island-leave")
+                .role("button")
+                .label("Leave call")
+                .cursor(Cursor::Pointer)
+                .hit()
+                .size(26.0, 26.0)
+                .radius(RADIUS_PILL)
+                .fill(bad())
+                .hover(bad().alpha(0.85))
+                .center()
+                .on_press(|s: &mut AppState| s.leave_discord_voice())
+                .child(icon_phone_off(14.0, FG)),
+        );
+
+    if blur {
+        pill = pill.backdrop_blur(GLASS_CONTROL_SIGMA);
+    }
+    Some(pill)
+}
+
+pub fn incoming_call_overlay(s: &AppState, blur: bool) -> Option<El> {
+    let cid = s.discord.voice_ui.ringing_channel_id.clone()?;
+    let dm = s.discord.home.dms.iter().find(|d| d.id == cid);
+    let caller = dm
+        .map(|d| d.name.clone())
+        .unwrap_or_else(|| "Incoming call".into());
+    let av = dm.and_then(|d| d.avatar.as_deref());
+    let cid_ans = cid.clone();
+    let cid_vid = cid.clone();
+    let cid_dec = cid.clone();
+
+    let mut card = row()
+        .key("dc-incoming-call")
+        .pin(None, Some(64.0), Some(18.0), None)
+        .px(16.0)
+        .py(12.0)
+        .gap(12.0)
+        .center_y()
+        .radius(RADIUS_PANEL)
+        .fill(if blur {
+            glass_panel_fill()
+        } else {
+            glass_still_panel_fill()
+        })
+        .border_gradient(1.0, good().alpha(0.65), glass_rim_bottom())
+        .transition(overlay_transition())
+        .hit()
+        .child(avatar_box(s, av, &caller, 40.0, 20.0, None, true, 1.0))
+        .child(
+            col()
+                .gap(2.0)
+                .child(text(caller).font(type_section()).color(FG))
+                .child(text("Incoming call").font(type_label()).color(good())),
+        )
+        .child(
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(
+                    el().key("dc-ring-answer")
+                        .role("button")
+                        .label("Join call")
+                        .cursor(Cursor::Pointer)
+                        .hit()
+                        .size(34.0, 34.0)
+                        .radius(RADIUS_PILL)
+                        .fill(good())
+                        .center()
+                        .on_press(move |s: &mut AppState| {
+                            s.discord.voice_ui.ringing_channel_id = None;
+                            s.join_discord_voice(None, &cid_ans);
+                            s.open_active_voice_channel();
+                        })
+                        .child(icon_phone(15.0, PRIMARY_FG)),
+                )
+                .child(
+                    el().key("dc-ring-video")
+                        .role("button")
+                        .label("Join with video")
+                        .cursor(Cursor::Pointer)
+                        .hit()
+                        .size(34.0, 34.0)
+                        .radius(RADIUS_PILL)
+                        .fill(glass_still_control_fill())
+                        .border(1.0, hairline())
+                        .hover(hover_fill())
+                        .center()
+                        .on_press(move |s: &mut AppState| {
+                            s.discord.voice_ui.ringing_channel_id = None;
+                            s.join_discord_voice(None, &cid_vid);
+                            s.toggle_discord_camera();
+                            s.open_active_voice_channel();
+                        })
+                        .child(icon_video(15.0, FG)),
+                )
+                .child(
+                    el().key("dc-ring-decline")
+                        .role("button")
+                        .label("Decline")
+                        .cursor(Cursor::Pointer)
+                        .hit()
+                        .size(34.0, 34.0)
+                        .radius(RADIUS_PILL)
+                        .fill(bad())
+                        .center()
+                        .on_press(move |s: &mut AppState| s.decline_discord_call(&cid_dec))
+                        .child(icon_phone_off(15.0, FG)),
+                ),
+        );
+    if blur {
+        card = card.backdrop_blur(GLASS_PANEL_SIGMA);
+    }
+    Some(card)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fit_tiles_respects_16_9_and_max_1280() {
+        let solo = fit_tiles(1400.0, 900.0, 1, 12.0);
+        assert_eq!(solo, 1280.0);
+        let quad = fit_tiles(1200.0, 700.0, 4, 12.0);
+        assert!((550.0..=600.0).contains(&quad), "quad={quad}");
+        let tiny = fit_tiles(100.0, 60.0, 9, 12.0);
+        assert_eq!(tiny, 120.0);
+    }
+
+    #[test]
+    fn format_golive_stats_matches_react_format() {
+        let st = DiscordGoLiveStatsEvent {
+            width: 1920,
+            height: 1080,
+            fps: 60.0,
+            bitrate: 6_000_000.0,
+            max: Some(8_000_000.0),
+            codec: Some("H265".into()),
+            sound: Some("Game audio".into()),
+        };
+        assert_eq!(
+            format_golive_stats(&st),
+            "1920×1080 · 60 fps · H265 · up to 8.0 Mbps · Game audio"
+        );
+    }
 }
