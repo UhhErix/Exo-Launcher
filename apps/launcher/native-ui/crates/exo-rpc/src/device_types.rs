@@ -517,12 +517,3 @@ pub struct MouseDataReply {
     pub message: Option<String>,
     pub data: Option<Value>,
 }
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct PickFolderReply {
-    pub ok: bool,
-    pub cancelled: bool,
-    pub path: Option<String>,
-    pub message: Option<String>,
-}

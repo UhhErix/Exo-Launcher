@@ -28,6 +28,7 @@ fn palette_icon(target: &PaletteTarget) -> El {
         PaletteTarget::NewNote | PaletteTarget::OpenNotes | PaletteTarget::OpenNote(_) => {
             icon_sparkles(16.0, fg_muted())
         }
+        PaletteTarget::ReportProblem => icon_settings(16.0, fg_muted()),
     }
 }
 

@@ -940,16 +940,41 @@ internal sealed partial class LeftoverScan
     /// The elevated steps that send these, already checked by the caller, to the Recycle Bin: the paths travel encoded, as
     /// literals, several to a step, each step under cmd's line limit once encoded. A path with a control character is left out.
     /// </summary>
+    private const int MaxRecycleStepLength = 7500;
+
     internal static List<string> RecycleSteps(IEnumerable<string> paths)
     {
-        var scripts = new List<List<string>> { new() };
+        var prefix = $"{PowerShell} -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand ";
+        var templateChars = RecycleScript.Length - "{0}".Length;
+        var steps = new List<string>();
+        var literals = new List<string>();
+        var payloadChars = 0;
+
+        int EncodedStepLength(int chars)
+        {
+            var bytes = (templateChars + chars) * 2;
+            return prefix.Length + ((bytes + 2) / 3) * 4;
+        }
+
+        void Flush()
+        {
+            if (literals.Count == 0) return;
+            var script = RecycleScript.Replace("{0}", string.Join(",", literals), StringComparison.Ordinal);
+            steps.Add(prefix + Convert.ToBase64String(Encoding.Unicode.GetBytes(script)));
+            literals.Clear();
+            payloadChars = 0;
+        }
+
         foreach (var path in paths.Where(path => !path.Any(char.IsControl)))
         {
-            if (scripts[^1].Sum(literal => literal.Length + 3) + path.Length > 2000) scripts.Add([]);
-            scripts[^1].Add("'" + path.Replace("'", "''") + "'");
+            var literal = "'" + path.Replace("'", "''") + "'";
+            var added = (literals.Count > 0 ? 1 : 0) + literal.Length;
+            if (literals.Count > 0 && EncodedStepLength(payloadChars + added) > MaxRecycleStepLength) Flush();
+            payloadChars += (literals.Count > 0 ? 1 : 0) + literal.Length;
+            literals.Add(literal);
         }
-        return scripts.Where(literals => literals.Count > 0).Select(literals => $"{PowerShell} -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " +
-            Convert.ToBase64String(Encoding.Unicode.GetBytes(RecycleScript.Replace("{0}", string.Join(",", literals), StringComparison.Ordinal)))).ToList();
+        Flush();
+        return steps;
     }
 
     private const string RecycleScript =

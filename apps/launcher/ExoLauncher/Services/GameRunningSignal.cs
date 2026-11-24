@@ -68,7 +68,7 @@ internal static class GameRunningSignal
     /// stops or slows while a game runs, instead of a process scan of its own.</summary>
     internal static bool Running => Volatile.Read(ref _state) == 1;
 
-    internal static void Update(bool running, int generation) => Update(running, generation, WifiGameMode.Hold, LeanSignal.Update, Signal);
+    internal static void Update(bool running, int generation) => Update(running, generation, g => { WifiGameMode.Hold(g); GameSessionDownloadPause.Hold(g); }, LeanSignal.Update, Signal);
 
     /// <summary>
     /// The state is set first: LeanSignal.Changed's listeners (an update waiting for the game) read <see cref="Running"/>, and

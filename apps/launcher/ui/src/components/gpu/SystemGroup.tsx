@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Bolt, Clock, Cpu, EyeOff, GraphicsCard, Lock, Memory, Monitor, Mouse, Performance, Server } from '../../brand/icons'
+import { Bolt, Clock, Cpu, Drive, EyeOff, GraphicsCard, Lock, Memory, Monitor, Mouse, Network, Performance, Server } from '../../brand/icons'
 import { host, type LatencyCheck, type LatencySample, type Tuning, type TuningItem, type TuningKey } from '../../lib/host'
 import { report } from '../../lib/report'
 import { trimStop } from '../../lib/utils'
@@ -14,6 +14,9 @@ const ICONS: Record<TuningKey, ReactNode> = {
   pagefile: <Memory size={16} />,
   cache: <Memory size={16} />,
   captureService: <Server size={16} />,
+  networkThrottling: <Network size={16} />,
+  pagingExecutive: <Memory size={16} />,
+  trimEnabled: <Drive size={16} />,
   vrrLfc: <Monitor size={16} />,
   privacy: <EyeOff size={16} />,
   tasks: <Clock size={16} />,
@@ -23,6 +26,8 @@ const ICONS: Record<TuningKey, ReactNode> = {
   usbPower: <Mouse size={16} />,
   aiTelemetry: <EyeOff size={16} />,
   storageFs: <Server size={16} />,
+  edgeBackground: <Bolt size={16} />,
+  gameIndexing: <Drive size={16} />,
   gamingUx: <Performance size={16} />,
   amdGpuPower: <GraphicsCard size={16} />,
   hags: <Monitor size={16} />,
@@ -48,14 +53,14 @@ const ICONS: Record<TuningKey, ReactNode> = {
  * one Windows prompt), against the check before.
  */
 export function SystemGroup({ tuning, onTuning }: { tuning: Tuning | null; onTuning: (next: Tuning) => void }) {
-  const [busy, setBusy] = useState<TuningKey | 'latency' | null>(null)
-  const [error, setError] = useState<{ key: TuningKey | 'latency'; text: string } | null>(null)
+  const [busy, setBusy] = useState<TuningKey | 'latency' | 'migrate' | null>(null)
+  const [error, setError] = useState<{ key: TuningKey | 'latency' | 'migrate'; text: string } | null>(null)
   if (!tuning) return null
   const visibleItems = tuning.items.filter(item =>
     item.key !== 'integrity' && item.key !== 'mouseAccel' && (item.key !== 'vrr' || item.canUndo),
   )
 
-  const call = async (key: TuningKey | 'latency', ask: () => Promise<Tuning>) => {
+  const call = async (key: TuningKey | 'latency' | 'migrate', ask: () => Promise<Tuning>) => {
     if (busy) return
     setBusy(key)
     setError(null)
@@ -70,10 +75,22 @@ export function SystemGroup({ tuning, onTuning }: { tuning: Tuning | null; onTun
     setBusy(null)
   }
   const run = (item: TuningItem, on: boolean) => call(item.key, () => host.systemTuning(on ? 'on' : 'off', item.key))
+  const migration = tuning.migration ?? null
 
   return (
     <section className="exo-pc-menu-rows" aria-labelledby="pc-best-system">
       <h3 id="pc-best-system" className="exo-pc-best-group">System</h3>
+      {migration?.pending ? (
+        <Row label="Retired playbook tweaks" icon={<Bolt size={16} />} detail={migration.summary}
+          error={error?.key === 'migrate' ? error.text : null}>
+          <button type="button" className="exo-set-btn is-primary" disabled={!!busy} aria-busy={busy === 'migrate'}
+            onClick={() => void call('migrate', () => host.systemTuning('migrate'))}>
+            {busy === 'migrate' ? <Spinner label="Reverting retired playbook tweaks" /> : null}Revert now
+          </button>
+        </Row>
+      ) : migration?.reverted.length ? (
+        <p className="exo-pc-best-note">{migration.summary}</p>
+      ) : null}
       {visibleItems.map(item => {
         const id = `pc-best-sys-${item.key}`
         const detail = item.off ? 'Off: Use best settings leaves it as it is.' : item.optIn && !item.on && !item.blocked ? `${item.detail} Only this switch sets it.` : item.detail

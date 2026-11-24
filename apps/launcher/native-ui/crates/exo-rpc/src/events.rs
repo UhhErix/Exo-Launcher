@@ -135,3 +135,13 @@ pub struct StoreSaleEvent {
     pub currency: Option<String>,
     pub price: Option<String>,
 }
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GpuDriverInstallEvent {
+    pub phase: String,
+    pub version: Option<String>,
+    pub message: Option<String>,
+    pub restored: Vec<String>,
+    pub not_restored: Vec<String>,
+}

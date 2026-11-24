@@ -76,7 +76,7 @@ All commands run fresh after the final edit:
 ## Follow-up: `feat/native-polish-2` Merge, Rune `e6c0716a` (`Lightbox`), and Vision Parity Fixes (2026-11-23)
 
 ### Integration & Rune Pin
-- **Base merge (`1b23da5`):** Merged `origin/feat/native-polish-2` (`f2d3797`) into `UhhErix/native-WP10`, preserving `events.rs` `EventRegistry` push-event registrations (`capture.shrunk`, `capture.reel`, `notes.open`, `controller.state`, `audio.changed`, `devices.changed`) and deduplicating `METHOD_SHELL_OPEN_URL` / `AppState::open_external_url` cleanly. `git merge-base --is-ancestor origin/feat/native-polish-2 HEAD` exits `0`.
+- **Base merge:** Merged latest `origin/feat/native-polish-2` (through `cdbec1f`, including WP1, WP4, WP5, WP9, WP11, perf branches, and `events.rs` `EventRegistry`) into `UhhErix/native-WP10`, keeping all WP10 push events registered through `events.rs` (`capture.shrunk`, `capture.reel`, `notes.open`, `controller.state`, `audio.changed`, `devices.changed`) and deduplicating shared RPC symbols cleanly. `git merge-base --is-ancestor origin/feat/native-polish-2 HEAD` exits `0`.
 - **Isolated Rune pin (`f64e9cb`):** Updated all 8 Rune fork crate pins in `apps/launcher/native-ui/Cargo.toml` and `Cargo.lock` to `exo-inputs` rev `e6c0716a660a97576b3e3951973c599b82bd11e7` in one isolated commit.
 - **Rune `Lightbox` adoption:** Wired Rune `Lightbox` / `LightboxState` / `LightboxItem` in `media_state.rs`, `captures.rs`, `notes.rs`, and `state.rs` so clicking a screenshot in the Captures viewer or an embedded photo in Notes Markdown preview opens the native zoom/pan/prev/next modal lightbox (dismissed via Esc in `dismiss_top_layer`).
 
@@ -98,7 +98,7 @@ Verified via `node tools/parity/run.mjs --states shell-capture-popover,shell-cap
 ### Fresh Verification Gates (Post-Follow-up)
 - `cargo fmt --check` (in `apps/launcher/native-ui`): **exit 0**
 - `cargo clippy --workspace --all-targets -- -D warnings`: **exit 0** (0 warnings)
-- `cargo test --workspace`: **exit 0** (`exo-kit` 4 passed, `exo-rpc` 22 passed / 1 ignored bench, `exo-ui` 119 passed — 145 total passed, 0 failed)
+- `cargo test --workspace`: **exit 0** (`exo-kit` 4 passed, `exo-rpc` 26 passed / 1 ignored bench, `exo-ui` 139 passed — 169 total passed, 0 failed)
 - `cargo build --release -p exo-ui`: **exit 0**
 - `node --test apps/launcher/tools/parity/parity.test.mjs`: **exit 0** (8/8 passed)
 - `node apps/launcher/tools/check-comments.mjs`: **exit 1** — **0 comment violations in any Rust/WP10 file**; exit 1 is solely due to 12 pre-existing stale lower-count ratchet entries in `mouse/` and `ui/` inherited from `origin/feat/native-polish-2` (`f2d3797`), left untouched to stay strictly inside WP10 file ownership.
