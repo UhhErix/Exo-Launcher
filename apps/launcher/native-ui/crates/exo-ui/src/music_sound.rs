@@ -33,41 +33,18 @@ const SLEEP_MINUTES: [i64; 5] = [15, 30, 45, 60, 90];
 
 pub(crate) fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
     let title = match panel {
-        MusicPanel::NowPlaying => "Now playing",
-        MusicPanel::Queue => "Queue",
-        MusicPanel::Devices => "Play on",
-        MusicPanel::Friends => "Friend activity",
-        MusicPanel::Jam => {
-            if s.media.music_service.has_jam() {
-                "Jam"
-            } else {
-                "Listen along"
-            }
-        }
-        MusicPanel::Sound => "Sound",
-        MusicPanel::Credits => "Credits",
+        MusicPanel::NowPlaying => None,
+        MusicPanel::Queue => Some("Queue"),
+        MusicPanel::Devices => Some("Play on"),
+        MusicPanel::Friends => Some("Friend activity"),
+        MusicPanel::Jam => Some(if s.media.music_service.has_jam() {
+            "Jam"
+        } else {
+            "Listen along"
+        }),
+        MusicPanel::Sound => Some("Sound"),
+        MusicPanel::Credits => Some("Credits"),
     };
-
-    let header = row()
-        .w_full()
-        .mb(14.0)
-        .justify_between()
-        .center_y()
-        .child(text(title).font(scaled_title(s)).color(FG))
-        .child(
-            el().key("music-panel-close")
-                .role("button")
-                .label("Close panel")
-                .focusable(true)
-                .hit()
-                .press_on_down()
-                .size(28.0, 28.0)
-                .radius(RADIUS_PILL)
-                .hover(hover_fill())
-                .center()
-                .on_press(|s: &mut AppState| s.media.music_panel = None)
-                .child(icon_close(14.0, fg_muted())),
-        );
 
     let content = match panel {
         MusicPanel::NowPlaying => now_playing_panel(s, scale),
@@ -79,29 +56,40 @@ pub(crate) fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
         MusicPanel::Credits => credits_panel(s),
     };
 
-    col()
+    let mut panel_col = col()
         .key("music-side-panel")
-        .w(360.0)
-        .h_full()
+        .w(400.0)
+        .grow(1.0)
         .min_h(0.0)
-        .mb(86.0)
         .padding(16.0)
         .radius(RADIUS_PANEL)
         .clip_rounded(RADIUS_PANEL)
         .fill(BG)
-        .border(1.0, glass_rim())
-        .child(header)
-        .child(
-            col()
-                .key("music-panel-scroll")
-                .grow(1.0)
+        .border(1.0, glass_rim());
+
+    if let Some(heading) = title {
+        panel_col = panel_col.child(
+            row()
                 .w_full()
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(content),
-        )
+                .mb(12.0)
+                .center_y()
+                .child(text(heading).font(scaled_title(s)).color(FG)),
+        );
+    }
+
+    let panel_col = panel_col.child(
+        col()
+            .key("music-panel-scroll")
+            .grow(1.0)
+            .w_full()
+            .min_h(0.0)
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(content),
+    );
+
+    col().w(400.0).h_full().min_h(0.0).pb(86.0).child(panel_col)
 }
 
 fn now_playing_panel(s: &AppState, scale: f32) -> El {

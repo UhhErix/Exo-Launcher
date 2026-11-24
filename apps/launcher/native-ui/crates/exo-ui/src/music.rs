@@ -11,10 +11,10 @@ use exo_kit::{
     BG, ExoGlass, FG, GAP, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
     RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, apply_glass, bad,
     fg_faint, fg_muted, glass_button, glass_capsule, glass_control_fill, glass_panel, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hover_fill, icon_back, icon_chevron_left, icon_close,
-    icon_folder, icon_home, icon_maximize, icon_more_horiz, icon_music, icon_pause, icon_pin,
-    icon_play, icon_plus, icon_search, icon_skip_back, icon_skip_forward, icon_sparkles,
-    icon_video, icon_volume, icon_volume_low, icon_volume_off, pressed_fill,
+    glass_rim_bottom, glass_rim_top, good, hover_fill, icon_back, icon_chevron_left, icon_folder,
+    icon_home, icon_maximize, icon_more_horiz, icon_music, icon_pause, icon_pin, icon_play,
+    icon_plus, icon_search, icon_skip_back, icon_skip_forward, icon_video, icon_volume,
+    icon_volume_low, icon_volume_off, pressed_fill,
 };
 use exo_rpc::{PlayerCard, PlayerLink, PlayerSection};
 use rune::{
@@ -128,6 +128,24 @@ fn icon_compass(size: f32, color: Color) -> El {
             color,
         );
     canvas(shape).size(size, size)
+}
+
+fn icon_four_point_sparkle(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[&[
+            [12.0, 2.0],
+            [14.6, 9.4],
+            [22.0, 12.0],
+            [14.6, 14.6],
+            [12.0, 22.0],
+            [9.4, 14.6],
+            [2.0, 12.0],
+            [9.4, 9.4],
+            [12.0, 2.0],
+        ]],
+        color,
+    )
 }
 
 fn icon_shuffle(size: f32, color: Color) -> El {
@@ -285,7 +303,7 @@ pub(crate) fn render_art_image(
         ))
     } else {
         box_el.fill(art_surface_fill()).center().child(icon_music(
-            size.map_or(28.0, |v| (v * 0.36).max(14.0)),
+            size.map_or(20.0, |v| (v * 0.36).clamp(14.0, 22.0)),
             fg_faint(),
         ))
     }
@@ -364,7 +382,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
         nav = nav.child(nav_row(
             "music-nav-new",
             "New",
-            icon_sparkles(16.0, FG),
+            icon_four_point_sparkle(16.0, FG),
             matches!(s.media.music_nav, MusicNav::Browse { uri: None, .. }),
             MusicNav::Browse {
                 uri: None,
@@ -669,8 +687,9 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
         .radius(RADIUS_PANEL)
         .clip_rounded(RADIUS_PANEL)
         .fill(BG)
-        .px(6.0)
-        .pt(6.0)
+        .border(1.0, glass_rim())
+        .px(8.0)
+        .pt(12.0)
         .gap(8.0)
         .child(nav)
         .child(side_head)
@@ -1042,18 +1061,7 @@ fn section_title(s: &AppState) -> Option<&str> {
         MusicNav::Explore => Some("Explore"),
         MusicNav::Search => Some("Search"),
         MusicNav::Discography { .. } => None,
-        MusicNav::Collection { title, .. } => {
-            if s.media
-                .music_page_data
-                .as_ref()
-                .and_then(|d| d.header.as_ref())
-                .is_some()
-            {
-                None
-            } else {
-                Some(title.as_str())
-            }
-        }
+        MusicNav::Collection { .. } => None,
     }
 }
 
@@ -1154,7 +1162,7 @@ fn bar_icon_btn(key: &str, label: &str, icon: El, size: f32, active: bool, disab
         .motion(SPRING_QUICK)
         .child(icon);
     if active {
-        b = b.fill(pressed_fill());
+        b = b.fill(good().alpha(0.14));
     }
     if disabled {
         b = b.opacity(0.35);
@@ -1169,8 +1177,10 @@ fn volume_slider(key_prefix: &str, width: f32, level: f64, muted: bool) -> El {
         (level.clamp(0.0, 1.0)) as f32
     };
     let fill_w = (width * pct).clamp(0.0, width);
+    let show_thumb = !muted && pct > 0.001;
 
-    el().key(format!("{key_prefix}-vol-slider"))
+    let mut slider = el()
+        .key(format!("{key_prefix}-vol-slider"))
         .role("slider")
         .label("Music volume")
         .focusable(true)
@@ -1201,14 +1211,26 @@ fn volume_slider(key_prefix: &str, width: f32, level: f64, muted: bool) -> El {
                 .h(3.0)
                 .radius(2.0)
                 .fill(track_bg_fill())
-                .child(el().w(fill_w).h(3.0).radius(2.0).fill(FG)),
-        )
-        .child(
+                .child(
+                    el().w(if muted {
+                        (width * level.clamp(0.0, 1.0) as f32).clamp(0.0, width)
+                    } else {
+                        fill_w
+                    })
+                    .h(3.0)
+                    .radius(2.0)
+                    .fill(if muted { FG.alpha(0.22) } else { FG }),
+                ),
+        );
+    if show_thumb {
+        slider = slider.child(
             el().absolute((fill_w - 5.0).clamp(0.0, width - 10.0), 5.0)
                 .size(10.0, 10.0)
                 .radius(5.0)
                 .fill(FG),
-        )
+        );
+    }
+    slider
 }
 
 fn seek_slider(
@@ -1423,12 +1445,12 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         .unwrap_or("Nothing playing");
     let artist = pb.map(|p| p.artist.as_str()).unwrap_or("");
 
-    let mut song_text = col().grow(1.0).min_w(0.0).child(
-        text(title)
-            .font(scaled_body(s))
-            .color(if has_track { FG } else { fg_muted() })
-            .truncate(),
-    );
+    let title_style = TextStyle::new(13.0 * text_scale(s), 500.0).lh(13.0 * text_scale(s) * 1.3);
+    let mut song_text = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .child(text(title).font(title_style).color(FG).truncate());
+    let _ = has_track;
     if let Some((ref err, _)) = s.media.music_bar_failed {
         song_text = song_text.child(
             text(err.clone())
@@ -1512,7 +1534,7 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         icon_disc(
             16.0,
             if s.media.music_panel == Some(MusicPanel::NowPlaying) {
-                FG
+                good()
             } else {
                 fg_muted()
             },
@@ -1529,7 +1551,7 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         icon_queue(
             16.0,
             if s.media.music_panel == Some(MusicPanel::Queue) {
-                FG
+                good()
             } else {
                 fg_muted()
             },
@@ -1546,7 +1568,7 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         icon_maximize(
             16.0,
             if s.media.music_immersion {
-                FG
+                good()
             } else {
                 fg_muted()
             },
@@ -1570,7 +1592,7 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
     let more_btn = bar_icon_btn(
         "music-more",
         "More panels",
-        icon_more_horiz(16.0, if more_active { FG } else { fg_muted() }),
+        icon_more_horiz(16.0, if more_active { good() } else { fg_muted() }),
         32.0,
         more_active,
         false,
@@ -1597,7 +1619,7 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
                 } else {
                     "Play the music video"
                 },
-                icon_video(15.0, if on { FG } else { fg_muted() }),
+                icon_video(15.0, if on { good() } else { fg_muted() }),
                 32.0,
                 on,
                 false,
@@ -1658,26 +1680,22 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
     let has_lyrics = !s.media.music_track_uri.is_empty()
         && (!s.media.music_lyrics_lines.is_empty() || s.media.music_lyrics_loading);
 
-    let close_btn = el()
-        .key("music-immersion-close")
-        .role("button")
-        .label("Leave full window")
-        .focusable(true)
-        .hit()
-        .press_on_down()
-        .pin(None, Some(64.0), Some(24.0), None)
-        .size(36.0, 36.0)
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .hover(hover_fill())
-        .center()
-        .on_press(|s: &mut AppState| s.media.music_immersion = false)
-        .child(icon_close(16.0, FG));
+    let art_size: f32 = if has_lyrics { 520.0 } else { 560.0 };
+    let title_font = TextStyle::new(28.0 * text_scale(s), 600.0).lh(28.0 * text_scale(s) * 1.2);
+
+    let leave_btn = bar_icon_btn(
+        "music-immersion-close",
+        "Leave full window",
+        icon_maximize(16.0, fg_muted()),
+        32.0,
+        false,
+        false,
+    )
+    .on_press(|s: &mut AppState| s.media.music_immersion = false);
 
     let progress = row()
-        .w(360.0)
-        .gap(10.0)
+        .w_full()
+        .gap(12.0)
         .center_y()
         .child(
             text(format_time_clock(pos_ms))
@@ -1687,7 +1705,7 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         )
         .child(seek_slider(
             "music-immersion-seek",
-            260.0,
+            (art_size - 104.0).max(200.0),
             pos_ms,
             dur_ms,
             can_seek,
@@ -1700,8 +1718,22 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         );
 
     let muted = s.media.music_muted;
+    let vol_pct = format!(
+        "{}%",
+        if muted {
+            0
+        } else {
+            (s.media.music_volume * 100.0).round() as i32
+        }
+    );
     let vol = row()
+        .h(34.0)
+        .pl(8.0)
+        .pr(12.0)
         .gap(8.0)
+        .radius(RADIUS_PILL)
+        .fill(glass_control_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .center_y()
         .child(
             bar_icon_btn(
@@ -1710,9 +1742,9 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
                 if muted {
                     icon_volume_off(16.0, fg_muted())
                 } else {
-                    icon_volume(16.0, fg_muted())
+                    icon_volume(16.0, FG)
                 },
-                28.0,
+                26.0,
                 false,
                 false,
             )
@@ -1720,18 +1752,32 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         )
         .child(volume_slider(
             "music-immersion",
-            160.0,
+            112.0,
             s.media.music_volume,
             muted,
-        ));
+        ))
+        .child(text(vol_pct).font(scaled_small(s)).color(fg_muted()));
+
+    let controls_row = row()
+        .w_full()
+        .gap(8.0)
+        .center_y()
+        .child(
+            row()
+                .grow(1.0)
+                .min_w(0.0)
+                .child(verdict_controls(s, "music-immersion")),
+        )
+        .child(playback_controls(s, "music-immersion"))
+        .child(row().grow(1.0).min_w(0.0).justify_end().child(leave_btn));
 
     let song_col = col()
-        .w(400.0)
+        .w(art_size)
         .items_center()
-        .gap(18.0)
+        .gap(16.0)
         .child(render_art_image(
             s.current_playback_art(scale),
-            Some(340.0),
+            Some(art_size),
             RADIUS_PANEL,
             false,
         ))
@@ -1740,24 +1786,18 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
                 .w_full()
                 .items_center()
                 .gap(4.0)
-                .child(text(title).font(scaled_title(s)).color(FG).truncate())
+                .child(text(title).font(title_font).color(FG).truncate())
                 .child(song_artists_row(s, pb, true)),
         )
         .child(progress)
-        .child(
-            row()
-                .gap(10.0)
-                .center_y()
-                .child(verdict_controls(s, "music-immersion"))
-                .child(playback_controls(s, "music-immersion")),
-        )
+        .child(controls_row)
         .child(vol);
 
     let mut stage = row()
         .w_full()
         .h_full()
         .pt(TITLEBAR_HEIGHT + 24.0)
-        .pb(32.0)
+        .pb(48.0)
         .px(64.0)
         .gap(64.0)
         .center()
@@ -1781,7 +1821,6 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         .h_full()
         .fill(BG)
         .child(stage)
-        .child(close_btn)
 }
 
 pub fn view(s: &AppState, scale: f32) -> El {

@@ -471,12 +471,12 @@ pub(crate) fn songs_page(s: &AppState, scale: f32) -> El {
 
     let mut head = row()
         .w_full()
-        .mb(18.0)
+        .pb(12.0)
         .gap(12.0)
         .center_y()
         .child(text("Songs").font(scaled_title(s)).color(FG))
-        .child(play_btn)
         .child(el().grow(1.0))
+        .child(play_btn)
         .child(filter_box);
 
     if !s.media.music_songs_sorts.is_empty() {
@@ -503,7 +503,10 @@ pub(crate) fn songs_page(s: &AppState, scale: f32) -> El {
         );
     }
 
-    let mut body = col().w_full().child(head);
+    let mut body = col()
+        .w_full()
+        .child(head)
+        .child(el().w_full().h(1.0).mb(14.0).fill(hairline()));
     if let Some(ref err) = s.media.music_songs_error {
         body = body.child(
             text(err.clone())
@@ -512,12 +515,27 @@ pub(crate) fn songs_page(s: &AppState, scale: f32) -> El {
                 .mb(12.0),
         );
     } else if !s.media.music_songs_loaded {
-        body = body.child(
-            text("Loading your songs…")
-                .font(scaled_body(s))
-                .color(fg_muted())
-                .py(24.0),
-        );
+        let bone = || el().fill(art_surface_fill()).radius(RADIUS_SMALL);
+        body = body.child(col().w_full().gap(6.0).children((0..5).map(|i| {
+            let w1 = 160.0 + ((i * 37) % 120) as f32;
+            let w2 = 96.0 + ((i * 29) % 80) as f32;
+            row()
+                .key(format!("music-songs-wait-{i}"))
+                .w_full()
+                .h(52.0)
+                .px(8.0)
+                .gap(12.0)
+                .center_y()
+                .child(el().size(40.0, 40.0).radius(8.0).fill(art_surface_fill()))
+                .child(
+                    col()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .gap(6.0)
+                        .child(bone().w(w1).h(12.0))
+                        .child(bone().w(w2).h(10.0)),
+                )
+        })));
     } else if total == 0 {
         let msg = if !s.media.music_songs_applied_filter.is_empty() {
             format!("No songs match “{}”", s.media.music_songs_applied_filter)
