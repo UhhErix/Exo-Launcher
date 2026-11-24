@@ -24,6 +24,9 @@ internal sealed class PowerPlan(PcHealth.IPowerApi api, string statePath, Action
 
     // Start-up's Auto and a Setup's Ready can both find the plan missing at once; one makes it, the other finds it.
     private static readonly object Gate = new();
+    private static readonly Lock StateGate = new();
+    private const int StateIoAttempts = 5;
+    internal static int StateIoBaseDelayMs { get; set; } = 25;
 
     internal static readonly Guid Balanced = new("381b4222-f694-41f0-9685-ff5bb260df2e");
     internal static readonly Guid HighPerformance = new("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c");
@@ -327,22 +330,68 @@ internal sealed class PowerPlan(PcHealth.IPowerApi api, string statePath, Action
 
     private Saved Load()
     {
-        try { return (File.Exists(statePath) ? JsonSerializer.Deserialize<Saved>(File.ReadAllText(statePath)) : null) ?? new(null, null, Guid.Empty, false); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException) { return new(null, null, Guid.Empty, false); }
+        lock (StateGate)
+        {
+            for (var attempt = 0; attempt < StateIoAttempts; attempt++)
+            {
+                try
+                {
+                    if (!File.Exists(statePath)) return new(null, null, Guid.Empty, false);
+                    using var stream = new FileStream(statePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var reader = new StreamReader(stream);
+                    return JsonSerializer.Deserialize<Saved>(reader.ReadToEnd()) ?? new(null, null, Guid.Empty, false);
+                }
+                catch (Exception ex) when (ex is JsonException or NotSupportedException)
+                {
+                    return new(null, null, Guid.Empty, false);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    if (attempt + 1 >= StateIoAttempts) return new(null, null, Guid.Empty, false);
+                    var delay = StateIoBaseDelayMs * (1 << attempt);
+                    if (delay > 0) Thread.Sleep(delay);
+                }
+            }
+            return new(null, null, Guid.Empty, false);
+        }
     }
 
     private bool Save(Saved saved)
     {
-        try
+        lock (StateGate)
         {
-            var temp = statePath + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(saved));
-            File.Move(temp, statePath, overwrite: true);
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            AppLog.Warn("Power plan: Exo's plan state couldn't be saved: " + ex.Message);
+            var payload = JsonSerializer.Serialize(saved);
+            var directory = Path.GetDirectoryName(statePath);
+            for (var attempt = 0; attempt < StateIoAttempts; attempt++)
+            {
+                var temp = $"{statePath}.{Guid.NewGuid():N}.tmp";
+                try
+                {
+                    if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+                    File.WriteAllText(temp, payload);
+                    File.Move(temp, statePath, overwrite: true);
+                    temp = null;
+                    return true;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    if (attempt + 1 >= StateIoAttempts)
+                    {
+                        AppLog.Warn("Power plan: Exo's plan state couldn't be saved: " + ex.Message);
+                        return false;
+                    }
+                    var delay = StateIoBaseDelayMs * (1 << attempt);
+                    if (delay > 0) Thread.Sleep(delay);
+                }
+                finally
+                {
+                    if (temp is not null)
+                    {
+                        try { if (File.Exists(temp)) DeletionGate.DeleteFile(temp); }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+                    }
+                }
+            }
             return false;
         }
     }
