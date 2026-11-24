@@ -369,6 +369,12 @@ internal sealed class ShadersAddon : IDisposable
                 foreach (var g in library().Where(g => !AntiCheatCheck.IsRiot(g)))
                 {
                     var noRecorder = KeepsRecorderOut(g);
+                    var acClass = AntiCheatClass.Classify(g, AntiCheatCheck.Cached(g)) switch
+                    {
+                        GameAntiCheatClass.NoAntiCheat or GameAntiCheatClass.OfflineAntiCheat => "offline",
+                        GameAntiCheatClass.OnlineNonCompetitivePve => "onlinePvE",
+                        _ => "competitivePvP",
+                    };
                     var copies = g.Variants.Count > 0
                         ? g.Variants.Select(v => (v.Id, v.Store, v.Installed, v.Path, v.LaunchTarget))
                         : [(g.Id, g.Store, g.Installed, g.Path, g.LaunchTarget)];
@@ -376,7 +382,7 @@ internal sealed class ShadersAddon : IDisposable
                     {
                         if (!installed || string.IsNullOrWhiteSpace(path) || !Directory.Exists(path) || !seen.Add(path)) continue;
                         var exe = target is { } t && t.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(t) ? t : null;
-                        var entry = new JsonObject { ["id"] = id, ["title"] = g.Title, ["store"] = StoreName(store), ["installDir"] = path, ["exe"] = exe };
+                        var entry = new JsonObject { ["id"] = id, ["title"] = g.Title, ["store"] = StoreName(store), ["installDir"] = path, ["exe"] = exe, ["antiCheatClass"] = acClass };
                         if (noRecorder) entry["noRecorder"] = true;
                         games.Add(entry);
                     }
