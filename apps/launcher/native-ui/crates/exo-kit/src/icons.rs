@@ -1687,3 +1687,185 @@ pub fn icon_bookmark_filled(size: f32, color: Color) -> El {
     );
     canvas(shape).size(size, size)
 }
+
+pub fn icon_list_music(size: f32, color: Color) -> El {
+    let shape = Shape::new()
+        .view_box(24.0, 24.0)
+        .stroke(vec![[4.0, 6.0], [16.0, 6.0]], 1.8, color)
+        .stroke(vec![[4.0, 12.0], [12.0, 12.0]], 1.8, color)
+        .stroke(vec![[4.0, 18.0], [10.0, 18.0]], 1.8, color)
+        .stroke(vec![[16.0, 18.0], [16.0, 10.0], [21.0, 9.0]], 1.8, color)
+        .stroke(circle_pts(14.5, 18.0, 2.0, 12), 1.8, color);
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_radio(size: f32, color: Color) -> El {
+    let shape = Shape::new()
+        .view_box(24.0, 24.0)
+        .fill(circle_pts(12.0, 12.0, 2.2, 12), color)
+        .stroke(
+            arc_pts(
+                12.0,
+                12.0,
+                5.5,
+                (-45.0_f32).to_radians(),
+                45.0_f32.to_radians(),
+                10,
+            ),
+            1.8,
+            color,
+        )
+        .stroke(
+            arc_pts(
+                12.0,
+                12.0,
+                5.5,
+                135.0_f32.to_radians(),
+                225.0_f32.to_radians(),
+                10,
+            ),
+            1.8,
+            color,
+        )
+        .stroke(
+            arc_pts(
+                12.0,
+                12.0,
+                9.2,
+                (-45.0_f32).to_radians(),
+                45.0_f32.to_radians(),
+                12,
+            ),
+            1.8,
+            color,
+        )
+        .stroke(
+            arc_pts(
+                12.0,
+                12.0,
+                9.2,
+                135.0_f32.to_radians(),
+                225.0_f32.to_radians(),
+                12,
+            ),
+            1.8,
+            color,
+        );
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_compass(size: f32, color: Color) -> El {
+    let shape = Shape::new()
+        .view_box(24.0, 24.0)
+        .stroke(circle_pts(12.0, 12.0, 9.0, 20), 1.8, color)
+        .stroke(
+            vec![
+                [15.5, 8.5],
+                [13.5, 13.5],
+                [8.5, 15.5],
+                [10.5, 10.5],
+                [15.5, 8.5],
+            ],
+            1.6,
+            color,
+        );
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_shuffle(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[4.0, 17.0], [8.0, 17.0], [16.0, 7.0], [20.0, 7.0]],
+            &[[17.0, 4.5], [20.0, 7.0], [17.0, 9.5]],
+            &[[4.0, 7.0], [8.0, 7.0], [10.5, 10.2]],
+            &[[13.5, 13.8], [16.0, 17.0], [20.0, 17.0]],
+            &[[17.0, 14.5], [20.0, 17.0], [17.0, 19.5]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_repeat(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[17.0, 3.0], [20.0, 6.0], [17.0, 9.0]],
+            &[[4.0, 11.0], [4.0, 8.0], [6.0, 6.0], [20.0, 6.0]],
+            &[[7.0, 21.0], [4.0, 18.0], [7.0, 15.0]],
+            &[[20.0, 13.0], [20.0, 16.0], [18.0, 18.0], [4.0, 18.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_disc(size: f32, color: Color) -> El {
+    let shape = Shape::new()
+        .view_box(24.0, 24.0)
+        .stroke(circle_pts(12.0, 12.0, 9.0, 20), 1.8, color)
+        .stroke(circle_pts(12.0, 12.0, 2.5, 12), 1.8, color);
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_queue(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[9.0, 6.0], [20.0, 6.0]],
+            &[[9.0, 12.0], [20.0, 12.0]],
+            &[[9.0, 18.0], [20.0, 18.0]],
+            &[[4.0, 6.0], [5.5, 6.0]],
+            &[[4.0, 12.0], [5.5, 12.0]],
+            &[[4.0, 18.0], [5.5, 18.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_heart(size: f32, color: Color) -> El {
+    let shape = Shape::new().view_box(24.0, 24.0).fill(
+        vec![
+            [12.0, 20.0],
+            [5.0, 13.5],
+            [4.0, 9.5],
+            [5.5, 6.0],
+            [8.5, 5.0],
+            [12.0, 7.5],
+            [15.5, 5.0],
+            [18.5, 6.0],
+            [20.0, 9.5],
+            [19.0, 13.5],
+        ],
+        color,
+    );
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_gallery(size: f32, color: Color) -> El {
+    let shape = Shape::new()
+        .view_box(24.0, 24.0)
+        .stroke(
+            vec![
+                [4.0, 5.0],
+                [20.0, 5.0],
+                [20.0, 19.0],
+                [4.0, 19.0],
+                [4.0, 5.0],
+            ],
+            1.8,
+            color,
+        )
+        .fill(circle_pts(9.0, 10.0, 1.5, 10), color)
+        .stroke(
+            vec![
+                [5.0, 17.0],
+                [10.0, 12.5],
+                [14.0, 16.0],
+                [16.5, 13.5],
+                [19.5, 17.0],
+            ],
+            1.8,
+            color,
+        );
+    canvas(shape).size(size, size)
+}

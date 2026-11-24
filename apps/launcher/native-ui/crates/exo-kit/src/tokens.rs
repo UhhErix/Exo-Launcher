@@ -146,6 +146,10 @@ pub fn surface_card() -> Color {
     Color::WHITE.alpha(0.035)
 }
 
+pub fn art_surface_fill() -> Color {
+    Color::WHITE.alpha(0.05)
+}
+
 pub fn subtle_fill() -> Color {
     Color::WHITE.alpha(0.06)
 }

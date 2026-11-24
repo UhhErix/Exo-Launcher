@@ -9,10 +9,11 @@ use exo_kit::{
     RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, danger_button, exo_glass, fg_faint,
     fg_muted, filter_pill, glass_control_fill, glass_panel_fill, glass_panel_opt, glass_rim, good,
     hairline, hover_fill, icon_back, icon_camera, icon_check, icon_close, icon_film, icon_folder,
-    icon_pause, icon_play, icon_plus, icon_record_dot, icon_replay, icon_scissors, icon_settings,
-    icon_star, icon_trash, icon_volume, icon_volume_off, popover_transition, pressed_fill,
-    primary_button, progress_bar, scaled, scrim_fill, slider_track, status_badge, type_body,
-    type_control, type_page, type_section, type_small, type_title, warn,
+    icon_gallery, icon_notes, icon_pause, icon_play, icon_plus, icon_record_dot, icon_replay,
+    icon_scissors, icon_settings, icon_star, icon_trash, icon_volume, icon_volume_off,
+    popover_transition_for, pressed_fill, primary_button, progress_bar, scaled, scrim_fill,
+    slider_track, status_badge, type_body, type_control, type_page, type_section, type_small,
+    type_title, warn,
 };
 use exo_rpc::{
     ActionResult, CaptureEditReply, CaptureItem, CaptureItemReply, CaptureListReply,
@@ -24,9 +25,8 @@ use exo_rpc::{
 };
 use rune::color::oklch;
 use rune::{
-    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, Phase, ScrollSpec, Shape, Side, Spring,
-    SurfaceFit, TextEdit, TextStyle, Tx, canvas, col, edit_access, el, lightbox, row, text,
-    text_input,
+    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, Phase, ScrollSpec, Side, Spring,
+    SurfaceFit, TextEdit, TextStyle, Tx, col, edit_access, el, lightbox, row, text, text_input,
 };
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -119,64 +119,6 @@ fn keys_label(raw: &str) -> String {
         .filter(|p| !p.is_empty())
         .collect::<Vec<_>>()
         .join(" + ")
-}
-
-fn circle_pts(cx: f32, cy: f32, r: f32, steps: usize) -> Vec<[f32; 2]> {
-    (0..=steps)
-        .map(|i| {
-            let a = (i as f32 / steps as f32) * std::f32::consts::TAU;
-            [cx + r * a.cos(), cy + r * a.sin()]
-        })
-        .collect()
-}
-
-fn icon_gallery(size: f32, color: Color) -> El {
-    let shape = Shape::new()
-        .view_box(24.0, 24.0)
-        .stroke(
-            vec![
-                [4.0, 5.0],
-                [20.0, 5.0],
-                [20.0, 19.0],
-                [4.0, 19.0],
-                [4.0, 5.0],
-            ],
-            1.8,
-            color,
-        )
-        .fill(circle_pts(9.0, 10.0, 1.5, 10), color)
-        .stroke(
-            vec![
-                [5.0, 17.0],
-                [10.0, 12.5],
-                [14.0, 16.0],
-                [16.5, 13.5],
-                [19.5, 17.0],
-            ],
-            1.8,
-            color,
-        );
-    canvas(shape).size(size, size)
-}
-
-fn icon_notes(size: f32, color: Color) -> El {
-    let shape = Shape::new()
-        .view_box(24.0, 24.0)
-        .stroke(
-            vec![
-                [5.0, 3.5],
-                [19.0, 3.5],
-                [19.0, 20.5],
-                [5.0, 20.5],
-                [5.0, 3.5],
-            ],
-            1.8,
-            color,
-        )
-        .stroke(vec![[8.5, 8.5], [15.5, 8.5]], 1.8, color)
-        .stroke(vec![[8.5, 12.5], [15.5, 12.5]], 1.8, color)
-        .stroke(vec![[8.5, 16.5], [12.5, 16.5]], 1.8, color);
-    canvas(shape).size(size, size)
 }
 
 pub fn format_size_mb_gb(bytes: u64) -> String {
@@ -1246,7 +1188,7 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
     };
 
     let mut menu = glass_panel_opt("capture-popover-menu", 240.0, blur)
-        .transition(popover_transition())
+        .transition(popover_transition_for(Side::Bottom, Align::End))
         .role("menu")
         .label("Capture")
         .focus_group()
