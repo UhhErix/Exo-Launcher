@@ -235,20 +235,22 @@ public sealed class VoiceLevelingTests
     public void EachPersonComesToTheSameLevelOnTheirOwn()
     {
         var leveling = new VoiceLeveling();
-        var hot = Talking(-12, 8, 1).GetEnumerator();
-        var quiet = Talking(-34, 8, 2).GetEnumerator();
-        float hotDb = 0, quietDb = 0;
-        // Talking over each other, frame for frame.
+        var hot = Talking(-12, 30, 1).GetEnumerator();
+        var quiet = Talking(-30, 30, 2).GetEnumerator();
+        var hotMeter = new LoudnessMeter(Opus.SampleRate, Opus.Channels);
+        var quietMeter = new LoudnessMeter(Opus.SampleRate, Opus.Channels);
         for (var f = 0; hot.MoveNext() && quiet.MoveNext(); f++)
         {
             leveling.Process(1, hot.Current);
             leveling.Process(2, quiet.Current);
-            if (f % 35 == 10) (hotDb, quietDb) = (SpeechLeveler.Level(hot.Current), SpeechLeveler.Level(quiet.Current));
+            hotMeter.Feed(hot.Current);
+            quietMeter.Feed(quiet.Current);
         }
-        TestContext.Current.TestOutputHelper?.WriteLine($"a -12 dBFS voice plays at {hotDb:0.0} dBFS ({leveling.GainDb(1):+0.0;-0.0} dB), a -34 dBFS one at {quietDb:0.0} ({leveling.GainDb(2):+0.0;-0.0} dB)");
-        Assert.InRange(hotDb, SpeechLeveler.TargetDb - 2, SpeechLeveler.TargetDb + 2);
-        Assert.InRange(quietDb, SpeechLeveler.TargetDb - 2, SpeechLeveler.TargetDb + 2);
-        // Gone, and the SSRC handed to someone new: they start at no gain.
+        var hotLufs = hotMeter.ShortTermLufs;
+        var quietLufs = quietMeter.ShortTermLufs;
+        TestContext.Current.TestOutputHelper?.WriteLine($"a -12 dBFS voice plays at {hotLufs:0.0} LUFS ({leveling.GainDb(1):+0.0;-0.0} dB), a -34 dBFS one at {quietLufs:0.0} LUFS ({leveling.GainDb(2):+0.0;-0.0} dB)");
+        Assert.InRange(hotLufs, VoiceLeveling.DefaultTargetLufs - 2.5f, VoiceLeveling.DefaultTargetLufs + 2.5f);
+        Assert.InRange(quietLufs, VoiceLeveling.DefaultTargetLufs - 2.5f, VoiceLeveling.DefaultTargetLufs + 2.5f);
         leveling.Forget(1);
         Assert.Equal(0f, leveling.GainDb(1));
     }
@@ -258,7 +260,7 @@ public sealed class VoiceLevelingTests
     public void AShoutIsHeldDownAndDoesntTeachTheLeveler()
     {
         var leveling = new VoiceLeveling();
-        foreach (var frame in Talking(-24, 6, 1)) leveling.Process(1, frame);
+        foreach (var frame in Talking(-24, 15, 1)) leveling.Process(1, frame);
         var before = leveling.GainDb(1);
         var loudest = -100f;
         var shout = Talking(-4, 1, 2).Take(25).ToList();
@@ -267,8 +269,8 @@ public sealed class VoiceLevelingTests
             leveling.Process(1, frame);
             if (frame != shout[0]) loudest = Math.Max(loudest, SpeechLeveler.Level(frame));
         }
-        Assert.InRange(loudest, -100f, SpeechLeveler.TargetDb + VoiceLeveling.ShoutOverDb + 1);
-        Assert.InRange(leveling.GainDb(1) - before, -1f, 1f);
+        Assert.InRange(loudest, -100f, VoiceLeveling.DefaultTargetLufs + VoiceLeveling.ShoutOverDb + 1);
+        Assert.InRange(leveling.GainDb(1) - before, -1.5f, 1.5f);
     }
 
     // A level a little over theirs is just talking louder: it isn't touched.

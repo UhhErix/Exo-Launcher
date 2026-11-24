@@ -101,6 +101,9 @@ if ($Targets -contains 'apm') {
         if ($LASTEXITCODE) { throw 'Meson did not install.' }
     }
     $apmBuild = Join-Path $here 'build\apm'
+    $apmCache = Join-Path $here 'apm\subprojects\packagecache'
+    Get-SourcePin 'wrapdb.mesonbuild.com/v2/abseil-cpp_20240722.0-3/get_patch' 5929 `
+        '12dd8df1488a314c53e3751abd2750cf233b830651d168b6a9f15e7d0cf71f7b' (Join-Path $apmCache 'abseil-cpp_20240722.0-3_patch.zip') | Out-Null
     if (-not (Test-Path (Join-Path $apmBuild 'build.ninja'))) {
         Invoke-Dev "`"$meson`" setup `"$apmBuild`" `"$here\apm`" --backend=ninja -Dcpp_std=c++20 -Dwebrtc-audio-processing:cpp_std=c++20 -Dabseil-cpp:cpp_std=c++20"
     }

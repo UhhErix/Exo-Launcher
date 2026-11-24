@@ -31,6 +31,8 @@ internal sealed class VoiceChain : IDisposable
     private readonly LowCut _lowCut = new();
     private readonly KnockDetector _knock = new();
     private WebRtcNoise? _standard;
+    private WebRtcAgc2? _agc2;
+    private bool _agc2Failed;
     private NoiseSuppressor? _suppressor;
     private readonly VoiceShape _shape = new();
     /// <summary>The level the leveler brings a voice to (dBFS, its frames' mean), and a kept tuning's gain toward.</summary>
@@ -198,7 +200,8 @@ internal sealed class VoiceChain : IDisposable
         // Exo's own isn't here, but Windows' cleans the stream (VoiceAudio turned it on): suppression runs, and the gate
         // isn't held shut as it is while Exo's loads.
         else if (processing.NoiseSuppression) suppression = VoiceAudio.WindowsSuppresses ? "windows" : _missing ? "missing" : "loading";
-        Stages = new VoiceStages(suppression, limit, processing.Focus, systemGain ? "windows" : exo ? "exo" : "off", tuning is not null);
+        var agc2 = processing.MicAutoGain && !processing.Focus ? Agc2() : null;
+        Stages = new VoiceStages(suppression, limit, processing.Focus, agc2 is not null ? "agc2" : systemGain ? "windows" : exo ? "exo" : "off", tuning is not null);
         var focus = processing.Focus && !Recording;
         var cleaned = Cleaned;
         var open = false;
@@ -246,8 +249,9 @@ internal sealed class VoiceChain : IDisposable
             // speaking level, stood down where Windows' own gain control already rides it (Voice Focus has its own).
             // None and a custom chain send the voice as the gate left it.
             _shape.Process(frame);
-            if (!systemGain) _leveler.Process(frame, open && !held);
+            if (agc2 is null && !systemGain) _leveler.Process(frame, open && !held);
         }
+        if (!focus && agc2 is not null) agc2.Process(frame);
         if (focus)
         {
             _focus ??= new VoiceFocus();
@@ -431,10 +435,20 @@ internal sealed class VoiceChain : IDisposable
     }
 
 
+    private WebRtcAgc2? Agc2()
+    {
+        if (_agc2 is not null || _agc2Failed) return _agc2;
+        _agc2 = WebRtcAgc2.Create();
+        if (_agc2 is null) _agc2Failed = true;
+        return _agc2;
+    }
+
     public void Dispose()
     {
         _standard?.Dispose();
         _standard = null;
+        _agc2?.Dispose();
+        _agc2 = null;
         _suppressor?.Dispose();
         _suppressor = null;
         // One still loading is let go of when it is in.

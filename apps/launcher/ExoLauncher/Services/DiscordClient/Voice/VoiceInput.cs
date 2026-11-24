@@ -10,7 +10,7 @@ namespace ExoLauncher.Services.DiscordClient.Voice;
 /// are Exo Voice now.
 /// </summary>
 internal readonly record struct VoiceProcessing(string Profile, bool NoiseSuppression, bool EchoCancellation,
-    bool PushToTalk, bool AutoSensitivity, int Threshold, int PttDelay, bool Focus, bool OnlyMyVoice = false, string Suppressor = "ai")
+    bool PushToTalk, bool AutoSensitivity, int Threshold, int PttDelay, bool Focus, bool OnlyMyVoice = false, string Suppressor = "ai", bool MicAutoGain = false)
 {
     internal static VoiceProcessing Current => From(App.Services.Settings.Shared);
 
@@ -33,17 +33,20 @@ internal readonly record struct VoiceProcessing(string Profile, bool NoiseSuppre
         ? new("custom", false, s.DiscordEchoCancellation,
             s.DiscordPushToTalk, s.DiscordAutoSensitivity, s.DiscordSensitivity, s.DiscordPttDelay, Focus: false,
             OnlyMyVoice: s.DiscordOnlyMyVoice && Voiceprint.Learned,
-            Suppressor: s.DiscordNoiseSuppressionKind)
+            Suppressor: s.DiscordNoiseSuppressionKind,
+            MicAutoGain: s.DiscordMicAutoGain)
         : s.DiscordNoiseSuppressionKind is "standard"
         ? new("custom", true, s.DiscordEchoCancellation,
             s.DiscordPushToTalk, s.DiscordAutoSensitivity, s.DiscordSensitivity, s.DiscordPttDelay, Focus: false,
             OnlyMyVoice: s.DiscordOnlyMyVoice && Voiceprint.Learned,
-            Suppressor: s.DiscordNoiseSuppressionKind)
+            Suppressor: s.DiscordNoiseSuppressionKind,
+            MicAutoGain: s.DiscordMicAutoGain)
         : new("exo", true, true, s.DiscordPushToTalk, true, s.DiscordSensitivity, s.DiscordPttDelay, Focus: false,
             // Exo Voice's Only My Voice is the learned voiceprint. "ai" (Custom's AI) reads as itself; any other kind,
             // an earlier build's included, is Exo Voice.
             OnlyMyVoice: s.DiscordOnlyMyVoice && Voiceprint.Learned,
-            Suppressor: s.DiscordNoiseSuppressionKind is "ai" ? "ai" : "exo");
+            Suppressor: s.DiscordNoiseSuppressionKind is "ai" ? "ai" : "exo",
+            MicAutoGain: s.DiscordMicAutoGain);
 }
 
 /// <summary>
