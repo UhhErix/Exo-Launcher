@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using ExoLauncher.Helpers;
 using Microsoft.Data.Sqlite;
 
 namespace ExoLauncher.Services;
@@ -187,11 +188,7 @@ internal static class GogGalaxySqlite
                 SQLitePCL.raw.sqlite3_limit(_connection.Handle, SQLitePCL.raw.SQLITE_LIMIT_COLUMN, 128);
                 SQLitePCL.raw.sqlite3_progress_handler(_connection.Handle, 1000,
                     _ => _elapsed.Elapsed > TimeSpan.FromSeconds(3) ? 1 : 0, this);
-                using (var setup = _connection.CreateCommand())
-                {
-                    setup.CommandText = "PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA cache_size=-2048;";
-                    setup.ExecuteNonQuery();
-                }
+                ExoSqlite.ApplyReadOnlyPragmas(_connection, cacheSizeKib: -2048);
                 _transaction = _connection.BeginTransaction(deferred: true);
                 using var command = Command("SELECT name, sql FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' LIMIT 1025");
                 using var reader = command.ExecuteReader();
