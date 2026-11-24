@@ -137,7 +137,7 @@ test('a release file comes from the mirror, whole or from a byte range, and is i
   const env = { MIRROR: standInMirror({ 'cinema/v1.1.0/ExoCinema-Setup.exe': '0123456789' }) }
   const whole = await ask('/v1/cinema/download/v1.1.0/ExoCinema-Setup.exe', env)
   assert.equal(whole.status, 200)
-  assert.equal(whole.headers.get('cache-control'), 'public, max-age=31536000, immutable')
+  assert.equal(whole.headers.get('cache-control'), 'public, max-age=86400')
   assert.equal(whole.headers.get('content-length'), '10')
   assert.equal(await whole.text(), '0123456789')
   const rest = await ask('/v1/cinema/download/v1.1.0/ExoCinema-Setup.exe', env, { headers: { range: 'bytes=4-' } })
@@ -150,7 +150,7 @@ test('a release file comes from the mirror, whole or from a byte range, and is i
 test('cache metadata stored on the mirror object never stretches a download past its hour', async () => {
   const env = { MIRROR: standInMirror({ 'cinema/v1.4.6/ExoCinema-Setup.exe': '0123456789' }) }
   const r = await ask('/v1/cinema/download/v1.4.6/ExoCinema-Setup.exe', env)
-  assert.equal(r.headers.get('cache-control'), 'public, max-age=31536000, immutable')
+  assert.equal(r.headers.get('cache-control'), 'public, max-age=86400')
 })
 test('HEAD gets the GET answer\'s status and headers, and no body', async () => {
   const env = { MIRROR: standInMirror({ 'launcher/latest.json': JSON.stringify(manifest('launcher', 'v3.24.1', 'ExoLauncher-Setup.exe')) }) }

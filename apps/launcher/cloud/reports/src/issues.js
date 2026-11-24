@@ -1,5 +1,5 @@
 import { GitHubError, gitHubOf } from './github.js'
-import { fingerprintOf, signatureOf } from './fingerprint.js'
+import { fingerprintOf, legacyFingerprintOf, signatureOf } from './fingerprint.js'
 import { utcDay } from './telemetry-store.js'
 import { trimExcerpt } from './triage.js'
 
@@ -38,14 +38,26 @@ export async function claim(db, day, kind) {
 }
 
 export async function recordGroup(db, report, key, day) {
-  const fingerprint = await fingerprintOf(report)
-  const inserted = await db.prepare(
-    'INSERT INTO crash_groups (fingerprint, app, error_type, count, versions, newest_version, first_day, last_day, os_build, sample_key) '
-    + 'VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?) ON CONFLICT (fingerprint) DO NOTHING',
-  ).bind(fingerprint, report.app, report.errorType, JSON.stringify([report.version]), report.version, day, day, report.osBuild, key).run()
-  if (inserted.meta?.changes === 1) return { group: await groupOf(db, fingerprint), newVersion: true }
-
-  const before = await groupOf(db, fingerprint)
+  let fingerprint = await fingerprintOf(report)
+  let before = await groupOf(db, fingerprint)
+  if (!before) {
+    const legacy = await legacyFingerprintOf(report)
+    if (legacy !== fingerprint) {
+      const existing = await groupOf(db, legacy)
+      if (existing) {
+        fingerprint = legacy
+        before = existing
+      }
+    }
+  }
+  if (!before) {
+    const inserted = await db.prepare(
+      'INSERT INTO crash_groups (fingerprint, app, error_type, count, versions, newest_version, first_day, last_day, os_build, sample_key) '
+      + 'VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?) ON CONFLICT (fingerprint) DO NOTHING',
+    ).bind(fingerprint, report.app, report.errorType, JSON.stringify([report.version]), report.version, day, day, report.osBuild, key).run()
+    if (inserted.meta?.changes === 1) return { group: await groupOf(db, fingerprint), newVersion: true }
+    before = await groupOf(db, fingerprint)
+  }
   const versions = JSON.parse(before.versions)
   const newVersion = !versions.includes(report.version)
   if (newVersion) {

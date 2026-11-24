@@ -36,7 +36,7 @@ const ANNOUNCE_STATUS = { 'not-live': 409, 'wrong-version': 409, refused: 409, f
 const FRESH_SECONDS = 60
 // The edge cache is shared by every Worker version: bump this whenever the latest response shape changes, so a deploy never serves an older version's cached answer.
 const CACHE_SCHEMA = 4
-const IMMUTABLE_SECONDS = 31536000
+const TAG_SECONDS = 86400
 const ADVISORIES_SECONDS = 3600
 // A change list changes with each release, so it is kept at the edge a minute, as the newest-version answer is.
 const CHANGELOG_SECONDS = 60
@@ -241,7 +241,7 @@ async function download(app, tag, name, request, env, ctx) {
   if (!part) return new Response('Not found', { status: 404 })
   const key = `${app}/${tag}/${name}`
   const type = name === NAMES.filesJson ? 'application/json; charset=utf-8' : undefined
-  const served = await fromMirror(key, request, env, { type, immutable: true })
+  const served = await fromMirror(key, request, env, { seconds: TAG_SECONDS, type })
   if (served.status !== 404 || app !== 'launcher' || !env.MIRROR) return served
   return fromGitHub(tag, part, key, type, request, env, ctx)
 }
@@ -259,7 +259,7 @@ async function fromGitHub(tag, part, key, type, request, env, ctx) {
     console.warn(`GitHub release ${tag} not served: ${error}.`)
     return missing()
   }
-  if (!LARGE.has(part)) return found(await fromMirror(key, request, env, { type, immutable: true }))
+  if (!LARGE.has(part)) return found(await fromMirror(key, request, env, { seconds: TAG_SECONDS, type }))
   const asset = assetsOf(release)[part]
   const expected = manifest.files[part]
   if (!asset || !expected) return missing()
@@ -272,7 +272,7 @@ function changelog(app, request, env) {
 }
 /** A release's file list, immutable under its tag as its other files are. Never kept when it is missing: it may arrive a moment later. */
 async function payload(app, tag, request, env) {
-  return found(await fromMirror(`${app}/${tag}/payload-manifest.json`, request, env, { type: 'application/json; charset=utf-8', immutable: true }))
+  return found(await fromMirror(`${app}/${tag}/payload-manifest.json`, request, env, { seconds: TAG_SECONDS, type: 'application/json; charset=utf-8' }))
 }
 /** One app file by the SHA-256 of its bytes, gzipped. The name says what the bytes are, so it is kept for a year. */
 async function file(app, sha256, request, env) {
@@ -335,7 +335,7 @@ function contentTypeOf(key) {
  * The mirror's copy, with byte ranges so an interrupted download picks up where it stopped, and a 304 when the client
  * already has this exact copy (R2 answers the condition itself, so the body is never read).
  */
-async function fromMirror(key, request, env, { seconds = IMMUTABLE_SECONDS, type, immutable = false } = {}) {
+async function fromMirror(key, request, env, { seconds = TAG_SECONDS, type, immutable = false } = {}) {
   if (!env.MIRROR) return new Response('Not available', { status: 503, headers: { 'cache-control': 'no-store' } })
   const heading = request.method === 'HEAD'
   // One byte range per request; a list of ranges is answered with the whole file, which HTTP allows.

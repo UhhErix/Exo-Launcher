@@ -15,7 +15,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import worker from '../src/worker.js'
 import { limiters } from './limiters.mjs'
-import { fingerprintOf, normalizeFrame, signatureOf } from '../src/fingerprint.js'
+import { fingerprintOf, legacyFingerprintOf, normalizeFrame, signatureOf } from '../src/fingerprint.js'
 import { DAILY, compareVersions, dueNow, safeTitle, withStats } from '../src/issues.js'
 import { parseUserReport } from '../src/user-report.js'
 
@@ -181,6 +181,47 @@ test('async CLR and WinUI plumbing frames are skipped before picking top frames'
     'ExoLauncher.Services.WebHostBridge.HandleAsync',
   ])
   assert.notEqual(await fingerprintOf(a), await fingerprintOf(b))
+})
+
+test('a report for an existing legacy plumbing-frame group attaches to it and does not open a duplicate issue', async () => {
+  const { env, db, github } = makeEnv()
+  const report = {
+    ...crash,
+    version: '3.30.3',
+    excerpt: [
+      'Exo Launcher 3.30.3 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC',
+      'Error (rpc): NullReferenceException',
+      '   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()',
+      '   at System.Runtime.CompilerServices.TaskAwaiter.GetResult()',
+      '   at Microsoft.UI.Dispatching.DispatcherQueue.TryEnqueue()',
+      '   at ExoLauncher.Services.StoreService.HomeAsync()',
+      '   at ExoLauncher.Services.WebHostBridge.HandleAsync()',
+    ].join('\n'),
+  }
+  const modern = await fingerprintOf(report)
+  const legacy = await legacyFingerprintOf(report)
+  assert.notEqual(modern, legacy)
+
+  github.issues.set(14, {
+    number: 14,
+    state: 'open',
+    title: '[launcher] NullReferenceException: System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw',
+    body: `<!-- exo:group ${legacy} -->\n<!-- exo:stats -->\n**Seen 1 time**\n<!-- /exo:stats -->`,
+    labels: ['app:launcher', 'kind:crash', 'v3.30.2'],
+  })
+  db.sql.prepare(
+    'INSERT INTO crash_groups (fingerprint, app, error_type, count, versions, newest_version, first_day, last_day, os_build, sample_key, issue_number, synced_count, synced_version, pending) '
+    + 'VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 14, 1, ?, 0)',
+  ).run(legacy, report.app, report.errorType, '["3.30.2"]', '3.30.2', '2026-11-20', '2026-11-20', report.osBuild, 'reports/2026-11-20/old.json', '3.30.2')
+
+  assert.equal((await send(env, report)).status, 202)
+  assert.equal(github.issues.size, 1)
+  assert.equal(github.calls.filter((call) => call === 'POST /issues').length, 0)
+  assert.match(github.issues.get(14).body, /\*\*Seen 2 times\*\*/)
+  assert.equal(groups(db).length, 1)
+  assert.equal(groups(db)[0].fingerprint, legacy)
+  assert.equal(groups(db)[0].count, 2)
+  assert.equal(groups(db)[0].newest_version, '3.30.3')
 })
 
 // ---- Create versus update ----
