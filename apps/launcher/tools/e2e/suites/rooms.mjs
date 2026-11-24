@@ -6,12 +6,13 @@ import { screenMatchesPage } from './shell.mjs'
 
 /** What a room shows once it has loaded (its own content, not a spinner). */
 const READY = {
-  Library: () => document.querySelectorAll('.exo-game-grid button[data-game-id]').length > 0,
+  Library: () => document.querySelectorAll('.exo-deck-card, .exo-game-grid button[data-game-id]').length > 0,
   Store: () => !!document.querySelector('.exo-store-hero, .exo-store-row, .exo-store-empty'),
   Discord: () => !!document.querySelector('main.exo-dc, main.exo-dc-signin'),
   Music: () => !!document.querySelector('.exo-music-side, .exo-music-panel, [class*="exo-music"] h1, [class*="exo-music"] h2'),
-  PC: () => !!document.querySelector('.exo-pc .exo-pc-about'),
   Devices: () => !!document.querySelector('iframe[src*="mouse.exo-launcher.local"], .exo-devices'),
+  'Exo AI': () => !!document.querySelector('.exo-ai-room .exo-pc-about, .exo-ai-room .exo-ai-title'),
+  Apps: () => !!document.querySelector('.exo-apps-room .exo-apps-list, .exo-apps-room .exo-apps-row, .exo-apps-room'),
 }
 
 /**
@@ -46,7 +47,8 @@ export async function run(t) {
   })
   if (applied.status === 'FAIL') return
   for (const room of ROOMS) {
-    await run.check('rooms', room.toLowerCase(), `${room} looks right`, async (c) => {
+    const slug = room.toLowerCase().replace(/\s+/g, '-')
+    await run.check('rooms', slug, `${room} looks right`, async (c) => {
       const mark = t.console.length
       const ms = await k.nav(room)
       c.metric('switch', ms, ' ms', 600)
@@ -57,7 +59,7 @@ export async function run(t) {
       const failures = await k.look(c, room)
       const covers = await t.shell.call(COVERS)
       if (covers.length) failures.push(`the page is not black: ${covers.join(', ')}`)
-      await c.shot(room.toLowerCase(), t.shell)
+      await c.shot(slug, t.shell)
       if (room === 'Library') failures.push(...await screenMatchesPage(t, c, 'library'))
       const errors = k.consoleSince(mark).filter(e => e.level !== 'warning' && !/Failed to load resource/.test(e.text))
       if (errors.length) failures.push(`console: ${errors.slice(0, 2).map(e => e.text.slice(0, 140)).join(' | ')}`)

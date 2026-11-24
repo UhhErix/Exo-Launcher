@@ -6,10 +6,10 @@ import { pixelContrast } from './contrast.mjs'
 import { writeFile } from 'node:fs/promises'
 import { a11yScan, brokenImages, layoutFaults, layoutScan, roomState, settle, whiteBlockScan } from './page.mjs'
 
-export const ROOMS = ['Library', 'Store', 'Discord', 'Music', 'PC', 'Devices']
+export const ROOMS = ['Library', 'Store', 'Discord', 'Music', 'Devices', 'Exo AI', 'Apps']
 
-/** The rooms with a tab in the Bar: Devices is a page of the PC room, opened from its Devices chip. */
-export const BAR_ROOMS = ROOMS.filter(room => room !== 'Devices')
+/** The rooms with a tab in the Bar. */
+export const BAR_ROOMS = ROOMS
 
 /** The Bar's tab for a room (its label without a count badge). */
 export const roomTab = (name) => [...document.querySelectorAll('.exo-titlebar button, nav button')]
@@ -38,18 +38,6 @@ export function kit(t) {
     /** Goes to a room by its Bar tab and waits until it is current and still; returns the time it took (ms). */
     async nav(room) {
       await k.closeAll()
-      if (room === 'Devices') {
-        // A page of the PC room: its chip on the This PC line opens it, and the PC tab stays lit there.
-        await k.nav('PC')
-        const t0 = Date.now()
-        const opened = await t.shell.click(() => [...document.querySelectorAll('.exo-pc-chip')].find(b => b.textContent.trim() === 'Devices'))
-        if (!opened) throw new Error('no Devices chip in the PC room')
-        const ok = await t.shell.waitFor(() => { const m = document.querySelector('main[aria-label="Devices"]'); return !!m && m.getBoundingClientRect().width > 0 }, { timeoutMs: 8000 })
-        if (!ok) throw new Error('Devices did not open from the PC room')
-        const ms = Date.now() - t0
-        await k.settle()
-        return ms
-      }
       const t0 = Date.now()
       const clicked = await t.shell.click(roomTab, room)
       if (!clicked) throw new Error(`no Bar tab for ${room}`)
@@ -61,6 +49,26 @@ export function kit(t) {
       const ms = Date.now() - t0
       await k.settle()
       return ms
+    },
+
+    async libraryGrid() {
+      await k.nav('Library')
+      if (!await t.shell.eval(`!!document.querySelector('.exo-game-grid')?.checkVisibility()`)) {
+        const clicked = await t.shell.click(() => document.querySelector('button[aria-label="All games grid"]'))
+        if (!clicked) throw new Error('no All games grid button in Library HomeDeck')
+        const ok = await t.shell.waitFor(() => !!document.querySelector('.exo-game-grid')?.checkVisibility(), { timeoutMs: 8000 })
+        if (!ok) throw new Error('All games grid did not open')
+        await k.settle()
+      }
+    },
+
+    async libraryHome() {
+      await k.nav('Library')
+      if (!await t.shell.eval(`!!document.querySelector('.exo-home-deck')?.checkVisibility()`)) {
+        await t.shell.click(() => document.querySelector('.exo-library-back'))
+        await t.shell.waitFor(() => !!document.querySelector('.exo-home-deck')?.checkVisibility(), { timeoutMs: 8000 })
+        await k.settle()
+      }
     },
 
     /** Sets a field's text as typing does (React hears it); '' clears it. */

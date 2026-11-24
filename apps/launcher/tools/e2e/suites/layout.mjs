@@ -20,7 +20,7 @@ export async function roomsLayout(t, c, tag, go = (room) => t.k.nav(room)) {
     await go(room)
     await sleep(900)
     await t.k.settle(300, 6000)
-    failures.push(...await t.k.layout(c, `${tag}-${room.toLowerCase()}`))
+    failures.push(...await t.k.layout(c, `${tag}-${room.toLowerCase().replace(/\s+/g, '-')}`))
   }
   return failures
 }
@@ -78,13 +78,16 @@ export async function run(t) {
   }, { shell: t.shell })
 
   await run.check('layout', `library`, `the Library's sheet, menus and Ctrl+K`, async (c) => {
-    await k.nav('Library')
-    return walk(t, c, [
-      [`game-sheet`, async () => { await click(() => [...document.querySelectorAll('.exo-game-grid button[data-game-id]')].find(b => !b.closest('.exo-folder-tile'))); return wait(() => !!document.querySelector('.exo-game-overlay-stage .exo-game-title')) }, () => k.closeAll()],
+    await k.libraryGrid()
+    const failures = await walk(t, c, [
+      [`all-games-grid`, async () => t.shell.eval(`!!document.querySelector('.exo-game-grid')?.checkVisibility()`)],
+      [`game-sheet`, async () => { await click(() => [...document.querySelectorAll('.exo-game-grid button[data-game-id]')].find(b => !b.closest('.exo-folder-tile'))); return wait(() => !!document.querySelector('.exo-game-room .exo-game-page')?.checkVisibility()) }, () => k.closeAll()],
       [`add-menu`, async () => { await click(visible, '.exo-library-more'); return wait(() => [...document.querySelectorAll('[role="menu"]')].some(m => m.getBoundingClientRect().width)) }, () => k.closeAll()],
       [`sort-menu`, async () => { await click(visible, 'main.exo-library-pane button[aria-label^="Sort library"]'); return wait(() => [...document.querySelectorAll('[role="menu"]')].some(m => m.getBoundingClientRect().width)) }, () => k.closeAll()],
       [`ctrl-k`, async () => { await t.shell.key('k', { ctrl: true }); if (!await wait(() => document.activeElement?.getAttribute('role') === 'combobox', 3000)) return false; await t.shell.type('a'); return wait(() => document.querySelectorAll('[role="dialog"] [role="option"]').length > 2, 4000) }, () => k.closeAll()],
     ])
+    await k.libraryHome()
+    return failures
   }, { shell: t.shell })
 
   await run.check('layout', `settings`, `every Settings section`, async (c) => {
@@ -141,20 +144,22 @@ export async function run(t) {
     ])
   }, { shell: t.shell })
 
-  await run.check('layout', `pc`, `each section of PC, and its Apps sheet,`, async (c) => {
-    await k.nav('PC')
-    const parts = await t.shell.eval(`[...document.querySelectorAll('.exo-pc [data-pc-part]')].filter(s => s.checkVisibility()).map(s => s.dataset.pcPart)`)
-    return walk(t, c, [
-      ...parts.map(p => [`pc-${p}`, async () => t.shell.call((id) => { const at = document.querySelector(`.exo-pc [data-pc-part="${id}"]`); at?.scrollIntoView({ block: 'start' }); return !!at }, p)]),
-      [`pc-apps-sheet`, async () => !!await click(() => document.querySelector('.exo-pc [data-pc-menu="apps"]')) && wait(() => !!document.querySelector('.exo-pc-apps-sheet .exo-apps-row'), 20000),
-        () => k.closeAll()],
-      // Best settings on the PC's line, and the card's, the screen's and the board's menus.
-      ...['best', 'graphics', 'display', 'board'].map(menu => [`pc-${menu}-menu`,
-        async () => !!await click((m) => document.querySelector(`.exo-pc [data-pc-menu="${m}"]`), menu) && wait(() => !!document.querySelector('.exo-pc-menu .exo-set-item, .exo-pc-menu .exo-pc-best'), 5000),
+  await run.check('layout', `pc`, `each section of Exo AI, its part menus, and Apps`, async (c) => {
+    await k.nav('Exo AI')
+    const parts = await t.shell.eval(`[...document.querySelectorAll('.exo-ai-room [data-pc-part]')].filter(s => s.checkVisibility()).map(s => s.dataset.pcPart)`)
+    const failures = await walk(t, c, [
+      ...parts.map(p => [`pc-${p}`, async () => t.shell.call((id) => { const at = document.querySelector(`.exo-ai-room [data-pc-part="${id}"]`); at?.scrollIntoView({ block: 'start' }); return !!at }, p)]),
+      ...['graphics', 'display', 'board'].map(menu => [`pc-${menu}-menu`,
+        async () => !!await click((m) => document.querySelector(`.exo-ai-room [data-pc-menu="${m}"]`), menu) && wait(() => !!document.querySelector('.exo-pc-menu .exo-set-item, .exo-pc-menu .exo-pc-best'), 5000),
         () => k.closeAll()]),
-      [`pc-upscalers-sheet`, async () => !!await click(() => [...document.querySelectorAll('.exo-pc .exo-pc-chip')].find(b => b.textContent.includes('Upscalers'))) && wait(() => !!document.querySelector('.exo-pc-upscalers-sheet'), 5000),
+      [`pc-storage`, async () => !!await click(() => document.querySelector('.exo-ai-room [data-pc-menu="storage"]')) && wait(() => !!document.querySelector('.exo-storage-room')?.checkVisibility(), 5000),
         () => k.closeAll()],
     ])
+    await k.nav('Apps')
+    failures.push(...await walk(t, c, [
+      [`apps-room`, async () => wait(() => !!document.querySelector('.exo-apps-room .exo-apps-row'), 20000)],
+    ]))
+    return failures
   }, { shell: t.shell })
 
   await run.check('layout', `discord`, `Discord's channel, side panels, server pages, a forum and its settings`, async (c) => {
@@ -239,18 +244,21 @@ export async function run(t) {
   }, { shell: t.shell })
 
   await run.check('layout', 'text-large', 'every room and Settings at the largest text size', async (c) => {
-    const choose = async (label) => {
+    const openGeneral = async () => {
       await k.closeAll()
       await click(() => document.querySelector('.exo-settings-btn'))
       await wait(() => !!document.querySelector('.exo-settings')?.checkVisibility())
+      await click(() => [...document.querySelectorAll('.exo-settings-nav button')].find(b => b.textContent.trim() === 'General'))
+      await wait(() => !!document.getElementById('set-text-size'))
+    }
+    const choose = async (label) => {
+      await openGeneral()
       await click(() => document.getElementById('set-text-size')?.closest('.exo-set-item')?.querySelector('button[aria-haspopup="menu"]') ?? null)
       await sleep(300)
       await click((l) => [...document.querySelectorAll('[role^="menuitem"]')].find(i => i.getBoundingClientRect().width && i.textContent.trim() === l), label)
       await sleep(600)
     }
-    await k.closeAll()
-    await click(() => document.querySelector('.exo-settings-btn'))
-    await wait(() => !!document.querySelector('.exo-settings')?.checkVisibility())
+    await openGeneral()
     const was = await t.shell.eval(`document.getElementById('set-text-size')?.closest('.exo-set-item')?.querySelector('button[aria-haspopup="menu"]')?.textContent.trim()`)
     const sizes = await t.shell.call(() => { document.getElementById('set-text-size')?.closest('.exo-set-item')?.querySelector('button[aria-haspopup="menu"]')?.click(); return new Promise(r => setTimeout(() => { const items = [...document.querySelectorAll('[role^="menuitem"]')].filter(i => i.getBoundingClientRect().width).map(i => i.textContent.trim()); r(items) }, 300)) })
     await k.closeAll()
