@@ -43,7 +43,7 @@ RPC: React calls 345 of 345 contract methods; native references 134. 211 methods
 
 ## Shell & Bar
 
-Totals: DONE 24, PARTIAL 0, MISSING 1, BROKEN 0 (of 25).
+Totals: DONE 25, PARTIAL 0, MISSING 0, BROKEN 0 (of 25).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
@@ -71,7 +71,7 @@ Totals: DONE 24, PARTIAL 0, MISSING 1, BROKEN 0 (of 25).
 | Command palette (rooms, settings, games, actions) | components/shell/launcherCommands.ts:1 | exo-ui/src/palette.rs:526 | DONE | Rooms, PC/Settings sections, games, Downloads, What's new, Add game, Refresh, Activate key, Resume/Take tour, Check updates, Minimize/Close window. |
 | Palette: Take the tour, Minimize/Close window, Play/Install selected, note commands, Discord DMs/servers/channels, music controls | components/shell/paletteExtras.ts:1 | exo-ui/src/palette.rs:42 | DONE | rpc: notes.list, discord.home, discord.channels, music.control. Loads extras on open; Play/Install selected game, notes, Discord DMs/servers/channels, Music play-pause/next/prev/open. |
 | Tour (guided walkthrough) | components/shell/ExoTour.tsx:54 | exo-ui/src/setup.rs:25† | DONE | Delivered by native-onboarding branch (live tour). |
-| Report a problem entry points (Settings, palette, error screen) | components/settings/ReportProblem.tsx:20 | — | MISSING | rpc: report.preview, report.send. See Settings. |
+| Report a problem entry points (Settings, palette, error screen) | components/settings/ReportProblem.tsx:20 | exo-ui/src/report.rs:14 | DONE | Settings > About, PaletteTarget::ReportProblem, and BootGate error screen all open ReportProblem. |
 
 ## Library
 
@@ -321,50 +321,50 @@ Totals: DONE 10, PARTIAL 0, MISSING 0, BROKEN 0 (of 10).
 
 ## Settings
 
-Totals: DONE 6, PARTIAL 5, MISSING 12, BROKEN 0 (of 23).
+Totals: DONE 23, PARTIAL 0, MISSING 0, BROKEN 0 (of 23).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Settings search + jump (38 entries) | components/SettingsPanel.tsx:48 | exo-ui/src/settings.rs:418 | PARTIAL | Search box filters the 6 native sections only; React indexes 38 entries across 13+ sections. Smoke: sidebar shows General, Library, Downloads, In game, Music, About. |
+| Settings search + jump (38 entries) | components/SettingsPanel.tsx:48 | exo-ui/src/settings.rs:826 | DONE | Live search + jump with highlight across all settings entries. |
 | General: text size, reduce motion, show tools | components/settings/GeneralSection.tsx:18 | exo-ui/src/settings.rs:99 | DONE | rpc: settings.get, settings.set.  |
 | General: launch on startup | components/settings/GeneralSection.tsx:1 | exo-ui/src/settings.rs:99 | DONE | rpc: startup.list.  |
-| General: FPS counter (position, 1% low, on/off) | components/settings/GeneralSection.tsx:127 | — | MISSING | rpc: fps.counter.  |
-| General: achievement pop-up sound, test pop-up, OBS overlay URL | components/settings/GeneralSection.tsx:93 | — | MISSING | rpc: achievements.preview.  |
-| General: install folder, download hours, auto-update games, update upscalers in anti-cheat games | components/settings/GeneralSection.tsx:175 | exo-ui/src/settings.rs:207 | PARTIAL | rpc: settings.set. Downloads section has some toggles; no install folder picker or hours. |
-| Store accounts: sign in to Steam (QR / password / guard) | components/settings/SteamSignInRow.tsx:1 | — | MISSING | rpc: steam.signInQr, steam.signInPassword, steam.signInGuard, steam.signInPoll, steam.signInCancel, steam.signOut, steam.account.  |
-| Store accounts: Epic / GOG / Ubisoft / EA accounts (add, switch, remove, import) | components/settings/StoreAccounts.tsx:2 | — | MISSING | rpc: accounts.list, accounts.add, accounts.switch, accounts.remove, accounts.signOut, accounts.epicAdd, accounts.epicImport, accounts.epicRemove, accounts.epicNewLauncher. accounts.progress event not handled. |
-| Stores section (auth state, check, matrix, offline mode, Riot ID, get another store) | components/settings/StoresSection.tsx:132 | exo-ui/src/settings.rs:192 | PARTIAL | rpc: stores.auth, stores.check, stores.matrix, stores.playOffline, steam.setOffline, playtime.riotRefresh. Native has Riot sync + keep store clients quiet only. |
-| Gifts (Steam gifts sign-in) | components/settings/StoresSection.tsx:94 | — | MISSING | rpc: gifts.list, gifts.steamSignIn, gifts.steamSignOut.  |
-| Riot data export import / baseline | components/settings/StoresSection.tsx:397 | — | MISSING | rpc: playtime.importRiotExport, playtime.setRiotBaseline.  |
-| Exo Account (create, sign in, password, recovery code, devices, export, delete) | components/settings/AccountSection.tsx:21 | exo-ui/src/settings.rs:289 | PARTIAL | rpc: exoAccount.state, exoAccount.sync, exoAccount.signOut, exoAccount.create, exoAccount.signIn, exoAccount.changePassword, exoAccount.newRecoveryCode, exoAccount.reset, exoAccount.sessions, exoAccount.revoke, exoAccount.export, exoAccount.delete. Only state, sync, sign out natively. |
+| General: FPS counter (position, 1% low, on/off) | components/settings/GeneralSection.tsx:127 | exo-ui/src/settings.rs:492 | DONE | FPS counter toggle, Position Choice dropdown (OpenDropdown::FpsPosition), and all 9 metric switches (settings-ingame PASS). |
+| General: achievement pop-up sound, test pop-up, OBS overlay URL | components/settings/GeneralSection.tsx:93 | exo-ui/src/settings.rs:447 | DONE | Achievement pop-ups toggle, Pop-up sound slider, Test pop-up preview, OBS overlay URL copy (settings-ingame PASS). |
+| General: install folder, download hours, auto-update games, update upscalers in anti-cheat games | components/settings/GeneralSection.tsx:175 | exo-ui/src/settings.rs:294 | DONE | Install folder pick/reset, download hours presets, auto-update, anti-cheat upscaler toggle (settings-downloads PASS). |
+| Store accounts: sign in to Steam (QR / password / guard) | components/settings/SteamSignInRow.tsx:1 | exo-ui/src/settings_stores.rs:250 | DONE | Steam library QR, password, and Steam Guard sign-in flow. |
+| Store accounts: Epic / GOG / Ubisoft / EA accounts (add, switch, remove, import) | components/settings/StoreAccounts.tsx:2 | exo-ui/src/settings_stores.rs:966 | DONE | Store accounts list, switch, add, remove, and Epic import. |
+| Stores section (auth state, check, matrix, offline mode, Riot ID, get another store) | components/settings/StoresSection.tsx:132 | exo-ui/src/settings_stores.rs:907 | DONE | Game stores matrix, auth status, Check again, offline mode, Riot ID, Get another store (settings-library PASS). |
+| Gifts (Steam gifts sign-in) | components/settings/StoresSection.tsx:94 | exo-ui/src/settings_stores.rs:640 | DONE | Steam gifts sign-in and status row. |
+| Riot data export import / baseline | components/settings/StoresSection.tsx:397 | exo-ui/src/settings_stores.rs:845 | DONE | Riot hours sync, data export import, and baseline editor. |
+| Exo Account (create, sign in, password, recovery code, devices, export, delete) | components/settings/AccountSection.tsx:21 | exo-ui/src/settings_account.rs:200 | DONE | Exo Account create/sign-in/password/recovery code/sessions/export/delete (settings-about PASS). |
 | Backups (now, export, import, status, restore) | components/settings/BackupSection.tsx:19 | exo-ui/src/settings.rs:133 | DONE | rpc: backup.status, backup.now, backup.export, backup.import. native settings.rs has now/export/import buttons per summary; calls observed only for status, so wiring needs verification. |
-| Privacy: what was sent, delete my data, telemetry opt-out | components/settings/PrivacySection.tsx:10 | — | MISSING | rpc: telemetry.sent, telemetry.delete.  |
-| Report a problem (preview payload, attach logs, send, open on GitHub) | components/settings/ReportProblem.tsx:20 | — | MISSING | rpc: report.preview, report.send.  |
+| Privacy: what was sent, delete my data, telemetry opt-out | components/settings/PrivacySection.tsx:10 | exo-ui/src/settings_privacy.rs:224 | DONE | Privacy Whats sent viewer and Delete my data (settings-about PASS). |
+| Report a problem (preview payload, attach logs, send, open on GitHub) | components/settings/ReportProblem.tsx:20 | exo-ui/src/report.rs:14 | DONE | Report a problem sheet with scrubbed log preview, send, and GitHub fallback. |
 | In-game settings (overlay, FPS hotkeys) | components/SettingsPanel.tsx:1 | exo-ui/src/settings.rs:234 | DONE | rpc: settings.set.  |
-| Music settings (service) | components/SettingsPanel.tsx:1 | exo-ui/src/settings.rs:7 | PARTIAL | rpc: settings.set.  |
-| Apps settings (web preferences) | components/settings/AppsSection.tsx:31 | — | MISSING | rpc: web.preferences.get, web.preferences.set.  |
+| Music settings (service) | components/SettingsPanel.tsx:1 | exo-ui/src/settings.rs:580 | DONE | Music service Choice dropdown synced via web.preferences.get/set (settings-music PASS). |
+| Apps settings (web preferences) | components/settings/AppsSection.tsx:31 | exo-ui/src/settings.rs:605 | DONE | Web client preferences (YouTube Music notifications and music service). |
 | About: version, Check for updates, Install update | components/settings/AboutSection.tsx:105 | exo-ui/src/settings.rs:289 | DONE | rpc: app.checkUpdate, app.installUpdate.  |
 | About: Take the tour, Resume setup, Open logs, Repair cache | components/settings/AboutSection.tsx:117 | exo-ui/src/settings.rs:289 | DONE | rpc: app.openLogs, app.repairCache.  |
-| About: Clear caches, Changelog, Licenses, Support Exo | components/settings/AboutSection.tsx:91 | — | MISSING | rpc: app.log, app.logsFor. Repair cache only. |
-| Shader pre-compile settings | components/SettingsPanel.tsx:1 | — | MISSING | rpc: shaders.status.  |
-| Discord settings pages (Account, Voice, App, Privacy, Keybinds) | components/discord/settings/AccountPages.tsx:1 | — | MISSING | rpc: discord.userSettings. See Discord room. |
+| About: Clear caches, Changelog, Licenses, Support Exo | components/settings/AboutSection.tsx:91 | exo-ui/src/settings.rs:646 | DONE | About version/update check, Clear caches, Report, Tour, Changelog, Privacy, Support Exo (settings-about PASS). |
+| Shader pre-compile settings | components/SettingsPanel.tsx:1 | exo-ui/src/settings_stores.rs:1260 | DONE | Shaders pre-compile section shown when shaders.addon reports present. |
+| Discord settings pages (Account, Voice, App, Privacy, Keybinds) | components/discord/settings/AccountPages.tsx:1 | exo-ui/src/discord_settings.rs:1 | DONE | Discord settings pages (Account, Voice, App, Privacy, Keybinds). |
 
 ## Onboarding & Account
 
-Totals: DONE 0, PARTIAL 4, MISSING 6, BROKEN 0 (of 10).
+Totals: DONE 10, PARTIAL 0, MISSING 0, BROKEN 0 (of 10).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Setup flow (welcome, scan, stores, account, apps, cleanup, restore) | components/OnboardingPanel.tsx:1 | exo-ui/src/setup.rs:93† | PARTIAL | rpc: shell.bootstrap. native-onboarding branch: 6 stages built; React has AccountStep/AppsStep/CleanupStep/RestoreStep with RPC calls missing. |
-| Setup: Account step (create / sign in / recovery code, probe) | components/onboarding/AccountStep.tsx:16 | exo-ui/src/setup.rs:866† | PARTIAL | rpc: exoAccount.probe, exoAccount.create, exoAccount.signIn, exoAccount.reset, exoAccount.newRecoveryCode. "Open account" does not sign in inline; exoAccount.* not called. |
-| Setup: Recovery code screen (save, confirm) | components/onboarding/RecoveryCodeScreen.tsx:9 | — | MISSING | rpc: exoAccount.saveCode, exoAccount.codeConfirmed.  |
-| Setup: Apps step (web preferences) | components/onboarding/AppsStep.tsx:15 | — | MISSING | rpc: web.preferences.get, web.preferences.set.  |
-| Setup: Cleanup step (replaced apps remove) | components/onboarding/CleanupStep.tsx:25 | — | MISSING | rpc: replaced.remove, apps.packagesPlan.  |
-| Setup: Restore step (restore from backup) | components/onboarding/RestoreStep.tsx:11 | — | MISSING | rpc: backup.restore, backup.decline. backup.stopped event not handled. |
-| Setup: per-device bodies; PC defaults count | components/onboarding/PcStep.tsx:1 | exo-ui/src/setup.rs:165† | PARTIAL | rpc: devices.list. Per-device bodies not built; PC defaults count reads 0 in fixture. |
-| Clients gate (store clients missing / fix) | components/clients/ClientsCard.tsx:1 | — | PARTIAL | rpc: clients.status, clients.fix. clients.status called; clients.fix never; no gate UI. components.failed event not handled. |
-| Account sheet (from bar) / sign-in state | components/account/AccountShell.tsx:18 | — | MISSING | rpc: exoAccount.probe.  |
-| Backup answer prompt (first-run restore/decline) | components/onboarding/RestoreStep.tsx:1 | — | MISSING | rpc: backup.decline.  |
+| Setup flow (welcome, scan, stores, account, apps, cleanup, restore) | components/OnboardingPanel.tsx:1 | exo-ui/src/setup.rs:1015 | DONE | Full setup flow stages wired to live host RPCs. |
+| Setup: Account step (create / sign in / recovery code, probe) | components/onboarding/AccountStep.tsx:16 | exo-ui/src/settings_account.rs:582 | DONE | Setup Account step (create, sign in, recovery code, probe). |
+| Setup: Recovery code screen (save, confirm) | components/onboarding/RecoveryCodeScreen.tsx:9 | exo-ui/src/settings_account.rs:88 | DONE | Recovery code display, save, and confirmation gate. |
+| Setup: Apps step (web preferences) | components/onboarding/AppsStep.tsx:15 | exo-ui/src/setup.rs:1066 | DONE | Setup Apps step wired to web.preferences.get/set. |
+| Setup: Cleanup step (replaced apps remove) | components/onboarding/CleanupStep.tsx:25 | exo-ui/src/setup.rs:1114 | DONE | Setup Cleanup step wired to replaced.scan/remove and junk.scan/clean. |
+| Setup: Restore step (restore from backup) | components/onboarding/RestoreStep.tsx:11 | exo-ui/src/setup.rs:1022 | DONE | Setup Restore step wired to backup.restore/decline. |
+| Setup: per-device bodies; PC defaults count | components/onboarding/PcStep.tsx:1 | exo-ui/src/setup.rs:730 | DONE | Setup per-device bodies and PC defaults count. |
+| Clients gate (store clients missing / fix) | components/clients/ClientsCard.tsx:1 | exo-ui/src/clients_gate.rs:1 | DONE | Clients start gate for missing/legacy store clients with Fix action. |
+| Account sheet (from bar) / sign-in state | components/account/AccountShell.tsx:18 | exo-ui/src/settings_account.rs:878 | DONE | Account sheet overlay and signed-in/out state. |
+| Backup answer prompt (first-run restore/decline) | components/onboarding/RestoreStep.tsx:1 | exo-ui/src/setup.rs:1052 | DONE | First-run backup answer prompt (restore or start fresh). |
 
 ## RPC coverage
 

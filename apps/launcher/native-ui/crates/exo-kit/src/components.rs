@@ -482,17 +482,17 @@ pub fn slider_track(
     label: impl Into<String>,
     width: f32,
     fraction: f32,
-    dragging: bool,
+    _dragging: bool,
     disabled: bool,
 ) -> El {
     let frac = fraction.clamp(0.0, 1.0);
     let fill_w = (width * frac).max(4.0);
+    let knob = 14.0_f32;
+    let knob_x = ((width - knob) * frac).clamp(0.0, (width - knob).max(0.0));
     let cursor = if disabled {
         Cursor::NotAllowed
-    } else if dragging {
-        Cursor::Grabbing
     } else {
-        Cursor::Grab
+        Cursor::Pointer
     };
     el().key(key)
         .role("slider")
@@ -503,13 +503,20 @@ pub fn slider_track(
         .cursor(cursor)
         .w(width)
         .h(20.0)
-        .center_y()
         .child(
-            el().w(width)
+            el().absolute(0.0, 8.0)
+                .w(width)
                 .h(4.0)
                 .radius(2.0)
                 .fill(Color::WHITE.alpha(0.16))
                 .child(el().w(fill_w).h(4.0).radius(2.0).fill(FG)),
+        )
+        .child(
+            el().absolute(knob_x, 3.0)
+                .size(knob, knob)
+                .radius(knob * 0.5)
+                .fill(FG)
+                .shadow(1.0, 3.0, BG.alpha(0.35)),
         )
 }
 

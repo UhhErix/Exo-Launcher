@@ -886,6 +886,91 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.pc.system_about = Some(about);
             }
+            if let Ok(status) = client.call_blocking::<_, exo_rpc::BackupStatus>(
+                exo_rpc::METHOD_BACKUP_STATUS,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                if let Some(ref note) = status.note
+                    && !note.sentence.is_empty()
+                {
+                    state.wp4.backup_note = Some(note.sentence.clone());
+                }
+                state.pc.backup = Some(status);
+            }
+            if let Ok(stores) = client.call_blocking::<_, Vec<exo_rpc::StoreStatus>>(
+                exo_rpc::METHOD_STORES_MATRIX,
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) {
+                state.wp4.stores = stores;
+            }
+            if let Ok(accounts) = client.call_blocking::<_, exo_rpc::StoreAccounts>(
+                exo_rpc::METHOD_ACCOUNTS_LIST,
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) {
+                state.wp4.store_accounts = Some(accounts);
+            }
+            if let Ok(steam) = client.call_blocking::<_, exo_rpc::SteamAccountReply>(
+                exo_rpc::METHOD_STEAM_ACCOUNT,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.wp4.steam_account = Some(steam);
+            }
+            if let Ok(sh) = client.call_blocking::<_, exo_rpc::ShadersAddonStatus>(
+                exo_rpc::METHOD_SHADERS_ADDON,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.wp4.shaders_present = sh.present;
+            }
+            if let Ok(ov) = client.call_blocking::<_, exo_rpc::ExoAccountOverview>(
+                exo_rpc::METHOD_EXO_ACCOUNT_OVERVIEW,
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) {
+                state.wp4.account_overview = Some(ov);
+            }
+            if let Ok(wp) = client.call_blocking::<_, exo_rpc::WebClientOptions>(
+                exo_rpc::METHOD_WEB_PREFERENCES_GET,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.wp4.web_prefs = Some(wp.clone());
+                state.pc.web_preferences = Some(wp);
+            }
+            if let Ok(fps) = client.call_blocking::<_, exo_rpc::FpsCounterReply>(
+                exo_rpc::METHOD_FPS_COUNTER,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.pc.fps_counter_state = Some(fps);
+            }
+            if let Ok(upd) = client.call_blocking::<_, exo_rpc::UpdateCheckReply>(
+                exo_rpc::METHOD_APP_CHECK_UPDATE,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.pc.update_check = Some(upd);
+            }
+            if state.wp4.riot_draft.text.is_empty()
+                && let Some(ref id) = state.settings.riot_id
+                && !id.trim().is_empty()
+            {
+                state.wp4.riot_draft = rune::TextEdit::new(id.trim());
+                state.wp4.riot_editing = false;
+            } else if state
+                .settings
+                .riot_id
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .is_empty()
+            {
+                state.wp4.riot_editing = true;
+            }
         }
         Some(sc) if sc == "pc" || sc.starts_with("pc-menu-") => {
             if let Ok(ai) = client.call_blocking::<_, exo_rpc::ExoAiState>(

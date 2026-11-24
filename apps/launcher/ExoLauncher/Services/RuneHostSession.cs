@@ -160,6 +160,9 @@ internal sealed partial class RuneHostSession
         transport.Start();
         services.HdrHost.Start();
         bridge.StartBackgroundMonitors();
+        Action<int> onDiscordBadge = count => bridge.PostFriendsBadge(count);
+        DiscordClient.DiscordSession.BadgeChanged += onDiscordBadge;
+        _ = Task.Run(DiscordClient.DiscordSession.Start);
         AppLog.Info($"RuneHostSession: listening on {transport.FullPipePath} (spawnUi={options.SpawnUi})");
 
         ConsoleCancelEventHandler onCancel = (_, e) =>
@@ -212,6 +215,7 @@ internal sealed partial class RuneHostSession
                 if (ReferenceEquals(_activeUiProcess, uiProcess)) _activeUiProcess = null;
             }
             Console.CancelKeyPress -= onCancel;
+            DiscordClient.DiscordSession.BadgeChanged -= onDiscordBadge;
             try { bridge.Detach(); } catch { }
             try { transport.Detach(); } catch { }
             try { services.MusicEngine.Close(); } catch { }

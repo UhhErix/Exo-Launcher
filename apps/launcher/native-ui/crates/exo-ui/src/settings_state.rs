@@ -1569,7 +1569,7 @@ impl Default for SettingsUiState {
             riot_tft_input: TextEdit::new(""),
             riot_hours_busy: false,
             riot_hours_note: None,
-            shaders_present: true,
+            shaders_present: false,
             shaders_auto: false,
             shaders_error: None,
             caches_busy: false,

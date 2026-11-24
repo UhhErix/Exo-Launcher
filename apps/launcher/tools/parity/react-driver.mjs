@@ -207,6 +207,31 @@ function probeDomState(openSelector, menuSelector, lastTarget) {
     opened = true
   }
 
+  const isUnoccluded = (el, r) => {
+    const x1 = Math.max(0, r.left)
+    const y1 = Math.max(0, r.top)
+    const x2 = Math.min(window.innerWidth - 1, r.right - 1)
+    const y2 = Math.min(window.innerHeight - 1, r.bottom - 1)
+    if (x2 < x1 || y2 < y1) return false
+    const mx = (x1 + x2) / 2
+    const my = (y1 + y2) / 2
+    const ix = Math.min(4, (x2 - x1) / 4)
+    const iy = Math.min(4, (y2 - y1) / 4)
+    const pts = [
+      [mx, my],
+      [x1 + ix, y1 + iy],
+      [x2 - ix, y1 + iy],
+      [x1 + ix, y2 - iy],
+      [x2 - ix, y2 - iy],
+    ]
+    for (const [px, py] of pts) {
+      const hit = document.elementFromPoint(px, py)
+      if (!hit) continue
+      if (hit === el || el.contains(hit) || hit.contains(el)) return true
+    }
+    return false
+  }
+
   const glass = []
   for (const el of document.querySelectorAll('*')) {
     if (!isVisible(el)) continue
@@ -214,6 +239,7 @@ function probeDomState(openSelector, menuSelector, lastTarget) {
     const bf = st.backdropFilter || st.webkitBackdropFilter || 'none'
     if (bf && bf !== 'none') {
       const r = el.getBoundingClientRect()
+      if (!isUnoccluded(el, r)) continue
       glass.push({
         rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
         backdropFilter: bf,

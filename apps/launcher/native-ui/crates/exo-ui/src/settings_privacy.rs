@@ -1,9 +1,9 @@
-use crate::settings::{set_btn, set_danger_btn};
+use crate::settings::{set_btn, set_danger_btn, settings_card};
 use crate::settings_state::{BackupOp, backup_day_label, today_utc_ymd};
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, RADIUS_CARD, RADIUS_SMALL, amoled_card, bad, fg_muted, glass_rim_bottom, glass_rim_top,
-    hairline, scaled, type_body, type_section, type_small,
+    BG, FG, RADIUS_SMALL, bad, fg_muted, glass_rim_bottom, glass_rim_top, hairline, scaled,
+    type_body, type_section, type_small,
 };
 use rune::{Cursor, El, ScrollSpec, TextStyle, col, el, row, text};
 
@@ -148,8 +148,7 @@ pub fn backup_section(s: &AppState) -> El {
         btn
     };
 
-    let mut card = amoled_card(RADIUS_CARD)
-        .w_full()
+    let mut card = settings_card()
         .child(row_box(
             "general-last-backup",
             "Last backup",
@@ -225,7 +224,7 @@ pub fn privacy_section(s: &AppState) -> El {
     let hi = |id: &str| s.wp4.highlight_row.is_some_and(|(rid, _)| rid == id);
     let viewing = s.wp4.privacy_viewing;
 
-    let mut card = amoled_card(RADIUS_CARD).w_full().child(row_box(
+    let mut card = settings_card().child(row_box(
         "about-privacy-sent",
         "What's sent",
         None,

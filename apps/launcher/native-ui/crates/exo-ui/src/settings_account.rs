@@ -1,13 +1,13 @@
-use crate::settings::{set_btn, set_danger_btn, set_primary_btn};
+use crate::settings::{set_btn, set_danger_btn, set_primary_btn, settings_card};
 use crate::settings_state::{
     AccountScreen, AccountSecurityForm, AccountSignedOutMode, RECOVERY_CODE_LENGTH,
     format_unix_timestamp, held_sentences, normalize_recovery_code, recovery_code_confirmed,
 };
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, RADIUS_CARD, RADIUS_SMALL, SPRING_BASE, amoled_card, bad, exo_mark, fg_muted,
-    glass_panel_opt, glass_rim_bottom, glass_rim_top, glass_still_control_fill, hairline,
-    modal_card_transition, scaled, type_body, type_section, type_small, type_title,
+    BG, FG, RADIUS_SMALL, SPRING_BASE, bad, exo_mark, fg_muted, glass_panel_opt, glass_rim_bottom,
+    glass_rim_top, glass_still_control_fill, hairline, modal_card_transition, scaled, type_body,
+    type_section, type_small, type_title,
 };
 use rune::{
     Cursor, El, PasswordInput, TextStyle, Transition, col, edit_access, el, row, text, text_input,
@@ -211,8 +211,7 @@ pub fn recovery_code_view(s: &AppState, code: &str, for_settings: bool) -> El {
 pub fn account_section(s: &AppState) -> El {
     if let Some(ref code) = s.wp4.account_recovery_code {
         return col().w_full().gap(8.0).child(sec_head("Account")).child(
-            amoled_card(RADIUS_CARD)
-                .w_full()
+            settings_card()
                 .padding(18.0)
                 .child(recovery_code_view(s, code, true)),
         );
@@ -246,7 +245,7 @@ pub fn account_section(s: &AppState) -> El {
             .on_press(|s: &mut AppState| s.wp4.account_sign_out_confirm = true)
     };
 
-    let mut acct_card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+    let mut acct_card = settings_card().child(set_row(
         "about-account-email",
         email_label,
         None,
@@ -292,7 +291,7 @@ pub fn account_section(s: &AppState) -> El {
     }
 
     let sec_form = s.wp4.account_security_form;
-    let mut sec_card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+    let mut sec_card = settings_card().child(set_row(
         "about-account-password",
         "Change password",
         None,
@@ -527,7 +526,7 @@ pub fn account_section(s: &AppState) -> El {
     }
 
     let sessions_open = s.wp4.account_sessions_open;
-    let mut sessions_card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+    let mut sessions_card = settings_card().child(set_row(
         "about-account-sessions",
         "Signed-in PCs",
         None,
@@ -605,8 +604,7 @@ pub fn account_section(s: &AppState) -> El {
     }
 
     let del_open = s.wp4.account_delete_open;
-    let mut data_card = amoled_card(RADIUS_CARD)
-        .w_full()
+    let mut data_card = settings_card()
         .child(set_row(
             "about-account-export",
             "Export my data",
@@ -673,7 +671,7 @@ pub fn account_section(s: &AppState) -> El {
 
     col()
         .w_full()
-        .gap(20.0)
+        .gap(24.0)
         .child(
             col()
                 .w_full()
@@ -855,7 +853,7 @@ fn signed_out_section(s: &AppState) -> El {
         .w_full()
         .gap(8.0)
         .child(sec_head("Account"))
-        .child(amoled_card(RADIUS_CARD).w_full().child(form.child(actions)))
+        .child(settings_card().child(form.child(actions)))
 }
 
 pub fn account_step_view(s: &AppState) -> El {

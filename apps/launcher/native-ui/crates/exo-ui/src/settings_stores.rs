@@ -1,4 +1,4 @@
-use crate::settings::{set_btn, set_danger_btn, set_primary_btn};
+use crate::settings::{set_btn, set_danger_btn, set_primary_btn, settings_card};
 use crate::settings_state::{
     RIOT_PRIVACY_URL, SteamSignInMode, StoreActionKind, account_name, available_store_rows,
     baseline_summary_parts, can_connect_store, can_open_store_client, is_valid_riot_id,
@@ -7,9 +7,9 @@ use crate::settings_state::{
 };
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, RADIUS_CARD, RADIUS_SMALL, amoled_card, bad, fg_muted, glass_rim_bottom, glass_rim_top,
-    glass_still_control_fill, good, hairline, hover_fill, icon_check, icon_chevron_down, scaled,
-    store_logo_or_fallback, switch_pill, type_body, type_section, type_small,
+    BG, FG, RADIUS_SMALL, bad, fg_muted, glass_rim_bottom, glass_rim_top, glass_still_control_fill,
+    good, hairline, hover_fill, icon_check, icon_chevron_down, scaled, store_logo_or_fallback,
+    switch_pill, type_body, type_section, type_small,
 };
 use exo_rpc::{
     METHOD_ACCOUNTS_ADD, METHOD_ACCOUNTS_EPIC_ADD, METHOD_ACCOUNTS_EPIC_IMPORT,
@@ -55,6 +55,7 @@ fn store_row_box(
             .font(TextStyle::new(scaled(13.0), 500.0))
             .color(FG),
     );
+    let has_detail = detail.is_some();
     if let Some(sub) = detail {
         text_col = text_col.child(
             text(sub)
@@ -71,7 +72,7 @@ fn store_row_box(
                 .wrap(),
         );
     }
-    let mut left = row().grow(1.0).min_w(0.0).gap(12.0).center_y();
+    let mut left = row().grow(1.0).min_w(0.0).gap(16.0).center_y();
     if let Some(ic) = icon {
         left = left.child(ic);
     }
@@ -83,8 +84,8 @@ fn store_row_box(
     wrap.child(
         row()
             .w_full()
-            .min_h(38.0)
-            .gap(14.0)
+            .min_h(if has_detail { 41.0 } else { 38.0 })
+            .gap(16.0)
             .justify_between()
             .center_y()
             .child(left)
@@ -923,7 +924,7 @@ pub fn stores_section(s: &AppState) -> El {
     .disabled(check_busy)
     .on_press(|s: &mut AppState| s.wp4_check_stores());
 
-    let mut card = amoled_card(RADIUS_CARD).w_full();
+    let mut card = settings_card();
 
     if installed.is_empty() {
         card = card.child(store_row_box(
@@ -1051,7 +1052,7 @@ pub fn stores_section(s: &AppState) -> El {
                     set_btn(
                         format!("set-get-store-{}", store.store),
                         &store.display_name,
-                        Some(store_logo_or_fallback(&store.store, 15.0)),
+                        Some(store_logo_or_fallback(&store.store, 14.0)),
                     )
                     .on_press(move |s: &mut AppState| s.wp4_open_url(url)),
                 );
@@ -1062,11 +1063,13 @@ pub fn stores_section(s: &AppState) -> El {
             .w_full()
             .px(18.0)
             .py(12.0)
-            .gap(10.0)
+            .gap(8.0)
             .child(
-                text("Get another store")
-                    .font(TextStyle::new(scaled(13.0), 500.0))
-                    .color(FG),
+                row().h(20.0).center_y().child(
+                    text("Get another store")
+                        .font(TextStyle::new(scaled(13.0), 500.0))
+                        .color(FG),
+                ),
             )
             .child(chips);
         if hi("library-get-store") {
@@ -1224,8 +1227,9 @@ fn render_installed_store(
             set_btn(
                 format!("set-store-acct-{id}"),
                 if acct_busy { "Working…" } else { "Account" },
-                Some(icon_chevron_down(12.0, FG)),
+                None,
             )
+            .child(icon_chevron_down(12.0, fg_muted()))
             .disabled(busy.is_some() || acct_busy)
             .on_press(move |s: &mut AppState| {
                 s.wp4.account_menu_confirm_id = None;
@@ -1294,7 +1298,7 @@ pub fn shaders_section(s: &AppState) -> Option<El> {
         .highlight_row
         .is_some_and(|(rid, _)| rid == "library-shaders");
     let on = s.wp4.shaders_auto;
-    let card = amoled_card(RADIUS_CARD).w_full().child(store_row_box(
+    let card = settings_card().child(store_row_box(
         "library-shaders",
         None,
         "Improve shader pre-compiling",
