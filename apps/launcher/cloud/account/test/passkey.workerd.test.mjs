@@ -190,8 +190,11 @@ test('workerd end-to-end: register, UV-required ES256 sign-in, regression flag, 
   })
   assert.equal(regFinish.status, 201)
 
-  const st = await call('POST', '/v1/passkeys/signin/start', { body: { email: EMAIL } })
+  const st = await call('POST', '/v1/passkeys/signin/start', { body: {} })
   assert.equal(st.status, 200)
+  assert.equal(st.body.rpId, RP_ID)
+  assert.equal(st.body.origin, ORIGIN)
+  assert.deepEqual(st.body.allowCredentials, [])
   const assertion = await buildAssertionPayload(regPayload.pair, regPayload.credentialId, st.body.challenge, 2)
   const fin = await call('POST', '/v1/passkeys/signin/finish', {
     body: { challenge: st.body.challenge, device: DEVICE, ...assertion },

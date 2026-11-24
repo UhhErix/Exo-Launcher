@@ -436,8 +436,9 @@ const PASSKEY_REAUTH_WINDOW = 300
 const PASSKEY_LABEL_MAX = 64
 
 function rpConfig(env) {
-  const rpId = typeof env.WEBAUTHN_RP_ID === 'string' && env.WEBAUTHN_RP_ID ? env.WEBAUTHN_RP_ID : 'accounts.getexo.app'
-  const origin = typeof env.WEBAUTHN_ORIGIN === 'string' && env.WEBAUTHN_ORIGIN ? env.WEBAUTHN_ORIGIN : `https://${rpId}`
+  const rpId = typeof env.WEBAUTHN_RP_ID === 'string' ? env.WEBAUTHN_RP_ID.trim() : ''
+  const origin = typeof env.WEBAUTHN_ORIGIN === 'string' ? env.WEBAUTHN_ORIGIN.trim() : ''
+  if (!rpId || !origin || !origin.startsWith('https://')) refuse(503, 'passkeys-unavailable')
   return { rpId, origin }
 }
 
@@ -468,6 +469,7 @@ async function consumeChallenge(db, challenge, expectedKind, expectedAccount = n
 }
 
 async function getPasskeys(request, env) {
+  rpConfig(env)
   const { account } = await sessionOf(request, env)
   const { results } = await env.DB.prepare(
     'SELECT credential_id, label, created, last_used, sign_count_flagged FROM passkeys WHERE account = ? ORDER BY created DESC'
@@ -484,6 +486,7 @@ async function getPasskeys(request, env) {
 }
 
 async function passkeyRegisterStart(request, env) {
+  const { rpId, origin } = rpConfig(env)
   await throttle(request, env)
   const { account, device, tokenHash } = await sessionOf(request, env)
   const record = await recordOf(env.DB, account)
@@ -500,7 +503,6 @@ async function passkeyRegisterStart(request, env) {
   }
   const { results: existing } = await env.DB.prepare('SELECT credential_id FROM passkeys WHERE account = ?').bind(account).all()
   if (existing.length >= PASSKEY_MAX) refuse(409, 'passkey-limit')
-  const { rpId, origin } = rpConfig(env)
   const challenge = await issueChallenge(env.DB, 'register', account)
   return json({
     challenge,
@@ -515,6 +517,7 @@ async function passkeyRegisterStart(request, env) {
 }
 
 async function passkeyRegisterFinish(request, env) {
+  const { rpId, origin } = rpConfig(env)
   await throttle(request, env)
   const { account } = await sessionOf(request, env)
   const input = await body(request)
@@ -525,7 +528,6 @@ async function passkeyRegisterFinish(request, env) {
   const { count } = await env.DB.prepare('SELECT COUNT(*) AS count FROM passkeys WHERE account = ?').bind(account).first()
   if (count >= PASSKEY_MAX) refuse(409, 'passkey-limit')
   await consumeChallenge(env.DB, input.challenge, 'register', account)
-  const { rpId, origin } = rpConfig(env)
   const verified = await verifyRegistration({
     rpId,
     expectedOrigin: origin,
@@ -548,6 +550,7 @@ async function passkeyRegisterFinish(request, env) {
 }
 
 async function deletePasskey(request, env, _url, match) {
+  rpConfig(env)
   const { account } = await sessionOf(request, env)
   const record = await recordOf(env.DB, account)
   const existing = await env.DB.prepare('SELECT credential_id FROM passkeys WHERE credential_id = ? AND account = ?')
@@ -561,35 +564,22 @@ async function deletePasskey(request, env, _url, match) {
 }
 
 async function passkeySignInStart(request, env) {
-  await throttle(request, env)
-  const input = await body(request)
-  let allowCredentials = []
-  let scopedAccount = null
-  if (typeof input.email === 'string' && input.email.trim().length > 0) {
-    const email = normalEmail(input.email)
-    if (email) {
-      const lookups = await emailLookups(env, email)
-      const record = await recordByAddress(env.DB, lookups)
-      if (record) {
-        scopedAccount = record.id
-        const { results } = await env.DB.prepare('SELECT credential_id FROM passkeys WHERE account = ?').bind(record.id).all()
-        allowCredentials = results.map(r => r.credential_id)
-      }
-    }
-  }
   const { rpId, origin } = rpConfig(env)
-  const challenge = await issueChallenge(env.DB, 'signin', scopedAccount)
+  await throttle(request, env)
+  await body(request)
+  const challenge = await issueChallenge(env.DB, 'signin', null)
   return json({
     challenge,
     rpId,
     origin,
     userVerification: 'required',
-    allowCredentials,
+    allowCredentials: [],
     timeout: 60000,
   })
 }
 
 async function passkeySignInFinish(request, env) {
+  const { rpId, origin } = rpConfig(env)
   await throttle(request, env)
   const input = await body(request)
   const device = deviceOf(input)
@@ -609,7 +599,6 @@ async function passkeySignInFinish(request, env) {
   ).bind(input.credentialId).first()
   if (!row) refuse(401, 'wrong-credentials')
   if (chRow.account !== null && row.account !== chRow.account) refuse(401, 'wrong-credentials')
-  const { rpId, origin } = rpConfig(env)
   const verified = await verifyAssertion({
     rpId,
     expectedOrigin: origin,

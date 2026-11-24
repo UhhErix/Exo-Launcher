@@ -9,6 +9,12 @@ const ORIGIN = 'https://accounts.getexo.app'
 const PASSWORD = 'correct horse battery staple'
 const DEVICE = '0123456789abcdef0123456789abcdef'
 
+const passkeyAccount = () => ({
+  ...account(),
+  WEBAUTHN_RP_ID: RP_ID,
+  WEBAUTHN_ORIGIN: ORIGIN,
+})
+
 afterEach(() => resetClock())
 
 function cborUint(major, n) {
@@ -119,7 +125,7 @@ async function signUpAndRegister(env, email = 'passkey@example.com', key = null)
 }
 
 test('challenges are single-use, server-stored in D1, and expire after 5 minutes', async () => {
-  const env = account()
+  const env = passkeyAccount()
   const { key } = await signUpAndRegister(env)
 
   const st1 = await call(env, 'POST', '/v1/passkeys/signin/start', { body: {} })
@@ -145,7 +151,7 @@ test('challenges are single-use, server-stored in D1, and expire after 5 minutes
 })
 
 test('rpId and origin are checked exactly on registration and sign-in', async () => {
-  const env = account()
+  const env = passkeyAccount()
   const made = await call(env, 'POST', '/v1/account', { body: { email: 'rp@example.com', password: PASSWORD, device: DEVICE } })
   const k = await makeKeyPair()
 
@@ -185,7 +191,7 @@ test('rpId and origin are checked exactly on registration and sign-in', async ()
 })
 
 test('userVerification (UV flag) is strictly required on registration and sign-in', async () => {
-  const env = account()
+  const env = passkeyAccount()
   const made = await call(env, 'POST', '/v1/account', { body: { email: 'uv@example.com', password: PASSWORD, device: DEVICE } })
   const k = await makeKeyPair()
 
@@ -210,7 +216,7 @@ test('userVerification (UV flag) is strictly required on registration and sign-i
 })
 
 test('signCount regression is refused and flagged in D1 and GET /v1/passkeys', async () => {
-  const env = account()
+  const env = passkeyAccount()
   const { key, made } = await signUpAndRegister(env)
 
   const s1 = await call(env, 'POST', '/v1/passkeys/signin/start', { body: {} })
@@ -231,7 +237,7 @@ test('signCount regression is refused and flagged in D1 and GET /v1/passkeys', a
 })
 
 test('credential IDs are unique per account and globally across accounts', async () => {
-  const env = account()
+  const env = passkeyAccount()
   const sharedKey = await makeKeyPair()
   const { made: acct1 } = await signUpAndRegister(env, 'one@example.com', sharedKey)
 
@@ -256,7 +262,7 @@ test('credential IDs are unique per account and globally across accounts', async
 })
 
 test('passkey register and sign-in endpoints are rate-limited (429 slow-down)', async () => {
-  const env = account()
+  const env = passkeyAccount()
   const made = await call(env, 'POST', '/v1/account', { body: { email: 'rl@example.com', password: PASSWORD, device: DEVICE } })
 
   for (let i = 0; i < 10; i++) {
@@ -277,7 +283,7 @@ test('passkey register and sign-in endpoints are rate-limited (429 slow-down)', 
 })
 
 test('registering a passkey requires a fresh session (<=5m) or fresh password re-auth', async () => {
-  const env = account()
+  const env = passkeyAccount()
   const made = await call(env, 'POST', '/v1/account', { body: { email: 'reauth@example.com', password: PASSWORD, device: DEVICE } })
 
   later(301)
@@ -295,7 +301,7 @@ test('registering a passkey requires a fresh session (<=5m) or fresh password re
 })
 
 test('removing the last sign-in method is blocked, while password accounts can delete passkeys and recovery codes still work', async () => {
-  const env = account()
+  const env = passkeyAccount()
   const { reg, made } = await signUpAndRegister(env, 'fallback@example.com')
 
   const delWithPw = await call(env, 'DELETE', `/v1/passkeys/${reg.credentialId}`, { token: made.body.token })
@@ -335,7 +341,7 @@ test('no auth secrets or PII are logged: zero console calls in Worker src and cl
   const wranglerToml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8')
   assert.match(wranglerToml, /\[observability\]\s*\r?\nenabled = false/)
 
-  const env = account()
+  const env = passkeyAccount()
   const secretEmail = 'pii-secret@example.com'
   const badRes = await call(env, 'POST', '/v1/passkeys/signin/finish', {
     body: {
@@ -352,4 +358,67 @@ test('no auth secrets or PII are logged: zero console calls in Worker src and cl
   assert.equal(serialized, '{"error":"bad-challenge"}')
   assert.ok(!serialized.includes(secretEmail))
   assert.ok(!serialized.includes('secret_cred_id'))
+})
+
+test('signin/start never enumerates accounts: known email, unknown email, and no email return identically shaped discoverable challenges', async () => {
+  const env = passkeyAccount()
+  const { key, made } = await signUpAndRegister(env, 'known@example.com')
+
+  const known = await call(env, 'POST', '/v1/passkeys/signin/start', { body: { email: 'known@example.com' } })
+  const unknown = await call(env, 'POST', '/v1/passkeys/signin/start', { body: { email: 'unknown@example.com' } })
+  const bare = await call(env, 'POST', '/v1/passkeys/signin/start', { body: {} })
+
+  for (const res of [known, unknown, bare]) {
+    assert.equal(res.status, 200)
+    assert.deepEqual(Object.keys(res.body).sort(), ['allowCredentials', 'challenge', 'origin', 'rpId', 'timeout', 'userVerification'])
+    assert.deepEqual(res.body.allowCredentials, [])
+    assert.equal(res.body.rpId, RP_ID)
+    assert.equal(res.body.origin, ORIGIN)
+    assert.equal(res.body.userVerification, 'required')
+    assert.equal(res.body.timeout, 60000)
+  }
+
+  const storedChallenges = env.DB.rows('webauthn_challenges')
+  assert.equal(storedChallenges.length, 3)
+  assert.ok(storedChallenges.every(row => row.account === null))
+
+  const assertion = await buildAssertion(key, bare.body.challenge, { signCount: 2 })
+  const fin = await call(env, 'POST', '/v1/passkeys/signin/finish', {
+    body: { challenge: bare.body.challenge, device: DEVICE, ...assertion },
+  })
+  assert.equal(fin.status, 200)
+  assert.equal(fin.body.account.id, made.body.account.id)
+})
+
+test('passkey routes fail closed with 503 passkeys-unavailable when WEBAUTHN_RP_ID or WEBAUTHN_ORIGIN is missing', async () => {
+  const wranglerToml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8')
+  assert.match(wranglerToml, /WEBAUTHN_RP_ID\s*=\s*"accounts\.getexo\.app"/)
+  assert.match(wranglerToml, /WEBAUTHN_ORIGIN\s*=\s*"https:\/\/accounts\.getexo\.app"/)
+
+  const configs = [
+    {},
+    { WEBAUTHN_RP_ID: RP_ID },
+    { WEBAUTHN_ORIGIN: ORIGIN },
+    { WEBAUTHN_RP_ID: RP_ID, WEBAUTHN_ORIGIN: 'http://accounts.getexo.app' },
+  ]
+
+  for (const vars of configs) {
+    const env = { ...account(), ...vars }
+    const made = await call(env, 'POST', '/v1/account', { body: { email: 'cfg@example.com', password: PASSWORD, device: DEVICE } })
+    assert.equal(made.status, 201)
+    const token = made.body.token
+
+    const routes = [
+      await call(env, 'GET', '/v1/passkeys', { token }),
+      await call(env, 'POST', '/v1/passkeys/register/start', { token, body: {} }),
+      await call(env, 'POST', '/v1/passkeys/register/finish', { token, body: {} }),
+      await call(env, 'DELETE', '/v1/passkeys/cred_missing_cfg_1', { token }),
+      await call(env, 'POST', '/v1/passkeys/signin/start', { body: {} }),
+      await call(env, 'POST', '/v1/passkeys/signin/finish', { body: {} }),
+    ]
+    for (const res of routes) {
+      assert.equal(res.status, 503)
+      assert.equal(res.body.error, 'passkeys-unavailable')
+    }
+  }
 })

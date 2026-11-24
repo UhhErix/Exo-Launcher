@@ -15,6 +15,10 @@ mode = "smart"
 [observability]
 enabled = false
 
+[vars]
+WEBAUTHN_RP_ID = "accounts.getexo.app"
+WEBAUTHN_ORIGIN = "https://accounts.getexo.app"
+
 # Secret ACCOUNT_SECRETS, set with `wrangler secret put ACCOUNT_SECRETS` (a keyring, README.md › Keys). It derives the keys
 # that open every account's items and recovery codes. A key is rotated by adding one on top of the others, not by changing one.
 [[d1_databases]]
