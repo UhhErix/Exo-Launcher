@@ -1270,6 +1270,42 @@ fn negotiate_wire(
     ))
 }
 
+#[derive(Serialize)]
+struct RpcRequest<'a, P: ?Sized> {
+    version: u32,
+    id: &'a str,
+    method: &'a str,
+    params: &'a P,
+}
+
+pub fn serialize_request<P: Serialize + ?Sized>(
+    id: &str,
+    method: &str,
+    params: &P,
+) -> Result<String, serde_json::Error> {
+    serde_json::to_string(&RpcRequest {
+        version: PROTOCOL_VERSION,
+        id,
+        method,
+        params,
+    })
+}
+
+fn serialize_request_line<P: Serialize + ?Sized>(
+    id: &str,
+    method: &str,
+    params: &P,
+) -> Result<Vec<u8>, serde_json::Error> {
+    let mut bytes = serde_json::to_vec(&RpcRequest {
+        version: PROTOCOL_VERSION,
+        id,
+        method,
+        params,
+    })?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 #[cfg(windows)]
 impl RpcClient {
     pub fn connect(
@@ -1472,24 +1508,13 @@ impl RpcClient {
                     return req_id;
                 }
             },
-            ActiveWireMode::Json => {
-                let envelope = json!({
-                    "version": PROTOCOL_VERSION,
-                    "id": id,
-                    "method": method,
-                    "params": params,
-                });
-                match serde_json::to_vec(&envelope) {
-                    Ok(mut bytes) => {
-                        bytes.push(b'\n');
-                        bytes
-                    }
-                    Err(e) => {
-                        callback(Err(RpcError::Json(e)));
-                        return req_id;
-                    }
+            ActiveWireMode::Json => match serialize_request_line(&id, method, params) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    callback(Err(RpcError::Json(e)));
+                    return req_id;
                 }
-            }
+            },
         };
         {
             let mut map = self.pending.lock().unwrap_or_else(|e| e.into_inner());
@@ -3568,5 +3593,19 @@ mod tests {
             client.close();
             let _ = server.join();
         }
+    }
+
+    #[test]
+    fn serialize_request_emits_protocol_envelope_directly() {
+        #[derive(Serialize)]
+        struct P<'a> {
+            id: &'a str,
+        }
+        let raw = serialize_request("9", "game.get", &P { id: "steam:730" }).expect("serialize");
+        let parsed: Value = serde_json::from_str(&raw).expect("parse");
+        assert_eq!(parsed["version"], PROTOCOL_VERSION);
+        assert_eq!(parsed["id"], "9");
+        assert_eq!(parsed["method"], "game.get");
+        assert_eq!(parsed["params"]["id"], "steam:730");
     }
 }

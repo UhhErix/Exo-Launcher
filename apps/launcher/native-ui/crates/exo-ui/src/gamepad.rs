@@ -5,6 +5,97 @@ use exo_kit::{
     selected_fill, type_small,
 };
 use rune::{El, el, row, text};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
+
+pub const STICK_DEADZONE_NORM: f32 = 0.28;
+pub const DIR_INITIAL_DELAY_MS: u64 = 340;
+pub const DIR_REPEAT_MS: u64 = 105;
+
+static WINDOW_FOCUSED: AtomicBool = AtomicBool::new(true);
+
+pub fn set_window_focused(focused: bool) {
+    WINDOW_FOCUSED.store(focused, Ordering::Release);
+}
+
+pub fn is_window_focused() -> bool {
+    WINDOW_FOCUSED.load(Ordering::Acquire)
+}
+
+pub fn stick_direction(lx: i16, ly: i16) -> (i8, i8) {
+    let nx = (lx as f32) / 32767.0;
+    let ny = (ly as f32) / 32767.0;
+    if nx.hypot(ny) < STICK_DEADZONE_NORM {
+        return (0, 0);
+    }
+    if nx.abs() >= ny.abs() {
+        (if nx > 0.0 { 1 } else { -1 }, 0)
+    } else {
+        (0, if ny > 0.0 { -1 } else { 1 })
+    }
+}
+
+pub fn combine_dir(dpad_dx: i8, dpad_dy: i8, stick_lx: i16, stick_ly: i16) -> (i8, i8) {
+    if dpad_dx != 0 {
+        (dpad_dx, 0)
+    } else if dpad_dy != 0 {
+        (0, dpad_dy)
+    } else {
+        stick_direction(stick_lx, stick_ly)
+    }
+}
+
+fn dir_to_action(dir: (i8, i8)) -> Option<GamepadAction> {
+    match dir {
+        (-1, 0) => Some(GamepadAction::Left),
+        (1, 0) => Some(GamepadAction::Right),
+        (0, -1) => Some(GamepadAction::Up),
+        (0, 1) => Some(GamepadAction::Down),
+        _ => None,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DirRepeater {
+    held: (i8, i8),
+    last_fire: Option<Instant>,
+    repeated: bool,
+}
+
+impl DirRepeater {
+    pub fn reset(&mut self) {
+        self.held = (0, 0);
+        self.last_fire = None;
+        self.repeated = false;
+    }
+
+    pub fn step(&mut self, dir: (i8, i8), now: Instant) -> Option<GamepadAction> {
+        if dir == (0, 0) {
+            self.reset();
+            return None;
+        }
+        if dir != self.held {
+            self.held = dir;
+            self.last_fire = Some(now);
+            self.repeated = false;
+            return dir_to_action(dir);
+        }
+        let wait_ms = if self.repeated {
+            DIR_REPEAT_MS
+        } else {
+            DIR_INITIAL_DELAY_MS
+        };
+        if self
+            .last_fire
+            .is_some_and(|t| now.duration_since(t) >= Duration::from_millis(wait_ms))
+        {
+            self.last_fire = Some(now);
+            self.repeated = true;
+            return dir_to_action(dir);
+        }
+        None
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GamepadKind {
@@ -245,77 +336,10 @@ pub fn cycle_room_subtab(s: &mut AppState, delta: isize) {
     }
 }
 
-const DPAD_UP_BIT: u16 = 0x0001;
-const DPAD_DOWN_BIT: u16 = 0x0002;
-const DPAD_LEFT_BIT: u16 = 0x0004;
-const DPAD_RIGHT_BIT: u16 = 0x0008;
-const STICK_RADIAL_DEADZONE: f32 = 32767.0 * 0.28;
-const DIR_INITIAL_DELAY_MS: u64 = 340;
-const DIR_REPEAT_INTERVAL_MS: u64 = 105;
-
-fn directional_input(buttons: u16, thumb_lx: i16, thumb_ly: i16) -> (i8, i8) {
-    let dpad_x = if buttons & DPAD_RIGHT_BIT != 0 {
-        1
-    } else if buttons & DPAD_LEFT_BIT != 0 {
-        -1
-    } else {
-        0
-    };
-    let dpad_y = if buttons & DPAD_UP_BIT != 0 {
-        -1
-    } else if buttons & DPAD_DOWN_BIT != 0 {
-        1
-    } else {
-        0
-    };
-    if dpad_x != 0 || dpad_y != 0 {
-        return (dpad_x, dpad_y);
-    }
-    let lx = thumb_lx as f32;
-    let ly = thumb_ly as f32;
-    if lx.hypot(ly) < STICK_RADIAL_DEADZONE {
-        return (0, 0);
-    }
-    if lx.abs() >= ly.abs() {
-        (if lx > 0.0 { 1 } else { -1 }, 0)
-    } else {
-        (0, if ly > 0.0 { -1 } else { 1 })
-    }
-}
-
-fn dir_repeat_due(same_dir: bool, repeating: bool, elapsed_ms: u64) -> bool {
-    if !same_dir {
-        return true;
-    }
-    let threshold = if repeating {
-        DIR_REPEAT_INTERVAL_MS
-    } else {
-        DIR_INITIAL_DELAY_MS
-    };
-    elapsed_ms >= threshold
-}
-
-#[cfg(windows)]
-fn is_process_foreground() -> bool {
-    #[link(name = "user32")]
-    unsafe extern "system" {
-        fn GetForegroundWindow() -> isize;
-        fn GetWindowThreadProcessId(hwnd: isize, lpdw_process_id: *mut u32) -> u32;
-    }
-    let hwnd = unsafe { GetForegroundWindow() };
-    if hwnd == 0 {
-        return false;
-    }
-    let mut pid: u32 = 0;
-    unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
-    pid == std::process::id()
-}
-
 #[cfg(windows)]
 pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    use std::time::{Duration, Instant};
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
     #[repr(C)]
@@ -339,6 +363,10 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
 
     type XInputGetStateFn = unsafe extern "system" fn(u32, *mut XInputState) -> u32;
 
+    const DPAD_UP: u16 = 0x0001;
+    const DPAD_DOWN: u16 = 0x0002;
+    const DPAD_LEFT: u16 = 0x0004;
+    const DPAD_RIGHT: u16 = 0x0008;
     const BTN_START: u16 = 0x0010;
     const BTN_BACK: u16 = 0x0020;
     const LB: u16 = 0x0100;
@@ -364,16 +392,25 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
             let get_state: XInputGetStateFn = unsafe { std::mem::transmute(raw_fn) };
 
             let mut connected = false;
+            let mut was_focused = is_window_focused();
             let mut prev_buttons: u16 = 0;
             let mut prev_lt = false;
             let mut prev_rt = false;
-            let mut prev_dir = (0i8, 0i8);
-            let mut dir_repeating = false;
-            let mut last_dir_fire = Instant::now();
+            let mut repeater = DirRepeater::default();
             let mut last_packet: u32 = 0;
             let mut last_activity = Instant::now();
 
             loop {
+                if !is_window_focused() {
+                    was_focused = false;
+                    prev_buttons = 0;
+                    prev_lt = false;
+                    prev_rt = false;
+                    repeater.reset();
+                    std::thread::sleep(Duration::from_millis(250));
+                    continue;
+                }
+
                 let mut state = XInputState::default();
                 let mut found = false;
                 for slot in 0..4u32 {
@@ -385,10 +422,10 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
 
                 if found != connected {
                     connected = found;
-                    prev_buttons = 0;
-                    prev_lt = false;
-                    prev_rt = false;
-                    prev_dir = (0, 0);
+                    prev_buttons = state.gamepad.buttons;
+                    prev_lt = state.gamepad.left_trigger >= TRIGGER_THRESHOLD;
+                    prev_rt = state.gamepad.right_trigger >= TRIGGER_THRESHOLD;
+                    repeater.reset();
                     last_packet = state.packet_number;
                     last_activity = Instant::now();
                     on_action(GamepadAction::Connected(connected));
@@ -402,14 +439,14 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
                 let b = state.gamepad.buttons;
                 let lt = state.gamepad.left_trigger >= TRIGGER_THRESHOLD;
                 let rt = state.gamepad.right_trigger >= TRIGGER_THRESHOLD;
-
-                if !is_process_foreground() {
+                if !was_focused {
+                    was_focused = true;
                     prev_buttons = b;
                     prev_lt = lt;
                     prev_rt = rt;
-                    prev_dir = (0, 0);
-                    dir_repeating = false;
-                    std::thread::sleep(Duration::from_millis(100));
+                    repeater.reset();
+                    last_packet = state.packet_number;
+                    std::thread::sleep(Duration::from_millis(16));
                     continue;
                 }
 
@@ -447,31 +484,35 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
                     on_action(GamepadAction::Settings);
                 }
 
-                let (dx, dy) = directional_input(b, state.gamepad.thumb_lx, state.gamepad.thumb_ly);
+                let dpad_dx = if b & DPAD_RIGHT != 0 {
+                    1
+                } else if b & DPAD_LEFT != 0 {
+                    -1
+                } else {
+                    0
+                };
+                let dpad_dy = if b & DPAD_UP != 0 {
+                    -1
+                } else if b & DPAD_DOWN != 0 {
+                    1
+                } else {
+                    0
+                };
+                let dir = combine_dir(
+                    dpad_dx,
+                    dpad_dy,
+                    state.gamepad.thumb_lx,
+                    state.gamepad.thumb_ly,
+                );
 
                 let now = Instant::now();
-                if state.packet_number != last_packet || b != 0 || lt || rt || (dx, dy) != (0, 0) {
+                if state.packet_number != last_packet || b != 0 || lt || rt || dir != (0, 0) {
                     last_packet = state.packet_number;
                     last_activity = now;
                 }
-                let same_dir = (dx, dy) == prev_dir;
-                let elapsed_ms = now.duration_since(last_dir_fire).as_millis() as u64;
-                if (dx, dy) != (0, 0) && dir_repeat_due(same_dir, dir_repeating, elapsed_ms) {
-                    dir_repeating = same_dir;
-                    last_dir_fire = now;
-                    if dx < 0 {
-                        on_action(GamepadAction::Left);
-                    } else if dx > 0 {
-                        on_action(GamepadAction::Right);
-                    } else if dy < 0 {
-                        on_action(GamepadAction::Up);
-                    } else if dy > 0 {
-                        on_action(GamepadAction::Down);
-                    }
-                } else if (dx, dy) == (0, 0) {
-                    dir_repeating = false;
+                if let Some(act) = repeater.step(dir, now) {
+                    on_action(act);
                 }
-                prev_dir = (dx, dy);
 
                 let poll_ms = if now.duration_since(last_activity) >= Duration::from_secs(2) {
                     100
@@ -513,16 +554,31 @@ mod tests {
     }
 
     #[test]
-    fn radial_deadzone_dominant_axis_and_repeat_delay() {
-        assert_eq!(directional_input(0, 5000, 5000), (0, 0));
-        assert_eq!(directional_input(0, 15000, 22000), (0, -1));
-        assert_eq!(directional_input(0, -24000, 12000), (-1, 0));
-        assert_eq!(directional_input(DPAD_DOWN_BIT, 25000, 0), (0, 1));
+    fn stick_direction_uses_radial_deadzone_and_dominant_axis() {
+        assert_eq!(stick_direction(0, 0), (0, 0));
+        assert_eq!(stick_direction(6000, 6000), (0, 0));
+        assert_eq!(stick_direction(7000, 20000), (0, -1));
+        assert_eq!(stick_direction(-7000, -20000), (0, 1));
+        assert_eq!(stick_direction(22000, 10000), (1, 0));
+        assert_eq!(stick_direction(-22000, -10000), (-1, 0));
+    }
 
-        assert!(dir_repeat_due(false, false, 0));
-        assert!(!dir_repeat_due(true, false, 200));
-        assert!(dir_repeat_due(true, false, 340));
-        assert!(!dir_repeat_due(true, true, 90));
-        assert!(dir_repeat_due(true, true, 105));
+    #[test]
+    fn dir_repeater_honors_initial_delay_then_repeat_cadence() {
+        let mut rep = DirRepeater::default();
+        let t0 = Instant::now();
+        assert_eq!(rep.step((1, 0), t0), Some(GamepadAction::Right));
+        assert_eq!(rep.step((1, 0), t0 + Duration::from_millis(180)), None);
+        assert_eq!(rep.step((1, 0), t0 + Duration::from_millis(339)), None);
+        let t1 = t0 + Duration::from_millis(DIR_INITIAL_DELAY_MS);
+        assert_eq!(rep.step((1, 0), t1), Some(GamepadAction::Right));
+        assert_eq!(rep.step((1, 0), t1 + Duration::from_millis(80)), None);
+        let t2 = t1 + Duration::from_millis(DIR_REPEAT_MS);
+        assert_eq!(rep.step((1, 0), t2), Some(GamepadAction::Right));
+        assert_eq!(rep.step((0, 0), t2 + Duration::from_millis(16)), None);
+        assert_eq!(
+            rep.step((0, 1), t2 + Duration::from_millis(32)),
+            Some(GamepadAction::Down)
+        );
     }
 }

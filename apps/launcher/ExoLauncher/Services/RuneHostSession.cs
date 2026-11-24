@@ -36,6 +36,19 @@ internal sealed partial class RuneHostSession
     [GeneratedRegex("^[A-Za-z0-9._-]{1,120}$")]
     private static partial Regex ValidPipeName();
 
+    internal static ProcessStartInfo BuildUiStartInfo(string exe, string pipeName)
+    {
+        var psi = new ProcessStartInfo(exe)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = PathHelper.AppDataDir,
+        };
+        psi.ArgumentList.Add("--pipe");
+        psi.ArgumentList.Add(pipeName);
+        return psi;
+    }
+
     internal static Options? TryParse(
         string[] args,
         Func<string, string?>? readEnv = null,
@@ -184,14 +197,7 @@ internal sealed partial class RuneHostSession
                     AppLog.Error("RuneHostSession: exo-ui.exe not found.");
                     return 2;
                 }
-                var psi = new ProcessStartInfo(exe)
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WorkingDirectory = PathHelper.AppDataDir,
-                };
-                psi.ArgumentList.Add("--pipe");
-                psi.ArgumentList.Add(options.PipeName);
+                var psi = BuildUiStartInfo(exe, options.PipeName);
                 uiProcess = Process.Start(psi);
                 if (uiProcess is null)
                 {

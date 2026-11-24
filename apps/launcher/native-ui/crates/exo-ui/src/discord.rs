@@ -61,19 +61,12 @@ fn glassy_ring(node: El) -> El {
     node.border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
 }
 
-fn glass_top_sheen() -> El {
-    el().pin(Some(0.0), Some(0.0), Some(0.0), None)
-        .h(22.0)
-        .linear_gradient(0.0, [(0.0, Color::WHITE.alpha(0.055)), (1.0, TRANSPARENT)])
-}
-
 fn panel_frame(node: El) -> El {
     glassy_ring(
         node.radius(RADIUS_PANEL)
             .clip_rounded(RADIUS_PANEL)
             .fill(BG),
     )
-    .child(glass_top_sheen())
 }
 
 pub(crate) fn status_color(status: &str) -> Color {
@@ -2661,8 +2654,7 @@ fn friend_card(s: &AppState, friend: &DiscordFriend, sc: f32, scale: f32) -> El 
             .hover(hover_fill())
             .hover_motion(Spring::NONE, SPRING_QUICK)
             .hover_group(),
-    )
-    .child(glass_top_sheen());
+    );
 
     if is_friend {
         let uid_open = uid.clone();

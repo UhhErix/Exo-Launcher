@@ -423,6 +423,21 @@ public sealed class NamedPipeHostTransportTests
         Assert.Null(smokeBypass);
 
         Assert.Throws<ArgumentException>(() => RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null, _ => false));
+
+        var fakeExe = Path.Combine(Path.GetTempPath(), "exo-app-dir", "exo-ui.exe");
+        var psi = RuneHostSession.BuildUiStartInfo(fakeExe, "exo-dev-123");
+        Assert.Equal(PathHelper.AppDataDir, psi.WorkingDirectory);
+        Assert.NotEqual(Path.GetDirectoryName(fakeExe), psi.WorkingDirectory);
+        Assert.Equal(["--pipe", "exo-dev-123"], psi.ArgumentList);
+    }
+
+    [Fact]
+    public void ReliableQueueIsBoundedAgainstStalledClient()
+    {
+        using var transport = new NamedPipeHostTransport($"exo-test-bound-{Guid.NewGuid():N}");
+        var payload = System.Text.Encoding.UTF8.GetBytes("{\"event\":\"ping\"}");
+        for (var i = 0; i < NamedPipeHostTransport.ReliableQueueCapacity + 64; i++)
+            transport.PostJsonUtf8(payload);
     }
 
     [Fact]

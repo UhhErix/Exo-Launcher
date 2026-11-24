@@ -15,7 +15,7 @@ use exo_kit::{
     glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_arrow_up, icon_bell_off,
     icon_bookmark, icon_check, icon_close, icon_copy, icon_download, icon_edit, icon_external,
     icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply,
-    icon_search, icon_smile, icon_sparkles, icon_trash, popover_transition, pressed_fill,
+    icon_search, icon_smile, icon_sparkles, icon_trash, popover_transition_from, pressed_fill,
     primary_button, scrim_fill, subtle_fill, type_body, type_control, type_label, type_page,
     type_section, type_small,
 };
@@ -2345,6 +2345,8 @@ pub fn timeline_and_composer(
         let has_text = !s.discord.chat.composer.text.trim().is_empty();
         let mut pmenu = col()
             .key("dc-plus-menu")
+            .role("menu")
+            .focus_group()
             .pin(Some(14.0), None, None, Some(64.0))
             .w(230.0)
             .padding(6.0)
@@ -2352,7 +2354,7 @@ pub fn timeline_and_composer(
             .radius(RADIUS_CARD)
             .fill(BG)
             .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-            .transition(popover_transition())
+            .transition(popover_transition_from(rune::Vec2::new(0.0, 1.0)))
             .child(
                 row()
                     .key("dc-pm-drop-hint")
@@ -2685,6 +2687,8 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
         let open_link = im.original_url.clone();
         let menu = col()
             .key("dc-image-menu")
+            .role("menu")
+            .focus_group()
             .pin(Some(im.x), Some(im.y), None, None)
             .w(196.0)
             .padding(6.0)
@@ -2692,7 +2696,7 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
             .radius(RADIUS_CARD)
             .fill(BG)
             .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-            .transition(popover_transition())
+            .transition(popover_transition_from(rune::Vec2::new(0.0, 0.0)))
             .child(
                 row()
                     .w_full()

@@ -15,7 +15,7 @@ use exo_kit::{
     glass_panel_opt, glass_plate_fill, glass_rim, glass_rim_bottom, glass_rim_top,
     glass_still_control_fill, good, hover_fill, icon_check, icon_chevron_left, icon_chevron_right,
     icon_close, icon_download, icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus,
-    icon_search, icon_stop, popover_transition, pressed_fill, primary_button, progress_bar,
+    icon_search, icon_stop, popover_transition_for, pressed_fill, primary_button, progress_bar,
     select_trigger, store_logo, surface_card, type_body, type_control, type_first_run,
     type_section, type_small, type_title, warn,
 };
@@ -30,9 +30,25 @@ use std::rc::Rc;
 const HOME_EDGE: f32 = 32.0;
 const DECK_CARD_W: f32 = 224.0;
 const DECK_CARD_H: f32 = 336.0;
-pub const ALL_GRID_COLS: usize = 11;
 pub const ALL_CARD_W: f32 = 163.63;
 pub const ALL_CARD_H: f32 = 245.45;
+const ALL_GRID_GAP: f32 = 10.0;
+const ALL_GRID_PAD_X: f32 = 10.0;
+
+pub fn all_grid_metrics(viewport_w: f32) -> (usize, f32, f32) {
+    let usable = if viewport_w > 0.0 {
+        (viewport_w - ALL_GRID_PAD_X * 2.0).max(160.0)
+    } else {
+        1900.0
+    };
+    let min_tile_w = 154.0_f32;
+    let cols =
+        (((usable + ALL_GRID_GAP) / (min_tile_w + ALL_GRID_GAP)).floor() as usize).clamp(3, 18);
+    let tile_w =
+        ((usable - (cols.saturating_sub(1) as f32) * ALL_GRID_GAP) / cols as f32).max(120.0);
+    let tile_h = (tile_w * 1.5).round();
+    (cols, tile_w, tile_h)
+}
 
 fn primary_verb(game: &Game) -> &'static str {
     if game.is_running {
@@ -352,14 +368,10 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         })
         .child(art);
 
-    if active {
-        card = card.outline(2.0, 3.0, FG);
-    } else if game.is_running {
+    if game.is_running {
         card = card.outline(1.0, 2.0, good());
     }
-    if s.input_mode == InputMode::Gamepad {
-        card = card.focus_ring(2.0, 3.0, FG);
-    }
+    card = card.focus_ring(2.0, 3.0, FG);
 
     card
 }
@@ -399,7 +411,9 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
         );
     }
     let panel = glass_panel_opt("library-filter-pop", 420.0, blur)
-        .transition(popover_transition())
+        .transition(popover_transition_for(Side::Bottom, Align::End))
+        .focus_group()
+        .focus_return("all-games-filter")
         .anchored_fit("all-games-filter", Side::Bottom, Align::End, 4.0)
         .px(12.0)
         .py(12.0)
@@ -473,30 +487,21 @@ fn filter_chip(chip: &LibraryChip, active: bool, idle: bool) -> El {
         })
 }
 
-fn all_games_poster_tile(game: &Game, s: &AppState, scale: f32) -> El {
+fn all_games_poster_tile(game: &Game, card_w: f32, card_h: f32, s: &AppState, scale: f32) -> El {
     let id = game.id.clone();
     let id_ctx = game.id.clone();
     let id_drag = game.id.clone();
     let flight_id = format!("grid:{}", game.id);
     let hover_key = format!("tile-{}", game.id);
     let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str());
-    let focused = s.lib.grid_focused_id.as_deref() == Some(game.id.as_str());
     let selecting = s.lib.selecting;
     let picked = selecting && s.lib.picked.contains(&game.id);
     let transfer = active_transfer_for(s, game);
     let hover_key_cb = hover_key.clone();
     let preview_title = game.title.clone();
-    let art = cover_surface(
-        game,
-        s,
-        scale,
-        [ALL_CARD_W, ALL_CARD_H],
-        !hovered,
-        true,
-        false,
-    )
-    .matched(flight_id.clone())
-    .motion(SPRING_FLIGHT);
+    let art = cover_surface(game, s, scale, [card_w, card_h], !hovered, true, false)
+        .matched(flight_id.clone())
+        .motion(SPRING_FLIGHT);
 
     let mut tile = el()
         .key(hover_key)
@@ -506,7 +511,7 @@ fn all_games_poster_tile(game: &Game, s: &AppState, scale: f32) -> El {
         .focusable(true)
         .hit()
         .press_scale(PRESS_SCALE)
-        .size(ALL_CARD_W, ALL_CARD_H)
+        .size(card_w, card_h)
         .radius(RADIUS_CARD)
         .continuous_corners()
         .offset(0.0, if hovered { -3.0 } else { 0.0 })
@@ -543,7 +548,7 @@ fn all_games_poster_tile(game: &Game, s: &AppState, scale: f32) -> El {
                 (!s.lib.selecting).then(|| LibraryDragPayload::Game(id_drag.clone()))
             })
             .drag_preview(move |_: &AppState| {
-                el().size(ALL_CARD_W * 0.72, ALL_CARD_H * 0.72)
+                el().size(card_w * 0.72, card_h * 0.72)
                     .radius(RADIUS_CARD)
                     .fill(glass_panel_fill())
                     .border(1.0, glass_rim())
@@ -566,14 +571,10 @@ fn all_games_poster_tile(game: &Game, s: &AppState, scale: f32) -> El {
                 .fill(FG)
                 .child(icon_check(14.0, PRIMARY_FG)),
         );
-    } else if focused {
-        tile = tile.outline(2.0, 3.0, FG);
     } else if game.is_running {
         tile = tile.outline(1.0, 2.0, good());
     }
-    if s.input_mode == InputMode::Gamepad {
-        tile = tile.focus_ring(2.0, 3.0, FG);
-    }
+    tile = tile.focus_ring(2.0, 3.0, FG);
     tile
 }
 
@@ -1480,6 +1481,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         }
         empty_col
     } else {
+        let (grid_cols, card_w, card_h) = all_grid_metrics(s.lib.grid_width);
         let mut folder_counter = 0usize;
         let rendered: Vec<El> = visible
             .iter()
@@ -1487,17 +1489,27 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                 GridTile::Folder(f) => {
                     let idx = folder_counter;
                     folder_counter += 1;
-                    folder_card(f, idx, s, scale)
+                    folder_card(f, idx, card_w, card_h, s, scale)
                 }
-                GridTile::Game(g) => all_games_poster_tile(g, s, scale),
+                GridTile::Game(g) => all_games_poster_tile(g, card_w, card_h, s, scale),
             })
             .collect();
 
         let rows: Vec<El> = rendered
-            .chunks(ALL_GRID_COLS)
-            .map(|chunk| row().w_full().gap(10.0).children(chunk.iter().cloned()))
+            .chunks(grid_cols)
+            .map(|chunk| {
+                row()
+                    .w_full()
+                    .gap(ALL_GRID_GAP)
+                    .children(chunk.iter().cloned())
+            })
             .collect();
-        col().w_full().pt(8.0).px(10.0).gap(10.0).children(rows)
+        col()
+            .w_full()
+            .pt(8.0)
+            .px(ALL_GRID_PAD_X)
+            .gap(ALL_GRID_GAP)
+            .children(rows)
     };
 
     let mut page = col()
@@ -1505,6 +1517,11 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .w_full()
         .pt(70.0)
         .pb(if s.lib.selecting { 96.0 } else { 48.0 })
+        .on_layout(|s: &mut AppState, rect| {
+            if (s.lib.grid_width - rect[2]).abs() > 1.0 {
+                s.lib.grid_width = rect[2];
+            }
+        })
         .child(head)
         .children(chips_bar)
         .children(
@@ -1797,5 +1814,27 @@ mod tests {
         rt.settle_all();
         rt.frame(6.0 / 60.0);
         assert!(rt.presented("library-error-state").is_some());
+    }
+
+    #[test]
+    fn all_grid_metrics_scales_across_viewports_without_overflow() {
+        for (vp, min_cols, max_cols) in [
+            (1280.0, 6, 8),
+            (1440.0, 7, 9),
+            (1920.0, 11, 11),
+            (2560.0, 14, 16),
+            (3840.0, 16, 18),
+        ] {
+            let (cols, w, h) = super::all_grid_metrics(vp);
+            assert!(cols >= min_cols && cols <= max_cols, "vp={vp} cols={cols}");
+            let row_w = cols as f32 * w
+                + (cols - 1) as f32 * super::ALL_GRID_GAP
+                + super::ALL_GRID_PAD_X * 2.0;
+            assert!(
+                row_w <= vp + 0.5,
+                "vp={vp} row_w={row_w} overflows viewport"
+            );
+            assert!((h - (w * 1.5).round()).abs() < 0.01);
+        }
     }
 }

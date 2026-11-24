@@ -42,6 +42,7 @@ mod win {
             let wide: Vec<u16> = OsStr::new(&full).encode_wide().chain(Some(0)).collect();
             let deadline = Instant::now() + timeout;
 
+            let mut not_found_backoff_ms = 2u64;
             loop {
                 let handle = unsafe {
                     CreateFileW(
@@ -66,7 +67,8 @@ mod win {
                         WaitNamedPipeW(wide.as_ptr(), 150);
                     }
                 } else if err == ERROR_FILE_NOT_FOUND {
-                    std::thread::sleep(Duration::from_millis(40));
+                    std::thread::sleep(Duration::from_millis(not_found_backoff_ms));
+                    not_found_backoff_ms = (not_found_backoff_ms * 2).min(16);
                 } else {
                     return Err(io::Error::from_raw_os_error(err as i32));
                 }

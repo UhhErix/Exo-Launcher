@@ -8,8 +8,8 @@ use exo_kit::{
     SPRING_QUICK, amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, float_line,
     glass_button, good, hairline, hover_fill, icon_chevron_left, icon_gamepad, icon_headphones,
     icon_keyboard, icon_mic, icon_mouse, icon_refresh, icon_zap, pressed_fill, primary_button,
-    scaled, status_badge, type_body, type_control, type_label, type_section, type_small,
-    type_title,
+    scaled, status_badge, surface_card, type_body, type_control, type_label, type_section,
+    type_small, type_title,
 };
 use exo_rpc::keyboard_layouts::{FormFactor, KeyCap, KeyKind, build_keyboard_layout, find_key};
 use exo_rpc::{KeyboardReadReply, PeripheralCard};
@@ -27,12 +27,22 @@ fn connection_label(conn: Option<&str>) -> &'static str {
     }
 }
 
-fn device_fallback_icon(kind: &str, role: Option<&str>) -> El {
+fn device_fallback_icon_name(kind: &str, role: Option<&str>) -> &'static str {
     match (kind, role) {
-        ("mouse", _) => icon_mouse(48.0, fg_faint()),
-        ("keyboard", _) => icon_keyboard(48.0, fg_faint()),
-        ("controller", _) => icon_gamepad(48.0, fg_faint()),
-        (_, Some("input")) => icon_mic(48.0, fg_faint()),
+        ("mouse", _) => "mouse",
+        ("keyboard", _) => "keyboard",
+        ("controller", _) => "gamepad",
+        (_, Some("input")) => "mic",
+        _ => "headphones",
+    }
+}
+
+fn device_fallback_icon(kind: &str, role: Option<&str>) -> El {
+    match device_fallback_icon_name(kind, role) {
+        "mouse" => icon_mouse(48.0, fg_faint()),
+        "keyboard" => icon_keyboard(48.0, fg_faint()),
+        "gamepad" => icon_gamepad(48.0, fg_faint()),
+        "mic" => icon_mic(48.0, fg_faint()),
         _ => icon_headphones(48.0, fg_faint()),
     }
 }
@@ -84,7 +94,10 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
 
     let media = if let Some(photo) = img {
         el().w_full().grow(1.0).min_h(0.0).center().child(
-            el().size(468.0, 312.0)
+            el().w_full()
+                .max_w(468.0)
+                .h_full()
+                .max_h(312.0)
                 .pixels_fit(photo.pixels(), SurfaceFit::Fit),
         )
     } else {
@@ -136,7 +149,7 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
         .continuous_corners()
         .fill(BG)
         .border(1.0, float_line())
-        .hover(BG)
+        .hover(surface_card())
         .motion(SPRING_MOVE)
         .on_press(move |s: &mut AppState| {
             if is_mouse {
@@ -1410,4 +1423,22 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
     }
 
     page
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn microphone_uses_mic_fallback_icon() {
+        assert_eq!(device_fallback_icon_name("audio", Some("input")), "mic");
+        assert_eq!(
+            device_fallback_icon_name("audio", Some("output")),
+            "headphones"
+        );
+        assert_eq!(device_fallback_icon_name("audio", None), "headphones");
+        assert_eq!(device_fallback_icon_name("mouse", None), "mouse");
+        assert_eq!(device_fallback_icon_name("keyboard", None), "keyboard");
+        assert_eq!(device_fallback_icon_name("controller", None), "gamepad");
+    }
 }

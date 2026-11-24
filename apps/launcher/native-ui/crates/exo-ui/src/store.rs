@@ -200,7 +200,13 @@ pub fn render_price(
                     .map(|v| format_cents(v, currency))
             });
         if let Some(w) = was {
-            r = r.child(text(w).font(type_small()).color(was_fg));
+            let len = w.len();
+            r = r.child(
+                text(w)
+                    .font(type_small())
+                    .color(was_fg)
+                    .strike(0, len, None),
+            );
         }
     }
     Some(r)

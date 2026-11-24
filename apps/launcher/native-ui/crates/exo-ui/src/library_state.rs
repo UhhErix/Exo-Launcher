@@ -1,6 +1,6 @@
 use crate::events::HostEventKind;
 use crate::image_cache::{CacheRoom, bucket_dim};
-use crate::library::ALL_GRID_COLS;
+use crate::library::all_grid_metrics;
 use crate::state::{
     AppState, ContextMenuTarget, HostStatus, LibraryChip, LibrarySort, NoticeTone, Room,
     chips_match, friends_playing, is_shelf_game, now_unix_ms, parse_iso_utc_ms,
@@ -184,6 +184,7 @@ pub struct LibraryExtraState {
     pub last_rescan_secs: f64,
     pub grid_focused_id: Option<String>,
     pub grid_intended_col: Option<usize>,
+    pub grid_width: f32,
     pub adding_portable: bool,
     pub folder_seq: u64,
     pub home_extras_pending_id: Option<String>,
@@ -226,6 +227,7 @@ impl Default for LibraryExtraState {
             last_rescan_secs: 0.0,
             grid_focused_id: None,
             grid_intended_col: None,
+            grid_width: 0.0,
             adding_portable: false,
             folder_seq: 1,
             home_extras_pending_id: None,
@@ -2545,9 +2547,10 @@ pub fn handle_library_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
             .as_deref()
             .and_then(|id| tiles.iter().position(|t| t.key_id() == id));
         if let Some(next_idx) = next_by_initial(&tiles, from, ch) {
+            let (grid_cols, _, _) = all_grid_metrics(s.lib.grid_width);
             let key_id = tiles[next_idx].key_id();
             s.lib.grid_focused_id = Some(key_id.clone());
-            s.lib.grid_intended_col = Some(next_idx % ALL_GRID_COLS);
+            s.lib.grid_intended_col = Some(next_idx % grid_cols);
             let dom_key = format!("tile-{key_id}");
             tx.scroll_into_view(dom_key.clone());
             tx.focus(dom_key, true);
@@ -2568,6 +2571,7 @@ pub fn handle_library_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
             | Key::PageDown
     ) && !ev.mods.alt
     {
+        let (grid_cols, _, _) = all_grid_metrics(s.lib.grid_width);
         let cur = s
             .lib
             .grid_focused_id
@@ -2577,7 +2581,7 @@ pub fn handle_library_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
         if let Some((next_idx, intended)) = move_grid_focus_index(
             cur,
             tiles.len(),
-            ALL_GRID_COLS,
+            grid_cols,
             3,
             &ev.key,
             ev.mods.ctrl || ev.mods.cmd,

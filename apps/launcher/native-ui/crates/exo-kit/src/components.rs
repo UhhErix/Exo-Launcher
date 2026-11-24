@@ -7,8 +7,8 @@ use crate::tokens::{
     track_fill, type_control, type_section, type_small, warn,
 };
 use rune::{
-    CaptionGlyph, CaptionStyle, Color, Cursor, Effect, El, SpringPair, Titlebar, Transition, Vec2,
-    col, el, row, text,
+    Align, CaptionGlyph, CaptionStyle, Color, Cursor, Effect, El, Side, SpringPair, Titlebar,
+    Transition, Vec2, col, el, row, text,
 };
 
 pub const CAPTION_BUTTON_WIDTH: f32 = 34.0;
@@ -48,8 +48,26 @@ pub fn exo_titlebar() -> Titlebar {
     Titlebar::new(TITLEBAR_HEIGHT).caption_style(caption_style())
 }
 
+pub fn popover_origin(side: Side, align: Align) -> Vec2 {
+    let along = match align {
+        Align::Start => 0.0,
+        Align::Center => 0.5,
+        Align::End => 1.0,
+    };
+    match side {
+        Side::Bottom => Vec2::new(along, 0.0),
+        Side::Top => Vec2::new(along, 1.0),
+        Side::Right => Vec2::new(0.0, along),
+        Side::Left => Vec2::new(1.0, along),
+    }
+}
+
 pub fn popover_transition() -> Transition {
-    popover_transition_from(Vec2::new(1.0, 0.0))
+    popover_transition_for(Side::Bottom, Align::End)
+}
+
+pub fn popover_transition_for(side: Side, align: Align) -> Transition {
+    popover_transition_from(popover_origin(side, align))
 }
 
 pub fn glass_enter(scale: f32, anchor: Vec2) -> Transition {
@@ -654,5 +672,28 @@ mod tests {
         ] {
             let _ = caption_glyph(kind, fg_muted());
         }
+    }
+
+    #[test]
+    fn popover_origin_matches_side_and_align() {
+        assert_eq!(
+            popover_origin(Side::Bottom, Align::Start),
+            Vec2::new(0.0, 0.0)
+        );
+        assert_eq!(
+            popover_origin(Side::Bottom, Align::Center),
+            Vec2::new(0.5, 0.0)
+        );
+        assert_eq!(
+            popover_origin(Side::Bottom, Align::End),
+            Vec2::new(1.0, 0.0)
+        );
+        assert_eq!(popover_origin(Side::Top, Align::Start), Vec2::new(0.0, 1.0));
+        assert_eq!(popover_origin(Side::Top, Align::End), Vec2::new(1.0, 1.0));
+        assert_eq!(
+            popover_origin(Side::Right, Align::Start),
+            Vec2::new(0.0, 0.0)
+        );
+        assert_eq!(popover_origin(Side::Left, Align::End), Vec2::new(1.0, 1.0));
     }
 }

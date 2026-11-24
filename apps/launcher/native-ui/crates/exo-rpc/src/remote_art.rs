@@ -1,4 +1,6 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::SystemTime;
 
 const ALLOWED_IMAGE_HOSTS: &[&str] = &[
     "steamstatic.com",
@@ -16,6 +18,13 @@ const ALLOWED_IMAGE_HOSTS: &[&str] = &[
 ];
 
 const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_CACHE_BYTES: u64 = 150 * 1024 * 1024;
+const TARGET_CACHE_BYTES: u64 = 120 * 1024 * 1024;
+const MAX_CACHE_FILES: usize = 1500;
+const TARGET_CACHE_FILES: usize = 1200;
+const PRUNE_EVERY_WRITES: usize = 32;
+
+static CACHE_WRITES: AtomicUsize = AtomicUsize::new(0);
 
 pub fn parse_allowed_https(url: &str) -> Option<(String, String)> {
     let rest = url.strip_prefix("https://")?;
@@ -91,6 +100,53 @@ pub fn default_cache_dir() -> Option<PathBuf> {
     )
 }
 
+pub fn prune_cache_dir(
+    cache_dir: &Path,
+    max_bytes: u64,
+    target_bytes: u64,
+    max_files: usize,
+    target_files: usize,
+) -> usize {
+    let Ok(read_dir) = std::fs::read_dir(cache_dir) else {
+        return 0;
+    };
+    let mut entries: Vec<(PathBuf, u64, SystemTime)> = Vec::new();
+    let mut total_bytes: u64 = 0;
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        if path.extension().and_then(|e| e.to_str()) == Some("tmp") {
+            continue;
+        }
+        let len = meta.len();
+        let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        total_bytes = total_bytes.saturating_add(len);
+        entries.push((path, len, modified));
+    }
+    if total_bytes <= max_bytes && entries.len() <= max_files {
+        return 0;
+    }
+    entries.sort_by_key(|(_, _, modified)| *modified);
+    let mut remaining = entries.len();
+    let mut removed = 0;
+    for (path, len, _) in entries {
+        if total_bytes <= target_bytes && remaining <= target_files {
+            break;
+        }
+        if std::fs::remove_file(&path).is_ok() {
+            total_bytes = total_bytes.saturating_sub(len);
+            remaining = remaining.saturating_sub(1);
+            removed += 1;
+        }
+    }
+    removed
+}
+
 #[cfg(windows)]
 pub fn fetch_cached_image(url: &str, cache_dir: &Path) -> Option<PathBuf> {
     let (host, path) = parse_allowed_https(url)?;
@@ -108,6 +164,16 @@ pub fn fetch_cached_image(url: &str, cache_dir: &Path) -> Option<PathBuf> {
     if std::fs::rename(&tmp, &target).is_err() {
         let _ = std::fs::remove_file(&tmp);
         return if target.is_file() { Some(target) } else { None };
+    }
+    let writes = CACHE_WRITES.fetch_add(1, Ordering::Relaxed) + 1;
+    if writes.is_multiple_of(PRUNE_EVERY_WRITES) {
+        prune_cache_dir(
+            cache_dir,
+            MAX_CACHE_BYTES,
+            TARGET_CACHE_BYTES,
+            MAX_CACHE_FILES,
+            TARGET_CACHE_FILES,
+        );
     }
     Some(target)
 }
@@ -133,9 +199,11 @@ fn shared_winhttp_session() -> Option<*mut std::ffi::c_void> {
     use std::ptr::null;
     use std::sync::OnceLock;
     use windows_sys::Win32::Networking::WinHttp::{
-        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_OPTION_REDIRECT_POLICY,
-        WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP, WinHttpOpen, WinHttpSetOption,
-        WinHttpSetTimeouts,
+        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_DECOMPRESSION_FLAG_DEFLATE,
+        WINHTTP_DECOMPRESSION_FLAG_GZIP, WINHTTP_OPTION_DECOMPRESSION,
+        WINHTTP_OPTION_ENABLE_HTTP_PROTOCOL, WINHTTP_OPTION_REDIRECT_POLICY,
+        WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP, WINHTTP_PROTOCOL_FLAG_HTTP2,
+        WinHttpOpen, WinHttpSetOption, WinHttpSetTimeouts,
     };
 
     static SESSION: OnceLock<Option<SharedSession>> = OnceLock::new();
@@ -163,6 +231,20 @@ fn shared_winhttp_session() -> Option<*mut std::ffi::c_void> {
                 raw,
                 WINHTTP_OPTION_REDIRECT_POLICY,
                 (&policy as *const u32).cast(),
+                std::mem::size_of::<u32>() as u32,
+            );
+            let proto = WINHTTP_PROTOCOL_FLAG_HTTP2;
+            WinHttpSetOption(
+                raw,
+                WINHTTP_OPTION_ENABLE_HTTP_PROTOCOL,
+                (&proto as *const u32).cast(),
+                std::mem::size_of::<u32>() as u32,
+            );
+            let decomp = WINHTTP_DECOMPRESSION_FLAG_GZIP | WINHTTP_DECOMPRESSION_FLAG_DEFLATE;
+            WinHttpSetOption(
+                raw,
+                WINHTTP_OPTION_DECOMPRESSION,
+                (&decomp as *const u32).cast(),
                 std::mem::size_of::<u32>() as u32,
             );
         }
@@ -310,5 +392,36 @@ mod tests {
             canonical_cache_key(c),
             "https://cdn.discordapp.com/avatars/1/hash.webp"
         );
+    }
+
+    #[test]
+    fn prune_cache_dir_evicts_oldest_files_when_over_budget() {
+        let dir =
+            std::env::temp_dir().join(format!("exo-remote-art-prune-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        let f1 = dir.join("a.png");
+        let f2 = dir.join("b.png");
+        let f3 = dir.join("c.png");
+        let tmp = dir.join("inprogress.tmp");
+        std::fs::write(&f1, vec![1u8; 40]).expect("write f1");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        std::fs::write(&f2, vec![2u8; 40]).expect("write f2");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        std::fs::write(&f3, vec![3u8; 40]).expect("write f3");
+        std::fs::write(&tmp, vec![4u8; 200]).expect("write tmp");
+
+        assert_eq!(prune_cache_dir(&dir, 200, 100, 10, 5), 0);
+        assert!(f1.is_file() && f2.is_file() && f3.is_file());
+
+        let removed = prune_cache_dir(&dir, 100, 50, 10, 5);
+        assert_eq!(removed, 2);
+        assert!(!f1.is_file());
+        assert!(!f2.is_file());
+        assert!(f3.is_file());
+        assert!(tmp.is_file());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
