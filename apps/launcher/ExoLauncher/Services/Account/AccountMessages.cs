@@ -25,6 +25,17 @@ internal static class AccountMessages
         ["not-configured"] = "Exo's account service can't be reached right now. Try again later.",
         // The service is between keys (its own rotation); nothing is wrong with this PC, and the same action works later.
         ["keyring-mismatch"] = "Exo's account service has a problem. Try again later.",
+        ["passkey-limit"] = "You've reached the passkey limit for this account.",
+        ["passkey-exists"] = "That passkey is already added to this account.",
+        ["passkey-replay"] = "That passkey check was rejected. Try again or use your password.",
+        ["passkey-uv-required"] = "Verify with Windows Hello or your security key PIN and try again.",
+        ["passkeys-unavailable"] = "Passkey sign-in isn't available right now. Use your password instead.",
+        ["reauth-required"] = "Enter your account password to confirm adding a passkey.",
+        ["last-sign-in-method"] = "Set a password before removing your last passkey.",
+        ["bad-passkey"] = "Windows couldn't verify that passkey. Try again or use your password.",
+        ["bad-challenge"] = "That passkey request expired. Try again.",
+        ["bad-signature"] = "That passkey didn't match this account. Try again or use your password.",
+        ["unsupported-algorithm"] = "That security key isn't supported here. Use Windows Hello or an ES256/RS256 key.",
     };
 
     /// <summary>Codes a screen can show: each has its own sentence above. locked is shown through <see cref="Locked"/>.</summary>

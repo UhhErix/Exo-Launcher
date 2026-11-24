@@ -350,6 +350,56 @@ pub struct ExoAccountSessionsReply {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExoAccountPasskeyRow {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub created: i64,
+    #[serde(default)]
+    pub last_used: i64,
+    #[serde(default)]
+    pub flagged: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExoAccountPasskeyStatus {
+    #[serde(default)]
+    pub supported: bool,
+    #[serde(default)]
+    pub api_version: u32,
+    #[serde(default)]
+    pub platform_available: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub passkeys: Vec<ExoAccountPasskeyRow>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeAuthProviderStatus {
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub display_name: String,
+    #[serde(default)]
+    pub flow: String,
+    #[serde(default)]
+    pub available: bool,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeAuthProvidersReply {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub providers: Vec<NativeAuthProviderStatus>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExoAccountProbe {
     #[serde(default)]
     pub reachable: bool,

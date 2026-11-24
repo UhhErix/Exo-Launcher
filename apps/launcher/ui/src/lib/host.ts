@@ -2947,6 +2947,11 @@ export const host = {
   exoAccountCodeConfirmed: () => rawCall<{ ok: boolean }>('exoAccount.codeConfirmed'),
   /** Whether Exo's account service answers again, and whether a game runs (for the sheet's return after Continue without an account). */
   exoAccountProbe: () => rawCall<{ reachable: boolean; gameRunning: boolean }>('exoAccount.probe'),
+  exoAccountPasskeyStatus: () => rawCall<{ supported: boolean; apiVersion: number; platformAvailable: boolean; passkeys: { id: string; label: string; created: number; lastUsed: number; flagged: boolean }[] }>('exoAccount.passkeyStatus'),
+  exoAccountPasskeyRegister: (label?: string, ownerHwnd?: number, password?: string) => rawCall<ExoAccountOutcome>('exoAccount.passkeyRegister', { label, ownerHwnd, password }),
+  exoAccountPasskeySignIn: (ownerHwnd?: number) => rawCall<ExoAccountOutcome>('exoAccount.passkeySignIn', { ownerHwnd }),
+  exoAccountPasskeyDelete: (id: string) => rawCall<ExoAccountOutcome>('exoAccount.passkeyDelete', { id }),
+  authNativeProviders: () => rawCall<{ providers: { provider: string; displayName: string; flow: string; available: boolean; note: string }[] }>('auth.nativeProviders'),
   /** The show-again state of the sheet, banner and top-bar button, as stored text (device-only). */
   storesAuth: (store: string) =>
     rawCall<{ ok: boolean; message?: string; requiresUserAction?: boolean; handoff?: boolean }>('stores.auth', { store }),
