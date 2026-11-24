@@ -30,17 +30,37 @@ internal sealed class CaptureAddon(Func<ProcessStartInfo?> getStartInfo) : IDisp
 
     internal static string Newer(string local, string bundled)
     {
-        var mine = new FileInfo(Path.Combine(local, "ExoCapture.exe"));
-        var shipped = new FileInfo(Path.Combine(bundled, "ExoCapture.exe"));
-        if (!mine.Exists) return bundled;
-        return !shipped.Exists || mine.LastWriteTimeUtc >= shipped.LastWriteTimeUtc ? local : bundled;
+        var mine = BestExeIn(local);
+        var shipped = BestExeIn(bundled);
+        if (mine is null) return bundled;
+        return shipped is null || mine.LastWriteTimeUtc >= shipped.LastWriteTimeUtc ? local : bundled;
+    }
+
+    internal static string ResolveExe(string local, string bundled)
+    {
+        var mine = BestExeIn(local);
+        var shipped = BestExeIn(bundled);
+        if (mine is not null && (shipped is null || mine.LastWriteTimeUtc >= shipped.LastWriteTimeUtc))
+            return mine.FullName;
+        if (shipped is not null)
+            return shipped.FullName;
+        return Path.Combine(bundled, "ExoCapture.exe");
+    }
+
+    private static FileInfo? BestExeIn(string folder)
+    {
+        var native = new FileInfo(Path.Combine(folder, "exo-capture.exe"));
+        var legacy = new FileInfo(Path.Combine(folder, "ExoCapture.exe"));
+        if (native.Exists && (!legacy.Exists || native.LastWriteTimeUtc >= legacy.LastWriteTimeUtc))
+            return native;
+        return legacy.Exists ? legacy : null;
     }
 
     private static string LocalRoot => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ExoLauncher", "addons", "capture");
 
     private static string BundledRoot => Path.Combine(AppContext.BaseDirectory, "addons", "capture");
-    internal static string ExePath => Path.Combine(Root, "ExoCapture.exe");
+    internal static string ExePath => ResolveExe(LocalRoot, BundledRoot);
     internal static bool Present => File.Exists(ExePath);
 
     private readonly object _gate = new();

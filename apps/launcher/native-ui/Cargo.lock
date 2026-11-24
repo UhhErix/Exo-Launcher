@@ -873,6 +873,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-capture"
+version = "0.1.0"
+dependencies = [
+ "exo-rpc",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
 name = "exo-controller"
 version = "0.1.0"
 dependencies = [
