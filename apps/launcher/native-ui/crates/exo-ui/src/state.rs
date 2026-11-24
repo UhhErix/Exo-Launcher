@@ -679,6 +679,7 @@ pub struct AppState {
     pub game_frame_gen: Option<GameFrameGen>,
     pub frame_gen_menu_open: bool,
     pub frame_gen_busy: bool,
+    pub frame_gen_confirm: Option<(String, String, Option<String>)>,
     pub game_frame_cap: Option<GameFrameCap>,
     pub frame_cap_menu_open: bool,
     pub frame_cap_busy: bool,
@@ -831,6 +832,7 @@ impl AppState {
             }),
             frame_gen_menu_open: false,
             frame_gen_busy: false,
+            frame_gen_confirm: None,
             game_frame_cap: Some(GameFrameCap {
                 ok: true,
                 game_id: "steam:1091500".into(),
@@ -1036,6 +1038,7 @@ impl AppState {
             game_frame_gen: None,
             frame_gen_menu_open: false,
             frame_gen_busy: false,
+            frame_gen_confirm: None,
             game_frame_cap: None,
             frame_cap_menu_open: false,
             frame_cap_busy: false,
@@ -2247,6 +2250,7 @@ impl AppState {
         self.open_game_id = Some(id.to_string());
         self.props_open = false;
         self.frame_gen_menu_open = false;
+        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
         self.frame_cap_menu_open = false;
         self.frame_cap_busy = false;
@@ -2315,6 +2319,18 @@ impl AppState {
         route: Option<&str>,
         xess_override: Option<&str>,
     ) {
+        self.set_game_frame_gen_with_risk(id, route, xess_override, false, None);
+    }
+
+    pub fn set_game_frame_gen_with_risk(
+        &mut self,
+        id: &str,
+        route: Option<&str>,
+        xess_override: Option<&str>,
+        accept_risk: bool,
+        anti_cheat: Option<&str>,
+    ) {
+        self.frame_gen_confirm = None;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.frame_gen_busy = true;
@@ -2326,6 +2342,12 @@ impl AppState {
             }
             if let Some(x) = xess_override {
                 body.insert("xessOverride".into(), json!(x));
+            }
+            if accept_risk {
+                body.insert("acceptRisk".into(), json!(true));
+                if let Some(ac) = anti_cheat {
+                    body.insert("antiCheat".into(), json!(ac));
+                }
             }
             rpc.call::<_, GameFrameGen>(
                 METHOD_GAME_FRAME_GEN,
@@ -2540,6 +2562,7 @@ impl AppState {
         self.open_game_id = None;
         self.props_open = false;
         self.frame_gen_menu_open = false;
+        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
         self.frame_cap_menu_open = false;
         self.frame_cap_busy = false;

@@ -706,6 +706,12 @@ pub struct FrameGenRoute {
     pub choice_value: Option<String>,
     #[serde(default)]
     pub choices: Vec<String>,
+    #[serde(default)]
+    pub requires_risk_confirm: bool,
+    #[serde(default)]
+    pub risk_warning: Option<String>,
+    #[serde(default)]
+    pub anti_cheat: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

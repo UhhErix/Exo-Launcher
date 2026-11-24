@@ -20,8 +20,15 @@ pub fn route_short_label(route: Option<&FrameGenRoute>) -> String {
         "native_dlss" => "Built in · DLSS".into(),
         "native_fsr" => "Built in · FSR 3".into(),
         "native_xess" => "Built in · XeSS".into(),
-        "mod_optiscaler" => "OptiScaler".into(),
+        "mod_optiscaler" => {
+            if route.label.contains("OptiScaler FG") {
+                "OptiScaler FG".into()
+            } else {
+                "OptiScaler".into()
+            }
+        }
         "mod_dlssg" => "DLSSG SM86".into(),
+        "mod_mfg" => "MFG Unlocker".into(),
         "mod_other" => curly(&route.label),
         "driver_smooth_motion" => {
             if route.active {
@@ -41,13 +48,6 @@ pub fn route_short_label(route: Option<&FrameGenRoute>) -> String {
             Some(c) if c != "game" => format!("XeSS {c}"),
             _ => "XeSS override".into(),
         },
-        "external_lossless_scaling" => {
-            if route.active {
-                "Lossless Scaling".into()
-            } else {
-                "Lossless Scaling · Off".into()
-            }
-        }
         _ => "Not available".into(),
     }
 }
@@ -91,7 +91,6 @@ fn tier_tag(tier: &str) -> &'static str {
         "native" => "Built in",
         "mod" => "Mod",
         "driver" => "Driver",
-        "external" => "External",
         _ => "",
     }
 }
@@ -229,6 +228,12 @@ pub fn view(s: &AppState, game: &Game) -> El {
             if route.selectable {
                 let gid = game_id.clone();
                 let rid = route.id.clone();
+                let needs_confirm = route.requires_risk_confirm;
+                let warning = route.risk_warning.clone().unwrap_or_else(|| {
+                    "This game runs anti-cheat. A mod loading into it can get the account banned."
+                        .into()
+                });
+                let ac = route.anti_cheat.clone();
                 item_row = item_row
                     .role("button")
                     .label(curly(&route.label))
@@ -240,7 +245,11 @@ pub fn view(s: &AppState, game: &Game) -> El {
                     .motion(SPRING_QUICK)
                     .on_press(move |s: &mut AppState| {
                         s.frame_gen_menu_open = false;
-                        s.set_game_frame_gen(&gid, Some(&rid), None);
+                        if needs_confirm {
+                            s.frame_gen_confirm = Some((rid.clone(), warning.clone(), ac.clone()));
+                        } else {
+                            s.set_game_frame_gen(&gid, Some(&rid), None);
+                        }
                     });
             }
             menu_col = menu_col.child(item_row);
@@ -361,6 +370,82 @@ pub fn view(s: &AppState, game: &Game) -> El {
         );
     }
 
+    if let Some((confirm_route, warning, ac)) = s.frame_gen_confirm.clone() {
+        let gid = game.id.clone();
+        let confirm_bar = row()
+            .key("gp-fg-confirm")
+            .w_full()
+            .mt(6.0)
+            .px(12.0)
+            .py(8.0)
+            .gap(8.0)
+            .center_y()
+            .justify_between()
+            .radius(RADIUS_CARD)
+            .fill(glass_still_panel_fill())
+            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+            .child(
+                text(curly(&warning))
+                    .font(type_small())
+                    .color(bad())
+                    .grow(1.0),
+            )
+            .child(
+                row()
+                    .gap(6.0)
+                    .center_y()
+                    .child(
+                        row()
+                            .key("gp-fg-confirm-cancel")
+                            .role("button")
+                            .label("Cancel")
+                            .focusable(true)
+                            .hit()
+                            .press_on_down()
+                            .h(28.0)
+                            .px(10.0)
+                            .center_y()
+                            .radius(RADIUS_PILL)
+                            .fill(glass_control_fill())
+                            .hover(hover_fill())
+                            .press(pressed_fill())
+                            .motion(SPRING_QUICK)
+                            .on_press(|s: &mut AppState| {
+                                s.frame_gen_confirm = None;
+                            })
+                            .child(text("Cancel").font(type_small()).color(FG)),
+                    )
+                    .child(
+                        row()
+                            .key("gp-fg-confirm-ok")
+                            .role("button")
+                            .label("Turn on anyway")
+                            .focusable(true)
+                            .hit()
+                            .press_on_down()
+                            .h(28.0)
+                            .px(10.0)
+                            .center_y()
+                            .radius(RADIUS_PILL)
+                            .fill(glass_control_fill())
+                            .hover(hover_fill())
+                            .press(pressed_fill())
+                            .motion(SPRING_QUICK)
+                            .on_press(move |s: &mut AppState| {
+                                s.set_game_frame_gen_with_risk(
+                                    &gid,
+                                    Some(&confirm_route),
+                                    None,
+                                    true,
+                                    ac.as_deref(),
+                                );
+                            })
+                            .child(text("Turn on anyway").font(type_small()).color(FG)),
+                    ),
+            );
+        container = container.child(confirm_bar);
+    }
+
     container
 }
 
@@ -388,6 +473,9 @@ mod tests {
             how_to_enable: None,
             choice_value: None,
             choices: Vec::new(),
+            requires_risk_confirm: false,
+            risk_warning: None,
+            anti_cheat: None,
         }
     }
 
@@ -402,22 +490,22 @@ mod tests {
             best_route_id: "unavailable".into(),
             selected_route_id: "unavailable".into(),
             state: "unavailable".into(),
-            word: "Off · Anti-Cheat Expert blocks mods".into(),
+            word: "Mods would get you banned".into(),
             good: false,
             bad: false,
-            reason: Some("Off · Anti-Cheat Expert blocks mods".into()),
-            how_to_enable: Some("Install Lossless Scaling on Steam (App 993090).".into()),
+            reason: Some("Mods would get you banned".into()),
+            how_to_enable: Some("Anti-Cheat Expert blocks DLL mods; only built-in or signed driver frame generation can run safely here.".into()),
             routes: vec![sample_route(
                 "unavailable",
                 "unavailable",
                 "unavailable",
                 "Not available",
-                "Off · Anti-Cheat Expert blocks mods",
+                "Mods would get you banned",
             )],
             ..Default::default()
         };
         let (text, _) = summary_for(Some(&unavail));
-        assert_eq!(text, "Off · Anti-Cheat Expert blocks mods");
+        assert_eq!(text, "Mods would get you banned");
     }
 
     #[test]
@@ -479,5 +567,74 @@ mod tests {
                 .presented("gp-fg-opt-driver_smooth_motion")
                 .is_some()
         );
+    }
+
+    #[test]
+    fn route_short_label_covers_mfg_and_optifg() {
+        let mfg = sample_route("mod_mfg", "mod", "mod_mfg", "MFG Unlocker", "MFG Unlocker");
+        assert_eq!(route_short_label(Some(&mfg)), "MFG Unlocker");
+        let optifg = sample_route(
+            "mod_optiscaler",
+            "mod",
+            "mod_optiscaler",
+            "OptiScaler FG",
+            "OptiScaler FG",
+        );
+        assert_eq!(route_short_label(Some(&optifg)), "OptiScaler FG");
+    }
+
+    #[test]
+    fn view_shows_mods_would_get_you_banned_for_online_anti_cheat_unavailable() {
+        let mut state = AppState::with_demo_games();
+        state.game_frame_gen = Some(GameFrameGen {
+            ok: true,
+            best_route_id: "unavailable".into(),
+            selected_route_id: "unavailable".into(),
+            state: "unavailable".into(),
+            word: "Mods would get you banned".into(),
+            good: false,
+            bad: false,
+            reason: Some("Mods would get you banned".into()),
+            how_to_enable: Some("Riot Vanguard blocks DLL mods; only built-in or signed driver frame generation can run safely here.".into()),
+            routes: vec![sample_route(
+                "unavailable",
+                "unavailable",
+                "unavailable",
+                "Not available",
+                "Mods would get you banned",
+            )],
+            ..Default::default()
+        });
+        let mut rt = rune::Runtime::new(
+            state,
+            |s, _| view(s, &s.games[0]),
+            (600.0, 400.0),
+            rune::Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        assert!(rt.presented("gp-fg-row").is_some());
+        assert!(rt.presented("gp-fg-word").is_some());
+        assert!(rt.presented("gp-fg-confirm").is_none());
+    }
+
+    #[test]
+    fn view_renders_inline_risk_confirmation_for_pve_opt_in_dll() {
+        let mut state = AppState::with_demo_games();
+        state.frame_gen_confirm = Some((
+            "mod_dlssg".into(),
+            "Wuthering Waves runs Anti-Cheat Expert. A mod loading into it can get the account banned."
+                .into(),
+            Some("Anti-Cheat Expert".into()),
+        ));
+        let mut rt = rune::Runtime::new(
+            state,
+            |s, _| view(s, &s.games[0]),
+            (600.0, 400.0),
+            rune::Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        assert!(rt.presented("gp-fg-confirm").is_some());
+        assert!(rt.presented("gp-fg-confirm-cancel").is_some());
+        assert!(rt.presented("gp-fg-confirm-ok").is_some());
     }
 }

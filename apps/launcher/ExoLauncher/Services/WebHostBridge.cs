@@ -892,6 +892,7 @@ public sealed partial class WebHostBridge
                 "dlss.restore" => await DlssRestoreAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "dlss.consent" => await DlssConsentAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "dlss.frameGen" => await DlssFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "dlss.frameGenSet" => await DlssFrameGenSetAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.frameGen" => await GameFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.frameCap" => await GameFrameCapAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.capLab.run" => await GameCapLabRunAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),

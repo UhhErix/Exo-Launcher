@@ -45,11 +45,11 @@ public sealed class FrameGenStateTableTests
         (12, Read with { Wanted = "native", OtherMod = "UE4SS", AntiCheat = "BattlEye" }, "native", null, null, FrameGenNext.Nothing),
         (13, Read with { Folder = false, OtherMod = "UE4SS" }, "hidden", null, null, FrameGenNext.Nothing),
         (14, Read with { OtherMod = "UE4SS", AntiCheat = "BattlEye" }, "mod", null, null, FrameGenNext.Nothing),
-        (15, Read with { AntiCheat = "Riot Vanguard", NeverAllowed = true, AntiCheatSentence = "Exo never changes Riot games or games with Vanguard." }, "note", null, "Exo never changes Riot games or games with Vanguard.", FrameGenNext.Nothing),
-        (16, Read with { AntiCheat = "BattlEye", KeptOff = "removed", AntiCheatSentence = "This game uses BattlEye, so Exo puts nothing into it." }, "note", null, "This game uses BattlEye, so Exo puts nothing into it.", FrameGenNext.Nothing),
-        // Steam can't say, and an install Exo couldn't read, keep mods out the same way.
-        (16, Read with { AntiCheat = "possibly Valve Anti-Cheat", AntiCheatSentence = "Steam can't say whether this game uses Valve Anti-Cheat, so Exo puts nothing into it." }, "note", null, "Steam can't say whether this game uses Valve Anti-Cheat, so Exo puts nothing into it.", FrameGenNext.Nothing),
-        (16, Read with { AntiCheat = "unreadable", NeverAllowed = true, AntiCheatSentence = "Exo couldn't check this game for anti-cheat, so it leaves it as it is." }, "note", null, "Exo couldn't check this game for anti-cheat, so it leaves it as it is.", FrameGenNext.Nothing),
+        (15, Read with { AntiCheat = "Riot Vanguard", NeverAllowed = true }, "note", null, ExoLauncher.Services.FrameGenAntiCheat.OnlineBlockedMessage, FrameGenNext.Nothing),
+        (16, Read with { AntiCheat = "BattlEye", KeptOff = "removed" }, "note", null, ExoLauncher.Services.FrameGenAntiCheat.OnlineBlockedMessage, FrameGenNext.Nothing),
+        // Steam can't say, and an install Exo couldn't read, keep auto-apply out the same way.
+        (16, Read with { AntiCheat = "possibly Valve Anti-Cheat" }, "note", null, ExoLauncher.Services.FrameGenAntiCheat.OnlineBlockedMessage, FrameGenNext.Nothing),
+        (16, Read with { AntiCheat = "unreadable", NeverAllowed = true }, "note", null, ExoLauncher.Services.FrameGenAntiCheat.OnlineBlockedMessage, FrameGenNext.Nothing),
         (17, Read with { KeptOff = "replaced", Unoffered = "Not available yet" }, "broken", "replaced", null, FrameGenNext.Nothing),
         (17, Read with { KeptOff = "removed" }, "broken", "removed", null, FrameGenNext.Nothing),
         (18, Read with { Wanted = "dlss", Unoffered = "Not available yet" }, "note", null, "Not available yet", FrameGenNext.Nothing),

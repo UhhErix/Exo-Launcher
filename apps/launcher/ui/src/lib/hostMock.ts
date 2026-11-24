@@ -2163,10 +2163,24 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   // OptiScaler (Control). ?riot=partial: another mod replaced Exo's loader.
   'dlss.frameGen': (p) => {
     const id = String(p?.id)
-    if (mockRiotPartial) return { ok: true, state: 'broken', path: 'dlss', version: 'DLSSG SM86 0.4.1', reason: 'replaced', mod: 'UE4SS' }
+    if (mockRiotPartial) return { ok: true, state: 'broken', path: 'dlss', package: 'DLSSG SM86', version: 'DLSSG SM86 0.4.2', reason: 'replaced', mod: 'UE4SS' }
     if (mockGpu || !/cyberpunk|control|rivals/.test(id)) return { ok: true, state: 'hidden' }
-    if (id.includes('rivals')) return { ok: true, state: 'note', path: 'dlss', antiCheat: 'NetEase anti-cheat', note: 'Not in games with anti-cheat' }
-    return id.includes('control') ? { ok: true, state: 'on', path: 'fsr', version: 'OptiScaler v0.9.4' } : { ok: true, state: 'on', path: 'dlss', version: 'DLSSG SM86 0.4.1', session: 'ran' }
+    if (id.includes('rivals')) return { ok: true, state: 'note', antiCheat: 'NetEase anti-cheat', note: 'Mods would get you banned', canToggle: false }
+    return id.includes('control')
+      ? { ok: true, state: 'on', path: 'fsr', package: 'OptiScaler', version: 'OptiScaler v0.9.5', canToggle: true }
+      : { ok: true, state: 'on', path: 'dlss', package: 'DLSSG SM86', version: 'DLSSG SM86 0.4.2', session: 'ran', canToggle: true }
+  },
+  'dlss.frameGenSet': (p) => {
+    const enabled = Boolean(p?.enabled)
+    return {
+      ok: true,
+      state: enabled ? 'on' : 'off',
+      path: 'dlss',
+      package: 'DLSSG SM86',
+      version: enabled ? 'DLSSG SM86 0.4.2' : null,
+      canToggle: true,
+      message: enabled ? 'Turn on DLSS Frame Generation in the game' : 'Off.',
+    }
   },
   'game.frameGen': (p) => mockGameFrameGen(p),
   'game.frameCap': (p) => mockGameFrameCap(p),
@@ -2720,7 +2734,7 @@ function mockWuWaFrameGen(routeParam: unknown) {
     autoEnable: false,
     latencyNote: 'Lowest latency: uses game motion vectors. Requires DirectX 12 in Wuthering Waves.',
     selectable: true,
-    active: routeParam !== 'external_lossless_scaling',
+    active: true,
   }]
   if (isAmd) {
     routes.push({
@@ -2760,29 +2774,12 @@ function mockWuWaFrameGen(routeParam: unknown) {
       choices: ['game', '2x', '3x', '4x'],
     })
   }
-  const lsOn = routeParam === 'external_lossless_scaling'
-  routes.push({
-    id: 'external_lossless_scaling',
-    tier: 'external',
-    kind: 'external_lossless_scaling',
-    label: 'Lossless Scaling',
-    status: lsOn ? 'active' : 'available',
-    summary: lsOn ? 'Lossless Scaling · On' : 'Lossless Scaling · Ready',
-    gpuSupported: true,
-    gpuNote: 'Works on any GPU via external capture.',
-    antiCheatVerdict: 'safe',
-    antiCheatNote: 'Safe: external Windows Graphics Capture overlay.',
-    autoEnable: false,
-    latencyNote: 'Adds ~1–2 frames of capture latency. Requires Borderless mode.',
-    selectable: true,
-    active: lsOn,
-  })
   const chosen = routes.find(r => r.id === routeParam) ?? routes[0]
   return {
     ok: true,
     bestRouteId: String(routes[0].id),
     selectedRouteId: String(chosen.id),
-    state: chosen.tier === 'external' ? 'external' : 'native',
+    state: 'native',
     word: String(chosen.summary),
     good: Boolean(chosen.active) && chosen.tier !== 'native',
     bad: false,
@@ -2794,8 +2791,7 @@ function mockGameFrameGen(p?: Record<string, unknown>) {
   const id = String(p?.id ?? '')
   if (mockGpu === 'intel' && typeof p?.xessOverride === 'string') mockFrameGen = p.xessOverride
   if (/valorant|league/.test(id)) {
-    const reason = 'Exo never changes Riot games or games with Vanguard'
-    return mockUnavailableFrameGen(reason, 'Use in-game graphics settings only.', 'blocked', reason)
+    return mockUnavailableFrameGen('Mods would get you banned', 'Riot Vanguard blocks DLL mods; use in-game graphics settings only.', 'blocked', 'Riot Vanguard blocks DLL mods.')
   }
   if (id.includes('wuthering')) return mockWuWaFrameGen(p?.route)
   if (mockGpu === 'amd') {
@@ -2809,12 +2805,19 @@ function mockGameFrameGen(p?: Record<string, unknown>) {
     const route = { id: 'mod_optiscaler', tier: 'mod', kind: 'mod_optiscaler', label: 'OptiScaler v0.9.4', status: 'active', summary: 'OptiScaler v0.9.4', gpuSupported: true, gpuNote: 'RTX 3070 supports OptiScaler.', antiCheatVerdict: 'safe', antiCheatNote: 'Safe: clean game with no anti-cheat.', autoEnable: true, latencyNote: 'Low latency.', selectable: true, active: true }
     return { ok: true, bestRouteId: route.id, selectedRouteId: route.id, state: 'on', word: route.summary, good: true, bad: false, routes: [route] }
   }
-  const blocked = id.includes('rivals')
+  if (id.includes('rivals')) {
+    return mockUnavailableFrameGen(
+      'Mods would get you banned',
+      'NetEase anti-cheat blocks DLL mods; only built-in or driver frame generation can run safely here.',
+      'blocked',
+      'NetEase anti-cheat blocks placed files.',
+    )
+  }
   return mockUnavailableFrameGen(
-    blocked ? 'Off · NetEase anti-cheat blocks mods' : 'Not built into this game',
-    'Install Lossless Scaling on Steam (App 993090) for external frame generation on any GPU.',
-    blocked ? 'blocked' : 'safe',
-    blocked ? 'NetEase anti-cheat blocks placed files.' : 'No anti-cheat block.',
+    'Not built into this game',
+    'No built-in, mod, or driver frame generation route applies to this game.',
+    'safe',
+    'No anti-cheat block.',
   )
 }
 
