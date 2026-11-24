@@ -33,10 +33,41 @@ public sealed class GameGraphicsFeaturesTests : IDisposable
     private static AntiCheatCheck.Answer NoAntiCheat => new(AntiCheatCheck.Kind.None, [], "test");
 
     [Fact]
-    public void OfflineModeModNoteExplainsOfficialOfflineMode()
+    public void OfflineModeModNoteExplainsOfflineMode()
     {
         var note = GameGraphicsFeatures.OfflineModeModNote("NBA 2K26");
-        Assert.Equal("NBA 2K26 runs in its official offline mode without anti-cheat. Mods load only in that offline mode.", note);
+        Assert.Equal("NBA 2K26 runs in offline mode with anti-cheat. Mods load only in offline play.", note);
+    }
+
+    [Fact]
+    public void OnlineNonCompetitivePveAllowsOptInDllBehindBanRiskConfirmationNeverAutoApplied()
+    {
+        var install = Path.Combine(_root, "pve-opti");
+        Directory.CreateDirectory(install);
+        File.WriteAllBytes(Path.Combine(install, "GenshinImpact.exe"), [0x4D, 0x5A]);
+        File.WriteAllBytes(Path.Combine(install, "nvngx_dlss.dll"), [0x4D, 0x5A]);
+        File.WriteAllText(Path.Combine(install, "OptiScaler.ini"), "[Upscalers]\r\nDx12Upscaler=auto\r\n");
+
+        var game = new GameEntry { Id = "local:genshin", Title = "Genshin Impact", Store = StoreKind.Local, Installed = true, Path = install };
+        var ac = new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, ["HoYoKProtect"], "test");
+        var stateRoot = Path.Combine(_root, "state-pve");
+        var ctx = new GameGraphicsFeatures.RuntimeContext(Rx7800Xt, ac, null, false, stateRoot);
+
+        var snap = GameGraphicsFeatures.Inspect(game, ctx);
+        var up = snap.Features.Single(f => f.Id == GameGraphicsFeatures.FeatureUpscalers);
+        Assert.Equal(GameGraphicsFeatures.RouteDll, up.RouteKind);
+        Assert.True(up.CanToggle);
+        Assert.True(up.NeedsAntiCheatConfirm);
+        Assert.Equal("Genshin Impact runs HoYoKProtect. A mod loading into it can get the account banned.", up.AntiCheatWarning);
+
+        var refused = GameGraphicsFeatures.Set(game, GameGraphicsFeatures.FeatureUpscalers, true, acceptAntiCheatRisk: false, null, ctx);
+        Assert.False(refused.Ok);
+
+        string? savedConsent = null;
+        var allowed = GameGraphicsFeatures.Set(game, GameGraphicsFeatures.FeatureUpscalers, true, acceptAntiCheatRisk: true, (_, token) => savedConsent = token, ctx);
+        Assert.True(allowed.Ok);
+        Assert.Equal("HoYoKProtect", savedConsent);
+        Assert.Contains("Dx12Upscaler=fsr31", File.ReadAllText(Path.Combine(install, "OptiScaler.ini")));
     }
 
     [Fact]

@@ -183,29 +183,36 @@ internal static partial class GameGraphicsFeatures
     internal static string StateFilePath(string root) => Path.Combine(root, "state.json");
     internal static string BackupsDir(string root) => Path.Combine(root, "backups");
 
-    internal static string OfflineModeModNote(string gameTitle)
-    {
-        var title = string.IsNullOrWhiteSpace(gameTitle) ? "This game" : gameTitle.Trim();
-        return $"{title} runs in its official offline mode without anti-cheat. Mods load only in that offline mode.";
-    }
+    internal static string OfflineModeModNote(string gameTitle) =>
+        AntiCheatClass.OfflineOneTimeNote(gameTitle);
 
     internal static bool IsKnownFeature(string? featureId) =>
         featureId is FeatureUpscalers or FeatureReflex or FeatureRayTracing or FeaturePathTracing or FeatureHiddenSettings;
 
-    internal static bool IsOfficialOfflineMode(AntiCheatCheck.Answer antiCheat) =>
-        antiCheat.Kind == AntiCheatCheck.Kind.None
-        && string.Equals(antiCheat.Evidence, AntiCheatCheck.WithoutAntiCheatEvidence, StringComparison.Ordinal);
+    internal static bool AllowsDllMod(GameEntry game, AntiCheatCheck.Answer antiCheat) =>
+        AntiCheatClass.DllPolicyFor(AntiCheatClass.Classify(game, antiCheat)) != DllModPolicy.Disallowed;
 
-    internal static bool AllowsDllMod(GameEntry game, AntiCheatCheck.Answer antiCheat)
+    internal static (bool NeedsPrompt, string? PromptText, string? ConsentToken) DllPromptState(
+        GameEntry game,
+        AntiCheatCheck.Answer antiCheat,
+        string? existingConsent)
     {
-        if (AntiCheatCheck.IsRiot(game) || antiCheat.Names.Contains(DlssSwapService.RiotVanguard)) return false;
-        return antiCheat.Kind == AntiCheatCheck.Kind.None;
+        var acClass = AntiCheatClass.Classify(game, antiCheat);
+        var policy = AntiCheatClass.DllPolicyFor(acClass);
+        return policy switch
+        {
+            DllModPolicy.Allowed => (false, null, null),
+            DllModPolicy.AllowedWithOfflineNote =>
+                string.Equals(existingConsent, AntiCheatCheck.WithoutAntiCheatEvidence, StringComparison.OrdinalIgnoreCase)
+                    ? (false, null, AntiCheatCheck.WithoutAntiCheatEvidence)
+                    : (true, AntiCheatClass.OfflineOneTimeNote(game.Title), AntiCheatCheck.WithoutAntiCheatEvidence),
+            DllModPolicy.OptInWithBanRiskConfirmation =>
+                !string.IsNullOrWhiteSpace(antiCheat.Label) && DlssSwapService.Accepted(game, antiCheat.Label, existingConsent)
+                    ? (false, null, antiCheat.Label)
+                    : (true, AntiCheatClass.BanRiskConfirmation(game.Title, antiCheat.Name), antiCheat.Label ?? "pve-anti-cheat"),
+            _ => (false, null, null),
+        };
     }
-
-    internal static bool NeedsOfflineOneTimeNote(GameEntry game, AntiCheatCheck.Answer antiCheat, string? consent) =>
-        AllowsDllMod(game, antiCheat)
-        && IsOfficialOfflineMode(antiCheat)
-        && !string.Equals(consent, AntiCheatCheck.WithoutAntiCheatEvidence, StringComparison.OrdinalIgnoreCase);
 
     internal static bool AllowsConfigOrDriver(GameEntry game, AntiCheatCheck.Answer antiCheat) =>
         !AntiCheatCheck.IsRiot(game) && !antiCheat.Names.Contains(DlssSwapService.RiotVanguard);
@@ -278,15 +285,19 @@ internal static partial class GameGraphicsFeatures
         if (on && target.RouteKind == RouteDll)
         {
             if (!AllowsDllMod(game, ctx.AntiCheat))
-                return new Snapshot(false, "Online or anti-cheat protected games use config, in-game, and driver routes only (no DLL mods).", detected.EngineLabel, false, ctx.AntiCheat.Label, current.Features);
+                return new Snapshot(false, "Competitive online or unknown anti-cheat games use config, in-game, and driver routes only (no DLL mods).", detected.EngineLabel, false, ctx.AntiCheat.Label, current.Features);
 
-            if (target.NeedsAntiCheatConfirm)
+            var (needsPrompt, promptText, consentToken) = DllPromptState(game, ctx.AntiCheat, ctx.ModConsent);
+            if (needsPrompt)
             {
                 if (!acceptAntiCheatRisk)
-                    return new Snapshot(false, target.AntiCheatWarning ?? OfflineModeModNote(game.Title), detected.EngineLabel, false, ctx.AntiCheat.Label, current.Features);
+                    return new Snapshot(false, promptText ?? AntiCheatClass.BanRiskConfirmation(game.Title, ctx.AntiCheat.Name), detected.EngineLabel, false, ctx.AntiCheat.Label, current.Features);
 
-                saveModConsent?.Invoke(game.Id, AntiCheatCheck.WithoutAntiCheatEvidence);
-                ctx = ctx with { ModConsent = AntiCheatCheck.WithoutAntiCheatEvidence };
+                if (!string.IsNullOrWhiteSpace(consentToken))
+                {
+                    saveModConsent?.Invoke(game.Id, consentToken);
+                    ctx = ctx with { ModConsent = consentToken };
+                }
             }
         }
 
@@ -697,10 +708,14 @@ internal static partial class GameGraphicsFeatures
         var hasAnyUpscaler = d.HasDlss || d.HasFsr || d.HasXess;
         var isOn = enabled.Contains(FeatureUpscalers);
         var dllAllowed = AllowsDllMod(game, ctx.AntiCheat);
-        var needsOfflineNote = NeedsOfflineOneTimeNote(game, ctx.AntiCheat, ctx.ModConsent);
+        var (needsDllPrompt, dllPromptText, _) = DllPromptState(game, ctx.AntiCheat, ctx.ModConsent);
 
         if (d.Engine == EngineKind.WutheringWaves)
         {
+            if (d.HasOptiScaler && dllAllowed)
+            {
+                return new FeatureRow(FeatureUpscalers, "Upscalers", isOn ? StateOn : StateInGame, "OptiScaler bridge (opt-in) · LocalStorage DLSS + NVIDIA DRS", RouteDll, true, needsDllPrompt, dllPromptText);
+            }
             var wuWaOn = isOn || (IsWuWaDlssEnabledOnDisk(d.WuWaLocalStoragePath) && HasNvidiaDlssOverride(record));
             var route = isNvidia && series >= 20
                 ? "LocalStorage DLSS + NVIDIA DRS override"
@@ -724,7 +739,7 @@ internal static partial class GameGraphicsFeatures
 
             if (d.HasOptiScaler && dllAllowed)
             {
-                return new FeatureRow(FeatureUpscalers, "Upscalers", isOn ? StateOn : StateInGame, $"OptiScaler bridge ({names})", RouteDll, true, needsOfflineNote, needsOfflineNote ? OfflineModeModNote(game.Title) : null);
+                return new FeatureRow(FeatureUpscalers, "Upscalers", isOn ? StateOn : StateInGame, $"OptiScaler bridge ({names})", RouteDll, true, needsDllPrompt, dllPromptText);
             }
 
             if (isNvidia && series >= 20 && d.HasDlss && d.ProgramPath is not null && AllowsConfigOrDriver(game, ctx.AntiCheat))
@@ -760,7 +775,7 @@ internal static partial class GameGraphicsFeatures
         var isAmd = string.Equals(ctx.Pc.Vendor, "amd", StringComparison.OrdinalIgnoreCase);
         var isOn = enabled.Contains(FeatureReflex);
         var dllAllowed = AllowsDllMod(game, ctx.AntiCheat);
-        var needsOfflineNote = NeedsOfflineOneTimeNote(game, ctx.AntiCheat, ctx.ModConsent);
+        var (needsDllPrompt, dllPromptText, _) = DllPromptState(game, ctx.AntiCheat, ctx.ModConsent);
 
         if (d.HasSpecialK && dllAllowed)
         {
@@ -770,7 +785,7 @@ internal static partial class GameGraphicsFeatures
         if (d.HasOptiScaler && dllAllowed && !isNvidia && d.HasReflex)
         {
             var targetApi = isAmd ? "AMD Anti-Lag 2" : "LatencyFlex";
-            return new FeatureRow(FeatureReflex, "Reflex & low latency", isOn ? StateOn : StateOff, $"OptiScaler + fakenvapi ({targetApi})", RouteDll, true, needsOfflineNote, needsOfflineNote ? OfflineModeModNote(game.Title) : null);
+            return new FeatureRow(FeatureReflex, "Reflex & low latency", isOn ? StateOn : StateOff, $"OptiScaler + fakenvapi ({targetApi})", RouteDll, true, needsDllPrompt, dllPromptText);
         }
 
         if (d.Engine is EngineKind.Unreal4 or EngineKind.Unreal5 or EngineKind.WutheringWaves && d.HasReflex && AllowsConfigOrDriver(game, ctx.AntiCheat))
@@ -866,7 +881,7 @@ internal static partial class GameGraphicsFeatures
         var isOn = enabled.Contains(FeaturePathTracing);
         var allowed = AllowsConfigOrDriver(game, ctx.AntiCheat);
         var dllAllowed = AllowsDllMod(game, ctx.AntiCheat);
-        var needsOfflineNote = NeedsOfflineOneTimeNote(game, ctx.AntiCheat, ctx.ModConsent);
+        var (needsDllPrompt, dllPromptText, _) = DllPromptState(game, ctx.AntiCheat, ctx.ModConsent);
 
         return d.Engine switch
         {
@@ -890,8 +905,8 @@ internal static partial class GameGraphicsFeatures
                     d.HasRtxRemix ? "NVIDIA RTX Remix runtime active" : "NVIDIA RTX Remix runtime (DX8/DX9 MIT)",
                     RouteDll,
                     false,
-                    needsOfflineNote,
-                    needsOfflineNote ? OfflineModeModNote(game.Title) : null,
+                    needsDllPrompt,
+                    dllPromptText,
                     "Drop NVIDIAGameWorks/rtx-remix runtime beside the DX8/DX9 executable"),
 
             EngineKind.FixedFunctionDx89 =>
