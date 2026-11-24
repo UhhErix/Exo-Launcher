@@ -232,12 +232,17 @@ internal sealed class StoreGifts
             """;
     }
 
+    private static readonly Lazy<HttpClient> ExchangeHttp = new(() => ExoHttp.Create(TimeSpan.FromSeconds(20), new SocketsHttpHandler
+    {
+        AutomaticDecompression = System.Net.DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+    }));
+
     private static async Task<string?> ExchangeCodeAsync(EpicPlaytime.Session account, CancellationToken ct)
     {
-        using var http = ExoHttp.Create(TimeSpan.FromSeconds(20));
         using var request = new HttpRequestMessage(HttpMethod.Get, EpicExchange);
         request.Headers.Authorization = new AuthenticationHeaderValue("bearer", account.AccessToken);
-        using var response = await http.SendAsync(request, ct).ConfigureAwait(true);
+        using var response = await ExchangeHttp.Value.SendAsync(request, ct).ConfigureAwait(true);
         if (!response.IsSuccessStatusCode)
         {
             AppLog.Warn($"Gifts: Epic exchange code refused ({(int)response.StatusCode}).");

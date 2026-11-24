@@ -58,7 +58,7 @@ public static class FailureReportRules
     /// </summary>
     public static bool IsHostCallBug(Exception ex) =>
         ex is not (InvalidOperationException or InvalidDataException or OperationCanceledException or TimeoutException
-            or HttpRequestException or System.Net.Sockets.SocketException);
+            or HttpRequestException or System.Net.Sockets.SocketException or UserFacingException);
 
     /// <summary>
     /// What a failed host call's report says: the method and the exception's type, never its message (a message can carry

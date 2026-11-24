@@ -222,7 +222,8 @@ public sealed class NamedPipeHostTransportTests
     {
         var ct = TestContext.Current.CancellationToken;
         var pipeName = $"exo-test-pipe-{Guid.NewGuid():N}";
-        using var transport = new NamedPipeHostTransport(pipeName);
+        const int testLimit = 64 * 1024;
+        using var transport = new NamedPipeHostTransport(pipeName, testLimit);
 
         var reset = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         transport.SessionReset += () => reset.TrySetResult();
@@ -231,7 +232,7 @@ public sealed class NamedPipeHostTransportTests
         using (var client1 = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous))
         {
             await client1.ConnectAsync(5000, ct);
-            var oversize = new byte[NamedPipeHostTransport.MaxMessageBytes + 128];
+            var oversize = new byte[testLimit + 128];
             Array.Fill(oversize, (byte)'a');
             oversize[^1] = (byte)'\n';
             try { await client1.WriteAsync(oversize, ct); } catch (IOException) { }
@@ -248,6 +249,27 @@ public sealed class NamedPipeHostTransportTests
 
         var msg2 = await received.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
         Assert.Equal("""{"id":"2","method":"ping"}""", msg2);
+    }
+
+    [Fact]
+    public async Task LargeFrameAboveFourMegabytesSucceeds()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pipeName = $"exo-test-pipe-{Guid.NewGuid():N}";
+        using var transport = new NamedPipeHostTransport(pipeName);
+
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        transport.MessageReceived += msg => received.TrySetResult(msg);
+        transport.Start();
+
+        using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await client.ConnectAsync(5000, ct);
+        var largePayload = "{\"id\":\"big\",\"method\":\"capture.saveImage\",\"data\":\"" + new string('x', 5 * 1024 * 1024) + "\"}";
+        using var writer = new StreamWriter(client, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+        await writer.WriteLineAsync(largePayload.AsMemory(), ct);
+
+        var got = await received.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        Assert.Equal(largePayload.Length, got.Length);
     }
 
     [Fact]

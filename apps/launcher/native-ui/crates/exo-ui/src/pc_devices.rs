@@ -7,8 +7,9 @@ use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_SMALL, SPRING_MOVE,
     SPRING_QUICK, amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, float_line,
     glass_button, good, hairline, hover_fill, icon_chevron_left, icon_gamepad, icon_headphones,
-    icon_keyboard, icon_mouse, icon_refresh, icon_zap, pressed_fill, primary_button, scaled,
-    status_badge, type_body, type_control, type_label, type_section, type_small, type_title,
+    icon_keyboard, icon_mic, icon_mouse, icon_refresh, icon_zap, pressed_fill, primary_button,
+    scaled, status_badge, type_body, type_control, type_label, type_section, type_small,
+    type_title,
 };
 use exo_rpc::keyboard_layouts::{FormFactor, KeyCap, KeyKind, build_keyboard_layout, find_key};
 use exo_rpc::{KeyboardReadReply, PeripheralCard};
@@ -26,11 +27,12 @@ fn connection_label(conn: Option<&str>) -> &'static str {
     }
 }
 
-fn device_fallback_icon(kind: &str) -> El {
-    match kind {
-        "mouse" => icon_mouse(48.0, fg_faint()),
-        "keyboard" => icon_keyboard(48.0, fg_faint()),
-        "controller" => icon_gamepad(48.0, fg_faint()),
+fn device_fallback_icon(kind: &str, role: Option<&str>) -> El {
+    match (kind, role) {
+        ("mouse", _) => icon_mouse(48.0, fg_faint()),
+        ("keyboard", _) => icon_keyboard(48.0, fg_faint()),
+        ("controller", _) => icon_gamepad(48.0, fg_faint()),
+        (_, Some("input")) => icon_mic(48.0, fg_faint()),
         _ => icon_headphones(48.0, fg_faint()),
     }
 }
@@ -90,7 +92,7 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
             .grow(1.0)
             .min_h(0.0)
             .center()
-            .child(device_fallback_icon(&dev.kind))
+            .child(device_fallback_icon(&dev.kind, dev.role.as_deref()))
     };
 
     let display_name = clean_device_name(dev, s);

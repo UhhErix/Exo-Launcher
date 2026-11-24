@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using ExoLauncher.Helpers;
 using Microsoft.Data.Sqlite;
 
 namespace ExoLauncher.Adapters.Riot;
@@ -89,15 +90,7 @@ internal static class RiotProductMetadata
     {
         try
         {
-            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-            {
-                DataSource = dbPath,
-                Mode = SqliteOpenMode.ReadOnly,
-                Cache = SqliteCacheMode.Private,
-                Pooling = false,
-                DefaultTimeout = 1,
-            }.ToString());
-            connection.Open();
+            using var connection = ExoSqlite.OpenReadOnly(dbPath, defaultTimeoutSeconds: 1);
             using var command = connection.CreateCommand();
             command.CommandTimeout = 1;
             command.CommandText = "SELECT COUNT(*), TOTAL(size) FROM files";

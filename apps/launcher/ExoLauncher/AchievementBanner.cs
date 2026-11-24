@@ -21,14 +21,80 @@ internal static class AchievementBanner
     /// <summary>The window, in the page's pixels: the card (banner.html) and the room above it for its entrance.</summary>
     private const int Width = 480, Height = 176;
     private static Overlay? _overlay;
+    private static Task<Overlay>? _creating;
     private static Timer? _close, _wait;
     private static DateTimeOffset _closeAt;
     private static readonly Queue<Unlock> Waiting = new();
 
-    internal static void Start() => AchievementWatch.Unlocked += unlock =>
+    internal static bool ShouldPrewarm(bool bannersEnabled, bool gameRunning, bool hasOverlay) =>
+        bannersEnabled && gameRunning && !hasOverlay;
+
+    internal static bool ShouldDisposeOnIdle(bool gameRunning) => !gameRunning;
+
+    private static bool IsGameRunning() =>
+        Services.GameRunningSignal.Running || Services.LeanSignal.Active || App.Services.Launcher.AnyGameRunning;
+
+    internal static void Start()
     {
-        if (App.MainAppWindow?.DispatcherQueue.Enqueue(() => Arrive(unlock)) != true) AppLog.Warn("Achievements: no window thread for the banner.");
-    };
+        AchievementWatch.Unlocked += unlock =>
+        {
+            if (App.MainAppWindow?.DispatcherQueue.Enqueue(() => Arrive(unlock)) != true) AppLog.Warn("Achievements: no window thread for the banner.");
+        };
+        Services.LeanSignal.Changed += OnGameStateChanged;
+    }
+
+    private static void OnGameStateChanged()
+    {
+        App.MainAppWindow?.DispatcherQueue.Enqueue(() =>
+        {
+            var running = IsGameRunning();
+            if (ShouldPrewarm(App.Services.Settings.Current.AchievementBanners, running, _overlay is not null || _creating is not null))
+            {
+                _ = PrewarmAsync();
+                return;
+            }
+            if (!running && _overlay is not null && DateTimeOffset.UtcNow >= _closeAt)
+                Close();
+        });
+    }
+
+    private static async Task PrewarmAsync()
+    {
+        try
+        {
+            var overlay = await EnsureOverlayAsync(startHidden: true).ConfigureAwait(true);
+            if (overlay is null) return;
+            if (DateTimeOffset.UtcNow >= _closeAt)
+            {
+                if (ShouldDisposeOnIdle(IsGameRunning())) Close();
+                else overlay.HideAndSuspend();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Debug($"Achievements: pre-warm skipped ({ex.GetType().Name}).");
+            _overlay?.Dispose();
+            _overlay = null;
+        }
+    }
+
+    private static async Task<Overlay?> EnsureOverlayAsync(bool startHidden)
+    {
+        if (_overlay is not null) return _overlay;
+        var pending = _creating;
+        if (pending is not null) return await pending.ConfigureAwait(true);
+        var create = Overlay.CreateAsync(Width, Height, startHidden);
+        _creating = create;
+        try
+        {
+            _overlay = await create.ConfigureAwait(true);
+            return _overlay;
+        }
+        finally
+        {
+            if (ReferenceEquals(_creating, create)) _creating = null;
+        }
+    }
 
     /// <summary>On the window thread: shown now, or held while a game is in exclusive full screen.</summary>
     private static void Arrive(Unlock unlock)
@@ -65,18 +131,18 @@ internal static class AchievementBanner
         try
         {
             var settings = App.Services.Settings.Current;
-            _overlay ??= await Overlay.CreateAsync(Width, Height).ConfigureAwait(true);
-            _overlay.Place();
+            var overlay = await EnsureOverlayAsync(startHidden: false).ConfigureAwait(true);
+            if (overlay is null) return;
+            overlay.ResumeAndPlace();
             foreach (var unlock in unlocks)
             {
                 AppLog.Info($"Achievements: banner for {unlock.Name} ({unlock.Rarity}).");
-                _overlay.Post(AchievementWatch.Card(unlock, settings.AchievementVolume, settings.ReduceMotion));
+                overlay.Post(AchievementWatch.Card(unlock, settings.AchievementVolume, settings.ReduceMotion));
             }
-            // The page shows them one after another, each up to 11.5 s; the window outlasts the last one queued by a margin.
             var closeAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(4 + 12 * unlocks.Count);
             if (closeAt < _closeAt) closeAt = _closeAt.AddSeconds(12 * unlocks.Count);
             _closeAt = closeAt;
-            (_close ??= new Timer(_ => App.MainAppWindow?.DispatcherQueue.Enqueue(Close))).Change(closeAt - DateTimeOffset.UtcNow, Timeout.InfiniteTimeSpan);
+            (_close ??= new Timer(_ => App.MainAppWindow?.DispatcherQueue.Enqueue(OnIdle))).Change(closeAt - DateTimeOffset.UtcNow, Timeout.InfiniteTimeSpan);
         }
         catch (Exception ex)
         {
@@ -87,6 +153,13 @@ internal static class AchievementBanner
         }
     }
 
+    private static void OnIdle()
+    {
+        if (DateTimeOffset.UtcNow < _closeAt) return;
+        if (ShouldDisposeOnIdle(IsGameRunning())) Close();
+        else _overlay?.HideAndSuspend();
+    }
+
     private static void Close()
     {
         _overlay?.Dispose();
@@ -95,6 +168,7 @@ internal static class AchievementBanner
 
     internal static void Shutdown()
     {
+        Services.LeanSignal.Changed -= OnGameStateChanged;
         _wait?.Dispose();
         _wait = null;
         _close?.Dispose();
@@ -131,14 +205,16 @@ internal static class AchievementBanner
         private static bool _registered;
         private readonly int _width, _height;
         private bool _loaded;
+        private bool _suspendWhenReady;
         private Timer? _readyFallback;
         private readonly Queue<string> _pending = new();
 
         private Overlay(int width, int height) { _width = width; _height = height; }
 
-        internal static async Task<Overlay> CreateAsync(int width, int height)
+        internal static async Task<Overlay> CreateAsync(int width, int height, bool startHidden = false)
         {
             var overlay = new Overlay(width, height);
+            overlay._suspendWhenReady = startHidden;
             overlay.MakeWindow();
             EnsureSystemDispatcher();
             overlay._compositor = new Windows.UI.Composition.Compositor();
@@ -161,15 +237,35 @@ internal static class AchievementBanner
             core.Settings.IsZoomControlEnabled = false;
             core.SetVirtualHostNameToFolderMapping(Host, Path.Combine(AppContext.BaseDirectory, "Assets", "Overlay"), CoreWebView2HostResourceAccessKind.DenyCors);
             core.NavigationStarting += (_, e) => UiGuard.Run(() => { if (!e.Uri.StartsWith($"https://{Host}/", StringComparison.Ordinal)) e.Cancel = true; });
-            // Size the visual and WebView2 bounds before navigating so the first frame lays out at full dimensions.
             overlay._root.Size = new System.Numerics.Vector2(width, height);
             overlay._controller.Bounds = new Windows.Foundation.Rect(0, 0, width, height);
-            overlay._controller.IsVisible = true;
-            // The page says when its listener is attached (banner.ready) and when a banner sound is due.
+            overlay._controller.IsVisible = !startHidden;
             core.WebMessageReceived += (_, e) => UiGuard.Run(() => overlay.OnWebMessage(e.WebMessageAsJson));
             core.NavigationCompleted += (_, e) => UiGuard.Run(() => overlay.OnNavigationCompleted(e.IsSuccess));
             core.Navigate($"https://{Host}/banner.html");
             return overlay;
+        }
+
+        internal void ResumeAndPlace()
+        {
+            _suspendWhenReady = false;
+            if (_controller is not null) _controller.IsVisible = true;
+            Place();
+        }
+
+        internal void HideAndSuspend()
+        {
+            if (_hwnd != IntPtr.Zero) ShowWindow(_hwnd, 0);
+            if (_controller is null) return;
+            _controller.IsVisible = false;
+            if (!_loaded)
+            {
+                _suspendWhenReady = true;
+                return;
+            }
+            var core = _controller.CoreWebView2;
+            if (core is null || core.IsSuspended) return;
+            _ = core.TrySuspendAsync().AsTask().ContinueWith(_ => { }, TaskScheduler.Default);
         }
 
         /// <summary>
@@ -230,6 +326,7 @@ internal static class AchievementBanner
             _readyFallback = null;
             if (_controller?.CoreWebView2 is not { } core) return;
             while (_pending.Count > 0) core.PostWebMessageAsJson(_pending.Dequeue());
+            if (_suspendWhenReady && _pending.Count == 0) HideAndSuspend();
         }
 
         /// <summary>Plays the sound the page asked for ({"sound":"epic"}, by tier) on Windows' default output, at the volume in Settings.</summary>
@@ -349,6 +446,7 @@ internal static class AchievementBanner
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CreateWindowEx(uint ex, string cls, string name, uint style, int x, int y, int w, int h, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr DefWindowProc(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
         [DllImport("user32.dll")] private static extern bool DestroyWindow(IntPtr hwnd);
+        [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hwnd, int command);
         [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);

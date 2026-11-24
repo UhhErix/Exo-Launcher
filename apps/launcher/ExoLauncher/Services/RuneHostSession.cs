@@ -185,7 +185,7 @@ internal sealed partial class RuneHostSession
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    WorkingDirectory = Path.GetDirectoryName(exe) ?? PathHelper.AppDataDir,
+                    WorkingDirectory = PathHelper.AppDataDir,
                 };
                 psi.ArgumentList.Add("--pipe");
                 psi.ArgumentList.Add(options.PipeName);

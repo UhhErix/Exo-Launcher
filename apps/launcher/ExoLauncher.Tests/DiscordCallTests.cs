@@ -121,4 +121,43 @@ public sealed class DiscordCallTests
         transport.SendVideo(2, 101, true, 1, 0, [1, 2, 3]);
         transport.SendRtcp(new byte[12]);
     }
+
+    [Fact]
+    public void XChaChaMatchesCngAcrossSizesAndRejectsTampering()
+    {
+        var key = new byte[32];
+        var rng = new Random(42);
+        rng.NextBytes(key);
+        Span<byte> nonce16 = stackalloc byte[16];
+        foreach (var (aadLen, plainLen) in new[] { (0, 0), (12, 0), (0, 1), (12, 16), (12, 63), (12, 64), (16, 65), (20, 128), (24, 1200) })
+        {
+            var aad = new byte[aadLen];
+            var plain = new byte[plainLen];
+            rng.NextBytes(aad);
+            rng.NextBytes(plain);
+            var counter = (uint)(aadLen * 10000 + plainLen + 1);
+
+            var cipher = new byte[plainLen];
+            var tag = new byte[16];
+            VoiceTransport.XChaChaEncrypt(key, counter, aad, plain, cipher, tag);
+
+            nonce16.Clear();
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(nonce16, counter);
+            using var cng = new System.Security.Cryptography.ChaCha20Poly1305(VoiceTransport.HChaCha20(key, nonce16));
+            var expectedCipher = new byte[plainLen];
+            var expectedTag = new byte[16];
+            cng.Encrypt(new byte[12], plain, expectedCipher, expectedTag, aad);
+
+            Assert.Equal(expectedCipher, cipher);
+            Assert.Equal(expectedTag, tag);
+
+            var opened = new byte[plainLen];
+            Assert.True(VoiceTransport.XChaChaDecrypt(key, counter, aad, cipher, tag, opened));
+            Assert.Equal(plain, opened);
+
+            var badTag = (byte[])tag.Clone();
+            badTag[0] ^= 1;
+            Assert.False(VoiceTransport.XChaChaDecrypt(key, counter, aad, cipher, badTag, opened));
+        }
+    }
 }

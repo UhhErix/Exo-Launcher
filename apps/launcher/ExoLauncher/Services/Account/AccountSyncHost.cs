@@ -85,10 +85,23 @@ internal sealed class AccountSyncHost : IDisposable
     /// <summary>A snapshot of the sync for the settings page.</summary>
     internal sealed record AccountSyncStatus(DateTimeOffset? LastSyncAt, int Pending, IReadOnlyList<HeldItem> Held, bool SignedOut, bool PushStopped);
 
-    /// <summary>A pass pulls and pushes every 30 s; a local change pulls the push in after the debounce (Write). Nothing runs while signed out.</summary>
     private static readonly TimeSpan SyncEvery = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MaxIdleSyncEvery = TimeSpan.FromMinutes(2);
+    private TimeSpan _pollInterval = SyncEvery;
 
-    internal void Start() => timer ??= new Timer(_ => _ = SyncAsync(CancellationToken.None), null, TimeSpan.Zero, SyncEvery);
+    internal void Start() => timer ??= new Timer(_ => _ = PollTickAsync(), null, TimeSpan.Zero, SyncEvery);
+
+    private Task PollTickAsync()
+    {
+        if (GameRunningSignal.Running)
+        {
+            lock (gate)
+            {
+                if (engine is null || engine.State.Dirty.Count == 0) return Task.CompletedTask;
+            }
+        }
+        return SyncAsync(CancellationToken.None);
+    }
 
     /// <summary>Records a local change to a synced item. Ignored when no account is signed in.</summary>
     internal void Write(string type, string id, string? value)
@@ -106,7 +119,8 @@ internal sealed class AccountSyncHost : IDisposable
             {
                 state.Write(type, id, value, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), DateTimeOffset.UtcNow);
                 AccountSyncStore.Save(dataDir, state.State);
-                timer?.Change(AccountSyncRules.Debounce, SyncEvery);
+                _pollInterval = SyncEvery;
+                timer?.Change(AccountSyncRules.Debounce, _pollInterval);
             }
             catch (ArgumentException e)
             {
@@ -131,30 +145,42 @@ internal sealed class AccountSyncHost : IDisposable
         {
             var sign = session();
             if (sign is null) return;
+            var stateDirty = false;
             lock (gate)
             {
                 DrainPending(sign);
-                // Refused items are sent again hourly (ReleaseHeld), and at sign-in.
                 if (DateTimeOffset.UtcNow >= heldSweepAt)
                 {
-                    Engine(sign).ReleaseHeld();
+                    var state = Engine(sign);
+                    var heldBefore = state.State.Held.Count;
+                    state.ReleaseHeld();
+                    if (state.State.Held.Count != heldBefore) stateDirty = true;
                     heldSweepAt = DateTimeOffset.UtcNow + TimeSpan.FromHours(1);
                 }
             }
-            RetryUnapplied(sign);
-            if (await PullAllAsync(sign, ct))
+            if (RetryUnapplied(sign)) stateDirty = true;
+            var (pulledAll, pullChanged) = await PullAllAsync(sign, ct);
+            if (pulledAll)
             {
                 SeedOnce(sign);
                 try { AfterFullPull?.Invoke(); }
                 catch (Exception e) when (e is IOException or InvalidOperationException or InvalidDataException) { AppLog.Warn("Sync: after a pull: " + e.GetType().Name); }
             }
-            await PushDueAsync(sign, ct);
+            var pushChanged = await PushDueAsync(sign, ct);
             bool ended;
             lock (gate)
             {
                 if (engine is not null && !engine.State.SignedOut) engine.State.LastSyncAt = DateTimeOffset.UtcNow;
-                if (engine is not null) AccountSyncStore.Save(dataDir, engine.State);
+                if (engine is not null && stateDirty) AccountSyncStore.Save(dataDir, engine.State);
                 ended = engine?.State.SignedOut == true;
+                var nextInterval = pullChanged || pushChanged || stateDirty
+                    ? SyncEvery
+                    : TimeSpan.FromSeconds(Math.Min(_pollInterval.TotalSeconds * 2, MaxIdleSyncEvery.TotalSeconds));
+                if (nextInterval != _pollInterval)
+                {
+                    _pollInterval = nextInterval;
+                    try { timer?.Change(_pollInterval, _pollInterval); } catch (ObjectDisposedException) { }
+                }
             }
             // The service ended this session: the session file goes (its queue stays on disk), so the page asks to sign in.
             if (ended) AccountSessionStore.EndIfCurrent(dataDir, sign.Token);
@@ -186,29 +212,34 @@ internal sealed class AccountSyncHost : IDisposable
     }
 
     /// <summary>The pulled items that could not be applied before, with the value this PC has for them now.</summary>
-    private void RetryUnapplied(AccountSession sign)
+    private bool RetryUnapplied(AccountSession sign)
     {
         List<PulledItem> again;
+        var pruned = false;
         lock (gate)
         {
             var state = Engine(sign).State;
             again = [.. state.Unapplied.Where(pair => state.Items.ContainsKey(pair.Key))
                 .Select(pair => state.Items[pair.Key])
                 .Select(entry => new PulledItem(entry.Type, entry.Id, entry.Value, state.Unapplied[AccountSyncRules.Key(entry.Type, entry.Id)]))];
-            foreach (var gone in state.Unapplied.Keys.Where(key => !state.Items.ContainsKey(key)).ToList()) state.Unapplied.Remove(gone);
+            foreach (var gone in state.Unapplied.Keys.Where(key => !state.Items.ContainsKey(key)).ToList())
+            {
+                state.Unapplied.Remove(gone);
+                pruned = true;
+            }
         }
         if (again.Count > 0) Apply(sign, again);
+        return pruned || again.Count > 0;
     }
 
-    /// <summary>Pulls every page; true when the last page came in (the account's items are all here).</summary>
-    private async Task<bool> PullAllAsync(AccountSession sign, CancellationToken ct)
+    private async Task<(bool PulledAll, bool HadChanges)> PullAllAsync(AccountSession sign, CancellationToken ct)
     {
-        // Signed out, or a refusal's backoff (429 with Retry-After, 503, a server error) still running: no request yet.
         lock (gate)
         {
             var waiting = Engine(sign).State;
-            if (waiting.SignedOut || DateTimeOffset.UtcNow < waiting.NextAttempt) return false;
+            if (waiting.SignedOut || DateTimeOffset.UtcNow < waiting.NextAttempt) return (false, false);
         }
+        var hadChanges = false;
         for (var page = 0; page < 1000; page++)
         {
             AccountReply reply;
@@ -220,17 +251,19 @@ internal sealed class AccountSyncHost : IDisposable
                 lock (gate)
                 {
                     var state = Engine(sign);
-                    state.ApplyPut(null, reply, DateTimeOffset.UtcNow); // signed-out and failures stop here
+                    state.ApplyPut(null, reply, DateTimeOffset.UtcNow);
                     AccountSyncStore.Save(dataDir, state.State);
                 }
-                return false;
+                return (false, true);
             }
 
             List<PulledItem> pulled = [];
             bool more;
+            bool pageChanged;
             lock (gate)
             {
                 var state = Engine(sign);
+                var cursorBefore = state.State.Cursor;
                 state.Applied.Clear();
                 state.Added.Clear();
                 more = state.Pull(reply, DateTimeOffset.UtcNow);
@@ -239,34 +272,40 @@ internal sealed class AccountSyncHost : IDisposable
                     var entry = state.State.Items[key];
                     pulled.Add(new PulledItem(entry.Type, entry.Id, entry.Value, state.Added.Contains(key)));
                 }
+                pageChanged = pulled.Count > 0 || state.State.Cursor != cursorBefore;
             }
-            Apply(sign, pulled);
-            // The cursor moves only once the page is applied, so a page cut short is pulled again (what was applied is idempotent).
-            lock (gate) AccountSyncStore.Save(dataDir, Engine(sign).State);
-            if (!more) return true;
+            if (pulled.Count > 0) Apply(sign, pulled);
+            if (pageChanged)
+            {
+                hadChanges = true;
+                lock (gate) AccountSyncStore.Save(dataDir, Engine(sign).State);
+            }
+            if (!more) return (true, hadChanges);
             ct.ThrowIfCancellationRequested();
         }
-        return false;
+        return (false, hadChanges);
     }
 
-    private async Task PushDueAsync(AccountSession sign, CancellationToken ct)
+    private async Task<bool> PushDueAsync(AccountSession sign, CancellationToken ct)
     {
+        var pushed = false;
         for (var batch = 0; batch < 1000; batch++)
         {
             List<SyncItem>? due;
             lock (gate) due = Engine(sign).NextPush(DateTimeOffset.UtcNow);
-            if (due is null) return;
+            if (due is null) return pushed;
 
             var reply = await client.PutItemsAsync(sign.Token, due);
+            pushed = true;
             lock (gate)
             {
                 var state = Engine(sign);
                 state.ApplyPut(due, reply, DateTimeOffset.UtcNow);
                 AccountSyncStore.Save(dataDir, state.State);
             }
-            // A backoff makes NextPush return null next time; a split or a hold goes on with the rest of the queue.
             ct.ThrowIfCancellationRequested();
         }
+        return pushed;
     }
 
     /// <summary>

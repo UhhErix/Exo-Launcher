@@ -1026,7 +1026,7 @@ fn toast_card(s: &AppState, item: &NoticeItem, scale: f32, allow_blur: bool) -> 
                     s.begin_notice_drag(id, tx.clock());
                 }
                 Phase::Move => {
-                    let x = d.dx.max(SWIPE_MIN_DX);
+                    let x = rubber_band_swipe_x(d.dx);
                     s.update_notice_drag(id, x, tx.clock());
                 }
                 Phase::Up => {
@@ -1037,6 +1037,14 @@ fn toast_card(s: &AppState, item: &NoticeItem, scale: f32, allow_blur: bool) -> 
             });
     }
     card
+}
+
+fn rubber_band_swipe_x(dx: f32) -> f32 {
+    if dx >= 0.0 {
+        dx
+    } else {
+        SWIPE_MIN_DX * (1.0 - (-dx.abs() / 48.0).exp())
+    }
 }
 
 pub fn view(s: &AppState, scale: f32, allow_blur: bool) -> El {
@@ -1170,5 +1178,16 @@ mod tests {
         assert_eq!(s.notices.len(), 2);
         assert_eq!(s.notices[1].title.as_deref(), Some("Backup stopped"));
         assert!(s.notices[1].lasting);
+    }
+
+    #[test]
+    fn left_toast_drag_applies_smooth_rubber_band_resistance() {
+        assert_eq!(rubber_band_swipe_x(30.0), 30.0);
+        assert_eq!(rubber_band_swipe_x(0.0), 0.0);
+        let small = rubber_band_swipe_x(-12.0);
+        let medium = rubber_band_swipe_x(-48.0);
+        let large = rubber_band_swipe_x(-240.0);
+        assert!(small < 0.0 && small > medium);
+        assert!(medium > large && large > SWIPE_MIN_DX);
     }
 }

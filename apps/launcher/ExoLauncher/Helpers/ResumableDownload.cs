@@ -105,9 +105,14 @@ internal static class ResumableDownload
             long written = offset;
             var lastProgress = Environment.TickCount64 - 250;
             progress?.Invoke(written, total);
+            using var chunkIdle = CancellationTokenSource.CreateLinkedTokenSource(ct);
             while (true)
             {
-                var read = await WithIdleAsync(token => input.ReadAsync(buffer.AsMemory(), token).AsTask(), idle, ct).ConfigureAwait(false);
+                chunkIdle.CancelAfter(idle);
+                int read;
+                try { read = await input.ReadAsync(buffer.AsMemory(), chunkIdle.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                { throw new TimeoutException("Installer download stopped responding. Retry to continue the download."); }
                 if (read == 0) break;
                 if (written > maximumBytes - read || total is { } length && written > length - read)
                     throw new InvalidDataException("Installer download exceeded its declared size or limit.");
