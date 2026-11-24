@@ -173,7 +173,7 @@ internal static partial class Peripherals
     private static Peripheral Answered(Peripheral card, Func<bool> gameRunning)
     {
         var color = card is { Connection: "usb", VendorId: 0x054C, ProductId: 0x0CE6 or 0x0DF2 };
-        var layout = card is { Kind: "keyboard", Connection: "usb", VendorId: 0x31E3 };
+        var layout = card is { Kind: "keyboard", Connection: "usb" } && WootingKeyboard.IsWootingIds(card.VendorId, card.ProductId);
         if (!color && !layout || card.Source is not { } source) return card;
         // One serial that didn't read (three seconds with a busy PC at Exo's start) must not last until the next unplug: the
         // color, and everything Exo saved for this controller, hang on it.
@@ -194,7 +194,11 @@ internal static partial class Peripherals
                         learned = tries > 0 && known.Unit is not null;
                         if (known.Unit is null) AppLog.Warn("Devices: a controller's serial didn't read; Exo asks again.");
                     }
-                    else known = (Bounded(() => WootingConfig(card) is { } config && LayoutByte(config) is { } value ? LayoutOf(value) : null), null, 0, 0);
+                    else
+                    {
+                        var v1 = card.VendorId == WootingKeyboard.LegacyVendorId;
+                        known = (Bounded(() => WootingConfig(card) is { } config && LayoutByte(config, v1) is { } value ? LayoutOf(value) : null), null, 0, 0);
+                    }
                     Answers[source] = known;
                 }
             if (learned) ControllerKnown?.Invoke();
@@ -265,7 +269,7 @@ internal static partial class Peripherals
         {
             var n = reader.ReadAsync(report, limit.Token).AsTask().GetAwaiter().GetResult();
             if (n <= 0) continue;
-            if (numbered && report[0] == 1) return report[..n];
+            if (numbered && report[0] is >= 1 and <= 6 && n >= 4 && report[1] == 0xD1 && report[2] == 0xDA && report[3] == 19) return report[..n];
             if (!numbered && report[0] == 0) answer.AddRange(report[1..n]);
         }
         return [.. answer];
