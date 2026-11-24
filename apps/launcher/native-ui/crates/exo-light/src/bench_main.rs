@@ -76,10 +76,10 @@ fn build_mock_rig() -> LightManager {
     )));
     mgr.add_device(Box::new(MockLampTransport::new(
         LightDeviceInfo {
-            id: "mock:smbus-ram".into(),
-            name: "Mock DDR5 RGB (PawnIO)".into(),
+            id: "mock:hid-strip".into(),
+            name: "Mock USB HID Desk Strip".into(),
             vendor: "MockVendor".into(),
-            tier: DeviceTier::SmbusPawnIo,
+            tier: DeviceTier::UsbHid,
             zone_count: 16,
             wireless: false,
         },

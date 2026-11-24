@@ -1,5 +1,6 @@
 pub mod auto_context;
 pub mod effects;
+#[cfg(feature = "smbus-rgb")]
 pub mod smbus_pawnio;
 pub mod transport;
 pub mod usb_hid_rgb;
@@ -7,7 +8,22 @@ pub mod win11_lamparray;
 
 use auto_context::{AutoContextConfig, ContextState, resolve_context};
 use effects::{EffectMode, render_frame};
-use transport::{LightDevice, Rgb8};
+use transport::{DeviceTier, LightDevice, Rgb8};
+
+pub fn available_device_tiers() -> Vec<DeviceTier> {
+    #[cfg(feature = "smbus-rgb")]
+    {
+        vec![
+            DeviceTier::Win11LampArray,
+            DeviceTier::UsbHid,
+            DeviceTier::SmbusPawnIo,
+        ]
+    }
+    #[cfg(not(feature = "smbus-rgb"))]
+    {
+        vec![DeviceTier::Win11LampArray, DeviceTier::UsbHid]
+    }
+}
 
 pub const REPLACED_VENDOR_SERVICES: &[&str] = &[
     "LightingService",
@@ -206,6 +222,15 @@ mod tests {
         mgr.shutdown_restore().unwrap();
         assert_eq!(stats.lock().unwrap().restore_count, 1);
         assert_eq!(stats.lock().unwrap().last_brightness_pct, 80);
+    }
+
+    #[test]
+    fn smbus_tier_is_absent_when_feature_is_off() {
+        let tiers = available_device_tiers();
+        #[cfg(not(feature = "smbus-rgb"))]
+        assert!(!tiers.contains(&DeviceTier::SmbusPawnIo));
+        #[cfg(feature = "smbus-rgb")]
+        assert!(tiers.contains(&DeviceTier::SmbusPawnIo));
     }
 
     #[test]

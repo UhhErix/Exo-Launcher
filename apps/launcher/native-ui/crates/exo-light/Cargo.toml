@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = []
+smbus-rgb = []
+
 [lib]
 name = "exo_light"
 path = "src/lib.rs"
