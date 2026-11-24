@@ -91,11 +91,11 @@ public sealed partial class DependencyService
         IReadOnlySet<string>? needed = null)
     {
         var named = ids is { Count: > 0 } ? new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase) : null;
-        var pool = statuses.Where(s => s.Runtime.Installable && (named is null || mode == "repair" || named.Contains(s.Runtime.Id)));
+        var pool = statuses.Where(s => s.Runtime.Installable && (named is null || named.Contains(s.Runtime.Id)));
         bool Missing(RuntimeStatus s) => s.State == State.Missing && (named is not null || !s.EndOfSupport && Wanted(s, needed));
         var chosen = mode switch
         {
-            "repair" => pool.Where(s => s.Runtime.IsVisualCpp),
+            "repair" => named is not null ? pool : pool.Where(s => s.Runtime.IsVisualCpp),
             "update" => pool.Where(s => Missing(s) || s.State == State.Outdated),
             _ => pool.Where(Missing),
         };

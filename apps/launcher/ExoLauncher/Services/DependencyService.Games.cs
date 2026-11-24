@@ -28,10 +28,24 @@ public sealed partial class DependencyService
         ["228988"] = ["vc14-x86", "vc14-x64"],
         ["228989"] = ["vc14-x86", "vc14-x64"],
         ["228990"] = ["directx"],
+        ["229000"] = ["netfx35"],
+        ["229001"] = ["netfx35"],
+        ["229002"] = ["netfx481"],
+        ["229003"] = ["netfx481"],
+        ["229004"] = ["netfx481"],
+        ["229005"] = ["netfx481"],
+        ["229006"] = ["netfx481"],
+        ["229007"] = ["netfx481"],
+        ["229012"] = ["xna40"],
+        ["229020"] = ["openal"],
+        ["229030"] = ["physx-legacy"],
+        ["229031"] = ["physx-legacy", "physx"],
+        ["229032"] = ["physx"],
+        ["229033"] = ["physx"],
     };
 
     private static readonly string[] RedistFolders =
-        ["_CommonRedist", "CommonRedist", "__redist", "_redist", "Redist", "Redistributables", "_Installer", "__Installer", "Prerequisites", "Prereqs", "Support"];
+        ["_CommonRedist", "CommonRedist", "__redist", "_redist", "Redist", "Redistributables", "_Installer", "__Installer", "Prerequisites", "Prereqs", "Support", Path.Combine("Engine", "Extras", "Redist")];
 
     /// <summary>
     /// The runtimes one hint names. A hint is a path or name from a store's record or a game's redist folder
@@ -136,6 +150,23 @@ public sealed partial class DependencyService
             if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty(game.LaunchTarget, out var install) &&
                 install.TryGetProperty("prereq_info", out var prereq) && prereq.ValueKind == JsonValueKind.Object)
                 foreach (var hint in EpicPrereqHints(prereq, "name", "path")) add(hint, null);
+        }
+        var manifestsDir = EpicClassicManifests.DefaultManifestsDir();
+        if (Directory.Exists(manifestsDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(manifestsDir, "*.item").Take(256))
+            {
+                try
+                {
+                    if (new FileInfo(file).Length > 1024 * 1024) continue;
+                    using var doc = JsonDocument.Parse(File.ReadAllText(file));
+                    if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
+                    if (!doc.RootElement.TryGetProperty("AppName", out var appName) ||
+                        !string.Equals(appName.GetString(), game.LaunchTarget, StringComparison.OrdinalIgnoreCase)) continue;
+                    foreach (var hint in EpicPrereqHints(doc.RootElement, "PrereqName", "PrereqPath")) add(hint, null);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+            }
         }
     }
 

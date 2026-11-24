@@ -94,9 +94,9 @@ public sealed partial class DependencyService
     /// <summary>.NET's Desktop Runtime channels Exo offers: the latest patch comes from Microsoft's release list (DependencyService.Dotnet.cs); these are its fallback.</summary>
     internal static readonly (int Major, string Latest, DateTime EndOfSupport)[] DotnetChannels =
     [
-        (10, "10.0.14", new DateTime(2028, 11, 14)),
-        (9, "9.0.22", new DateTime(2026, 11, 10)),
-        (8, "8.0.33", new DateTime(2026, 11, 10)),
+        (10, "10.0.15", new DateTime(2028, 11, 14)),
+        (9, "9.0.23", new DateTime(2026, 11, 10)),
+        (8, "8.0.34", new DateTime(2026, 11, 10)),
         (6, "6.0.36", new DateTime(2024, 11, 12)),
     ];
 
@@ -138,31 +138,31 @@ public sealed partial class DependencyService
             new("vc2012-x86", "Visual C++ 2012 (x86)", Group.VisualCpp, Kind.Exe, "11.0.61030", new Version(11, 0, 61030),
                 "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe",
                 "B924AD8062EAF4E70437C8BE50FA612162795FF0839479546CE907FFA8D6E386", 6554576, "/install /quiet /norestart", "/repair /quiet /norestart",
-                MicrosoftOnly, 36, s => Uninstall(s, @"^Microsoft Visual C\+\+ 2012 x86 Minimum Runtime")),
+                MicrosoftOnly, 36, s => VcLegacy(s, "vc11:x86", @"^Microsoft Visual C\+\+ 2012 (x86 Minimum Runtime|Redistributable \(x86\))")),
             new("vc2012-x64", "Visual C++ 2012 (x64)", Group.VisualCpp, Kind.Exe, "11.0.61030", new Version(11, 0, 61030),
                 "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe",
                 "681BE3E5BA9FD3DA02C09D7E565ADFA078640ED66A0D58583EFAD2C1E3CC4064", 7186992, "/install /quiet /norestart", "/repair /quiet /norestart",
-                MicrosoftOnly, 37, s => Uninstall(s, @"^Microsoft Visual C\+\+ 2012 x64 Minimum Runtime")),
+                MicrosoftOnly, 37, s => VcLegacy(s, "vc11:x64", @"^Microsoft Visual C\+\+ 2012 (x64 Minimum Runtime|Redistributable \(x64\))")),
             new("vc2013-x86", "Visual C++ 2013 (x86)", Group.VisualCpp, Kind.Exe, "12.0.40664", new Version(12, 0, 40664),
                 "https://download.visualstudio.microsoft.com/download/pr/10912113/5da66ddebb0ad32ebd4b922fd82e8e25/vcredist_x86.exe",
                 "53B605D1100AB0A88B867447BBF9274B5938125024BA01F5105A9E178A3DCDBD", 6510136, "/install /quiet /norestart", "/repair /quiet /norestart",
-                MicrosoftOnly, 38, s => Uninstall(s, @"^Microsoft Visual C\+\+ 2013 x86 Minimum Runtime")),
+                MicrosoftOnly, 38, s => VcLegacy(s, "vc12:x86", @"^Microsoft Visual C\+\+ 2013 (x86 Minimum Runtime|Redistributable \(x86\))")),
             new("vc2013-x64", "Visual C++ 2013 (x64)", Group.VisualCpp, Kind.Exe, "12.0.40664", new Version(12, 0, 40664),
                 "https://download.visualstudio.microsoft.com/download/pr/10912041/cee5d6bca2ddbcd039da727bf4acb48a/vcredist_x64.exe",
                 "A4BBA7701E355AE29C403431F871A537897C363E215CAFE706615E270984F17C", 7200744, "/install /quiet /norestart", "/repair /quiet /norestart",
-                MicrosoftOnly, 39, s => Uninstall(s, @"^Microsoft Visual C\+\+ 2013 x64 Minimum Runtime")),
+                MicrosoftOnly, 39, s => VcLegacy(s, "vc12:x64", @"^Microsoft Visual C\+\+ 2013 (x64 Minimum Runtime|Redistributable \(x64\))")),
             // v14 covers every program built with Visual Studio 2015 to 2026: the build aka.ms/vc14 (Microsoft's "latest supported") serves.
-            new("vc14-x86", "Visual C++ 2015–2026 (x86)", Group.VisualCpp, Kind.Exe, "14.51.36247.0", new Version(14, 51, 36247, 0),
-                "https://download.visualstudio.microsoft.com/download/pr/57eef8ae-a341-46c3-b0bc-c041027b54cd/F0BAB33A302B3CDB2E11113760D016F54FD3D2632C65BA7834FAC4F0ABD7F1A3/VC_redist.x86.exe",
-                "F0BAB33A302B3CDB2E11113760D016F54FD3D2632C65BA7834FAC4F0ABD7F1A3", 6941536, "/install /quiet /norestart", "/repair /quiet /norestart",
+            new("vc14-x86", "Visual C++ 2015–2026 (x86)", Group.VisualCpp, Kind.Exe, "14.52.37029.0", new Version(14, 52, 37029, 0),
+                "https://download.visualstudio.microsoft.com/download/pr/78d061c5-9ef3-42ab-98ed-3309d1095dc4/7B0117E6E20E9E349029C000A8A2715A52CF37C15B6BB697B2908E8BC7066CDF/VC_redist.x86.exe",
+                "7B0117E6E20E9E349029C000A8A2715A52CF37C15B6BB697B2908E8BC7066CDF", 6919464, "/install /quiet /norestart", "/repair /quiet /norestart",
                 MicrosoftOnly, 40, s => Vc14(s, "x86", "wow:vcruntime140.dll")),
-            new("vc14-x64", "Visual C++ 2015–2026 (x64)", Group.VisualCpp, Kind.Exe, "14.51.36247.0", new Version(14, 51, 36247, 0),
-                "https://download.visualstudio.microsoft.com/download/pr/ebdab8e5-1d7b-4d9f-a11b-cbb1720c3b12/843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C/VC_redist.x64.exe",
-                "843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C", 18731856, "/install /quiet /norestart", "/repair /quiet /norestart",
+            new("vc14-x64", "Visual C++ 2015–2026 (x64)", Group.VisualCpp, Kind.Exe, "14.52.37029.0", new Version(14, 52, 37029, 0),
+                "https://download.visualstudio.microsoft.com/download/pr/78d061c5-9ef3-42ab-98ed-3309d1095dc4/9C02C9ED120F671B900E6B9471D890E3B2414117A7E53F4AE2E855466FA2B7C9/VC_redist.x64.exe",
+                "9C02C9ED120F671B900E6B9471D890E3B2414117A7E53F4AE2E855466FA2B7C9", 18863624, "/install /quiet /norestart", "/repair /quiet /norestart",
                 MicrosoftOnly, 41, s => Vc14(s, "x64", s.Arm64 ? null : "sys:vcruntime140.dll")),
-            new("vc14-arm64", "Visual C++ 2015–2026 (Arm64)", Group.VisualCpp, Kind.Exe, "14.51.36247.0", new Version(14, 51, 36247, 0),
-                "https://download.visualstudio.microsoft.com/download/pr/57eef8ae-a341-46c3-b0bc-c041027b54cd/B70EF586669A620A0A30A1156969C05C6A3831DC8F8BC992DA75779D2A92F944/VC_redist.arm64.exe",
-                "B70EF586669A620A0A30A1156969C05C6A3831DC8F8BC992DA75779D2A92F944", 11870816, "/install /quiet /norestart", "/repair /quiet /norestart",
+            new("vc14-arm64", "Visual C++ 2015–2026 (Arm64)", Group.VisualCpp, Kind.Exe, "14.52.37029.0", new Version(14, 52, 37029, 0),
+                "https://download.visualstudio.microsoft.com/download/pr/78d061c5-9ef3-42ab-98ed-3309d1095dc4/3C81BCF5B06156858362400D7066F65ECE38E8ACCB5E687FC65BEF5735F31FFC/VC_redist.arm64.exe",
+                "3C81BCF5B06156858362400D7066F65ECE38E8ACCB5E687FC65BEF5735F31FFC", 11967280, "/install /quiet /norestart", "/repair /quiet /norestart",
                 MicrosoftOnly, 42, s => Vc14(s, "arm64", null), s => s.Arm64),
 
             // DirectX. The June 2010 package is what every DirectX 9, 10 and 11 game's own installer runs (D3DX, XInput 1.3,
@@ -173,7 +173,7 @@ public sealed partial class DependencyService
                 MicrosoftOnly, 60, DirectXLegacy),
             new("gameinput", "GameInput", Group.DirectX, Kind.Zip, "4.0.306", new Version(4, 0, 306),
                 "https://globalcdn.nuget.org/packages/microsoft.gameinput.4.0.306.nupkg",
-                "B7FACB296FD0EAED20B3D60DCA5345A5FCFA674398B34D6F0DBC2793D502E3C1", 4828711, "/qn /norestart", null,
+                "B7FACB296FD0EAED20B3D60DCA5345A5FCFA674398B34D6F0DBC2793D502E3C1", 4828711, "/qn /norestart", "/qn /norestart REINSTALL=ALL REINSTALLMODE=vomus",
                 MicrosoftOnly, 120, s => Uninstall(s, @"^Microsoft GameInput$"), Entry: "redist/GameInputRedist.msi"),
             new("d3d12", "DirectX 12", Group.DirectX, Kind.Info, "Built into Windows", null, null, null, 0, "", null, [], 0, _ => null),
             new("directstorage", "DirectStorage", Group.DirectX, Kind.Info, "Inside the games that use it", null, null, null, 0, "", null, [], 0, _ => null),
@@ -204,7 +204,7 @@ public sealed partial class DependencyService
         [
             new("xna40", "XNA Framework 4.0", Group.Other, Kind.Msi, "4.0.30901.0", new Version(4, 0, 30901, 0),
                 "https://download.microsoft.com/download/5/3/A/53A804C8-EC78-43CD-A0F0-2FB4D45603D3/xnafx40_redist.msi",
-                "2B03C130C4BB5F106B9619BEA8150201F7E982709CFE9A0CC8BDE75FF0A83B27", 7059456, "/qn /norestart", null,
+                "2B03C130C4BB5F106B9619BEA8150201F7E982709CFE9A0CC8BDE75FF0A83B27", 7059456, "/qn /norestart", "/qn /norestart REINSTALL=ALL REINSTALLMODE=vomus",
                 MicrosoftOnly, 90, s => Uninstall(s, @"^Microsoft XNA Framework Redistributable 4\.0")),
             // Creative's OpenAL installer, from openal.org (Creative's site for it): signed by Creative Labs.
             new("openal", "OpenAL", Group.Other, Kind.Zip, "2.0.7.0", null,
@@ -221,7 +221,7 @@ public sealed partial class DependencyService
                 ["NVIDIA Corporation"], 110, s => Uninstall(s, @"^NVIDIA PhysX System Software \d", exclude: PhysXLegacyCode), s => s.Nvidia),
             new("physx-legacy", "PhysX Legacy", Group.Other, Kind.Msi, "9.13.0604", new Version(9, 13, 604),
                 "https://us.download.nvidia.com/Windows/9.13.0604/PhysX-9.13.0604-SystemSoftware-Legacy.msi",
-                "2B78DF4A9004F5C4220D62C363709E5AC5E2E58DF9F2284DF0254CBFA4970D91", 20154368, "/qn /norestart", null,
+                "2B78DF4A9004F5C4220D62C363709E5AC5E2E58DF9F2284DF0254CBFA4970D91", 20154368, "/qn /norestart", "/qn /norestart REINSTALL=ALL REINSTALLMODE=vomus",
                 ["NVIDIA Corporation"], 111, s => s.Uninstall.FirstOrDefault(e => e.Key.Equals(PhysXLegacyCode, StringComparison.OrdinalIgnoreCase)) is { } legacy
                     ? new Found(legacy.Version ?? "9.13.0604", Parse(legacy.Version)) : null, s => s.Nvidia),
             // WebView2 keeps itself current through Edge Update: its bootstrapper, checked against Microsoft's signature.
@@ -260,10 +260,36 @@ public sealed partial class DependencyService
 
     private static Found? Vc2005(Snapshot s, bool x64)
     {
-        var found = Uninstall(s, x64 ? @"^Microsoft Visual C\+\+ 2005 Redistributable \(x64\)$" : @"^Microsoft Visual C\+\+ 2005 Redistributable( \(x86\))?$");
+        var found = Uninstall(s, x64
+            ? @"^Microsoft Visual C\+\+ 2005 Redistributable \(x64\)( - \d[\d.]*)?$"
+            : @"^Microsoft Visual C\+\+ 2005 Redistributable( \(x86\))?( - \d[\d.]*)?$");
+        if (found is null)
+        {
+            string[] codes = x64
+                ? ["{ad8a2fa1-06e7-4b0d-927d-6e54b3d31028}", "{6ce5bae9-d3ca-4b99-891a-1dc6c118a5fc}", "{071c9b48-7c32-4621-a0ac-3f809523288f}"]
+                : ["{710f4c1c-cc18-4c49-8cbf-51240c89a1a2}", "{837b34e3-7c30-493c-8f6a-2b0f04e2912c}", "{7299052b-02a4-4627-81f2-1818da5d550d}"];
+            var byCode = s.Uninstall
+                .Where(e => codes.Any(c => e.Key.Equals(c, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(e => Parse(e.Version))
+                .FirstOrDefault();
+            if (byCode is not null) found = new Found(byCode.Version ?? "Installed", Parse(byCode.Version));
+        }
         if (found?.Comparable is not { } msi) return found;
         var key = $"{msi.Major}.{msi.Minor}.{msi.Build}";
         return found with { Shown = Vc2005Shown.GetValueOrDefault(key, found.Shown) };
+    }
+
+    private static Found? VcLegacy(Snapshot s, string valueKey, string pattern)
+    {
+        var fromUninstall = Uninstall(s, pattern);
+        var fromRegistry = s.Values.GetValueOrDefault(valueKey) is { Length: > 0 } regVersion
+            ? new Found(Parse(regVersion)?.ToString() ?? regVersion, Parse(regVersion))
+            : null;
+        if (fromUninstall is null) return fromRegistry;
+        if (fromRegistry is null) return fromUninstall;
+        return fromRegistry.Comparable is { } reg && (fromUninstall.Comparable is null || reg > fromUninstall.Comparable)
+            ? fromRegistry
+            : fromUninstall;
     }
 
     private static Found? FileVersion(Snapshot s, string file) =>
@@ -422,6 +448,22 @@ public sealed partial class DependencyService
         Read("sys:", system, "vulkan-1.dll", version: true);
 
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (major, prefix) in new[] { ("11.0", "vc11:"), ("12.0", "vc12:") })
+        {
+            foreach (var arch in new[] { "x64", "x86" })
+            {
+                foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+                {
+                    var installed = ReadValue(view, $@"SOFTWARE\Microsoft\VisualStudio\{major}\VC\Runtimes\{arch}", "Installed");
+                    if (installed is int one && one == 1 && ReadValue(view, $@"SOFTWARE\Microsoft\VisualStudio\{major}\VC\Runtimes\{arch}", "Version") is string version)
+                    {
+                        var existing = values.GetValueOrDefault(prefix + arch);
+                        if (existing is null || (Parse(version) is { } next && (Parse(existing) is null || next > Parse(existing))))
+                            values[prefix + arch] = version;
+                    }
+                }
+            }
+        }
         foreach (var (arch, view) in new[] { ("x64", RegistryView.Registry64), ("x86", RegistryView.Registry32), ("arm64", RegistryView.Registry64) })
         {
             var installed = ReadValue(view, $@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\{arch}", "Installed");
