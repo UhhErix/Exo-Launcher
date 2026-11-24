@@ -42,6 +42,12 @@ public sealed partial class DlssSwapService
             // A game started without its anti-cheat gets it only for a session Exo starts (ForSessionAtLaunch).
             if (AntiCheatCheck.ChoseWithoutAntiCheat(game)) continue;
             if (ResolveInstallRoot(game.Path) is not { } root || IsGameRunning(game, root)) continue;
+            if (GameSettings.IsWutheringWavesEntry(game) || GameSettings.IsWutheringWaves(game))
+            {
+                if (ApplyWuWaNativeFrameGenConfig(game, gpu))
+                    added++;
+                continue;
+            }
             // The state table (FrameGenDecide) says what happens next; Best settings acts on PutBack and PutIn.
             FrameGenNext next;
             try
@@ -108,6 +114,83 @@ public sealed partial class DlssSwapService
         // Last, so a take-out above leaves nothing kept off either: a record Exo keeps of another mod's file over its
         // loader still says so on the game's line.
         ForgetKeptOff();
+    }
+
+    internal static bool ApplyWuWaNativeFrameGenConfig(GameEntry game, string? gpu, string? routeId = null)
+    {
+        var root = ResolveInstallRoot(game.Path);
+        if (root is null) return false;
+        var clientRoot = Directory.Exists(Path.Combine(root, "Wuthering Waves Game", "Client"))
+            ? Path.Combine(root, "Wuthering Waves Game")
+            : root;
+        var dbPath = Path.Combine(clientRoot, "Client", "Saved", "LocalStorage", "LocalStorage.db");
+        var engineIni = Path.Combine(clientRoot, "Client", "Saved", "Config", "WindowsNoEditor", "Engine.ini");
+        var card = FrameGenCardFor(gpu);
+        var isDlss = string.Equals(routeId, FrameGenRouter.RouteNativeDlss, StringComparison.OrdinalIgnoreCase)
+            || (routeId is null && card is { DlssFrameGen: true });
+        var isXess = string.Equals(routeId, FrameGenRouter.RouteNativeXess, StringComparison.OrdinalIgnoreCase)
+            || (routeId is null && card is { Vendor: "intel" });
+
+        var dbPairs = new Dictionary<string, string>(StringComparer.Ordinal);
+        var iniPairs = new List<(string Key, string Value)>();
+        if (isDlss)
+        {
+            dbPairs["NvidiaSuperSamplingEnable"] = "1";
+            dbPairs["NvidiaSuperSamplingQuality"] = "3";
+            dbPairs["NvidiaSuperSamplingFrameGeneration"] = "1";
+            iniPairs.Add(("t.Streamline.DLSSG.Enable", "1"));
+            iniPairs.Add(("t.Streamline.Reflex.Mode", "1"));
+        }
+        else if (isXess)
+        {
+            dbPairs["XessEnable"] = "1";
+            iniPairs.Add(("r.XeSS.FG.Enabled", "1"));
+            iniPairs.Add(("r.XeLL.Enabled", "1"));
+        }
+        else
+        {
+            if (card is { Vendor: "nvidia" })
+            {
+                dbPairs["NvidiaSuperSamplingEnable"] = "1";
+                dbPairs["NvidiaSuperSamplingQuality"] = "3";
+                iniPairs.Add(("t.Streamline.Reflex.Mode", "1"));
+            }
+            dbPairs["FsrEnable"] = "1";
+            iniPairs.Add(("r.FidelityFX.FI.Enabled", "1"));
+            iniPairs.Add(("r.FidelityFX.FSR3.Enabled", "1"));
+        }
+
+        var changed = false;
+        if (File.Exists(dbPath))
+        {
+            var needed = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (key, value) in dbPairs)
+            {
+                if (!string.Equals(GameGraphicsFeatures.ReadWuWaLocalStorageValue(dbPath, key), value, StringComparison.Ordinal))
+                    needed[key] = value;
+            }
+            if (needed.Count > 0)
+            {
+                GameGraphicsFeatures.WriteWuWaLocalStorage(dbPath, needed);
+                changed = true;
+            }
+        }
+
+        var iniDir = Path.GetDirectoryName(engineIni);
+        if (!string.IsNullOrEmpty(iniDir) && Directory.Exists(iniDir))
+        {
+            var before = File.Exists(engineIni) ? File.ReadAllText(engineIni) : "";
+            var updated = before;
+            foreach (var (key, value) in iniPairs)
+                updated = SetIniValue(updated, "SystemSettings", key, value);
+            if (!string.Equals(before, updated, StringComparison.Ordinal))
+            {
+                File.WriteAllText(engineIni, updated);
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
     private static Action? _frameGenEverywhereSoon;

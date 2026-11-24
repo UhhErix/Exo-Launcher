@@ -64,43 +64,50 @@ public sealed class FrameGenRouterTests
             ShipsFsrFg: true,
             ShipsXessFg: true,
             ShipsXessFgDll: true,
-            ModStatus: new DlssSwapService.FrameGenStatus("native", AntiCheat: "Anti-Cheat Expert"),
+            ModStatus: new DlssSwapService.FrameGenStatus("native", Path: "dlss", Package: "DLSSG SM86", AntiCheat: "Anti-Cheat Expert", CanToggle: true, RiskWarning: AntiCheatClass.BanRiskConfirmation("Wuthering Waves", "Anti-Cheat Expert")),
             FluidFacts: SinglePlayerFacts("Wuthering Waves"),
             SmoothMotionEnabled: smoothOn,
             IntelXessOverride: intelOverride,
             Dx12Mode: dx12Mode);
 
     [Fact]
-    public void WuWaOnRtx4070PrefersNativeDlssThenSmoothMotionWithNoModRoute()
+    public void WuWaOnRtx4070PrefersNativeConfigThenSmoothMotionWithOptInModFallback()
     {
         var decision = Decide(Rtx4070(), WuWaInput());
 
         Assert.NotEqual("hidden", decision.State);
         Assert.Equal(RouteNativeDlss, decision.BestRouteId);
-        Assert.Contains("DLSS", decision.Word, StringComparison.Ordinal);
+        Assert.True(decision.Routes[0].AutoEnable);
         var ids = decision.Routes.Select(r => r.Id).ToList();
-        var dlssIdx = ids.IndexOf(RouteNativeDlss);
-        var smIdx = ids.IndexOf(RouteDriverSmoothMotion);
-        Assert.True(dlssIdx >= 0 && smIdx > dlssIdx);
-        Assert.DoesNotContain(decision.Routes, r => r.Tier == TierMod);
+        Assert.True(ids.IndexOf(RouteDriverSmoothMotion) > ids.IndexOf(RouteNativeDlss));
+        var mod = Assert.Single(decision.Routes, r => r.Tier == TierMod);
+        Assert.True(mod.Selectable);
+        Assert.False(mod.AutoEnable);
+        Assert.True(mod.RequiresRiskConfirm);
+        Assert.Equal(AntiCheatClass.BanRiskConfirmation("Wuthering Waves", "Anti-Cheat Expert"), mod.RiskWarning);
         AssertAllRouteMetadataPresent(decision);
     }
 
     [Fact]
-    public void WuWaOnRtx3070PrefersNativeFsrAndXessWithNoDllModFallback()
+    public void WuWaOnRtx3070PrefersNativeFsrConfigByDefaultWithOptInDlssgSm86BehindBanRiskConfirm()
     {
         var decision = Decide(Rtx3070(smoothDriver: true), WuWaInput());
 
         Assert.Equal(RouteNativeFsr, decision.BestRouteId);
+        Assert.True(decision.Routes[0].AutoEnable);
         Assert.Contains(decision.Routes, r => r.Id == RouteNativeXess);
         Assert.DoesNotContain(decision.Routes, r => r.Id == RouteNativeDlss);
         Assert.DoesNotContain(decision.Routes, r => r.Id == RouteDriverSmoothMotion);
-        Assert.DoesNotContain(decision.Routes, r => r.Tier == TierMod);
+        var mod = Assert.Single(decision.Routes, r => r.Id == RouteModDlssg);
+        Assert.True(mod.Selectable);
+        Assert.False(mod.AutoEnable);
+        Assert.True(mod.RequiresRiskConfirm);
+        Assert.Equal(AntiCheatClass.BanRiskConfirmation("Wuthering Waves", "Anti-Cheat Expert"), mod.RiskWarning);
         AssertAllRouteMetadataPresent(decision);
     }
 
     [Fact]
-    public void WuWaOnRtx3070Dx11ShowsModsWouldGetYouBannedWithNoModRoute()
+    public void WuWaOnRtx3070Dx11OffersOptInModBehindBanRiskConfirmation()
     {
         var decision = Decide(Rtx3070(), WuWaInput(dx12Mode: false) with
         {
@@ -108,33 +115,33 @@ public sealed class FrameGenRouterTests
             ShipsFsrFg = false,
             ShipsXessFg = false,
             ShipsXessFgDll = false,
-            ModStatus = new DlssSwapService.FrameGenStatus("note", AntiCheat: "Anti-Cheat Expert", Note: FrameGenAntiCheat.OnlineBlockedMessage),
+            ModStatus = new DlssSwapService.FrameGenStatus("off", Path: "optifg", Package: "OptiScaler FG", AntiCheat: "Anti-Cheat Expert", CanToggle: true, RiskWarning: AntiCheatClass.BanRiskConfirmation("Wuthering Waves", "Anti-Cheat Expert")),
         });
 
-        Assert.Equal(RouteUnavailable, decision.BestRouteId);
-        Assert.Equal("unavailable", decision.State);
-        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, decision.Word);
-        Assert.DoesNotContain(decision.Routes, r => r.Tier == TierMod);
-        Assert.Contains("DirectX 12", decision.HowToEnable ?? "", StringComparison.Ordinal);
+        Assert.Equal(RouteModOptiScaler, decision.BestRouteId);
+        var mod = Assert.Single(decision.Routes, r => r.Tier == TierMod);
+        Assert.True(mod.Selectable);
+        Assert.False(mod.AutoEnable);
+        Assert.True(mod.RequiresRiskConfirm);
+        Assert.Equal(AntiCheatClass.BanRiskConfirmation("Wuthering Waves", "Anti-Cheat Expert"), mod.RiskWarning);
         AssertAllRouteMetadataPresent(decision);
     }
 
     [Fact]
-    public void WuWaOnRx6700PrefersNativeFsrThenAfmfWithNoModRoute()
+    public void WuWaOnRx6700PrefersNativeFsrThenAfmfWithOptInModFallback()
     {
         var decision = Decide(Rx6700(), WuWaInput());
 
         Assert.Equal(RouteNativeFsr, decision.BestRouteId);
+        Assert.True(decision.Routes[0].AutoEnable);
         var ids = decision.Routes.Select(r => r.Id).ToList();
-        var fsrIdx = ids.IndexOf(RouteNativeFsr);
-        var afmfIdx = ids.IndexOf(RouteDriverAfmf);
-        Assert.True(fsrIdx >= 0 && afmfIdx > fsrIdx);
-        Assert.DoesNotContain(decision.Routes, r => r.Tier == TierMod);
+        Assert.True(ids.IndexOf(RouteDriverAfmf) > ids.IndexOf(RouteNativeFsr));
+        Assert.Contains(decision.Routes, r => r.Tier == TierMod && r.RequiresRiskConfirm && !r.AutoEnable);
         AssertAllRouteMetadataPresent(decision);
     }
 
     [Fact]
-    public void WuWaOnArcPrefersNativeXessWithIntelOverrideAndNoModRoute()
+    public void WuWaOnArcPrefersNativeXessWithIntelOverrideAndOptInModFallback()
     {
         var decision = Decide(ArcB580(), WuWaInput(intelOverride: "2x"));
 
@@ -142,27 +149,26 @@ public sealed class FrameGenRouterTests
         var xessOverride = Assert.Single(decision.Routes, r => r.Id == RouteDriverXessOverride);
         Assert.Equal("2x", xessOverride.ChoiceValue);
         Assert.Equal(["game", "2x", "3x", "4x"], xessOverride.Choices);
-        Assert.DoesNotContain(decision.Routes, r => r.Tier == TierMod);
+        Assert.Contains(decision.Routes, r => r.Tier == TierMod && r.RequiresRiskConfirm && !r.AutoEnable);
         AssertAllRouteMetadataPresent(decision);
     }
 
     [Fact]
-    public void WuWaOnRx5700AndGtx1660ShowsModsWouldGetYouBannedWithNoModRoute()
+    public void WuWaOnRx5700AndGtx1660OffersOptInModBehindBanRiskConfirm()
     {
         var rx5700 = Decide(Rx5700(), WuWaInput());
-        Assert.Equal(RouteUnavailable, rx5700.BestRouteId);
-        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, rx5700.Word);
-        Assert.DoesNotContain(rx5700.Routes, r => r.Tier == TierMod);
+        Assert.Contains(rx5700.Routes, r => r.Tier == TierMod && r.RequiresRiskConfirm && !r.AutoEnable);
 
         var gtx = Decide(Gtx1660(), WuWaInput());
-        Assert.Equal(RouteUnavailable, gtx.BestRouteId);
-        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, gtx.Word);
-        Assert.DoesNotContain(gtx.Routes, r => r.Tier == TierMod);
+        var mod = Assert.Single(gtx.Routes, r => r.Tier == TierMod);
+        Assert.True(mod.RequiresRiskConfirm);
+        Assert.False(mod.AutoEnable);
+        Assert.Equal(AntiCheatClass.BanRiskConfirmation("Wuthering Waves", "Anti-Cheat Expert"), mod.RiskWarning);
         AssertAllRouteMetadataPresent(gtx);
     }
 
     [Fact]
-    public void TierBOptiScalerAutoEnablesOnlyOnCleanGamesAndBlocksOnlineAntiCheatGames()
+    public void TierBOptiScalerAutoEnablesOnlyOnCleanGamesAndDisallowsUnlistedAntiCheatGames()
     {
         var cleanGame = new FrameGenGameInput(
             GameId: "steam:1091500",
@@ -200,7 +206,7 @@ public sealed class FrameGenRouterTests
     }
 
     [Fact]
-    public void TierCDriverSmoothMotionGatedToRtx40PlusAndShowsModsWouldGetYouBannedOnRtx30WithAntiCheat()
+    public void TierCDriverSmoothMotionGatedToRtx40PlusAndOfflineAcRequiresOfficialOfflineModeOnRtx30()
     {
         var eldenRing = new FrameGenGameInput(
             GameId: "steam:1245620",
@@ -227,11 +233,11 @@ public sealed class FrameGenRouterTests
         Assert.Equal(RouteDriverSmoothMotion, rtx5080Supported.BestRouteId);
         Assert.DoesNotContain(rtx5080Supported.Routes, r => r.Tier == TierMod);
 
-        var rtx3070Blocked = Decide(Rtx3070(smoothDriver: true), eldenRing);
-        Assert.DoesNotContain(rtx3070Blocked.Routes, r => r.Id == RouteDriverSmoothMotion);
-        Assert.DoesNotContain(rtx3070Blocked.Routes, r => r.Tier == TierMod);
-        Assert.Equal(RouteUnavailable, rtx3070Blocked.BestRouteId);
-        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, rtx3070Blocked.Word);
+        var rtx3070ActiveEac = Decide(Rtx3070(smoothDriver: true), eldenRing);
+        Assert.DoesNotContain(rtx3070ActiveEac.Routes, r => r.Id == RouteDriverSmoothMotion);
+        Assert.DoesNotContain(rtx3070ActiveEac.Routes, r => r.Tier == TierMod);
+        Assert.Equal(RouteUnavailable, rtx3070ActiveEac.BestRouteId);
+        Assert.Contains("official offline", rtx3070ActiveEac.HowToEnable ?? "", StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -268,7 +274,6 @@ public sealed class FrameGenRouterTests
         Assert.DoesNotContain(arcNoXessDll.Routes, r => r.Id == RouteDriverXessOverride);
         Assert.DoesNotContain(arcNoXessDll.Routes, r => r.Tier == TierMod);
         Assert.Equal(RouteUnavailable, arcNoXessDll.BestRouteId);
-        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, arcNoXessDll.Word);
 
         var arcWithXessDll = Decide(ArcB580(), eldenRing with { ShipsXessFg = true, ShipsXessFgDll = true });
         Assert.Contains(arcWithXessDll.Routes, r => r.Id == RouteDriverXessOverride);
@@ -341,8 +346,9 @@ public sealed class FrameGenRouterTests
         var offlineRoute = Assert.Single(offlineDecision.Routes, r => r.Id == RouteModOptiScaler);
         Assert.True(offlineRoute.Selectable);
         Assert.False(offlineRoute.AutoEnable);
+        Assert.False(offlineRoute.RequiresRiskConfirm);
         Assert.Equal("offline", offlineRoute.AntiCheatVerdict);
-        Assert.Contains("official offline", offlineRoute.AntiCheatNote, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(AntiCheatClass.OfflineOneTimeNote("NBA 2K26"), offlineRoute.AntiCheatNote);
 
         var dx9Game = new FrameGenGameInput(
             GameId: "steam:220",

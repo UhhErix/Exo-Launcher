@@ -63,61 +63,60 @@ public sealed class FrameGenMatrixAndAntiCheatTests
     }
 
     [Fact]
-    public void WutheringWavesOnRtx3070GetsNativeBuiltInOnlyWithNoDlssgSm86Fallback()
+    public void WutheringWavesUsesSharedAntiCheatClassPveWithNativeFirstAndOptInDlssgFallback()
     {
         var rtx30 = FrameGenCardFor("NVIDIA GeForce RTX 3070");
         var wuwa = new GameEntry { Id = "steam:3513350", Title = "Wuthering Waves", Store = StoreKind.Steam };
         var layout = Game(dlssg: true, major: 310, own: true, streamline: 2, antiCheat: "Anti-Cheat Expert");
 
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(wuwa, "Anti-Cheat Expert"));
-        Assert.True(FrameGenAntiCheat.BlocksDllMods(wuwa, "Anti-Cheat Expert"));
-        Assert.True(FrameGenAntiCheat.BlocksDllMods(wuwa, null));
+        Assert.Equal(GameAntiCheatClass.OnlineNonCompetitivePve, FrameGenAntiCheat.Classify(wuwa, "Anti-Cheat Expert"));
+        Assert.Equal(DllModPolicy.OptInWithBanRiskConfirmation, FrameGenAntiCheat.PolicyFor(wuwa, "Anti-Cheat Expert"));
+        Assert.False(FrameGenAntiCheat.IsDllDisallowed(wuwa, "Anti-Cheat Expert"));
+        Assert.True(FrameGenAntiCheat.IsDllOptInWithConsent(wuwa, "Anti-Cheat Expert"));
+
         Assert.Equal("native", FrameGenPath(rtx30, layout, wuwa));
-        Assert.Null(FrameGenModFallbackPath(rtx30, layout, wuwa));
+        Assert.Equal("dlss", FrameGenModFallbackPath(rtx30, layout, wuwa));
 
         var verdict = FrameGenDecide(new DlssSwapService.FrameGenFacts(
             Readable: true,
             Wanted: "native",
             Native: true,
             AntiCheat: "Anti-Cheat Expert",
+            RiskWarning: AntiCheatClass.BanRiskConfirmation(wuwa.Title, "Anti-Cheat Expert"),
             FallbackPath: FrameGenModFallbackPath(rtx30, layout, wuwa)));
         Assert.Equal("native", verdict.Status.State);
-        Assert.Null(verdict.Status.Path);
-        Assert.False(verdict.Status.CanToggle);
+        Assert.Equal("dlss", verdict.Status.Path);
+        Assert.Equal("DLSSG SM86", verdict.Status.Package);
+        Assert.True(verdict.Status.CanToggle);
+        Assert.Equal(AntiCheatClass.BanRiskConfirmation("Wuthering Waves", "Anti-Cheat Expert"), verdict.Status.RiskWarning);
         Assert.Equal(FrameGenNext.Nothing, verdict.Next);
     }
 
     [Fact]
-    public void OnlineAndUnknownAntiCheatGamesGetNoDllRouteAndShowModsWouldGetYouBanned()
+    public void CompetitivePvpAndUnknownAntiCheatGamesDelegateToSharedTableAndDisallowDllMods()
     {
         var rtx30 = FrameGenCardFor("NVIDIA GeForce RTX 3070");
         var valorant = new GameEntry { Id = "riot:valorant", Title = "VALORANT", Store = StoreKind.Riot };
-        var cod = new GameEntry { Id = "steam:1938090", Title = "Call of Duty", Store = StoreKind.Steam };
+        var cod = new GameEntry { Id = "steam:1938090", Title = "Call of Duty: Modern Warfare 4", Store = StoreKind.Steam };
         var fortnite = new GameEntry { Id = "epic:fortnite", Title = "Fortnite", Store = StoreKind.Epic };
         var roblox = new GameEntry { Id = "roblox:player", Title = "Roblox", Store = StoreKind.Roblox };
-        var wuwa = new GameEntry { Id = "steam:3513350", Title = "Wuthering Waves", Store = StoreKind.Steam };
-        var elden = new GameEntry { Id = "steam:1245620", Title = "ELDEN RING", Store = StoreKind.Steam };
         var cs2 = new GameEntry { Id = "steam:730", Title = "Counter-Strike 2", Store = StoreKind.Steam };
-        var nba = new GameEntry { Id = "steam:3472040", Title = "NBA 2K26", Store = StoreKind.Steam };
         var clean = new GameEntry { Id = "steam:1620730", Title = "Hell is Us", Store = StoreKind.Steam };
 
-        Assert.Equal(FrameGenAntiCheatVerdict.DllSafe, FrameGenAntiCheat.Evaluate(clean, null));
-        Assert.Equal(FrameGenAntiCheatVerdict.OfflineOfficialOnly, FrameGenAntiCheat.Evaluate(nba, "Easy Anti-Cheat"));
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(valorant, RiotVanguard));
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(cod, "Ricochet"));
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(fortnite, "Easy Anti-Cheat"));
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(roblox, "Hyperion"));
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(wuwa, "Anti-Cheat Expert"));
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(elden, "Easy Anti-Cheat"));
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(cs2, "Valve Anti-Cheat"));
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(clean, AntiCheatCheck.Unreadable));
-        Assert.Equal(FrameGenAntiCheatVerdict.OnlineNoMods, FrameGenAntiCheat.Evaluate(clean, "Unknown Custom AC"));
+        Assert.Equal(DllModPolicy.Allowed, FrameGenAntiCheat.PolicyFor(clean, (string?)null));
+        Assert.Equal(DllModPolicy.Disallowed, FrameGenAntiCheat.PolicyFor(valorant, RiotVanguard));
+        Assert.Equal(DllModPolicy.Disallowed, FrameGenAntiCheat.PolicyFor(cod, "Ricochet"));
+        Assert.Equal(DllModPolicy.Disallowed, FrameGenAntiCheat.PolicyFor(fortnite, "Easy Anti-Cheat"));
+        Assert.Equal(DllModPolicy.Disallowed, FrameGenAntiCheat.PolicyFor(roblox, "Hyperion"));
+        Assert.Equal(DllModPolicy.Disallowed, FrameGenAntiCheat.PolicyFor(cs2, "Valve Anti-Cheat"));
+        Assert.Equal(DllModPolicy.Disallowed, FrameGenAntiCheat.PolicyFor(clean, AntiCheatCheck.Unreadable));
+        Assert.Equal(DllModPolicy.Disallowed, FrameGenAntiCheat.PolicyFor(clean, "Unknown Custom AC"));
 
         Assert.Null(FrameGenPath(rtx30, Game(dlssg: true, antiCheat: RiotVanguard), valorant));
+        Assert.Null(FrameGenModFallbackPath(rtx30, Game(dlssg: true, antiCheat: RiotVanguard), valorant));
         Assert.Null(FrameGenPath(rtx30, Game(dlssg: false, antiCheat: "Ricochet"), cod));
-        Assert.Null(FrameGenPath(rtx30, Game(dlssg: false, antiCheat: "Easy Anti-Cheat"), elden));
         Assert.Null(FrameGenPath(rtx30, Game(dlssg: true, antiCheat: AntiCheatCheck.Unreadable), clean));
-        Assert.Equal("native", FrameGenPath(rtx30, Game(own: true, antiCheat: "Anti-Cheat Expert"), wuwa));
+        Assert.Null(FrameGenModFallbackPath(rtx30, Game(dlssg: true, antiCheat: AntiCheatCheck.Unreadable), clean));
 
         var decideBlocked = FrameGenDecide(new DlssSwapService.FrameGenFacts(
             Readable: true,
@@ -130,19 +129,17 @@ public sealed class FrameGenMatrixAndAntiCheatTests
     }
 
     [Fact]
-    public void AntiCheatPerGameTableHasAtLeastThirtyEvidenceBackedRulesWithoutLossless()
+    public void SharedAntiCheatClassTableCoversAllThreeAntiCheatClassesWithoutLossless()
     {
-        Assert.True(FrameGenAntiCheat.PerGameRules.Count >= 30);
-        Assert.Contains(FrameGenAntiCheat.PerGameRules, r => r.Verdict == FrameGenAntiCheatVerdict.OfflineOfficialOnly);
-        Assert.Contains(FrameGenAntiCheat.PerGameRules, r => r.Verdict == FrameGenAntiCheatVerdict.OnlineNoMods);
-        foreach (var rule in FrameGenAntiCheat.PerGameRules)
+        Assert.True(AntiCheatClass.PerGameTable.Count >= 30);
+        Assert.Contains(AntiCheatClass.PerGameTable, r => r.Class == GameAntiCheatClass.OnlineNonCompetitivePve);
+        Assert.Contains(AntiCheatClass.PerGameTable, r => r.Class == GameAntiCheatClass.OfflineAntiCheat);
+        Assert.Contains(AntiCheatClass.PerGameTable, r => r.Class == GameAntiCheatClass.CompetitivePvpOnline);
+        foreach (var rule in AntiCheatClass.PerGameTable)
         {
-            Assert.False(string.IsNullOrWhiteSpace(rule.Id));
-            Assert.False(string.IsNullOrWhiteSpace(rule.Reason));
-            Assert.False(string.IsNullOrWhiteSpace(rule.Source));
-            Assert.False(string.IsNullOrWhiteSpace(rule.Evidence));
-            Assert.DoesNotContain("Lossless", rule.Evidence, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("Lossless", rule.Reason, StringComparison.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(rule.TitleKey));
+            Assert.False(string.IsNullOrWhiteSpace(rule.Notes));
+            Assert.DoesNotContain("Lossless", rule.Notes, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -169,7 +166,7 @@ public sealed class FrameGenMatrixAndAntiCheatTests
             Assert.NotNull(launch);
             Assert.Equal("option1", launch.Option);
             Assert.True(FrameGenAntiCheat.IsOfficialOfflineModeActive(nba));
-            Assert.Contains("official offline", FrameGenAntiCheat.OfflineModeNote(nba), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(AntiCheatClass.OfflineOneTimeNote("NBA 2K26"), FrameGenAntiCheat.OfflineNote(nba));
         }
         finally
         {

@@ -97,7 +97,7 @@ internal static class FrameGenService
             if (isModRequest)
             {
                 var currentAntiCheat = await Task.Run(() => dlss.AntiCheatNow(game, ct), ct).ConfigureAwait(false);
-                if (FrameGenAntiCheat.BlocksDllMods(game, currentAntiCheat))
+                if (FrameGenAntiCheat.IsDllDisallowed(game, currentAntiCheat))
                     return new RouteResult(false, current, FrameGenAntiCheat.OnlineBlockedMessage);
             }
             return new RouteResult(false, current, target?.Reason ?? "That frame generation route is not available for this game.");
@@ -113,10 +113,30 @@ internal static class FrameGenService
         else if (target.Id is FrameGenRouter.RouteModOptiScaler or FrameGenRouter.RouteModDlssg or FrameGenRouter.RouteModMfg)
         {
             var currentAntiCheat = await Task.Run(() => dlss.AntiCheatNow(game, ct), ct).ConfigureAwait(false);
-            if (FrameGenAntiCheat.BlocksDllMods(game, currentAntiCheat))
+            if (FrameGenAntiCheat.IsDllDisallowed(game, currentAntiCheat))
                 return new RouteResult(false, current, FrameGenAntiCheat.OnlineBlockedMessage);
+
+            string? acceptedAntiCheat = null;
+            if (currentAntiCheat is not null && FrameGenAntiCheat.IsDllOptInWithConsent(game, currentAntiCheat))
+            {
+                var savedConsent = settings.GraphicsModConsent(game.Id);
+                if (string.Equals(savedConsent, currentAntiCheat, StringComparison.OrdinalIgnoreCase))
+                {
+                    acceptedAntiCheat = currentAntiCheat;
+                }
+                else if (acceptRisk && (string.IsNullOrWhiteSpace(shownAntiCheat) || string.Equals(shownAntiCheat, currentAntiCheat, StringComparison.OrdinalIgnoreCase)))
+                {
+                    settings.SetGraphicsModConsent(game.Id, currentAntiCheat);
+                    AppLog.Info($"Frame generation consent: gameId={game.Id}; anti-cheat {currentAntiCheat}; user accepted the risk.");
+                    acceptedAntiCheat = currentAntiCheat;
+                }
+                else
+                {
+                    return new RouteResult(false, current, FrameGenAntiCheat.BanRiskWarning(game, currentAntiCheat));
+                }
+            }
             settings.SetFrameGenKeptOff(game.Id, false);
-            var (ok, message) = await dlss.FrameGenOnAsync(game, SystemSpecs.FrameGenGpu, ct, auto: false).ConfigureAwait(false);
+            var (ok, message) = await dlss.FrameGenOnAsync(game, SystemSpecs.FrameGenGpu, ct, auto: false, acceptedAntiCheat: acceptedAntiCheat).ConfigureAwait(false);
             if (!ok) applyError = message;
             else
             {
@@ -131,6 +151,8 @@ internal static class FrameGenService
         else if (target.Tier == FrameGenRouter.TierNative)
         {
             await ApplySmoothMotionAsync(game, false, settings, ct).ConfigureAwait(false);
+            if (GameSettings.IsWutheringWavesEntry(game) || GameSettings.IsWutheringWaves(game))
+                await Task.Run(() => DlssSwapService.ApplyWuWaNativeFrameGenConfig(game, gpu.Name, target.Id), ct).ConfigureAwait(false);
             settings.SetFrameGenRoute(game.Id, target.Id);
         }
 

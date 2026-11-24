@@ -2191,18 +2191,10 @@ public sealed partial class FrameGenModTests : IDisposable
     }
 
     [Fact]
-    public async Task WutheringWavesValorantAndUnknownAntiCheatRefuseDllRouteEvenWithConsentTrue()
+    public async Task ValorantAndUnknownAntiCheatRefuseDllRouteEvenWithConsentTrue()
     {
         var service = Service(dlssgOffered: true);
         var settings = new SettingsService();
-
-        var wuwaDir = Path.Combine(_root, "WuWa");
-        var wuwaGame = new GameEntry { Id = "steam:3513350", Title = "Wuthering Waves", Store = StoreKind.Steam, Path = wuwaDir, Installed = true };
-        Put(@"WuWa\Client\Binaries\Win64\Client-Win64-Shipping.exe", Pe(4000));
-        Put(@"WuWa\Client\Binaries\Win64\nvngx_dlssg.dll", Pe(500));
-        Put(@"WuWa\Client\Binaries\Win64\sl.interposer.dll", Pe(500));
-        Put(@"WuWa\Engine\Plugins\Runtime\Intel\XeSS\Binaries\ThirdParty\Win64\libxess_fg.dll", Pe(500));
-        Put(@"WuWa\Client\Binaries\Win64\AntiCheatExpert\ACE-Base64.dll", Pe(300));
 
         var valDir = Path.Combine(_root, "Valorant");
         var valGame = new GameEntry { Id = "riot:valorant", Title = "VALORANT", Store = StoreKind.Riot, Path = valDir, Installed = true };
@@ -2218,24 +2210,19 @@ public sealed partial class FrameGenModTests : IDisposable
         Put(@"UnknownAc\Game\Binaries\Win64\sl.interposer.dll", Pe(500));
 
         var before = Snapshot();
-
-        var wuwaSet = await service.FrameGenSetAsync(wuwaGame, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: "Anti-Cheat Expert", CancellationToken.None);
-        Assert.False(wuwaSet.Ok);
-        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, wuwaSet.Message);
-        var wuwaRoute = await FrameGenService.ApplyRouteAsync(wuwaGame, Helpers.FrameGenRouter.RouteModDlssg, null, service, settings, CancellationToken.None, acceptRisk: true, shownAntiCheat: "Anti-Cheat Expert");
-        Assert.False(wuwaRoute.Ok);
-        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, wuwaRoute.Message);
-
-        var valSet = await service.FrameGenSetAsync(valGame, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: RiotVanguard, CancellationToken.None);
-        Assert.False(valSet.Ok);
-        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, valSet.Message);
-        var valRoute = await FrameGenService.ApplyRouteAsync(valGame, Helpers.FrameGenRouter.RouteModOptiScaler, null, service, settings, CancellationToken.None, acceptRisk: true, shownAntiCheat: RiotVanguard);
-        Assert.False(valRoute.Ok);
-        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, valRoute.Message);
-
+        var priorConsent = FrameGenConsentLookup;
         var priorSteam = AntiCheatCheck.SteamSource;
         try
         {
+            FrameGenConsentLookup = id => id == valGame.Id ? RiotVanguard : AntiCheatCheck.Unreadable;
+
+            var valSet = await service.FrameGenSetAsync(valGame, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: RiotVanguard, CancellationToken.None);
+            Assert.False(valSet.Ok);
+            Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, valSet.Message);
+            var valRoute = await FrameGenService.ApplyRouteAsync(valGame, Helpers.FrameGenRouter.RouteModOptiScaler, null, service, settings, CancellationToken.None, acceptRisk: true, shownAntiCheat: RiotVanguard);
+            Assert.False(valRoute.Ok);
+            Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, valRoute.Message);
+
             AntiCheatCheck.SteamSource = _ => AntiCheatCheck.SteamWord.CannotTell;
             var unkSet = await service.FrameGenSetAsync(unkGame, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: AntiCheatCheck.Unreadable, CancellationToken.None);
             Assert.False(unkSet.Ok);
@@ -2246,10 +2233,65 @@ public sealed partial class FrameGenModTests : IDisposable
         }
         finally
         {
+            FrameGenConsentLookup = priorConsent;
             AntiCheatCheck.SteamSource = priorSteam;
         }
 
         Assert.Equal(before, Snapshot());
+    }
+
+    [Fact]
+    public async Task WutheringWavesConfigRouteTurnsOnByDefaultAndDllInstallsOnlyWithConsent()
+    {
+        var wuwaDir = Path.Combine(_root, "WuWa");
+        var wuwaGame = new GameEntry { Id = "steam:3513350", Title = "Wuthering Waves", Store = StoreKind.Steam, Path = wuwaDir, Installed = true };
+        Put(@"WuWa\Client\Binaries\Win64\Client-Win64-Shipping.exe", Pe(4000));
+        Put(@"WuWa\Client\Binaries\Win64\nvngx_dlssg.dll", Pe(500));
+        Put(@"WuWa\Client\Binaries\Win64\sl.interposer.dll", Pe(500));
+        Put(@"WuWa\Engine\Plugins\Runtime\Intel\XeSS\Binaries\ThirdParty\Win64\libxess_fg.dll", Pe(500));
+        Put(@"WuWa\Client\Binaries\Win64\AntiCheatExpert\ACE-Base64.dll", Pe(300));
+        Put(@"WuWa\Client\Saved\Config\WindowsNoEditor\Engine.ini", "[Core.System]\r\n"u8.ToArray());
+
+        var service = Service(dlssgOffered: true);
+        var priorSteam = AntiCheatCheck.SteamSource;
+        var priorConsent = FrameGenConsentLookup;
+        AntiCheatCheck.SteamSource = _ => AntiCheatCheck.SteamWord.None;
+        try
+        {
+            var applied = await service.FrameGenEverywhereAsync([wuwaGame], Rtx3070, _ => false, _ => false, CancellationToken.None);
+            Assert.Equal(1, applied);
+            var iniText = Text(@"WuWa\Client\Saved\Config\WindowsNoEditor\Engine.ini");
+            Assert.Contains("r.FidelityFX.FI.Enabled=1", iniText, StringComparison.Ordinal);
+            Assert.Contains("r.FidelityFX.FSR3.Enabled=1", iniText, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(wuwaDir, @"Client\Binaries\Win64\version.dll")));
+            Assert.False(File.Exists(Path.Combine(wuwaDir, @"Client\Binaries\Win64\exo-frame-gen.json")));
+
+            var afterConfig = Snapshot();
+
+            var unconfirmed = await service.FrameGenSetAsync(wuwaGame, Rtx3070, enabled: true, acceptRisk: false, shownAntiCheat: null, CancellationToken.None);
+            Assert.False(unconfirmed.Ok);
+            Assert.Equal(AntiCheatClass.BanRiskConfirmation("Wuthering Waves", "Anti-Cheat Expert"), unconfirmed.Message);
+            Assert.Equal(afterConfig, Snapshot());
+
+            FrameGenConsentLookup = id => id == wuwaGame.Id ? "Anti-Cheat Expert" : null;
+            var confirmed = await service.FrameGenSetAsync(wuwaGame, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: "Anti-Cheat Expert", CancellationToken.None);
+            Assert.True(confirmed.Ok, confirmed.Message);
+            var onStatus = service.FrameGenState(wuwaGame, Rtx3070, CancellationToken.None);
+            Assert.Equal("on", onStatus.State);
+            Assert.True(onStatus.RiskAccepted);
+
+            service.FrameGenAtLaunch(wuwaGame, Rtx3070);
+            Assert.Equal("on", service.FrameGenState(wuwaGame, Rtx3070, CancellationToken.None).State);
+
+            var off = await service.FrameGenSetAsync(wuwaGame, Rtx3070, enabled: false, CancellationToken.None);
+            Assert.True(off.Ok, off.Message);
+            Assert.Equal(afterConfig, Snapshot());
+        }
+        finally
+        {
+            AntiCheatCheck.SteamSource = priorSteam;
+            FrameGenConsentLookup = priorConsent;
+        }
     }
 
     [Fact]
@@ -2277,11 +2319,11 @@ public sealed partial class FrameGenModTests : IDisposable
             offlineChosen = true;
             var installed = await service.FrameGenSetAsync(nba, Rtx3070, enabled: true, acceptRisk: false, shownAntiCheat: null, CancellationToken.None);
             Assert.True(installed.Ok, installed.Message);
-            Assert.Contains("official offline", installed.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(AntiCheatClass.OfflineOneTimeNote("NBA 2K26"), installed.Message);
 
             var firstState = service.FrameGenState(nba, Rtx3070, CancellationToken.None);
             Assert.Equal("on", firstState.State);
-            Assert.Contains("official offline", firstState.Note ?? "", StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(AntiCheatClass.OfflineOneTimeNote("NBA 2K26"), firstState.Note);
 
             var secondState = service.FrameGenState(nba, Rtx3070, CancellationToken.None);
             Assert.Equal("on", secondState.State);

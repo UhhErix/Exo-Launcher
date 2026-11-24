@@ -16,6 +16,8 @@ public sealed partial class WebHostBridge
         session = status.Session,
         mod = status.Mod,
         antiCheat = status.AntiCheat,
+        riskWarning = status.RiskWarning,
+        riskAccepted = status.RiskAccepted,
         note = status.Note,
         reason = status.Reason,
         canToggle = status.CanToggle,
@@ -39,7 +41,26 @@ public sealed partial class WebHostBridge
         var acceptRisk = ReadBool(p, hasParams, "acceptRisk") == true;
         var shownAntiCheat = ReadString(p, hasParams, "antiCheat");
         var gpu = await Task.Run(() => SystemSpecs.FrameGenGpu, ct).ConfigureAwait(false);
-        var (ok, message) = await Task.Run(() => _dlss.FrameGenSetAsync(game, gpu, enabled, acceptRisk, shownAntiCheat, ct), ct).ConfigureAwait(false);
+        string? acceptedAntiCheat = null;
+        if (enabled)
+        {
+            var currentAntiCheat = await Task.Run(() => _dlss.AntiCheatNow(game, ct), ct).ConfigureAwait(false);
+            if (currentAntiCheat is not null && FrameGenAntiCheat.IsDllOptInWithConsent(game, currentAntiCheat))
+            {
+                var saved = _services.Settings.GraphicsModConsent(game.Id);
+                if (string.Equals(saved, currentAntiCheat, StringComparison.OrdinalIgnoreCase))
+                {
+                    acceptedAntiCheat = currentAntiCheat;
+                }
+                else if (acceptRisk && (string.IsNullOrWhiteSpace(shownAntiCheat) || string.Equals(shownAntiCheat, currentAntiCheat, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _services.Settings.SetGraphicsModConsent(game.Id, currentAntiCheat);
+                    AppLog.Info($"Frame generation consent: gameId={game.Id}; anti-cheat {currentAntiCheat}; user accepted the risk.");
+                    acceptedAntiCheat = currentAntiCheat;
+                }
+            }
+        }
+        var (ok, message) = await Task.Run(() => _dlss.FrameGenSetAsync(game, gpu, enabled, acceptRisk, acceptedAntiCheat ?? shownAntiCheat, ct), ct).ConfigureAwait(false);
         if (ok) _services.Settings.SetFrameGenKeptOff(game.Id, !enabled);
         var status = await Task.Run(() => _dlss.FrameGenState(game, gpu, ct), ct).ConfigureAwait(false);
         return FrameGenDto(status, ok, message);
@@ -97,6 +118,9 @@ public sealed partial class WebHostBridge
                 howToEnable = r.HowToEnable,
                 choiceValue = r.ChoiceValue,
                 choices = r.Choices,
+                requiresRiskConfirm = r.RequiresRiskConfirm,
+                riskWarning = r.RiskWarning,
+                antiCheat = r.AntiCheat,
             }).ToList(),
         };
     }

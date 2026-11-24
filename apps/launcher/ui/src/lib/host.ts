@@ -115,6 +115,8 @@ export type FrameGenMod = {
   session?: 'ran' | null
   mod?: string | null
   antiCheat?: string | null
+  riskWarning?: string | null
+  riskAccepted?: boolean
   note?: string | null
   reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
   canToggle?: boolean
@@ -140,6 +142,9 @@ export type FrameGenRoute = {
   howToEnable?: string | null
   choiceValue?: string | null
   choices?: string[] | null
+  requiresRiskConfirm?: boolean
+  riskWarning?: string | null
+  antiCheat?: string | null
 }
 
 export type GameFrameGen = {
@@ -3298,9 +3303,9 @@ export const host = {
     rawCall<{ ok: boolean; message?: string }>('dlss.consent', { id, allow, ...(allow && antiCheat ? { antiCheat } : {}) }),
   /** The game's Frame generation line. */
   dlssFrameGen: (id: string) => rawCall<FrameGenMod>('dlss.frameGen', { id }, 60_000),
-  dlssFrameGenSet: (id: string, enabled: boolean) =>
-    rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled }, 10 * 60_000),
-  gameFrameGen: (id: string, change?: { route?: string; xessOverride?: IntelFrameGen }) =>
+  dlssFrameGenSet: (id: string, enabled: boolean, consent?: { acceptRisk?: boolean; antiCheat?: string | null }) =>
+    rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled, ...(consent?.acceptRisk ? { acceptRisk: true, ...(consent.antiCheat ? { antiCheat: consent.antiCheat } : {}) } : {}) }, 10 * 60_000),
+  gameFrameGen: (id: string, change?: { route?: string; xessOverride?: IntelFrameGen; acceptRisk?: boolean; antiCheat?: string | null }) =>
     rawCall<GameFrameGen>('game.frameGen', { id, ...change }, 60_000),
   gameFrameCap: (id: string, change?: { tier?: string; capFps?: number; backend?: string }) =>
     rawCall<GameFrameCap>('game.frameCap', { id, ...change }, 30_000),
