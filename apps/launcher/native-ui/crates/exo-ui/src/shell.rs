@@ -1,7 +1,7 @@
-use crate::state::{AppState, ContextMenuTarget, InputMode, MiniBarSlot, Room};
+use crate::state::{AppState, ContextMenuTarget, HostStatus, InputMode, MiniBarSlot, Room};
 use crate::{
-    captures, discord, game_page, key_modal, library, menus, music, notice, palette, pc, settings,
-    setup, store,
+    captures, clients_gate, discord, game_page, key_modal, library, menus, music, notice, palette,
+    pc, report, settings, settings_account, setup, store, store_media,
 };
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
@@ -118,7 +118,12 @@ fn gamepad_prompt_bar() -> El {
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     cx.reduced_motion(s.settings.reduce_motion);
     set_text_scale(s.text_scale());
-    let has_modal_scrim = s.palette_open || s.key_modal_open;
+    let has_modal_scrim =
+        s.palette_open
+            || s.key_modal_open
+            || s.store_ext.lightbox_index.is_some()
+            || s.wp4.report_open
+            || s.wp4_is_account_sheet_open();
     let budget = BlurBudget::compute(s, !s.notices.is_empty());
     cx.set_titlebar(exo_titlebar());
     cx.caption_color(if has_modal_scrim {
@@ -131,6 +136,13 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let scale = cx.env().scale;
     if s.setup.open {
         let mut root = setup::view(s, scale);
+        if !s.notices.is_empty() {
+            root = root.child(notice::view(s, budget.toast));
+        }
+        return root;
+    }
+    if s.wp4_is_clients_gate_open() {
+        let mut root = clients_gate::clients_start_view(s);
         if !s.notices.is_empty() {
             root = root.child(notice::view(s, budget.toast));
         }
@@ -578,8 +590,24 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if s.setup.return_to.is_some() && !s.setup.open {
         root = root.child(setup::return_bar(s));
     }
+    if s.store_ext.lightbox_index.is_some() {
+        root = root.children(store_media::lightbox_layers(s, scale, budget.overlay));
+    }
     if s.key_modal_open {
         root = root.children(key_modal::layers(s, budget.overlay));
+    }
+    if s.wp4.report_open {
+        root = root.children(report::layers(s, budget.overlay));
+    }
+    if s.wp4_is_account_sheet_open() {
+        root = root.children(settings_account::account_sheet_layers(s, budget.overlay));
+    }
+    if matches!(s.status, HostStatus::Error(_)) && !s.wp4.report_open {
+        root = root.child(
+            settings::set_btn("host-error-report", "Report a problem", None)
+                .pin(None, None, Some(GAP), Some(GAP))
+                .on_press(|s: &mut AppState| s.wp4_open_report()),
+        );
     }
     if s.palette_open {
         root = root.children(palette::layers(s, budget.overlay));

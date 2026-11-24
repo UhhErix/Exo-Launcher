@@ -12,12 +12,9 @@ const mockAutopilotChoices: Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGa
 }
 const mockAutopilot = (): AutopilotState => ({
   ...mockAutopilotChoices,
-  on: true,
-  gamePriority: 'above',
-  keepGameMode: false,
-  coreParking: true,
-  gameMode: { off: true, keptOn: null },
-  mouseAccel: { off: true, managed: true },
+  gameMode: { off: mockAutopilotChoices.on && !mockAutopilotChoices.keepGameMode, keptOn: mockAutopilotChoices.on && mockAutopilotChoices.keepGameMode ? 'you keep it on' : null },
+  mouseAccel: { off: mockAutopilotChoices.on, managed: mockAutopilotChoices.on },
+  standbyPurge: { available: false, reason: 'Unavailable without administrator permission (run Exo as administrator for live standby purges; Auto Tune still purges once when elevated).' },
   memoryIntegrity: {
     status: 'unlocked',
     reason: 'None of your installed games require Memory Integrity. Turning it off can add 5–10% FPS (lowers kernel driver protection; takes a restart).',
@@ -1327,6 +1324,51 @@ const mockExoAiPref: {
   lastCheckUtc: null,
 }
 
+const mockGpuProcesses = () => {
+  const topGpu = {
+    pid: 4120,
+    name: 'chrome',
+    adapterLuid: '0x00000000_0x00010A4F',
+    adapterName: 'NVIDIA GeForce RTX 3070',
+    totalPercent: 14.2,
+    engines: [{ type: '3D', percent: 14.2 }, { type: 'Video Decode', percent: 3.1 }],
+    localBytes: 640 * 1024 * 1024,
+    nonLocalBytes: 42 * 1024 * 1024,
+    protectedReason: null as string | null,
+  }
+  const dwm = {
+    pid: 1024,
+    name: 'dwm',
+    adapterLuid: '0x00000000_0x00010A4F',
+    adapterName: 'NVIDIA GeForce RTX 3070',
+    totalPercent: 2.1,
+    engines: [{ type: '3D', percent: 2.1 }],
+    localBytes: 280 * 1024 * 1024,
+    nonLocalBytes: 18 * 1024 * 1024,
+    protectedReason: 'part of Windows',
+  }
+  return {
+    ok: true,
+    adapters: [
+      {
+        luid: '0x00000000_0x00010A4F',
+        name: 'NVIDIA GeForce RTX 3070',
+        vendorId: 0x10DE,
+        dedicatedBytes: 8 * 1024 ** 3,
+        sharedBytes: 8 * 1024 ** 3,
+        software: false,
+      },
+    ],
+    processes: [topGpu, dwm],
+    answer: {
+      summary: 'chrome is using 14% GPU (3D) and 640 MB VRAM.',
+      topGpu,
+      topVram: topGpu,
+      hogs: [topGpu],
+    },
+  }
+}
+
 const mockExoAi = () => ({
   autoApplyBestSettings: mockExoAiPref.autoApplyBestSettings,
   backgroundDriftCheck: mockExoAiPref.backgroundDriftCheck,
@@ -1354,6 +1396,7 @@ const mockExoAi = () => ({
     fanCount: 2,
     note: null as string | null,
   },
+  gpuAnswer: mockGpuProcesses().answer,
 })
 
 const MOCK_HANDLERS: Record<string, MockHandler> = {
@@ -1883,6 +1926,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     if (id.includes('rivals')) return { ok: true, state: 'note', path: 'dlss', antiCheat: 'NetEase anti-cheat', note: 'Not in games with anti-cheat' }
     return id.includes('control') ? { ok: true, state: 'on', path: 'fsr', version: 'OptiScaler v0.9.4' } : { ok: true, state: 'on', path: 'dlss', version: 'DLSSG SM86 0.4.1', session: 'ran' }
   },
+  'game.frameGen': (p) => mockGameFrameGen(p),
   'shaders.status': mockShadersStatus,
   'shaders.prepare.games': () => ({ ok: true, games: MOCK_GAMES.filter(game => game.installed).slice(0, 2).map((game, at) => ({ id: game.id, title: at ? game.title : 'A Very Long Unreal Game Name: The Definitive Remastered Edition', state: mockPrepareRunning && !at ? 'running' : 'ready', message: null })) }),
   'shaders.prepare.start': () => { mockPrepareRunning = true; emitHostEvent('shaders.changed', {}); return { ok: true, message: null } },
@@ -2156,6 +2200,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'exoAi.state': () => mockExoAi(),
+  'gpu.processes': () => mockGpuProcesses(),
   'exoAi.set': (p) => {
     const patch = (p ?? {}) as { autoApplyBestSettings?: boolean; backgroundDriftCheck?: boolean; fanPreset?: string; runNow?: boolean }
     if (typeof patch.autoApplyBestSettings === 'boolean') mockExoAiPref.autoApplyBestSettings = patch.autoApplyBestSettings
@@ -2169,6 +2214,12 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'autopilot.state': mockAutopilot,
   'autopilot.set': (p) => {
     const partial = p as Partial<typeof mockAutopilotChoices>
+    if (typeof partial.on === 'boolean') mockAutopilotChoices.on = partial.on
+    if (partial.gamePriority === 'above' || partial.gamePriority === 'high' || partial.gamePriority === 'normal') {
+      mockAutopilotChoices.gamePriority = partial.gamePriority
+    }
+    if (typeof partial.keepGameMode === 'boolean') mockAutopilotChoices.keepGameMode = partial.keepGameMode
+    if (typeof partial.coreParking === 'boolean') mockAutopilotChoices.coreParking = partial.coreParking
     if (Array.isArray(partial.alwaysDemote)) mockAutopilotChoices.alwaysDemote = partial.alwaysDemote
     if (Array.isArray(partial.suspend)) mockAutopilotChoices.suspend = partial.suspend
     return { ok: true, message: null, state: mockAutopilot() }
@@ -2278,6 +2329,155 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'keys.preview': () => ({ ok: true, looksLikeKey: false, store: 'unknown', key: '' }),
   'keys.activate': () => ({ ok: true, message: 'Mock key.' }),
   'keep.status': () => ({ pc: 'none', games: {} }),
+}
+
+function mockUnavailableFrameGen(reason: string, howToEnable: string, antiCheatVerdict: string, antiCheatNote: string) {
+  return {
+    ok: true,
+    bestRouteId: 'unavailable',
+    selectedRouteId: 'unavailable',
+    state: 'unavailable',
+    word: reason,
+    good: false,
+    bad: false,
+    reason,
+    howToEnable,
+    routes: [{
+      id: 'unavailable',
+      tier: 'unavailable',
+      kind: 'unavailable',
+      label: 'Not available',
+      status: antiCheatVerdict === 'blocked' ? 'blocked' : 'unavailable',
+      summary: reason,
+      gpuSupported: false,
+      gpuNote: mockGpu ?? 'RTX 3070',
+      antiCheatVerdict,
+      antiCheatNote,
+      autoEnable: false,
+      latencyNote: 'Frame generation is off.',
+      selectable: false,
+      active: false,
+      reason,
+      howToEnable,
+    }],
+  }
+}
+
+function mockWuWaFrameGen(routeParam: unknown) {
+  const isIntel = mockGpu === 'intel'
+  const isAmd = mockGpu === 'amd'
+  const nativeId = isIntel ? 'native_xess' : 'native_fsr'
+  const nativeSummary = isIntel ? 'Built into the game · XeSS' : 'Built into the game · FSR 3'
+  const routes: Record<string, unknown>[] = [{
+    id: nativeId,
+    tier: 'native',
+    kind: nativeId,
+    label: isIntel ? 'Built into the game (XeSS)' : 'Built into the game (FSR 3)',
+    status: 'active',
+    summary: nativeSummary,
+    gpuSupported: true,
+    gpuNote: 'Supported under DirectX 12.',
+    antiCheatVerdict: 'safe',
+    antiCheatNote: 'Safe: built into the game with no files placed or hooked.',
+    autoEnable: false,
+    latencyNote: 'Lowest latency: uses game motion vectors. Requires DirectX 12 in Wuthering Waves.',
+    selectable: true,
+    active: routeParam !== 'external_lossless_scaling',
+  }]
+  if (isAmd) {
+    routes.push({
+      id: 'driver_afmf',
+      tier: 'driver',
+      kind: 'driver_afmf',
+      label: 'AMD Fluid Motion Frames',
+      status: 'available',
+      summary: 'Fluid Motion Frames · Off',
+      gpuSupported: true,
+      gpuNote: 'Radeon RX 6000+ supports AFMF 2/2.1.',
+      antiCheatVerdict: 'safe',
+      antiCheatNote: 'Safe: AMD Adrenalin driver feature.',
+      autoEnable: false,
+      latencyNote: 'Adds ~5–13 ms driver latency.',
+      selectable: true,
+      active: false,
+    })
+  }
+  if (isIntel) {
+    routes.push({
+      id: 'driver_xess_override',
+      tier: 'driver',
+      kind: 'driver_xess_override',
+      label: 'Intel XeSS-FG override',
+      status: mockFrameGen !== 'game' ? 'active' : 'available',
+      summary: mockFrameGen !== 'game' ? `Intel XeSS override · ${mockFrameGen}` : 'Intel XeSS override · Game’s choice',
+      gpuSupported: true,
+      gpuNote: 'Arc supports XeSS 2x/3x/4x override.',
+      antiCheatVerdict: 'safe',
+      antiCheatNote: 'Safe: Intel Graphics driver override.',
+      autoEnable: false,
+      latencyNote: 'Uses in-game XeSS-FG + XeLL motion vectors.',
+      selectable: true,
+      active: mockFrameGen !== 'game',
+      choiceValue: mockFrameGen,
+      choices: ['game', '2x', '3x', '4x'],
+    })
+  }
+  const lsOn = routeParam === 'external_lossless_scaling'
+  routes.push({
+    id: 'external_lossless_scaling',
+    tier: 'external',
+    kind: 'external_lossless_scaling',
+    label: 'Lossless Scaling',
+    status: lsOn ? 'active' : 'available',
+    summary: lsOn ? 'Lossless Scaling · On' : 'Lossless Scaling · Ready',
+    gpuSupported: true,
+    gpuNote: 'Works on any GPU via external capture.',
+    antiCheatVerdict: 'safe',
+    antiCheatNote: 'Safe: external Windows Graphics Capture overlay.',
+    autoEnable: false,
+    latencyNote: 'Adds ~1–2 frames of capture latency. Requires Borderless mode.',
+    selectable: true,
+    active: lsOn,
+  })
+  const chosen = routes.find(r => r.id === routeParam) ?? routes[0]
+  return {
+    ok: true,
+    bestRouteId: String(routes[0].id),
+    selectedRouteId: String(chosen.id),
+    state: chosen.tier === 'external' ? 'external' : 'native',
+    word: String(chosen.summary),
+    good: Boolean(chosen.active) && chosen.tier !== 'native',
+    bad: false,
+    routes,
+  }
+}
+
+function mockGameFrameGen(p?: Record<string, unknown>) {
+  const id = String(p?.id ?? '')
+  if (mockGpu === 'intel' && typeof p?.xessOverride === 'string') mockFrameGen = p.xessOverride
+  if (/valorant|league/.test(id)) {
+    const reason = 'Exo never changes Riot games or games with Vanguard'
+    return mockUnavailableFrameGen(reason, 'Use in-game graphics settings only.', 'blocked', reason)
+  }
+  if (id.includes('wuthering')) return mockWuWaFrameGen(p?.route)
+  if (mockGpu === 'amd') {
+    const afmfOn = !/rivals|fortnite|cyberpunk/.test(id)
+    const route = id.includes('cyberpunk')
+      ? { id: 'native_fsr', tier: 'native', kind: 'native_fsr', label: 'Built into the game (FSR 3)', status: 'active', summary: 'Built into the game · FSR 3', gpuSupported: true, gpuNote: 'Radeon RX 9070 XT supports FSR 3 FG.', antiCheatVerdict: 'safe', antiCheatNote: 'Safe: built into the game.', autoEnable: false, latencyNote: 'Lowest latency.', selectable: true, active: true }
+      : { id: 'driver_afmf', tier: 'driver', kind: 'driver_afmf', label: 'AMD Fluid Motion Frames', status: afmfOn ? 'active' : 'available', summary: afmfOn ? 'Fluid Motion Frames · On' : 'Fluid Motion Frames · Off', gpuSupported: true, gpuNote: 'Radeon RX 9070 XT supports AFMF 2/2.1.', antiCheatVerdict: 'safe', antiCheatNote: 'Safe: AMD Adrenalin driver feature.', autoEnable: afmfOn, latencyNote: 'Adds ~5–13 ms driver latency.', selectable: true, active: afmfOn }
+    return { ok: true, bestRouteId: route.id, selectedRouteId: route.id, state: route.tier === 'native' ? 'native' : 'driver', word: route.summary, good: route.tier === 'driver' && route.active, bad: false, routes: [route] }
+  }
+  if (id.includes('control') || id.includes('cyberpunk')) {
+    const route = { id: 'mod_optiscaler', tier: 'mod', kind: 'mod_optiscaler', label: 'OptiScaler v0.9.4', status: 'active', summary: 'OptiScaler v0.9.4', gpuSupported: true, gpuNote: 'RTX 3070 supports OptiScaler.', antiCheatVerdict: 'safe', antiCheatNote: 'Safe: clean game with no anti-cheat.', autoEnable: true, latencyNote: 'Low latency.', selectable: true, active: true }
+    return { ok: true, bestRouteId: route.id, selectedRouteId: route.id, state: 'on', word: route.summary, good: true, bad: false, routes: [route] }
+  }
+  const blocked = id.includes('rivals')
+  return mockUnavailableFrameGen(
+    blocked ? 'Off · NetEase anti-cheat blocks mods' : 'Not built into this game',
+    'Install Lossless Scaling on Steam (App 993090) for external frame generation on any GPU.',
+    blocked ? 'blocked' : 'safe',
+    blocked ? 'NetEase anti-cheat blocks placed files.' : 'No anti-cheat block.',
+  )
 }
 
 // ?hold=store.,discord.chat holds every call whose method starts so, for looking at a wait.

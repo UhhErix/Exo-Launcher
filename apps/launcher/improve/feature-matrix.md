@@ -14,8 +14,8 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 |---|---:|---:|---:|---:|---:|
 | Shell & Bar | 6 | 10 | 9 | 0 | 25 |
 | Library | 6 | 7 | 6 | 2 | 21 |
-| Game page | 3 | 7 | 9 | 3 | 22 |
-| Store | 5 | 2 | 9 | 1 | 17 |
+| Game page | 22 | 0 | 0 | 0 | 22 |
+| Store | 16 | 1 | 0 | 0 | 17 |
 | Discord | 25 | 9 | 11 | 0 | 45 |
 | Music | 5 | 7 | 9 | 0 | 21 |
 | Exo AI / PC | 0 | 8 | 12 | 1 | 21 |
@@ -24,7 +24,7 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 | Captures | 0 | 4 | 5 | 1 | 10 |
 | Settings | 6 | 5 | 12 | 0 | 23 |
 | Onboarding & Account | 0 | 4 | 6 | 0 | 10 |
-| **Overall** | **63** | **67** | **99** | **9** | **238** |
+| **Overall** | **93** | **59** | **81** | **5** | **238** |
 
 RPC: React calls 345 of 345 contract methods; native references 134. 211 methods React calls are never called natively. Events: React handles 77 of 77; native handles 35; 42 React-handled events are dropped natively.
 
@@ -103,56 +103,56 @@ Totals: DONE 6, PARTIAL 7, MISSING 6, BROKEN 2 (of 21).
 
 ## Game page
 
-Totals: DONE 3, PARTIAL 7, MISSING 9, BROKEN 3 (of 22).
+Totals: DONE 22, PARTIAL 0, MISSING 0, BROKEN 0 (of 22).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Page hero (art, logo, title, meta) | components/GamePage.tsx:50 | exo-ui/src/game_page.rs:562 | DONE | rpc: game.get.  |
-| Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy) | components/game/PrimaryAction.tsx:6 | exo-ui/src/game_page.rs:8 | PARTIAL | rpc: game.launch, game.install, game.update, game.pauseInstall, game.cancelInstall, game.stop. game.dequeue / resumeDownload / progress unused; no Queued, Buy again, entitlement states. |
-| Download / install progress bar + speed + ETA | components/game/PrimaryAction.tsx:16 | exo-ui/src/game_page.rs:154 | PARTIAL | rpc: game.progress. Progress from push events only. |
-| Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen) | components/game/OptimizeLine.tsx:29 | exo-ui/src/game_page.rs:156 | BROKEN | rpc: game.settings, keep.status, dlss.*, gpu.game, hdr.game. game_page.rs:149-190 renders hardcoded text ("Up to date", "Built into the game", Optimize "Applied" for any installed game). No RPC behind it. |
-| Display mode (windowed / fullscreen / borderless) | components/game/GameProperties.tsx:1 | exo-ui/src/state.rs:1068 | BROKEN | rpc: game.settings. state.rs:1263 sets local state + notice only; never persisted or applied. |
-| Frame generation row (DLSS FG / AFMF / Lossless) | components/game/FrameGenRow.tsx:28 | — | MISSING | rpc: dlss.frameGen, gpu.game, gpu.afmf3.  |
-| HDR row | components/game/HdrRow.tsx:23 | — | MISSING | rpc: hdr.game.  |
-| Compress row (CompactOS per game) | components/game/CompressRow.tsx:110 | — | MISSING | rpc: compress.state, compress.act.  |
-| Shader pre-compile row | components/game/ShaderPrecompile.tsx:10 | — | MISSING | rpc: shaders.status, shaders.prepare.cancel, shaders.rebuild. native uses 5 shaders.* methods in PC only. |
-| Properties: General (launch options, language, Steam overlay) | components/game/GameProperties.tsx:2 | exo-ui/src/game_page.rs:129 | PARTIAL | rpc: game.properties, game.properties.set. Cloud saves, Steam Input, anti-cheat choice, size on disk, library folder move missing. |
-| Properties: Installed files (Verify, Browse, Uninstall) | components/game/GameProperties.tsx:42 | exo-ui/src/game_page.rs:453 | DONE | rpc: game.repair, game.uninstall.  |
-| Properties: Betas (switch branch, access code) | components/game/GameProperties.tsx:42 | exo-ui/src/game_page.rs:17 | PARTIAL | rpc: game.properties. Read-only text; cannot switch. |
-| Properties: DLC | components/game/GameProperties.tsx:1 | exo-ui/src/game_page.rs:17 | PARTIAL | Read-only list. |
-| Properties: Artwork (refetch, replace, reset) | components/game/Artwork.tsx:3 | exo-ui/src/game_page.rs:484 | BROKEN | rpc: art.refetch, art.replace, art.reset. game_page.rs:~482 "Refresh" calls refresh_library, not art.*; no Replace/Reset/file picker. |
-| Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent) | components/UpscalerFiles.tsx:6 | — | MISSING | rpc: dlss.consent, dlss.restore, dlss.status, dlss.newer, dlss.downloadNewer, dlss.updateAll. Scene game-props-dlss exists but no real UI. |
-| Properties: Anti-cheat choice | components/game/GameProperties.tsx:66 | — | MISSING | rpc: game.properties.set.  |
-| Properties: Cloud saves / Steam Input | components/game/GameProperties.tsx:66 | — | MISSING | rpc: steamInput.state, game.properties.  |
-| Properties: Move to another library folder / size on disk | components/game/GameProperties.tsx:52 | — | MISSING | rpc: game.properties.set.  |
-| Achievements (list, progress, rarity) + pop-up | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:690 | PARTIAL | rpc: game.extras. game.achievements event not handled; achievement pop-up not shown. |
-| Playtime / last played stats | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:686 | DONE | rpc: game.get. Riot export import (playtime.importRiotExport / setRiotBaseline) missing. |
-| Friends who play | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:202 | PARTIAL |  |
-| Store page link / Buy again | components/game/PrimaryAction.tsx:7 | — | MISSING |  |
+| Page hero (art, logo, title, meta) | components/GamePage.tsx:50 | exo-ui/src/game_page.rs:405 | DONE | rpc: game.get. Includes driveHeat warning, live status pill, non-installed ArtworkStrip. |
+| Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy) | components/game/PrimaryAction.tsx:6 | exo-ui/src/game_page.rs:163 | DONE | rpc: game.launch, game.install, game.update, game.pauseInstall, game.cancelInstall, game.stop, game.dequeue, game.resumeDownload, game.progress, shell.openUrl. |
+| Download / install progress bar + speed + ETA | components/game/PrimaryAction.tsx:16 | exo-ui/src/game_page.rs:315 | DONE | rpc: game.progress + install.progress event; edge progress bar, bytes, speed, ETA. |
+| Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen) | components/game/OptimizeLine.tsx:29 | exo-ui/src/game_perf.rs:187 | DONE | rpc: game.settings, keep.status, dlss.status, dlss.frameGen, gpu.game, hdr.game, hdr.state, shaders.status. Zero fake data. |
+| Display mode (windowed / fullscreen / borderless) | components/game/OptimizeLine.tsx:87 | exo-ui/src/game_perf.rs:354 | DONE | rpc: game.settings (windowMode persisted to host). |
+| Frame generation row (DLSS FG / AFMF / Lossless) | components/game/FrameGenRow.tsx:28 | exo-ui/src/game_perf.rs:260 | DONE | rpc: dlss.frameGen, gpu.game + Smooth Motion switch. |
+| HDR row | components/game/HdrRow.tsx:23 | exo-ui/src/game_perf.rs:277 | DONE | rpc: hdr.game, hdr.state, settings.set (hdrForGames Turn on). |
+| Compress row (CompactOS per game) | components/game/CompressRow.tsx:110 | exo-ui/src/game_props.rs:475 | DONE | rpc: compress.state (auto-sample), compress.act + compress.progress event. |
+| Shader pre-compile row | components/game/ShaderPrecompile.tsx:10 | exo-ui/src/game_perf.rs:232 | DONE | rpc: shaders.status + shaders.changed event + Installed files Rebuild shaders. |
+| Properties: General (launch options, language, Steam overlay) | components/game/GameProperties.tsx:388 | exo-ui/src/game_props.rs:254 | DONE | rpc: game.properties, game.properties.set (fixed steamOverlay on/off). |
+| Properties: Installed files (Verify, Browse, Uninstall) | components/game/GameProperties.tsx:452 | exo-ui/src/game_props.rs:647 | DONE | rpc: game.repair, game.uninstall, game.openFolder. |
+| Properties: Betas (switch branch, access code) | components/game/GameProperties.tsx:561 | exo-ui/src/game_props.rs:956 | DONE | rpc: game.properties, game.properties.set (beta + secure masked betaCode). |
+| Properties: DLC | components/game/GameProperties.tsx:583 | exo-ui/src/game_props.rs:1057 | DONE | rpc: game.properties, game.properties.set (content toggles + confirm + states). |
+| Properties: Artwork (refetch, replace, reset) | components/game/Artwork.tsx:19 | exo-ui/src/game_props.rs:196 | DONE | rpc: art.refetch, art.replace, art.reset. |
+| Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent) | components/game/GameProperties.tsx:504 | exo-ui/src/game_props.rs:869 | DONE | rpc: dlss.consent, dlss.restore, dlss.status. |
+| Properties: Anti-cheat choice | components/game/GameProperties.tsx:428 | exo-ui/src/game_props.rs:424 | DONE | rpc: game.properties.set (antiCheatLaunch + confirm). |
+| Properties: Cloud saves / Steam Input | components/game/GameProperties.tsx:409 | exo-ui/src/game_props.rs:348 | DONE | rpc: game.properties, game.properties.set (cloudSync, throughSteam, storeProperties). |
+| Properties: Move to another library folder / size on disk | components/game/GameProperties.tsx:464 | exo-ui/src/game_props.rs:815 | DONE | rpc: game.properties, game.properties.set (folder + live move progress polling). |
+| Achievements (list, progress, rarity) + pop-up | components/game/GameSections.tsx:122 | exo-ui/src/game_page.rs:517 | DONE | rpc: game.extras + game.achievements event + progress bar (in-game banners are host-side). |
+| Playtime / last played stats | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:505 | DONE | rpc: game.get. Matches React relative last played + omits unknown facts. |
+| Friends who play | components/game/GameSections.tsx:8 | exo-ui/src/game_page.rs:41 | DONE | Matches React GameSections.tsx: GameShared Steam Family badge + multi-source GameStore switcher. |
+| Store page link / Buy again | components/game/PrimaryAction.tsx:25 | exo-ui/src/game_page.rs:233 | DONE | rpc: shell.openUrl (hostedBuyUrl + Buy again / Buy on Steam / GOG / browser). |
 
 ## Store
 
-Totals: DONE 5, PARTIAL 2, MISSING 9, BROKEN 1 (of 17).
+Totals: DONE 16, PARTIAL 1, MISSING 0, BROKEN 0 (of 17).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Store room Discover tab (hero, shelves, tiles) | components/store/StoreRoom.tsx:49 | exo-ui/src/store.rs:463 | DONE | rpc: store.home.  |
-| Store hero hover / pick list | components/store/StoreRoom.tsx:201 | exo-ui/src/store.rs:720 | PARTIAL |  |
-| Wishlist tab | components/store/storeData.ts:265 | exo-ui/src/store.rs:509 | PARTIAL | rpc: store.wishlist. store.changed(wishlist) refreshes; no on-sale count badge on the tab. |
-| Store search (results, empty, loading) | components/store/StoreRoom.tsx:61 | exo-ui/src/store.rs:471 | DONE | rpc: store.search.  |
-| Tile card: price, discount, store logo | components/store/StoreCard.tsx:87 | exo-ui/src/store.rs:89 | DONE |  |
-| Tile card: "Library" button on owned games | components/store/StoreCard.tsx:87 | — | MISSING |  |
-| Check prices / On sale split | components/store/StoreRoom.tsx:385 | — | MISSING | rpc: store.wishlist. storeWishlist("check") never called; store.sale event not handled. |
-| Store game page: offers (open in store) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store.rs:402 | DONE | rpc: store.game.  |
-| Store game page: offer rows (store names, prices, historical low) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store.rs:402 | BROKEN | rpc: store.game. Smoke (store-game): offer rows are labeled "1" and "25" (raw store ids, not store names) and the Historical low line prints a raw ISO timestamp 2026-11-19T20:55:23.0000000+00:00. |
-| Store game page: hero art / header image | components/store/StoreGamePage.tsx:4 | exo-ui/src/store.rs:174 | MISSING | rpc: store.game. Smoke: page opens with a bare title and empty left gutter; no hero, cover or logo. |
-| Store game page: fact chips (price, reviews, Metacritic, Released) | components/store/StoreGamePage.tsx:243 | exo-ui/src/store.rs:174 | DONE |  |
-| Store game page: trailers (HLS player) | components/store/TrailerPlayer.tsx:24 | exo-ui/src/video_decoder.rs:1 | MISSING | video_decoder.rs exists for captures only; video.frame / keyframe events handled for captures. |
-| Store game page: screenshot strip + lightbox | components/store/StoreGamePage.tsx:28 | — | MISSING |  |
-| Store game page: system requirements | components/store/StoreGamePage.tsx:29 | — | MISSING |  |
-| Store game page: tags, About card, More like this | components/store/StoreGamePage.tsx:29 | — | MISSING |  |
-| Store game page: wishlist toggle | components/store/StoreGamePage.tsx:34 | — | MISSING | rpc: store.wishlist.  |
-| Game reviews | components/store/StoreGamePage.tsx:243 | — | MISSING | rpc: store.gameReviews. Chip uses cached score only; no review list. |
+| Store room Discover tab (hero, shelves, tiles) | components/store/StoreRoom.tsx:49 | exo-ui/src/store.rs:957 | DONE | rpc: store.home. Fixed StoreTile::similar_to Vec<String> deserialization and all shelves render. |
+| Store hero hover / pick list | components/store/StoreRoom.tsx:201 | exo-ui/src/store.rs:777 | DONE | 8s auto-rotate with countdown bar, hover pause, reduce-motion pause, active pick click opens game, Steam logo/tags. |
+| Wishlist tab | components/store/storeData.ts:265 | exo-ui/src/store.rs:582 | DONE | rpc: store.wishlist. Loads store.wishlist(get), refreshes on store.changed(wishlist), empty/loading/error states. |
+| Store search (results, empty, loading) | components/store/StoreRoom.tsx:61 | exo-ui/src/store.rs:724 | DONE | rpc: store.search. Debounced 250ms search-as-you-type, clear button, empty/error states. |
+| Tile card: price, discount, store logo | components/store/StoreCard.tsx:87 | exo-ui/src/store.rs:248 | DONE | Steam poster/header fallback, live wishlist bookmark badge, price/discount/was formatting. |
+| Tile card: "Library" button on owned games | components/store/StoreCard.tsx:87 | exo-ui/src/store.rs:348 | DONE | Matches React useOwned; hides price/reviews and opens game directly in Library. |
+| Check prices / On sale split | components/store/StoreRoom.tsx:385 | exo-ui/src/store.rs:610 | DONE | rpc: store.wishlist. Calls store.wishlist(check), splits On sale now vs Not on sale, handles store.sale push toast. |
+| Store game page: offers (open in store) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store_page.rs:1244 | DONE | rpc: store.game, store.open. |
+| Store game page: offer rows (store names, prices, historical low) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store_page.rs:1244 | DONE | rpc: store.game, store.gameOffers, store.open, shell.openUrl. Displays real store names (Steam, Epic Games Store, GOG, Ubisoft), GG.deals link, owned Library primary button; StoreLowest::formatted_date() formats ISO dates cleanly. |
+| Store game page: hero art / header image | components/store/StoreGamePage.tsx:4 | exo-ui/src/store_page.rs:1143 | DONE | rpc: store.game. Fixed 80px Steam logo slot with title fallback, plus 16:9 media stage with header/hero fallback. |
+| Store game page: fact chips (price, reviews, Metacritic, Released) | components/store/StoreGamePage.tsx:243 | exo-ui/src/store_page.rs:1526 | DONE | 10-cell Facts card matching React StoreGamePage. |
+| Store game page: trailers (HLS player) | components/store/TrailerPlayer.tsx:24 | exo-ui/src/store_media.rs:172 | PARTIAL | Wired via rune_media::Player::url with play/pause/mute/scrubber and graceful poster fallback; blocked on HLS playback (video_decoder.rs is Discord WebRTC elementary packets only; desktop Media Foundation IMFSourceResolver in rune-media rejects .m3u8 playlists). |
+| Store game page: screenshot strip + lightbox | components/store/StoreGamePage.tsx:28 | exo-ui/src/store_media.rs:172 | DONE | 16:9 stage + horizontal thumbnail strip (600x338 thumbs) + fullscreen lightbox overlay with prev/next/counter/Esc/arrow keys. |
+| Store game page: system requirements | components/store/StoreGamePage.tsx:29 | exo-ui/src/store_page.rs:1632 | DONE | All 7 hardware rows with This PC comparison marks/tones, Minimum/Recommended rows, and verdict pill. |
+| Store game page: tags, About card, More like this | components/store/StoreGamePage.tsx:29 | exo-ui/src/store_page.rs:1168 | DONE | Single-row tag pills, About card, and More like this horizontal shelf footer. |
+| Store game page: wishlist toggle | components/store/StoreGamePage.tsx:34 | exo-ui/src/store_page.rs:1357 | DONE | rpc: store.wishlist. Optimistic add/remove with green check and error rollback. |
+| Game reviews | components/store/StoreGamePage.tsx:243 | exo-ui/src/store_page.rs:1526 | DONE | rpc: store.gameReviews. Fetches Recent reviews and renders in Facts card alongside all-time Reviews. |
 
 ## Discord
 
@@ -162,24 +162,24 @@ Totals: DONE 25, PARTIAL 9, MISSING 11, BROKEN 0 (of 45).
 |---|---|---|---|---|
 | Sign-in (QR / token) and account switch | components/FriendsRoomRoute.tsx:1 | exo-ui/src/discord.rs:690 | DONE | rpc: discord.signIn, discord.accounts. accounts RPC namespace (add/switch) not called. |
 | DM list, pinned DMs, unread dots, search | components/discord/Messages.tsx:17 | exo-ui/src/discord.rs:1817 | DONE | rpc: discord.home. Message requests + group edit (Messages.tsx) missing. |
-| Create DM / group DM (select friends, 10 limit) | components/discord/Messages.tsx:226 | exo-ui/src/discord_threads.rs:100 | DONE | rpc: discord.channel. WP6: Select friends modal with search and 9-friend (10-member) cap. |
+| Create DM / group DM (select friends, 10 limit) | components/discord/Messages.tsx:226 | exo-ui/src/discord_threads.rs:100 | DONE | WP6: Create DM / group DM modal with friend search and 9-friend (10-member) limit via discord.channel. |
 | Friends tab (Online / All / Pending / Blocked / Add friend) | components/discord/HomePage.tsx:1 | exo-ui/src/discord.rs:2602 | DONE | rpc: discord.friends. Smoke: renders Active now/Online with rich profile cards, search, Add friend. |
 | Server rail (icons, unread pips, folders, reorder) | components/discord/DiscordClient.tsx:1 | exo-ui/src/discord.rs:2195 | DONE | rpc: discord.home, discord.server. Smoke: rail with unread pips renders; folder tiles exist (band_folder_tile); drag reorder absent. |
 | Channel list (categories, text, voice, collapse) | components/discord/Channels.tsx:4 | exo-ui/src/discord.rs:2030 | DONE | rpc: discord.channels. Channel status set/clear (voice) skipped per room-discord report. |
 | Message list (virtualized, jump to present, unread bar) | components/discord/Chat.tsx:13 | exo-ui/src/discord_chat.rs:181 | DONE | rpc: discord.messages.  |
-| Message rendering: markdown, mentions, embeds, attachments | components/discord/Message.tsx:11 | exo-ui/src/discord_chat.rs:1129 | DONE | WP6: Full markdown (mentions, roles, subtext, timestamps, spoilers, code), embeds, stickers, forwarded snapshots, thread-start/call/system rows, Spotify Jam / gift / invite link cards. |
-| Composer: send, reply, edit, typing | components/discord/Composer.tsx:154 | exo-ui/src/discord_chat.rs:1870 | DONE | rpc: discord.send, discord.typing, discord.upload. WP6: Multi-line auto_grow, drafts, reply @On/@Off, edit, OS file drop + virtual_cols strip, spoiler, alt text, Modify attachment, upload-as-file, char counter. |
-| Emoji picker, GIF picker, sticker picker | components/discord/Composer.tsx:5 | exo-ui/src/discord_pickers.rs:180 | DONE | rpc: discord.emojis, discord.gifs, discord.stickers, discord.emojiFavorites, discord.gifFavorites. WP6: Unified Expression Picker with Emoji, GIF (trending/favorites/search), and Sticker tabs. |
-| Reactions: add, remove, who reacted | components/discord/Message.tsx:414 | exo-ui/src/discord_pickers.rs:1542 | DONE | rpc: discord.react, discord.reactors. WP6: Normal + super reactions plus Who Reacted dialog with tabs and moderator remove. |
-| Message menu (reply, edit, pin, copy, delete, report, forward) | components/discord/Message.tsx:1 | exo-ui/src/menus.rs:1183 | DONE | WP6: Reply, Edit, Pin, Forward, Create thread, Bookmark, Remind me submenu, View/Clear reactions, Mark unread, Copy text/link/ID, Remove embeds, Delete, Report. |
+| Message rendering: markdown, mentions, embeds, attachments | components/discord/Message.tsx:11 | exo-ui/src/discord_chat.rs:1129 | DONE | WP6: Full markdown (bold/italic/underline/strike/code/spoiler/links/mentions/channels/roles/subtext/timestamps), embeds, stickers, forwarded snapshots, thread-start/pin/call/system rows, Spotify Jam / gift / invite link cards. |
+| Composer: send, reply, edit, typing | components/discord/Composer.tsx:154 | exo-ui/src/discord_chat.rs:1870 | DONE | WP6: Multi-line auto_grow composer, drafts per channel, reply @On/@Off, edit, typing, OS file drop + virtual_cols pending strip, spoiler/alt/Modify attachment, upload-as-file, char counter. |
+| Emoji picker, GIF picker, sticker picker | components/discord/Composer.tsx:5 | exo-ui/src/discord_pickers.rs:180 | DONE | WP6: Expression picker with Emoji, GIF (trending + favorites + search), and Sticker tabs via discord.emojis, discord.emojiFavorites, discord.gifs, discord.gifFavorites, discord.stickers. |
+| Reactions: add, remove, who reacted | components/discord/Message.tsx:414 | exo-ui/src/discord_pickers.rs:1542 | DONE | WP6: Normal + super reactions add/remove via discord.react, plus Who Reacted dialog with per-emoji tabs and moderator remove via discord.reactors. |
+| Message menu (reply, edit, pin, copy, delete, report, forward) | components/discord/Message.tsx:1 | exo-ui/src/menus.rs:1183 | DONE | WP6: Complete DiscordMessage context menu: Reply, Edit, Pin/Unpin, Forward, Create thread, Bookmark, Remind me submenu, View/Clear reactions, Mark unread, Copy text/link/ID, Remove embeds, Delete, Report. |
 | Threads and forum channels | components/discord/Forum.tsx:4 | — | MISSING | rpc: discord.thread, discord.threads.  |
-| Polls (create, vote, results) | components/discord/PollCreator.tsx:23 | exo-ui/src/discord_threads.rs:295 | DONE | rpc: discord.poll. WP6: Poll creator modal, inline voting/remove-vote/end/results, discord.pollVote push event registered in events.rs. |
-| Message search (filters) | components/discord/SearchBar.tsx:1 | exo-ui/src/discord_search.rs:242 | DONE | rpc: discord.search. WP6: Filter chips (from/in/has/mentions/before/on/after/pinned/authorType), sort tabs, pagination, jump. |
-| Pins panel | components/discord/ChatHeader.tsx:1 | exo-ui/src/discord_search.rs:169 | DONE | rpc: discord.pins. WP6: Pins drawer with fetch, jump, and unpin. |
-| Inbox (mentions, unreads) | components/discord/Inbox.tsx:16 | exo-ui/src/discord_search.rs:550 | DONE | rpc: discord.mentions, discord.forYou, discord.unreads. WP6: For you, Unreads (peeks + mark read), Mentions (filters + dismiss), Bookmarks, Reminders. |
-| Saved messages | components/discord/MessageTools.tsx:1 | exo-ui/src/discord_search.rs:550 | DONE | rpc: discord.saved. WP6: Bookmarks & Reminders tabs in Inbox + Bookmark / Remind me message menu actions. |
+| Polls (create, vote, results) | components/discord/PollCreator.tsx:23 | exo-ui/src/discord_threads.rs:295 | DONE | WP6: Poll creator modal, inline poll card voting/remove-vote/end-poll/results via discord.poll, and real-time discord.pollVote push event registered in events.rs. |
+| Message search (filters) | components/discord/SearchBar.tsx:1 | exo-ui/src/discord_search.rs:242 | DONE | WP6: Search drawer with inline filter chips (from:, in:, has:, mentions:, before:, on:/during:, after:, pinned:, authorType:), quick filters, Newest/Oldest/Relevant sort, pagination, and jump via discord.search. |
+| Pins panel | components/discord/ChatHeader.tsx:1 | exo-ui/src/discord_search.rs:169 | DONE | WP6: Pins drawer with discord.pins fetch, jump-to-message, and unpin. |
+| Inbox (mentions, unreads) | components/discord/Inbox.tsx:16 | exo-ui/src/discord_search.rs:550 | DONE | WP6: Full Inbox panel with For you (discord.forYou), Unreads (message peeks + mark channel/server read), Mentions (discord.mentions + filter toggles + dismiss), Bookmarks, and Reminders. |
+| Saved messages | components/discord/MessageTools.tsx:1 | exo-ui/src/discord_search.rs:550 | DONE | WP6: Saved messages Bookmarks & Reminders tabs in Inbox plus Bookmark and Remind me actions in message menu via discord.saved. |
 | Member list (roles, status, presence) | components/discord/MemberList.tsx:1 | exo-ui/src/discord.rs:1246 | DONE | rpc: discord.members.  |
-| User profile popover/card (roles, mutual, note, badges) | components/discord/profileParts.tsx:1 | exo-ui/src/discord_threads.rs:1536 | DONE | rpc: discord.profile, discord.admin. WP6: Popout + full profile modal with banner, badges, bio, roles + role editor, connections, mutual friends/servers tabs, editable note. |
+| User profile popover/card (roles, mutual, note, badges) | components/discord/profileParts.tsx:1 | exo-ui/src/discord_threads.rs:1536 | DONE | WP6: Full DM user profile sidebar + popout & full modal with banner, overlapping avatar, badges, bio, Member since, roles + role editor (discord.admin), connections, mutual friends/servers, and editable note via discord.profile. |
 | User menu (message, call, nickname, timeout, kick/ban, report) | components/discord/UserMenu.tsx:71 | exo-ui/src/menus.rs:1288† | PARTIAL | No change nickname, timeout, transfer ownership, report. |
 | Status menu (online / idle / dnd / invisible / custom) | components/discord/MeMenus.tsx:1 | exo-ui/src/discord.rs:1435 | DONE | rpc: discord.setStatus, discord.status.  |
 | Voice channel join / leave / mute / deafen | components/discord/voice.tsx:31 | exo-ui/src/discord_voice.rs:2 | DONE | rpc: discord.voice.  |
@@ -194,16 +194,16 @@ Totals: DONE 25, PARTIAL 9, MISSING 11, BROKEN 0 (of 45).
 | Server settings (overview, roles, emoji, moderation, automod, onboarding, guide) | components/discord/ServerSettings.tsx:45 | — | MISSING | rpc: discord.admin. 10+ settings pages: settingsRoles, settingsExpressions, settingsModeration, settingsAutomod, settingsOnboarding, settingsGuide, settingsAccess, settingsRoleLinks, settingsPages, ServerSettings. None natively. |
 | Channel settings (overview, permissions, slowmode) | components/discord/ChannelSettings.tsx:34 | — | MISSING | rpc: discord.admin.  |
 | Server pages (events, resources, get started, members) | components/discord/serverPages.tsx:1 | — | MISSING | rpc: discord.admin. events.tsx: create/start/edit/cancel events. |
-| Invite dialog | components/discord/InviteDialog.tsx:30 | exo-ui/src/discord_threads.rs:686 | DONE | rpc: discord.channel. WP6: Friend search + send invite, copy link, edit invite settings (expiry/uses/temporary). |
+| Invite dialog | components/discord/InviteDialog.tsx:30 | exo-ui/src/discord_threads.rs:686 | DONE | WP6: Invite dialog with friend search + send invite, copy invite link, and Edit invite link settings (expiry/max uses/temporary) via discord.channel action invite. |
 | Shop (collectibles, bundles, payment) | components/discord/ShopPage.tsx:124 | exo-ui/src/discord.rs:3434 | PARTIAL | rpc: discord.shop. Placeholder title only. |
 | User settings: Account / Profile | components/discord/settings/AccountPages.tsx:1 | exo-ui/src/discord.rs:3871† | PARTIAL | rpc: discord.account, discord.userSettings. discord.userSettings event not handled. |
 | User settings: Voice and video (devices, volumes, noise suppression, echo, AGC) | components/discord/settings/VoicePage.tsx:19 | — | PARTIAL | rpc: discord.clientSettings. clientSettings noise suppression / echo / AGC not wired (room-discord report). |
 | User settings: Notifications / App / Privacy / Keybinds | components/discord/settings/AppPages.tsx:1 | — | MISSING | rpc: discord.userSettings, discord.account. discord.keybind event not handled (global push-to-talk). |
 | Report message/user/server | components/discord/Report.tsx:2 | — | MISSING | rpc: discord.report.  |
-| Link rows / image & file viewer, fileText, image save | components/discord/extras.tsx:1 | exo-ui/src/discord_chat.rs:2417 | DONE | rpc: discord.image, discord.fileText, shell.openUrl. WP6: Rune modal Lightbox gallery (prev/next, zoom, drag-pan, Esc) + Copy/Save/Open original bar, right-click image menu, inline fileText preview, virtual_cols multi-image strip. |
+| Link rows / image & file viewer, fileText, image save | components/discord/extras.tsx:1 | exo-ui/src/discord_chat.rs:2417 | DONE | WP6: Rune modal Lightbox gallery (prev/next, zoom, drag-pan, Esc) + Copy/Save/Open original actions (discord.image, shell.openUrl), right-click image menu, discord.fileText inline preview + expand/collapse, virtual_cols multi-image strips. |
 | Colors / font / Streamer mode | components/discord/DiscordClient.tsx:1 | — | MISSING | rpc: discord.colors, discord.font. discord.colors event not handled. |
-| Interactions (slash commands, bot apps, buttons) | components/discord/Composer.tsx:443 | exo-ui/src/discord_pickers.rs:1094 | DONE | rpc: discord.apps, discord.interaction. WP6: Slash commands + inline CommandForm, bot message components (buttons/selects), AppModal overlay, ephemeral dismiss, discord.interaction event registered in events.rs. |
-| Mentionable autocomplete | components/discord/Composer.tsx:32 | exo-ui/src/discord_pickers.rs:815 | DONE | rpc: discord.mentionable. WP6: @user, @role, @everyone/@here, #channel, :emoji: autocomplete + raw mention expansion. |
+| Interactions (slash commands, bot apps, buttons) | components/discord/Composer.tsx:443 | exo-ui/src/discord_pickers.rs:1094 | DONE | WP6: Slash command list + inline CommandForm with option autocomplete, bot message components (buttons/selects), AppModal overlay, ephemeral dismiss via discord.apps & discord.interaction push event. |
+| Mentionable autocomplete | components/discord/Composer.tsx:32 | exo-ui/src/discord_pickers.rs:815 | DONE | WP6: Mentionable autocomplete for @user, @role, @everyone/@here, #channel, and :emoji: with raw token expansion via discord.mentionable. |
 | Top-bar cursor over open menu | components/discord/Chat.tsx:1 | — | PARTIAL | Blocked on a Rune change (room-discord report). |
 
 ## Music
@@ -531,25 +531,25 @@ Owns: native-ui/crates/exo-ui/src/game_page.rs (+ new game_props.rs, game_perf.r
 
 Depends on: None for RPC (game.settings, game.properties.set, dlss.*, gpu.game, hdr.game, compress.*, art.*, keep.status, shaders.status all exist). Rune: file picker is host-side (shell), none needed.
 
-- `game-page-02` [PARTIAL] Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy)
-- `game-page-03` [PARTIAL] Download / install progress bar + speed + ETA
-- `game-page-04` [BROKEN] Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen)
-- `game-page-05` [BROKEN] Display mode (windowed / fullscreen / borderless)
-- `game-page-06` [MISSING] Frame generation row (DLSS FG / AFMF / Lossless)
-- `game-page-07` [MISSING] HDR row
-- `game-page-08` [MISSING] Compress row (CompactOS per game)
-- `game-page-09` [MISSING] Shader pre-compile row
-- `game-page-10` [PARTIAL] Properties: General (launch options, language, Steam overlay)
-- `game-page-12` [PARTIAL] Properties: Betas (switch branch, access code)
-- `game-page-13` [PARTIAL] Properties: DLC
-- `game-page-14` [BROKEN] Properties: Artwork (refetch, replace, reset)
-- `game-page-15` [MISSING] Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent)
-- `game-page-16` [MISSING] Properties: Anti-cheat choice
-- `game-page-17` [MISSING] Properties: Cloud saves / Steam Input
-- `game-page-18` [MISSING] Properties: Move to another library folder / size on disk
-- `game-page-19` [PARTIAL] Achievements (list, progress, rarity) + pop-up
-- `game-page-21` [PARTIAL] Friends who play
-- `game-page-22` [MISSING] Store page link / Buy again
+- `game-page-02` [DONE] Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy)
+- `game-page-03` [DONE] Download / install progress bar + speed + ETA
+- `game-page-04` [DONE] Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen)
+- `game-page-05` [DONE] Display mode (windowed / fullscreen / borderless)
+- `game-page-06` [DONE] Frame generation row (DLSS FG / AFMF / Lossless)
+- `game-page-07` [DONE] HDR row
+- `game-page-08` [DONE] Compress row (CompactOS per game)
+- `game-page-09` [DONE] Shader pre-compile row
+- `game-page-10` [DONE] Properties: General (launch options, language, Steam overlay)
+- `game-page-12` [DONE] Properties: Betas (switch branch, access code)
+- `game-page-13` [DONE] Properties: DLC
+- `game-page-14` [DONE] Properties: Artwork (refetch, replace, reset)
+- `game-page-15` [DONE] Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent)
+- `game-page-16` [DONE] Properties: Anti-cheat choice
+- `game-page-17` [DONE] Properties: Cloud saves / Steam Input
+- `game-page-18` [DONE] Properties: Move to another library folder / size on disk
+- `game-page-19` [DONE] Achievements (list, progress, rarity) + pop-up
+- `game-page-21` [DONE] Friends who play
+- `game-page-22` [DONE] Store page link / Buy again
 
 #### WP2 Library: folders, select mode, gifts, shelves, drag and drop (L, 15 items)
 
@@ -604,34 +604,34 @@ Owns: settings.rs (+ new settings_accounts.rs, settings_stores.rs, settings_acco
 
 Depends on: Rune fork: masked (password) text input, one-time-code / QR image display. RPC: all present (accounts.*, steam.signIn*, exoAccount.*, stores.*, telemetry.*, report.*, web.preferences.*, backup.restore).
 
-- `shell-bar-25` [MISSING] Report a problem entry points (Settings, palette, error screen)
-- `settings-01` [PARTIAL] Settings search + jump (38 entries)
+- `shell-bar-25` [DONE] Report a problem entry points (Settings, palette, error screen)
+- `settings-01` [DONE] Settings search + jump (38 entries)
 - `settings-04` [MISSING] General: FPS counter (position, 1% low, on/off)
-- `settings-05` [MISSING] General: achievement pop-up sound, test pop-up, OBS overlay URL
-- `settings-06` [PARTIAL] General: install folder, download hours, auto-update games, update upscalers in anti-cheat games
-- `settings-07` [MISSING] Store accounts: sign in to Steam (QR / password / guard)
-- `settings-08` [MISSING] Store accounts: Epic / GOG / Ubisoft / EA accounts (add, switch, remove, import)
-- `settings-09` [PARTIAL] Stores section (auth state, check, matrix, offline mode, Riot ID, get another store)
-- `settings-10` [MISSING] Gifts (Steam gifts sign-in)
-- `settings-11` [MISSING] Riot data export import / baseline
-- `settings-12` [PARTIAL] Exo Account (create, sign in, password, recovery code, devices, export, delete)
-- `settings-14` [MISSING] Privacy: what was sent, delete my data, telemetry opt-out
-- `settings-15` [MISSING] Report a problem (preview payload, attach logs, send, open on GitHub)
+- `settings-05` [DONE] General: achievement pop-up sound, test pop-up, OBS overlay URL
+- `settings-06` [DONE] General: install folder, download hours, auto-update games, update upscalers in anti-cheat games
+- `settings-07` [DONE] Store accounts: sign in to Steam (QR / password / guard)
+- `settings-08` [DONE] Store accounts: Epic / GOG / Ubisoft / EA accounts (add, switch, remove, import)
+- `settings-09` [DONE] Stores section (auth state, check, matrix, offline mode, Riot ID, get another store)
+- `settings-10` [DONE] Gifts (Steam gifts sign-in)
+- `settings-11` [DONE] Riot data export import / baseline
+- `settings-12` [DONE] Exo Account (create, sign in, password, recovery code, devices, export, delete)
+- `settings-14` [DONE] Privacy: what was sent, delete my data, telemetry opt-out
+- `settings-15` [DONE] Report a problem (preview payload, attach logs, send, open on GitHub)
 - `settings-17` [PARTIAL] Music settings (service)
 - `settings-18` [MISSING] Apps settings (web preferences)
-- `settings-21` [MISSING] About: Clear caches, Changelog, Licenses, Support Exo
-- `settings-22` [MISSING] Shader pre-compile settings
+- `settings-21` [DONE] About: Clear caches, Changelog, Licenses, Support Exo
+- `settings-22` [DONE] Shader pre-compile settings
 - `settings-23` [MISSING] Discord settings pages (Account, Voice, App, Privacy, Keybinds)
-- `onboarding-account-01` [PARTIAL] Setup flow (welcome, scan, stores, account, apps, cleanup, restore)
-- `onboarding-account-02` [PARTIAL] Setup: Account step (create / sign in / recovery code, probe)
-- `onboarding-account-03` [MISSING] Setup: Recovery code screen (save, confirm)
-- `onboarding-account-04` [MISSING] Setup: Apps step (web preferences)
-- `onboarding-account-05` [MISSING] Setup: Cleanup step (replaced apps remove)
-- `onboarding-account-06` [MISSING] Setup: Restore step (restore from backup)
-- `onboarding-account-07` [PARTIAL] Setup: per-device bodies; PC defaults count
-- `onboarding-account-08` [PARTIAL] Clients gate (store clients missing / fix)
-- `onboarding-account-09` [MISSING] Account sheet (from bar) / sign-in state
-- `onboarding-account-10` [MISSING] Backup answer prompt (first-run restore/decline)
+- `onboarding-account-01` [DONE] Setup flow (welcome, scan, stores, account, apps, cleanup, restore)
+- `onboarding-account-02` [DONE] Setup: Account step (create / sign in / recovery code, probe)
+- `onboarding-account-03` [DONE] Setup: Recovery code screen (save, confirm)
+- `onboarding-account-04` [DONE] Setup: Apps step (web preferences)
+- `onboarding-account-05` [DONE] Setup: Cleanup step (replaced apps remove)
+- `onboarding-account-06` [DONE] Setup: Restore step (restore from backup)
+- `onboarding-account-07` [DONE] Setup: per-device bodies; PC defaults count
+- `onboarding-account-08` [DONE] Clients gate (store clients missing / fix)
+- `onboarding-account-09` [DONE] Account sheet (from bar) / sign-in state
+- `onboarding-account-10` [DONE] Backup answer prompt (first-run restore/decline)
 
 #### WP5 Store game page and store extras (M, 12 items)
 
@@ -639,18 +639,18 @@ Owns: store.rs (+ new store_page.rs, store_media.rs)
 
 Depends on: Trailers need an HLS path: reuse video_decoder.rs (owned by WP10 for captures; coordinate read-only reuse). Rune fork: image lightbox / horizontal strip virtualisation if not present. RPC: store.gameReviews and storeWishlist(check) exist.
 
-- `store-02` [PARTIAL] Store hero hover / pick list
-- `store-03` [PARTIAL] Wishlist tab
-- `store-06` [MISSING] Tile card: "Library" button on owned games
-- `store-07` [MISSING] Check prices / On sale split
-- `store-09` [BROKEN] Store game page: offer rows (store names, prices, historical low)
-- `store-10` [MISSING] Store game page: hero art / header image
-- `store-12` [MISSING] Store game page: trailers (HLS player)
-- `store-13` [MISSING] Store game page: screenshot strip + lightbox
-- `store-14` [MISSING] Store game page: system requirements
-- `store-15` [MISSING] Store game page: tags, About card, More like this
-- `store-16` [MISSING] Store game page: wishlist toggle
-- `store-17` [MISSING] Game reviews
+- `store-02` [DONE] Store hero hover / pick list
+- `store-03` [DONE] Wishlist tab
+- `store-06` [DONE] Tile card: "Library" button on owned games
+- `store-07` [DONE] Check prices / On sale split
+- `store-09` [DONE] Store game page: offer rows (store names, prices, historical low)
+- `store-10` [DONE] Store game page: hero art / header image
+- `store-12` [PARTIAL] Store game page: trailers (HLS player — UI + rune_media::Player::url wired with poster fallback; blocked on desktop MF/video_decoder HLS support)
+- `store-13` [DONE] Store game page: screenshot strip + lightbox
+- `store-14` [DONE] Store game page: system requirements
+- `store-15` [DONE] Store game page: tags, About card, More like this
+- `store-16` [DONE] Store game page: wishlist toggle
+- `store-17` [DONE] Game reviews
 
 #### WP6 Discord chat: composer, pickers, threads, polls, search, inbox, profile (L, 16 items)
 
@@ -659,7 +659,7 @@ Owns: discord_chat.rs, discord_chat_state.rs, discord_md.rs (+ new discord_picke
 Depends on: Rune fork: file drop onto composer, multi-line text with caret/selection already used? (verify), animated sticker (Lottie) decoder optional. RPC present: discord.emojis/gifs/stickers/thread(s)/poll/search/saved/mentions/forYou/upload.
 
 - `discord-03` [DONE] Create DM / group DM (select friends, 10 limit) — `exo-ui/src/discord_threads.rs:100`
-- `discord-08` [DONE] Message rendering: markdown, mentions, embeds, attachments — `exo-ui/src/discord_chat.rs:1129`, `exo-ui/src/discord_md.rs:1`
+- `discord-08` [DONE] Message rendering: markdown, mentions, embeds, attachments — `exo-ui/src/discord_chat.rs:1129`
 - `discord-09` [DONE] Composer: send, reply, edit, typing — `exo-ui/src/discord_chat.rs:1870`
 - `discord-10` [DONE] Emoji picker, GIF picker, sticker picker — `exo-ui/src/discord_pickers.rs:180`
 - `discord-11` [DONE] Reactions: add, remove, who reacted — `exo-ui/src/discord_pickers.rs:1542`

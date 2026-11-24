@@ -48,7 +48,17 @@ pub enum HostEventKind {
     AutopilotReport,
     AutopilotLive,
     ShadersChanged,
+    ShadersEvent,
+    AccountsProgress,
+    BackupStopped,
+    ComponentsFailed,
+    GiftsChanged,
     StoreChanged,
+    StoreSale,
+    GameAchievements,
+    GameOptimizedAgain,
+    GameOptimizeHeld,
+    CompressProgress,
     Raw,
     Disconnected,
 }
@@ -98,7 +108,17 @@ impl HostEventKind {
             HostEvent::AutopilotReport(_) => Self::AutopilotReport,
             HostEvent::AutopilotLive(_) => Self::AutopilotLive,
             HostEvent::ShadersChanged => Self::ShadersChanged,
+            HostEvent::ShadersEvent(_) => Self::ShadersEvent,
+            HostEvent::AccountsProgress(_) => Self::AccountsProgress,
+            HostEvent::BackupStopped(_) => Self::BackupStopped,
+            HostEvent::ComponentsFailed(_) => Self::ComponentsFailed,
+            HostEvent::GiftsChanged(_) => Self::GiftsChanged,
             HostEvent::StoreChanged(_) => Self::StoreChanged,
+            HostEvent::StoreSale(_) => Self::StoreSale,
+            HostEvent::GameAchievements(_) => Self::GameAchievements,
+            HostEvent::GameOptimizedAgain(_) => Self::GameOptimizedAgain,
+            HostEvent::GameOptimizeHeld(_) => Self::GameOptimizeHeld,
+            HostEvent::CompressProgress(_) => Self::CompressProgress,
             HostEvent::Raw { .. } => Self::Raw,
             HostEvent::Disconnected(_) => Self::Disconnected,
         }
@@ -127,6 +147,8 @@ impl EventRegistry {
         register_discord(&mut reg);
         register_pc(&mut reg);
         register_store(&mut reg);
+        register_game(&mut reg);
+        crate::settings_state::register_wp4_events(&mut reg);
         reg
     }
 
@@ -493,6 +515,40 @@ fn register_store(reg: &mut EventRegistry) {
         };
         state.apply_store_changed(sc);
         state.room == Room::Store
+    });
+    reg.on(HostEventKind::StoreSale, |state, ev| {
+        let HostEvent::StoreSale(sale) = ev else {
+            return false;
+        };
+        state.apply_store_sale(sale);
+        true
+    });
+}
+
+fn register_game(reg: &mut EventRegistry) {
+    reg.on(HostEventKind::GameAchievements, |state, ev| {
+        let HostEvent::GameAchievements(ga) = ev else {
+            return false;
+        };
+        state.handle_game_achievements(ga)
+    });
+    reg.on(HostEventKind::GameOptimizedAgain, |state, ev| {
+        let HostEvent::GameOptimizedAgain(go) = ev else {
+            return false;
+        };
+        state.handle_game_optimized_again(go)
+    });
+    reg.on(HostEventKind::GameOptimizeHeld, |state, ev| {
+        let HostEvent::GameOptimizeHeld(go) = ev else {
+            return false;
+        };
+        state.handle_game_optimize_held(go)
+    });
+    reg.on(HostEventKind::CompressProgress, |state, ev| {
+        let HostEvent::CompressProgress(cp) = ev else {
+            return false;
+        };
+        state.handle_compress_progress(cp)
     });
 }
 

@@ -336,14 +336,80 @@ public sealed class AutopilotTelemetryTests : IDisposable
         watch.Second("g1", "Game", true, Frames(7, 10), [1]);
         Assert.Equal(1, purges);
 
-        clock = clock.AddSeconds(10);
+        clock = clock.AddSeconds(30);
         watch.Second("g1", "Game", true, Frames(7, 10), [1]);
         Assert.Equal(1, purges);
 
-        clock = clock.AddSeconds(25);
+        clock = clock.AddSeconds(35);
         watch.Second("g1", "Game", true, Frames(7, 10), [1]);
         Assert.Equal(2, purges);
         watch.End();
+
+        var disabledPurges = 0;
+        var disabledWatch = new AutopilotWatch(
+            () => new CustomSampler(() => currentSecond),
+            _ => true,
+            () => clock,
+            () => { disabledPurges++; return true; },
+            () => false);
+        disabledWatch.Second("g1", "Game", true, Frames(7, 10), [1]);
+        Assert.Equal(0, disabledPurges);
+        disabledWatch.End();
+    }
+
+    [Fact]
+    public void StandbyPurgeControllerReportsUnavailableAndRetriesAfterElevationChanges()
+    {
+        var fake = new FakeStandbyPurgeSystem();
+        var controller = new StandbyPurgeController(fake);
+
+        var unavailable = controller.Status();
+        Assert.False(unavailable.Available);
+        Assert.False(string.IsNullOrWhiteSpace(unavailable.Reason));
+        Assert.False(controller.TryPurge());
+        Assert.Equal(0, fake.EnableCalls);
+        Assert.Equal(0, fake.PurgeCalls);
+        Assert.Equal(0, fake.ElevatedCalls);
+
+        fake.CanElevateSilently = true;
+        var silentStatus = controller.Status();
+        Assert.True(silentStatus.Available);
+        Assert.True(silentStatus.SilentElevated);
+        Assert.Null(silentStatus.Reason);
+        Assert.True(controller.TryPurge());
+        Assert.Equal(1, fake.ElevatedCalls);
+
+        fake.CanElevateSilently = false;
+        fake.PrivilegeHeld = true;
+        var inProcStatus = controller.Status();
+        Assert.True(inProcStatus.Available);
+        Assert.True(inProcStatus.InProcess);
+        Assert.Null(inProcStatus.Reason);
+        Assert.True(controller.TryPurge());
+        Assert.Equal(1, fake.EnableCalls);
+        Assert.Equal(1, fake.PurgeCalls);
+
+        fake.PurgeStatus = unchecked((int)0xC0000061);
+        Assert.False(controller.TryPurge());
+        fake.PurgeStatus = 0;
+        Assert.True(controller.TryPurge());
+        Assert.Equal(3, fake.PurgeCalls);
+    }
+
+    private sealed class FakeStandbyPurgeSystem : IStandbyPurgeSystem
+    {
+        public bool PrivilegeHeld { get; set; }
+        public bool CanElevateSilently { get; set; }
+        public int PurgeStatus { get; set; }
+        public int EnableCalls { get; private set; }
+        public int PurgeCalls { get; private set; }
+        public int ElevatedCalls { get; private set; }
+
+        public bool HasPrivilege() => PrivilegeHeld;
+        public bool EnablePrivilege() { EnableCalls++; return PrivilegeHeld; }
+        public int PurgeMemoryList() { PurgeCalls++; return PurgeStatus; }
+        public bool CanSilentElevate() => CanElevateSilently;
+        public bool RunSilentElevatedPurge() { ElevatedCalls++; return CanElevateSilently; }
     }
 
     private sealed class CustomSampler(Func<SystemSecond?> read) : ISystemSampler

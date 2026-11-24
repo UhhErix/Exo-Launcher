@@ -71,6 +71,8 @@ public sealed class SystemTuningTests : IDisposable
         public bool SupportsOsOverhead { get; set; }
         public bool Laptop { get; set; }
         public bool IsLaptop() => Laptop;
+        public bool AskUac { get; set; } = true;
+        public bool WindowsAsks() => AskUac;
         public string? DirectXUser { get; set; }
         public int[] Mouse { get; set; } = [6, 10, 1];
         public string? UserDirectXSettings() => DirectXUser;
@@ -1038,19 +1040,19 @@ public sealed class SystemTuningTests : IDisposable
     }
 
     [Fact]
-    public async Task Os_overhead_applies_desktop_power_throttling_and_skips_it_on_laptop()
+    public async Task Os_overhead_omits_power_throttling_off_and_reverts_p2p_and_widgets()
     {
         _system.SupportsOsOverhead = true;
         _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")] = 3;
         _system.OnRun = _system.Take;
 
         Assert.Null(await Make().ApplyAsync());
-        Assert.Equal(1, _system.Dwords[(@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff")]);
+        Assert.False(_system.Dwords.ContainsKey((LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)));
         Assert.Equal(0, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
         Assert.Equal(0, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests")]);
 
         Assert.Null(await Make().TurnOffAsync(OsOverheadKey));
-        Assert.False(_system.Dwords.ContainsKey((@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff")));
+        Assert.False(_system.Dwords.ContainsKey((LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)));
         Assert.Equal(3, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
         Assert.False(_system.Dwords.ContainsKey((@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests")));
 
@@ -1058,10 +1060,90 @@ public sealed class SystemTuningTests : IDisposable
         _system.Runs.Clear();
         _system.Laptop = true;
         Assert.Null(await Make().ApplyAsync([OsOverheadKey]));
-        Assert.False(_system.Dwords.ContainsKey((@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff")));
+        Assert.False(_system.Dwords.ContainsKey((LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)));
         Assert.Equal(0, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
 
         Assert.Null(Revert(OsOverheadKey, new Was(Strings: [@"SOFTWARE\Microsoft\Windows Defender|DisableAntiSpyware=1"])));
+    }
+
+    [Fact]
+    public async Task Legacy_power_throttling_off_migrates_only_when_exo_set_it()
+    {
+        _system.SupportsOsOverhead = true;
+        _system.Dwords[(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)] = 1;
+        _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")] = 0;
+        _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests")] = 0;
+        _system.OnRun = _system.Take;
+
+        var legacySaved = new Saved(
+            [],
+            new()
+            {
+                [OsOverheadKey] = new Was(Strings:
+                [
+                    $"{LegacyPowerThrottlingKey}|{LegacyPowerThrottlingValue}=absent",
+                    @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization|DODownloadMode=3",
+                    @"SOFTWARE\Policies\Microsoft\Dsh|AllowNewsAndInterests=absent",
+                ]),
+            },
+            new(),
+            [],
+            []);
+        File.WriteAllText(SavedPath, System.Text.Json.JsonSerializer.Serialize(legacySaved));
+
+        var pending = Make().Read().Items.Single(i => i.Key == OsOverheadKey);
+        Assert.False(pending.On);
+        Assert.Contains("EcoQoS", pending.Detail, StringComparison.Ordinal);
+
+        _system.AskUac = true;
+        Assert.False(await Make().MigrateLegacyPowerThrottlingAsync(allowPrompt: false));
+        Assert.Equal(1, _system.Dwords[(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)]);
+
+        _system.AskUac = false;
+        Assert.True(await Make().MigrateLegacyPowerThrottlingAsync(allowPrompt: false));
+        Assert.False(_system.Dwords.ContainsKey((LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)));
+        Assert.True(Make().Read().Items.Single(i => i.Key == OsOverheadKey).On);
+
+        _system.Dwords[(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)] = 1;
+        var priorZero = legacySaved with
+        {
+            Kept = new()
+            {
+                [OsOverheadKey] = new Was(Strings:
+                [
+                    $"{LegacyPowerThrottlingKey}|{LegacyPowerThrottlingValue}=0",
+                    @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization|DODownloadMode=3",
+                    @"SOFTWARE\Policies\Microsoft\Dsh|AllowNewsAndInterests=absent",
+                ]),
+            },
+        };
+        File.WriteAllText(SavedPath, System.Text.Json.JsonSerializer.Serialize(priorZero));
+        Assert.Null(await Make().ApplyAsync([OsOverheadKey]));
+        Assert.Equal(0, _system.Dwords[(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)]);
+
+        _system.Dwords[(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)] = 1;
+        var userOwned = legacySaved with
+        {
+            Kept = new()
+            {
+                [OsOverheadKey] = new Was(Strings:
+                [
+                    $"{LegacyPowerThrottlingKey}|{LegacyPowerThrottlingValue}=1",
+                    @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization|DODownloadMode=3",
+                    @"SOFTWARE\Policies\Microsoft\Dsh|AllowNewsAndInterests=absent",
+                ]),
+            },
+        };
+        File.WriteAllText(SavedPath, System.Text.Json.JsonSerializer.Serialize(userOwned));
+        Assert.True(Make().Read().Items.Single(i => i.Key == OsOverheadKey).On);
+        Assert.False(await Make().MigrateLegacyPowerThrottlingAsync(allowPrompt: true));
+        Assert.Equal(1, _system.Dwords[(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)]);
+
+        _system.Dwords[(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)] = 1;
+        File.WriteAllText(SavedPath, System.Text.Json.JsonSerializer.Serialize(legacySaved));
+        Assert.Null(await Make().TurnOffAsync(OsOverheadKey));
+        Assert.False(_system.Dwords.ContainsKey((LegacyPowerThrottlingKey, LegacyPowerThrottlingValue)));
+        Assert.Equal(3, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
     }
 
     [Fact]
@@ -1086,7 +1168,7 @@ public sealed class SystemTuningTests : IDisposable
         Assert.Contains(batch, l => l.Contains("sc.exe config SysMain start= demand", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(batch, l => l.Contains("schtasks.exe", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(batch, l => l.Contains(WindowsFeatures.Flag, StringComparison.Ordinal));
-        Assert.Contains(batch, l => l.Contains("PowerThrottlingOff", StringComparison.Ordinal));
+        Assert.DoesNotContain(batch, l => l.Contains("PowerThrottlingOff", StringComparison.Ordinal));
         Assert.Contains(batch, l => l.Contains("/flushdns", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(1, _system.DnsFlushedCount);
         Assert.Equal(1, _system.StandbyPurgedCount);

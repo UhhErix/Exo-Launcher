@@ -1,12 +1,19 @@
+use crate::clients_gate::clients_step_view;
+use crate::settings::{set_btn, set_danger_btn, set_primary_btn};
+use crate::settings_account::account_step_view;
+use crate::settings_state::{
+    backup_day_label, clients_offered, format_bytes_short, junk_total_bytes, junk_worth,
+    leftover_summary_words, today_utc_ymd,
+};
 use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
-    BG, FG, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, amoled_card,
+    BG, FG, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, amoled_card, bad,
     exo_mark, fg_faint, fg_muted, glass_control_fill, glass_panel_opt, glass_rim_bottom,
     glass_rim_top, good, hairline, hover_fill, icon_check, icon_gamepad, icon_headphones,
     icon_keyboard, icon_microphone, icon_mouse, icon_shield, pressed_fill, scaled,
-    store_logo_or_fallback, type_body, type_page, type_small, warn,
+    store_logo_or_fallback, type_body, type_page, type_small,
 };
-use rune::{Align, Color, Cursor, El, Side, SurfaceFit, TextStyle, col, el, row, text};
+use rune::{Align, Color, Cursor, El, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row, text};
 use serde_json::json;
 use std::collections::VecDeque;
 
@@ -165,16 +172,22 @@ impl AppState {
                 self.load_pc_devices();
                 self.load_settings_room();
                 self.load_backup_and_clients();
+                self.wp4_load_settings_all();
+                self.wp4_load_cleanup();
             }
             0 => {
                 self.load_pc_devices();
                 self.load_settings_room();
+                self.wp4_load_backup_status();
+                self.wp4_load_clients_status(false);
+                self.wp4_load_account_overview();
             }
             2 => self.load_pc_devices(),
             3 => {
                 self.load_pc_exo_ai();
                 self.load_pc_drives();
                 self.load_settings_room();
+                self.wp4_load_cleanup();
             }
             _ => {}
         }
@@ -247,12 +260,6 @@ impl AppState {
         self.setup.open = true;
         self.setup.stage = self.setup.return_to.take().unwrap_or(2);
         self.setup_enter_stage();
-    }
-
-    pub fn setup_open_settings(&mut self, stage: usize) {
-        self.setup.return_to = Some(stage);
-        self.setup.open = false;
-        self.switch_room(Room::Settings);
     }
 
     fn load_backup_and_clients(&mut self) {
@@ -380,7 +387,30 @@ impl AppState {
         changed
     }
 
+    pub fn effective_setup_picks(&self) -> Vec<String> {
+        if let Some(ref picks) = self.setup.picks {
+            return picks.clone();
+        }
+        let Some(ref tuning) = self.pc.tuning else {
+            return Vec::new();
+        };
+        let active: Vec<String> = tuning
+            .items
+            .iter()
+            .filter(|i| i.on)
+            .map(|i| i.key.clone())
+            .collect();
+        if !active.is_empty() {
+            active
+        } else {
+            tuning.items.iter().map(|i| i.key.clone()).collect()
+        }
+    }
+
     pub fn toggle_setup_pick(&mut self, key: &str) {
+        if self.setup.picks.is_none() {
+            self.setup.picks = Some(self.effective_setup_picks());
+        }
         let picks = self.setup.picks.get_or_insert_with(Vec::new);
         if let Some(pos) = picks.iter().position(|k| k == key) {
             picks.remove(pos);
@@ -393,9 +423,7 @@ impl AppState {
         if self.setup.applying {
             return;
         }
-        let Some(picks) = self.setup.picks.clone() else {
-            return;
-        };
+        let picks = self.effective_setup_picks();
         let Some(tuning) = self.pc.tuning.as_ref() else {
             return;
         };
@@ -716,6 +744,15 @@ fn device_maker_model(dev: &exo_rpc::PeripheralCard) -> String {
 
 fn bay_facts(dev: &exo_rpc::PeripheralCard) -> Vec<(&'static str, String)> {
     let mut facts = Vec::new();
+    let kind_label = match dev.kind.as_str() {
+        "mouse" => "Mouse · DPI, polling, profiles",
+        "keyboard" => "Keyboard · rapid trigger, layouts",
+        "headset" | "audio" => "Audio · output, Exo EQ",
+        "microphone" => "Microphone · gain, voice cleanup",
+        "controller" => "Controller · deadzone, calibration",
+        _ => "Peripheral · live device profile",
+    };
+    facts.push(("Role", kind_label.into()));
     if let Some(c) = dev.connection.clone().filter(|c| !c.is_empty()) {
         facts.push(("Connection", c));
     }
@@ -1012,6 +1049,243 @@ fn store_row(s: &AppState, id: &str) -> El {
         .child(state)
 }
 
+fn setup_restore_card(s: &AppState) -> Option<El> {
+    let offer = s.pc.backup.as_ref()?.offer.as_ref()?;
+    let today = today_utc_ymd();
+    let day = backup_day_label(&offer.day, &today);
+    let busy = s.wp4.restore_busy;
+    let held = s.wp4.restore_held;
+    let mut card = amoled_card(RADIUS_CARD)
+        .key("setup-restore-card")
+        .w_full()
+        .padding(18.0)
+        .gap(10.0)
+        .child(text("Restore your data").font(type_body()).color(FG))
+        .child(
+            text(format!(
+                "Exo found a backup from {day}: your settings, library folders, collections, custom covers, playtime and notes. You sign in again afterwards."
+            ))
+            .font(type_small())
+            .color(fg_muted())
+            .wrap(),
+        );
+    let mut actions = row().gap(8.0).center_y();
+    let mut restore_btn = set_primary_btn(
+        "setup-restore-now",
+        if busy {
+            "Restoring…"
+        } else {
+            "Restore my data"
+        },
+        None,
+    )
+    .disabled(busy || held);
+    if !busy && !held {
+        restore_btn = restore_btn.on_press(|s: &mut AppState| s.wp4_restore_backup_offer());
+    }
+    actions = actions.child(restore_btn);
+    if !held {
+        actions = actions.child(
+            set_btn("setup-restore-decline", "Start fresh", None)
+                .disabled(busy)
+                .on_press(|s: &mut AppState| s.wp4_decline_backup_offer()),
+        );
+    }
+    card = card.child(actions);
+    if let Some(ref msg) = s.wp4.restore_message {
+        card = card.child(
+            text(msg.text.clone())
+                .font(type_small())
+                .color(if msg.error { bad() } else { fg_muted() })
+                .wrap(),
+        );
+    }
+    Some(card)
+}
+
+fn setup_apps_card(s: &AppState) -> El {
+    let active = s
+        .wp4
+        .web_prefs
+        .as_ref()
+        .and_then(|p| p.music_service.as_deref())
+        .unwrap_or(s.media.music_service.id());
+    let saving = s.wp4.web_prefs_saving;
+    let choices = [
+        ("spotify", "Spotify", "spotify"),
+        ("apple", "Apple Music", "apple-music"),
+        ("youtube", "YouTube Music", "youtube"),
+    ];
+    let mut tiles = row().w_full().gap(8.0);
+    for (id, label, logo) in choices {
+        let selected = active == id;
+        let btn = if selected {
+            set_primary_btn(
+                format!("setup-music-{id}"),
+                label,
+                Some(store_logo_or_fallback(logo, 15.0)),
+            )
+        } else {
+            set_btn(
+                format!("setup-music-{id}"),
+                label,
+                Some(store_logo_or_fallback(logo, 15.0)),
+            )
+        }
+        .grow(1.0)
+        .disabled(saving)
+        .on_press(move |s: &mut AppState| s.wp4_set_web_music_service(id));
+        tiles = tiles.child(btn);
+    }
+    let mut card = amoled_card(RADIUS_CARD)
+        .key("setup-apps-card")
+        .w_full()
+        .padding(18.0)
+        .gap(10.0)
+        .child(text("Music").font(type_body()).color(FG))
+        .child(tiles);
+    if let Some(ref err) = s.wp4.web_prefs_error {
+        card = card.child(text(err.clone()).font(type_small()).color(bad()).wrap());
+    }
+    card
+}
+
+fn setup_cleanup_card(s: &AppState) -> Option<El> {
+    let shown: Vec<&exo_rpc::ReplacedApp> = s
+        .wp4
+        .replaced_apps
+        .iter()
+        .filter(|app| s.wp4.replaced_listed.contains(&app.id))
+        .collect();
+    let has_junk =
+        junk_worth(&s.wp4.junk_items) || s.wp4.junk_done.is_some() || s.wp4.junk_error.is_some();
+    if shown.is_empty() && !has_junk {
+        return None;
+    }
+    let mut card = amoled_card(RADIUS_CARD)
+        .key("setup-cleanup-card")
+        .w_full()
+        .padding(18.0)
+        .gap(10.0)
+        .child(text("Clean up").font(type_body()).color(FG));
+
+    for app in shown {
+        let gone = !app.installed && app.leftovers == 0;
+        let amount = format_bytes_short(app.bytes);
+        let detail = if !app.installed && !gone {
+            Some(format!(
+                "Left behind: {}",
+                leftover_summary_words(&app.found)
+            ))
+        } else {
+            None
+        };
+        let err = s.wp4.replaced_errors.get(&app.id);
+        let busy_other = s.wp4.replaced_busy.as_deref().is_some_and(|b| b != app.id);
+        let confirming = s.wp4.replaced_confirm.as_deref() == Some(app.id.as_str());
+        let id = app.id.clone();
+        let name = app.name.clone();
+        let ctrl = if gone {
+            text("Removed").font(type_small()).color(good())
+        } else if confirming {
+            let question = if app.installed { "Remove?" } else { "Clear?" };
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(
+                    set_btn(format!("setup-clean-cancel-{id}"), "Cancel", None)
+                        .on_press(|s: &mut AppState| s.wp4.replaced_confirm = None),
+                )
+                .child(
+                    set_danger_btn(format!("setup-clean-go-{id}"), question, None)
+                        .disabled(busy_other)
+                        .on_press(move |s: &mut AppState| {
+                            s.wp4_remove_replaced_app(id.clone(), name.clone())
+                        }),
+                )
+        } else {
+            let label = if app.installed { "Remove" } else { "Clear" };
+            let mut r = row().gap(8.0).center_y();
+            if app.installed && !amount.is_empty() {
+                r = r.child(text(amount).font(type_small()).color(fg_muted()));
+            }
+            r.child(
+                set_danger_btn(format!("setup-clean-{id}"), label, None)
+                    .disabled(busy_other)
+                    .on_press(move |s: &mut AppState| {
+                        s.wp4.replaced_confirm = Some(id.clone());
+                    }),
+            )
+        };
+        let mut left = col()
+            .grow(1.0)
+            .min_w(0.0)
+            .gap(2.0)
+            .child(text(app.name.clone()).font(type_small()).color(FG));
+        if let Some(d) = detail {
+            left = left.child(text(d).font(type_small()).color(fg_muted()).wrap());
+        }
+        if let Some(e) = err {
+            left = left.child(text(e.clone()).font(type_small()).color(bad()).wrap());
+        }
+        card = card.child(
+            row()
+                .w_full()
+                .justify_between()
+                .center_y()
+                .gap(10.0)
+                .child(left)
+                .child(ctrl),
+        );
+    }
+
+    if has_junk {
+        let total = format_bytes_short(junk_total_bytes(&s.wp4.junk_items));
+        let mut left = col()
+            .grow(1.0)
+            .min_w(0.0)
+            .gap(2.0)
+            .child(text("Junk files").font(type_small()).color(FG));
+        if s.wp4.junk_done.is_none() {
+            left = left.child(text(total.clone()).font(type_small()).color(fg_muted()));
+        }
+        if let Some(ref err) = s.wp4.junk_error {
+            left = left.child(text(err.clone()).font(type_small()).color(bad()).wrap());
+        }
+        let ctrl = if let Some(ref done) = s.wp4.junk_done {
+            text(done.clone()).font(type_small()).color(good())
+        } else if s.wp4.junk_confirm {
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(
+                    set_btn("setup-junk-cancel", "Cancel", None)
+                        .on_press(|s: &mut AppState| s.wp4.junk_confirm = false),
+                )
+                .child(
+                    set_danger_btn("setup-junk-go", format!("Delete {total}?"), None)
+                        .disabled(s.wp4.junk_busy)
+                        .on_press(|s: &mut AppState| s.wp4_clean_setup_junk()),
+                )
+        } else {
+            set_danger_btn("setup-junk-clean", "Clean", None)
+                .disabled(s.wp4.junk_busy)
+                .on_press(|s: &mut AppState| s.wp4.junk_confirm = true)
+        };
+        card = card.child(
+            row()
+                .w_full()
+                .justify_between()
+                .center_y()
+                .gap(10.0)
+                .child(left)
+                .child(ctrl),
+        );
+    }
+
+    Some(card)
+}
+
 fn accounts(s: &AppState) -> El {
     let found = store_ids(s);
     let mut list = col().w_full();
@@ -1026,165 +1300,45 @@ fn accounts(s: &AppState) -> El {
             .child(el().w_full().h(1.0).fill(hairline()));
     }
 
-    let account = match s.pc.account.signed_in {
-        true => {
-            s.pc.account
-                .email
-                .clone()
-                .unwrap_or_else(|| "Signed in".into())
-        }
-        false => {
-            "Not signed in. Optional: sync settings across PCs, staying local until you sign in."
-                .into()
-        }
-    };
-    let account_action = if s.pc.account.signed_in {
-        button(
-            "setup-account-sync",
-            "Sync now",
-            false,
-            |s: &mut AppState| s.sync_exo_account(),
-        )
-    } else {
-        button(
-            "setup-account-open",
-            "Sign in",
-            false,
-            |s: &mut AppState| s.setup_open_settings(1),
-        )
-    };
-    let backup_line = match s.pc.backup.as_ref() {
-        Some(b) if b.offer.is_some() => {
-            let o = b.offer.as_ref();
-            format!(
-                "Backup from {} found · {} files",
-                o.map_or("another PC", |o| o.device.as_str()),
-                o.map_or(0, |o| o.files)
-            )
-        }
-        Some(b) => match b.last.as_ref() {
-            Some(last) => format!("{} snapshot · folders, covers & notes", last.day),
-            None => "No backup on this PC yet".into(),
-        },
-        None => "Checking backups".into(),
-    };
-    let (clients_pill, clients_tint, clients_ink) = match s.pc.clients.as_ref() {
-        None => ("Checking", fg_faint().alpha(0.2), fg_muted()),
-        Some(c) if c.needs_fix => ("Needs fix", warn().alpha(0.16), warn()),
-        Some(c) if c.problem.is_some() => ("Unknown", fg_faint().alpha(0.2), fg_muted()),
-        Some(_) => ("Healthy", good().alpha(0.16), good()),
-    };
-    let backup_action = button(
-        "setup-restore-backup",
-        "Restore",
-        false,
-        |s: &mut AppState| s.setup_open_settings(1),
-    );
-
-    let side = col()
-        .w(380.0)
+    let mut side = col()
+        .w(440.0)
+        .h_full()
         .gap(14.0)
+        .pb(20.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
         .child(
             amoled_card(RADIUS_CARD)
+                .key("setup-account-card")
                 .w_full()
                 .padding(18.0)
                 .gap(10.0)
                 .child(text("Exo account").font(type_body()).color(FG))
-                .child(text(account).font(type_small()).color(fg_muted()).wrap())
-                .child(account_action),
-        )
-        .child(
-            amoled_card(RADIUS_CARD)
-                .w_full()
-                .padding(18.0)
-                .gap(12.0)
-                .child(text("Backups & clients").font(type_body()).color(FG))
-                .child(
-                    row()
-                        .w_full()
-                        .justify_between()
-                        .center_y()
-                        .gap(10.0)
-                        .child(
-                            col()
-                                .grow(1.0)
-                                .min_w(0.0)
-                                .gap(2.0)
-                                .child(text("Restore local backup").font(type_small()).color(FG))
-                                .child(
-                                    text(backup_line)
-                                        .font(type_small())
-                                        .color(fg_muted())
-                                        .wrap(),
-                                ),
-                        )
-                        .child(backup_action),
-                )
-                .child(
-                    row()
-                        .w_full()
-                        .justify_between()
-                        .center_y()
-                        .gap(10.0)
-                        .child(
-                            col()
-                                .grow(1.0)
-                                .min_w(0.0)
-                                .gap(2.0)
-                                .child(text("Game clients").font(type_small()).color(FG))
-                                .child(
-                                    text("Steam, Riot & Epic stay untouched as backends")
-                                        .font(type_small())
-                                        .color(fg_muted())
-                                        .wrap(),
-                                ),
-                        )
-                        .child(pill(clients_pill, clients_tint, clients_ink)),
-                ),
-        )
-        .child(
-            amoled_card(RADIUS_CARD)
-                .w_full()
-                .padding(18.0)
-                .gap(12.0)
-                .child(text("Music & chat").font(type_body()).color(FG))
-                .child(
-                    row()
-                        .w_full()
-                        .justify_between()
-                        .center_y()
-                        .child(
-                            text("Spotify, Apple Music, YouTube Music")
-                                .font(type_small())
-                                .color(fg_muted())
-                                .wrap(),
-                        )
-                        .child(button(
-                            "setup-open-music",
-                            "Open Music",
-                            false,
-                            |s: &mut AppState| s.switch_room(Room::Music),
-                        )),
-                )
-                .child(
-                    row()
-                        .w_full()
-                        .justify_between()
-                        .center_y()
-                        .child(
-                            text("Discord, Exo's own client")
-                                .font(type_small())
-                                .color(fg_muted())
-                                .wrap(),
-                        )
-                        .child(button(
-                            "setup-open-discord",
-                            "Open Discord",
-                            false,
-                            |s: &mut AppState| s.switch_room(Room::Discord),
-                        )),
-                ),
+                .child(account_step_view(s)),
         );
+
+    if let Some(restore) = setup_restore_card(s) {
+        side = side.child(restore);
+    }
+
+    if clients_offered(s.pc.clients.as_ref(), s.wp4.clients_failed) {
+        side = side.child(
+            amoled_card(RADIUS_CARD)
+                .key("setup-clients-card")
+                .w_full()
+                .padding(18.0)
+                .gap(10.0)
+                .child(text("Game clients").font(type_body()).color(FG))
+                .child(clients_step_view(s)),
+        );
+    }
+
+    side = side.child(setup_apps_card(s));
+
+    if let Some(cleanup) = setup_cleanup_card(s) {
+        side = side.child(cleanup);
+    }
 
     row()
         .w_full()
@@ -1196,7 +1350,11 @@ fn accounts(s: &AppState) -> El {
             col()
                 .grow(1.0)
                 .min_w(0.0)
+                .h_full()
                 .gap(12.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
                 .child(text("Accounts & stores").font(type_page()).color(FG))
                 .child(
                     text("Exo reads each store's library from this PC. Sign-ins happen only when you press their button.")
@@ -1523,7 +1681,7 @@ fn pc_defaults(s: &AppState) -> El {
             .as_ref()
             .map(|t| t.items.clone())
             .unwrap_or_default();
-    let picks = s.setup.picks.clone().unwrap_or_default();
+    let picks = s.effective_setup_picks();
     let mut list = col().w_full().gap(0.0);
     if tuning_items.is_empty() {
         list = list.child(

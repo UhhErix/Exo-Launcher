@@ -130,6 +130,42 @@ export type FrameGenMod = {
   reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
 }
 
+export type FrameGenRoute = {
+  id: string
+  tier: 'native' | 'mod' | 'driver' | 'external' | 'unavailable'
+  kind: string
+  label: string
+  status: string
+  summary: string
+  gpuSupported: boolean
+  gpuNote: string
+  antiCheatVerdict: string
+  antiCheatNote: string
+  autoEnable: boolean
+  latencyNote: string
+  selectable: boolean
+  active: boolean
+  reason?: string | null
+  howToEnable?: string | null
+  choiceValue?: string | null
+  choices?: string[] | null
+}
+
+export type GameFrameGen = {
+  ok: boolean
+  message?: string | null
+  bestRouteId: string
+  selectedRouteId: string
+  state: 'native' | 'on' | 'off' | 'broken' | 'mod' | 'driver' | 'external' | 'unavailable' | 'unread'
+  word: string
+  good: boolean
+  bad: boolean
+  reason?: string | null
+  howToEnable?: string | null
+  routes: FrameGenRoute[]
+  legacyMod?: FrameGenMod | null
+}
+
 /**
  * A game's line from the Exo Shaders engine (Library > Shaders).
  * noApp: Exo Shaders is not installed. warmed: compiled for this driver. stale:
@@ -693,7 +729,7 @@ export type GpuGame = {
 
 /** System > This PC: one row per setup problem (none when all is well); power switches to Exo's plan for cpu, with Undo; chipset Exo updates (busy while it installs, applied while it waits for a restart, url only after a failed install). */
 export type PcHealthItem = {
-  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'pcie' | 'gpucable' | 'network' | NetworkItemKey | 'netlink'
+  key: 'ram' | 'ramchannel' | 'cpumicrocode' | 'ryzenbranch' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'pcie' | 'gpucable' | 'network' | NetworkItemKey | 'netlink'
   label: string
   detail: string
   url?: string | null
@@ -771,8 +807,8 @@ export type DriveInfo = {
 }
 
 /** A drive setting Exo fixes with Windows' permission: write caching on, write-cache flushing back on, Windows' weekly optimize able to run. */
-export type DriveFix = { key: 'cache' | 'flush' | 'optimize'; label: string; detail: string; applied: boolean; restart: boolean }
-export type DriveAction = 'cache' | 'flush' | 'optimize' | 'all'
+export type DriveFix = { key: 'cache' | 'flush' | 'optimize' | 'trim'; label: string; detail: string; applied: boolean; restart: boolean }
+export type DriveAction = 'cache' | 'flush' | 'optimize' | 'trim' | 'all'
 /** A game's last session whose drive came near its warning point or slowed itself (DriveHeat.cs): its peak °C and how long it slowed. */
 export type DriveHeat = { peak: number; warn?: number | null; slowedSeconds: number }
 export type DrivesState = { ok: boolean; message?: string | null; fixes: DriveFix[]; drives: DriveInfo[] }
@@ -911,11 +947,49 @@ export type AutopilotState = {
   gameMode: { off: boolean; keptOn?: string | null }
   mouseAccel?: { off: boolean; managed: boolean }
   memoryIntegrity?: { status: AutopilotMemoryIntegrityStatus; reason: string; canUndo: boolean; needsRestart: boolean }
+  standbyPurge?: { available: boolean; reason?: string | null }
   cpu: string
   now?: { game: string; did: string[] } | null
   live: AutopilotLive | null; reports: AutopilotReport[]
 }
 export type AutopilotChange = Partial<Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGameMode' | 'coreParking' | 'alwaysDemote' | 'suspend'>>
+
+export type GpuAdapterUsage = {
+  luid: string
+  name: string
+  vendorId: number
+  dedicatedBytes: number
+  sharedBytes: number
+  software: boolean
+}
+
+export type GpuEngineSlice = { type: string; percent: number }
+
+export type GpuProcessUsage = {
+  pid: number
+  name: string
+  adapterLuid: string
+  adapterName: string
+  totalPercent: number
+  engines: GpuEngineSlice[]
+  localBytes: number
+  nonLocalBytes: number
+  protectedReason?: string | null
+}
+
+export type GpuUsageAnswer = {
+  summary: string
+  topGpu: GpuProcessUsage | null
+  topVram: GpuProcessUsage | null
+  hogs: GpuProcessUsage[]
+}
+
+export type GpuProcessesState = {
+  ok: boolean
+  adapters: GpuAdapterUsage[]
+  processes: GpuProcessUsage[]
+  answer: GpuUsageAnswer
+}
 
 export type ExoAiFanPreset = 'auto' | 'quiet' | 'balanced' | 'performance'
 
@@ -944,6 +1018,7 @@ export type ExoAiState = {
     fanCount: number
     note: string | null
   }
+  gpuAnswer?: GpuUsageAnswer | null
 }
 
 export type ExoAiChange = {
@@ -2797,6 +2872,8 @@ export const host = {
     rawCall<{ ok: boolean; message?: string }>('dlss.consent', { id, allow, ...(allow && antiCheat ? { antiCheat } : {}) }),
   /** The game's Frame generation line. */
   dlssFrameGen: (id: string) => rawCall<FrameGenMod>('dlss.frameGen', { id }, 60_000),
+  gameFrameGen: (id: string, change?: { route?: string; xessOverride?: IntelFrameGen }) =>
+    rawCall<GameFrameGen>('game.frameGen', { id, ...change }, 60_000),
   dlssNewer: () => rawCall<{ ok: boolean; items: { family: string; version: string }[] }>('dlss.newer', {}, 15_000),
   dlssDownloadNewer: () => rawCall<{ ok: boolean; message?: string | null }>('dlss.downloadNewer', {}, 10 * 60_000),
   shadersStatus: (id: string) => rawCall<ShaderStatus>('shaders.status', { id }),
@@ -3117,8 +3194,9 @@ export const host = {
   gpuGame: (id: string, change?: { frameGen?: IntelFrameGen }) => rawCall<GpuGame>('gpu.game', { id, ...change }, 30_000),
   /** The card maker's own control panel opened as the user (NVIDIA Control Panel, AMD Software, Intel Graphics Software); message names one that isn't installed. */
   gpuControlPanel: () => rawCall<{ ok: boolean; message?: string | null }>('gpu.controlPanel', {}, 20_000),
+  gpuProcesses: (limit?: number) => rawCall<GpuProcessesState>('gpu.processes', limit ? { limit } : {}, 15_000),
   /** System > This PC: the checks; apply or undo Exo's power plan; gpusched opens Windows' Graphics settings; gamemode-on/off and gamebar-on (Exo keeps Game Bar off)/off (Exo puts it back) answer ok, and a sentence when Windows didn't take it. */
-  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
+  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'winupdate' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
   /** One item of Best settings › Network on (set now, back in Best settings) or off (put back as it was, left out of Best settings). */
   systemNetwork: (on: boolean, item: 'adapter' | 'dns' | 'tcp') => rawCall<PcHealth>('system.health', { action: on ? 'network-on' : 'network-off', item }, 240_000),
   /** PC › Overview: what this PC is (processor, memory, drives, board, BIOS, Windows, security, connection). */

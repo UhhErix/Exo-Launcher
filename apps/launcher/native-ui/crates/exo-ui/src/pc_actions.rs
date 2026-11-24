@@ -2,20 +2,18 @@ use crate::pc_state::PcTab;
 use crate::state::{AppState, HostStatus};
 use exo_rpc::{
     ActionResult, AppsIconsReply, AppsListReply, AudioReadReply, AutopilotState, DevicesImageReply,
-    DevicesListReply, DrivesReply, EqStateReply, ExoAccountState, ExoAiState, HdrState,
-    KeyboardBackupResult, KeyboardBackupsReply, KeyboardReadReply, LauncherSettings,
-    METHOD_APP_CHECK_UPDATE, METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS,
-    METHOD_APP_REPAIR_CACHE, METHOD_APPS_ICONS, METHOD_APPS_LIST, METHOD_APPS_UNINSTALL,
-    METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE,
-    METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST, METHOD_EQ, METHOD_EXO_ACCOUNT_STATE,
-    METHOD_EXO_ACCOUNT_SYNC, METHOD_EXO_AI_SET, METHOD_EXO_AI_STATE, METHOD_HDR_STATE,
-    METHOD_JUNK_CLEAN, METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_PROFILE,
-    METHOD_KEYBOARD_READ, METHOD_KEYBOARD_RESTORE, METHOD_KEYBOARD_SETTINGS,
-    METHOD_MOUSE_PANEL_BOUNDS, METHOD_MOUSE_PANEL_CLOSE, METHOD_MOUSE_PANEL_OPEN,
-    METHOD_PLAYTIME_RIOT_REFRESH, METHOD_SETTINGS_SET, METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL,
-    METHOD_SHADERS_ESTIMATES, METHOD_SHADERS_PREPARE_GAMES, METHOD_SHADERS_PREPARE_START,
-    METHOD_STARTUP_LIST, METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES,
-    METHOD_SYSTEM_TUNING, ShaderEstimate, ShaderSnapGame, ShadersAddonStatus,
+    DevicesListReply, DrivesReply, EqStateReply, ExoAiState, HdrState, KeyboardBackupResult,
+    KeyboardBackupsReply, KeyboardReadReply, LauncherSettings, METHOD_APP_CHECK_UPDATE,
+    METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS, METHOD_APPS_ICONS, METHOD_APPS_LIST,
+    METHOD_APPS_UNINSTALL, METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME,
+    METHOD_AUTOPILOT_STATE, METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST, METHOD_EQ,
+    METHOD_EXO_AI_SET, METHOD_EXO_AI_STATE, METHOD_HDR_STATE, METHOD_JUNK_CLEAN,
+    METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ,
+    METHOD_KEYBOARD_RESTORE, METHOD_KEYBOARD_SETTINGS, METHOD_MOUSE_PANEL_BOUNDS,
+    METHOD_MOUSE_PANEL_CLOSE, METHOD_MOUSE_PANEL_OPEN, METHOD_SETTINGS_SET, METHOD_SHADERS_ADDON,
+    METHOD_SHADERS_CALL, METHOD_SHADERS_ESTIMATES, METHOD_SHADERS_PREPARE_GAMES,
+    METHOD_SHADERS_PREPARE_START, METHOD_STARTUP_LIST, METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT,
+    METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_TUNING, ShaderEstimate, ShaderSnapGame, ShadersAddonStatus,
     ShadersEstimatesReply, ShadersPrepareGamesReply, StartupListReply, SystemAbout,
     SystemTuningState, UpdateCheckReply,
 };
@@ -28,12 +26,6 @@ impl AppState {
         }
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let h1 = handle.clone();
-            rpc.call::<_, ExoAccountState>(METHOD_EXO_ACCOUNT_STATE, &json!({}), move |res| {
-                if let Ok(acct) = res {
-                    h1.update(move |s, _| s.pc.account = acct);
-                }
-            });
             let h2 = handle.clone();
             rpc.call::<_, HdrState>(METHOD_HDR_STATE, &json!({}), move |res| {
                 if let Ok(hdr) = res {
@@ -131,49 +123,6 @@ impl AppState {
         #[cfg(windows)]
         if let Some(rpc) = self.rpc.clone() {
             rpc.call_raw(METHOD_APP_OPEN_LOGS, &json!({}), |_| {});
-        }
-    }
-
-    pub fn repair_app_cache(&mut self) {
-        self.notice = Some("Repairing cover cache…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_APP_REPAIR_CACHE, &json!({}), move |res| {
-                handle.update(move |s, _| match res {
-                    Ok(r) => s.notice = r.message.or_else(|| Some("Cache repaired.".into())),
-                    Err(e) => s.notice = Some(format!("Repair failed: {e}")),
-                });
-            });
-        }
-    }
-
-    pub fn sync_exo_account(&mut self) {
-        self.notice = Some("Syncing Exo account…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call_raw(METHOD_EXO_ACCOUNT_SYNC, &json!({}), move |res| {
-                handle.update(move |s, _| {
-                    s.notice = Some(match res {
-                        Ok(_) => "Account synced.".into(),
-                        Err(e) => format!("Sync failed: {e}"),
-                    });
-                });
-            });
-        }
-    }
-
-    pub fn refresh_riot_playtime(&mut self) {
-        self.notice = Some("Refreshing Riot playtime…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call_raw(METHOD_PLAYTIME_RIOT_REFRESH, &json!({}), move |res| {
-                handle.update(move |s, _| {
-                    s.notice = Some(match res {
-                        Ok(_) => "Riot playtime refreshed.".into(),
-                        Err(e) => format!("Riot refresh failed: {e}"),
-                    });
-                });
-            });
         }
     }
 

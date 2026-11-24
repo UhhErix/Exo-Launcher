@@ -2,11 +2,13 @@ pub mod base64;
 pub mod discord_chat_types;
 pub mod discord_types;
 pub mod events;
+pub mod game_types;
 pub mod keyboard_layouts;
 pub mod media_types;
 pub mod pc_types;
 pub mod pipe;
 pub mod remote_art;
+pub mod settings_types;
 pub mod types;
 
 pub use discord_chat_types::{
@@ -50,7 +52,15 @@ pub use discord_types::{
 pub use events::{
     AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
     GameRunStateEvent, InstallQueueEvent, LaunchStatusEvent, MusicVolumeEvent, PausedDownloadItem,
-    RequestId, ShellBootstrap, StoreChangedEvent,
+    RequestId, ShellBootstrap, StoreChangedEvent, StoreSaleEvent,
+};
+pub use game_types::{
+    AntiCheatLaunch, ArtworkMutationResponse, CompressProgressEvent, CompressState,
+    CompressStateReply, DequeueReply, DlssFileOutcome, DlssNewerItem, DlssNewerReply,
+    DlssRunResult, DlssStatus, DlssStatusItem, DriveHeat, FrameGenMod, GameAchievementsEvent,
+    GameContent, GameOptimizeEvent, GameSettingsGroup, GameSettingsState, GpuGame, HdrGame,
+    InstallResponse, KeepStatus, MovingProgress, OpenUrlReply, PropertyChoice, ShaderStatus,
+    ShaderWarmed, UninstallResponse,
 };
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
@@ -60,21 +70,33 @@ pub use media_types::{
 };
 pub use pc_types::{
     AppsIconsReply, AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
-    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, BackupDay, BackupNote, BackupOffer,
-    BackupStatus, ClientsEpic, ClientsStatus, ClientsSteam, DevicesImageReply, DevicesListReply,
-    DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
-    DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, EqStateReply, ExoAiFans, ExoAiGaming,
-    ExoAiState, HdrState, InstalledAppItem, KeyboardBackupResult, KeyboardBackupSummary,
-    KeyboardBackupsReply, KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample,
-    PeripheralCard, PeripheralPort, ShaderEstimate, ShaderPrepareGame, ShaderSnapGame,
-    ShadersAddonStatus, ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot,
-    StartupItem, StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
-    UpdateCheckReply, UpdateProgress,
+    AutopilotMemoryIntegrity, AutopilotReport, AutopilotStandbyPurge, AutopilotState, BackupDay,
+    BackupNote, BackupOffer, BackupStatus, ClientsEpic, ClientsStatus, ClientsSteam,
+    DevicesImageReply, DevicesListReply, DriveFix, DriveGameEntry, DriveHealth, DriveInfo,
+    DriveLink, DriveSpaceBreakdown, DriveTemp, DriveVerdict, DriveVolume, DrivesReply, EqHeadphone,
+    EqStateReply, ExoAiFans, ExoAiGaming, ExoAiState, HdrState, InstalledAppItem,
+    KeyboardBackupResult, KeyboardBackupSummary, KeyboardBackupsReply, KeyboardProfileSlot,
+    KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard, PeripheralPort,
+    ShaderEstimate, ShaderPrepareGame, ShaderSnapGame, ShadersAddonStatus, ShadersEstimatesReply,
+    ShadersPrepareGamesReply, ShadersSnapshot, StartupItem, StartupListReply, StartupRemovedItem,
+    SystemAbout, SystemTuningState, TuningItem, UpdateCheckReply, UpdateProgress,
 };
 pub use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use serde_json::{Value, json};
+pub use settings_types::{
+    AccountsProgressEvent, AmazonAccountInfo, BackupActionReply, BackupStoppedEvent,
+    ComponentsFailedEvent, EpicAccountsInfo, EpicAddedAccount, ExoAccountFileReply,
+    ExoAccountHeldItem, ExoAccountOutcome, ExoAccountOverview, ExoAccountProbe, ExoAccountSession,
+    ExoAccountSessionsReply, ExoAccountSyncState, GogAccountInfo, JunkCleanReply, JunkItem,
+    JunkScanReply, LeftoverSummary, PickFolderReply, ReplacedApp, ReplacedRemoveReply,
+    ReplacedScanReply, ReportPreviewReply, ReportSendReply, RiotAccountEntry, RiotAccountsInfo,
+    RiotBaseline, RiotBaselineReply, RiotExportImport, RiotHoursRefresh, ShadersEventPayload,
+    SteamAccountEntry, SteamAccountReply, SteamAccountsInfo, SteamSignInStep, StoreAccounts,
+    StoreGiftsReply, StoreLocalCheck, StoreStatus, StoresAuthReply, TelemetrySentReply,
+    WebClientOptions,
+};
 use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -83,10 +105,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::Duration;
 pub use types::{
-    ActionResult, ArtBase, ExoAccountState, Game, GameExtras, GameGetReply, GameProperties,
-    GamePropertySetReply, HostContract, HostEvent, InstallProgress, KeyPreview, LauncherSettings,
-    LibraryPayload, StoreArt, StoreGame, StoreHome, StoreLowest, StoreOffer, StoreOtherOffers,
-    StoreSearchReply, StoreShelf, StoreTile,
+    ActionResult, ArtBase, ExoAccountState, FrameGenRoute, Game, GameExtras, GameFrameGen,
+    GameGetReply, GameProperties, GamePropertySetReply, GameVariant, HostContract, HostEvent,
+    InstallProgress, KeyPreview, LauncherSettings, LibraryPayload, StoreArt, StoreGame, StoreHome,
+    StoreLowest, StoreMedia, StoreOffer, StoreOtherOffers, StoreRecentReviews, StoreSearchReply,
+    StoreShelf, StoreSpec, StoreTile, StoreWishlistReply,
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -106,6 +129,20 @@ pub const METHOD_APPS_LIST: &str = "apps.list";
 pub const METHOD_APPS_TIDY: &str = "apps.tidy";
 pub const METHOD_APPS_UNINSTALL: &str = "apps.uninstall";
 pub const METHOD_ART_BASE: &str = "art.base";
+pub const METHOD_ART_REFETCH: &str = "art.refetch";
+pub const METHOD_ART_REPLACE: &str = "art.replace";
+pub const METHOD_ART_RESET: &str = "art.reset";
+pub const METHOD_COMPRESS_ACT: &str = "compress.act";
+pub const METHOD_COMPRESS_STATE: &str = "compress.state";
+pub const METHOD_DLSS_CONSENT: &str = "dlss.consent";
+pub const METHOD_DLSS_DOWNLOAD_NEWER: &str = "dlss.downloadNewer";
+pub const METHOD_DLSS_FRAME_GEN: &str = "dlss.frameGen";
+pub const METHOD_DLSS_NEWER: &str = "dlss.newer";
+pub const METHOD_DLSS_RESTORE: &str = "dlss.restore";
+pub const METHOD_DLSS_STATUS: &str = "dlss.status";
+pub const METHOD_GPU_GAME: &str = "gpu.game";
+pub const METHOD_HDR_GAME: &str = "hdr.game";
+pub const METHOD_KEEP_STATUS: &str = "keep.status";
 pub const METHOD_AUDIO_READ: &str = "audio.read";
 pub const METHOD_AUDIO_SET_MUTE: &str = "audio.setMute";
 pub const METHOD_AUDIO_SET_VOLUME: &str = "audio.setVolume";
@@ -208,9 +245,14 @@ pub const METHOD_GAME_UNINSTALL: &str = "game.uninstall";
 pub const METHOD_GAME_REPAIR: &str = "game.repair";
 pub const METHOD_GAME_OPEN_FOLDER: &str = "game.openFolder";
 pub const METHOD_GAME_CANCEL_INSTALL: &str = "game.cancelInstall";
+pub const METHOD_GAME_DEQUEUE: &str = "game.dequeue";
 pub const METHOD_GAME_PAUSE_INSTALL: &str = "game.pauseInstall";
+pub const METHOD_GAME_PROGRESS: &str = "game.progress";
 pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
+pub const METHOD_GAME_RESUME_DOWNLOAD: &str = "game.resumeDownload";
+pub const METHOD_GAME_SETTINGS: &str = "game.settings";
+pub const METHOD_GAME_FRAME_GEN: &str = "game.frameGen";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
 pub const METHOD_MOUSE_PANEL_BOUNDS: &str = "mouse.panel.bounds";
@@ -228,6 +270,7 @@ pub const METHOD_SHADERS_CALL: &str = "shaders.call";
 pub const METHOD_SHADERS_ESTIMATES: &str = "shaders.estimates";
 pub const METHOD_SHADERS_PREPARE_GAMES: &str = "shaders.prepare.games";
 pub const METHOD_SHADERS_PREPARE_START: &str = "shaders.prepare.start";
+pub const METHOD_SHADERS_STATUS: &str = "shaders.status";
 pub const METHOD_RPC_CANCEL: &str = "rpc.cancel";
 pub const METHOD_SHELL_BOOTSTRAP: &str = "shell.bootstrap";
 pub const METHOD_SHELL_OPEN_URL: &str = "shell.openUrl";
@@ -244,6 +287,7 @@ pub const METHOD_STORE_HOME: &str = "store.home";
 pub const METHOD_STORE_SEARCH: &str = "store.search";
 pub const METHOD_STORE_GAME: &str = "store.game";
 pub const METHOD_STORE_GAME_OFFERS: &str = "store.gameOffers";
+pub const METHOD_STORE_GAME_REVIEWS: &str = "store.gameReviews";
 pub const METHOD_STORE_OPEN: &str = "store.open";
 pub const METHOD_STORE_WISHLIST: &str = "store.wishlist";
 pub const METHOD_SYSTEM_ABOUT: &str = "system.about";
@@ -252,6 +296,62 @@ pub const METHOD_SYSTEM_TUNING: &str = "system.tuning";
 pub const METHOD_YTMUSIC_ACT: &str = "ytmusic.act";
 pub const METHOD_YTMUSIC_START: &str = "ytmusic.start";
 pub const METHOD_YTMUSIC_VIEW: &str = "ytmusic.view";
+pub const METHOD_ACCOUNTS_LIST: &str = "accounts.list";
+pub const METHOD_ACCOUNTS_ADD: &str = "accounts.add";
+pub const METHOD_ACCOUNTS_SWITCH: &str = "accounts.switch";
+pub const METHOD_ACCOUNTS_REMOVE: &str = "accounts.remove";
+pub const METHOD_ACCOUNTS_SIGN_OUT: &str = "accounts.signOut";
+pub const METHOD_ACCOUNTS_EPIC_ADD: &str = "accounts.epicAdd";
+pub const METHOD_ACCOUNTS_EPIC_IMPORT: &str = "accounts.epicImport";
+pub const METHOD_ACCOUNTS_EPIC_REMOVE: &str = "accounts.epicRemove";
+pub const METHOD_ACCOUNTS_EPIC_NEW_LAUNCHER: &str = "accounts.epicNewLauncher";
+pub const METHOD_ACHIEVEMENTS_PREVIEW: &str = "achievements.preview";
+pub const METHOD_BACKUP_NOW: &str = "backup.now";
+pub const METHOD_BACKUP_EXPORT: &str = "backup.export";
+pub const METHOD_BACKUP_IMPORT: &str = "backup.import";
+pub const METHOD_BACKUP_RESTORE: &str = "backup.restore";
+pub const METHOD_BACKUP_DECLINE: &str = "backup.decline";
+pub const METHOD_CLIENTS_FIX: &str = "clients.fix";
+pub const METHOD_EXO_ACCOUNT_OVERVIEW: &str = "exoAccount.overview";
+pub const METHOD_EXO_ACCOUNT_CREATE: &str = "exoAccount.create";
+pub const METHOD_EXO_ACCOUNT_SIGN_IN: &str = "exoAccount.signIn";
+pub const METHOD_EXO_ACCOUNT_RESET: &str = "exoAccount.reset";
+pub const METHOD_EXO_ACCOUNT_CHANGE_PASSWORD: &str = "exoAccount.changePassword";
+pub const METHOD_EXO_ACCOUNT_NEW_RECOVERY_CODE: &str = "exoAccount.newRecoveryCode";
+pub const METHOD_EXO_ACCOUNT_SAVE_CODE: &str = "exoAccount.saveCode";
+pub const METHOD_EXO_ACCOUNT_CODE_CONFIRMED: &str = "exoAccount.codeConfirmed";
+pub const METHOD_EXO_ACCOUNT_SESSIONS: &str = "exoAccount.sessions";
+pub const METHOD_EXO_ACCOUNT_REVOKE: &str = "exoAccount.revoke";
+pub const METHOD_EXO_ACCOUNT_EXPORT: &str = "exoAccount.export";
+pub const METHOD_EXO_ACCOUNT_DELETE: &str = "exoAccount.delete";
+pub const METHOD_EXO_ACCOUNT_PROBE: &str = "exoAccount.probe";
+pub const METHOD_GIFTS_LIST: &str = "gifts.list";
+pub const METHOD_GIFTS_STEAM_SIGN_IN: &str = "gifts.steamSignIn";
+pub const METHOD_GIFTS_STEAM_SIGN_OUT: &str = "gifts.steamSignOut";
+pub const METHOD_PLAYTIME_IMPORT_RIOT_EXPORT: &str = "playtime.importRiotExport";
+pub const METHOD_PLAYTIME_SET_RIOT_BASELINE: &str = "playtime.setRiotBaseline";
+pub const METHOD_REPLACED_SCAN: &str = "replaced.scan";
+pub const METHOD_REPLACED_REMOVE: &str = "replaced.remove";
+pub const METHOD_REPORT_PREVIEW: &str = "report.preview";
+pub const METHOD_REPORT_SEND: &str = "report.send";
+pub const METHOD_SHELL_PICK_FOLDER: &str = "shell.pickFolder";
+pub const METHOD_SHELL_SHOW_STORE: &str = "shell.showStore";
+pub const METHOD_STEAM_ACCOUNT: &str = "steam.account";
+pub const METHOD_STEAM_SET_OFFLINE: &str = "steam.setOffline";
+pub const METHOD_STEAM_SIGN_IN_QR: &str = "steam.signInQr";
+pub const METHOD_STEAM_SIGN_IN_POLL: &str = "steam.signInPoll";
+pub const METHOD_STEAM_SIGN_IN_PASSWORD: &str = "steam.signInPassword";
+pub const METHOD_STEAM_SIGN_IN_GUARD: &str = "steam.signInGuard";
+pub const METHOD_STEAM_SIGN_IN_CANCEL: &str = "steam.signInCancel";
+pub const METHOD_STEAM_SIGN_OUT: &str = "steam.signOut";
+pub const METHOD_STORES_AUTH: &str = "stores.auth";
+pub const METHOD_STORES_CHECK: &str = "stores.check";
+pub const METHOD_STORES_MATRIX: &str = "stores.matrix";
+pub const METHOD_STORES_PLAY_OFFLINE: &str = "stores.playOffline";
+pub const METHOD_TELEMETRY_SENT: &str = "telemetry.sent";
+pub const METHOD_TELEMETRY_DELETE: &str = "telemetry.delete";
+pub const METHOD_WEB_PREFERENCES_GET: &str = "web.preferences.get";
+pub const METHOD_WEB_PREFERENCES_SET: &str = "web.preferences.set";
 
 pub const USED_METHODS: &[&str] = &[
     METHOD_APP_CHECK_UPDATE,
@@ -266,6 +366,20 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_APPS_TIDY,
     METHOD_APPS_UNINSTALL,
     METHOD_ART_BASE,
+    METHOD_ART_REFETCH,
+    METHOD_ART_REPLACE,
+    METHOD_ART_RESET,
+    METHOD_COMPRESS_ACT,
+    METHOD_COMPRESS_STATE,
+    METHOD_DLSS_CONSENT,
+    METHOD_DLSS_DOWNLOAD_NEWER,
+    METHOD_DLSS_FRAME_GEN,
+    METHOD_DLSS_NEWER,
+    METHOD_DLSS_RESTORE,
+    METHOD_DLSS_STATUS,
+    METHOD_GPU_GAME,
+    METHOD_HDR_GAME,
+    METHOD_KEEP_STATUS,
     METHOD_AUDIO_READ,
     METHOD_AUDIO_SET_MUTE,
     METHOD_AUDIO_SET_VOLUME,
@@ -366,9 +480,14 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_REPAIR,
     METHOD_GAME_OPEN_FOLDER,
     METHOD_GAME_CANCEL_INSTALL,
+    METHOD_GAME_DEQUEUE,
     METHOD_GAME_PAUSE_INSTALL,
+    METHOD_GAME_PROGRESS,
     METHOD_GAME_PROPERTIES,
     METHOD_GAME_PROPERTIES_SET,
+    METHOD_GAME_RESUME_DOWNLOAD,
+    METHOD_GAME_SETTINGS,
+    METHOD_GAME_FRAME_GEN,
     METHOD_KEYS_PREVIEW,
     METHOD_KEYS_ACTIVATE,
     METHOD_MOUSE_PANEL_BOUNDS,
@@ -388,6 +507,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SHADERS_ESTIMATES,
     METHOD_SHADERS_PREPARE_GAMES,
     METHOD_SHADERS_PREPARE_START,
+    METHOD_SHADERS_STATUS,
     METHOD_SHELL_BOOTSTRAP,
     METHOD_SHELL_OPEN_URL,
     METHOD_SHELL_READY,
@@ -403,9 +523,66 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_STORE_SEARCH,
     METHOD_STORE_GAME,
     METHOD_STORE_GAME_OFFERS,
+    METHOD_STORE_GAME_REVIEWS,
     METHOD_STORE_OPEN,
     METHOD_STORE_WISHLIST,
     METHOD_SYSTEM_ABOUT,
+    METHOD_ACCOUNTS_LIST,
+    METHOD_ACCOUNTS_ADD,
+    METHOD_ACCOUNTS_SWITCH,
+    METHOD_ACCOUNTS_REMOVE,
+    METHOD_ACCOUNTS_SIGN_OUT,
+    METHOD_ACCOUNTS_EPIC_ADD,
+    METHOD_ACCOUNTS_EPIC_IMPORT,
+    METHOD_ACCOUNTS_EPIC_REMOVE,
+    METHOD_ACCOUNTS_EPIC_NEW_LAUNCHER,
+    METHOD_ACHIEVEMENTS_PREVIEW,
+    METHOD_BACKUP_NOW,
+    METHOD_BACKUP_EXPORT,
+    METHOD_BACKUP_IMPORT,
+    METHOD_BACKUP_RESTORE,
+    METHOD_BACKUP_DECLINE,
+    METHOD_CLIENTS_FIX,
+    METHOD_EXO_ACCOUNT_OVERVIEW,
+    METHOD_EXO_ACCOUNT_CREATE,
+    METHOD_EXO_ACCOUNT_SIGN_IN,
+    METHOD_EXO_ACCOUNT_RESET,
+    METHOD_EXO_ACCOUNT_CHANGE_PASSWORD,
+    METHOD_EXO_ACCOUNT_NEW_RECOVERY_CODE,
+    METHOD_EXO_ACCOUNT_SAVE_CODE,
+    METHOD_EXO_ACCOUNT_CODE_CONFIRMED,
+    METHOD_EXO_ACCOUNT_SESSIONS,
+    METHOD_EXO_ACCOUNT_REVOKE,
+    METHOD_EXO_ACCOUNT_EXPORT,
+    METHOD_EXO_ACCOUNT_DELETE,
+    METHOD_EXO_ACCOUNT_PROBE,
+    METHOD_GIFTS_LIST,
+    METHOD_GIFTS_STEAM_SIGN_IN,
+    METHOD_GIFTS_STEAM_SIGN_OUT,
+    METHOD_PLAYTIME_IMPORT_RIOT_EXPORT,
+    METHOD_PLAYTIME_SET_RIOT_BASELINE,
+    METHOD_REPLACED_SCAN,
+    METHOD_REPLACED_REMOVE,
+    METHOD_REPORT_PREVIEW,
+    METHOD_REPORT_SEND,
+    METHOD_SHELL_PICK_FOLDER,
+    METHOD_SHELL_SHOW_STORE,
+    METHOD_STEAM_ACCOUNT,
+    METHOD_STEAM_SET_OFFLINE,
+    METHOD_STEAM_SIGN_IN_QR,
+    METHOD_STEAM_SIGN_IN_POLL,
+    METHOD_STEAM_SIGN_IN_PASSWORD,
+    METHOD_STEAM_SIGN_IN_GUARD,
+    METHOD_STEAM_SIGN_IN_CANCEL,
+    METHOD_STEAM_SIGN_OUT,
+    METHOD_STORES_AUTH,
+    METHOD_STORES_CHECK,
+    METHOD_STORES_MATRIX,
+    METHOD_STORES_PLAY_OFFLINE,
+    METHOD_TELEMETRY_SENT,
+    METHOD_TELEMETRY_DELETE,
+    METHOD_WEB_PREFERENCES_GET,
+    METHOD_WEB_PREFERENCES_SET,
     METHOD_SYSTEM_DRIVES,
     METHOD_SYSTEM_TUNING,
     METHOD_YTMUSIC_ACT,
@@ -1112,8 +1289,38 @@ fn parse_event(
             }
         }
         "shaders.changed" => Ok(HostEvent::ShadersChanged),
+        "shaders.event" => Ok(serde_json::from_str::<ShadersEventPayload>(data_raw)
+            .map(HostEvent::ShadersEvent)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "accounts.progress" => Ok(serde_json::from_str::<AccountsProgressEvent>(data_raw)
+            .map(HostEvent::AccountsProgress)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "backup.stopped" => Ok(serde_json::from_str::<BackupStoppedEvent>(data_raw)
+            .map(HostEvent::BackupStopped)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "components.failed" => Ok(serde_json::from_str::<ComponentsFailedEvent>(data_raw)
+            .map(HostEvent::ComponentsFailed)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "gifts.changed" => Ok(serde_json::from_str::<StoreGiftsReply>(data_raw)
+            .map(HostEvent::GiftsChanged)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "store.changed" => Ok(serde_json::from_str::<StoreChangedEvent>(data_raw)
             .map(HostEvent::StoreChanged)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "game.achievements" => Ok(serde_json::from_str::<GameAchievementsEvent>(data_raw)
+            .map(HostEvent::GameAchievements)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "game.optimizedAgain" => Ok(serde_json::from_str::<GameOptimizeEvent>(data_raw)
+            .map(HostEvent::GameOptimizedAgain)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "game.optimizeHeld" => Ok(serde_json::from_str::<GameOptimizeEvent>(data_raw)
+            .map(HostEvent::GameOptimizeHeld)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "compress.progress" => Ok(serde_json::from_str::<CompressProgressEvent>(data_raw)
+            .map(HostEvent::CompressProgress)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "store.sale" => Ok(serde_json::from_str::<StoreSaleEvent>(data_raw)
+            .map(HostEvent::StoreSale)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "music.playback" => {
             fn present_option<'de, D, T>(d: D) -> Result<Option<Option<T>>, D::Error>
@@ -1441,7 +1648,8 @@ mod tests {
 
     #[test]
     fn parses_all_newly_wired_host_events() {
-        let cases: &[(&[u8], fn(HostEvent) -> bool)] = &[
+        type EventCase = (&'static [u8], fn(HostEvent) -> bool);
+        let cases: &[EventCase] = &[
             (
                 br#"{"event":"music.volume","data":{"level":0.42,"source":"app"}}"#,
                 |ev| matches!(ev, HostEvent::MusicVolume(v) if (v.level - 0.42).abs() < 1e-6 && v.source == "app"),
@@ -1493,6 +1701,26 @@ mod tests {
             (
                 br#"{"event":"store.changed","data":{"what":"wishlist"}}"#,
                 |ev| matches!(ev, HostEvent::StoreChanged(s) if s.what == "wishlist"),
+            ),
+            (
+                br#"{"event":"game.achievements","data":{"id":"steam:10","unlocked":12,"total":40}}"#,
+                |ev| matches!(ev, HostEvent::GameAchievements(a) if a.id == "steam:10" && a.unlocked == 12 && a.total == 40),
+            ),
+            (
+                br#"{"event":"game.optimizedAgain","data":{"title":"Cyberpunk 2077"}}"#,
+                |ev| matches!(ev, HostEvent::GameOptimizedAgain(o) if o.title == "Cyberpunk 2077"),
+            ),
+            (
+                br#"{"event":"game.optimizeHeld","data":{"title":"Cyberpunk 2077"}}"#,
+                |ev| matches!(ev, HostEvent::GameOptimizeHeld(o) if o.title == "Cyberpunk 2077"),
+            ),
+            (
+                br#"{"event":"compress.progress","data":{"id":"steam:10","compress":{"state":"compressing","percent":0.42,"saved":1024,"sampled":true,"changed":0}}}"#,
+                |ev| matches!(ev, HostEvent::CompressProgress(c) if c.id == "steam:10" && c.compress.state == "compressing" && c.compress.saved == 1024),
+            ),
+            (
+                br#"{"event":"store.sale","data":{"appId":"1091500","name":"Cyberpunk 2077","final":2999,"discount":50,"currency":"USD","price":"$29.99"}}"#,
+                |ev| matches!(ev, HostEvent::StoreSale(s) if s.app_id == "1091500" && s.discount == 50),
             ),
         ];
         let pending = Mutex::new(HashMap::new());
