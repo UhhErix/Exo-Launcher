@@ -119,6 +119,17 @@ internal sealed class ExoAiFans : IDisposable
         lock (_gate) TickLocked();
     }
 
+    internal void ResetCache()
+    {
+        lock (_gate)
+        {
+            _lastTargetPct = null;
+            _lastTempC = null;
+            _touchedFans.Clear();
+            TickLocked();
+        }
+    }
+
     private void TickLocked()
     {
         if (_blocked) return;

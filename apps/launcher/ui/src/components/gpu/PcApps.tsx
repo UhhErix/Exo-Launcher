@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { host, onHostEvent, type InstalledApp, type RuntimeItem } from '../../lib/host'
 import { report } from '../../lib/report'
 
-type AppsSummary = { apps: number; bloat: number; runtimes: RuntimeItem[] | null }
+type AppsSummary = { apps: number; bloat: number; runtimes: RuntimeItem[] | null; runtimesDeferred: boolean }
 
 let last: AppsSummary | null = null
 
@@ -21,6 +21,7 @@ export function useAppsSummary(active: boolean, read: number): AppsSummary | nul
         apps: programs?.length ?? last?.apps ?? 0,
         bloat: programs ? bloatOf(programs) : last?.bloat ?? 0,
         runtimes: runtimes.status === 'fulfilled' ? runtimes.value.items : last?.runtimes ?? null,
+        runtimesDeferred: runtimes.status === 'fulfilled' ? Boolean(runtimes.value.deferred) : last?.runtimesDeferred ?? false,
       }
       last = next
       setSummary(next)

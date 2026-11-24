@@ -834,6 +834,132 @@ export type GpuFeatureState = 'on' | 'off' | 'unavailable'
 export type GpuFeature = { key: string; label: string; state: GpuFeatureState }
 
 export type IntelLowLatency = 'on' | 'boost' | 'off'
+
+export type GpuTuningRange = {
+  min: number
+  max: number
+  step: number
+  default: number
+  supported: boolean
+}
+
+export type GpuVfPoint = {
+  index: number
+  voltageMv: number
+  baseClockMhz: number
+  offsetMhz: number
+}
+
+export type GpuFanPoint = {
+  tempC: number
+  speedPercent: number
+}
+
+export type GpuFanChannelCurve = {
+  fanIndex: number
+  manual: boolean
+  points: GpuFanPoint[]
+}
+
+export type GpuTuningCapabilities = {
+  vendor: 'nvidia' | 'amd' | 'intel' | 'unknown'
+  generation: string
+  deviceId: string
+  deviceName: string
+  backend: 'nvapi' | 'nvml' | 'adlx' | 'igcl' | 'none'
+  fallbackReason?: string | null
+  isLaptop: boolean
+  lockedByMaker: boolean
+  lockReason?: string | null
+  requiresWaiver: boolean
+  waiverAccepted: boolean
+  waiverText?: string | null
+  persistsInDriver: boolean
+  needsResidentForFanCurve: boolean
+  persistenceNote?: string | null
+  supportsCurveEditor: boolean
+  supportsUndervoltSearch: boolean
+  coreClockOffsetMhz: GpuTuningRange
+  coreMinClockMhz: GpuTuningRange
+  coreMaxClockMhz: GpuTuningRange
+  voltageMv: GpuTuningRange
+  voltageOffsetMv: GpuTuningRange
+  memoryClockOffsetMhz: GpuTuningRange
+  memoryMaxClockMhz: GpuTuningRange
+  powerLimitPercent: GpuTuningRange
+  powerLimitWatts: GpuTuningRange
+  tempLimitC: GpuTuningRange
+  clockLockMhz: GpuTuningRange
+  memoryTimingLevels: string[]
+  vfCurvePoints: GpuVfPoint[]
+  fanCount: number
+  supportsHardwareFanCurve: boolean
+  supportsSoftwareFanCurve: boolean
+  supportsZeroRpm: boolean
+  fanMaxPoints: number
+  fanSpeedPercent: GpuTuningRange
+  fanTempC: GpuTuningRange
+}
+
+export type GpuManualProfile = {
+  mode: 'auto' | 'manual'
+  coreClockOffsetMhz?: number | null
+  coreMinClockMhz?: number | null
+  coreMaxClockMhz?: number | null
+  voltageMv?: number | null
+  voltageOffsetMv?: number | null
+  memoryClockOffsetMhz?: number | null
+  memoryMaxClockMhz?: number | null
+  memoryTimingLevel?: string | null
+  powerLimitPercent?: number | null
+  powerLimitWatts?: number | null
+  tempLimitC?: number | null
+  clockLockMhz?: number | null
+  vfCurve?: GpuVfPoint[] | null
+  zeroRpm?: boolean | null
+  fanCurve?: GpuFanPoint[] | null
+  fanChannels?: GpuFanChannelCurve[] | null
+}
+
+export type GpuStabilityProgress = {
+  running: boolean
+  kind: string
+  phase: string
+  elapsedSec: number
+  totalSec: number
+  passes: number
+  tempC?: number | null
+  clockMhz?: number | null
+  checksumOk: boolean
+  currentStep?: string | null
+  passed?: boolean | null
+  rolledBack: boolean
+  failureReason?: string | null
+  summary?: string | null
+}
+
+export type GpuManualTuningState = {
+  ok: boolean
+  message?: string | null
+  mode: 'auto' | 'manual'
+  pausedAfterCrash: boolean
+  pauseReason?: string | null
+  canReapply: boolean
+  queuedPending: boolean
+  queuedReason?: string | null
+  statusLine: string
+  live: {
+    tempC?: number | null
+    clockMhz?: number | null
+    fanPercent?: number | null
+    watts?: number | null
+  }
+  capabilities: GpuTuningCapabilities
+  factoryDefaults: GpuManualProfile
+  current: GpuManualProfile
+  saved: GpuManualProfile
+  test: GpuStabilityProgress
+}
 /** XeSS frame generation for one game: the game's own choice, or the driver's 2x, 3x or 4x override. */
 export type IntelFrameGen = 'game' | '2x' | '3x' | '4x'
 
@@ -975,7 +1101,7 @@ export type AutoTuneMode = 'cooler' | 'faster'
 export type TuneMeasure = { score: number; peakC?: number | null }
 export type TunePart = {
   id: 'nvidia' | 'radeon' | 'ryzen'
-  state: 'ready' | 'needs-driver' | 'testing' | 'tuned' | 'crashed'
+  state: 'ready' | 'needs-driver' | 'testing' | 'tuned' | 'crashed' | 'paused'
   /** Whether Cooler and Faster are a choice: a graphics card's. */
   modes: boolean
   mode: AutoTuneMode
@@ -990,6 +1116,7 @@ export type TunePart = {
   warning?: string | null
   minutes: number
   canUndo: boolean
+  canReapply?: boolean
   blocked?: string | null
 }
 export type AutoTune = { ok: boolean; message?: string | null; parts: TunePart[] }
@@ -1608,6 +1735,7 @@ export interface RuntimeResult {
   outcome: 'installed' | 'newer' | 'restart' | 'failed'
   message: string
   code?: number | null
+  detail?: string | null
 }
 
 export interface RuntimesInstallResponse {
@@ -1615,6 +1743,7 @@ export interface RuntimesInstallResponse {
   message?: string | null
   declined?: boolean
   canceled?: boolean
+  deferred?: boolean
   results: RuntimeResult[]
   items?: RuntimeItem[] | null
 }
@@ -2186,6 +2315,8 @@ export interface HostEventMap {
   /** Autopilot kept a session's report (shown in PC › Autopilot afterwards; nothing is said during play). */
   'autopilot.report': { game: string; title: string }
   'autopilot.live': AutopilotLive | null
+  'gpu.tuningChanged': { mode: string; statusLine: string; pausedAfterCrash: boolean; queuedPending: boolean; queuedReason?: string | null; backend: string }
+  'gpu.tuningTestProgress': GpuStabilityProgress
   /** The shader precompile moved on (at most four a second) or ended (ok set). */
   /** The Exo Shaders engine changed its list or a game's record: read shaders.status again. */
   'shaders.changed': Record<string, never>
@@ -2237,6 +2368,7 @@ export interface HostEventMap {
   'bios.progress': { share: number }
   /** A runtimes.install moved on: a download's bytes, a check, or the next installer in Windows' run. */
   'runtimes.progress': RuntimesProgress
+  'runtimes.done': RuntimesInstallResponse
   /** The programs read behind apps.list's kept answer differ from it: apps.list answers the new list. */
   'apps.changed': Record<string, never>
   /** This PC's account session was written or removed (a sign-in or sign-out, a deleted account, a session the service ended): read exoAccount.overview again. */
@@ -2943,7 +3075,7 @@ export const host = {
   /** Edge Update may install Edge again (asked in Exo's window): Exo told it not to when Edge was removed. */
   appsAllowEdge: () => rawCall<{ ok: boolean; message?: string | null }>('apps.allowEdge', {}, 5 * 60_000),
   /** Game runtimes: every one that applies to this PC, its version and the newest. */
-  runtimesList: () => rawCall<{ ok: boolean; busy?: boolean; items: RuntimeItem[] }>('runtimes.list', {}, 30_000),
+  runtimesList: () => rawCall<{ ok: boolean; busy?: boolean; deferred?: boolean; items: RuntimeItem[] }>('runtimes.list', {}, 30_000),
   /** missing: what isn't here (or the named ids); update: that and every older one; repair: every Visual C++ again. One Windows prompt. */
   runtimesInstall: (mode: 'missing' | 'update' | 'repair', ids?: string[]) =>
     rawCall<RuntimesInstallResponse>('runtimes.install', ids?.length ? { mode, ids } : { mode }, 120 * 60_000),
@@ -3395,6 +3527,16 @@ export const host = {
   /** The card maker's own control panel opened as the user (NVIDIA Control Panel, AMD Software, Intel Graphics Software); message names one that isn't installed. */
   gpuControlPanel: () => rawCall<{ ok: boolean; message?: string | null }>('gpu.controlPanel', {}, 20_000),
   gpuProcesses: (limit?: number) => rawCall<GpuProcessesState>('gpu.processes', limit ? { limit } : {}, 15_000),
+  gpuTuningState: () => rawCall<GpuManualTuningState>('gpu.tuning.state', {}, 25_000),
+  gpuTuningApply: (profile: GpuManualProfile & { reapply?: boolean }) =>
+    rawCall<GpuManualTuningState>('gpu.tuning.apply', profile, 25_000),
+  gpuTuningReset: () => rawCall<GpuManualTuningState>('gpu.tuning.reset', {}, 25_000),
+  gpuTuningWaiver: (accept: boolean, deviceId?: string) =>
+    rawCall<GpuManualTuningState>('gpu.tuning.waiver', { accept, ...(deviceId ? { deviceId } : {}) }, 25_000),
+  gpuTuningTest: (action: 'start' | 'stop', duration?: '60s' | '5m', profile?: GpuManualProfile) =>
+    rawCall<GpuManualTuningState>('gpu.tuning.test', { action, ...(duration ? { duration } : {}), ...(profile ? { profile } : {}) }, 25_000),
+  gpuTuningUndervolt: (action: 'start' | 'stop') =>
+    rawCall<GpuManualTuningState>('gpu.tuning.undervolt', { action }, 25_000),
   /** System > This PC: the checks; apply or undo Exo's power plan; gpusched opens Windows' Graphics settings; gamemode-on/off and gamebar-on (Exo keeps Game Bar off)/off (Exo puts it back) answer ok, and a sentence when Windows didn't take it. */
   systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'winupdate' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
   /** One item of Best settings › Network on (set now, back in Best settings) or off (put back as it was, left out of Best settings). */
@@ -3402,7 +3544,7 @@ export const host = {
   /** PC › Overview: what this PC is (processor, memory, drives, board, BIOS, Windows, security, connection). */
   systemAbout: () => rawCall<PcAbout>('system.about', {}, 15_000),
   /** PC > Auto tune: what's tunable and where it stands; start, stop or undo one part. Off until pressed. */
-  systemTune: (action?: 'start' | 'stop' | 'undo', part?: TunePart['id'], mode?: AutoTuneMode) =>
+  systemTune: (action?: 'start' | 'stop' | 'undo' | 'reapply', part?: TunePart['id'], mode?: AutoTuneMode) =>
     rawCall<AutoTune>('system.tune', action ? { action, part, mode } : {}, 45_000),
   /** PC › Autopilot: the game being watched now and the session reports kept on this PC, newest first. */
   autopilotState: () => rawCall<AutopilotState>('autopilot.state', {}, 15_000),

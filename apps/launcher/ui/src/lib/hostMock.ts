@@ -324,6 +324,7 @@ function mockTune(p?: Record<string, unknown>) {
   if (p?.action === 'start') mockTuneReads[id] = 0
   if (p?.action === 'stop') delete mockTuneReads[id]
   if (p?.action === 'undo') { delete mockTuneReads[id]; mockTuneDone.delete(id) }
+  if (p?.action === 'reapply') { delete mockTuneReads[id]; mockTuneDone.add(id) }
   const gpu = mockGpu === 'amd' ? 'radeon' : 'nvidia'
   const words: Record<string, string> = {
     nvidia: 'Moves your card\u2019s clock up at each voltage and tests each step, about 40 minutes. It\u2019s outside NVIDIA\u2019s specifications, can void your warranty, and can crash your PC while it tests, so save your work first. Exo goes back to stock by itself if anything goes wrong.',
@@ -850,6 +851,152 @@ function mockNvidiaDetails(applied: boolean, latencyLabel: string, vrrEnabled: b
     { key: 'dlss', label: 'DLSS overrides', value: 'Latest · Preset K / F / A', state },
     { key: 'rebar', label: 'Resizable BAR', value: 'On', state: 'on' as const },
   ]
+}
+
+const MOCK_TUNING_UNSUPPORTED = { min: 0, max: 0, step: 1, default: 0, supported: false }
+const MOCK_TUNING_VF = [
+  { index: 0, voltageMv: 750, baseClockMhz: 1500, offsetMhz: 0 },
+  { index: 1, voltageMv: 825, baseClockMhz: 1710, offsetMhz: 0 },
+  { index: 2, voltageMv: 900, baseClockMhz: 1890, offsetMhz: 0 },
+  { index: 3, voltageMv: 975, baseClockMhz: 2025, offsetMhz: 0 },
+  { index: 4, voltageMv: 1050, baseClockMhz: 2100, offsetMhz: 0 },
+]
+const MOCK_TUNING_FAN = [
+  { tempC: 35, speedPercent: 30 },
+  { tempC: 50, speedPercent: 45 },
+  { tempC: 65, speedPercent: 65 },
+  { tempC: 78, speedPercent: 85 },
+  { tempC: 85, speedPercent: 100 },
+]
+const MOCK_TUNING_PRESETS = {
+  nvidia: {
+    vendor: 'nvidia', generation: 'Ampere', deviceId: 'nvidia:NVIDIA GeForce RTX 3070', deviceName: 'NVIDIA GeForce RTX 3070', backend: 'nvapi',
+    fallbackReason: null, isLaptop: false, lockedByMaker: false, lockReason: null, requiresWaiver: false, waiverText: null,
+    persistsInDriver: false, needsResidentForFanCurve: true,
+    persistenceNote: 'Clocks and limits re-apply at sign-in; software fan curves stay active while Exo is open.',
+    supportsCurveEditor: true, supportsUndervoltSearch: true,
+    coreClockOffsetMhz: { min: -500, max: 500, step: 15, default: 0, supported: true },
+    coreMinClockMhz: MOCK_TUNING_UNSUPPORTED, coreMaxClockMhz: MOCK_TUNING_UNSUPPORTED,
+    voltageMv: MOCK_TUNING_UNSUPPORTED, voltageOffsetMv: MOCK_TUNING_UNSUPPORTED,
+    memoryClockOffsetMhz: { min: -1000, max: 1500, step: 25, default: 0, supported: true },
+    memoryMaxClockMhz: MOCK_TUNING_UNSUPPORTED,
+    powerLimitPercent: { min: 50, max: 115, step: 1, default: 100, supported: true },
+    powerLimitWatts: MOCK_TUNING_UNSUPPORTED,
+    tempLimitC: { min: 65, max: 90, step: 1, default: 83, supported: true },
+    clockLockMhz: { min: 600, max: 2200, step: 15, default: 2100, supported: true },
+    memoryTimingLevels: [], vfCurvePoints: MOCK_TUNING_VF,
+    fanCount: 2, supportsHardwareFanCurve: false, supportsSoftwareFanCurve: true, supportsZeroRpm: false, fanMaxPoints: 5,
+    fanSpeedPercent: { min: 0, max: 100, step: 1, default: 50, supported: true },
+    fanTempC: { min: 30, max: 100, step: 1, default: 60, supported: true },
+  },
+  amd: {
+    vendor: 'amd', generation: 'RDNA4', deviceId: 'amd:AMD Radeon RX 9070 XT', deviceName: 'AMD Radeon RX 9070 XT', backend: 'adlx',
+    fallbackReason: null, isLaptop: false, lockedByMaker: false, lockReason: null, requiresWaiver: false, waiverText: null,
+    persistsInDriver: true, needsResidentForFanCurve: false,
+    persistenceNote: 'AMD Adrenalin persists manual tuning and hardware fan curves in the driver.',
+    supportsCurveEditor: true, supportsUndervoltSearch: true,
+    coreClockOffsetMhz: MOCK_TUNING_UNSUPPORTED,
+    coreMinClockMhz: { min: 500, max: 2900, step: 10, default: 500, supported: true },
+    coreMaxClockMhz: { min: 500, max: 3200, step: 10, default: 2800, supported: true },
+    voltageMv: MOCK_TUNING_UNSUPPORTED,
+    voltageOffsetMv: { min: -100, max: 50, step: 5, default: 0, supported: true },
+    memoryClockOffsetMhz: MOCK_TUNING_UNSUPPORTED,
+    memoryMaxClockMhz: { min: 1750, max: 2750, step: 10, default: 2500, supported: true },
+    powerLimitPercent: { min: -10, max: 15, step: 1, default: 0, supported: true },
+    powerLimitWatts: MOCK_TUNING_UNSUPPORTED, tempLimitC: MOCK_TUNING_UNSUPPORTED, clockLockMhz: MOCK_TUNING_UNSUPPORTED,
+    memoryTimingLevels: ['Default', 'Fast Timing'], vfCurvePoints: MOCK_TUNING_VF,
+    fanCount: 1, supportsHardwareFanCurve: true, supportsSoftwareFanCurve: false, supportsZeroRpm: true, fanMaxPoints: 5,
+    fanSpeedPercent: { min: 0, max: 100, step: 1, default: 50, supported: true },
+    fanTempC: { min: 30, max: 100, step: 1, default: 60, supported: true },
+  },
+  intel: {
+    vendor: 'intel', generation: 'Battlemage', deviceId: 'intel:Intel Arc B580', deviceName: 'Intel Arc B580', backend: 'igcl',
+    fallbackReason: null, isLaptop: false, lockedByMaker: false, lockReason: null, requiresWaiver: true,
+    waiverText: 'Overclocking or altering GPU clock frequency, voltage, power, or fan settings outside Intel factory specifications may reduce hardware lifetime, cause instability, and is not covered by Intel warranty. Continue only if you accept these risks for this GPU.',
+    persistsInDriver: false, needsResidentForFanCurve: false,
+    persistenceNote: 'Intel Arc hardware fan tables run in the driver; clocks and limits re-apply at sign-in.',
+    supportsCurveEditor: false, supportsUndervoltSearch: true,
+    coreClockOffsetMhz: { min: -200, max: 300, step: 5, default: 0, supported: true },
+    coreMinClockMhz: MOCK_TUNING_UNSUPPORTED, coreMaxClockMhz: MOCK_TUNING_UNSUPPORTED,
+    voltageMv: MOCK_TUNING_UNSUPPORTED,
+    voltageOffsetMv: { min: -100, max: 100, step: 5, default: 0, supported: true },
+    memoryClockOffsetMhz: MOCK_TUNING_UNSUPPORTED, memoryMaxClockMhz: MOCK_TUNING_UNSUPPORTED,
+    powerLimitPercent: MOCK_TUNING_UNSUPPORTED,
+    powerLimitWatts: { min: 100, max: 228, step: 5, default: 190, supported: true },
+    tempLimitC: { min: 65, max: 95, step: 1, default: 90, supported: true },
+    clockLockMhz: MOCK_TUNING_UNSUPPORTED, memoryTimingLevels: [], vfCurvePoints: [],
+    fanCount: 2, supportsHardwareFanCurve: true, supportsSoftwareFanCurve: false, supportsZeroRpm: false, fanMaxPoints: 5,
+    fanSpeedPercent: { min: 0, max: 100, step: 1, default: 50, supported: true },
+    fanTempC: { min: 30, max: 100, step: 1, default: 60, supported: true },
+  },
+} as const
+
+let mockGpuManualMode: 'auto' | 'manual' = 'auto'
+let mockGpuManualWaived = false
+let mockGpuManualSaved: Record<string, unknown> = { mode: 'auto', coreClockOffsetMhz: 0, memoryClockOffsetMhz: 0, powerLimitPercent: 100, tempLimitC: 83 }
+
+function mockGpuManualTuningState(message: string | null = null) {
+  const key = mockGpu === 'amd' ? 'amd' : mockGpu === 'intel' ? 'intel' : 'nvidia'
+  const base = MOCK_TUNING_PRESETS[key]
+  const caps = { ...base, waiverAccepted: !base.requiresWaiver || mockGpuManualWaived }
+  const defaults = { mode: 'auto', coreClockOffsetMhz: 0, memoryClockOffsetMhz: 0, powerLimitPercent: key === 'amd' ? 0 : 100, tempLimitC: 83, fanCurve: MOCK_TUNING_FAN, vfCurve: MOCK_TUNING_VF }
+  const current = mockGpuManualMode === 'manual' ? { ...defaults, ...mockGpuManualSaved, mode: 'manual' } : defaults
+  return {
+    ok: true,
+    message,
+    mode: mockGpuManualMode,
+    pausedAfterCrash: false,
+    pauseReason: null,
+    canReapply: false,
+    queuedPending: false,
+    queuedReason: null,
+    statusLine: mockGpuManualMode === 'manual' ? `Manual active · ${caps.backend.toUpperCase()}` : `Auto (stock) · ${caps.backend.toUpperCase()}`,
+    live: { tempC: 44, clockMhz: 1920, fanPercent: 38, watts: 48 },
+    capabilities: caps,
+    factoryDefaults: defaults,
+    current,
+    saved: current,
+    test: { running: false, kind: 'idle', phase: 'idle', elapsedSec: 0, totalSec: 0, passes: 0, tempC: null, clockMhz: null, checksumOk: true, currentStep: null, passed: null, rolledBack: false, failureReason: null, summary: null },
+  }
+}
+
+function mockGpuManualTuningApply(p?: Record<string, unknown>) {
+  mockGpuManualMode = p?.mode === 'auto' ? 'auto' : 'manual'
+  if (p) mockGpuManualSaved = { ...mockGpuManualSaved, ...p, mode: mockGpuManualMode }
+  return mockGpuManualTuningState()
+}
+
+function mockGpuManualTuningReset() {
+  mockGpuManualMode = 'auto'
+  mockGpuManualSaved = { mode: 'auto', coreClockOffsetMhz: 0, memoryClockOffsetMhz: 0, powerLimitPercent: 100, tempLimitC: 83 }
+  return mockGpuManualTuningState()
+}
+
+function mockGpuManualTuningWaiver(p?: Record<string, unknown>) {
+  if (p?.accept === true) mockGpuManualWaived = true
+  return mockGpuManualTuningState()
+}
+
+function mockGpuManualTuningTest(p?: Record<string, unknown>) {
+  const stop = p?.action === 'stop'
+  const base = mockGpuManualTuningState()
+  return {
+    ...base,
+    test: stop
+      ? base.test
+      : { ...base.test, phase: 'passed', passed: true, passes: 120, elapsedSec: 60, totalSec: 60, summary: 'Passed 120 compute passes (60 s) with zero artifacts.' },
+  }
+}
+
+function mockGpuManualTuningUndervolt(p?: Record<string, unknown>) {
+  const stop = p?.action === 'stop'
+  const base = mockGpuManualTuningState()
+  return {
+    ...base,
+    test: stop
+      ? base.test
+      : { ...base.test, kind: 'undervolt', phase: 'passed', passed: true, passes: 4, elapsedSec: 4, totalSec: 5, summary: 'Stopped at step 5, backed off 2 steps to +45 MHz undervolt.' },
+  }
 }
 
 function mockGpuProfile(p?: Record<string, unknown>) {
@@ -2255,6 +2402,12 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'eq.headphones': () => ({ ok: true, headphones: MOCK_EQ_HEADPHONES }),
   'system.tune': (p) => mockTune(p),
   'gpu.profile': (p) => mockGpuProfile(p),
+  'gpu.tuning.state': () => mockGpuManualTuningState(),
+  'gpu.tuning.apply': (p) => mockGpuManualTuningApply(p),
+  'gpu.tuning.reset': () => mockGpuManualTuningReset(),
+  'gpu.tuning.waiver': (p) => mockGpuManualTuningWaiver(p),
+  'gpu.tuning.test': (p) => mockGpuManualTuningTest(p),
+  'gpu.tuning.undervolt': (p) => mockGpuManualTuningUndervolt(p),
   'system.about': () => ({
     name: 'Erix-PC', processor: mockIntelCpu ? 'Intel Core i7-14700K' : 'AMD Ryzen 5 5600X', cores: mockIntelCpu ? 20 : 6, threads: mockIntelCpu ? 28 : 12,
     graphics: 'NVIDIA GeForce RTX 3070', videoMemoryGb: 8, directX: '12 Ultimate', resizableBar: true,

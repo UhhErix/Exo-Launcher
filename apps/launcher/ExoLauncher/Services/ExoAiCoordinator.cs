@@ -113,6 +113,13 @@ internal sealed class ExoAiCoordinator : IDisposable
         ApplyFanPreset(initial.FanPreset);
     }
 
+    internal void OnSystemResume()
+    {
+        if (!_running) return;
+        _ = Task.Run(() => Fans.ResetCache());
+        _ = Task.Run(() => GpuManualTuningService.Shared.EvaluateLifecycleTrigger("wake"));
+    }
+
     internal void NotifySettings(ExoAiSettings settings)
     {
         var copy = settings.Copy();

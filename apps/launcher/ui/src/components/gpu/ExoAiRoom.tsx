@@ -286,6 +286,36 @@ function OverviewHealthRows({
   )
 }
 
+function AutoTuneAction({
+  isComplete,
+  running,
+  onRun,
+}: {
+  isComplete: boolean
+  running: boolean
+  onRun: () => void
+}) {
+  if (isComplete) {
+    return (
+      <div className="exo-ai-complete-group">
+        <span className="exo-ai-complete">
+          <Check size={15} />
+          Auto Tune complete
+        </span>
+        <button type="button" className="exo-set-btn" disabled={running} onClick={onRun}>
+          Run again
+        </button>
+      </div>
+    )
+  }
+  return (
+    <button type="button" className="exo-at-run" disabled={running} onClick={onRun}>
+      {running ? <Spinner label="Optimizing PC" /> : <Bolt size={15} />}
+      {running ? 'Optimizing PC' : 'Run Auto Tune'}
+    </button>
+  )
+}
+
 export function ExoAiRoom({
   active,
   jump = null,
@@ -380,32 +410,11 @@ export function ExoAiRoom({
           </div>
           <div className="exo-ai-head-actions">
             <StorageChip drives={state.drives} list={compressList} onOpen={openStorage} />
-            {isComplete ? (
-              <div className="exo-ai-complete-group">
-                <span className="exo-ai-complete">
-                  <Check size={15} />
-                  Auto Tune complete
-                </span>
-                <button
-                  type="button"
-                  className="exo-set-btn"
-                  disabled={pipeline.running}
-                  onClick={() => void pipeline.startPipeline()}
-                >
-                  Run again
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="exo-at-run"
-                disabled={pipeline.running}
-                onClick={() => void pipeline.startPipeline()}
-              >
-                {pipeline.running ? <Spinner label="Optimizing PC" /> : <Bolt size={15} />}
-                {pipeline.running ? 'Optimizing PC' : 'Run Auto Tune'}
-              </button>
-            )}
+            <AutoTuneAction
+              isComplete={isComplete}
+              running={pipeline.running}
+              onRun={() => void pipeline.startPipeline()}
+            />
           </div>
         </header>
 
@@ -462,6 +471,7 @@ export function ExoAiRoom({
                 onHealth={setHealth}
                 about={state.about}
                 runtimes={apps?.runtimes ?? null}
+                runtimesDeferred={apps?.runtimesDeferred ?? false}
               />
             </RightSection>
             <RightSection id="gpu-usage" title="GPU activity">

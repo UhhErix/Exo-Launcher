@@ -26,6 +26,7 @@ import { AutopilotControls, AutopilotReports } from './Autopilot'
 import { BestSetup } from './BestSetup'
 import { BestScreenRows, DisplayRows, HdrRows } from './DisplayTab'
 import { DriverRow } from './DriverRow'
+import { GpuManualTuning } from './GpuManualTuning'
 import { InterruptRows } from './InterruptRows'
 import { NetworkGroup } from './NetworkGroup'
 import { OverlayAdvisorGroup } from './OverlayAdvisorGroup'
@@ -197,6 +198,9 @@ export function PcPartMenus({
               />
             ) : null}
           </div>
+          <Group id="graphics-manual-tuning" title="Manual tuning">
+            <GpuManualTuning active={active && menu === 'graphics'} />
+          </Group>
           <Group id="graphics-upscalers" title="Upscalers">
             <UpscalersTab active={active && menu === 'graphics'} games={games} />
           </Group>
