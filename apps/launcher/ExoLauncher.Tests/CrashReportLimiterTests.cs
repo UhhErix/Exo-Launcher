@@ -140,4 +140,15 @@ public sealed class CrashReportLimiterTests : IDisposable
             Assert.DoesNotContain(forbidden, text);
         Assert.Matches(@"""SteamGameException\|[0-9a-f]{16}""", text);
     }
+
+    [Fact]
+    public void SameCauseInSameVersionDeduplicatesAcrossDaysAndResetsOnNewVersion()
+    {
+        Assert.True(CrashReportLimiter.TryReserve("UpdateFailure", "Error (update): Update download failed (HTTP 404)", Day1, StatePath, out var key, "3.29.0"));
+        Assert.False(CrashReportLimiter.TryReserve("UpdateFailure", "Error (update): Update download failed (HTTP 404)", Day2, StatePath, out _, "3.29.0"));
+        Assert.True(CrashReportLimiter.TryReserve("UpdateFailure", "Error (update): Update download failed (HTTP 404)", Day2, StatePath, out _, "3.29.1"));
+
+        CrashReportLimiter.Release(key, Day2, StatePath);
+        Assert.True(CrashReportLimiter.TryReserve("UpdateFailure", "Error (update): Update download failed (HTTP 404)", Day2, StatePath, out _, "3.29.1"));
+    }
 }

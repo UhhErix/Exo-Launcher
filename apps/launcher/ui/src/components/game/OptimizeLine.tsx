@@ -84,7 +84,7 @@ export function OptimizeLine({ gameId }: { gameId: string }) {
     <>
       <GameLine name="Optimize" word={wordFor(state, working, work, kept)} state={state.standing === 'applied' ? 'applied' : state.running ? 'running' : 'ready'} action
         disabled={working || state.running === true || state.standing === 'unfound'} confirm={applied ? 'Put back your settings?' : undefined} onOpen={() => run(!applied)}
-        control={state.windowMode ? <Choice label="Window mode" value={state.windowMode} choices={WINDOW_MODES} disabled={working || state.running === true} onChange={mode => run(true, mode)} /> : null} />
+        control={state.windowMode ? <Choice label="Window mode" value={state.windowMode} choices={WINDOW_MODES} disabled={working || state.running === true || state.standing === 'unfound'} onChange={mode => run(true, mode)} /> : null} />
       {state.smoothMotion != null && (
         <GameReading name="Smooth Motion" word={state.smoothMotion ? { text: 'On (without in-game DLSS-G)', good: true } : { text: 'Off' }}>
           <Switch checked={state.smoothMotion} label="Smooth Motion" disabled={working || state.running === true} onChange={toggleSmoothMotion} />

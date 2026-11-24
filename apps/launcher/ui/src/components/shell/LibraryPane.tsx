@@ -272,13 +272,14 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   const [showHidden, setShowHidden] = useState(false)
   const { playing, games } = props
   const grid = useMemo(() => withFolders(games, games, folders), [games, folders])
+  const showingHome = !props.empty && tab !== 'all' && !showHidden
   const search = useLibrarySearch(
     games,
     shelfView(showHidden, props.hidden, grid),
     showHidden,
+    !showingHome,
   )
   const { shelf, found } = search
-  const showingHome = !props.empty && tab !== 'all' && !showHidden
   const deckGames = useMemo(() => {
     if (search.query.trim()) {
       return shelf.games.filter((item): item is Game => !isFolderTile(item))

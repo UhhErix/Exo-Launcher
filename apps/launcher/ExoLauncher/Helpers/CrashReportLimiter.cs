@@ -13,19 +13,25 @@ namespace ExoLauncher.Helpers;
 internal sealed class CrashReportLimit
 {
     public const int MaxPerDay = 5;
+    private const int MaxVersionKeys = 64;
 
     private readonly HashSet<string> _keys;
+    private readonly HashSet<string> _versionKeys;
 
-    private CrashReportLimit(string day, int count, IEnumerable<string> keys)
+    private CrashReportLimit(string day, int count, IEnumerable<string> keys, string version = "", IEnumerable<string>? versionKeys = null)
     {
         Day = day;
         Count = count;
         _keys = new HashSet<string>(keys, StringComparer.Ordinal);
+        Version = version;
+        _versionKeys = new HashSet<string>(versionKeys ?? [], StringComparer.Ordinal);
     }
 
     public string Day { get; private set; }
     public int Count { get; private set; }
+    public string Version { get; private set; }
     public IReadOnlyCollection<string> Keys => _keys;
+    public IReadOnlyCollection<string> VersionKeys => _versionKeys;
 
     public static CrashReportLimit Empty(DateTime utcNow) => new(DayOf(utcNow), 0, []);
 
@@ -54,7 +60,7 @@ internal sealed class CrashReportLimit
     }
 
     /// <summary>Reserves a send for this errorType+signature on <paramref name="utcNow"/>'s UTC day. False when refused.</summary>
-    public bool TryReserve(string errorType, string signature, DateTime utcNow, out string key)
+    public bool TryReserve(string errorType, string signature, DateTime utcNow, out string key, string? version = null)
     {
         key = KeyOf(errorType, signature);
         var day = DayOf(utcNow);
@@ -64,7 +70,14 @@ internal sealed class CrashReportLimit
             Count = 0;
             _keys.Clear();
         }
+        if (!string.IsNullOrEmpty(version) && !string.Equals(version, Version, StringComparison.Ordinal))
+        {
+            Version = version;
+            _versionKeys.Clear();
+        }
+        if (!string.IsNullOrEmpty(version) && _versionKeys.Contains(key)) return false;
         if (Count >= MaxPerDay || !_keys.Add(key)) return false;
+        if (!string.IsNullOrEmpty(version) && _versionKeys.Count < MaxVersionKeys) _versionKeys.Add(key);
         Count++;
         return true;
     }
@@ -73,13 +86,22 @@ internal sealed class CrashReportLimit
     public void Release(string key)
     {
         if (_keys.Remove(key)) Count--;
+        _versionKeys.Remove(key);
     }
 
     public string ToJson()
     {
         var keys = new JsonArray();
         foreach (var key in _keys) keys.Add(JsonValue.Create(key));
-        return new JsonObject { ["day"] = Day, ["count"] = Count, ["keys"] = keys }.ToJsonString();
+        var node = new JsonObject { ["day"] = Day, ["count"] = Count, ["keys"] = keys };
+        if (!string.IsNullOrEmpty(Version))
+        {
+            var vKeys = new JsonArray();
+            foreach (var key in _versionKeys) vKeys.Add(JsonValue.Create(key));
+            node["version"] = Version;
+            node["versionKeys"] = vKeys;
+        }
+        return node.ToJsonString();
     }
 
     /// <summary>Reads the record <see cref="ToJson"/> writes. Throws on anything else.</summary>
@@ -92,7 +114,9 @@ internal sealed class CrashReportLimit
         if (!DateTime.TryParseExact(day, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
             || count < 0 || count > MaxPerDay || keys.Length > count)
             throw new FormatException("Out of range.");
-        return new CrashReportLimit(day, count, keys);
+        var version = root["version"]?.GetValue<string>() ?? "";
+        var versionKeys = root["versionKeys"] is JsonArray vk ? vk.Select(node => node!.GetValue<string>()).Take(MaxVersionKeys).ToArray() : [];
+        return new CrashReportLimit(day, count, keys, version, versionKeys);
     }
 }
 
@@ -108,18 +132,18 @@ public static class CrashReportLimiter
     public static string DefaultPath => Path.Combine(PathHelper.AppDataDir, "crash-report-limit.json");
 
     /// <summary>Reserves one send in the state file. False when refused; the caller then logs one line and sends nothing.</summary>
-    public static bool TryReserve(string errorType, string signature, DateTime utcNow, out string key) =>
-        TryReserve(errorType, signature, utcNow, DefaultPath, out key);
+    public static bool TryReserve(string errorType, string signature, DateTime utcNow, out string key, string? version = null) =>
+        TryReserve(errorType, signature, utcNow, DefaultPath, out key, version);
 
     /// <summary>Gives back a reservation whose POST did not succeed.</summary>
     public static void Release(string key, DateTime utcNow) => Release(key, utcNow, DefaultPath);
 
-    internal static bool TryReserve(string errorType, string signature, DateTime utcNow, string path, out string key)
+    internal static bool TryReserve(string errorType, string signature, DateTime utcNow, string path, out string key, string? version = null)
     {
         lock (Gate)
         {
             var state = Load(utcNow, path);
-            var reserved = state.TryReserve(errorType, signature, utcNow, out key);
+            var reserved = state.TryReserve(errorType, signature, utcNow, out key, version);
             // A reservation that is not saved would not survive a restart, so it is not sent.
             return reserved && Save(state, path);
         }

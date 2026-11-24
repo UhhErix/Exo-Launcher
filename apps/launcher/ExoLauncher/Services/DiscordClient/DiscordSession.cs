@@ -310,6 +310,7 @@ internal sealed partial class DiscordSession
     // Connections that never reached READY in a row; one report per stall (CrashReport kind DiscordGateway).
     private readonly FailureStreak _gatewayStreak = new();
     private int? _lastGatewayClose;
+    private bool _lastGatewayNetworkFailure;
 
     private static void SetState(string state, string? message = null)
     {
@@ -342,7 +343,7 @@ internal sealed partial class DiscordSession
                 return;
             }
             if (ready) _gatewayStreak.Record(true, DateTime.UtcNow);
-            else if (_gatewayStreak.Record(false, DateTime.UtcNow))
+            else if (_gatewayStreak.Record(false, DateTime.UtcNow) && FailureReportRules.IsDiscordGatewayReportable(_lastGatewayClose, _lastGatewayNetworkFailure))
                 CrashReport.Submit("DiscordGateway", $"Discord gateway failed {FailureStreak.DefaultThreshold} times in a row, last close code {_lastGatewayClose?.ToString() ?? "none"}", "discord");
             // Rate limited (4008) waits a minute; the backoff starts over only after a connection that stayed up a minute (GatewayBackoff).
             var stable = ready && Environment.TickCount64 - began >= GatewayBackoff.Stable.TotalMilliseconds;
@@ -363,6 +364,7 @@ internal sealed partial class DiscordSession
         _ws = ws;
         using var connection = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
         var ready = false;
+        var networkFailure = false;
         try
         {
             await ws.ConnectAsync(new Uri((_resumeUrl ?? GatewayUrl) + "/?encoding=json&v=9"), connection.Token).ConfigureAwait(false);
@@ -418,6 +420,7 @@ internal sealed partial class DiscordSession
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { return (null, ready, false); }
         catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or JsonException or IOException)
         {
+            networkFailure = ex is WebSocketException or IOException or OperationCanceledException;
             AppLog.Info("Discord client: connection dropped (" + ex.GetType().Name + ").");
         }
         finally
@@ -427,6 +430,7 @@ internal sealed partial class DiscordSession
         }
         var code = (int?)ws.CloseStatus;
         _lastGatewayClose = code;
+        _lastGatewayNetworkFailure = networkFailure && code is null;
         if (code is not null) AppLog.Info($"Discord client: gateway closed {code}.");
         var keyRefused = _keyInPresence is not null && KeyRefused(code, Environment.TickCount64 - Volatile.Read(ref _keySentAt));
         if (keyRefused)

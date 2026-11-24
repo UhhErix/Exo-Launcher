@@ -95,6 +95,39 @@ function matchesOne(game: Game, filter: LibraryFilter, context: MatchContext): b
   return (TESTS[filter.kind] as (game: Game, filter: LibraryFilter, context: MatchContext) => boolean)(game, filter, context)
 }
 
+function collectStoresAndTags(game: Game, stores: Set<string>, tags: Set<string>) {
+  if (game.stores?.length) {
+    for (let j = 0; j < game.stores.length; j++) stores.add(game.stores[j])
+  } else {
+    stores.add(game.store)
+  }
+  if (game.tags?.length) {
+    for (let j = 0; j < game.tags.length; j++) tags.add(game.tags[j])
+  }
+}
+
+export function computeFilterFlags(games: readonly Game[], now = Date.now()) {
+  let installed = false
+  let notInstalled = false
+  let update = false
+  let recent = false
+  let unplayed = false
+  let family = false
+  const stores = new Set<string>()
+  const tags = new Set<string>()
+  for (let i = 0; i < games.length; i++) {
+    const game = games[i]
+    if (onPc(game)) installed = true
+    else notInstalled = true
+    if (!update && (game.updateAvailable || game.variants?.some(variant => variant.updateAvailable))) update = true
+    if (!unplayed && !hasPlayed(game)) unplayed = true
+    if (!recent && game.lastPlayedUtc && now - Date.parse(game.lastPlayedUtc) < RECENT_MS) recent = true
+    if (!family && game.familyShared) family = true
+    collectStoresAndTags(game, stores, tags)
+  }
+  return { installed, notInstalled, update, recent, unplayed, family, stores: [...stores].sort(), tags }
+}
+
 /** Every group of filters matches (within a group, any one does). */
 export function matchesFilters(game: Game, filters: readonly LibraryFilter[], context: MatchContext = {}): boolean {
   if (filters.length === 0) return true

@@ -466,22 +466,26 @@ public sealed partial class WebHostBridge
     // The member list; at asks Discord for the rows from there on (they arrive as discord.members).
     private static object DiscordMembers(JsonElement p, bool hasParams)
     {
-        if (DiscordSession.Current is not { } session || ReadString(p, hasParams, "guildId") is not { } raw)
+        if (DiscordSession.Current is not { } session || ReadString(p, hasParams, "guildId") is not { } raw || !DiscordRest.IsId(raw))
             return new { items = Array.Empty<object>(), online = 0, total = 0, rows = 0 };
-        var guild = DiscordRest.Id(raw);
+        var guild = raw;
         if (hasParams && ReadInt(p, "at", 0, 1_000_000, -1) is var at and >= 0) session.MembersAt(guild, at);
         // Nothing to show yet: this page may have no chat that subscribes (a voice channel, a server's page), or the ask was lost.
-        else if (!session.Cache.HasMemberList(guild)) session.AskMembers(guild, ReadString(p, hasParams, "channelId") is { } open ? DiscordRest.Id(open) : null);
+        else if (!session.Cache.HasMemberList(guild))
+        {
+            var open = ReadString(p, hasParams, "channelId");
+            session.AskMembers(guild, DiscordRest.IsId(open) ? open : null);
+        }
         return session.Cache.MemberList(guild);
     }
 
     /// <summary>The composer's @ list: members Exo has seen whose names match; ask also asks Discord for more (they arrive as discord.colors).</summary>
     private static object DiscordMentionable(JsonElement p, bool hasParams)
     {
-        if (DiscordSession.Current is not { } session || ReadString(p, hasParams, "guildId") is not { } raw ||
+        if (DiscordSession.Current is not { } session || ReadString(p, hasParams, "guildId") is not { } raw || !DiscordRest.IsId(raw) ||
             ReadString(p, hasParams, "query")?.Trim() is not { Length: > 0 and <= 32 } query)
             return new { users = Array.Empty<object>() };
-        var guild = DiscordRest.Id(raw);
+        var guild = raw;
         // # in the message box: channels. @: people (Discord asked for more as you type), then roles.
         if (ReadBool(p, hasParams, "channels") == true) return new { users = Array.Empty<object>(), channels = session.Cache.FindChannels(guild, query, 8) };
         if (ReadBool(p, hasParams, "ask") == true) session.SearchMembers(guild, query);
@@ -510,11 +514,11 @@ public sealed partial class WebHostBridge
     /// </summary>
     private static object DiscordColors(JsonElement p, bool hasParams)
     {
-        if (DiscordSession.Current is not { } session || ReadString(p, hasParams, "guildId") is not { } raw ||
+        if (DiscordSession.Current is not { } session || ReadString(p, hasParams, "guildId") is not { } raw || !DiscordRest.IsId(raw) ||
             !p.TryGetProperty("userIds", out var ids) || ids.ValueKind != JsonValueKind.Array)
             return new { colors = new Dictionary<string, string?>() };
-        var guild = DiscordRest.Id(raw);
-        var people = ids.EnumerateArray().Select(i => i.GetString()).OfType<string>().Select(DiscordRest.Id).Take(200).ToList();
+        var guild = raw;
+        var people = ids.EnumerateArray().Select(i => i.GetString()).OfType<string>().Where(DiscordRest.IsId).Take(200).ToList();
         var (colors, unknown) = session.Cache.Colors(guild, people, Environment.TickCount64);
         session.RequestMembers(guild, unknown);
         return new { colors, avatars = session.Cache.MemberAvatars(guild, people), icons = session.Cache.RoleIcons(guild, people) };

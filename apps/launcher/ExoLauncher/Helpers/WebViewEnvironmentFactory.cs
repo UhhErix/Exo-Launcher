@@ -39,14 +39,19 @@ internal static class WebViewEnvironmentFactory
             // version's app folder open during an atomic installer swap.
             // Recursive deletes stay off the UI thread; the environment itself
             // is still created on the caller's thread after this await.
-            await Task.Run(() =>
+            var prepWatch = System.Diagnostics.Stopwatch.StartNew();
+            var browser = await Task.Run(() =>
             {
                 WebViewHostProfile.Shared = JoinShared();
                 AppLog.Info("webview-folder=" + (WebViewHostProfile.Shared ? "shared" : "own"));
-                WebViewCacheCleaner.RetireLegacyUserDataFolders();
                 WebViewCacheCleaner.RunIfVersionChanged(ExoLauncher.Services.AppServices.RunningVersion);
                 Directory.CreateDirectory(WebViewHostProfile.UserDataFolder);
+                return explicitInstalledRuntime
+                    ? WebViewRuntimeLocator.ResolveExplicitInstalledFolder() ?? WebViewRuntimeLocator.ResolveBrowserExecutableFolder()
+                    : WebViewRuntimeLocator.ResolveBrowserExecutableFolder();
             });
+            var prepMs = prepWatch.ElapsedMilliseconds;
+            _ = Task.Run(WebViewCacheCleaner.RetireLegacyUserDataFolders);
             var folder = WebViewHostProfile.UserDataFolder;
             // Every surface starts black, not the runtime's default, before its page has drawn.
             Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF000000");
@@ -59,15 +64,15 @@ internal static class WebViewEnvironmentFactory
             };
             // null = healthy evergreen. A path is used when the Clients pv still
             // names a version whose Application folder was emptied.
-            var browser = explicitInstalledRuntime
-                ? WebViewRuntimeLocator.ResolveExplicitInstalledFolder() ?? WebViewRuntimeLocator.ResolveBrowserExecutableFolder()
-                : WebViewRuntimeLocator.ResolveBrowserExecutableFolder();
             if (browser is not null)
                 AppLog.Info("webview-runtime-folder=" + browser + (explicitInstalledRuntime ? " (explicit retry)" : string.Empty));
+            var envWatch = System.Diagnostics.Stopwatch.StartNew();
             _environment = await CoreWebView2Environment.CreateWithOptionsAsync(
                 browserExecutableFolder: browser,
                 userDataFolder: folder,
                 options: options);
+            var createEnvMs = envWatch.ElapsedMilliseconds;
+            AppLog.Info($"PERF startup milestone=webview-env-ready prepMs={prepMs} createEnvMs={createEnvMs} shared={WebViewHostProfile.Shared}");
             return _environment;
         }
         finally

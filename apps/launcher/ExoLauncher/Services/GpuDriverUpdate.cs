@@ -127,15 +127,27 @@ internal static partial class GpuDriverUpdate
         return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
     }
 
+    internal static readonly TimeSpan ChipsetSettle = TimeSpan.FromSeconds(10);
+
+    internal static string? ChipsetHoldReason(bool chipsetInstalling, DateTime? chipsetFinishedUtc, DateTime nowUtc)
+    {
+        if (chipsetInstalling) return "Waiting for the chipset driver update to finish";
+        if (chipsetFinishedUtc is { } done && nowUtc - done < ChipsetSettle)
+            return "Waiting for the chipset driver update to settle";
+        return null;
+    }
+
     internal static async Task<string?> HoldingAsync() =>
         GameRunning() ? "Waiting for your game to close"
         : DiscordClient.DiscordSession.Current?.InCall == true ? "Waiting for your Discord call to end"
+        : ChipsetHoldReason(ChipsetUpdate.ThisPc?.IsInstalling == true, ChipsetUpdate.ThisPc?.LastFinishedUtc, DateTime.UtcNow) is { } chipset ? chipset
         : ShadersAddon.Live is { } shaders && await shaders.CompilingAsync(CancellationToken.None).ConfigureAwait(false) ? "Waiting for Exo Shaders to finish compiling"
         : null;
 
     internal static string? Busy() =>
         GameRunning() ? "Close your game first."
         : DiscordClient.DiscordSession.Current?.InCall == true ? "Leave your Discord call first."
+        : ChipsetUpdate.ThisPc?.IsInstalling == true ? "Wait for the chipset driver update to finish."
         : null;
 
     private static bool GameRunning() =>
@@ -181,19 +193,25 @@ internal static partial class GpuDriverUpdate
         return match.Success && int.TryParse(match.Groups[1].Value, out var code) ? code : null;
     }
 
-    internal static Ending Outcome(Latest latest, int exitCode, int? amdResult, string? installed)
+    internal static Ending Outcome(Latest latest, int exitCode, int? amdResult, string? installed, string? before = null)
     {
         var amd = latest.Vendor == "amd";
         var updated = VersionNumber.AtLeast(installed, latest.Version);
         var restart = amd ? amdResult == 2 : exitCode is 2 or 14;
         var shutdown = !amd && (exitCode is 17 or 18);
         var failed = amd ? amdResult == 1 || (amdResult is null && exitCode != 0) : exitCode is not (0 or 2 or 14 or 17 or 18);
-        if (updated || ((restart || shutdown) && !failed))
-            return new(true, $"Driver {latest.Version} installed{(shutdown ? ". Shut down your PC, then turn it on to finish" : restart ? ". Restart your PC to finish" : "")}");
         var maker = Maker(latest.Vendor);
+        if (updated || ((restart || shutdown) && !failed))
+        {
+            var note = updated && failed && exitCode != 0 ? $" ({maker}'s installer reported code {exitCode})" : "";
+            return new(true, $"Driver {latest.Version} installed{(shutdown ? ". Shut down your PC, then turn it on to finish" : restart ? ". Restart your PC to finish" : "")}{note}");
+        }
         if (!failed) return new(false, $"{maker}'s installer finished, but the driver is still {installed ?? "the one before"}");
+        var changed = before is not null && installed is not null && !Same(installed, before);
         return new(false, amd
-            ? amdResult == 1 ? "AMD's installer stopped. Your driver is unchanged" : $"AMD's installer stopped (code {exitCode}). Your driver is unchanged"
+            ? amdResult == 1
+                ? changed ? $"AMD's installer stopped. Your driver is now {installed}" : "AMD's installer stopped. Your driver is unchanged"
+                : AmdExitMessage(exitCode, changed ? installed : null)
             : exitCode switch
             {
                 6 => "The install was closed. Your driver is unchanged",
@@ -204,6 +222,22 @@ internal static partial class GpuDriverUpdate
                 16 => "Another install is running. Update again when it's done",
                 _ => $"Intel's installer stopped (code {exitCode}). Your driver is unchanged",
             });
+    }
+
+    private static string AmdExitMessage(int exitCode, string? changedTo)
+    {
+        var tail = changedTo is not null ? $"Your driver is now {changedTo}" : "Your driver is unchanged";
+        return exitCode switch
+        {
+            182 => $"AMD's installer didn't recognize a supported GPU (code 182). {tail}; restart your PC and try again if another update just ran",
+            184 => $"AMD's driver doesn't support this version of Windows (code 184). {tail}",
+            195 => $"AMD's installer couldn't reach AMD's servers (code 195). {tail}",
+            205 => $"Windows Update paused AMD's installer (code 205). {tail}; try again when Windows finishes",
+            206 => $"Restart your PC to finish a pending update, then update again (code 206)",
+            1602 => $"The install was canceled. {tail}",
+            1618 => "Another install is running. Update again when it's done",
+            _ => $"AMD's installer stopped (code {exitCode}). {tail}",
+        };
     }
 
     internal static string? AmdPackageVersion(string? manifest)
@@ -289,7 +323,7 @@ internal static partial class GpuDriverUpdate
                 await Task.Delay(1000).ConfigureAwait(false);
                 installed = Installed(vendor, card);
             }
-            var end = Outcome(latest, exit, result, installed);
+            var end = Outcome(latest, exit, result, installed, before);
             AppLog.Info($"Driver: {maker}'s installer exited {exit}{(result is { } code ? $", result {code}" : "")}; driver now {installed ?? "unknown"}: {end.Message}.");
             await MainWindow.ReloadAfterDriverInstallAsync().ConfigureAwait(false);
             if (!end.Ok)

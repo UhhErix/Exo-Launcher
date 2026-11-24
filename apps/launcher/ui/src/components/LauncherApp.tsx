@@ -2,7 +2,7 @@
  * Exo Launcher shell — the Library, rooms, and the game sheet.
  * CTA strings (Play | Install | Update) and cancelInstall live via GamePage + host.
  */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   host,
   type Game,
@@ -94,6 +94,7 @@ const ExoTour = lazy(() => import('./shell/ExoTour').then((m) => ({ default: m.E
 
 const NO_FOLDERS: LibraryFolder[] = []
 const NO_IDS: string[] = []
+const NO_COMMANDS: Command[] = []
 const MIN_BOOT_SPLASH_MS = 900
 const BOOT_COVERS_CAP_MS = 1500
 const BOOT_COVERS = 40
@@ -288,7 +289,8 @@ export function LauncherApp() {
         })
         const merged = reuseList(previous, mergeHostGames(previous, incoming, selectedIdRef.current))
         gamesRef.current = merged
-        setGames(merged)
+        if (previous.length === 0) setGames(merged)
+        else startTransition(() => setGames(merged))
       }
       if (parts.recent) {
         const next = parts.recent
@@ -519,13 +521,13 @@ export function LauncherApp() {
 
   const paletteExtras = usePaletteExtras(commandOpen)
   const noteCommands = useNoteCommands(commandOpen)
-  const commands = useMemo<Command[]>(() => buildShellCommands({
+  const commands = useMemo<Command[]>(() => commandOpen ? buildShellCommands({
     library: liveShelves.library,
     hidden: liveShelves.hidden,
     selected,
     noteCommands,
     paletteExtras,
-  }), [liveShelves.library, liveShelves.hidden, selected, noteCommands, paletteExtras])
+  }) : NO_COMMANDS, [commandOpen, liveShelves.library, liveShelves.hidden, selected, noteCommands, paletteExtras])
 
   const selectCommand = useCallback((command: Command) => executeShellCommand(command, {
     selected,
