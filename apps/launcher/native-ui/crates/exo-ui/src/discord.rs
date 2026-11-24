@@ -1328,6 +1328,21 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
     )
     .on_press(|s: &mut AppState| s.discord.inbox_open = !s.discord.inbox_open);
 
+    let scroll_right_btn = el()
+        .key("dc-band-scroll-right")
+        .role("button")
+        .label("More servers")
+        .cursor(Cursor::Pointer)
+        .focusable(true)
+        .hit()
+        .size(32.0, 32.0)
+        .radius(16.0)
+        .fill(subtle_fill())
+        .border(1.0, hairline())
+        .hover(hover_fill())
+        .center()
+        .child(icon_chevron_right(14.0, fg_muted()));
+
     panel_frame(
         row()
             .key("dc-server-band")
@@ -1338,7 +1353,14 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
             .center_y(),
     )
     .child(strip)
-    .child(row().pl(4.0).center_y().child(inbox_btn))
+    .child(
+        row()
+            .pl(4.0)
+            .gap(6.0)
+            .center_y()
+            .child(scroll_right_btn)
+            .child(inbox_btn),
+    )
 }
 
 fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
@@ -1376,6 +1398,8 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .gap(12.0)
         .center_y()
         .radius(RADIUS_PILL)
+        .fill(subtle_fill())
+        .border(1.0, hairline())
         .hover(hover_fill())
         .hover_motion(Spring::NONE, SPRING_QUICK)
         .hit()
@@ -1596,11 +1620,6 @@ fn dm_subtitle(dm: &DiscordDm) -> Option<String> {
     if dm.group {
         let count = dm.members.as_ref().map(|m| m.len() + 1).unwrap_or(2);
         return Some(format!("{count} Members"));
-    }
-    if let Some(ref st) = dm.status
-        && st != "offline"
-    {
-        return Some(status_label(st).into());
     }
     None
 }
@@ -1957,30 +1976,40 @@ fn guild_channel_row(
         fg_muted()
     };
 
+    let icon_color = if active {
+        PRIMARY_FG
+    } else if in_this_voice {
+        good()
+    } else if is_unread {
+        FG
+    } else {
+        fg_faint()
+    };
     let icon = if is_voice {
-        icon_volume(
-            15.0,
-            if active {
-                PRIMARY_FG
-            } else if in_this_voice {
-                good()
-            } else {
-                fg_muted()
-            },
-        )
+        if ch.locked {
+            icon_lock(14.0, icon_color)
+        } else {
+            icon_volume(
+                15.0,
+                if active {
+                    PRIMARY_FG
+                } else if in_this_voice {
+                    good()
+                } else {
+                    fg_muted()
+                },
+            )
+        }
+    } else if ch.rules {
+        icon_bookmark(14.0, icon_color)
+    } else if ch.kind == "forum" {
+        icon_chat(14.0, icon_color)
+    } else if ch.channel_type == 5 {
+        icon_sparkles(14.0, icon_color)
     } else if ch.locked {
         icon_lock(14.0, if active { PRIMARY_FG } else { fg_muted() })
     } else {
-        icon_hash(
-            15.0,
-            if active {
-                PRIMARY_FG
-            } else if is_unread {
-                FG
-            } else {
-                fg_faint()
-            },
-        )
+        icon_hash(15.0, icon_color)
     };
 
     let ch_ctx = ContextMenuTarget::DiscordChannel {
@@ -2250,6 +2279,8 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
                     category_id: ch.id.clone(),
                     name: ch.name.clone(),
                 };
+                let gid_add = guild.id.clone();
+                let cid_add = ch.id.clone();
                 tree = tree.child(
                     row()
                         .key(format!("dc-cat-{}", ch.id))
@@ -2279,8 +2310,28 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
                             text(ch.name.to_uppercase())
                                 .font(font_px(11.0 * sc, 600.0))
                                 .color(fg_faint())
+                                .grow(1.0)
                                 .truncate(),
-                        ),
+                        )
+                        .children(chans.can_manage.then(|| {
+                            el().key(format!("dc-cat-add-{}", ch.id))
+                                .role("button")
+                                .label("Create channel")
+                                .cursor(Cursor::Pointer)
+                                .hit()
+                                .size(22.0, 22.0)
+                                .radius(RADIUS_SMALL)
+                                .hover(hover_fill())
+                                .center()
+                                .on_press(move |s: &mut AppState| {
+                                    s.open_create_channel_dialog(
+                                        &gid_add,
+                                        Some(cid_add.clone()),
+                                        false,
+                                    );
+                                })
+                                .child(icon_plus(13.0, fg_faint()))
+                        })),
                 );
                 continue;
             }
@@ -2376,12 +2427,23 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
     let gid_inv = guild.id.clone();
     let gname_inv = guild.name.clone();
 
+    let srv_mark = avatar_box(
+        s,
+        guild.icon.as_deref(),
+        &guild.name,
+        24.0,
+        6.0,
+        None,
+        false,
+        scale,
+    );
+
     let head = row()
         .key("dc-server-head")
         .cursor(Cursor::Pointer)
         .w_full()
         .h(head_h)
-        .pl(14.0)
+        .pl(12.0)
         .pr(8.0)
         .gap(8.0)
         .center_y()
@@ -2392,6 +2454,7 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
         .on_secondary_press(move |s: &mut AppState, p, _| {
             s.open_context_menu(srv_ctx.clone(), p.x, p.y);
         })
+        .child(srv_mark)
         .child(
             text(guild.name.clone())
                 .font(font_px(15.0 * sc, 600.0))
@@ -2804,7 +2867,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             .press_on_down()
             .press_scale(PRESS_SCALE)
             .h(32.0)
-            .px(12.0)
+            .px(10.0)
             .gap(6.0)
             .center_y()
             .radius(RADIUS_PILL)
@@ -2831,7 +2894,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
 
     let search_box = glassy_ring(
         row()
-            .w(210.0)
+            .w(234.0)
             .h(32.0)
             .px(12.0)
             .gap(8.0)
@@ -2918,7 +2981,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             || username.is_some_and(|u| u.to_lowercase().contains(&q))
     };
 
-    let cols = if sc > 1.15 { 3 } else { 4 };
+    let cols = if sc > 1.15 { 4 } else { 5 };
     let add_bar = if s.discord.add_friend_open {
         Some(
             glassy_ring(
@@ -3402,12 +3465,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                                 name_color,
                             ));
                             if m.bot {
-                                name_row =
-                                    name_row.child(
-                                        el().px(4.0).py(1.0).radius(4.0).fill(subtle_fill()).child(
-                                            text("APP").font(type_label()).color(fg_muted()),
-                                        ),
-                                    );
+                                name_row = name_row.child(icon_check(12.0, fg_muted()));
                             }
                             if let Some(tag) = m.look.as_deref().and_then(|l| l.tag.as_ref())
                                 && !tag.tag.is_empty()
@@ -3585,54 +3643,178 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                 }
                 panel = panel.child(list);
             } else {
-                panel = panel
-                    .child(avatar_with_look(
-                        s,
-                        dm.avatar.as_deref(),
-                        dm.look.as_ref(),
-                        &dm.name,
-                        60.0,
-                        30.0,
-                        dm.status.as_deref(),
-                        false,
-                        BG,
-                        scale,
-                    ))
-                    .child(
-                        col()
-                            .gap(2.0)
-                            .child(styled_name_text(
-                                text(dm.name.clone()).font(type_title()),
-                                dm.look.as_ref(),
-                                FG,
-                            ))
-                            .child(
-                                text(
-                                    dm.username
-                                        .clone()
-                                        .map(|u| format!("@{u}"))
-                                        .unwrap_or_default(),
-                                )
+                let uid_opt = dm.user_id.as_deref();
+                let loaded = uid_opt.and_then(|u| s.discord.profiles_by_user.get(u));
+                let prof = loaded.and_then(|r| r.profile.as_ref());
+                let banner_url = prof.and_then(|p| {
+                    p.user.banner.as_deref().map(|hash| {
+                        format!(
+                            "https://cdn.discordapp.com/banners/{}/{hash}.webp?size=600",
+                            p.user.id
+                        )
+                    })
+                });
+                let accent_rgb = prof.and_then(|p| {
+                    p.user_profile
+                        .as_ref()
+                        .and_then(|up| up.accent_color)
+                        .or(p.user.accent_color)
+                });
+                let banner_el = if let Some(ref burl) = banner_url
+                    && let Some(img) = s.discord_remote_image_sized(burl, 600.0, scale)
+                {
+                    el().w_full()
+                        .h(105.0)
+                        .clip_rounded(0.0)
+                        .pixels_fit(img.pixels(), SurfaceFit::Fill)
+                } else {
+                    el().w_full()
+                        .h(105.0)
+                        .fill(accent_rgb.map(|c| hex(c, 1.0)).unwrap_or_else(subtle_fill))
+                };
+
+                let avatar_wrap = el().w_full().h(46.0).child(
+                    el().pin(Some(16.0), Some(-42.0), None, None)
+                        .size(86.0, 86.0)
+                        .radius(43.0)
+                        .fill(BG)
+                        .center()
+                        .child(avatar_with_look(
+                            s,
+                            dm.avatar.as_deref(),
+                            dm.look.as_ref(),
+                            &dm.name,
+                            78.0,
+                            39.0,
+                            dm.status.as_deref(),
+                            false,
+                            BG,
+                            scale,
+                        )),
+                );
+
+                let pronouns = prof
+                    .and_then(|p| p.user_profile.as_ref())
+                    .and_then(|up| up.pronouns.as_deref())
+                    .filter(|s| !s.is_empty());
+                let handle_str = dm
+                    .username
+                    .as_deref()
+                    .or_else(|| prof.map(|p| p.user.username.as_str()))
+                    .unwrap_or("");
+                let sub_handle = match (handle_str.is_empty(), pronouns) {
+                    (false, Some(pr)) => format!("{handle_str} · {pr}"),
+                    (false, None) => handle_str.to_string(),
+                    (true, Some(pr)) => pr.to_string(),
+                    (true, None) => String::new(),
+                };
+                let custom_st = loaded
+                    .and_then(|r| r.extras.as_ref())
+                    .and_then(|e| e.presence.as_ref())
+                    .filter(|pr| pr.activity_type == Some(4))
+                    .and_then(|pr| pr.activity.as_deref())
+                    .filter(|t| !t.is_empty());
+
+                let mut body = col().w_full().px(16.0).pb(18.0).gap(12.0).child(
+                    col()
+                        .gap(2.0)
+                        .child(styled_name_text(
+                            text(dm.name.clone()).font(type_title()),
+                            dm.look.as_ref(),
+                            FG,
+                        ))
+                        .children(
+                            (!sub_handle.is_empty())
+                                .then(|| text(sub_handle).font(type_small()).color(fg_muted())),
+                        )
+                        .children(custom_st.map(|ct| {
+                            text(ct.to_string())
                                 .font(type_small())
-                                .color(fg_muted()),
-                            ),
-                    )
-                    .child(el().w_full().h(1.0).fill(hairline()))
-                    .child(
+                                .color(FG)
+                                .pt(4.0)
+                                .w_full()
+                                .wrap()
+                        })),
+                );
+
+                if let Some(p) = prof {
+                    if !p.badges.is_empty() {
+                        let mut badge_row = row().gap(6.0).wrap().center_y();
+                        for b in &p.badges {
+                            let url =
+                                format!("https://cdn.discordapp.com/badge-icons/{}.png", b.icon);
+                            if let Some(img) = s.discord_remote_image_sized(&url, 48.0, scale) {
+                                badge_row = badge_row.child(
+                                    el().size(22.0, 22.0)
+                                        .label(b.description.clone())
+                                        .pixels_fit(img.pixels(), SurfaceFit::Fit),
+                                );
+                            }
+                        }
+                        body = body.child(badge_row);
+                    }
+
+                    let bio = p
+                        .user_profile
+                        .as_ref()
+                        .and_then(|up| up.bio.as_deref())
+                        .filter(|t| !t.is_empty())
+                        .or_else(|| p.user.bio.as_deref().filter(|t| !t.is_empty()));
+                    if let Some(bio_txt) = bio {
+                        body = body.child(
+                            text(bio_txt.to_string())
+                                .font(type_small())
+                                .color(FG)
+                                .w_full()
+                                .wrap(),
+                        );
+                    }
+
+                    if let Some(since) = format_snowflake_date(&p.user.id) {
+                        body = body.child(el().w_full().h(1.0).fill(hairline())).child(
+                            col()
+                                .gap(4.0)
+                                .child(text("Member since").font(type_label()).color(fg_muted()))
+                                .child(text(since).font(type_small()).color(FG)),
+                        );
+                    }
+
+                    if !p.connected_accounts.is_empty() {
+                        let mut conns = col()
+                            .w_full()
+                            .gap(6.0)
+                            .child(text("Connections").font(type_label()).color(fg_muted()));
+                        for acc in &p.connected_accounts {
+                            let mut crow = row()
+                                .w_full()
+                                .px(10.0)
+                                .py(7.0)
+                                .gap(8.0)
+                                .center_y()
+                                .radius(RADIUS_SMALL)
+                                .fill(subtle_fill())
+                                .border(1.0, hairline())
+                                .child(
+                                    text(acc.name.clone())
+                                        .font(type_small())
+                                        .color(FG)
+                                        .grow(1.0)
+                                        .truncate(),
+                                );
+                            if acc.verified {
+                                crow = crow.child(icon_check(13.0, good()));
+                            }
+                            conns = conns.child(crow);
+                        }
+                        body = body
+                            .child(el().w_full().h(1.0).fill(hairline()))
+                            .child(conns);
+                    }
+                } else if let Some(ref sub) = dm.subtitle {
+                    body = body.child(
                         col()
                             .gap(4.0)
-                            .child(text("Status").font(type_label()).color(fg_faint()))
-                            .child(
-                                text(status_label(dm.status.as_deref().unwrap_or("offline")))
-                                    .font(type_small())
-                                    .color(FG),
-                            ),
-                    );
-                if let Some(ref sub) = dm.subtitle {
-                    panel = panel.child(
-                        col()
-                            .gap(4.0)
-                            .child(text("Activity").font(type_label()).color(fg_faint()))
+                            .child(text("Activity").font(type_label()).color(fg_muted()))
                             .child(
                                 text(sub.clone())
                                     .font(type_small())
@@ -3642,11 +3824,202 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                             ),
                     );
                 }
+
+                if let Some(uid_s) = uid_opt.map(str::to_string) {
+                    let uid_save = uid_s.clone();
+                    body = body.child(el().w_full().h(1.0).fill(hairline())).child(
+                        col()
+                            .w_full()
+                            .gap(4.0)
+                            .child(text("Note").font(type_label()).color(fg_muted()))
+                            .child(
+                                text_input(&s.discord.profile_note_input, type_small())
+                                    .key("dc-dm-profile-note")
+                                    .placeholder("Click to add a note", fg_faint())
+                                    .w_full()
+                                    .min_h(32.0)
+                                    .px(8.0)
+                                    .py(6.0)
+                                    .radius(RADIUS_SMALL)
+                                    .fill(subtle_fill())
+                                    .color(FG)
+                                    .single_line()
+                                    .on_edit(edit_access(|s: &mut AppState| {
+                                        &mut s.discord.profile_note_input
+                                    }))
+                                    .on_submit(move |s: &mut AppState, _| {
+                                        s.save_discord_profile_note(&uid_save);
+                                    }),
+                            ),
+                    );
+                }
+
+                if let Some(p) = prof {
+                    let mutual_g: Vec<&DiscordGuild> = p
+                        .mutual_guilds
+                        .iter()
+                        .filter_map(|mg| s.discord.home.guilds.iter().find(|g| g.id == mg.id))
+                        .collect();
+                    if !mutual_g.is_empty() {
+                        let mut mlist = col().w_full().gap(4.0).child(
+                            text(format!("Mutual servers — {}", mutual_g.len()))
+                                .font(type_label())
+                                .color(fg_muted()),
+                        );
+                        for g in mutual_g.into_iter().take(6) {
+                            let gid_open = g.id.clone();
+                            mlist = mlist.child(
+                                row()
+                                    .key(format!("dc-pf-mg-{}", g.id))
+                                    .cursor(Cursor::Pointer)
+                                    .hit()
+                                    .w_full()
+                                    .h(34.0)
+                                    .px(6.0)
+                                    .gap(8.0)
+                                    .center_y()
+                                    .radius(RADIUS_SMALL)
+                                    .hover(hover_fill())
+                                    .on_press(move |s: &mut AppState| {
+                                        s.open_discord_guild(&gid_open);
+                                    })
+                                    .child(avatar_box(
+                                        s,
+                                        g.icon.as_deref(),
+                                        &g.name,
+                                        24.0,
+                                        6.0,
+                                        None,
+                                        false,
+                                        scale,
+                                    ))
+                                    .child(
+                                        text(g.name.clone())
+                                            .font(type_small())
+                                            .color(FG)
+                                            .truncate(),
+                                    ),
+                            );
+                        }
+                        body = body
+                            .child(el().w_full().h(1.0).fill(hairline()))
+                            .child(mlist);
+                    }
+
+                    let mf_list = uid_opt.and_then(|u| s.discord.mutual_friends_by_user.get(u));
+                    let mf_count = p
+                        .mutual_friends_count
+                        .unwrap_or_else(|| mf_list.map(|v| v.len() as i32).unwrap_or(0));
+                    if mf_count > 0 || mf_list.is_some_and(|v| !v.is_empty()) {
+                        let mut flist = col().w_full().gap(4.0).child(
+                            text(format!("Mutual friends — {mf_count}"))
+                                .font(type_label())
+                                .color(fg_muted()),
+                        );
+                        if let Some(friends) = mf_list {
+                            for f in friends.iter().take(6) {
+                                let fname = f
+                                    .global_name
+                                    .as_deref()
+                                    .filter(|n| !n.is_empty())
+                                    .unwrap_or(&f.username);
+                                let fav = f.avatar.as_deref().map(|h| {
+                                    format!(
+                                        "https://cdn.discordapp.com/avatars/{}/{h}.webp?size=64",
+                                        f.id
+                                    )
+                                });
+                                let fid = f.id.clone();
+                                flist = flist.child(
+                                    row()
+                                        .key(format!("dc-pf-mf-{}", f.id))
+                                        .cursor(Cursor::Pointer)
+                                        .hit()
+                                        .w_full()
+                                        .h(34.0)
+                                        .px(6.0)
+                                        .gap(8.0)
+                                        .center_y()
+                                        .radius(RADIUS_SMALL)
+                                        .hover(hover_fill())
+                                        .on_press(move |s: &mut AppState| {
+                                            s.open_dm_with_friend(&fid);
+                                        })
+                                        .child(avatar_box(
+                                            s,
+                                            fav.as_deref(),
+                                            fname,
+                                            24.0,
+                                            12.0,
+                                            None,
+                                            false,
+                                            scale,
+                                        ))
+                                        .child(
+                                            text(fname.to_string())
+                                                .font(type_small())
+                                                .color(FG)
+                                                .truncate(),
+                                        ),
+                                );
+                            }
+                        }
+                        body = body
+                            .child(el().w_full().h(1.0).fill(hairline()))
+                            .child(flist);
+                    }
+                }
+
+                panel = panel_frame(col().key("dc-dm-info").w(people_w).h_full()).child(
+                    col()
+                        .grow(1.0)
+                        .w_full()
+                        .min_h(0.0)
+                        .scroll(ScrollSpec {
+                            stick_bottom: false,
+                        })
+                        .child(banner_el)
+                        .child(avatar_wrap)
+                        .child(body),
+                );
             }
             Some(panel)
         }
         DiscordPlace::Home => None,
     }
+}
+
+fn format_snowflake_date(id: &str) -> Option<String> {
+    let raw: u64 = id.parse().ok()?;
+    let ms = (raw >> 22) + 1_420_070_400_000;
+    let secs = (ms / 1000) as i64;
+    let days = secs.div_euclid(86_400);
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if m <= 2 { y + 1 } else { y };
+    let mon = match m {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        12 => "Dec",
+        _ => "Jan",
+    };
+    Some(format!("{mon} {d}, {year}"))
 }
 
 fn inbox_panel(s: &AppState, sc: f32) -> El {
@@ -3924,7 +4297,7 @@ mod tests {
     }
 
     #[test]
-    fn discord_friends_gridlines_four_cols_and_blur_cap() {
+    fn discord_friends_gridlines_five_cols_and_blur_cap() {
         let state = demo_discord_state(false);
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
         rt.frame(0.0);
@@ -3943,10 +4316,10 @@ mod tests {
         assert!((c0[1] - c1[1]).abs() <= 1.0, "card 1 not on row 0");
         assert!((c0[1] - c2[1]).abs() <= 1.0, "card 2 not on row 0");
         assert!((c0[1] - c3[1]).abs() <= 1.0, "card 3 not on row 0");
-        assert!(c4[1] > c0[1] + 10.0, "expected 4 columns before wrapping");
+        assert!((c0[1] - c4[1]).abs() <= 1.0, "card 4 not on row 0");
         assert!(
-            c0[2] >= 340.0,
-            "expected 4-column card width >= 340px, got {}",
+            c0[2] >= 260.0,
+            "expected 5-column card width >= 260px, got {}",
             c0[2]
         );
 

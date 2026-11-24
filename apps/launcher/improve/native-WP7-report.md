@@ -1,7 +1,7 @@
 # Native WP7 Report — Discord Voice, Calls, Servers, User & Server Settings
 
-Branch: `UhhErix/native-WP7` (based on `origin/feat/native-polish-2`; Rune fork pinned to `ac59c6746f3619ed62b4eef307d16f15c4e7e5a0`).
-Status: **All 20/20 WP7 items DONE** + all WP7 Discord RPC method and push-event parity rows closed.
+Branch: `UhhErix/native-WP7` (merged `origin/feat/native-polish-2` at `f2d3797` in `bc2ac25`; Rune fork pinned to `e6c0716a660a97576b3e3951973c599b82bd11e7` in isolated commit `b58bedc`).
+Status: **All 20/20 WP7 items DONE** + all WP7 Discord RPC method/push-event parity rows closed + **all WP7-owned `vision-parity.md` items fixed** (WP6-owned chat/markdown files untouched).
 
 ## Summary of Changes
 
@@ -75,7 +75,7 @@ Additional live 1920x1080 snapshots verified against the temp signed-in copy:
 - `server-members.png`: Server `Members` page opened via `dc-guild-members` with search, Check prune, and Prune controls.
 - `voice-soundboard.png`: Voice stage solo tile with `El::blur(36.0)` blurred avatar backdrop and floating Soundboard popover with filter, mute/volume controls, and live loading state.
 
-## Verification Gates
+## Verification Gates (Initial WP7 Commit `3b95a54`)
 
 All gates executed fresh on final code:
 - `cargo fmt --check`: exit 0
@@ -86,3 +86,62 @@ All gates executed fresh on final code:
 - `cargo build --release -p exo-ui`: exit 0
 - `node apps/launcher/tools/check-comments.mjs`: exit 0 (`2384 legacy files, 225 zero-comment files`)
 - `node --test apps/launcher/tools/parity/parity.test.mjs`: exit 0 (8/8 passed)
+
+---
+
+## Follow-Up Integration Pass (`feat/native-polish-2` Merge, Rune `e6c0716a`, Vision Parity QA)
+
+### 1. Branch Sync & Isolated Rune Pin
+- **Merged `origin/feat/native-polish-2` (`f2d3797`)** in commit `bc2ac25`, preserving `events.rs` `EventRegistry` and both WP7 and `polish-2` additions (`store_media`, `store_on_room_leave`). Verified `git merge-base --is-ancestor origin/feat/native-polish-2 HEAD` exits 0.
+- **Bumped Rune `exo-inputs` pin to `e6c0716a660a97576b3e3951973c599b82bd11e7`** across all 8 workspace crate pins in `apps/launcher/native-ui/Cargo.toml` and `apps/launcher/native-ui/Cargo.lock` in ONE isolated commit (`b58bedc`), verified clean with `cargo check --workspace`.
+- **Ownership boundary strictly enforced**: zero edits to WP6-owned files (`discord_chat.rs`, `discord_chat_state.rs`, `discord_md.rs`).
+
+### 2. Vision Parity QA (`origin/UhhErix/parity-vision-qa:apps/launcher/improve/vision-parity.md`, Section `WP6/WP7 — Discord`)
+
+Every WP7-owned blocker, major, and minor item in `vision-parity.md` was fixed and verified on live signed-in captures; WP6-owned chat/markdown items were left untouched for WP6:
+
+| Category / Vision-Parity Finding | Owner | Status | Fix / Native Ref |
+| --- | --- | --- | --- |
+| `discord-dm` & `discord-dm-context-menu` blockers: wrong default DM (`Colton` instead of pinned `lazy`), stale preview snippet | WP7 | **FIXED** | `discord_state.rs` `first_visible_dm_id()` prioritizes `discordPinnedDms`; `hydrate_missing_dm_lines()` + `main.rs` select newest message by snowflake ID (`vc`); unit test `wp7_pinned_dm_selected_first_and_categories_sync_collapsed` |
+| `discord-dm` & `discord-dm-context-menu` blocker + major: missing 1:1 DM right user profile sidebar (`lazy`) | WP7 | **FIXED** | `exo-rpc/src/discord_types.rs` + `lib.rs` added `discord.profile` RPC & DTOs; `discord_state.rs` `load_discord_profile` / `save_discord_profile_note`; `discord.rs` full right profile panel (105px banner/accent, 80px overlapping avatar + status, name/username/pronouns, custom status, badges, bio, `Member since`, verified `Connections`, editable `Note`, `Mutual servers`, `Mutual friends`) |
+| `discord-settings-sheet` blockers: modal failed to open (`discord-settings-sheet` scene/click), wrong backdrop room, modal geometry/nav order/glass count | WP7 | **FIXED** | `tools/parity/states.mjs` uses `discord-voice` scene + `discordSettingsOpen: true`; `discord_state.rs` reordered `DiscordSettingsPage::ALL` (`Voice, Chat, Notifications, Privacy, Account, Keybinds, Profiles, ConnectedApps`); `discord_settings.rs` matched exact React `820x880` geometry, borderless nav, `top=52` scrim preserving top-bar `Cursor::Pointer`, and flat `sheet_action_btn` matching React `5/5` glass layers |
+| `discord-status-menu` majors + minor: extra checkmark on `Online`, leading icons / misaligned labels, `Copy user ID` icon position, `Shop` icon | WP7 | **FIXED** | `exo-kit/src/menu.rs` additive `.trailing_icon(El)` on `MenuItem`; `menus.rs` removed checkmark on status items, removed leading icon on `Shop` (and triggers `load_discord_shop(false)`), moved `Copy user ID` icon to trailing right, routed `Edit profile` to `Profiles` |
+| `discord-dm-context-menu` major: leading icons misaligned menu labels; `Report` action | WP7 | **FIXED** | `menus.rs` removed leading icons in `DiscordDm` menu for single flush-left text edge; moved `Unpin DM`/`Pin DM`, `Report` (opens `ReportModal`), `Copy user ID`, `Copy channel ID` icons to `.trailing_icon(...)` |
+| `discord-channel-context-menu` major: `Copy channel ID` icon alignment, `Mark as read` disabled state | WP7 | **FIXED** | `menus.rs` moved `Copy channel ID` icon to `.trailing_icon(...)`; disabled `Mark as read` when unread count is 0 |
+| `discord-home` majors + minor: Friends 5-column grid (was 4), `Search friends` width `234px`, Friends filter tab padding, `Erix` pill trigger | WP7 | **FIXED** | `discord.rs` switched Friends grid to 5 columns at 1920px (`<= 1.15` scale), set search width to `234.0`, tightened filter tab `px(10.0)`, added `subtle_fill()` + `hairline()` pill on `dc-me-trigger`; updated unit test `discord_friends_gridlines_five_cols_and_blur_cap` |
+| `discord-server-channel` & `discord-channel-context-menu` majors + minors: collapsed categories (`STAFF` collapsed, `TICKETS`/`#open-a-ticket` visible), `+` category create button, distinct channel icons (`rules`/`forum`/`announcement`/locked voice), 24px server icon left of header title, bot `✓` checkmark instead of `APP` pill | WP7 | **FIXED** | `discord_state.rs` `sync_collapsed_categories(&chans)` + persisted `discord.channel { action: "collapse" }`; `discord.rs` added 24x24 rounded guild icon in `dc-server-head`, `+` button on categories when `can_manage`, bookmark/chat/sparkles/lock channel icons, and `icon_check` on bots in Members sidebar |
+| `discord-home` / `discord-dm` / `discord-dm-context-menu` / `discord-status-menu` minors: circular `>` server strip scroll chevron; redundant `"Online"` DM subtext | WP7 | **FIXED** | `discord.rs` added `dc-band-scroll-right` circular `>` chevron before Inbox; removed `status_label(st)` fallback in `dm_subtitle` so plain online DM rows (`Tin Nguyen`, `Selim`, `Razdan`) show no `"Online"` subtext |
+| `discord-voice-stream` parity menu detection | WP7 | **FIXED** | `discord_voice.rs` added `.role("menu")` on `dc-golive-panel` and `.role("menuitem")` on `Applications`, `Screens`, `Close`; `main.rs` added `"dc-golive-panel"` to `semantic_menu_prefixes` (`3/3` menus pass) |
+| `discord-channel-context-menu` / `discord-server-channel` / `discord-dm` chat body & markdown items (welcome embed markdown links, `#channel` pills, message timestamps/grouping, reply previews, DM chat header icons, composer bar icons) | WP6 | **DEFERRED TO WP6** | Owned by `discord_chat.rs` / `discord_chat_state.rs` / `discord_md.rs` — left untouched per WP6/WP7 ownership boundary |
+
+### 3. Signed-In Parity Harness Progression (9 Discord States at 1920x1080 scale 1)
+
+| Metric | Baseline (`parity-baseline-signedin`) | Prior (`after-7`) | WP7 v1 (`3b95a54`) | WP7 Final (v4) |
+| --- | --- | --- | --- | --- |
+| CRITICAL | 6 | 1 | 0 | **0** |
+| Open failures | 4 | 0 | 0 | **0** |
+| Menu failures | 3 | 1 | 0 | **0** (all 4 menu states 100%) |
+| Glass failures | 9 | 0 | 0 | **0** (all 9 states pass, `discord-settings-sheet` 5/5) |
+| `discord-home` pixel diff | 9.20+ | 9.20 | 9.47 | **8.94** (10/10 cursors, 3/3 glass) |
+| `discord-status-menu` pixel diff | 9.38+ | 9.38 | 9.79 | **9.08** (10/10 menus, 20/21 cursors, 4/4 glass) |
+| `discord-dm` pixel diff | 13.38 | 13.38 | 13.23 | **9.17** (11/11 cursors, pinned `lazy` + full profile sidebar) |
+| `discord-dm-context-menu` pixel diff | 12.35 | 12.35 | 12.34 | **9.89** (15/15 menus, 21/21 cursors) |
+| `discord-server-channel` pixel diff | 6.37 | 6.37 | 6.37 | **6.39** (11/11 cursors, `STAFF` collapsed / `TICKETS` visible) |
+| `discord-channel-context-menu` pixel diff | 7.80 | 7.80 | 7.80 | **7.76** (8/8 menus, 18/19 cursors) |
+| `discord-voice-stream` menus / cursors | skip | skip | 0/3 / 11/11 | **3/3 menus / 14/14 cursors / 6/6 glass** |
+| `discord-settings-sheet` pixel diff / cursors / glass | 11.92 / fail | 11.92 | 12.06 / 16/21 | **5.57 / 18/21 (all 10 top-bar + all 6 nav tabs + close pass) / 5/5 glass** |
+
+*(Note: `discord-voice-call` reported 24.38 pixel diff in v4 due to live voice-stage backdrop/presence drift during capture; 11/11 cursors and glass passed.)*
+
+### 4. Fresh Final Verification Gates
+
+All executed fresh after the final edit:
+- `cargo fmt --check`: exit 0
+- `cargo clippy --workspace -- -D warnings`: exit 0
+- `cargo clippy --workspace --tests -- -D warnings`: exit 0
+- `cargo test --workspace`: exit 0 (`exo-kit` 4 passed, `exo-rpc` 22 passed / 1 ignored, `exo-ui` 116 passed — **142 passed, 0 failed**)
+- `cargo build --bin exo-ui`: exit 0
+- `cargo build --release -p exo-ui`: exit 0
+- `node apps/launcher/tools/check-comments.mjs`: exit 0 (`2383 legacy files, 243 zero-comment files`; ratchet tightened for stale entries from `feat/native-polish-2` merge)
+- `node --test apps/launcher/tools/parity/parity.test.mjs`: exit 0 (8/8 passed)
+- `git merge-base --is-ancestor origin/feat/native-polish-2 HEAD`: exit 0

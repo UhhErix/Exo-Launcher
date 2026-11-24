@@ -25,23 +25,25 @@ pub use discord_types::{
     DiscordMemberItem, DiscordMemberList, DiscordMemberRow, DiscordMemberRowInner,
     DiscordMemberSearch, DiscordMessage, DiscordMessageEvent, DiscordMessageMember,
     DiscordMessageRef, DiscordMessagesReply, DiscordMicHeard, DiscordMicLevel,
-    DiscordMicMonitorReply, DiscordModeration, DiscordMyVoiceReply, DiscordNoticeEvent,
-    DiscordNotifyClearEvent, DiscordOpenEvent, DiscordPaymentChoice, DiscordPinsReply, DiscordPrep,
-    DiscordPresenceEvent, DiscordRailItem, DiscordReaction, DiscordReactionEmoji,
-    DiscordReactionEvent, DiscordReportButton, DiscordReportElement, DiscordReportMenu,
-    DiscordReportNode, DiscordReportReply, DiscordResource, DiscordRich, DiscordRole,
-    DiscordRoleBrief, DiscordRoleIcon, DiscordSearchReply, DiscordSearchResult, DiscordSendReply,
-    DiscordServerReply, DiscordServerTagOption, DiscordSession, DiscordShopCatalog,
-    DiscordShopCategory, DiscordShopCountryPrices, DiscordShopItem, DiscordShopPrice,
-    DiscordShopPriceEntry, DiscordShopProduct, DiscordShopReply, DiscordShopStyles,
-    DiscordShopTierPrices, DiscordSignInStep, DiscordSoundItem, DiscordSoundboardReply,
-    DiscordStateEvent, DiscordStatus, DiscordThread, DiscordThreadCreateReply,
-    DiscordThreadCreated, DiscordThreadMetadata, DiscordThreadOwner, DiscordThreadSummary,
-    DiscordThreadsReply, DiscordTtsEvent, DiscordTypingEvent, DiscordUnreadChannel,
-    DiscordUnreadEvent, DiscordUnreadsReply, DiscordUploadReply, DiscordUser,
-    DiscordUserSettingsReply, DiscordVideoEvent, DiscordVideoFrame, DiscordVideoFrameMeta,
-    DiscordVoice, DiscordVoiceMember, DiscordVoiceReply, DiscordVoiceStages, FriendsBadgeReply,
-    GoLiveSource,
+    DiscordMicMonitorReply, DiscordModeration, DiscordMutualFriendsReply, DiscordMutualGuild,
+    DiscordMyVoiceReply, DiscordNoticeEvent, DiscordNotifyClearEvent, DiscordOpenEvent,
+    DiscordPaymentChoice, DiscordPinsReply, DiscordPrep, DiscordPresenceEvent, DiscordProfileAbout,
+    DiscordProfileBadge, DiscordProfileConnection, DiscordProfileData, DiscordProfileExtras,
+    DiscordProfilePresence, DiscordProfileReply, DiscordProfileUser, DiscordRailItem,
+    DiscordReaction, DiscordReactionEmoji, DiscordReactionEvent, DiscordReportButton,
+    DiscordReportElement, DiscordReportMenu, DiscordReportNode, DiscordReportReply,
+    DiscordResource, DiscordRich, DiscordRole, DiscordRoleBrief, DiscordRoleIcon,
+    DiscordSearchReply, DiscordSearchResult, DiscordSendReply, DiscordServerReply,
+    DiscordServerTagOption, DiscordSession, DiscordShopCatalog, DiscordShopCategory,
+    DiscordShopCountryPrices, DiscordShopItem, DiscordShopPrice, DiscordShopPriceEntry,
+    DiscordShopProduct, DiscordShopReply, DiscordShopStyles, DiscordShopTierPrices,
+    DiscordSignInStep, DiscordSoundItem, DiscordSoundboardReply, DiscordStateEvent, DiscordStatus,
+    DiscordThread, DiscordThreadCreateReply, DiscordThreadCreated, DiscordThreadMetadata,
+    DiscordThreadOwner, DiscordThreadSummary, DiscordThreadsReply, DiscordTtsEvent,
+    DiscordTypingEvent, DiscordUnreadChannel, DiscordUnreadEvent, DiscordUnreadsReply,
+    DiscordUploadReply, DiscordUser, DiscordUserSettingsReply, DiscordVideoEvent,
+    DiscordVideoFrame, DiscordVideoFrameMeta, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
+    DiscordVoiceStages, FriendsBadgeReply, GoLiveSource,
 };
 pub use events::{
     AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
@@ -166,6 +168,7 @@ pub const METHOD_DISCORD_MIC_TEST: &str = "discord.micTest";
 pub const METHOD_DISCORD_MY_VOICE: &str = "discord.myVoice";
 pub const METHOD_DISCORD_PINS: &str = "discord.pins";
 pub const METHOD_DISCORD_REACT: &str = "discord.react";
+pub const METHOD_DISCORD_PROFILE: &str = "discord.profile";
 pub const METHOD_DISCORD_REPORT: &str = "discord.report";
 pub const METHOD_DISCORD_RING: &str = "discord.ring";
 pub const METHOD_DISCORD_SEARCH: &str = "discord.search";
@@ -337,6 +340,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DISCORD_MY_VOICE,
     METHOD_DISCORD_PINS,
     METHOD_DISCORD_REACT,
+    METHOD_DISCORD_PROFILE,
     METHOD_DISCORD_REPORT,
     METHOD_DISCORD_RING,
     METHOD_DISCORD_SEARCH,

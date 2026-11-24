@@ -1184,6 +1184,29 @@ fn step_row(
         )
 }
 
+fn sheet_action_btn(key: impl Into<String>, label: impl Into<String>) -> El {
+    let lbl = label.into();
+    row()
+        .key(key.into())
+        .role("button")
+        .label(lbl.clone())
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(32.0)
+        .px(12.0)
+        .center()
+        .radius(RADIUS_PILL)
+        .fill(glass_still_control_fill())
+        .border(1.0, hairline())
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .motion(SPRING_QUICK)
+        .child(text(lbl).font(type_control()).color(FG))
+}
+
 fn account_page(s: &AppState) -> El {
     let ext = &s.discord.settings_ext;
     let hides = ext.streamer_hides();
@@ -1276,7 +1299,7 @@ fn account_page(s: &AppState) -> El {
                         ),
                 )
                 .child(
-                    glass_button("dc-set-edit-prof", "Edit profile", None).on_press(
+                    sheet_action_btn("dc-set-edit-prof", "Edit profile").on_press(
                         |s: &mut AppState| {
                             s.select_discord_settings_page(DiscordSettingsPage::Profiles)
                         },
@@ -1290,7 +1313,7 @@ fn account_page(s: &AppState) -> El {
             "Display name",
             display_name,
             Some(
-                glass_button("dc-set-edit-dname", "Edit", None).on_press(|s: &mut AppState| {
+                sheet_action_btn("dc-set-edit-dname", "Edit").on_press(|s: &mut AppState| {
                     s.select_discord_settings_page(DiscordSettingsPage::Profiles);
                 }),
             ),
@@ -1322,18 +1345,17 @@ fn account_page(s: &AppState) -> El {
                     .gap(6.0)
                     .center_y()
                     .children(s.discord.custom_status.is_some().then(|| {
-                        glass_button("dc-set-clear-cstatus", "Clear", None)
+                        sheet_action_btn("dc-set-clear-cstatus", "Clear")
                             .on_press(|s: &mut AppState| s.save_discord_custom_status_ext(true))
                     }))
                     .child(
-                        glass_button(
+                        sheet_action_btn(
                             "dc-set-open-cstatus",
                             if s.discord.custom_status.is_some() {
                                 "Edit"
                             } else {
                                 "Set"
                             },
-                            None,
                         )
                         .on_press(|s: &mut AppState| {
                             s.discord.custom_status_input = TextEdit::new(
@@ -1354,7 +1376,7 @@ fn account_page(s: &AppState) -> El {
             "Logged-in devices",
             "",
             Some(
-                glass_button("dc-set-devices", "View", None)
+                sheet_action_btn("dc-set-devices", "View")
                     .on_press(|s: &mut AppState| s.load_discord_sessions()),
             ),
         ))
@@ -1370,7 +1392,7 @@ fn account_page(s: &AppState) -> El {
                     row()
                         .gap(8.0)
                         .center_y()
-                        .child(glass_button("dc-set-logout-no", "Cancel", None).on_press(
+                        .child(sheet_action_btn("dc-set-logout-no", "Cancel").on_press(
                             |s: &mut AppState| s.discord.settings_ext.logout_confirm = false,
                         ))
                         .child(
@@ -1392,7 +1414,7 @@ fn account_page(s: &AppState) -> El {
                                 .child(text("Log out?").font(type_control()).color(FG)),
                         )
                 } else {
-                    glass_button("dc-set-logout", "Log out", None)
+                    sheet_action_btn("dc-set-logout", "Log out")
                         .on_press(|s: &mut AppState| s.discord.settings_ext.logout_confirm = true)
                 }),
         );
@@ -2913,22 +2935,15 @@ fn connected_apps_page(s: &AppState) -> El {
 
 pub fn settings_modal(s: &AppState, blur: bool) -> El {
     let page = s.discord.settings_page;
-    let mut nav = col()
-        .w(212.0)
-        .h_full()
-        .py(18.0)
-        .px(12.0)
-        .gap(4.0)
-        .border_sides([0.0, 1.0, 0.0, 0.0], hairline())
-        .child(
-            row()
-                .px(10.0)
-                .pb(10.0)
-                .gap(8.0)
-                .center_y()
-                .child(icon_settings(16.0, FG))
-                .child(text("Discord settings").font(type_section()).color(FG)),
-        );
+    let mut nav = col().w(212.0).h_full().py(24.0).px(12.0).gap(5.0).child(
+        row()
+            .px(10.0)
+            .pb(32.0)
+            .gap(8.0)
+            .center_y()
+            .child(icon_settings(16.0, FG))
+            .child(text("Discord settings").font(type_section()).color(FG)),
+    );
 
     for p in DiscordSettingsPage::ALL {
         let active = p == page;
@@ -3020,8 +3035,8 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
 
     let mut sheet = row()
         .key("dc-settings-modal")
-        .w(860.0)
-        .h(640.0)
+        .w(820.0)
+        .h(880.0)
         .radius(RADIUS_PANEL)
         .fill(if blur {
             glass_panel_fill()
@@ -3054,7 +3069,7 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
     }
 
     el().key("dc-settings-layer")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
         .center()
         .child(
             el().key("dc-settings-scrim")

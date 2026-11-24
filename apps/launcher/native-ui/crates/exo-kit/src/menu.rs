@@ -25,6 +25,7 @@ pub struct MenuItem<S: 'static> {
     pub key: String,
     pub label: String,
     pub icon: Option<El>,
+    pub trailing_icon: Option<El>,
     pub hint: Option<String>,
     pub checked: bool,
     pub danger: bool,
@@ -39,6 +40,7 @@ impl<S: 'static> MenuItem<S> {
             key: key.into(),
             label: label.into(),
             icon: None,
+            trailing_icon: None,
             hint: None,
             checked: false,
             danger: false,
@@ -50,6 +52,11 @@ impl<S: 'static> MenuItem<S> {
 
     pub fn icon(mut self, ic: El) -> Self {
         self.icon = Some(ic);
+        self
+    }
+
+    pub fn trailing_icon(mut self, ic: El) -> Self {
+        self.trailing_icon = Some(ic);
         self
     }
 
@@ -196,6 +203,7 @@ fn build_menu_rows<S: 'static>(
                     key,
                     label,
                     icon: item_icon,
+                    trailing_icon,
                     hint,
                     checked,
                     danger,
@@ -328,6 +336,9 @@ fn build_menu_rows<S: 'static>(
 
                 if let Some(h) = hint {
                     item_row = item_row.child(keycap_badge(h));
+                }
+                if let Some(tic) = trailing_icon {
+                    item_row = item_row.child(el().size(16.0, 16.0).center().child(tic));
                 }
                 if checked {
                     item_row = item_row.child(icon_check(14.0, FG));

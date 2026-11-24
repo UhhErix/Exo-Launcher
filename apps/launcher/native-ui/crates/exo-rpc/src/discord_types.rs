@@ -2476,6 +2476,128 @@ pub struct DiscordFontReply {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordProfileUser {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub global_name: Option<String>,
+    #[serde(default)]
+    pub avatar: Option<String>,
+    #[serde(default)]
+    pub banner: Option<String>,
+    #[serde(default)]
+    pub accent_color: Option<u32>,
+    #[serde(default)]
+    pub bio: Option<String>,
+    #[serde(default)]
+    pub bot: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordProfileAbout {
+    #[serde(default)]
+    pub bio: Option<String>,
+    #[serde(default)]
+    pub pronouns: Option<String>,
+    #[serde(default)]
+    pub accent_color: Option<u32>,
+    #[serde(default)]
+    pub theme_colors: Option<Vec<u32>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordProfileBadge {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub icon: String,
+    #[serde(default)]
+    pub link: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordProfileConnection {
+    #[serde(default, rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub verified: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordMutualGuild {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub nick: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordProfileData {
+    #[serde(default)]
+    pub user: DiscordProfileUser,
+    #[serde(default)]
+    pub user_profile: Option<DiscordProfileAbout>,
+    #[serde(default)]
+    pub badges: Vec<DiscordProfileBadge>,
+    #[serde(default)]
+    pub guild_badges: Vec<DiscordProfileBadge>,
+    #[serde(default)]
+    pub connected_accounts: Vec<DiscordProfileConnection>,
+    #[serde(default)]
+    pub mutual_guilds: Vec<DiscordMutualGuild>,
+    #[serde(default)]
+    pub mutual_friends_count: Option<i32>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordProfilePresence {
+    #[serde(default)]
+    pub activity_type: Option<i32>,
+    #[serde(default)]
+    pub activity: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordProfileExtras {
+    #[serde(default)]
+    pub presence: Option<DiscordProfilePresence>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordProfileReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub profile: Option<DiscordProfileData>,
+    #[serde(default)]
+    pub extras: Option<DiscordProfileExtras>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordMutualFriendsReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub friends: Option<Vec<DiscordProfileUser>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendsBadgeReply {
     #[serde(default)]

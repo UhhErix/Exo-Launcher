@@ -8,16 +8,17 @@ use exo_rpc::{
     ActionResult, DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel,
     DiscordChannels, DiscordDm, DiscordDmLineEvent, DiscordDmMember, DiscordFriend,
     DiscordFriendActionReply, DiscordFriendsReply, DiscordGuild, DiscordHome, DiscordMe,
-    DiscordMember, DiscordMemberItem, DiscordMemberList, DiscordNoticeEvent,
-    DiscordNotifyClearEvent, DiscordOpenEvent, DiscordPresenceEvent, DiscordRailItem, DiscordRich,
+    DiscordMember, DiscordMemberItem, DiscordMemberList, DiscordMessagesReply,
+    DiscordMutualFriendsReply, DiscordNoticeEvent, DiscordNotifyClearEvent, DiscordOpenEvent,
+    DiscordPresenceEvent, DiscordProfileReply, DiscordProfileUser, DiscordRailItem, DiscordRich,
     DiscordSignInStep, DiscordStateEvent, DiscordStatus, DiscordTtsEvent, DiscordUnreadChannel,
     DiscordUnreadEvent, DiscordUnreadsReply, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
     FriendsBadgeReply, METHOD_DISCORD_ACCOUNTS, METHOD_DISCORD_CHANNEL, METHOD_DISCORD_CHANNELS,
     METHOD_DISCORD_FRIEND, METHOD_DISCORD_FRIENDS, METHOD_DISCORD_HOME, METHOD_DISCORD_MARK_READ,
-    METHOD_DISCORD_MEMBERS, METHOD_DISCORD_MESSAGE_ACTION, METHOD_DISCORD_RING,
-    METHOD_DISCORD_SERVER, METHOD_DISCORD_SET_STATUS, METHOD_DISCORD_SIGN_IN,
-    METHOD_DISCORD_SIGN_OUT, METHOD_DISCORD_STATUS, METHOD_DISCORD_STREAM, METHOD_DISCORD_UNREADS,
-    METHOD_DISCORD_VIEW, METHOD_DISCORD_VOICE, METHOD_FRIENDS_BADGE,
+    METHOD_DISCORD_MEMBERS, METHOD_DISCORD_MESSAGE_ACTION, METHOD_DISCORD_MESSAGES,
+    METHOD_DISCORD_PROFILE, METHOD_DISCORD_RING, METHOD_DISCORD_SERVER, METHOD_DISCORD_SET_STATUS,
+    METHOD_DISCORD_SIGN_IN, METHOD_DISCORD_SIGN_OUT, METHOD_DISCORD_STATUS, METHOD_DISCORD_STREAM,
+    METHOD_DISCORD_UNREADS, METHOD_DISCORD_VIEW, METHOD_DISCORD_VOICE, METHOD_FRIENDS_BADGE,
 };
 use rune::TextEdit;
 use serde_json::json;
@@ -117,13 +118,13 @@ pub enum DiscordSettingsPage {
 
 impl DiscordSettingsPage {
     pub const ALL: [Self; 8] = [
-        Self::Account,
-        Self::Profiles,
         Self::Voice,
         Self::Chat,
         Self::Notifications,
         Self::Privacy,
+        Self::Account,
         Self::Keybinds,
+        Self::Profiles,
         Self::ConnectedApps,
     ];
 
@@ -201,6 +202,11 @@ pub struct DiscordState {
     pub settings_ext: DiscordSettingsState,
     pub admin: DiscordAdminState,
     pub friends_badge_count: i32,
+    pub profiles_by_user: HashMap<String, DiscordProfileReply>,
+    pub mutual_friends_by_user: HashMap<String, Vec<DiscordProfileUser>>,
+    pub profile_note_user: Option<String>,
+    pub profile_note_input: TextEdit,
+    pub hydrated_dm_lines: HashSet<String>,
     pub loaded: bool,
     pub warmed: bool,
     pub snapshot_hydrated: bool,
@@ -269,6 +275,11 @@ impl DiscordState {
             settings_ext: DiscordSettingsState::empty(),
             admin: DiscordAdminState::empty(),
             friends_badge_count: 0,
+            profiles_by_user: HashMap::new(),
+            mutual_friends_by_user: HashMap::new(),
+            profile_note_user: None,
+            profile_note_input: TextEdit::default(),
+            hydrated_dm_lines: HashSet::new(),
             loaded: false,
             warmed: false,
             snapshot_hydrated: false,
@@ -854,7 +865,6 @@ impl AppState {
         let Some(snap) = read_discord_snapshot(&path) else {
             return false;
         };
-        let first_dm = snap.home.dms.first().map(|d| d.id.clone());
         self.discord.home = snap.home;
         self.discord.friends = snap.friends;
         self.discord.blocked = snap.blocked;
@@ -863,7 +873,7 @@ impl AppState {
         }
         self.discord.unreads = snap.unreads;
         if self.discord.active_dm_id.is_none() {
-            self.discord.active_dm_id = first_dm;
+            self.discord.active_dm_id = self.first_visible_dm_id();
         }
         self.discord.from_snapshot = true;
         self.discord.loaded = true;
@@ -1028,7 +1038,6 @@ impl AppState {
                 json!({}),
                 |s, res: Result<DiscordHome, String>| {
                     if let Ok(home) = res {
-                        let first_dm = home.dms.first().map(|d| d.id.clone());
                         let active_guild = s.discord.active_guild_id.clone();
                         let voice_guild_ids: Vec<String> = home
                             .guilds
@@ -1041,8 +1050,9 @@ impl AppState {
                         s.discord.from_snapshot = false;
                         s.discord.loaded = true;
                         if s.discord.active_dm_id.is_none() {
-                            s.discord.active_dm_id = first_dm;
+                            s.discord.active_dm_id = s.first_visible_dm_id();
                         }
+                        s.hydrate_missing_dm_lines();
                         if let Some(gid) = active_guild {
                             s.load_discord_guild(&gid, false);
                         }
@@ -1275,7 +1285,7 @@ impl AppState {
         } else if action == "close" {
             self.discord.home.dms.retain(|d| d.id != channel_id);
             if self.discord.active_dm_id.as_deref() == Some(channel_id) {
-                self.discord.active_dm_id = self.discord.home.dms.first().map(|d| d.id.clone());
+                self.discord.active_dm_id = self.first_visible_dm_id();
             }
         }
         if self.status != HostStatus::Connected {
@@ -1497,6 +1507,187 @@ impl AppState {
         self.discord.chat.composer = TextEdit::new(&cur);
     }
 
+    pub fn first_visible_dm_id(&self) -> Option<String> {
+        let mut pinned_ids: Vec<String> = self
+            .settings
+            .ui_prefs
+            .get("discordPinnedDms")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .filter(|id| !self.discord.unpinned_dm_overrides.contains(id))
+                    .collect()
+            })
+            .unwrap_or_default();
+        for id in &self.discord.pinned_dm_overrides {
+            if !pinned_ids.contains(id) {
+                pinned_ids.push(id.clone());
+            }
+        }
+        for pid in &pinned_ids {
+            if self
+                .discord
+                .home
+                .dms
+                .iter()
+                .any(|d| d.id == *pid && !d.request && !d.spam)
+            {
+                return Some(pid.clone());
+            }
+        }
+        self.discord
+            .home
+            .dms
+            .iter()
+            .find(|d| !d.request && !d.spam)
+            .or_else(|| self.discord.home.dms.first())
+            .map(|d| d.id.clone())
+    }
+
+    pub fn sync_collapsed_categories(&mut self, chans: &DiscordChannels) {
+        for ch in &chans.channels {
+            if ch.kind == "category" {
+                if ch.collapsed {
+                    self.discord.collapsed_categories.insert(ch.id.clone());
+                } else {
+                    self.discord.collapsed_categories.remove(&ch.id);
+                }
+            }
+        }
+    }
+
+    pub fn hydrate_missing_dm_lines(&mut self) {
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        let first_pinned = self.first_visible_dm_id();
+        let mut targets: Vec<String> = Vec::new();
+        if let Some(pid) = first_pinned
+            && !self.discord.hydrated_dm_lines.contains(&pid)
+            && self
+                .discord
+                .home
+                .dms
+                .iter()
+                .any(|d| d.id == pid && d.line.as_deref().is_none_or(str::is_empty))
+        {
+            targets.push(pid);
+        }
+        for dm in &self.discord.home.dms {
+            if targets.len() >= 8 {
+                break;
+            }
+            if !dm.request
+                && !dm.spam
+                && dm.line.as_deref().is_none_or(str::is_empty)
+                && !self.discord.hydrated_dm_lines.contains(&dm.id)
+                && !targets.contains(&dm.id)
+            {
+                targets.push(dm.id.clone());
+            }
+        }
+        #[cfg(windows)]
+        for cid in targets {
+            self.discord.hydrated_dm_lines.insert(cid.clone());
+            let cid_c = cid.clone();
+            self.call_host_async(
+                METHOD_DISCORD_MESSAGES,
+                json!({ "channelId": cid, "limit": 1 }),
+                move |s, res: Result<DiscordMessagesReply, String>| {
+                    if let Ok(rep) = res
+                        && let Some(msgs) = rep.messages
+                        && let Some(last) =
+                            msgs.iter().max_by_key(|m| m.id.parse::<u64>().unwrap_or(0))
+                    {
+                        let preview = if !last.content.trim().is_empty() {
+                            Some(last.content.trim().to_string())
+                        } else if !last.attachments.is_empty() {
+                            Some("Attachment".to_string())
+                        } else {
+                            None
+                        };
+                        if let Some(line) = preview
+                            && let Some(dm) = s.discord.home.dms.iter_mut().find(|d| d.id == cid_c)
+                            && dm.line.as_deref().is_none_or(str::is_empty)
+                        {
+                            dm.line = Some(line);
+                        }
+                    }
+                },
+            );
+        }
+    }
+
+    pub fn load_discord_profile(&mut self, user_id: &str, guild_id: Option<&str>) {
+        if self.discord.profile_note_user.as_deref() != Some(user_id) {
+            self.discord.profile_note_user = Some(user_id.to_string());
+            let existing = self
+                .discord
+                .profiles_by_user
+                .get(user_id)
+                .and_then(|p| p.note.as_deref())
+                .unwrap_or("");
+            self.discord.profile_note_input = TextEdit::new(existing);
+        }
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        let uid = user_id.to_string();
+        let uid_mf = uid.clone();
+        let mut payload = json!({ "userId": uid });
+        if let Some(gid) = guild_id {
+            payload["guildId"] = json!(gid);
+        }
+        #[cfg(windows)]
+        {
+            self.call_host_async(
+                METHOD_DISCORD_PROFILE,
+                payload,
+                move |s, res: Result<DiscordProfileReply, String>| {
+                    if let Ok(rep) = res
+                        && rep.ok
+                    {
+                        if s.discord.profile_note_user.as_deref() == Some(uid.as_str())
+                            && let Some(ref note) = rep.note
+                        {
+                            s.discord.profile_note_input = TextEdit::new(note);
+                        }
+                        s.discord.profiles_by_user.insert(uid, rep);
+                    }
+                },
+            );
+            self.call_host_async(
+                METHOD_DISCORD_PROFILE,
+                json!({ "userId": uid_mf, "mutualFriends": true }),
+                move |s, res: Result<DiscordMutualFriendsReply, String>| {
+                    if let Ok(rep) = res
+                        && let Some(friends) = rep.friends
+                    {
+                        s.discord.mutual_friends_by_user.insert(uid_mf, friends);
+                    }
+                },
+            );
+        }
+    }
+
+    pub fn save_discord_profile_note(&mut self, user_id: &str) {
+        let note = self.discord.profile_note_input.text.to_string();
+        if let Some(prof) = self.discord.profiles_by_user.get_mut(user_id) {
+            prof.note = Some(note.clone());
+        }
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        let uid = user_id.to_string();
+        #[cfg(windows)]
+        self.call_host_async(
+            METHOD_DISCORD_PROFILE,
+            json!({ "userId": uid, "note": note }),
+            |_s, _res: Result<ActionResult, String>| {},
+        );
+    }
+
     pub fn open_discord_place(&mut self, place: DiscordPlace) {
         self.discord.place = place;
         self.discord.status_menu_open = false;
@@ -1510,12 +1701,22 @@ impl AppState {
         if place == DiscordPlace::Messages {
             self.discord.active_guild_id = None;
             if self.discord.active_dm_id.is_none() {
-                self.discord.active_dm_id = self.discord.home.dms.first().map(|d| d.id.clone());
+                self.discord.active_dm_id = self.first_visible_dm_id();
             }
-            if let Some(dm_id) = self.discord.active_dm_id.clone()
-                && !self.discord.chat.messages_by_channel.contains_key(&dm_id)
-            {
-                self.load_discord_messages(&dm_id, None);
+            if let Some(dm_id) = self.discord.active_dm_id.clone() {
+                if !self.discord.chat.messages_by_channel.contains_key(&dm_id) {
+                    self.load_discord_messages(&dm_id, None);
+                }
+                if let Some(uid) = self
+                    .discord
+                    .home
+                    .dms
+                    .iter()
+                    .find(|d| d.id == dm_id && !d.group)
+                    .and_then(|d| d.user_id.clone())
+                {
+                    self.load_discord_profile(&uid, None);
+                }
             }
         }
     }
@@ -1530,6 +1731,16 @@ impl AppState {
         self.discord.chat.editing = None;
         self.discord.chat.drawer = ChatDrawer::None;
         self.load_discord_messages(dm_id, None);
+        if let Some(uid) = self
+            .discord
+            .home
+            .dms
+            .iter()
+            .find(|d| d.id == dm_id && !d.group)
+            .and_then(|d| d.user_id.clone())
+        {
+            self.load_discord_profile(&uid, None);
+        }
         if self.status != HostStatus::Connected {
             return;
         }
@@ -1589,6 +1800,7 @@ impl AppState {
                             .find(|c| c.kind == "text" && c.can_read != Some(false))
                             .or_else(|| chans.channels.iter().find(|c| c.kind != "category"))
                             .map(|c| c.id.clone());
+                        s.sync_collapsed_categories(&chans);
                         s.discord.channels_by_guild.insert(gid.clone(), chans);
                         if select_default
                             && s.discord.active_guild_id.as_deref() == Some(gid.as_str())
@@ -1901,9 +2113,21 @@ impl AppState {
     }
 
     pub fn toggle_discord_category(&mut self, cat_id: &str) {
-        if !self.discord.collapsed_categories.remove(cat_id) {
+        let collapsed = if self.discord.collapsed_categories.remove(cat_id) {
+            false
+        } else {
             self.discord.collapsed_categories.insert(cat_id.to_string());
+            true
+        };
+        if self.status != HostStatus::Connected {
+            return;
         }
+        #[cfg(windows)]
+        self.call_host_async(
+            METHOD_DISCORD_CHANNEL,
+            json!({ "channelId": cat_id, "action": "collapse", "value": collapsed }),
+            |_s, _res: Result<ActionResult, String>| {},
+        );
     }
 
     pub fn toggle_discord_folder(&mut self, folder_id: &str) {

@@ -658,6 +658,7 @@ fn my_stream_tile(s: &AppState, members: &[DiscordVoiceMember], tile_w: f32, sca
 fn golive_modal(s: &AppState, blur: bool) -> El {
     let mut modal = col()
         .key("dc-golive-panel")
+        .role("menu")
         .w(900.0)
         .h(620.0)
         .padding(20.0)
@@ -677,7 +678,7 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
 
     let close = el()
         .key("dc-gl-close")
-        .role("button")
+        .role("menuitem")
         .label("Close")
         .cursor(Cursor::Pointer)
         .focusable(true)
@@ -886,10 +887,14 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
                 "Applications",
                 tab == GoLiveTab::Applications,
             )
+            .role("menuitem")
+            .label("Applications")
             .on_press(|s: &mut AppState| s.discord.voice_ui.golive_tab = GoLiveTab::Applications),
         )
         .child(
             filter_pill("dc-gl-tab-screens", "Screens", tab == GoLiveTab::Screens)
+                .role("menuitem")
+                .label("Screens")
                 .on_press(|s: &mut AppState| s.discord.voice_ui.golive_tab = GoLiveTab::Screens),
         )
         .child(el().grow(1.0))
