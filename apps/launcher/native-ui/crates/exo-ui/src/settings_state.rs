@@ -40,7 +40,6 @@ pub const RIOT_PRIVACY_URL: &str = "https://privacy.riotgames.com";
 pub const PRIVACY_URL: &str = "https://getexo.app/privacy";
 pub const CHANGELOG_URL: &str = "https://getexo.app/changelog";
 pub const SUPPORT_URL: &str = "https://www.buymeacoffee.com/UhhErix";
-pub const LICENSES_URL: &str = "https://getexo.app/source";
 pub const RECOVERY_CODE_LENGTH: usize = 24;
 pub const MAX_REPORT_MESSAGE: usize = 4000;
 pub const MAX_REPORT_CONTACT: usize = 200;
@@ -3872,6 +3871,38 @@ impl AppState {
                                 s.media.music_service = previous;
                                 s.wp4.web_prefs_error =
                                     Some("Exo couldn’t save the music service. Try again.".into());
+                            }
+                        }
+                    });
+                },
+            );
+            return;
+        }
+        self.wp4.web_prefs_saving = false;
+    }
+
+    pub fn wp4_set_web_notifications(&mut self, notifications: &'static str) {
+        if self.wp4.web_prefs_saving {
+            return;
+        }
+        self.wp4.web_prefs_saving = true;
+        self.wp4.web_prefs_error = None;
+        if let Some(ref mut prefs) = self.wp4.web_prefs {
+            prefs.notifications = notifications.to_string();
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, WebClientOptions>(
+                METHOD_WEB_PREFERENCES_SET,
+                &json!({ "notifications": notifications }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.wp4.web_prefs_saving = false;
+                        match res {
+                            Ok(saved) => s.wp4.web_prefs = Some(saved),
+                            Err(_) => {
+                                s.wp4.web_prefs_error =
+                                    Some("The change could not be saved. Try again.".into());
                             }
                         }
                     });

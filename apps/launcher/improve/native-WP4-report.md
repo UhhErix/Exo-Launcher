@@ -71,7 +71,7 @@ Steam library sign-in (`settings-07`) was NOT blocked because Rune (`fc71db1`) a
 
 - `cargo fmt --check`: PASS (exit 0)
 - `cargo clippy --workspace --locked -- -D warnings`: PASS (exit 0)
-- `cargo test --workspace --locked`: PASS (exit 0 — `exo-kit` 4/4, `exo-rpc` 25 passed / 1 ignored bench, `exo-ui` 90/90; 119 passed, 0 failed)
+- `cargo test --workspace --locked`: PASS (exit 0 — `exo-kit` 4/4, `exo-rpc` 25 passed / 1 ignored bench, `exo-ui` 115/115; 144 passed, 0 failed)
 - `cargo build --release --locked -p exo-ui`: PASS (exit 0)
 - `node tools/check-comments.mjs`: PASS (exit 0 — 2384 legacy files, 225 zero-comment files)
 
@@ -89,3 +89,22 @@ Steam library sign-in (`settings-07`) was NOT blocked because Rune (`fc71db1`) a
    - Removed redundant Native-only `exoAccount.state` call from `pc_actions.rs:load_settings_room()` (since `exoAccount.overview` already populates `s.pc.account`).
    - Verified statically against WP11's `rpc-parity.json` indexer rules: all 13 WP4 startup/settings methods present and called, and all 6 WP4 push events (`accounts.progress`, `backup.stopped`, `components.failed`, `gifts.changed`, `shaders.event`, `exoAccount.changed`) parsed in `exo-rpc` and registered via `events.rs` (0 remaining WP4 gaps).
 5. **Re-snapped & visually inspected at 1920x1080 scale 1**: `settings-steam-signin` (vector `QrView`), `settings-steam-password` (masked `PasswordInput`), `settings-steam-guard` (5-box `OtpInput` showing `A 2 B _ _`), and `settings-about` (`PasswordInput` with inline `Show` toggle).
+
+## Vision Parity QA Pass (2026-11-23 — `origin/UhhErix/parity-vision-qa` @ `1478414`)
+
+Merged `origin/feat/native-polish-2` (`acf8655`, fast-forward; Rune pins kept untouched) and resolved all 2 open blockers, 11 major items, and 1 minor item in the WP4 section of `vision-parity.md`:
+
+1. **Left-docked 280px Settings sidebar & centered 888px content column** (closed 1 open blocker `settings-about` layout + 9 open/re-check majors across `settings-library`, `settings-general`, `settings-ingame`, `settings-downloads`, `settings-choice-dropdown`, `settings-music`):
+   - Removed centered `max_w(1220.0)` wrapper and horizontal inset on `room-settings` / `settings-shell` (`settings.rs`).
+   - Pinned `settings-sidebar` flush left at `x = 0`, `w = scaled(280.0)`, `px(16.0).py(24.0)` (controls at `x = 16..264`, width `248px`), with full-height 1px vertical hairline divider (`float_line()`) at `x = 280` and `"Settings"` title `px(8.0)`, matching React `.exo-settings` / `.exo-settings-nav`.
+   - Centered `settings-pane-*` (`w_full().max_w(scaled(960.0)).pt(24.0).px(36.0).pb(48.0)`) directly inside `settings-scroll` (`x = 280..1920`, `w = 1640px`), placing the page title and every settings card at exact `x = 656..1544` (`888px` wide) matching React `.exo-settings-inner`.
+   - Aligned `settings-page-title` flush (`px(0.0)`) and all section headings (`settings.rs`, `settings_stores.rs`, `settings_account.rs`, `settings_privacy.rs`) to `px(2.0)` matching `.exo-settings .exo-set-section-head`.
+   - Updated `settings_gridlines_gutter_and_blur_cap` to assert exact presented pixel geometry (`sidebar = [0, w=280]`, `scroll = [280, w=1640]`, `pane = [620, w=960]`, `title.x = 656`, `section_head.x = 658`, `row_label.x = 674`, `blurs <= 4`) and verified `settings_section_switch_motion_gate` passes for both `reduce_motion = false/true`.
+2. **About top card 1:1 with React `AboutSection.tsx`** (closed open blocker #2 `settings-about` content-and-controls):
+   - Kept single-line `Exo Launcher {ver}` + `Check for updates` (moving check-status note inline beside the button instead of a subtitle), `Clear caches` + `Clear`, and the exact 5 utility links (`Report a problem`, `Take the tour`, `Changelog`, `Privacy`, `Support Exo`) styled to match `.exo-set-links` (`fg_muted()`, `gap(20.0)`).
+   - Removed extra `Setup`, `Diagnostic logs`, and `Licenses` items from the About card and cleaned up their now-unused helper methods (`pc_actions.rs:open_app_logs`, `setup.rs:SetupFlow::summary`).
+3. **Downloads subheading, Music service row, and active sidebar nav pill** (closed remaining majors & minor):
+   - Restored `section_head("Downloads")` above the 4-row Downloads card (`settings.rs`), matching React `GeneralSection.tsx:215`.
+   - Removed the extra subtitle and leading brand icon from `Music service` in `section_music`, keeping text-only trigger (`Apple Music` synced from `web.preferences.get`) and adding the `YouTube Music notifications` row (`Ask`/`Allow`/`Block` via `web.preferences.set`) when YouTube Music is selected.
+   - Darkened the active sidebar nav pill fill (`FG.alpha(0.08)`) with a subtle `hairline()` border matching React's low-contrast active pill (`settings-choice-dropdown` minor).
+4. **Fresh 1920x1080 scale-1 snaps visually verified**: `settings-general`, `settings-account` (Library), `settings-appearance` (Downloads), `settings-graphics` (In game), `settings-updates` (Music), and `settings-about`.

@@ -54,7 +54,7 @@ fn row_box(
 }
 
 fn sec_head(title: &str) -> El {
-    row().w_full().min_h(28.0).px(18.0).center_y().child(
+    row().w_full().min_h(28.0).px(2.0).center_y().child(
         text(title.to_string())
             .key(format!("set-sec-head-{title}"))
             .font(type_section())
