@@ -105,6 +105,21 @@ public sealed class MusicEngineReturnTests
         Assert.True(expressions[3].Length > 500);
     }
 
+    [Fact]
+    public void MusicWebRetryBackoffEscalatesAndGatesAutoRetries()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(2), MusicEngineService.RetryBackoff(1));
+        Assert.Equal(TimeSpan.FromSeconds(5), MusicEngineService.RetryBackoff(2));
+        Assert.Equal(TimeSpan.FromSeconds(15), MusicEngineService.RetryBackoff(3));
+        Assert.Equal(TimeSpan.FromSeconds(60), MusicEngineService.RetryBackoff(4));
+        Assert.Equal(TimeSpan.FromSeconds(60), MusicEngineService.RetryBackoff(10));
+
+        var now = new DateTimeOffset(2026, 11, 24, 12, 0, 0, TimeSpan.Zero);
+        Assert.True(MusicEngineService.CanAutoRetry(now, null));
+        Assert.False(MusicEngineService.CanAutoRetry(now, now.AddSeconds(5)));
+        Assert.True(MusicEngineService.CanAutoRetry(now.AddSeconds(5), now.AddSeconds(5)));
+    }
+
     /// The script runs in the page, so no test here can run it: what it must not wait on is pinned instead.
     [Fact]
     public void TheWriteDoesNotWaitOnTheApp()

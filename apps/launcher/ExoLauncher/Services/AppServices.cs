@@ -20,30 +20,25 @@ public sealed class AppServices
     public GogOwnedLibraryService GogOwnedLibrary { get; } = new();
     /// <summary>The game sheet's Shaders line, read from the Exo Shaders engine.</summary>
     internal ScsKillerStatus Shaders { get; } = new();
-    internal ShadersHostService ShadersHost => _shadersHost ??= new ShadersHostService(this);
-    private ShadersHostService? _shadersHost;
-    internal HdrHostService HdrHost => _hdrHost ??= new HdrHostService(this, _lifetime.Token);
-    private HdrHostService? _hdrHost;
-    internal HeadlessCaptureService HeadlessCapture => _headlessCapture ??= new HeadlessCaptureService(this);
-    private HeadlessCaptureService? _headlessCapture;
-    internal HeadlessMusicService HeadlessMusic => _headlessMusic ??= new HeadlessMusicService();
-    private HeadlessMusicService? _headlessMusic;
-    internal MusicEngineService MusicEngine => _musicEngine ??= new MusicEngineService();
-    private MusicEngineService? _musicEngine;
+    internal ShadersHostService ShadersHost => _shadersHost.Value;
+    private readonly Lazy<ShadersHostService> _shadersHost;
+    internal HdrHostService HdrHost => _hdrHost.Value;
+    private readonly Lazy<HdrHostService> _hdrHost;
+    internal HeadlessCaptureService HeadlessCapture => _headlessCapture.Value;
+    private readonly Lazy<HeadlessCaptureService> _headlessCapture;
+    internal HeadlessMusicService HeadlessMusic => _headlessMusic.Value;
+    private readonly Lazy<HeadlessMusicService> _headlessMusic = new(() => new HeadlessMusicService());
+    internal MusicEngineService MusicEngine => _musicEngine.Value;
+    private readonly Lazy<MusicEngineService> _musicEngine = new(() => new MusicEngineService());
 
-    /// <summary>The Shaders page's Prepare, for Unreal games.</summary>
-    internal ShaderPrepare ShaderPrepare => _shaderPrepare ??= new ShaderPrepare(() => Launcher);
-    private ShaderPrepare? _shaderPrepare;
-    /// <summary>The Store room: deals, prices, free games and the wishlist.</summary>
+    internal ShaderPrepare ShaderPrepare => _shaderPrepare.Value;
+    private readonly Lazy<ShaderPrepare> _shaderPrepare;
     internal StoreService Store => _store.Value;
-    /// <summary>Settings > Downloads applied: holds while playing and outside the download hours, idle auto-updates.</summary>
-    internal DownloadPolicy Downloads => _downloads ??= new DownloadPolicy(this);
-    private DownloadPolicy? _downloads;
-    /// <summary>Temporary files, crash reports, the thumbnail cache and Exo's old backups, cleaned while the PC is idle.</summary>
+    internal DownloadPolicy Downloads => _downloads.Value;
+    private readonly Lazy<DownloadPolicy> _downloads;
     private JunkAutoClean? _junk;
-    /// <summary>Compress games: Windows' own file compression for a game's install, by a press or while the PC is idle.</summary>
-    internal GameCompressor Compressor => _compressor ??= new GameCompressor(this);
-    private GameCompressor? _compressor;
+    internal GameCompressor Compressor => _compressor.Value;
+    private readonly Lazy<GameCompressor> _compressor;
     private readonly Lazy<StoreService> _store = new(() => new StoreService(RunningVersion));
     /// <summary>HID devices for the Devices room's mouse module.</summary>
     internal Hid.HidService Hid => _hid.Value;
@@ -60,6 +55,12 @@ public sealed class AppServices
     public GameArtworkService Artwork => _artwork.Value;
     public AppServices()
     {
+        _shadersHost = new Lazy<ShadersHostService>(() => new ShadersHostService(this));
+        _hdrHost = new Lazy<HdrHostService>(() => new HdrHostService(this, _lifetime.Token));
+        _headlessCapture = new Lazy<HeadlessCaptureService>(() => new HeadlessCaptureService(this));
+        _shaderPrepare = new Lazy<ShaderPrepare>(() => new ShaderPrepare(() => Launcher));
+        _downloads = new Lazy<DownloadPolicy>(() => new DownloadPolicy(this));
+        _compressor = new Lazy<GameCompressor>(() => new GameCompressor(this));
         _adapters = new Lazy<IReadOnlyList<IStoreAdapter>>(BuildAdapters);
         _library = new Lazy<LibraryService>(BuildLibrary);
         _artwork = new Lazy<GameArtworkService>(() => new GameArtworkService(Library, Settings));
@@ -347,13 +348,13 @@ public sealed class AppServices
         Shaders.Dispose();
         if (_store.IsValueCreated) _store.Value.Dispose();
         if (_hid.IsValueCreated) _hid.Value.Dispose();
-        _hdrHost?.Stop();
-        _shadersHost?.Dispose();
-        _headlessCapture?.Dispose();
-        _musicEngine?.Close();
-        _downloads?.Dispose();
+        if (_hdrHost.IsValueCreated) _hdrHost.Value.Stop();
+        if (_shadersHost.IsValueCreated) _shadersHost.Value.Dispose();
+        if (_headlessCapture.IsValueCreated) _headlessCapture.Value.Dispose();
+        if (_musicEngine.IsValueCreated) _musicEngine.Value.Close();
+        if (_downloads.IsValueCreated) _downloads.Value.Dispose();
         _junk?.Dispose();
-        _compressor?.Dispose();
+        if (_compressor.IsValueCreated) _compressor.Value.Dispose();
         Achievements.Dispose();
         HiddenStores.Dispose();
         GogAuth.Dispose();

@@ -12,7 +12,7 @@ try {
   tsApi = tsMod.default ?? tsMod
 } catch {}
 
-const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.cs', '.css', '.ps1', '.psm1'])
+const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.cs', '.css', '.ps1', '.psm1', '.rs', '.c', '.cc', '.cpp', '.h'])
 const EXCLUDED_PREFIXES = [
   'mouse/vendor/',
   'capture/third_party/',
@@ -20,8 +20,15 @@ const EXCLUDED_PREFIXES = [
   'ui/dist/',
   'mouse/dist/',
   'node_modules/',
+  'native-ui/target/',
+  'voice/build/',
+  'voice/out/',
+  'voice/vcpkg/',
+  'voice/downloads/',
+  'capture/out/',
+  'shaders/engine/third_party/',
 ]
-const EXCLUDED_SEGMENTS = ['/node_modules/', '/bin/', '/obj/']
+const EXCLUDED_SEGMENTS = ['/node_modules/', '/bin/', '/obj/', '/target/']
 const REGEX_PREFIX_KEYWORDS = new Set([
   'return', 'throw', 'case', 'delete', 'void', 'typeof', 'instanceof', 'in', 'of',
   'await', 'yield', 'new', 'else', 'do', 'export', 'default', 'extends', 'implements',
@@ -135,11 +142,12 @@ function scanQuoted(text, i, quote, allowBackslash) {
   while (i < n) {
     const ch = text[i]
     if (allowBackslash && ch === '\\') {
+      if (text[i + 1] === '\r' && text[i + 2] === '\n') { i += 3; continue }
       i += 2
       continue
     }
     if (ch === quote) return i + 1
-    if (ch === '\n' && !allowBackslash) return i
+    if (ch === '\n' || ch === '\r') return i
     i++
   }
   return n
@@ -324,6 +332,10 @@ function scanJsLike(text, ext, starts) {
       continue
     }
     if (ch === '\'' || ch === '"') {
+      if (ch === '\'' && (ext === '.tsx' || ext === '.jsx') && i > 0 && i + 1 < n && isIdentPart(text.charCodeAt(i - 1)) && isIdentPart(text.charCodeAt(i + 1))) {
+        i++
+        continue
+      }
       i = scanQuoted(text, i, ch, true)
       canBeRegex = false
       continue
@@ -725,14 +737,149 @@ function scanPowerShell(text, starts) {
   return comments
 }
 
-export function scanComments(text, filePath) {
+function scanCStyle(text, starts) {
+  const n = text.length
+  const comments = []
+  let i = 0
+  while (i < n) {
+    const ch = text[i]
+    if (ch === '"' || ch === '\'') {
+      i = scanQuoted(text, i, ch, true)
+      continue
+    }
+    if (ch === '/' && text[i + 1] === '/') {
+      const start = i
+      i += 2
+      while (i < n && text[i] !== '\r' && text[i] !== '\n') i++
+      const line = lineAtOffset(starts, start)
+      comments.push({
+        start,
+        end: i,
+        stripStart: start,
+        stripEnd: i,
+        raw: text.slice(start, i),
+        kind: text.slice(start, start + 3) === '///' ? 'doc' : 'line',
+        startLine: line,
+        endLine: line,
+      })
+      continue
+    }
+    if (ch === '/' && text[i + 1] === '*') {
+      const start = i
+      const close = text.indexOf('*/', i + 2)
+      const end = close < 0 ? n : close + 2
+      comments.push({
+        start,
+        end,
+        stripStart: start,
+        stripEnd: end,
+        raw: text.slice(start, end),
+        kind: 'block',
+        startLine: lineAtOffset(starts, start),
+        endLine: lineAtOffset(starts, Math.max(start, end - 1)),
+      })
+      i = end
+      continue
+    }
+    i++
+  }
+  return comments
+}
+
+function scanRust(text, starts) {
+  const n = text.length
+  const comments = []
+  let i = 0
+  while (i < n) {
+    const ch = text[i]
+    if ((ch === 'r' || (ch === 'b' && text[i + 1] === 'r')) && (i === 0 || !isIdentPart(text.charCodeAt(i - 1)))) {
+      let j = ch === 'b' ? i + 2 : i + 1
+      let hashes = 0
+      while (j < n && text[j] === '#') { hashes++; j++ }
+      if (j < n && text[j] === '"') {
+        j++
+        const closeToken = '"' + '#'.repeat(hashes)
+        const closeIdx = text.indexOf(closeToken, j)
+        i = closeIdx < 0 ? n : closeIdx + closeToken.length
+        continue
+      }
+    }
+    if (ch === '"') {
+      i++
+      while (i < n) {
+        if (text[i] === '\\') { i += 2; continue }
+        if (text[i] === '"') { i++; break }
+        i++
+      }
+      continue
+    }
+    if (ch === '\'') {
+      if (i + 1 < n && text[i + 1] === '\\') {
+        const end = text.indexOf('\'', i + 2)
+        i = end >= 0 && end - i <= 12 ? end + 1 : i + 1
+        continue
+      }
+      if (i + 2 < n && text[i + 2] === '\'') {
+        i += 3
+        continue
+      }
+      i++
+      continue
+    }
+    if (ch === '/' && text[i + 1] === '/') {
+      const start = i
+      i += 2
+      while (i < n && text[i] !== '\r' && text[i] !== '\n') i++
+      const line = lineAtOffset(starts, start)
+      comments.push({
+        start,
+        end: i,
+        stripStart: start,
+        stripEnd: i,
+        raw: text.slice(start, i),
+        kind: text.slice(start, start + 3) === '///' || text.slice(start, start + 3) === '//!' ? 'doc' : 'line',
+        startLine: line,
+        endLine: line,
+      })
+      continue
+    }
+    if (ch === '/' && text[i + 1] === '*') {
+      const start = i
+      let depth = 1
+      let j = i + 2
+      while (j < n && depth > 0) {
+        if (text[j] === '/' && text[j + 1] === '*') { depth++; j += 2; continue }
+        if (text[j] === '*' && text[j + 1] === '/') { depth--; j += 2; continue }
+        j++
+      }
+      comments.push({
+        start,
+        end: j,
+        stripStart: start,
+        stripEnd: j,
+        raw: text.slice(start, j),
+        kind: 'block',
+        startLine: lineAtOffset(starts, start),
+        endLine: lineAtOffset(starts, Math.max(start, j - 1)),
+      })
+      i = j
+      continue
+    }
+    i++
+  }
+  return comments
+}
+
+export function scanComments(text, filePath, options = {}) {
   const ext = path.extname(filePath).toLowerCase()
   const starts = buildLineStarts(text)
   let rawComments
   if (ext === '.cs') rawComments = scanCSharp(text, starts)
   else if (ext === '.css') rawComments = scanCss(text, starts)
   else if (ext === '.ps1' || ext === '.psm1') rawComments = scanPowerShell(text, starts)
-  else if (SOURCE_EXTENSIONS.has(ext)) rawComments = tsApi ? scanJsWithTs(text, ext, filePath, starts) : scanJsLike(text, ext, starts)
+  else if (ext === '.rs') rawComments = scanRust(text, starts)
+  else if (ext === '.c' || ext === '.cc' || ext === '.cpp' || ext === '.h') rawComments = scanCStyle(text, starts)
+  else if (SOURCE_EXTENSIONS.has(ext)) rawComments = tsApi && !options.fallback ? scanJsWithTs(text, ext, filePath, starts) : scanJsLike(text, ext, starts)
   else return []
 
   return rawComments.map((c) => ({

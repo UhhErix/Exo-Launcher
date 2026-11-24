@@ -132,3 +132,35 @@ test('enforces strict ratchet semantics and rejects increases on update', () => 
   assert.equal(tightened.ok, false)
   assert.deepEqual(tightened.next, { 'a.ts': 2, 'b.ts': 3 })
 })
+
+test('fallback TSX scanner handles JSX apostrophes without node_modules TypeScript', () => {
+  const tsx = [
+    'export function Empty({ missing }: { missing: boolean }) {',
+    '  if (missing) return <p>Exo Shaders isn\'t installed</p>',
+    '  // trailing comment after JSX apostrophe',
+    '  return <div>won\'t fail</div>',
+    '}',
+  ].join('\n')
+  const found = scanComments(tsx, 'Empty.tsx', { fallback: true }).filter((c) => !c.allowed)
+  assert.equal(found.length, 1)
+  assert.equal(found[0].startLine, 3)
+})
+
+test('scans Rust and C/C++ comments while ignoring strings, raw strings, and lifetimes', () => {
+  const rs = [
+    'fn demo<\'a>(s: &\'a str) -> &\'a str {',
+    '  let raw = r#"not // a comment /* nested */"#;',
+    '  /* outer /* nested */ still comment */',
+    '  // rust line comment',
+    '  s',
+    '}',
+  ].join('\n')
+  assert.equal(analyzeFile(rs, 'demo.rs').commentLineCount, 2)
+
+  const cc = [
+    'const char* url = "https://example.com//not";',
+    '// cpp line comment',
+    '/* block comment */',
+  ].join('\n')
+  assert.equal(analyzeFile(cc, 'demo.cc').commentLineCount, 2)
+})

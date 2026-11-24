@@ -983,7 +983,6 @@ public sealed partial class WebHostBridge
                 "system.drives" => await SystemDrivesAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "system.drivers" => await SystemDriversAsync(paramsEl, hasParams, requestToken).WaitAsync(TimeSpan.FromMinutes(4), requestToken).ConfigureAwait(false),
                 "store.home" => await StoreHomeAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
-                "store.calendar" => await StoreCalendarAsync(requestToken).ConfigureAwait(false),
                 "store.search" => await StoreSearchAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "store.game" => await StoreGameAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "store.gameOffers" => await StoreGameOffersAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
@@ -993,7 +992,6 @@ public sealed partial class WebHostBridge
                 // Listing opens every device to read its reports: off the UI thread, like the calls below.
                 "hid.list" => await Task.Run(() => HidList(paramsEl, hasParams)).ConfigureAwait(false),
                 "devices.list" => await Task.Run(DevicesList).ConfigureAwait(false),
-                "devices.usbMap" => await Task.Run(DevicesUsbMap).ConfigureAwait(false),
                 "keyboard.read" => await Task.Run(() => KeyboardRead(paramsEl, hasParams)).ConfigureAwait(false),
                 "keyboard.profile" => await Task.Run(() => KeyboardProfile(paramsEl, hasParams)).ConfigureAwait(false),
                 "keyboard.settings" => await Task.Run(() => KeyboardSettings(paramsEl, hasParams)).ConfigureAwait(false),

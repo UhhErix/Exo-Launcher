@@ -349,9 +349,25 @@ internal sealed partial class MusicEngineService
         return sessions;
     }
 
+    private int _musicWebFailures;
+    private DateTimeOffset? _musicWebNextRetryAt;
+
+    internal static TimeSpan RetryBackoff(int failures) => failures switch
+    {
+        <= 1 => TimeSpan.FromSeconds(2),
+        2 => TimeSpan.FromSeconds(5),
+        3 => TimeSpan.FromSeconds(15),
+        _ => TimeSpan.FromSeconds(60),
+    };
+
+    internal static bool CanAutoRetry(DateTimeOffset now, DateTimeOffset? nextRetryAt) =>
+        nextRetryAt is null || now >= nextRetryAt.Value;
+
     private void SelectServiceCore(string service)
     {
         if (!MusicWebPolicy.IsService(service) || _musicWebService == service) return;
+        _musicWebFailures = 0;
+        _musicWebNextRetryAt = null;
         ResetMusicWebView();
         _musicWebService = service;
         MediaSessions.SetProvider(service);
@@ -362,7 +378,11 @@ internal sealed partial class MusicEngineService
     {
         if (_musicWebClosed || WebClientPreferences.Read().MusicService is { } selected && selected != service) return;
         if (_musicWebService != service) SelectServiceCore(service);
-        if (_musicWebFailed) ResetMusicWebView();
+        if (_musicWebFailed)
+        {
+            if (!CanAutoRetry(DateTimeOffset.UtcNow, _musicWebNextRetryAt)) return;
+            ResetMusicWebView();
+        }
         if (service == "spotify") _ = SpotifyApp.CloseRunningAsync(_lifetimeCts.Token);
         if (_musicHost is null)
         {
@@ -382,6 +402,8 @@ internal sealed partial class MusicEngineService
         catch (Exception ex)
         {
             var reported = _musicWebFailed;
+            _musicWebFailures++;
+            _musicWebNextRetryAt = DateTimeOffset.UtcNow + RetryBackoff(_musicWebFailures);
             AppLog.Warn("Music web player initialization failed: " + ex.GetType().Name + ": " + ex.Message);
             ResetMusicWebView();
             _musicWebFailed = true;
@@ -621,6 +643,8 @@ internal sealed partial class MusicEngineService
 
     private void ReloadMusic()
     {
+        _musicWebFailures = 0;
+        _musicWebNextRetryAt = null;
         if (_musicWebFailed) { ResetMusicWebView(); return; }
         if (MusicCore is not { } core) return;
         _musicWebReady = false;
@@ -843,6 +867,8 @@ internal sealed partial class MusicEngineService
             _appleAdapterInstalled = service == "apple";
             _musicWebBooted = false;
             _musicWebFailed = false;
+            _musicWebFailures = 0;
+            _musicWebNextRetryAt = null;
             SetEmbeddedActivity(core, false, force: true);
             if (_musicNowPlaying?.Service != service)
                 SetMusicNowPlaying(MusicNowPlaying.ForWebPage(service, MusicWebEvaluate(core), () => MusicWebSuspended(core),
