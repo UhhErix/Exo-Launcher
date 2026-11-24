@@ -37,6 +37,8 @@ mod library_state;
 mod media_state;
 mod menus;
 mod music;
+mod music_pages;
+mod music_sound;
 mod notes;
 mod notice;
 mod palette;
@@ -380,6 +382,9 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
             _ => {}
         }
     }
+    if music::handle_key(s, ev, tx) {
+        return true;
+    }
     if ev.key == Key::Escape {
         if s.room == state::Room::Discord && s.dismiss_discord_chat_layer() {
             return true;
@@ -425,7 +430,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let wp4 = s.wp4_tick(now);
     let hb = s.tick_shell_heartbeat(now, tx);
     let wp9 = s.pc_wp9_tick(now);
-    focus_changed || notices || setup || island || lib || store || wp4 || hb || wp9
+    let music = s.music_tick(now);
+    focus_changed || notices || setup || island || lib || store || wp4 || hb || wp9 || music
 }
 
 #[cfg(windows)]
@@ -1491,11 +1497,19 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                         && let Some(data) = r.data
                     {
                         state.media.music_library = data.items;
+                        state.media.music_library_loaded = true;
                         if !data.filters.is_empty() {
+                            state.media.music_library_top_filters = data.filters.clone();
                             state.media.music_library_filters = data.filters;
+                        }
+                        if !data.sorts.is_empty() {
+                            state.media.music_library_sorts = data.sorts;
                         }
                         if let Some(f) = data.filter {
                             state.media.music_library_filter = f;
+                        }
+                        if let Some(so) = data.sort {
+                            state.media.music_library_sort = so;
                         }
                     }
                     if let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
@@ -1518,14 +1532,14 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     {
                         state.media.music_recent = data.items;
                     }
-                    if let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                    if let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerStateReply>(
                         view_m,
                         &serde_json::json!({ "view": "player" }),
                         Duration::from_secs(6),
                     ) && r.ok
                         && let Some(data) = r.data
                     {
-                        state.media.apply_player_state(&data);
+                        state.media.apply_player_state_data(&data);
                     }
                     if sc == "music-songs"
                         && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
@@ -1536,18 +1550,113 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                         && r.ok
                         && let Some(data) = r.data
                     {
-                        state.media.music_page_data = Some(data);
+                        let len = data.tracks.len() as u32;
+                        state.media.music_songs_tracks = data.tracks;
+                        state.media.music_songs_total = data.total.unwrap_or(0).max(len);
+                        state.media.music_songs_context_uri = data.context_uri.unwrap_or_default();
+                        state.media.music_songs_sorts = data.sorts;
+                        if let Some(so) = data.sort {
+                            state.media.music_songs_sort = so;
+                        }
+                        state.media.music_songs_liked = data.liked.unwrap_or(false);
+                        state.media.music_songs_loaded = true;
                     }
-                    if sc == "music-queue"
-                        && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                    if sc == "music-queue" {
+                        if let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
                             view_m,
                             &serde_json::json!({ "view": "queue" }),
                             Duration::from_secs(8),
+                        ) && r.ok
+                            && let Some(data) = r.data
+                        {
+                            state.media.music_queue_data = Some(data);
+                        }
+                        if state.media.music_service.has_history()
+                            && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                                view_m,
+                                &serde_json::json!({ "view": "history" }),
+                                Duration::from_secs(6),
+                            )
+                            && r.ok
+                            && let Some(data) = r.data
+                        {
+                            state.media.music_queue_history = data.tracks;
+                        }
+                    }
+                    if (sc == "music-now-playing" || sc == "music-immersion")
+                        && !state.media.music_track_uri.is_empty()
+                        && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                            view_m,
+                            &serde_json::json!({ "view": "lyrics", "uri": state.media.music_track_uri }),
+                            Duration::from_secs(6),
                         )
                         && r.ok
                         && let Some(data) = r.data
                     {
-                        state.media.music_queue_data = Some(data);
+                        state.media.music_lyrics_uri = state.media.music_track_uri.clone();
+                        state.media.music_lyrics_lines = data.lines;
+                        state.media.music_lyrics_synced = data.synced.unwrap_or(false);
+                    }
+                    if sc == "music-devices"
+                        && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                            view_m,
+                            &serde_json::json!({ "view": "devices" }),
+                            Duration::from_secs(6),
+                        )
+                        && r.ok
+                        && let Some(data) = r.data
+                    {
+                        state.media.music_devices = data.devices;
+                        state.media.music_devices_loaded = true;
+                    }
+                    if sc == "music-friends"
+                        && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                            view_m,
+                            &serde_json::json!({ "view": "friends" }),
+                            Duration::from_secs(6),
+                        )
+                        && r.ok
+                        && let Some(data) = r.data
+                    {
+                        state.media.music_friends = data.friends;
+                        state.media.music_friends_loaded = true;
+                    }
+                    if sc == "music-jam"
+                        && state.media.music_service.has_jam()
+                        && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                            view_m,
+                            &serde_json::json!({ "view": "jam" }),
+                            Duration::from_secs(6),
+                        )
+                        && r.ok
+                        && let Some(data) = r.data
+                    {
+                        state.media.music_jam_session = data.session;
+                        state.media.music_jam_experience = data.experience;
+                        state.media.music_jam_loaded = true;
+                    }
+                    if sc == "music-sound" {
+                        if state.media.music_service.has_audio()
+                            && let Ok(r) = client.call_blocking::<_, exo_rpc::SpotifyAudioReply>(
+                                view_m,
+                                &serde_json::json!({ "view": "audio" }),
+                                Duration::from_secs(6),
+                            )
+                            && r.ok
+                        {
+                            state.media.music_sound_spotify = r.data;
+                        } else if state.media.music_service.has_quality()
+                            && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                                view_m,
+                                &serde_json::json!({ "view": "audio" }),
+                                Duration::from_secs(6),
+                            )
+                            && r.ok
+                            && let Some(data) = r.data
+                        {
+                            state.media.music_sound_qualities = data.qualities;
+                            state.media.music_sound_quality = data.quality.unwrap_or_default();
+                        }
                     }
                     if let Some(ref cache_dir) = state.remote_cache_dir {
                         let mut urls: Vec<String> = Vec::new();
@@ -2446,6 +2555,39 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.switch_room(state::Room::Music);
         s.media.music_immersion = true;
     }),
+    ("music-devices", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_panel = Some(media_state::MusicPanel::Devices);
+    }),
+    ("music-friends", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_panel = Some(media_state::MusicPanel::Friends);
+    }),
+    ("music-jam", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_panel = Some(media_state::MusicPanel::Jam);
+    }),
+    ("music-sound", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_panel = Some(media_state::MusicPanel::Sound);
+    }),
+    ("music-signin", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_room_state = media_state::MusicRoomState::SignedOut;
+    }),
+    ("music-playlist-sheet", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.music_open_edit_playlist_sheet(
+            String::new(),
+            String::new(),
+            String::new(),
+            Some("PRIVATE".into()),
+            String::new(),
+        );
+        if let Some(ref mut sh) = s.media.music_playlist_sheet {
+            sh.uri = None;
+        }
+    }),
     ("captures", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.capture_menu_open = true;
@@ -3039,6 +3181,7 @@ fn run_parity_probe(
     }
 
     let popup_menu_open = rt.popup_menu().is_some()
+        || rt.state.media.music_menu.is_some()
         || elements
             .iter()
             .any(|e| !e.exiting && e.key.as_deref() == Some("pc-part-menu"));
@@ -3049,7 +3192,7 @@ fn run_parity_probe(
         "librarySearchOpen": rt.state.library_search_open,
         "libraryMoreOpen": rt.state.library_more_open,
         "libraryAddOpen": rt.state.library_add_open,
-        "contextMenuOpen": rt.state.context_menu.is_some(),
+        "contextMenuOpen": rt.state.context_menu.is_some() || rt.state.media.music_menu.is_some(),
         "openDropdown": rt.state.open_dropdown.map(|d| format!("{d:?}")),
         "openGameId": rt.state.open_game_id,
         "propsOpen": rt.state.props_open,

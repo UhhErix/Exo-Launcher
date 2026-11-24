@@ -808,6 +808,13 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                     s.open_context_menu(ContextMenuTarget::NavTab(room), p.x, p.y);
                 })
                 .child(base);
+            if room == Room::Music {
+                tab = tab.on_hover_change(|s: &mut AppState, inside, _| {
+                    if inside {
+                        s.warm_music();
+                    }
+                });
+            }
             if active {
                 tab = tab.child(
                     row()

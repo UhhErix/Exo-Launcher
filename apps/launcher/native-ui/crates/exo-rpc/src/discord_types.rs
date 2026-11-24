@@ -584,6 +584,12 @@ pub struct DiscordRich {
     #[serde(default)]
     pub start: Option<i64>,
     #[serde(default)]
+    pub end: Option<i64>,
+    #[serde(default)]
+    pub sync_id: Option<String>,
+    #[serde(default)]
+    pub uri: Option<String>,
+    #[serde(default)]
     pub image: Option<String>,
     #[serde(default)]
     pub through_exo: bool,

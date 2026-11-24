@@ -208,31 +208,31 @@ Totals: DONE 25, PARTIAL 9, MISSING 11, BROKEN 0 (of 45).
 
 ## Music
 
-Totals: DONE 5, PARTIAL 7, MISSING 9, BROKEN 0 (of 21).
+Totals: DONE 21, PARTIAL 0, MISSING 0, BROKEN 0 (of 21).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Service sign-in (Spotify / YouTube Music / Apple Music) | components/music/MusicSignIn.tsx:1 | exo-ui/src/music.rs:736 | DONE | rpc: music.signIn, spotify.start, ytmusic.start, applemusic.start. spotify.link (Spotify Connect link) not called. |
-| Home (shelves, top picks) | components/music/pages.tsx:32 | exo-ui/src/music.rs:7 | DONE | rpc: spotify.view, ytmusic.view. Empty-state copy ("Nothing on Home yet") missing. |
-| Search + Top result / Songs / Artists / Albums | components/music/pages.tsx:98 | exo-ui/src/music.rs:910 | PARTIAL | rpc: spotify.view. No Top result card, Station, Episodes sections. |
-| Library (songs, albums, artists, playlists) | components/music/MusicPlayer.tsx:33 | exo-ui/src/music.rs:276 | DONE |  |
-| Playlist page + create playlist sheet (name, description, cover) | components/music/PlaylistSheet.tsx:35 | exo-ui/src/music.rs:364 | PARTIAL | rpc: spotify.act, ytmusic.act, applemusic.act. Create only; no description/cover/rename/delete. |
-| Artist page (header, top songs, discography, fans also like, on tour) | components/music/artist.tsx:1 | — | MISSING | rpc: spotify.view.  |
-| Album page / discography | components/music/pages.tsx:65 | exo-ui/src/music.rs:398 | PARTIAL | No discography page, singles/EPs/compilations. |
-| Radio / stations | components/music/pages.tsx:94 | exo-ui/src/music.rs:319 | PARTIAL | Nav exists, station start unverified. |
-| Podcasts / episodes | components/music/pages.tsx:121 | — | MISSING |  |
-| Now playing bar (seek, shuffle, repeat, like, volume) | components/music/MusicPlayer.tsx:8 | exo-ui/src/music.rs:1180 | DONE | rpc: music.control, music.volume, music.playback.  |
-| Queue panel (next, history, autoplay, reorder, clear) | components/music/panels.tsx:28 | exo-ui/src/music.rs:992 | PARTIAL | rpc: music.playback. Read-only list capped at 30; no history, autoplay, reorder. |
-| Lyrics panel | components/music/panels.tsx:13 | — | MISSING | rpc: music.playback.  |
-| Connect / Play on devices | components/music/panels.tsx:145 | — | MISSING | rpc: spotify.link.  |
-| Friend activity + Listen along | components/music/panels.tsx:204 | — | MISSING | rpc: spotify.view.  |
-| Immersive now-playing | components/music/Immersive.tsx:19 | exo-ui/src/music.rs:1429 | DONE |  |
-| Sound panel (exclusive mode, crossfade, gapless, AutoMix, normalize, EQ) | components/music/SoundPanel.tsx:44 | — | MISSING | rpc: audio.formats, audio.setFormat, eq.headphones.  |
-| Song matching / warm cache (YTM resolves Spotify tracks) | components/music/MusicPlayer.tsx:1 | — | MISSING | rpc: music.match, music.warm.  |
-| Library filter folder / show-and-sort | components/music/MusicPlayer.tsx:501 | — | MISSING |  |
-| Music room first-run / no-service state | components/music/MusicSignIn.tsx:1 | exo-ui/src/music.rs:717 | PARTIAL | rpc: applemusic.start. Smoke: room sits on "Starting Apple Music…" with empty Home and "Nothing playing" (this data copy is not signed in to a service; React shows MusicSignIn / MusicWait with Change service). |
-| Music keyboard shortcuts | components/shell/useRoomController.ts:4 | — | MISSING |  |
-| Track context menus (add to playlist, go to artist, share) | components/music/controls.tsx:1 | exo-ui/src/menus.rs:1 | PARTIAL | Few items. |
+| Service sign-in (Spotify / YouTube Music / Apple Music) | components/music/MusicSignIn.tsx:1 | exo-ui/src/music_pages.rs:24 | DONE | rpc: music.signIn, spotify.start, ytmusic.start, applemusic.start, spotify.link. Full MusicSignIn/NotPremium/Error/MusicWait + Change music service -> Settings > Music; fixed exo.musicWebService pref key. |
+| Home (shelves, top picks) | components/music/pages.tsx:32 | exo-ui/src/music.rs:717 | DONE | rpc: spotify.view, ytmusic.view, applemusic.view. Includes "Nothing on Home yet" empty state, recent grid, shelves, and MusicWait skeleton. |
+| Search + Top result / Songs / Artists / Albums | components/music/pages.tsx:98 | exo-ui/src/music_pages.rs:626 | DONE | rpc: spotify.view, ytmusic.view, applemusic.view. Server filter pills + client kind chips, Top result + 4 Songs side-by-side, all groups (Artists/Albums/Playlists/Stations/Videos/Podcasts/Episodes/Audiobooks). |
+| Library (songs, albums, artists, playlists) | components/music/MusicPlayer.tsx:33 | exo-ui/src/music.rs:333 | DONE | rpc: spotify.view, ytmusic.view, applemusic.view. Full sidebar library + Songs page with sort/filter/pagination + Apple ratings merge. |
+| Playlist page + create playlist sheet (name, description, cover) | components/music/PlaylistSheet.tsx:35 | exo-ui/src/music_pages.rs:2113 | DONE | rpc: spotify.act, ytmusic.act, applemusic.act. Full create/edit/rename/delete playlist sheet with JPEG cover upload (>=300x300), description, YTM privacy, track reorder/remove, and Add to playlist submenu. |
+| Artist page (header, top songs, discography, fans also like, on tour) | components/music/artist.tsx:1 | exo-ui/src/music_pages.rs:1048 | DONE | rpc: spotify.view, ytmusic.view, applemusic.view. Full Artist page with top songs, Albums/Singles/Compilations, On tour, Featuring, Fans also like, Appears on, Discovered on, Artist's playlists, and About/Biography. |
+| Album page / discography | components/music/pages.tsx:65 | exo-ui/src/music_pages.rs:998 | DONE | rpc: spotify.view, ytmusic.view, applemusic.view. Full Album/Playlist/Show/Discography pages with PageHeader, Show more pagination, Facts, and track rows. |
+| Radio / stations | components/music/pages.tsx:94 | exo-ui/src/music_pages.rs:893 | DONE | rpc: spotify.view, ytmusic.view, applemusic.view, *.act(radio). Explore/New/Radio browse pages with moods/stations and Station/Go to radio actions. |
+| Podcasts / episodes | components/music/pages.tsx:121 | exo-ui/src/music_pages.rs:1866 | DONE | rpc: spotify.view, spotify.act. Show/Podcast/Audiobook pages, Your Episodes library entry, episode dates, Played / min left badges, and Save/Remove episode. |
+| Now playing bar (seek, shuffle, repeat, like, volume) | components/music/MusicPlayer.tsx:8 | exo-ui/src/music.rs:1417 | DONE | rpc: music.control, music.volume, music.playback. Fixed "previous" action, added SongVerdict (heart + YTM dislike), Play here, YTM Song/Video toggle, drag/wheel volume slider + mini-player volume popover. |
+| Queue panel (next, history, autoplay, reorder, clear) | components/music/panels.tsx:28 | exo-ui/src/music_sound.rs:352 | DONE | rpc: *.view(queue/history), *.act(queueClear/queueRemove/queueMove/autoplay). Full Queue panel with Now playing, Next in queue/Playing next + reorder/remove/clear, Autoplay toggle, Next up, History. |
+| Lyrics panel | components/music/panels.tsx:13 | exo-ui/src/music_sound.rs:258 | DONE | rpc: *.view(lyrics/related), music.playback. Synced clickable lyrics with live clock, duet alignment, gap dots, and YTM Lyrics/Related tabs inside Now Playing panel + Immersive view. |
+| Connect / Play on devices | components/music/panels.tsx:145 | exo-ui/src/music_sound.rs:713 | DONE | rpc: spotify.view(devices), spotify.act(transfer), spotify.link. Play on devices panel with transfer + "Play here" button on transport bar when playing elsewhere. |
+| Friend activity + Listen along | components/music/panels.tsx:204 | exo-ui/src/music_sound.rs:780 | DONE | rpc: spotify.view(friends/jam), spotify.act(jam*), spotify.link, discord.callSongs, discord.friends, music.match. Friend activity, Spotify Jam (with QR + invite copy + guest switches + members), and Discord Listen along. |
+| Immersive now-playing | components/music/Immersive.tsx:19 | exo-ui/src/music.rs:1648 | DONE | Full Immersive view with clickable artists, interactive seek bar + clock, verdict/transport controls, volume slider, side-by-side live synced Lyrics, and F/Escape/Arrow shortcuts. |
+| Sound panel (exclusive mode, crossfade, gapless, AutoMix, normalize, EQ) | components/music/SoundPanel.tsx:44 | exo-ui/src/music_sound.rs:1427 | DONE | rpc: spotify.view(audio), ytmusic.view(audio), applemusic.view(audio), *.act(audio/speed), music.control(pause). Matches React SoundPanel.tsx 1:1 (quality, exclusive, crossfade, gapless, AutoMix, normalize, Smart Shuffle, mono, EQ + vertical band sliders, speed, sleep timer). |
+| Song matching / warm cache (YTM resolves Spotify tracks) | components/music/MusicPlayer.tsx:1 | exo-ui/src/media_state.rs:1572 | DONE | rpc: music.match, music.warm, spotify.link. Throttled music.warm on Music tab & mini-player hover, music.match with 200-entry cache for cross-service Listen along, and spotify.link URL resolution. |
+| Library filter folder / show-and-sort | components/music/MusicPlayer.tsx:501 | exo-ui/src/music.rs:333 | DONE | rpc: *.view(library/folder), *.act(folderCreate/folderRename/folderDelete/folderMove/pin). Show & Sort menu, Create menu, folder stack navigation, inline folder naming, row pinning and folder moves. |
+| Music room first-run / no-service state | components/music/MusicSignIn.tsx:1 | exo-ui/src/music_pages.rs:24 | DONE | rpc: spotify.start, ytmusic.start, applemusic.start, music.signIn, music.status. Full MusicSignIn, NotPremium, ErrorState (Try again + Change music service), and 1:1 MusicWait skeleton + crash-restart leash. |
+| Music keyboard shortcuts | components/shell/useRoomController.ts:4 | exo-ui/src/music.rs:2134 | DONE | Full Spotify/Apple/YouTube/Immersive shortcuts (Space, F, Escape, Ctrl+Arrows/S/R/N/L, Shift+Arrows, Alt+Shift+B/H/S/Q/J/D, YTM K/J/L/N/P/S/R/+/-///, Immersive Up/Down). |
+| Track context menus (add to playlist, go to artist, share) | components/music/controls.tsx:1 | exo-ui/src/music_sound.rs:1838 | DONE | Full context menus via exo_kit::context_menu_layers: TrackMore (with Add to playlist submenu, Queue, Radio, Save/Like, Go to artist/album, Credits, Copy link, Move/Remove), PageMore, LibraryRow, LibraryShowSort, LibraryCreate, MorePanels, SongsSort, Sound menus. |
 
 ## Exo AI / PC
 
@@ -711,22 +711,22 @@ Owns: music.rs, media_state.rs (+ new music_pages.rs, music_sound.rs)
 
 Depends on: None for Rune. RPC: music.match/warm, spotify.link, audio.formats/setFormat, eq.headphones exist. Mini-player volume popover belongs here (bar item in shell.rs: one-line hook only).
 
-- `music-03` [PARTIAL] Search + Top result / Songs / Artists / Albums
-- `music-05` [PARTIAL] Playlist page + create playlist sheet (name, description, cover)
-- `music-06` [MISSING] Artist page (header, top songs, discography, fans also like, on tour)
-- `music-07` [PARTIAL] Album page / discography
-- `music-08` [PARTIAL] Radio / stations
-- `music-09` [MISSING] Podcasts / episodes
-- `music-11` [PARTIAL] Queue panel (next, history, autoplay, reorder, clear)
-- `music-12` [MISSING] Lyrics panel
-- `music-13` [MISSING] Connect / Play on devices
-- `music-14` [MISSING] Friend activity + Listen along
-- `music-16` [MISSING] Sound panel (exclusive mode, crossfade, gapless, AutoMix, normalize, EQ)
-- `music-17` [MISSING] Song matching / warm cache (YTM resolves Spotify tracks)
-- `music-18` [MISSING] Library filter folder / show-and-sort
-- `music-19` [PARTIAL] Music room first-run / no-service state
-- `music-20` [MISSING] Music keyboard shortcuts
-- `music-21` [PARTIAL] Track context menus (add to playlist, go to artist, share)
+- `music-03` [DONE] Search + Top result / Songs / Artists / Albums
+- `music-05` [DONE] Playlist page + create playlist sheet (name, description, cover)
+- `music-06` [DONE] Artist page (header, top songs, discography, fans also like, on tour)
+- `music-07` [DONE] Album page / discography
+- `music-08` [DONE] Radio / stations
+- `music-09` [DONE] Podcasts / episodes
+- `music-11` [DONE] Queue panel (next, history, autoplay, reorder, clear)
+- `music-12` [DONE] Lyrics panel
+- `music-13` [DONE] Connect / Play on devices
+- `music-14` [DONE] Friend activity + Listen along
+- `music-16` [DONE] Sound panel (exclusive mode, crossfade, gapless, AutoMix, normalize, EQ)
+- `music-17` [DONE] Song matching / warm cache (YTM resolves Spotify tracks)
+- `music-18` [DONE] Library filter folder / show-and-sort
+- `music-19` [DONE] Music room first-run / no-service state
+- `music-20` [DONE] Music keyboard shortcuts
+- `music-21` [DONE] Track context menus (add to playlist, go to artist, share)
 
 #### WP9 Exo AI / PC, Storage, Apps (L, 29 items)
 
