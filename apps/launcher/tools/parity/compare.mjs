@@ -312,6 +312,12 @@ export function renderMarkdownReport(payload) {
   if (summary.avgMeanAbsDiff !== null) {
     lines.push(`- Mean absolute pixel diff across compared states: **${summary.avgMeanAbsDiff}** (0 = identical)`)
   }
+  if (payload.visionSummary) {
+    const vs = payload.visionSummary
+    lines.push(
+      `- Vision QA (${vs.model}, status=${vs.status}): **${vs.counts.blocker}** blockers, **${vs.counts.major}** major, **${vs.counts.minor}** minor | calls=${vs.calls}, cacheHits=${vs.cacheHits}, spend=$${Number(vs.totalCostUsd || 0).toFixed(4)}`,
+    )
+  }
   lines.push('')
   lines.push('## Ranked Gap List (Grouped by Room)')
   lines.push('')
@@ -420,6 +426,17 @@ export function renderHtmlGallery(payload) {
         c.menus.status === 'fail'
           ? `<div class="detail"><strong>Menu diff:</strong> react=[${esc(c.menus.reactItems.join(', '))}] | native=[${esc(c.menus.nativeItems.join(', '))}]</div>`
           : ''
+      const visionFindings = item.vision?.findings || []
+      const visionHtml =
+        visionFindings.length > 0
+          ? `<div class="detail"><strong>Vision QA (${visionFindings.length}):</strong><ul>${visionFindings
+              .slice(0, 6)
+              .map(
+                (f) =>
+                  `<li><b>[${esc(f.severity)}] ${esc(f.area)}:</b> react=${esc(f.react)} | native=${esc(f.native)}</li>`,
+              )
+              .join('')}</ul></div>`
+          : ''
       const img = c.pixels.sheet || item.nativeShot || item.reactShot
       return `<article class="card" data-room="${esc(item.room)}" data-sev="${esc(item.severity)}" data-search="${esc(`${item.id} ${item.name} ${item.room} ${item.kind}`.toLowerCase())}">
   <header class="card-head">
@@ -436,6 +453,7 @@ export function renderHtmlGallery(payload) {
   ${item.issues.length ? `<p class="issues">${esc(item.issues.join(' • '))}</p>` : ''}
   ${menuHtml}
   ${cursorHtml}
+  ${visionHtml}
   ${img ? `<a href="${esc(img)}" target="_blank"><img loading="lazy" src="${esc(img)}" alt="${esc(item.id)}"></a>` : '<div class="muted">No screenshot available</div>'}
 </article>`
     })
