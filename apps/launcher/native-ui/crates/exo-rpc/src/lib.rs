@@ -13,7 +13,7 @@ pub mod remote_art;
 pub mod settings_types;
 pub mod types;
 
-pub use anticheat::AntiCheatClass;
+pub use anticheat::{AntiCheatClass, is_anti_cheat_process, normalize_process_name};
 pub use device_types::{
     AudioEndpoint, AudioFormatInfo, AudioFormatOption, AudioFormatsReply, AudioReadReply,
     AudioVoiceInfo, ButtonBounce, ButtonCheck, ControllerCalibrateReply, ControllerCalibration,

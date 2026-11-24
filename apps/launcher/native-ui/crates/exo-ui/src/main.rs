@@ -40,6 +40,7 @@ mod menus;
 mod music;
 mod music_pages;
 mod music_sound;
+mod native_autopilot;
 mod notes;
 mod notice;
 mod palette;
@@ -80,6 +81,7 @@ struct CliArgs {
     pipe: Option<String>,
     parity_probe: Option<String>,
     probe_points: Option<String>,
+    native_autopilot: bool,
     passthrough: Vec<String>,
 }
 
@@ -87,6 +89,7 @@ fn split_cli_args() -> CliArgs {
     let mut pipe = None;
     let mut parity_probe = None;
     let mut probe_points = None;
+    let mut native_autopilot = false;
     let mut passthrough = Vec::new();
     let mut iter = std::env::args();
     if let Some(exe) = iter.next() {
@@ -105,6 +108,8 @@ fn split_cli_args() -> CliArgs {
             probe_points = iter.next();
         } else if let Some(path) = arg.strip_prefix("--probe-points=") {
             probe_points = Some(path.to_string());
+        } else if arg == "--native-autopilot" {
+            native_autopilot = true;
         } else {
             passthrough.push(arg);
         }
@@ -113,6 +118,7 @@ fn split_cli_args() -> CliArgs {
         pipe,
         parity_probe,
         probe_points,
+        native_autopilot,
         passthrough,
     }
 }
@@ -3312,6 +3318,17 @@ fn main() {
     let headless_flag = rune_args
         .iter()
         .any(|a| a == "--snap" || a == "--tree" || a == "--script" || a == "--headless");
+
+    let _native_autopilot = if !headless_flag {
+        let _ = native_autopilot::recover_orphaned_session();
+        if cli.native_autopilot {
+            Some(native_autopilot::NativeAutopilotGuard::start())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     let mut spec = AppSpec::new(
         "Exo Launcher",

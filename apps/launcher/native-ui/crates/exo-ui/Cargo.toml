@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+exo-autopilot = { path = "../exo-autopilot" }
 exo-controller = { path = "../exo-controller" }
 exo-kit = { path = "../exo-kit" }
 exo-macros = { path = "../exo-macros" }
