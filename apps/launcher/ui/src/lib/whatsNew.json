@@ -1,5 +1,40 @@
 [
   {
+    "version": "3.29.1",
+    "items": [
+      {
+        "icon": "Home",
+        "title": "Tabs stay responsive after games close",
+        "detail": "Fixes top bar tabs and window controls stopping after exiting a fullscreen game or changing display scaling."
+      },
+      {
+        "icon": "Mic",
+        "title": "Clearer Discord voice & working friend requests",
+        "detail": "Stops voice from cutting out on noisy USB condenser mics, fixes accepting and adding Discord friends, and guards invalid member IDs."
+      },
+      {
+        "icon": "Performance",
+        "title": "Wooting keyboard fixes across every model",
+        "detail": "Fixes HID framing, live profile reload, actuation and Rapid Trigger read-back, backups, and key map layouts in Devices."
+      },
+      {
+        "icon": "Download",
+        "title": "Reliable runtime installs & persistent GPU tuning",
+        "detail": "Fixes silent runtime installer failures, defers installs while a game runs, keeps Auto tune and fan curves after sleep or restart, and pauses safely after a driver reset."
+      },
+      {
+        "icon": "Record",
+        "title": "Capture stability & cleaner PC updates",
+        "detail": "Prevents Exo Capture crashes on unsupported GPUs or during driver updates, handles AMD driver exit codes cleanly, and removes duplicate driver offers."
+      },
+      {
+        "icon": "Library",
+        "title": "Faster startup, onboarding & store detection",
+        "detail": "Fixes first-run health check timeouts and startup hangs, handles long paths in leftover cleanup, and detects classic Epic, Ubisoft, Rockstar, and Paradox installs."
+      }
+    ]
+  },
+  {
     "version": "3.29.0",
     "items": [
       {
