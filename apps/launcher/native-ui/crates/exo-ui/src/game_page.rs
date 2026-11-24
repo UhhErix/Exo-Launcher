@@ -1303,4 +1303,92 @@ mod tests {
         assert!(rt.presented("gp-art-replace").is_some());
         assert!(rt.presented("gp-art-refresh").is_some());
     }
+
+    #[test]
+    fn game_page_graphics_features_card_renders_all_five_rows_and_controls() {
+        let mut state = AppState::with_demo_games();
+        state.open_game_page("demo:cyberpunk");
+        state.game_page.graphics_features = Some(exo_rpc::GameGraphicsFeaturesState {
+            ok: true,
+            message: None,
+            engine: Some("REDengine 4".into()),
+            running: Some(false),
+            anti_cheat: None,
+            features: Some(vec![
+                exo_rpc::GraphicsFeatureRow {
+                    id: "upscalers".into(),
+                    name: "Upscalers".into(),
+                    state: "inGame".into(),
+                    route: "DLSS / FSR / XeSS · NVIDIA DRS DLSS 4/4.5 override".into(),
+                    route_kind: "driver".into(),
+                    can_toggle: true,
+                    needs_anti_cheat_confirm: false,
+                    anti_cheat_warning: None,
+                    closest_option: None,
+                    details: None,
+                },
+                exo_rpc::GraphicsFeatureRow {
+                    id: "reflex".into(),
+                    name: "Reflex & low latency".into(),
+                    state: "on".into(),
+                    route: "NVIDIA Reflex + driver Low Latency Mode Ultra".into(),
+                    route_kind: "driver".into(),
+                    can_toggle: true,
+                    needs_anti_cheat_confirm: false,
+                    anti_cheat_warning: None,
+                    closest_option: None,
+                    details: None,
+                },
+                exo_rpc::GraphicsFeatureRow {
+                    id: "rayTracing".into(),
+                    name: "Ray tracing".into(),
+                    state: "off".into(),
+                    route: "REDengine UserSettings.json".into(),
+                    route_kind: "config".into(),
+                    can_toggle: true,
+                    needs_anti_cheat_confirm: false,
+                    anti_cheat_warning: None,
+                    closest_option: None,
+                    details: None,
+                },
+                exo_rpc::GraphicsFeatureRow {
+                    id: "pathTracing".into(),
+                    name: "Path tracing".into(),
+                    state: "off".into(),
+                    route: "REDengine RT Overdrive (UserSettings.json)".into(),
+                    route_kind: "config".into(),
+                    can_toggle: true,
+                    needs_anti_cheat_confirm: false,
+                    anti_cheat_warning: None,
+                    closest_option: None,
+                    details: None,
+                },
+                exo_rpc::GraphicsFeatureRow {
+                    id: "hiddenSettings".into(),
+                    name: "Hidden settings".into(),
+                    state: "off".into(),
+                    route: "Ultra decals, 16x AF & crowd (UserSettings.json)".into(),
+                    route_kind: "config".into(),
+                    can_toggle: true,
+                    needs_anti_cheat_confirm: false,
+                    anti_cheat_warning: None,
+                    closest_option: None,
+                    details: None,
+                },
+            ]),
+        });
+
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        assert!(rt.presented("gp-graphics-features-card").is_some());
+        assert!(rt.presented("gp-gfx-switch-upscalers").is_some());
+        assert!(rt.presented("gp-gfx-switch-reflex").is_some());
+        assert!(rt.presented("gp-gfx-switch-rayTracing").is_some());
+        assert!(rt.presented("gp-gfx-switch-pathTracing").is_some());
+        assert!(rt.presented("gp-gfx-switch-hiddenSettings").is_some());
+    }
 }
