@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 exo-kit = { path = "../exo-kit" }
 exo-rpc = { path = "../exo-rpc" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 rune.workspace = true
 rune-media.workspace = true
 serde_json.workspace = true

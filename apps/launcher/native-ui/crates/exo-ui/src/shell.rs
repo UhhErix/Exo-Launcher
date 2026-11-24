@@ -1214,6 +1214,30 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if s.library_filter_open {
         root = root.children(crate::library::library_filter_overlay(s, budget.overlay));
     }
+    if s.lib.gifts_open {
+        root = root.children(crate::gifts::gifts_popover_overlay(
+            s,
+            scale,
+            budget.overlay,
+        ));
+    }
+    if s.lib.selecting && s.room == Room::Library && s.library_all_games {
+        root = root.children(crate::select_bar::select_bar_overlay(s, budget.overlay));
+    }
+    if s.lib.open_folder_id.is_some() && s.room == Room::Library && s.open_game_id.is_none() {
+        root = root.children(crate::folders::folder_panel_overlay(
+            s,
+            scale,
+            budget.overlay,
+        ));
+    }
+    if s.lib.folder_sheet.is_some() && s.room == Room::Library && s.open_game_id.is_none() {
+        root = root.children(crate::folders::folder_sheet_overlay(
+            s,
+            scale,
+            budget.overlay,
+        ));
+    }
     if s.pc.part_menu.is_some() {
         root = root.children(pc::part_menu_layers(s, budget.overlay));
     }

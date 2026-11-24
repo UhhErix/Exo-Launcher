@@ -196,3 +196,62 @@ pub fn type_page() -> TextStyle {
 pub fn type_first_run() -> TextStyle {
     TextStyle::new(scaled(32.0), 700.0).letter_spacing(-0.025)
 }
+
+pub const FOLDER_COLOR_IDS: [&str; 8] = [
+    "gray", "red", "orange", "yellow", "green", "teal", "blue", "pink",
+];
+
+pub fn normalize_folder_color(color: Option<&str>) -> &'static str {
+    match color {
+        Some("red") => "red",
+        Some("orange") => "orange",
+        Some("yellow") => "yellow",
+        Some("green") => "green",
+        Some("teal") => "teal",
+        Some("blue") => "blue",
+        Some("pink") => "pink",
+        _ => "gray",
+    }
+}
+
+pub fn folder_color_rgb(color: &str) -> (u8, u8, u8) {
+    match color {
+        "red" => (255, 69, 58),
+        "orange" => (255, 159, 10),
+        "yellow" => (255, 214, 10),
+        "green" => (48, 209, 88),
+        "teal" => (64, 200, 224),
+        "blue" => (10, 132, 255),
+        "pink" => (255, 55, 95),
+        _ => (142, 142, 147),
+    }
+}
+
+pub fn folder_color_swatch(color: &str, alpha: f32) -> Color {
+    let (r, g, b) = folder_color_rgb(color);
+    srgb(r, g, b, alpha)
+}
+
+pub fn folder_color_mix_black(color: &str, pct: f32) -> Color {
+    let (r, g, b) = folder_color_rgb(color);
+    let k = pct.clamp(0.0, 1.0);
+    srgb(
+        (r as f32 * k).round() as u8,
+        (g as f32 * k).round() as u8,
+        (b as f32 * k).round() as u8,
+        1.0,
+    )
+}
+
+pub fn folder_color_label(color: &str) -> &'static str {
+    match color {
+        "red" => "Red",
+        "orange" => "Orange",
+        "yellow" => "Yellow",
+        "green" => "Green",
+        "teal" => "Teal",
+        "blue" => "Blue",
+        "pink" => "Pink",
+        _ => "Gray",
+    }
+}

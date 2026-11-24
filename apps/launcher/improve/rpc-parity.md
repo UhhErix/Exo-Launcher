@@ -1,7 +1,7 @@
 # host-v1 Record & Replay RPC Parity Report
 
-Generated: 2026-11-24T02:04:36.109Z
-Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
+Generated: 2026-11-24T02:20:13.811Z
+Capture: `tools/rpc-parity/out/2026-11-24T02-16-34`
 
 ## Summary
 
@@ -14,7 +14,7 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 | Unique RPC methods called by Native (Rune) | 90 |
 | Methods React called that Native never called | 10 |
 | Methods Native called that React never called | 21 |
-| Chatty methods (>2x call ratio) | 3 |
+| Chatty methods (>2x call ratio) | 2 |
 | Observed push events (web / native) | 10 / 6 |
 | React-subscribed push events unhandled by Native (static) | 16 |
 
@@ -72,9 +72,8 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 
 | Method | Web calls | Native calls | Ratio | Chattier | React caller(s) |
 | --- | ---: | ---: | ---: | --- | --- |
-| `music.volume` | 8 | 2 | 4x | web | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
+| `music.volume` | 7 | 2 | 3.5x | web | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
 | `discord.voice` | 1 | 3 | 3x | native | `ui/src/components/discord/voice.tsx:52`, `ui/src/components/discord/voice.tsx:87`, `ui/src/components/discord/voice.tsx:93` |
-| `game.extras` | 3 | 1 | 3x | web | `ui/src/components/game/useGameDetails.ts:58`, `ui/src/components/shell/HomeDeck.tsx:238` |
 
 ## Push Event Gaps
 
@@ -84,7 +83,6 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 | --- | ---: | ---: | --- | --- | --- |
 | `discord.signin` | 2 | 0 | yes | `startup`, `room-discord` | `ui/src/components/discord/DiscordSignIn.tsx:19`, `ui/src/components/discord/MeMenus.tsx:108` |
 | `music.status` | 2 | 1 | no | `startup`, `room-music` | `ui/src/components/music/NativeMusicRoom.tsx:132` |
-| `game.achievements` | 1 | 0 | yes | `startup` | `ui/src/components/game/useGameDetails.ts:68` |
 | `gifts.changed` | 1 | 0 | yes | `startup` | `ui/src/components/settings/StoresSection.tsx:161`, `ui/src/components/shell/GiftsShelf.tsx:94` |
 | `music.volume` | 1 | 0 | yes | `room-devices` | `ui/src/components/shell/MusicVolume.tsx:40` |
 | `shell.window` | 1 | 0 | yes | `startup` | `ui/src/components/WindowChrome.tsx:16` |
@@ -114,67 +112,86 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 
 ### `startup` — App startup (Library initial load)
 
-- **Gap score:** 158 | **Web:** ok (75 req, 10 ev) | **Native:** ok (52 req, 6 ev)
+- **Gap score:** 142 | **Web:** ok (73 req, 10 ev) | **Native:** ok (56 req, 7 ev)
 
 **React called, Native did not:**
 
 | Method | Web calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `discord.signIn` | 2 | 0.72 | `ui/src/components/discord/DiscordSignIn.tsx:21`, `ui/src/components/discord/DiscordSignIn.tsx:25` |
-| `game.extras` | 2 | 8.67 | `ui/src/components/game/useGameDetails.ts:58`, `ui/src/components/shell/HomeDeck.tsx:238` |
-| `discord.clientSettings` | 1 | 32.72 | `ui/src/components/discord/GoLivePicker.tsx:320`, `ui/src/components/discord/MeMenus.tsx:126`, `ui/src/components/discord/MeMenus.tsx:132` |
-| `discord.stream` | 1 | 1.81 | `ui/src/components/discord/voice.tsx:274`, `ui/src/components/discord/voice.tsx:290`, `ui/src/components/discord/voice.tsx:763` |
-| `hdr.state` | 1 | 3.85 | `ui/src/lib/hdr.ts:10` |
-| `hid.close` | 1 | 0.98 | `ui/src/lib/mouseRelay.ts:11` |
-| `hid.list` | 1 | 97.28 | `ui/src/lib/mouseRelay.ts:9` |
-| `hid.open` | 1 | 6.22 | `ui/src/lib/mouseRelay.ts:10` |
-| `hid.sendReport` | 1 | 12.72 | `ui/src/lib/mouseRelay.ts:12` |
-| `library.get` | 1 | 973.23 | `ui/src/components/LauncherApp.tsx:279`, `ui/src/components/devices/GameProfiles.tsx:32`, `ui/src/lib/bridgeCancellation.ts:2` |
-| `mouse.presets.get` | 1 | 10.78 | `ui/src/lib/mouseRelay.ts:61` |
-| `music.playback` | 1 | 1.75 | `ui/src/components/discord/JamBox.tsx:15`, `ui/src/components/discord/JamBox.tsx:16`, `ui/src/components/music/MusicPlayer.tsx:108` |
+| `discord.signIn` | 2 | 0.69 | `ui/src/components/discord/DiscordSignIn.tsx:21`, `ui/src/components/discord/DiscordSignIn.tsx:25` |
+| `discord.clientSettings` | 1 | 7.32 | `ui/src/components/discord/GoLivePicker.tsx:320`, `ui/src/components/discord/MeMenus.tsx:126`, `ui/src/components/discord/MeMenus.tsx:132` |
+| `discord.stream` | 1 | 1.59 | `ui/src/components/discord/voice.tsx:274`, `ui/src/components/discord/voice.tsx:290`, `ui/src/components/discord/voice.tsx:763` |
+| `hdr.state` | 1 | 10.51 | `ui/src/lib/hdr.ts:10` |
+| `hid.close` | 1 | 1.04 | `ui/src/lib/mouseRelay.ts:11` |
+| `hid.list` | 1 | 79.59 | `ui/src/lib/mouseRelay.ts:9` |
+| `hid.open` | 1 | 3.79 | `ui/src/lib/mouseRelay.ts:10` |
+| `hid.sendReport` | 1 | 4.21 | `ui/src/lib/mouseRelay.ts:12` |
+| `library.get` | 1 | 600.39 | `ui/src/components/LauncherApp.tsx:279`, `ui/src/components/devices/GameProfiles.tsx:32`, `ui/src/lib/bridgeCancellation.ts:2` |
+| `mouse.presets.get` | 1 | 0.89 | `ui/src/lib/mouseRelay.ts:61` |
+| `music.playback` | 1 | 3.15 | `ui/src/components/discord/JamBox.tsx:15`, `ui/src/components/discord/JamBox.tsx:16`, `ui/src/components/music/MusicPlayer.tsx:108` |
 
 **Native called, React did not:**
 
 | Method | Native calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `discord.accounts` | 1 | 2.11 | `ui/src/components/discord/MeMenus.tsx:51`, `ui/src/components/discord/MeMenus.tsx:102` |
-| `shell.bootstrap` | 1 | 1208.47 | `ui/src/lib/host.ts:2406` |
+| `discord.accounts` | 1 | 57.01 | `ui/src/components/discord/MeMenus.tsx:51`, `ui/src/components/discord/MeMenus.tsx:102` |
+| `shell.bootstrap` | 1 | 703.77 | `ui/src/lib/host.ts:2406` |
 
 **Chattiness (>2x):**
 
 | Method | Web | Native | Ratio | Chattier | React caller(s) |
 | --- | ---: | ---: | ---: | --- | --- |
-| `music.volume` | 4 | 1 | 4x | web | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
+| `music.volume` | 3 | 1 | 3x | web | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
 
 **Push event gaps:**
 
 | Event | Web | Native | Reason | React subscriber(s) |
 | --- | ---: | ---: | --- | --- |
 | `discord.signin` | 1 | 0 | not emitted on native | `ui/src/components/discord/DiscordSignIn.tsx:19`, `ui/src/components/discord/MeMenus.tsx:108` |
-| `game.achievements` | 1 | 0 | not emitted on native | `ui/src/components/game/useGameDetails.ts:68` |
 | `gifts.changed` | 1 | 0 | not emitted on native | `ui/src/components/settings/StoresSection.tsx:161`, `ui/src/components/shell/GiftsShelf.tsx:94` |
 | `music.status` | 1 | 1 | emitted but unhandled in native | `ui/src/components/music/NativeMusicRoom.tsx:132` |
 | `shell.window` | 1 | 0 | not emitted on native | `ui/src/components/WindowChrome.tsx:16` |
 
-### `room-devices` — Open Devices room
+### `discord-dm` — Open Discord DM conversation
 
-- **Gap score:** 38 | **Web:** ok (14 req, 1 ev) | **Native:** ok (20 req, 1 ev)
+- **Gap score:** 45 | **Web:** not drivable (Discord not signed in in disposable test instance) (11 req, 0 ev) | **Native:** not drivable (Discord not signed in in disposable test instance) (10 req, 1 ev)
 
 **React called, Native did not:**
 
 | Method | Web calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `music.playback` | 1 | 0.06 | `ui/src/components/discord/JamBox.tsx:15`, `ui/src/components/discord/JamBox.tsx:16`, `ui/src/components/music/MusicPlayer.tsx:108` |
-| `music.volume` | 1 | 26.69 | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
+| `music.volume` | 2 | 0.05 | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
+| `dlss.newer` | 1 | 0.74 | `ui/src/components/LauncherApp.tsx:111` |
 
 **Native called, React did not:**
 
 | Method | Native calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `audio.read` | 1 | 10.15 | `ui/src/components/devices/AudioPage.tsx:88` |
-| `eq` | 1 | 77.37 | — |
-| `keyboard.backups` | 1 | 27.67 | `ui/src/components/devices/KeyboardPage.tsx:50`, `ui/src/components/devices/KeyboardPage.tsx:61`, `ui/src/components/devices/KeyboardPage.tsx:76` |
-| `keyboard.read` | 1 | 93.08 | `ui/src/components/devices/KeyboardPage.tsx:61`, `ui/src/components/devices/KeyboardPage.tsx:76` |
+| `app.pendingOpen` | 1 | 0.15 | `ui/src/components/shell/useShellEvents.ts:279` |
+| `discord.accounts` | 1 | 0.26 | `ui/src/components/discord/MeMenus.tsx:51`, `ui/src/components/discord/MeMenus.tsx:102` |
+| `discord.status` | 1 | 0.39 | `ui/src/components/discord/NativeDiscordRoom.tsx:29`, `ui/src/components/discord/NativeDiscordRoom.tsx:42`, `ui/src/components/onboarding/DiscordStep.tsx:15` |
+| `discord.stream` | 1 | 0.15 | `ui/src/components/discord/voice.tsx:274`, `ui/src/components/discord/voice.tsx:290`, `ui/src/components/discord/voice.tsx:763` |
+| `discord.voice` | 1 | 0.05 | `ui/src/components/discord/voice.tsx:52`, `ui/src/components/discord/voice.tsx:87`, `ui/src/components/discord/voice.tsx:93` |
+
+### `room-devices` — Open Devices room
+
+- **Gap score:** 38 | **Web:** ok (14 req, 1 ev) | **Native:** ok (19 req, 1 ev)
+
+**React called, Native did not:**
+
+| Method | Web calls | Median ms | React caller(s) |
+| --- | ---: | ---: | --- |
+| `music.playback` | 1 | 0.05 | `ui/src/components/discord/JamBox.tsx:15`, `ui/src/components/discord/JamBox.tsx:16`, `ui/src/components/music/MusicPlayer.tsx:108` |
+| `music.volume` | 1 | 29.11 | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
+
+**Native called, React did not:**
+
+| Method | Native calls | Median ms | React caller(s) |
+| --- | ---: | ---: | --- |
+| `audio.read` | 1 | 12.5 | `ui/src/components/devices/AudioPage.tsx:88` |
+| `eq` | 1 | 62.29 | — |
+| `keyboard.backups` | 1 | 23.03 | `ui/src/components/devices/KeyboardPage.tsx:50`, `ui/src/components/devices/KeyboardPage.tsx:61`, `ui/src/components/devices/KeyboardPage.tsx:76` |
+| `keyboard.read` | 1 | 76.56 | `ui/src/components/devices/KeyboardPage.tsx:61`, `ui/src/components/devices/KeyboardPage.tsx:76` |
 
 **Chattiness (>2x):**
 
@@ -188,43 +205,24 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 | --- | ---: | ---: | --- | --- |
 | `music.volume` | 1 | 0 | not emitted on native | `ui/src/components/shell/MusicVolume.tsx:40` |
 
-### `discord-dm` — Open Discord DM conversation
-
-- **Gap score:** 35 | **Web:** not drivable (Discord not signed in in disposable test instance) (12 req, 0 ev) | **Native:** not drivable (Discord not signed in in disposable test instance) (11 req, 1 ev)
-
-**React called, Native did not:**
-
-| Method | Web calls | Median ms | React caller(s) |
-| --- | ---: | ---: | --- |
-| `music.volume` | 2 | 0.06 | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
-
-**Native called, React did not:**
-
-| Method | Native calls | Median ms | React caller(s) |
-| --- | ---: | ---: | --- |
-| `app.pendingOpen` | 1 | 0.03 | `ui/src/components/shell/useShellEvents.ts:279` |
-| `discord.accounts` | 1 | 0.39 | `ui/src/components/discord/MeMenus.tsx:51`, `ui/src/components/discord/MeMenus.tsx:102` |
-| `discord.status` | 1 | 0.92 | `ui/src/components/discord/NativeDiscordRoom.tsx:29`, `ui/src/components/discord/NativeDiscordRoom.tsx:42`, `ui/src/components/onboarding/DiscordStep.tsx:15` |
-| `discord.stream` | 1 | 0.22 | `ui/src/components/discord/voice.tsx:274`, `ui/src/components/discord/voice.tsx:290`, `ui/src/components/discord/voice.tsx:763` |
-| `discord.voice` | 1 | 0.18 | `ui/src/components/discord/voice.tsx:52`, `ui/src/components/discord/voice.tsx:87`, `ui/src/components/discord/voice.tsx:93` |
-
 ### `room-music` — Open Music room
 
-- **Gap score:** 30 | **Web:** ok (10 req, 1 ev) | **Native:** ok (11 req, 0 ev)
+- **Gap score:** 32 | **Web:** ok (10 req, 1 ev) | **Native:** ok (12 req, 0 ev)
 
 **React called, Native did not:**
 
 | Method | Web calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `discord.signIn` | 1 | 0.27 | `ui/src/components/discord/DiscordSignIn.tsx:21`, `ui/src/components/discord/DiscordSignIn.tsx:25` |
-| `music.warm` | 1 | 0.58 | `ui/src/lib/music.ts:126` |
+| `discord.signIn` | 1 | 0.24 | `ui/src/components/discord/DiscordSignIn.tsx:21`, `ui/src/components/discord/DiscordSignIn.tsx:25` |
+| `music.warm` | 1 | 0.57 | `ui/src/lib/music.ts:126` |
 
 **Native called, React did not:**
 
 | Method | Native calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `music.playback` | 1 | 4.64 | `ui/src/components/discord/JamBox.tsx:15`, `ui/src/components/discord/JamBox.tsx:16`, `ui/src/components/music/MusicPlayer.tsx:108` |
-| `music.volume` | 1 | 10.47 | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
+| `dlss.newer` | 1 | 0.77 | `ui/src/components/LauncherApp.tsx:111` |
+| `music.playback` | 1 | 15.43 | `ui/src/components/discord/JamBox.tsx:15`, `ui/src/components/discord/JamBox.tsx:16`, `ui/src/components/music/MusicPlayer.tsx:108` |
+| `music.volume` | 1 | 3.99 | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
 
 **Push event gaps:**
 
@@ -234,44 +232,44 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 
 ### `game-page` — Open a game page from Library
 
-- **Gap score:** 26 | **Web:** not drivable (no game tiles in Library) (9 req, 0 ev) | **Native:** ok (21 req, 1 ev)
+- **Gap score:** 28 | **Web:** not drivable (no game tiles in Library) (9 req, 0 ev) | **Native:** ok (22 req, 0 ev)
 
 **Native called, React did not:**
 
 | Method | Native calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `app.pendingOpen` | 1 | 0.05 | `ui/src/components/shell/useShellEvents.ts:279` |
-| `compress.state` | 1 | 15.15 | `ui/src/components/game/CompressRow.tsx:36`, `ui/src/components/game/CompressRow.tsx:41` |
-| `dlss.frameGen` | 1 | 87.86 | `ui/src/lib/host.ts:2882` |
-| `game.extras` | 1 | 12.73 | `ui/src/components/game/useGameDetails.ts:58`, `ui/src/components/shell/HomeDeck.tsx:238` |
-| `game.frameGen` | 1 | 310.79 | `ui/src/components/game/FrameGenRow.tsx:23`, `ui/src/components/game/FrameGenRow.tsx:57` |
-| `game.get` | 1 | 51.05 | `ui/src/components/shell/useGameActions.ts:261`, `ui/src/components/shell/useRunStatePoll.ts:56`, `ui/src/components/shell/useShellEvents.ts:179` |
-| `game.progress` | 1 | 1.26 | `ui/src/components/DownloadsSheet.tsx:39`, `ui/src/lib/hostContract.ts:23` |
-| `game.properties` | 1 | 144.04 | `ui/src/components/game/GameProperties.tsx:205` |
-| `game.settings` | 1 | 314.54 | `ui/src/components/game/OptimizeLine.tsx:37`, `ui/src/components/game/OptimizeLine.tsx:66` |
-| `gpu.game` | 1 | 17.04 | `ui/src/lib/host.ts:3202` |
-| `hdr.game` | 1 | 44.33 | `ui/src/components/game/HdrRow.tsx:39`, `ui/src/components/game/HdrRow.tsx:54` |
-| `keep.status` | 1 | 0.39 | `ui/src/components/game/OptimizeLine.tsx:45`, `ui/src/components/gpu/PcOverview.tsx:97` |
-| `shaders.status` | 1 | 4.56 | `ui/src/components/game/ShaderPrecompile.tsx:65` |
+| `game.extras` | 2 | 0.68 | `ui/src/components/game/useGameDetails.ts:58`, `ui/src/components/shell/HomeDeck.tsx:238` |
+| `app.pendingOpen` | 1 | 0.02 | `ui/src/components/shell/useShellEvents.ts:279` |
+| `compress.state` | 1 | 14.51 | `ui/src/components/game/CompressRow.tsx:36`, `ui/src/components/game/CompressRow.tsx:41` |
+| `dlss.frameGen` | 1 | 86.55 | `ui/src/lib/host.ts:2882` |
+| `game.frameGen` | 1 | 234.54 | `ui/src/components/game/FrameGenRow.tsx:23`, `ui/src/components/game/FrameGenRow.tsx:57` |
+| `game.get` | 1 | 56.21 | `ui/src/components/shell/useGameActions.ts:261`, `ui/src/components/shell/useRunStatePoll.ts:56`, `ui/src/components/shell/useShellEvents.ts:179` |
+| `game.progress` | 1 | 1.79 | `ui/src/components/DownloadsSheet.tsx:39`, `ui/src/lib/hostContract.ts:23` |
+| `game.properties` | 1 | 148.34 | `ui/src/components/game/GameProperties.tsx:205` |
+| `game.settings` | 1 | 336.49 | `ui/src/components/game/OptimizeLine.tsx:37`, `ui/src/components/game/OptimizeLine.tsx:66` |
+| `gifts.list` | 1 | 0.04 | `ui/src/components/settings/StoresSection.tsx:160`, `ui/src/components/shell/GiftsShelf.tsx:93` |
+| `gpu.game` | 1 | 12.64 | `ui/src/lib/host.ts:3202` |
+| `hdr.game` | 1 | 47.21 | `ui/src/components/game/HdrRow.tsx:39`, `ui/src/components/game/HdrRow.tsx:54` |
+| `keep.status` | 1 | 2.46 | `ui/src/components/game/OptimizeLine.tsx:45`, `ui/src/components/gpu/PcOverview.tsx:97` |
+| `shaders.status` | 1 | 3.08 | `ui/src/components/game/ShaderPrecompile.tsx:65` |
 
 ### `room-discord` — Open Discord room
 
-- **Gap score:** 24 | **Web:** ok (7 req, 1 ev) | **Native:** ok (19 req, 1 ev)
+- **Gap score:** 22 | **Web:** ok (8 req, 1 ev) | **Native:** ok (11 req, 1 ev)
 
 **React called, Native did not:**
 
 | Method | Web calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `discord.signIn` | 1 | 0.07 | `ui/src/components/discord/DiscordSignIn.tsx:21`, `ui/src/components/discord/DiscordSignIn.tsx:25` |
+| `discord.signIn` | 1 | 0.06 | `ui/src/components/discord/DiscordSignIn.tsx:21`, `ui/src/components/discord/DiscordSignIn.tsx:25` |
 
 **Native called, React did not:**
 
 | Method | Native calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `store.game` | 7 | 299.27 | `ui/src/components/store/storeData.ts:150` |
-| `discord.accounts` | 1 | 0.09 | `ui/src/components/discord/MeMenus.tsx:51`, `ui/src/components/discord/MeMenus.tsx:102` |
-| `discord.stream` | 1 | 1.52 | `ui/src/components/discord/voice.tsx:274`, `ui/src/components/discord/voice.tsx:290`, `ui/src/components/discord/voice.tsx:763` |
-| `discord.voice` | 1 | 0.04 | `ui/src/components/discord/voice.tsx:52`, `ui/src/components/discord/voice.tsx:87`, `ui/src/components/discord/voice.tsx:93` |
+| `discord.accounts` | 1 | 0.18 | `ui/src/components/discord/MeMenus.tsx:51`, `ui/src/components/discord/MeMenus.tsx:102` |
+| `discord.stream` | 1 | 1.25 | `ui/src/components/discord/voice.tsx:274`, `ui/src/components/discord/voice.tsx:290`, `ui/src/components/discord/voice.tsx:763` |
+| `discord.voice` | 1 | 0.13 | `ui/src/components/discord/voice.tsx:52`, `ui/src/components/discord/voice.tsx:87`, `ui/src/components/discord/voice.tsx:93` |
 
 **Push event gaps:**
 
@@ -281,49 +279,38 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 
 ### `room-pc-apps` — Open Apps room
 
-- **Gap score:** 22 | **Web:** ok (16 req, 0 ev) | **Native:** ok (15 req, 0 ev)
+- **Gap score:** 22 | **Web:** ok (16 req, 0 ev) | **Native:** ok (16 req, 0 ev)
 
 **React called, Native did not:**
 
 | Method | Web calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `gpu.processes` | 1 | 4.01 | `ui/src/components/gpu/GpuProcessesSection.tsx:33` |
-| `system.tune` | 1 | 0.43 | `ui/src/components/gpu/AutoTune.tsx:44`, `ui/src/components/gpu/AutoTune.tsx:60`, `ui/src/components/gpu/usePcState.ts:75` |
+| `gpu.processes` | 1 | 3.45 | `ui/src/components/gpu/GpuProcessesSection.tsx:33` |
+| `system.tune` | 1 | 0.41 | `ui/src/components/gpu/AutoTune.tsx:44`, `ui/src/components/gpu/AutoTune.tsx:60`, `ui/src/components/gpu/usePcState.ts:75` |
 
 **Native called, React did not:**
 
 | Method | Native calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `apps.packages` | 1 | 913.78 | `ui/src/components/gpu/ExoAiRoom.tsx:172` |
-
-### `room-library` — Return to Library room
-
-- **Gap score:** 20 | **Web:** ok (7 req, 0 ev) | **Native:** ok (6 req, 0 ev)
-
-**React called, Native did not:**
-
-| Method | Web calls | Median ms | React caller(s) |
-| --- | ---: | ---: | --- |
-| `game.extras` | 1 | 0.85 | `ui/src/components/game/useGameDetails.ts:58`, `ui/src/components/shell/HomeDeck.tsx:238` |
-| `gifts.list` | 1 | 0.06 | `ui/src/components/settings/StoresSection.tsx:160`, `ui/src/components/shell/GiftsShelf.tsx:93` |
+| `apps.packages` | 1 | 382.5 | `ui/src/components/gpu/ExoAiRoom.tsx:172` |
 
 ### `room-pc` — Open Exo AI / PC room
 
-- **Gap score:** 16 | **Web:** ok (32 req, 0 ev) | **Native:** ok (33 req, 0 ev)
+- **Gap score:** 16 | **Web:** ok (32 req, 0 ev) | **Native:** ok (32 req, 0 ev)
 
 **React called, Native did not:**
 
 | Method | Web calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `gpu.processes` | 1 | 440.77 | `ui/src/components/gpu/GpuProcessesSection.tsx:33` |
+| `gpu.processes` | 1 | 421.63 | `ui/src/components/gpu/GpuProcessesSection.tsx:33` |
 
 **Native called, React did not:**
 
 | Method | Native calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `bios.update` | 1 | 1.55 | `ui/src/components/gpu/AutoTuneCinema.tsx:143`, `ui/src/components/gpu/DriversSection.tsx:348`, `ui/src/components/gpu/DriversSection.tsx:355` |
-| `gpu.afmf3` | 1 | 6.42 | `ui/src/components/gpu/Afmf3Row.tsx:18`, `ui/src/components/gpu/Afmf3Row.tsx:25` |
-| `shaders.rebuild` | 1 | 0.67 | `ui/src/components/shaders/ShadersBoard.tsx:350`, `ui/src/components/shaders/ShadersBoard.tsx:351` |
+| `bios.update` | 1 | 2.83 | `ui/src/components/gpu/AutoTuneCinema.tsx:143`, `ui/src/components/gpu/DriversSection.tsx:348`, `ui/src/components/gpu/DriversSection.tsx:355` |
+| `gpu.afmf3` | 1 | 7.95 | `ui/src/components/gpu/Afmf3Row.tsx:18`, `ui/src/components/gpu/Afmf3Row.tsx:25` |
+| `shaders.rebuild` | 1 | 0.97 | `ui/src/components/shaders/ShadersBoard.tsx:350`, `ui/src/components/shaders/ShadersBoard.tsx:351` |
 
 ### `settings-general` — Open Settings > General
 
@@ -333,30 +320,28 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 
 | Method | Native calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `web.preferences.get` | 2 | 1.01 | `ui/src/components/LauncherApp.tsx:184`, `ui/src/components/onboarding/AppsStep.tsx:22`, `ui/src/components/settings/AppsSection.tsx:24` |
-| `app.checkUpdate` | 1 | 151.52 | `ui/src/components/shell/useAppUpdate.ts:99`, `ui/src/components/shell/useAppUpdate.ts:171`, `ui/src/lib/bridgeCancellation.ts:4` |
-| `backup.status` | 1 | 3.06 | `ui/src/components/OnboardingPanel.tsx:95`, `ui/src/components/settings/BackupSection.tsx:30`, `ui/src/components/settings/BackupSection.tsx:67` |
-| `exoAccount.overview` | 1 | 0.23 | `ui/src/components/account/useAccount.ts:6`, `ui/src/components/account/useAccount.ts:10` |
-| `fps.counter` | 1 | 2.85 | `ui/src/components/settings/GeneralSection.tsx:127`, `ui/src/components/settings/GeneralSection.tsx:131`, `ui/src/components/settings/GeneralSection.tsx:144` |
-| `hdr.state` | 1 | 0.24 | `ui/src/lib/hdr.ts:10` |
-| `stores.matrix` | 1 | 141.6 | `ui/src/components/OnboardingPanel.tsx:47`, `ui/src/components/OnboardingPanel.tsx:250`, `ui/src/components/SettingsPanel.tsx:160` |
-| `system.about` | 1 | 7.69 | `ui/src/components/gpu/usePcState.ts:68` |
+| `web.preferences.get` | 2 | 0.92 | `ui/src/components/LauncherApp.tsx:184`, `ui/src/components/onboarding/AppsStep.tsx:22`, `ui/src/components/settings/AppsSection.tsx:24` |
+| `app.checkUpdate` | 1 | 108.88 | `ui/src/components/shell/useAppUpdate.ts:99`, `ui/src/components/shell/useAppUpdate.ts:171`, `ui/src/lib/bridgeCancellation.ts:4` |
+| `backup.status` | 1 | 2.35 | `ui/src/components/OnboardingPanel.tsx:95`, `ui/src/components/settings/BackupSection.tsx:30`, `ui/src/components/settings/BackupSection.tsx:67` |
+| `exoAccount.overview` | 1 | 0.5 | `ui/src/components/account/useAccount.ts:6`, `ui/src/components/account/useAccount.ts:10` |
+| `fps.counter` | 1 | 2.81 | `ui/src/components/settings/GeneralSection.tsx:127`, `ui/src/components/settings/GeneralSection.tsx:131`, `ui/src/components/settings/GeneralSection.tsx:144` |
+| `hdr.state` | 1 | 0.26 | `ui/src/lib/hdr.ts:10` |
+| `stores.matrix` | 1 | 111.1 | `ui/src/components/OnboardingPanel.tsx:47`, `ui/src/components/OnboardingPanel.tsx:250`, `ui/src/components/SettingsPanel.tsx:160` |
+| `system.about` | 1 | 5.58 | `ui/src/components/gpu/usePcState.ts:68` |
 
-### `room-store` — Open Store room
+### `downloads` — Open Downloads sheet
 
-- **Gap score:** 14 | **Web:** ok (19 req, 0 ev) | **Native:** ok (10 req, 0 ev)
+- **Gap score:** 10 | **Web:** not drivable (Downloads menu item not found) (9 req, 0 ev) | **Native:** ok (15 req, 0 ev)
 
-**React called, Native did not:**
+**Native called, React did not:**
 
-| Method | Web calls | Median ms | React caller(s) |
+| Method | Native calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `music.volume` | 1 | 0.05 | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
-
-**Chattiness (>2x):**
-
-| Method | Web | Native | Ratio | Chattier | React caller(s) |
-| --- | ---: | ---: | ---: | --- | --- |
-| `store.game` | 10 | 3 | 3.33x | web | `ui/src/components/store/storeData.ts:150` |
+| `app.pendingOpen` | 1 | 0.03 | `ui/src/components/shell/useShellEvents.ts:279` |
+| `downloads.list` | 1 | 2.78 | `ui/src/components/DownloadsSheet.tsx:30` |
+| `game.extras` | 1 | 0.65 | `ui/src/components/game/useGameDetails.ts:58`, `ui/src/components/shell/HomeDeck.tsx:238` |
+| `game.progress` | 1 | 0.08 | `ui/src/components/DownloadsSheet.tsx:39`, `ui/src/lib/hostContract.ts:23` |
+| `gifts.list` | 1 | 0.04 | `ui/src/components/settings/StoresSection.tsx:160`, `ui/src/components/shell/GiftsShelf.tsx:93` |
 
 ### `palette` — Open Command Palette (Ctrl+K)
 
@@ -366,21 +351,39 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 
 | Method | Web calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `shell.setChromeLayout` | 1 | 2.32 | `ui/src/components/shell/useShellLayout.ts:106` |
+| `shell.setChromeLayout` | 1 | 1.9 | `ui/src/components/shell/useShellLayout.ts:106` |
 
-### `downloads` — Open Downloads sheet
+### `room-store` — Open Store room
 
-- **Gap score:** 6 | **Web:** not drivable (Downloads menu item not found) (9 req, 0 ev) | **Native:** ok (12 req, 0 ev)
+- **Gap score:** 10 | **Web:** ok (19 req, 0 ev) | **Native:** ok (18 req, 0 ev)
 
-**Native called, React did not:**
+**React called, Native did not:**
 
-| Method | Native calls | Median ms | React caller(s) |
+| Method | Web calls | Median ms | React caller(s) |
 | --- | ---: | ---: | --- |
-| `app.pendingOpen` | 1 | 0.05 | `ui/src/components/shell/useShellEvents.ts:279` |
-| `downloads.list` | 1 | 2.42 | `ui/src/components/DownloadsSheet.tsx:30` |
-| `game.progress` | 1 | 0.05 | `ui/src/components/DownloadsSheet.tsx:39`, `ui/src/lib/hostContract.ts:23` |
+| `music.volume` | 1 | 0.05 | `ui/src/components/music/Immersive.tsx:276`, `ui/src/components/music/shortcuts.ts:29`, `ui/src/components/music/shortcuts.ts:30` |
+
+### `settings-about` — Open Settings > About
+
+- **Gap score:** 4 | **Web:** ok (1 req, 0 ev) | **Native:** ok (4 req, 0 ev)
+
+**Chattiness (>2x):**
+
+| Method | Web | Native | Ratio | Chattier | React caller(s) |
+| --- | ---: | ---: | ---: | --- | --- |
+| `shell.heartbeat` | 1 | 4 | 4x | native | `ui/src/lib/heartbeat.ts:15` |
 
 ### `settings-ingame` — Open Settings > In game
+
+- **Gap score:** 4 | **Web:** ok (1 req, 0 ev) | **Native:** ok (4 req, 0 ev)
+
+**Chattiness (>2x):**
+
+| Method | Web | Native | Ratio | Chattier | React caller(s) |
+| --- | ---: | ---: | ---: | --- | --- |
+| `shell.heartbeat` | 1 | 4 | 4x | native | `ui/src/lib/heartbeat.ts:15` |
+
+### `settings-library` — Open Settings > Library
 
 - **Gap score:** 4 | **Web:** ok (1 req, 0 ev) | **Native:** ok (3 req, 0 ev)
 
@@ -390,9 +393,9 @@ Capture: `tools/rpc-parity/out/2026-11-24T02-00-45`
 | --- | ---: | ---: | ---: | --- | --- |
 | `shell.heartbeat` | 1 | 3 | 3x | native | `ui/src/lib/heartbeat.ts:15` |
 
-### `settings-about` — Open Settings > About
+### `room-library` — Return to Library room
 
-- **Gap score:** 0 | **Web:** ok (2 req, 0 ev) | **Native:** ok (4 req, 0 ev)
+- **Gap score:** 0 | **Web:** ok (7 req, 0 ev) | **Native:** ok (7 req, 0 ev)
 
 No RPC or push-event gaps observed for this action.
 
@@ -402,14 +405,8 @@ No RPC or push-event gaps observed for this action.
 
 No RPC or push-event gaps observed for this action.
 
-### `settings-library` — Open Settings > Library
-
-- **Gap score:** 0 | **Web:** ok (2 req, 0 ev) | **Native:** ok (4 req, 0 ev)
-
-No RPC or push-event gaps observed for this action.
-
 ### `settings-music` — Open Settings > Music
 
-- **Gap score:** 0 | **Web:** ok (2 req, 0 ev) | **Native:** ok (4 req, 0 ev)
+- **Gap score:** 0 | **Web:** ok (2 req, 0 ev) | **Native:** ok (3 req, 0 ev)
 
 No RPC or push-event gaps observed for this action.

@@ -1229,6 +1229,7 @@ mod tests {
                 exo_rpc::HostEvent::GiftsChanged(exo_rpc::StoreGiftsReply {
                     ok: true,
                     steam_signed_in: true,
+                    ..Default::default()
                 })
             ));
             assert!(events.dispatch(

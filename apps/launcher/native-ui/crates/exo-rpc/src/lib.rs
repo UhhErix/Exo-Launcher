@@ -95,11 +95,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::Duration;
 pub use types::{
-    ActionResult, ArtBase, ExoAccountState, FrameGenRoute, Game, GameExtras, GameFrameGen,
-    GameGetReply, GameProperties, GamePropertySetReply, GameVariant, HostContract, HostEvent,
-    InstallProgress, KeyPreview, LauncherSettings, LibraryPayload, StoreArt, StoreGame, StoreHome,
-    StoreLowest, StoreMedia, StoreOffer, StoreOtherOffers, StoreRecentReviews, StoreSearchReply,
-    StoreShelf, StoreSpec, StoreTile, StoreWishlistReply,
+    ActionResult, ArtBase, ExoAccountState, FolderArtReply, FrameGenRoute, Game, GameExtras,
+    GameFrameGen, GameGetReply, GameProperties, GamePropertySetReply, GameVariant, HostContract,
+    HostEvent, InstallProgress, KeyPreview, LauncherSettings, LibraryFolder, LibraryPayload,
+    LibraryRefreshAllReply, PickPathReply, RiotAccounts, RiotSavedAccount, StoreAccountsReply,
+    StoreArt, StoreGame, StoreGift, StoreGifts, StoreHome, StoreLowest, StoreMedia, StoreOffer,
+    StoreOtherOffers, StoreRecentReviews, StoreSearchReply, StoreShelf, StoreSpec, StoreTile,
+    StoreWishlistReply, UninstallReply,
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -233,6 +235,14 @@ pub const METHOD_GAME_EXTRAS: &str = "game.extras";
 pub const METHOD_GAME_LAUNCH: &str = "game.launch";
 pub const METHOD_GAME_STOP: &str = "game.stop";
 pub const METHOD_GAME_INSTALL: &str = "game.install";
+pub const METHOD_ACCOUNTS_LIST: &str = "accounts.list";
+pub const METHOD_ACCOUNTS_SWITCH: &str = "accounts.switch";
+pub const METHOD_GIFTS_ANSWER: &str = "gifts.answer";
+pub const METHOD_GIFTS_LIST: &str = "gifts.list";
+pub const METHOD_LIBRARY_FOLDER_ART: &str = "library.folderArt";
+pub const METHOD_LIBRARY_REFRESH_ALL: &str = "library.refreshAll";
+pub const METHOD_SHELL_PICK_FOLDER: &str = "shell.pickFolder";
+pub const METHOD_SHELL_PICK_PROGRAM: &str = "shell.pickProgram";
 pub const METHOD_GAME_UPDATE: &str = "game.update";
 pub const METHOD_GAME_UNINSTALL: &str = "game.uninstall";
 pub const METHOD_GAME_REPAIR: &str = "game.repair";
@@ -300,9 +310,7 @@ pub const METHOD_WEB_PREFERENCES_SET: &str = "web.preferences.set";
 pub const METHOD_YTMUSIC_ACT: &str = "ytmusic.act";
 pub const METHOD_YTMUSIC_START: &str = "ytmusic.start";
 pub const METHOD_YTMUSIC_VIEW: &str = "ytmusic.view";
-pub const METHOD_ACCOUNTS_LIST: &str = "accounts.list";
 pub const METHOD_ACCOUNTS_ADD: &str = "accounts.add";
-pub const METHOD_ACCOUNTS_SWITCH: &str = "accounts.switch";
 pub const METHOD_ACCOUNTS_REMOVE: &str = "accounts.remove";
 pub const METHOD_ACCOUNTS_SIGN_OUT: &str = "accounts.signOut";
 pub const METHOD_ACCOUNTS_EPIC_ADD: &str = "accounts.epicAdd";
@@ -329,7 +337,6 @@ pub const METHOD_EXO_ACCOUNT_REVOKE: &str = "exoAccount.revoke";
 pub const METHOD_EXO_ACCOUNT_EXPORT: &str = "exoAccount.export";
 pub const METHOD_EXO_ACCOUNT_DELETE: &str = "exoAccount.delete";
 pub const METHOD_EXO_ACCOUNT_PROBE: &str = "exoAccount.probe";
-pub const METHOD_GIFTS_LIST: &str = "gifts.list";
 pub const METHOD_GIFTS_STEAM_SIGN_IN: &str = "gifts.steamSignIn";
 pub const METHOD_GIFTS_STEAM_SIGN_OUT: &str = "gifts.steamSignOut";
 pub const METHOD_PLAYTIME_IMPORT_RIOT_EXPORT: &str = "playtime.importRiotExport";
@@ -337,7 +344,6 @@ pub const METHOD_PLAYTIME_SET_RIOT_BASELINE: &str = "playtime.setRiotBaseline";
 pub const METHOD_REPLACED_SCAN: &str = "replaced.scan";
 pub const METHOD_REPORT_PREVIEW: &str = "report.preview";
 pub const METHOD_REPORT_SEND: &str = "report.send";
-pub const METHOD_SHELL_PICK_FOLDER: &str = "shell.pickFolder";
 pub const METHOD_SHELL_SHOW_STORE: &str = "shell.showStore";
 pub const METHOD_STEAM_ACCOUNT: &str = "steam.account";
 pub const METHOD_STEAM_SET_OFFLINE: &str = "steam.setOffline";
@@ -474,8 +480,16 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_KEYBOARD_READ,
     METHOD_KEYBOARD_RESTORE,
     METHOD_KEYBOARD_SETTINGS,
+    METHOD_ACCOUNTS_LIST,
+    METHOD_ACCOUNTS_SWITCH,
+    METHOD_GIFTS_ANSWER,
+    METHOD_GIFTS_LIST,
+    METHOD_LIBRARY_FOLDER_ART,
     METHOD_LIBRARY_GET,
     METHOD_LIBRARY_REFRESH,
+    METHOD_LIBRARY_REFRESH_ALL,
+    METHOD_SHELL_PICK_FOLDER,
+    METHOD_SHELL_PICK_PROGRAM,
     METHOD_GAME_GET,
     METHOD_GAME_EXTRAS,
     METHOD_GAME_LAUNCH,

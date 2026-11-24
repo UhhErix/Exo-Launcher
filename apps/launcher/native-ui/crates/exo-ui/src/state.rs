@@ -23,7 +23,7 @@ use exo_rpc::{
     GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
     LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
     METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_FRAME_GEN, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH,
-    METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_STOP, METHOD_GAME_UPDATE,
+    METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE,
     METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET,
     METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback, MusicVolumeEvent, ShellBootstrap,
     StoreArt, StoreChangedEvent, StoreGame, StoreHome, StoreOtherOffers, StoreShelf, StoreTile,
@@ -446,6 +446,7 @@ pub enum ContextMenuTarget {
     CaptureButton,
     SettingsButton,
     GameCard(String),
+    FolderCard(String),
     DiscordStatusMenu,
     DiscordAudioQuick {
         input: bool,
@@ -662,6 +663,7 @@ pub struct AppState {
     pub store_shelf_x: [f32; 4],
     pub filters: Vec<LibraryChip>,
     pub library_filter_open: bool,
+    pub lib: crate::library_state::LibraryExtraState,
     pub sort: LibrarySort,
     pub status: HostStatus,
     pub games: Vec<Game>,
@@ -753,7 +755,7 @@ impl AppState {
     pub fn with_demo_games() -> Self {
         let games = demo_games();
         let selected_game_id = games.first().map(|g| g.id.clone());
-        Self {
+        let mut s = Self {
             room: Room::Library,
             prev_room: Room::Library,
             room_dir: 1.0,
@@ -774,6 +776,7 @@ impl AppState {
             store_shelf_x: [0.0; 4],
             filters: Vec::new(),
             library_filter_open: false,
+            lib: crate::library_state::LibraryExtraState::default(),
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Standalone,
             games,
@@ -899,11 +902,14 @@ impl AppState {
             inflight_requests: HashMap::new(),
             #[cfg(windows)]
             inflight_discord_channel: None,
-        }
+        };
+        crate::library_state::register_library_wp2_events(&mut s);
+        s.selected_game_id = s.home_deck_games().first().map(|g| g.id.clone());
+        s
     }
 
     pub fn for_host_pipe() -> Self {
-        Self {
+        let mut s = Self {
             room: Room::Library,
             prev_room: Room::Library,
             room_dir: 1.0,
@@ -924,6 +930,7 @@ impl AppState {
             store_shelf_x: [0.0; 4],
             filters: Vec::new(),
             library_filter_open: false,
+            lib: crate::library_state::LibraryExtraState::default(),
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Connecting,
             games: Vec::new(),
@@ -1003,7 +1010,20 @@ impl AppState {
             inflight_requests: HashMap::new(),
             #[cfg(windows)]
             inflight_discord_channel: None,
-        }
+        };
+        crate::library_state::register_library_wp2_events(&mut s);
+        s
+    }
+
+    pub fn clock_secs_now(&self) -> f64 {
+        self.clock_secs
+    }
+
+    pub fn arm_confirm_key(&mut self, key: &str, tx: &mut Tx) {
+        const ARMED_SECS: f64 = 4.0;
+        let deadline = self.clock_secs + ARMED_SECS;
+        self.armed_confirm = Some((key.to_string(), deadline));
+        tx.wake_after(Duration::from_secs_f64(ARMED_SECS));
     }
 
     pub fn install_waker(&mut self, waker: Waker) {
@@ -1073,12 +1093,29 @@ impl AppState {
                     images.push(img);
                 }
             }
+            let mut preload_ids: Vec<&Game> = self.filtered_games().into_iter().take(60).collect();
+            for folder in &self.settings.library_folders {
+                for gid in folder.games.iter().take(4) {
+                    if let Some(g) = self.games.iter().find(|g| g.id == *gid)
+                        && !preload_ids.iter().any(|existing| existing.id == g.id)
+                    {
+                        preload_ids.push(g);
+                    }
+                }
+            }
             images.extend(
-                self.filtered_games()
-                    .into_iter()
-                    .take(16)
+                preload_ids
+                    .iter()
                     .filter_map(|g| self.cover_image(g, scale)),
             );
+            for img in &images {
+                let _ = img.wait();
+            }
+            let retry: Vec<Image> = preload_ids
+                .iter()
+                .filter_map(|g| self.cover_image(g, scale))
+                .collect();
+            images.extend(retry);
         }
         if self.room == Room::Store {
             if let Some(ref home) = self.store_home {
@@ -1318,6 +1355,13 @@ impl AppState {
         self.capture_menu_open = false;
         self.library_more_open = false;
         self.library_add_open = false;
+        self.lib.gifts_open = false;
+        if room != Room::Library {
+            self.exit_select_mode();
+            self.close_folder_panel();
+            self.lib.folder_sheet = None;
+            self.lib.folder_cropper = None;
+        }
         self.context_menu = None;
         self.open_dropdown = None;
         self.chrome.mini_volume_open = false;
@@ -1326,6 +1370,7 @@ impl AppState {
             self.close_captures();
         }
         match room {
+            Room::Library => self.on_library_room_enter(),
             Room::Store => {
                 if !self.store_loading {
                     self.load_store_home(false);
@@ -1348,7 +1393,6 @@ impl AppState {
             Room::Devices => self.load_pc_tab(crate::pc_state::PcTab::Devices),
             Room::ExoAi => self.load_pc_tab(crate::pc_state::PcTab::ExoAi),
             Room::Apps => self.load_pc_tab(crate::pc_state::PcTab::Apps),
-            _ => {}
         }
         self.on_room_switched(prev_room, room);
     }
@@ -1373,6 +1417,14 @@ impl AppState {
         self.library_add_open = false;
         self.open_dropdown = None;
         self.discord.status_menu_open = matches!(target, ContextMenuTarget::DiscordStatusMenu);
+        if let ContextMenuTarget::GameCard(ref gid) = target
+            && self
+                .games
+                .iter()
+                .any(|g| g.id == *gid && g.store == "riot" && g.installed && !g.is_running)
+        {
+            self.load_riot_accounts();
+        }
         self.context_menu = Some(ContextMenuState {
             target,
             x,
@@ -1521,11 +1573,10 @@ impl AppState {
             .all(|g| Some(&g.id) != self.selected_game_id.as_ref())
         {
             self.selected_game_id = self
-                .filtered_games()
-                .into_iter()
-                .next()
-                .or_else(|| self.games.first())
-                .map(|g| g.id.clone());
+                .home_deck_games()
+                .first()
+                .map(|g| g.id.clone())
+                .or_else(|| self.games.first().map(|g| g.id.clone()));
         }
         if self.notice.as_deref() == Some("Connecting to Exo host…") {
             self.notice = None;
@@ -1554,6 +1605,9 @@ impl AppState {
             .unwrap_or("")
             .to_string();
         self.settings = settings;
+        if let Some(mode) = self.settings.sort_mode.as_deref() {
+            self.sort = LibrarySort::from_id(mode);
+        }
         if !self.setup.loaded && self.status == HostStatus::Connected {
             self.setup.loaded = true;
             if raw.is_empty() && !tour_seen {
@@ -1595,10 +1649,7 @@ impl AppState {
         let mut out: Vec<&Game> = self
             .games
             .iter()
-            .filter(|g| {
-                is_shelf_game(g, transfer_id, show_tools)
-                    && !self.settings.hidden_games.iter().any(|h| h == &g.id)
-            })
+            .filter(|g| is_shelf_game(g, transfer_id, show_tools))
             .filter(|g| chips_match(&self.filters, g, now_ms, &playing))
             .collect();
         let hidden = &self.settings.hidden_games;
@@ -1695,8 +1746,8 @@ impl AppState {
                         loaded
                     }
                 };
-                if img.is_some() {
-                    return img;
+                if let Some(ready) = img.filter(|i| i.error().is_none()) {
+                    return Some(ready);
                 }
             } else if cand.url.starts_with("https://") && !waiting_remote {
                 let canonical = remote_art::canonical_cache_key(&cand.url);
@@ -1706,6 +1757,7 @@ impl AppState {
                 }
                 if let Some(img) =
                     self.remote_image_in_room(&cand.url, dim, scale, CacheRoom::Library)
+                    && img.error().is_none()
                 {
                     return Some(img);
                 }
@@ -1713,27 +1765,38 @@ impl AppState {
             }
         }
         let san_key = format!("cov-san:{}#{}", game.id, game.art_revision.unwrap_or(0));
-        if let Some(existing) = self.images.borrow_mut().get(&san_key, Some(cache)) {
-            return existing;
+        let sanitized = if let Some(existing) = self.images.borrow_mut().get(&san_key, Some(cache))
+        {
+            existing
+        } else {
+            let loaded = self
+                .art_base
+                .resolve_local_sanitized_portrait(game)
+                .map(|path| cache.file_capped(path, dim, scale));
+            self.images.borrow_mut().insert(
+                san_key,
+                loaded.clone(),
+                CacheRoom::Library,
+                dim,
+                scale,
+            );
+            loaded
+        };
+        if let Some(ok_img) = sanitized.filter(|i| i.error().is_none()) {
+            return Some(ok_img);
         }
-        let loaded = self
-            .art_base
-            .resolve_local_sanitized_portrait(game)
-            .map(|path| cache.file_capped(path, dim, scale));
-        self.images
-            .borrow_mut()
-            .insert(san_key, loaded.clone(), CacheRoom::Library, dim, scale);
-        loaded
+        self.hero_image_direct(game, scale)
+            .filter(|i| i.error().is_none())
     }
 
-    pub fn hero_image(&self, game: &Game, scale: f32) -> Option<Image> {
+    fn hero_image_direct(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
         let dim = bucket_dim(1440.0);
         let key = format!("hero:{}#{}", game.id, game.art_revision.unwrap_or(0));
         if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            if existing.is_some() {
-                return existing;
+            if let Some(ready) = existing.filter(|i| i.error().is_none()) {
+                return Some(ready);
             }
         } else {
             let loaded = self
@@ -1743,23 +1806,30 @@ impl AppState {
             self.images
                 .borrow_mut()
                 .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
-            if loaded.is_some() {
-                return loaded;
+            if let Some(ready) = loaded.filter(|i| i.error().is_none()) {
+                return Some(ready);
             }
         }
         if let Some(url) = game.hero_url.as_deref()
             && url.starts_with("https://")
             && !url.contains(".exo-launcher.local")
             && let Some(img) = self.remote_image_in_room(url, dim, scale, CacheRoom::Library)
+            && img.error().is_none()
         {
             return Some(img);
         }
         if let Some(url) = game.steam_hero_url()
             && let Some(img) = self.remote_image_in_room(&url, dim, scale, CacheRoom::Library)
+            && img.error().is_none()
         {
             return Some(img);
         }
-        self.cover_image(game, scale)
+        None
+    }
+
+    pub fn hero_image(&self, game: &Game, scale: f32) -> Option<Image> {
+        self.hero_image_direct(game, scale)
+            .or_else(|| self.cover_image(game, scale))
     }
 
     pub fn logo_image(&self, game: &Game, scale: f32) -> Option<Image> {
@@ -2066,6 +2136,7 @@ impl AppState {
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
+        self.exit_select_mode();
         self.game_page.selected_variant_id = None;
         if self.status != HostStatus::Standalone {
             self.game_frame_gen = None;
@@ -2563,6 +2634,30 @@ impl AppState {
         }
         if self.library_add_open {
             self.library_add_open = false;
+            return true;
+        }
+        if self.library_filter_open {
+            self.library_filter_open = false;
+            return true;
+        }
+        if self.lib.gifts_open {
+            self.lib.gifts_open = false;
+            return true;
+        }
+        if self.lib.folder_cropper.is_some() {
+            self.lib.folder_cropper = None;
+            return true;
+        }
+        if self.lib.folder_sheet.is_some() {
+            self.lib.folder_sheet = None;
+            return true;
+        }
+        if self.lib.open_folder_id.is_some() {
+            self.close_folder_panel();
+            return true;
+        }
+        if self.lib.selecting {
+            self.exit_select_mode();
             return true;
         }
         if self.pc.part_menu.is_some() {
@@ -3270,10 +3365,6 @@ impl AppState {
         self.game_action(METHOD_GAME_LAUNCH, id, "Launching", "Launched");
     }
 
-    pub fn stop_game(&mut self, id: &str) {
-        self.game_action(METHOD_GAME_STOP, id, "Stopping", "Stopped");
-    }
-
     pub fn install_game(&mut self, id: &str) {
         self.game_action(
             METHOD_GAME_INSTALL,
@@ -3373,12 +3464,20 @@ impl AppState {
                     handle.update(move |s, _| match res {
                         Ok(lib) => {
                             let count = lib.games.len();
+                            s.lib.library_error = None;
+                            s.lib.refresh_error = None;
                             s.apply_library(lib);
                             s.notice = Some(format!("Library refreshed ({count} games)"));
                         }
                         Err(e) => {
+                            let msg = e.to_string();
                             s.refreshing = false;
-                            s.notice = Some(format!("Refresh failed: {e}"));
+                            if s.games.is_empty() {
+                                s.lib.library_error = Some(msg.clone());
+                            } else {
+                                s.lib.refresh_error = Some(msg.clone());
+                            }
+                            s.notice = Some(format!("Refresh failed: {msg}"));
                         }
                     });
                 },
@@ -3396,6 +3495,7 @@ impl AppState {
         self.apply_music_playback(boot.music_playback.playback);
         self.discord.status = boot.discord_status;
         self.load_web_preferences();
+        self.warm_library_on_startup();
         match self.room {
             Room::Discord if !self.discord.loaded => self.load_discord_room(),
             Room::Music => self.load_music_room(),
@@ -3578,6 +3678,7 @@ impl AppState {
                 let msg = e.to_string();
                 handle.update(move |s, _| {
                     s.refreshing = false;
+                    s.lib.library_error = Some(msg.clone());
                     s.status = HostStatus::Error(msg.clone());
                     s.notice = Some(format!("Failed to bootstrap host: {msg}"));
                 });

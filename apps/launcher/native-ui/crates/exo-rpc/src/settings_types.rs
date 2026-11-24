@@ -256,14 +256,7 @@ pub struct SteamSignInStep {
     pub interval_seconds: Option<u64>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StoreGiftsReply {
-    #[serde(default)]
-    pub ok: bool,
-    #[serde(default)]
-    pub steam_signed_in: bool,
-}
+pub type StoreGiftsReply = crate::types::StoreGifts;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]

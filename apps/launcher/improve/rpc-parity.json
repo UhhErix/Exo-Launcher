@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-24T02:04:36.109Z",
+  "generatedAt": "2026-11-24T02:20:13.811Z",
   "totals": {
     "actions": 18,
     "webDrivable": 15,
@@ -8,7 +8,7 @@
     "uniqueNativeMethods": 90,
     "sessionReactOnlyMethods": 10,
     "sessionNativeOnlyMethods": 21,
-    "sessionChattyMethods": 3,
+    "sessionChattyMethods": 2,
     "observedWebEvents": 10,
     "observedNativeEvents": 6,
     "staticUnhandledReactEvents": 16
@@ -420,9 +420,9 @@
   "sessionChattiness": [
     {
       "method": "music.volume",
-      "webCount": 8,
+      "webCount": 7,
       "nativeCount": 2,
-      "ratio": 4,
+      "ratio": 3.5,
       "chattier": "web",
       "reactCallers": [
         "ui/src/components/music/Immersive.tsx:276",
@@ -446,17 +446,6 @@
         "ui/src/components/discord/voice.tsx:102",
         "ui/src/components/discord/voice.tsx:105",
         "ui/src/components/discord/voice.tsx:201"
-      ]
-    },
-    {
-      "method": "game.extras",
-      "webCount": 3,
-      "nativeCount": 1,
-      "ratio": 3,
-      "chattier": "web",
-      "reactCallers": [
-        "ui/src/components/game/useGameDetails.ts:58",
-        "ui/src/components/shell/HomeDeck.tsx:238"
       ]
     }
   ],
@@ -486,18 +475,6 @@
       ],
       "reactSubscribers": [
         "ui/src/components/music/NativeMusicRoom.tsx:132"
-      ]
-    },
-    {
-      "event": "game.achievements",
-      "totalWebEvents": 1,
-      "totalNativeEvents": 0,
-      "nativeHandles": true,
-      "actions": [
-        "startup"
-      ],
-      "reactSubscribers": [
-        "ui/src/components/game/useGameDetails.ts:68"
       ]
     },
     {
@@ -688,14 +665,14 @@
         "status": "ok"
       },
       "webSummary": {
-        "totalRequests": 75,
+        "totalRequests": 73,
         "totalEvents": 10,
         "methods": {
           "accounts.list": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 46.47,
+            "medianMs": 23.26,
             "shapes": [
               "null"
             ]
@@ -704,7 +681,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 448.76,
+            "medianMs": 219.69,
             "shapes": [
               "{}"
             ]
@@ -713,7 +690,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 0.66,
+            "medianMs": 0.82,
             "shapes": [
               "{\"level\":\"string\",\"message\":\"string\",\"context\":\"string\",\"stack\":\"string\"}",
               "{\"level\":\"string\",\"message\":\"string\"}"
@@ -723,7 +700,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.74,
+            "medianMs": 0.23,
             "shapes": [
               "null"
             ]
@@ -732,7 +709,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 14.86,
+            "medianMs": 8.99,
             "shapes": [
               "null"
             ]
@@ -741,7 +718,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 54.87,
+            "medianMs": 22.94,
             "shapes": [
               "null"
             ]
@@ -750,7 +727,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 5.39,
+            "medianMs": 4.08,
             "shapes": [
               "null"
             ]
@@ -759,7 +736,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 17.81,
+            "medianMs": 5.82,
             "shapes": [
               "{}"
             ]
@@ -768,7 +745,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 32.72,
+            "medianMs": 7.32,
             "shapes": [
               "{\"streamerQuiet\":\"boolean\",\"streamerSilent\":\"boolean\"}"
             ]
@@ -777,7 +754,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 0.72,
+            "medianMs": 0.69,
             "shapes": [
               "{\"cancel\":\"boolean\"}"
             ]
@@ -786,7 +763,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1.05,
+            "medianMs": 1.16,
             "shapes": [
               "{\"connect\":\"boolean\"}"
             ]
@@ -795,7 +772,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1.81,
+            "medianMs": 1.59,
             "shapes": [
               "{\"action\":\"string\",\"hevc\":\"boolean\"}"
             ]
@@ -804,7 +781,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 3.74,
+            "medianMs": 3.6,
             "shapes": [
               "{\"action\":\"string\"}"
             ]
@@ -813,7 +790,7 @@
             "count": 6,
             "ok": 6,
             "failed": 0,
-            "medianMs": 1292.7,
+            "medianMs": 709.82,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -822,7 +799,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.8,
+            "medianMs": 1.58,
             "shapes": [
               "null"
             ]
@@ -831,7 +808,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.28,
+            "medianMs": 0.17,
             "shapes": [
               "null"
             ]
@@ -840,7 +817,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 8.67,
+            "medianMs": 6.44,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -849,7 +826,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 4.36,
+            "medianMs": 2.64,
             "shapes": [
               "{\"force\":\"boolean\"}"
             ]
@@ -858,7 +835,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 3.85,
+            "medianMs": 10.51,
             "shapes": [
               "{}"
             ]
@@ -867,7 +844,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.98,
+            "medianMs": 1.04,
             "shapes": [
               "{\"device\":\"string\"}"
             ]
@@ -876,7 +853,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 97.28,
+            "medianMs": 79.59,
             "shapes": [
               "{\"vendorIds\":[\"number\"]}"
             ]
@@ -885,7 +862,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 6.22,
+            "medianMs": 3.79,
             "shapes": [
               "{\"device\":\"string\"}"
             ]
@@ -894,7 +871,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 12.72,
+            "medianMs": 4.21,
             "shapes": [
               "{\"device\":\"string\",\"reportId\":\"number\",\"data\":\"string\"}"
             ]
@@ -903,7 +880,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 11.75,
+            "medianMs": 13.27,
             "shapes": [
               "{}"
             ]
@@ -912,7 +889,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 973.23,
+            "medianMs": 600.39,
             "shapes": [
               "{\"force\":\"boolean\"}"
             ]
@@ -921,7 +898,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 10.78,
+            "medianMs": 0.89,
             "shapes": [
               "null"
             ]
@@ -930,16 +907,16 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1.75,
+            "medianMs": 3.15,
             "shapes": [
               "null"
             ]
           },
           "music.volume": {
-            "count": 4,
-            "ok": 4,
+            "count": 3,
+            "ok": 3,
             "failed": 0,
-            "medianMs": 0.09,
+            "medianMs": 0.1,
             "shapes": [
               "{}"
             ]
@@ -948,7 +925,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.24,
+            "medianMs": 0.17,
             "shapes": [
               "null"
             ]
@@ -957,7 +934,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 15.12,
+            "medianMs": 6.06,
             "shapes": [
               "null"
             ]
@@ -966,7 +943,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 5.21,
+            "medianMs": 1.29,
             "shapes": [
               "null"
             ]
@@ -975,16 +952,16 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.46,
+            "medianMs": 2.19,
             "shapes": [
               "{\"method\":\"string\",\"params\":{}}"
             ]
           },
           "shell.heartbeat": {
-            "count": 13,
-            "ok": 13,
+            "count": 12,
+            "ok": 12,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.08,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -993,7 +970,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.07,
+            "medianMs": 0.04,
             "shapes": [
               "null"
             ]
@@ -1002,7 +979,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 4.87,
+            "medianMs": 3.26,
             "shapes": [
               "null"
             ]
@@ -1011,7 +988,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.63,
+            "medianMs": 0.43,
             "shapes": [
               "null"
             ]
@@ -1020,7 +997,7 @@
             "count": 3,
             "ok": 3,
             "failed": 0,
-            "medianMs": 4.37,
+            "medianMs": 1.97,
             "shapes": [
               "{}",
               "{\"interactiveRegions\":[{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}],\"maximizeButton\":{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}}"
@@ -1030,7 +1007,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.36,
+            "medianMs": 0.29,
             "shapes": [
               "null"
             ]
@@ -1039,7 +1016,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.95,
+            "medianMs": 0.87,
             "shapes": [
               "null"
             ]
@@ -1048,7 +1025,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 2768.84,
+            "medianMs": 1491.67,
             "shapes": [
               "{}"
             ]
@@ -1057,7 +1034,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 8.03,
+            "medianMs": 7.7,
             "shapes": [
               "{\"action\":\"string\"}"
             ]
@@ -1066,7 +1043,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 439.44,
+            "medianMs": 186.3,
             "shapes": [
               "null"
             ]
@@ -1075,7 +1052,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 4.94,
+            "medianMs": 0.51,
             "shapes": [
               "null"
             ]
@@ -1084,7 +1061,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 59.17,
+            "medianMs": 14.38,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -1093,7 +1070,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 1.38,
+            "medianMs": 0.98,
             "shapes": [
               "null"
             ]
@@ -1102,7 +1079,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 20.21,
+            "medianMs": 10.27,
             "shapes": [
               "{\"musicService\":\"string\"}"
             ]
@@ -1166,14 +1143,14 @@
         }
       },
       "nativeSummary": {
-        "totalRequests": 52,
-        "totalEvents": 6,
+        "totalRequests": 56,
+        "totalEvents": 7,
         "methods": {
           "accounts.list": {
-            "count": 1,
-            "ok": 1,
+            "count": 2,
+            "ok": 2,
             "failed": 0,
-            "medianMs": 79.56,
+            "medianMs": 82.15,
             "shapes": [
               "{}"
             ]
@@ -1182,7 +1159,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 505.33,
+            "medianMs": 340.67,
             "shapes": [
               "{}"
             ]
@@ -1191,7 +1168,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.52,
+            "medianMs": 4.87,
             "shapes": [
               "{\"level\":\"string\",\"message\":\"string\"}"
             ]
@@ -1200,7 +1177,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.24,
+            "medianMs": 0.56,
             "shapes": [
               "{}"
             ]
@@ -1209,7 +1186,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.14,
+            "medianMs": 1.23,
             "shapes": [
               "{}"
             ]
@@ -1218,7 +1195,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 40.11,
+            "medianMs": 73.12,
             "shapes": [
               "{}"
             ]
@@ -1227,7 +1204,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.71,
+            "medianMs": 5.42,
             "shapes": [
               "{}"
             ]
@@ -1236,7 +1213,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 8.48,
+            "medianMs": 37.31,
             "shapes": [
               "{}"
             ]
@@ -1245,7 +1222,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.11,
+            "medianMs": 57.01,
             "shapes": [
               "{}"
             ]
@@ -1254,7 +1231,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.74,
+            "medianMs": 4.79,
             "shapes": [
               "{\"connect\":\"boolean\"}"
             ]
@@ -1263,16 +1240,16 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.67,
+            "medianMs": 3.45,
             "shapes": [
               "{}"
             ]
           },
           "dlss.status": {
-            "count": 7,
-            "ok": 7,
+            "count": 8,
+            "ok": 8,
             "failed": 0,
-            "medianMs": 685.32,
+            "medianMs": 377.43,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -1281,7 +1258,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.12,
+            "medianMs": 3.13,
             "shapes": [
               "{}"
             ]
@@ -1290,16 +1267,25 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.2,
+            "medianMs": 0.53,
             "shapes": [
               "{}"
             ]
           },
-          "gifts.list": {
+          "game.extras": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 5.64,
+            "medianMs": 11.81,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "gifts.list": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 9.01,
             "shapes": [
               "{\"force\":\"boolean\"}"
             ]
@@ -1308,7 +1294,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 31.98,
+            "medianMs": 26.38,
             "shapes": [
               "{}"
             ]
@@ -1317,7 +1303,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.78,
+            "medianMs": 4.57,
             "shapes": [
               "{}"
             ]
@@ -1326,7 +1312,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.3,
+            "medianMs": 0.9,
             "shapes": [
               "{}"
             ]
@@ -1335,7 +1321,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 0.59,
+            "medianMs": 2.97,
             "shapes": [
               "{}"
             ]
@@ -1344,7 +1330,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 28.03,
+            "medianMs": 39.04,
             "shapes": [
               "{}"
             ]
@@ -1353,7 +1339,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.25,
+            "medianMs": 12.29,
             "shapes": [
               "{\"method\":\"string\",\"params\":{}}"
             ]
@@ -1362,14 +1348,14 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1208.47,
+            "medianMs": 703.77,
             "shapes": [
               "{}"
             ]
           },
           "shell.heartbeat": {
-            "count": 8,
-            "ok": 8,
+            "count": 7,
+            "ok": 7,
             "failed": 0,
             "medianMs": 0.1,
             "shapes": [
@@ -1380,7 +1366,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.53,
             "shapes": [
               "{}"
             ]
@@ -1389,7 +1375,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.03,
+            "medianMs": 0.02,
             "shapes": [
               "{}"
             ]
@@ -1398,16 +1384,16 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.16,
+            "medianMs": 0.13,
             "shapes": [
               "{}"
             ]
           },
           "shell.setChromeLayout": {
-            "count": 2,
-            "ok": 2,
+            "count": 3,
+            "ok": 3,
             "failed": 0,
-            "medianMs": 3.18,
+            "medianMs": 0.31,
             "shapes": [
               "{\"interactiveRegions\":[{\"height\":\"number\",\"width\":\"number\",\"x\":\"number\",\"y\":\"number\"}],\"maximizeButton\":{\"height\":\"number\",\"width\":\"number\",\"x\":\"number\",\"y\":\"number\"}}",
               "{\"interactiveRegions\":[{\"height\":\"number\",\"width\":\"number\",\"x\":\"number\",\"y\":\"number\"}]}"
@@ -1417,7 +1403,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.32,
+            "medianMs": 0.53,
             "shapes": [
               "{}"
             ]
@@ -1426,7 +1412,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.69,
+            "medianMs": 0.71,
             "shapes": [
               "{}"
             ]
@@ -1435,7 +1421,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 3223.12,
+            "medianMs": 2548.88,
             "shapes": [
               "{}"
             ]
@@ -1444,7 +1430,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 10.64,
+            "medianMs": 95.29,
             "shapes": [
               "{\"action\":\"string\"}"
             ]
@@ -1453,7 +1439,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 303.82,
+            "medianMs": 393.61,
             "shapes": [
               "{}"
             ]
@@ -1462,7 +1448,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.56,
+            "medianMs": 0.69,
             "shapes": [
               "{}"
             ]
@@ -1471,7 +1457,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.37,
+            "medianMs": 3.22,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -1480,7 +1466,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 0.6,
+            "medianMs": 0.52,
             "shapes": [
               "{}"
             ]
@@ -1489,7 +1475,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 49.83,
+            "medianMs": 21.1,
             "shapes": [
               "{\"musicService\":\"string\"}"
             ]
@@ -1506,6 +1492,12 @@
             "count": 1,
             "shapes": [
               "{\"state\":\"string\"}"
+            ]
+          },
+          "game.achievements": {
+            "count": 1,
+            "shapes": [
+              "{\"id\":\"string\",\"unlocked\":\"number\",\"total\":\"number\"}"
             ]
           },
           "music.playback": {
@@ -1528,33 +1520,23 @@
           }
         }
       },
-      "gapScore": 158,
+      "gapScore": 142,
       "reactOnlyMethods": [
         {
           "method": "discord.signIn",
           "webCount": 2,
           "nativeCount": 0,
-          "webMedianMs": 0.72,
+          "webMedianMs": 0.69,
           "reactCallers": [
             "ui/src/components/discord/DiscordSignIn.tsx:21",
             "ui/src/components/discord/DiscordSignIn.tsx:25"
           ]
         },
         {
-          "method": "game.extras",
-          "webCount": 2,
-          "nativeCount": 0,
-          "webMedianMs": 8.67,
-          "reactCallers": [
-            "ui/src/components/game/useGameDetails.ts:58",
-            "ui/src/components/shell/HomeDeck.tsx:238"
-          ]
-        },
-        {
           "method": "discord.clientSettings",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 32.72,
+          "webMedianMs": 7.32,
           "reactCallers": [
             "ui/src/components/discord/GoLivePicker.tsx:320",
             "ui/src/components/discord/MeMenus.tsx:126",
@@ -1568,7 +1550,7 @@
           "method": "discord.stream",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 1.81,
+          "webMedianMs": 1.59,
           "reactCallers": [
             "ui/src/components/discord/voice.tsx:274",
             "ui/src/components/discord/voice.tsx:290",
@@ -1582,7 +1564,7 @@
           "method": "hdr.state",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 3.85,
+          "webMedianMs": 10.51,
           "reactCallers": [
             "ui/src/lib/hdr.ts:10"
           ]
@@ -1591,7 +1573,7 @@
           "method": "hid.close",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 0.98,
+          "webMedianMs": 1.04,
           "reactCallers": [
             "ui/src/lib/mouseRelay.ts:11"
           ]
@@ -1600,7 +1582,7 @@
           "method": "hid.list",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 97.28,
+          "webMedianMs": 79.59,
           "reactCallers": [
             "ui/src/lib/mouseRelay.ts:9"
           ]
@@ -1609,7 +1591,7 @@
           "method": "hid.open",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 6.22,
+          "webMedianMs": 3.79,
           "reactCallers": [
             "ui/src/lib/mouseRelay.ts:10"
           ]
@@ -1618,7 +1600,7 @@
           "method": "hid.sendReport",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 12.72,
+          "webMedianMs": 4.21,
           "reactCallers": [
             "ui/src/lib/mouseRelay.ts:12"
           ]
@@ -1627,7 +1609,7 @@
           "method": "library.get",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 973.23,
+          "webMedianMs": 600.39,
           "reactCallers": [
             "ui/src/components/LauncherApp.tsx:279",
             "ui/src/components/devices/GameProfiles.tsx:32",
@@ -1640,7 +1622,7 @@
           "method": "mouse.presets.get",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 10.78,
+          "webMedianMs": 0.89,
           "reactCallers": [
             "ui/src/lib/mouseRelay.ts:61"
           ]
@@ -1649,7 +1631,7 @@
           "method": "music.playback",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 1.75,
+          "webMedianMs": 3.15,
           "reactCallers": [
             "ui/src/components/discord/JamBox.tsx:15",
             "ui/src/components/discord/JamBox.tsx:16",
@@ -1665,7 +1647,7 @@
           "method": "discord.accounts",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 2.11,
+          "nativeMedianMs": 57.01,
           "reactCallers": [
             "ui/src/components/discord/MeMenus.tsx:51",
             "ui/src/components/discord/MeMenus.tsx:102"
@@ -1675,7 +1657,7 @@
           "method": "shell.bootstrap",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 1208.47,
+          "nativeMedianMs": 703.77,
           "reactCallers": [
             "ui/src/lib/host.ts:2406"
           ]
@@ -1691,16 +1673,6 @@
           "reactSubscribers": [
             "ui/src/components/discord/DiscordSignIn.tsx:19",
             "ui/src/components/discord/MeMenus.tsx:108"
-          ]
-        },
-        {
-          "event": "game.achievements",
-          "webCount": 1,
-          "nativeCount": 0,
-          "nativeHandles": true,
-          "reason": "not emitted on native",
-          "reactSubscribers": [
-            "ui/src/components/game/useGameDetails.ts:68"
           ]
         },
         {
@@ -1738,9 +1710,9 @@
       "chattiness": [
         {
           "method": "music.volume",
-          "webCount": 4,
+          "webCount": 3,
           "nativeCount": 1,
-          "ratio": 4,
+          "ratio": 3,
           "chattier": "web",
           "reactCallers": [
             "ui/src/components/music/Immersive.tsx:276",
@@ -1752,6 +1724,210 @@
           ]
         }
       ]
+    },
+    {
+      "id": "discord-dm",
+      "label": "Open Discord DM conversation",
+      "group": "discord",
+      "webStatus": {
+        "status": "not_drivable",
+        "reason": "Discord not signed in in disposable test instance"
+      },
+      "nativeStatus": {
+        "status": "not_drivable",
+        "reason": "Discord not signed in in disposable test instance"
+      },
+      "webSummary": {
+        "totalRequests": 11,
+        "totalEvents": 0,
+        "methods": {
+          "dlss.newer": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.74,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "music.volume": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 8,
+            "ok": 8,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 10,
+        "totalEvents": 1,
+        "methods": {
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.15,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "discord.accounts": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.26,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "discord.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.39,
+            "shapes": [
+              "{\"connect\":\"boolean\"}"
+            ]
+          },
+          "discord.stream": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.15,
+            "shapes": [
+              "{\"action\":\"string\",\"hevc\":\"boolean\"}"
+            ]
+          },
+          "discord.voice": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 5,
+            "ok": 5,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {
+          "discord.state": {
+            "count": 1,
+            "shapes": [
+              "{\"state\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "gapScore": 45,
+      "reactOnlyMethods": [
+        {
+          "method": "music.volume",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 0.05,
+          "reactCallers": [
+            "ui/src/components/music/Immersive.tsx:276",
+            "ui/src/components/music/shortcuts.ts:29",
+            "ui/src/components/music/shortcuts.ts:30",
+            "ui/src/components/shell/MusicVolume.tsx:33",
+            "ui/src/components/shell/MusicVolume.tsx:40",
+            "ui/src/components/shell/MusicVolume.tsx:94"
+          ]
+        },
+        {
+          "method": "dlss.newer",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.74,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:111"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [
+        {
+          "method": "app.pendingOpen",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.15,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "discord.accounts",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.26,
+          "reactCallers": [
+            "ui/src/components/discord/MeMenus.tsx:51",
+            "ui/src/components/discord/MeMenus.tsx:102"
+          ]
+        },
+        {
+          "method": "discord.status",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.39,
+          "reactCallers": [
+            "ui/src/components/discord/NativeDiscordRoom.tsx:29",
+            "ui/src/components/discord/NativeDiscordRoom.tsx:42",
+            "ui/src/components/onboarding/DiscordStep.tsx:15",
+            "ui/src/lib/listenAlong.ts:78"
+          ]
+        },
+        {
+          "method": "discord.stream",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.15,
+          "reactCallers": [
+            "ui/src/components/discord/voice.tsx:274",
+            "ui/src/components/discord/voice.tsx:290",
+            "ui/src/components/discord/voice.tsx:763",
+            "ui/src/lib/discordVideo.ts:32",
+            "ui/src/lib/discordVideo.ts:153",
+            "ui/src/lib/discordVideo.ts:208"
+          ]
+        },
+        {
+          "method": "discord.voice",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.05,
+          "reactCallers": [
+            "ui/src/components/discord/voice.tsx:52",
+            "ui/src/components/discord/voice.tsx:87",
+            "ui/src/components/discord/voice.tsx:93",
+            "ui/src/components/discord/voice.tsx:102",
+            "ui/src/components/discord/voice.tsx:105",
+            "ui/src/components/discord/voice.tsx:201"
+          ]
+        }
+      ],
+      "pushEventGaps": [],
+      "chattiness": []
     },
     {
       "id": "room-devices",
@@ -1780,7 +1956,7 @@
             "count": 4,
             "ok": 4,
             "failed": 0,
-            "medianMs": 564.85,
+            "medianMs": 646.67,
             "shapes": [
               "{\"kind\":\"string\",\"model\":\"null\",\"name\":\"string\",\"maker\":\"string\"}",
               "{\"app\":{\"id\":\"string\",\"name\":\"string\",\"where\":\"string\"},\"battery\":\"null\",\"color\":\"null\",\"connection\":\"string\",\"id\":\"string\",\"kind\":\"string\",\"lab\":\"boolean\",\"layout\":\"string\",\"maker\":\"string\",\"model\":\"string\",\"name\":\"string\",\"port\":{\"better\":\"string\",\"chips\":\"number\",\"hubs\":\"number\",\"interrupts\":\"string\",\"where\":\"string\"},\"role\":\"null\"}",
@@ -1791,7 +1967,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 115.32,
+            "medianMs": 100.53,
             "shapes": [
               "{}"
             ]
@@ -1800,7 +1976,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.05,
             "shapes": [
               "null"
             ]
@@ -1809,7 +1985,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 26.69,
+            "medianMs": 29.11,
             "shapes": [
               "{}"
             ]
@@ -1827,7 +2003,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 3.62,
+            "medianMs": 3.64,
             "shapes": [
               "null"
             ]
@@ -1836,7 +2012,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.57,
+            "medianMs": 0.52,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -1852,14 +2028,14 @@
         }
       },
       "nativeSummary": {
-        "totalRequests": 20,
+        "totalRequests": 19,
         "totalEvents": 1,
         "methods": {
           "app.pendingOpen": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.02,
+            "medianMs": 0.03,
             "shapes": [
               "{}"
             ]
@@ -1868,7 +2044,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 10.15,
+            "medianMs": 12.5,
             "shapes": [
               "{\"mic\":\"null\",\"output\":\"string\"}"
             ]
@@ -1877,7 +2053,7 @@
             "count": 5,
             "ok": 5,
             "failed": 0,
-            "medianMs": 673.93,
+            "medianMs": 338.82,
             "shapes": [
               "{\"color\":\"null\",\"kind\":\"string\",\"layout\":\"null\",\"maker\":\"string\",\"model\":\"null\",\"name\":\"string\"}",
               "{\"color\":\"null\",\"kind\":\"string\",\"layout\":\"string\",\"maker\":\"string\",\"model\":\"string\",\"name\":\"string\"}",
@@ -1888,7 +2064,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 185.48,
+            "medianMs": 115.59,
             "shapes": [
               "{}"
             ]
@@ -1897,7 +2073,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 77.37,
+            "medianMs": 62.29,
             "shapes": [
               "{\"action\":\"string\"}"
             ]
@@ -1906,7 +2082,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 27.67,
+            "medianMs": 23.03,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -1915,14 +2091,14 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 93.08,
+            "medianMs": 76.56,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
           },
           "shell.heartbeat": {
-            "count": 5,
-            "ok": 5,
+            "count": 4,
+            "ok": 4,
             "failed": 0,
             "medianMs": 0.05,
             "shapes": [
@@ -1933,7 +2109,7 @@
             "count": 3,
             "ok": 3,
             "failed": 0,
-            "medianMs": 0.28,
+            "medianMs": 3.02,
             "shapes": [
               "{}"
             ]
@@ -1942,7 +2118,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.66,
+            "medianMs": 0.65,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -1963,7 +2139,7 @@
           "method": "music.playback",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 0.06,
+          "webMedianMs": 0.05,
           "reactCallers": [
             "ui/src/components/discord/JamBox.tsx:15",
             "ui/src/components/discord/JamBox.tsx:16",
@@ -1977,7 +2153,7 @@
           "method": "music.volume",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 26.69,
+          "webMedianMs": 29.11,
           "reactCallers": [
             "ui/src/components/music/Immersive.tsx:276",
             "ui/src/components/music/shortcuts.ts:29",
@@ -1993,7 +2169,7 @@
           "method": "audio.read",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 10.15,
+          "nativeMedianMs": 12.5,
           "reactCallers": [
             "ui/src/components/devices/AudioPage.tsx:88"
           ]
@@ -2002,14 +2178,14 @@
           "method": "eq",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 77.37,
+          "nativeMedianMs": 62.29,
           "reactCallers": []
         },
         {
           "method": "keyboard.backups",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 27.67,
+          "nativeMedianMs": 23.03,
           "reactCallers": [
             "ui/src/components/devices/KeyboardPage.tsx:50",
             "ui/src/components/devices/KeyboardPage.tsx:61",
@@ -2020,7 +2196,7 @@
           "method": "keyboard.read",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 93.08,
+          "nativeMedianMs": 76.56,
           "reactCallers": [
             "ui/src/components/devices/KeyboardPage.tsx:61",
             "ui/src/components/devices/KeyboardPage.tsx:76"
@@ -2053,210 +2229,6 @@
       ]
     },
     {
-      "id": "discord-dm",
-      "label": "Open Discord DM conversation",
-      "group": "discord",
-      "webStatus": {
-        "status": "not_drivable",
-        "reason": "Discord not signed in in disposable test instance"
-      },
-      "nativeStatus": {
-        "status": "not_drivable",
-        "reason": "Discord not signed in in disposable test instance"
-      },
-      "webSummary": {
-        "totalRequests": 12,
-        "totalEvents": 0,
-        "methods": {
-          "dlss.newer": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.8,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "music.volume": {
-            "count": 2,
-            "ok": 2,
-            "failed": 0,
-            "medianMs": 0.06,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "shell.heartbeat": {
-            "count": 9,
-            "ok": 9,
-            "failed": 0,
-            "medianMs": 0.05,
-            "shapes": [
-              "{\"visible\":\"boolean\"}"
-            ]
-          }
-        },
-        "events": {}
-      },
-      "nativeSummary": {
-        "totalRequests": 11,
-        "totalEvents": 1,
-        "methods": {
-          "app.pendingOpen": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.03,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "discord.accounts": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.39,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "discord.status": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.92,
-            "shapes": [
-              "{\"connect\":\"boolean\"}"
-            ]
-          },
-          "discord.stream": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.22,
-            "shapes": [
-              "{\"action\":\"string\",\"hevc\":\"boolean\"}"
-            ]
-          },
-          "discord.voice": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.18,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "dlss.newer": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.93,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "shell.heartbeat": {
-            "count": 5,
-            "ok": 5,
-            "failed": 0,
-            "medianMs": 0.06,
-            "shapes": [
-              "{\"visible\":\"boolean\"}"
-            ]
-          }
-        },
-        "events": {
-          "discord.state": {
-            "count": 1,
-            "shapes": [
-              "{\"state\":\"string\"}"
-            ]
-          }
-        }
-      },
-      "gapScore": 35,
-      "reactOnlyMethods": [
-        {
-          "method": "music.volume",
-          "webCount": 2,
-          "nativeCount": 0,
-          "webMedianMs": 0.06,
-          "reactCallers": [
-            "ui/src/components/music/Immersive.tsx:276",
-            "ui/src/components/music/shortcuts.ts:29",
-            "ui/src/components/music/shortcuts.ts:30",
-            "ui/src/components/shell/MusicVolume.tsx:33",
-            "ui/src/components/shell/MusicVolume.tsx:40",
-            "ui/src/components/shell/MusicVolume.tsx:94"
-          ]
-        }
-      ],
-      "nativeOnlyMethods": [
-        {
-          "method": "app.pendingOpen",
-          "webCount": 0,
-          "nativeCount": 1,
-          "nativeMedianMs": 0.03,
-          "reactCallers": [
-            "ui/src/components/shell/useShellEvents.ts:279"
-          ]
-        },
-        {
-          "method": "discord.accounts",
-          "webCount": 0,
-          "nativeCount": 1,
-          "nativeMedianMs": 0.39,
-          "reactCallers": [
-            "ui/src/components/discord/MeMenus.tsx:51",
-            "ui/src/components/discord/MeMenus.tsx:102"
-          ]
-        },
-        {
-          "method": "discord.status",
-          "webCount": 0,
-          "nativeCount": 1,
-          "nativeMedianMs": 0.92,
-          "reactCallers": [
-            "ui/src/components/discord/NativeDiscordRoom.tsx:29",
-            "ui/src/components/discord/NativeDiscordRoom.tsx:42",
-            "ui/src/components/onboarding/DiscordStep.tsx:15",
-            "ui/src/lib/listenAlong.ts:78"
-          ]
-        },
-        {
-          "method": "discord.stream",
-          "webCount": 0,
-          "nativeCount": 1,
-          "nativeMedianMs": 0.22,
-          "reactCallers": [
-            "ui/src/components/discord/voice.tsx:274",
-            "ui/src/components/discord/voice.tsx:290",
-            "ui/src/components/discord/voice.tsx:763",
-            "ui/src/lib/discordVideo.ts:32",
-            "ui/src/lib/discordVideo.ts:153",
-            "ui/src/lib/discordVideo.ts:208"
-          ]
-        },
-        {
-          "method": "discord.voice",
-          "webCount": 0,
-          "nativeCount": 1,
-          "nativeMedianMs": 0.18,
-          "reactCallers": [
-            "ui/src/components/discord/voice.tsx:52",
-            "ui/src/components/discord/voice.tsx:87",
-            "ui/src/components/discord/voice.tsx:93",
-            "ui/src/components/discord/voice.tsx:102",
-            "ui/src/components/discord/voice.tsx:105",
-            "ui/src/components/discord/voice.tsx:201"
-          ]
-        }
-      ],
-      "pushEventGaps": [],
-      "chattiness": []
-    },
-    {
       "id": "room-music",
       "label": "Open Music room",
       "group": "rooms",
@@ -2274,7 +2246,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.01,
+            "medianMs": 0.02,
             "shapes": [
               "null"
             ]
@@ -2283,7 +2255,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.27,
+            "medianMs": 0.24,
             "shapes": [
               "{\"cancel\":\"boolean\"}"
             ]
@@ -2292,7 +2264,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.58,
+            "medianMs": 0.57,
             "shapes": [
               "null"
             ]
@@ -2301,7 +2273,7 @@
             "count": 4,
             "ok": 4,
             "failed": 0,
-            "medianMs": 0.04,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -2310,7 +2282,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 11.72,
+            "medianMs": 8.2,
             "shapes": [
               "null"
             ]
@@ -2319,7 +2291,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.36,
+            "medianMs": 0.45,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -2335,14 +2307,23 @@
         }
       },
       "nativeSummary": {
-        "totalRequests": 11,
+        "totalRequests": 12,
         "totalEvents": 0,
         "methods": {
           "app.pendingOpen": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.02,
+            "medianMs": 0.03,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "dlss.newer": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.77,
             "shapes": [
               "{}"
             ]
@@ -2351,7 +2332,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 4.64,
+            "medianMs": 15.43,
             "shapes": [
               "{}"
             ]
@@ -2360,7 +2341,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 10.47,
+            "medianMs": 3.99,
             "shapes": [
               "{}"
             ]
@@ -2369,7 +2350,7 @@
             "count": 4,
             "ok": 4,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -2378,7 +2359,7 @@
             "count": 3,
             "ok": 3,
             "failed": 0,
-            "medianMs": 0.25,
+            "medianMs": 3.52,
             "shapes": [
               "{}"
             ]
@@ -2387,7 +2368,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.69,
+            "medianMs": 0.73,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -2395,13 +2376,13 @@
         },
         "events": {}
       },
-      "gapScore": 30,
+      "gapScore": 32,
       "reactOnlyMethods": [
         {
           "method": "discord.signIn",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 0.27,
+          "webMedianMs": 0.24,
           "reactCallers": [
             "ui/src/components/discord/DiscordSignIn.tsx:21",
             "ui/src/components/discord/DiscordSignIn.tsx:25"
@@ -2411,7 +2392,7 @@
           "method": "music.warm",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 0.58,
+          "webMedianMs": 0.57,
           "reactCallers": [
             "ui/src/lib/music.ts:126"
           ]
@@ -2419,10 +2400,19 @@
       ],
       "nativeOnlyMethods": [
         {
+          "method": "dlss.newer",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.77,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:111"
+          ]
+        },
+        {
           "method": "music.playback",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 4.64,
+          "nativeMedianMs": 15.43,
           "reactCallers": [
             "ui/src/components/discord/JamBox.tsx:15",
             "ui/src/components/discord/JamBox.tsx:16",
@@ -2436,7 +2426,7 @@
           "method": "music.volume",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 10.47,
+          "nativeMedianMs": 3.99,
           "reactCallers": [
             "ui/src/components/music/Immersive.tsx:276",
             "ui/src/components/music/shortcuts.ts:29",
@@ -2489,14 +2479,14 @@
         "events": {}
       },
       "nativeSummary": {
-        "totalRequests": 21,
-        "totalEvents": 1,
+        "totalRequests": 22,
+        "totalEvents": 0,
         "methods": {
           "app.pendingOpen": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.05,
+            "medianMs": 0.02,
             "shapes": [
               "{}"
             ]
@@ -2505,7 +2495,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 15.15,
+            "medianMs": 14.51,
             "shapes": [
               "{\"estimate\":\"boolean\",\"id\":\"string\"}"
             ]
@@ -2514,16 +2504,16 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 87.86,
+            "medianMs": 86.55,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
           },
           "game.extras": {
-            "count": 1,
-            "ok": 1,
+            "count": 2,
+            "ok": 2,
             "failed": 0,
-            "medianMs": 12.73,
+            "medianMs": 0.68,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -2532,7 +2522,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 310.79,
+            "medianMs": 234.54,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -2541,7 +2531,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 51.05,
+            "medianMs": 56.21,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -2550,7 +2540,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1.26,
+            "medianMs": 1.79,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -2559,7 +2549,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 144.04,
+            "medianMs": 148.34,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -2568,16 +2558,25 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 314.54,
+            "medianMs": 336.49,
             "shapes": [
               "{\"id\":\"string\"}"
+            ]
+          },
+          "gifts.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.04,
+            "shapes": [
+              "{\"force\":\"boolean\"}"
             ]
           },
           "gpu.game": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 17.04,
+            "medianMs": 12.64,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -2586,7 +2585,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 44.33,
+            "medianMs": 47.21,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -2595,7 +2594,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.39,
+            "medianMs": 2.46,
             "shapes": [
               "{}"
             ]
@@ -2604,38 +2603,41 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 4.56,
+            "medianMs": 3.08,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
           },
           "shell.heartbeat": {
-            "count": 8,
-            "ok": 8,
+            "count": 7,
+            "ok": 7,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.04,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
           }
         },
-        "events": {
-          "game.achievements": {
-            "count": 1,
-            "shapes": [
-              "{\"id\":\"string\",\"unlocked\":\"number\",\"total\":\"number\"}"
-            ]
-          }
-        }
+        "events": {}
       },
-      "gapScore": 26,
+      "gapScore": 28,
       "reactOnlyMethods": [],
       "nativeOnlyMethods": [
+        {
+          "method": "game.extras",
+          "webCount": 0,
+          "nativeCount": 2,
+          "nativeMedianMs": 0.68,
+          "reactCallers": [
+            "ui/src/components/game/useGameDetails.ts:58",
+            "ui/src/components/shell/HomeDeck.tsx:238"
+          ]
+        },
         {
           "method": "app.pendingOpen",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 0.05,
+          "nativeMedianMs": 0.02,
           "reactCallers": [
             "ui/src/components/shell/useShellEvents.ts:279"
           ]
@@ -2644,7 +2646,7 @@
           "method": "compress.state",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 15.15,
+          "nativeMedianMs": 14.51,
           "reactCallers": [
             "ui/src/components/game/CompressRow.tsx:36",
             "ui/src/components/game/CompressRow.tsx:41"
@@ -2654,26 +2656,16 @@
           "method": "dlss.frameGen",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 87.86,
+          "nativeMedianMs": 86.55,
           "reactCallers": [
             "ui/src/lib/host.ts:2882"
-          ]
-        },
-        {
-          "method": "game.extras",
-          "webCount": 0,
-          "nativeCount": 1,
-          "nativeMedianMs": 12.73,
-          "reactCallers": [
-            "ui/src/components/game/useGameDetails.ts:58",
-            "ui/src/components/shell/HomeDeck.tsx:238"
           ]
         },
         {
           "method": "game.frameGen",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 310.79,
+          "nativeMedianMs": 234.54,
           "reactCallers": [
             "ui/src/components/game/FrameGenRow.tsx:23",
             "ui/src/components/game/FrameGenRow.tsx:57"
@@ -2683,7 +2675,7 @@
           "method": "game.get",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 51.05,
+          "nativeMedianMs": 56.21,
           "reactCallers": [
             "ui/src/components/shell/useGameActions.ts:261",
             "ui/src/components/shell/useRunStatePoll.ts:56",
@@ -2694,7 +2686,7 @@
           "method": "game.progress",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 1.26,
+          "nativeMedianMs": 1.79,
           "reactCallers": [
             "ui/src/components/DownloadsSheet.tsx:39",
             "ui/src/lib/hostContract.ts:23"
@@ -2704,7 +2696,7 @@
           "method": "game.properties",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 144.04,
+          "nativeMedianMs": 148.34,
           "reactCallers": [
             "ui/src/components/game/GameProperties.tsx:205"
           ]
@@ -2713,17 +2705,27 @@
           "method": "game.settings",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 314.54,
+          "nativeMedianMs": 336.49,
           "reactCallers": [
             "ui/src/components/game/OptimizeLine.tsx:37",
             "ui/src/components/game/OptimizeLine.tsx:66"
           ]
         },
         {
+          "method": "gifts.list",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.04,
+          "reactCallers": [
+            "ui/src/components/settings/StoresSection.tsx:160",
+            "ui/src/components/shell/GiftsShelf.tsx:93"
+          ]
+        },
+        {
           "method": "gpu.game",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 17.04,
+          "nativeMedianMs": 12.64,
           "reactCallers": [
             "ui/src/lib/host.ts:3202"
           ]
@@ -2732,7 +2734,7 @@
           "method": "hdr.game",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 44.33,
+          "nativeMedianMs": 47.21,
           "reactCallers": [
             "ui/src/components/game/HdrRow.tsx:39",
             "ui/src/components/game/HdrRow.tsx:54"
@@ -2742,7 +2744,7 @@
           "method": "keep.status",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 0.39,
+          "nativeMedianMs": 2.46,
           "reactCallers": [
             "ui/src/components/game/OptimizeLine.tsx:45",
             "ui/src/components/gpu/PcOverview.tsx:97"
@@ -2752,7 +2754,7 @@
           "method": "shaders.status",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 4.56,
+          "nativeMedianMs": 3.08,
           "reactCallers": [
             "ui/src/components/game/ShaderPrecompile.tsx:65"
           ]
@@ -2772,14 +2774,14 @@
         "status": "ok"
       },
       "webSummary": {
-        "totalRequests": 7,
+        "totalRequests": 8,
         "totalEvents": 1,
         "methods": {
           "app.pendingOpen": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.02,
+            "medianMs": 0.06,
             "shapes": [
               "null"
             ]
@@ -2788,7 +2790,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.07,
+            "medianMs": 0.06,
             "shapes": [
               "{\"cancel\":\"boolean\"}"
             ]
@@ -2803,8 +2805,8 @@
             ]
           },
           "shell.heartbeat": {
-            "count": 3,
-            "ok": 3,
+            "count": 4,
+            "ok": 4,
             "failed": 0,
             "medianMs": 0.05,
             "shapes": [
@@ -2815,7 +2817,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.05,
+            "medianMs": 0.1,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -2831,14 +2833,14 @@
         }
       },
       "nativeSummary": {
-        "totalRequests": 19,
+        "totalRequests": 11,
         "totalEvents": 1,
         "methods": {
           "app.pendingOpen": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.01,
+            "medianMs": 0.02,
             "shapes": [
               "{}"
             ]
@@ -2847,7 +2849,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.09,
+            "medianMs": 0.18,
             "shapes": [
               "{}"
             ]
@@ -2856,7 +2858,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.25,
+            "medianMs": 0.28,
             "shapes": [
               "{\"connect\":\"boolean\"}"
             ]
@@ -2865,7 +2867,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1.52,
+            "medianMs": 1.25,
             "shapes": [
               "{\"action\":\"string\",\"hevc\":\"boolean\"}"
             ]
@@ -2874,34 +2876,25 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.04,
+            "medianMs": 0.13,
             "shapes": [
               "{}"
             ]
           },
           "shell.heartbeat": {
-            "count": 6,
-            "ok": 6,
+            "count": 5,
+            "ok": 5,
             "failed": 0,
-            "medianMs": 0.07,
+            "medianMs": 0.06,
             "shapes": [
               "{\"visible\":\"boolean\"}"
-            ]
-          },
-          "store.game": {
-            "count": 7,
-            "ok": 7,
-            "failed": 0,
-            "medianMs": 299.27,
-            "shapes": [
-              "{\"appId\":\"string\"}"
             ]
           },
           "telemetry.track": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.02,
+            "medianMs": 0.04,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -2916,13 +2909,13 @@
           }
         }
       },
-      "gapScore": 24,
+      "gapScore": 22,
       "reactOnlyMethods": [
         {
           "method": "discord.signIn",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 0.07,
+          "webMedianMs": 0.06,
           "reactCallers": [
             "ui/src/components/discord/DiscordSignIn.tsx:21",
             "ui/src/components/discord/DiscordSignIn.tsx:25"
@@ -2931,19 +2924,10 @@
       ],
       "nativeOnlyMethods": [
         {
-          "method": "store.game",
-          "webCount": 0,
-          "nativeCount": 7,
-          "nativeMedianMs": 299.27,
-          "reactCallers": [
-            "ui/src/components/store/storeData.ts:150"
-          ]
-        },
-        {
           "method": "discord.accounts",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 0.09,
+          "nativeMedianMs": 0.18,
           "reactCallers": [
             "ui/src/components/discord/MeMenus.tsx:51",
             "ui/src/components/discord/MeMenus.tsx:102"
@@ -2953,7 +2937,7 @@
           "method": "discord.stream",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 1.52,
+          "nativeMedianMs": 1.25,
           "reactCallers": [
             "ui/src/components/discord/voice.tsx:274",
             "ui/src/components/discord/voice.tsx:290",
@@ -2967,7 +2951,7 @@
           "method": "discord.voice",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 0.04,
+          "nativeMedianMs": 0.13,
           "reactCallers": [
             "ui/src/components/discord/voice.tsx:52",
             "ui/src/components/discord/voice.tsx:87",
@@ -3020,7 +3004,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 288.59,
+            "medianMs": 282.06,
             "shapes": [
               "{\"ids\":[\"string\"]}"
             ]
@@ -3029,7 +3013,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 49.77,
+            "medianMs": 47.39,
             "shapes": [
               "{}"
             ]
@@ -3038,7 +3022,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.31,
+            "medianMs": 0.26,
             "shapes": [
               "{}"
             ]
@@ -3047,7 +3031,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1545.23,
+            "medianMs": 1385.67,
             "shapes": [
               "{\"fresh\":\"boolean\"}"
             ]
@@ -3056,7 +3040,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 4.01,
+            "medianMs": 3.45,
             "shapes": [
               "{\"limit\":\"number\"}"
             ]
@@ -3074,7 +3058,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.3,
+            "medianMs": 0.23,
             "shapes": [
               "{\"method\":\"string\",\"params\":{\"visible\":\"boolean\"}}"
             ]
@@ -3092,7 +3076,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 669.92,
+            "medianMs": 609.87,
             "shapes": [
               "{}"
             ]
@@ -3101,7 +3085,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.43,
+            "medianMs": 0.41,
             "shapes": [
               "{}"
             ]
@@ -3119,7 +3103,7 @@
         "events": {}
       },
       "nativeSummary": {
-        "totalRequests": 15,
+        "totalRequests": 16,
         "totalEvents": 0,
         "methods": {
           "app.pendingOpen": {
@@ -3135,7 +3119,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 963.24,
+            "medianMs": 441.68,
             "shapes": [
               "{\"ids\":[\"string\"]}"
             ]
@@ -3144,7 +3128,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 41.95,
+            "medianMs": 49.38,
             "shapes": [
               "{}"
             ]
@@ -3153,7 +3137,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.32,
+            "medianMs": 0.41,
             "shapes": [
               "{}"
             ]
@@ -3162,7 +3146,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 913.78,
+            "medianMs": 382.5,
             "shapes": [
               "{}"
             ]
@@ -3189,25 +3173,25 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.3,
+            "medianMs": 0.24,
             "shapes": [
               "{\"method\":\"string\",\"params\":{\"visible\":\"boolean\"}}"
             ]
           },
           "shell.heartbeat": {
-            "count": 4,
-            "ok": 4,
+            "count": 5,
+            "ok": 5,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
           },
           "startup.list": {
             "count": 1,
-            "ok": 0,
+            "ok": 1,
             "failed": 0,
-            "medianMs": null,
+            "medianMs": 804.88,
             "shapes": [
               "{}"
             ]
@@ -3216,7 +3200,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.03,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -3230,7 +3214,7 @@
           "method": "gpu.processes",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 4.01,
+          "webMedianMs": 3.45,
           "reactCallers": [
             "ui/src/components/gpu/GpuProcessesSection.tsx:33"
           ]
@@ -3239,7 +3223,7 @@
           "method": "system.tune",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 0.43,
+          "webMedianMs": 0.41,
           "reactCallers": [
             "ui/src/components/gpu/AutoTune.tsx:44",
             "ui/src/components/gpu/AutoTune.tsx:60",
@@ -3252,135 +3236,12 @@
           "method": "apps.packages",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 913.78,
+          "nativeMedianMs": 382.5,
           "reactCallers": [
             "ui/src/components/gpu/ExoAiRoom.tsx:172"
           ]
         }
       ],
-      "pushEventGaps": [],
-      "chattiness": []
-    },
-    {
-      "id": "room-library",
-      "label": "Return to Library room",
-      "group": "rooms",
-      "webStatus": {
-        "status": "ok"
-      },
-      "nativeStatus": {
-        "status": "ok"
-      },
-      "webSummary": {
-        "totalRequests": 7,
-        "totalEvents": 0,
-        "methods": {
-          "app.pendingOpen": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.02,
-            "shapes": [
-              "null"
-            ]
-          },
-          "game.extras": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.85,
-            "shapes": [
-              "{\"id\":\"string\"}"
-            ]
-          },
-          "gifts.list": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.06,
-            "shapes": [
-              "{\"force\":\"boolean\"}"
-            ]
-          },
-          "shell.heartbeat": {
-            "count": 3,
-            "ok": 3,
-            "failed": 0,
-            "medianMs": 0.05,
-            "shapes": [
-              "{\"visible\":\"boolean\"}"
-            ]
-          },
-          "telemetry.track": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.65,
-            "shapes": [
-              "{\"room\":\"string\"}"
-            ]
-          }
-        },
-        "events": {}
-      },
-      "nativeSummary": {
-        "totalRequests": 6,
-        "totalEvents": 0,
-        "methods": {
-          "app.pendingOpen": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.05,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "shell.heartbeat": {
-            "count": 4,
-            "ok": 4,
-            "failed": 0,
-            "medianMs": 0.05,
-            "shapes": [
-              "{\"visible\":\"boolean\"}"
-            ]
-          },
-          "telemetry.track": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.68,
-            "shapes": [
-              "{\"room\":\"string\"}"
-            ]
-          }
-        },
-        "events": {}
-      },
-      "gapScore": 20,
-      "reactOnlyMethods": [
-        {
-          "method": "game.extras",
-          "webCount": 1,
-          "nativeCount": 0,
-          "webMedianMs": 0.85,
-          "reactCallers": [
-            "ui/src/components/game/useGameDetails.ts:58",
-            "ui/src/components/shell/HomeDeck.tsx:238"
-          ]
-        },
-        {
-          "method": "gifts.list",
-          "webCount": 1,
-          "nativeCount": 0,
-          "webMedianMs": 0.06,
-          "reactCallers": [
-            "ui/src/components/settings/StoresSection.tsx:160",
-            "ui/src/components/shell/GiftsShelf.tsx:93"
-          ]
-        }
-      ],
-      "nativeOnlyMethods": [],
       "pushEventGaps": [],
       "chattiness": []
     },
@@ -3411,7 +3272,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1323.9,
+            "medianMs": 1453.27,
             "shapes": [
               "{}"
             ]
@@ -3420,7 +3281,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 385.76,
+            "medianMs": 361.56,
             "shapes": [
               "{}"
             ]
@@ -3429,7 +3290,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 711.38,
+            "medianMs": 682.8,
             "shapes": [
               "{}"
             ]
@@ -3438,7 +3299,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 607.4,
+            "medianMs": 608.1,
             "shapes": [
               "{}"
             ]
@@ -3447,7 +3308,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 976.22,
+            "medianMs": 256.74,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -3456,7 +3317,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 55.53,
+            "medianMs": 53.04,
             "shapes": [
               "{}"
             ]
@@ -3465,7 +3326,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 402.79,
+            "medianMs": 383.59,
             "shapes": [
               "{}"
             ]
@@ -3474,7 +3335,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 443.35,
+            "medianMs": 492.12,
             "shapes": [
               "{\"action\":\"string\"}"
             ]
@@ -3483,7 +3344,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 656.95,
+            "medianMs": 687.21,
             "shapes": [
               "{\"action\":\"string\",\"branch\":\"string\"}"
             ]
@@ -3492,7 +3353,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 440.77,
+            "medianMs": 421.63,
             "shapes": [
               "{\"limit\":\"number\"}"
             ]
@@ -3501,7 +3362,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 385.95,
+            "medianMs": 465.64,
             "shapes": [
               "{}"
             ]
@@ -3510,7 +3371,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.24,
+            "medianMs": 0.21,
             "shapes": [
               "{}"
             ]
@@ -3519,7 +3380,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1.03,
+            "medianMs": 0.75,
             "shapes": [
               "{}"
             ]
@@ -3528,7 +3389,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 276.93,
+            "medianMs": 285.95,
             "shapes": [
               "{}"
             ]
@@ -3537,7 +3398,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 2.85,
+            "medianMs": 2.13,
             "shapes": [
               "null"
             ]
@@ -3546,7 +3407,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 16.62,
+            "medianMs": 16.87,
             "shapes": [
               "null"
             ]
@@ -3555,7 +3416,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 712.62,
+            "medianMs": 693.65,
             "shapes": [
               "null"
             ]
@@ -3564,7 +3425,7 @@
             "count": 5,
             "ok": 5,
             "failed": 0,
-            "medianMs": 0.05,
+            "medianMs": 0.04,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -3573,7 +3434,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 239.07,
+            "medianMs": 216.91,
             "shapes": [
               "{}"
             ]
@@ -3591,7 +3452,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 224.38,
+            "medianMs": 224.74,
             "shapes": [
               "{}"
             ]
@@ -3600,7 +3461,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 89.22,
+            "medianMs": 59.89,
             "shapes": [
               "{}"
             ]
@@ -3609,7 +3470,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 65.83,
+            "medianMs": 73.88,
             "shapes": [
               "{}"
             ]
@@ -3618,7 +3479,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 17.16,
+            "medianMs": 15.69,
             "shapes": [
               "{}"
             ]
@@ -3627,7 +3488,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 758.01,
+            "medianMs": 737.99,
             "shapes": [
               "{}"
             ]
@@ -3636,7 +3497,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.05,
+            "medianMs": 0.03,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -3645,23 +3506,23 @@
         "events": {}
       },
       "nativeSummary": {
-        "totalRequests": 33,
+        "totalRequests": 32,
         "totalEvents": 0,
         "methods": {
           "app.pendingOpen": {
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.1,
+            "medianMs": 0.04,
             "shapes": [
               "{}"
             ]
           },
           "apps.list": {
             "count": 1,
-            "ok": 0,
+            "ok": 1,
             "failed": 0,
-            "medianMs": null,
+            "medianMs": 1662.48,
             "shapes": [
               "{}"
             ]
@@ -3670,7 +3531,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1118.38,
+            "medianMs": 502.55,
             "shapes": [
               "{}"
             ]
@@ -3679,7 +3540,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 769.6,
+            "medianMs": 650.1,
             "shapes": [
               "{}"
             ]
@@ -3688,7 +3549,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1.55,
+            "medianMs": 2.83,
             "shapes": [
               "{}"
             ]
@@ -3697,7 +3558,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 813.97,
+            "medianMs": 649.44,
             "shapes": [
               "{}"
             ]
@@ -3706,7 +3567,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 333.7,
+            "medianMs": 167.11,
             "shapes": [
               "{\"id\":\"string\"}"
             ]
@@ -3715,7 +3576,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 143.87,
+            "medianMs": 66.08,
             "shapes": [
               "{}"
             ]
@@ -3724,7 +3585,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 465.88,
+            "medianMs": 467.35,
             "shapes": [
               "{}"
             ]
@@ -3733,7 +3594,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 6.42,
+            "medianMs": 7.95,
             "shapes": [
               "{}"
             ]
@@ -3742,7 +3603,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 588.47,
+            "medianMs": 511.83,
             "shapes": [
               "{\"action\":\"string\"}"
             ]
@@ -3751,7 +3612,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 896.71,
+            "medianMs": 769.22,
             "shapes": [
               "{\"action\":\"string\",\"branch\":\"string\"}"
             ]
@@ -3760,7 +3621,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 563.67,
+            "medianMs": 481.08,
             "shapes": [
               "{}"
             ]
@@ -3769,7 +3630,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.31,
+            "medianMs": 2.15,
             "shapes": [
               "{}"
             ]
@@ -3778,7 +3639,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.4,
+            "medianMs": 0.32,
             "shapes": [
               "{}"
             ]
@@ -3787,7 +3648,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 439.93,
+            "medianMs": 332.34,
             "shapes": [
               "{}"
             ]
@@ -3796,7 +3657,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.13,
+            "medianMs": 2.26,
             "shapes": [
               "{}"
             ]
@@ -3805,7 +3666,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 15.22,
+            "medianMs": 18.56,
             "shapes": [
               "{}"
             ]
@@ -3814,7 +3675,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 475.57,
+            "medianMs": 733.89,
             "shapes": [
               "{}"
             ]
@@ -3823,16 +3684,16 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.67,
+            "medianMs": 0.97,
             "shapes": [
               "{}"
             ]
           },
           "shell.heartbeat": {
-            "count": 5,
-            "ok": 5,
+            "count": 4,
+            "ok": 4,
             "failed": 0,
-            "medianMs": 0.07,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -3841,7 +3702,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 693.44,
+            "medianMs": 859.91,
             "shapes": [
               "{}"
             ]
@@ -3857,9 +3718,9 @@
           },
           "system.drives": {
             "count": 1,
-            "ok": 0,
+            "ok": 1,
             "failed": 0,
-            "medianMs": null,
+            "medianMs": 1597.46,
             "shapes": [
               "{\"space\":\"boolean\"}"
             ]
@@ -3868,7 +3729,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 211.06,
+            "medianMs": 106.27,
             "shapes": [
               "{}"
             ]
@@ -3877,7 +3738,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 71.28,
+            "medianMs": 59.04,
             "shapes": [
               "{}"
             ]
@@ -3886,7 +3747,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 15.25,
+            "medianMs": 40.43,
             "shapes": [
               "{}"
             ]
@@ -3895,7 +3756,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 941.51,
+            "medianMs": 777.12,
             "shapes": [
               "{}"
             ]
@@ -3904,7 +3765,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.07,
+            "medianMs": 0.06,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -3918,7 +3779,7 @@
           "method": "gpu.processes",
           "webCount": 1,
           "nativeCount": 0,
-          "webMedianMs": 440.77,
+          "webMedianMs": 421.63,
           "reactCallers": [
             "ui/src/components/gpu/GpuProcessesSection.tsx:33"
           ]
@@ -3929,7 +3790,7 @@
           "method": "bios.update",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 1.55,
+          "nativeMedianMs": 2.83,
           "reactCallers": [
             "ui/src/components/gpu/AutoTuneCinema.tsx:143",
             "ui/src/components/gpu/DriversSection.tsx:348",
@@ -3942,7 +3803,7 @@
           "method": "gpu.afmf3",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 6.42,
+          "nativeMedianMs": 7.95,
           "reactCallers": [
             "ui/src/components/gpu/Afmf3Row.tsx:18",
             "ui/src/components/gpu/Afmf3Row.tsx:25"
@@ -3952,7 +3813,7 @@
           "method": "shaders.rebuild",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 0.67,
+          "nativeMedianMs": 0.97,
           "reactCallers": [
             "ui/src/components/shaders/ShadersBoard.tsx:350",
             "ui/src/components/shaders/ShadersBoard.tsx:351"
@@ -3980,7 +3841,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 15.21,
+            "medianMs": 9.55,
             "shapes": [
               "null"
             ]
@@ -3989,7 +3850,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 0.16,
+            "medianMs": 0.09,
             "shapes": [
               "{\"level\":\"string\",\"message\":\"string\"}",
               "{\"level\":\"string\",\"message\":\"string\",\"context\":\"string\",\"stack\":\"string\"}"
@@ -3999,7 +3860,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.03,
+            "medianMs": 0.02,
             "shapes": [
               "null"
             ]
@@ -4008,7 +3869,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.07,
+            "medianMs": 0.05,
             "shapes": [
               "{\"force\":\"boolean\"}"
             ]
@@ -4017,7 +3878,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.43,
+            "medianMs": 0.17,
             "shapes": [
               "null"
             ]
@@ -4026,7 +3887,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.17,
+            "medianMs": 0.14,
             "shapes": [
               "{\"method\":\"string\",\"params\":{}}"
             ]
@@ -4035,7 +3896,7 @@
             "count": 4,
             "ok": 4,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.04,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -4044,7 +3905,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.37,
+            "medianMs": 0.22,
             "shapes": [
               "null"
             ]
@@ -4053,7 +3914,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.88,
+            "medianMs": 0.63,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -4069,7 +3930,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 12.11,
+            "medianMs": 8.42,
             "shapes": [
               "{}"
             ]
@@ -4078,7 +3939,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 151.52,
+            "medianMs": 108.88,
             "shapes": [
               "{\"manual\":\"boolean\"}"
             ]
@@ -4087,7 +3948,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.08,
+            "medianMs": 0.05,
             "shapes": [
               "{\"level\":\"string\",\"message\":\"string\"}"
             ]
@@ -4096,7 +3957,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.01,
+            "medianMs": 0.02,
             "shapes": [
               "{}"
             ]
@@ -4105,7 +3966,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 3.06,
+            "medianMs": 2.35,
             "shapes": [
               "{}"
             ]
@@ -4114,7 +3975,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.23,
+            "medianMs": 0.5,
             "shapes": [
               "{}"
             ]
@@ -4123,7 +3984,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 2.85,
+            "medianMs": 2.81,
             "shapes": [
               "{}"
             ]
@@ -4141,7 +4002,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.24,
+            "medianMs": 0.26,
             "shapes": [
               "{}"
             ]
@@ -4150,7 +4011,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 0.17,
+            "medianMs": 0.23,
             "shapes": [
               "{}"
             ]
@@ -4159,7 +4020,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 0.36,
+            "medianMs": 0.15,
             "shapes": [
               "{\"method\":\"string\",\"params\":{}}"
             ]
@@ -4177,7 +4038,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.13,
+            "medianMs": 0.15,
             "shapes": [
               "{}"
             ]
@@ -4186,7 +4047,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 141.6,
+            "medianMs": 111.1,
             "shapes": [
               "{}"
             ]
@@ -4195,7 +4056,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 7.69,
+            "medianMs": 5.58,
             "shapes": [
               "{}"
             ]
@@ -4204,7 +4065,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.59,
+            "medianMs": 0.69,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -4213,7 +4074,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 1.01,
+            "medianMs": 0.92,
             "shapes": [
               "{}"
             ]
@@ -4235,7 +4096,7 @@
           "method": "web.preferences.get",
           "webCount": 0,
           "nativeCount": 2,
-          "nativeMedianMs": 1.01,
+          "nativeMedianMs": 0.92,
           "reactCallers": [
             "ui/src/components/LauncherApp.tsx:184",
             "ui/src/components/onboarding/AppsStep.tsx:22",
@@ -4246,7 +4107,7 @@
           "method": "app.checkUpdate",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 151.52,
+          "nativeMedianMs": 108.88,
           "reactCallers": [
             "ui/src/components/shell/useAppUpdate.ts:99",
             "ui/src/components/shell/useAppUpdate.ts:171",
@@ -4258,7 +4119,7 @@
           "method": "backup.status",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 3.06,
+          "nativeMedianMs": 2.35,
           "reactCallers": [
             "ui/src/components/OnboardingPanel.tsx:95",
             "ui/src/components/settings/BackupSection.tsx:30",
@@ -4270,7 +4131,7 @@
           "method": "exoAccount.overview",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 0.23,
+          "nativeMedianMs": 0.5,
           "reactCallers": [
             "ui/src/components/account/useAccount.ts:6",
             "ui/src/components/account/useAccount.ts:10"
@@ -4280,7 +4141,7 @@
           "method": "fps.counter",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 2.85,
+          "nativeMedianMs": 2.81,
           "reactCallers": [
             "ui/src/components/settings/GeneralSection.tsx:127",
             "ui/src/components/settings/GeneralSection.tsx:131",
@@ -4291,7 +4152,7 @@
           "method": "hdr.state",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 0.24,
+          "nativeMedianMs": 0.26,
           "reactCallers": [
             "ui/src/lib/hdr.ts:10"
           ]
@@ -4300,7 +4161,7 @@
           "method": "stores.matrix",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 141.6,
+          "nativeMedianMs": 111.1,
           "reactCallers": [
             "ui/src/components/OnboardingPanel.tsx:47",
             "ui/src/components/OnboardingPanel.tsx:250",
@@ -4314,12 +4175,258 @@
           "method": "system.about",
           "webCount": 0,
           "nativeCount": 1,
-          "nativeMedianMs": 7.69,
+          "nativeMedianMs": 5.58,
           "reactCallers": [
             "ui/src/components/gpu/usePcState.ts:68"
           ]
         }
       ],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "downloads",
+      "label": "Open Downloads sheet",
+      "group": "library",
+      "webStatus": {
+        "status": "not_drivable",
+        "reason": "Downloads menu item not found"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 9,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 9,
+            "ok": 9,
+            "failed": 0,
+            "medianMs": 0.04,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 15,
+        "totalEvents": 0,
+        "methods": {
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.03,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "downloads.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 2.78,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "game.extras": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.65,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "game.progress": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.08,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "gifts.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.04,
+            "shapes": [
+              "{\"force\":\"boolean\"}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 10,
+            "ok": 10,
+            "failed": 0,
+            "medianMs": 0.04,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "gapScore": 10,
+      "reactOnlyMethods": [],
+      "nativeOnlyMethods": [
+        {
+          "method": "app.pendingOpen",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.03,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "downloads.list",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 2.78,
+          "reactCallers": [
+            "ui/src/components/DownloadsSheet.tsx:30"
+          ]
+        },
+        {
+          "method": "game.extras",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.65,
+          "reactCallers": [
+            "ui/src/components/game/useGameDetails.ts:58",
+            "ui/src/components/shell/HomeDeck.tsx:238"
+          ]
+        },
+        {
+          "method": "game.progress",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.08,
+          "reactCallers": [
+            "ui/src/components/DownloadsSheet.tsx:39",
+            "ui/src/lib/hostContract.ts:23"
+          ]
+        },
+        {
+          "method": "gifts.list",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.04,
+          "reactCallers": [
+            "ui/src/components/settings/StoresSection.tsx:160",
+            "ui/src/components/shell/GiftsShelf.tsx:93"
+          ]
+        }
+      ],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "palette",
+      "label": "Open Command Palette (Ctrl+K)",
+      "group": "shell",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 6,
+        "totalEvents": 0,
+        "methods": {
+          "discord.home": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.56,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "notes.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.67,
+            "shapes": [
+              "{\"query\":\"null\"}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 3,
+            "ok": 3,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "shell.setChromeLayout": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.9,
+            "shapes": [
+              "{\"interactiveRegions\":[{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}],\"maximizeButton\":{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 6,
+        "totalEvents": 0,
+        "methods": {
+          "discord.home": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.49,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "notes.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.54,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 4,
+            "ok": 4,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "gapScore": 10,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.setChromeLayout",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1.9,
+          "reactCallers": [
+            "ui/src/components/shell/useShellLayout.ts:106"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
       "pushEventGaps": [],
       "chattiness": []
     },
@@ -4359,7 +4466,7 @@
             "count": 4,
             "ok": 4,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -4368,7 +4475,7 @@
             "count": 10,
             "ok": 10,
             "failed": 0,
-            "medianMs": 226.32,
+            "medianMs": 142.77,
             "shapes": [
               "{\"appId\":\"string\"}"
             ]
@@ -4377,7 +4484,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.49,
+            "medianMs": 0.46,
             "shapes": [
               "{}"
             ]
@@ -4386,7 +4493,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.21,
+            "medianMs": 0.13,
             "shapes": [
               "{\"action\":\"string\"}"
             ]
@@ -4395,7 +4502,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.72,
+            "medianMs": 0.81,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -4404,7 +4511,7 @@
         "events": {}
       },
       "nativeSummary": {
-        "totalRequests": 10,
+        "totalRequests": 18,
         "totalEvents": 0,
         "methods": {
           "app.pendingOpen": {
@@ -4417,8 +4524,8 @@
             ]
           },
           "shell.heartbeat": {
-            "count": 3,
-            "ok": 3,
+            "count": 4,
+            "ok": 4,
             "failed": 0,
             "medianMs": 0.06,
             "shapes": [
@@ -4426,10 +4533,10 @@
             ]
           },
           "store.game": {
-            "count": 3,
-            "ok": 3,
+            "count": 10,
+            "ok": 10,
             "failed": 0,
-            "medianMs": 295.18,
+            "medianMs": 163.18,
             "shapes": [
               "{\"appId\":\"string\"}"
             ]
@@ -4438,7 +4545,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.78,
+            "medianMs": 0.48,
             "shapes": [
               "{}"
             ]
@@ -4447,7 +4554,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.76,
+            "medianMs": 0.22,
             "shapes": [
               "{\"action\":\"string\"}"
             ]
@@ -4456,7 +4563,7 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 1.13,
+            "medianMs": 0.75,
             "shapes": [
               "{\"room\":\"string\"}"
             ]
@@ -4464,7 +4571,7 @@
         },
         "events": {}
       },
-      "gapScore": 14,
+      "gapScore": 10,
       "reactOnlyMethods": [
         {
           "method": "music.volume",
@@ -4483,23 +4590,12 @@
       ],
       "nativeOnlyMethods": [],
       "pushEventGaps": [],
-      "chattiness": [
-        {
-          "method": "store.game",
-          "webCount": 10,
-          "nativeCount": 3,
-          "ratio": 3.33,
-          "chattier": "web",
-          "reactCallers": [
-            "ui/src/components/store/storeData.ts:150"
-          ]
-        }
-      ]
+      "chattiness": []
     },
     {
-      "id": "palette",
-      "label": "Open Command Palette (Ctrl+K)",
-      "group": "shell",
+      "id": "settings-about",
+      "label": "Open Settings > About",
+      "group": "settings",
       "webStatus": {
         "status": "ok"
       },
@@ -4507,75 +4603,30 @@
         "status": "ok"
       },
       "webSummary": {
-        "totalRequests": 6,
+        "totalRequests": 1,
         "totalEvents": 0,
         "methods": {
-          "discord.home": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.59,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "notes.list": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 4.21,
-            "shapes": [
-              "{\"query\":\"null\"}"
-            ]
-          },
           "shell.heartbeat": {
-            "count": 3,
-            "ok": 3,
+            "count": 1,
+            "ok": 1,
             "failed": 0,
             "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
-            ]
-          },
-          "shell.setChromeLayout": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 2.32,
-            "shapes": [
-              "{\"interactiveRegions\":[{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}],\"maximizeButton\":{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}}"
             ]
           }
         },
         "events": {}
       },
       "nativeSummary": {
-        "totalRequests": 6,
+        "totalRequests": 4,
         "totalEvents": 0,
         "methods": {
-          "discord.home": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.43,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "notes.list": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 2.7,
-            "shapes": [
-              "{}"
-            ]
-          },
           "shell.heartbeat": {
             "count": 4,
             "ok": 4,
             "failed": 0,
-            "medianMs": 0.05,
+            "medianMs": 0.04,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -4583,126 +4634,22 @@
         },
         "events": {}
       },
-      "gapScore": 10,
-      "reactOnlyMethods": [
-        {
-          "method": "shell.setChromeLayout",
-          "webCount": 1,
-          "nativeCount": 0,
-          "webMedianMs": 2.32,
-          "reactCallers": [
-            "ui/src/components/shell/useShellLayout.ts:106"
-          ]
-        }
-      ],
+      "gapScore": 4,
+      "reactOnlyMethods": [],
       "nativeOnlyMethods": [],
       "pushEventGaps": [],
-      "chattiness": []
-    },
-    {
-      "id": "downloads",
-      "label": "Open Downloads sheet",
-      "group": "library",
-      "webStatus": {
-        "status": "not_drivable",
-        "reason": "Downloads menu item not found"
-      },
-      "nativeStatus": {
-        "status": "ok"
-      },
-      "webSummary": {
-        "totalRequests": 9,
-        "totalEvents": 0,
-        "methods": {
-          "shell.heartbeat": {
-            "count": 9,
-            "ok": 9,
-            "failed": 0,
-            "medianMs": 0.05,
-            "shapes": [
-              "{\"visible\":\"boolean\"}"
-            ]
-          }
-        },
-        "events": {}
-      },
-      "nativeSummary": {
-        "totalRequests": 12,
-        "totalEvents": 0,
-        "methods": {
-          "app.pendingOpen": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.05,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "downloads.list": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 2.42,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "game.progress": {
-            "count": 1,
-            "ok": 1,
-            "failed": 0,
-            "medianMs": 0.05,
-            "shapes": [
-              "{}"
-            ]
-          },
-          "shell.heartbeat": {
-            "count": 9,
-            "ok": 9,
-            "failed": 0,
-            "medianMs": 0.05,
-            "shapes": [
-              "{\"visible\":\"boolean\"}"
-            ]
-          }
-        },
-        "events": {}
-      },
-      "gapScore": 6,
-      "reactOnlyMethods": [],
-      "nativeOnlyMethods": [
+      "chattiness": [
         {
-          "method": "app.pendingOpen",
-          "webCount": 0,
-          "nativeCount": 1,
-          "nativeMedianMs": 0.05,
+          "method": "shell.heartbeat",
+          "webCount": 1,
+          "nativeCount": 4,
+          "ratio": 4,
+          "chattier": "native",
           "reactCallers": [
-            "ui/src/components/shell/useShellEvents.ts:279"
-          ]
-        },
-        {
-          "method": "downloads.list",
-          "webCount": 0,
-          "nativeCount": 1,
-          "nativeMedianMs": 2.42,
-          "reactCallers": [
-            "ui/src/components/DownloadsSheet.tsx:30"
-          ]
-        },
-        {
-          "method": "game.progress",
-          "webCount": 0,
-          "nativeCount": 1,
-          "nativeMedianMs": 0.05,
-          "reactCallers": [
-            "ui/src/components/DownloadsSheet.tsx:39",
-            "ui/src/lib/hostContract.ts:23"
+            "ui/src/lib/heartbeat.ts:15"
           ]
         }
-      ],
-      "pushEventGaps": [],
-      "chattiness": []
+      ]
     },
     {
       "id": "settings-ingame",
@@ -4722,7 +4669,66 @@
             "count": 1,
             "ok": 1,
             "failed": 0,
-            "medianMs": 0.09,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 4,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 4,
+            "ok": 4,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "gapScore": 4,
+      "reactOnlyMethods": [],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 1,
+          "nativeCount": 4,
+          "ratio": 4,
+          "chattier": "native",
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "settings-library",
+      "label": "Open Settings > Library",
+      "group": "settings",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 1,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.04,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -4738,7 +4744,7 @@
             "count": 3,
             "ok": 3,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -4764,9 +4770,9 @@
       ]
     },
     {
-      "id": "settings-about",
-      "label": "Open Settings > About",
-      "group": "settings",
+      "id": "room-library",
+      "label": "Return to Library room",
+      "group": "rooms",
       "webStatus": {
         "status": "ok"
       },
@@ -4774,32 +4780,104 @@
         "status": "ok"
       },
       "webSummary": {
-        "totalRequests": 2,
+        "totalRequests": 7,
         "totalEvents": 0,
         "methods": {
-          "shell.heartbeat": {
-            "count": 2,
-            "ok": 2,
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
             "failed": 0,
-            "medianMs": 0.1,
+            "medianMs": 0.02,
+            "shapes": [
+              "null"
+            ]
+          },
+          "game.extras": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.75,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "gifts.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.07,
+            "shapes": [
+              "{\"force\":\"boolean\"}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 3,
+            "ok": 3,
+            "failed": 0,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.49,
+            "shapes": [
+              "{\"room\":\"string\"}"
             ]
           }
         },
         "events": {}
       },
       "nativeSummary": {
-        "totalRequests": 4,
+        "totalRequests": 7,
         "totalEvents": 0,
         "methods": {
-          "shell.heartbeat": {
-            "count": 4,
-            "ok": 4,
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.01,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "game.extras": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.83,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "gifts.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.08,
+            "shapes": [
+              "{\"force\":\"boolean\"}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 3,
+            "ok": 3,
+            "failed": 0,
+            "medianMs": 0.04,
             "shapes": [
               "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.5,
+            "shapes": [
+              "{\"room\":\"string\"}"
             ]
           }
         },
@@ -4829,7 +4907,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.04,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -4845,55 +4923,7 @@
             "count": 4,
             "ok": 4,
             "failed": 0,
-            "medianMs": 0.06,
-            "shapes": [
-              "{\"visible\":\"boolean\"}"
-            ]
-          }
-        },
-        "events": {}
-      },
-      "gapScore": 0,
-      "reactOnlyMethods": [],
-      "nativeOnlyMethods": [],
-      "pushEventGaps": [],
-      "chattiness": []
-    },
-    {
-      "id": "settings-library",
-      "label": "Open Settings > Library",
-      "group": "settings",
-      "webStatus": {
-        "status": "ok"
-      },
-      "nativeStatus": {
-        "status": "ok"
-      },
-      "webSummary": {
-        "totalRequests": 2,
-        "totalEvents": 0,
-        "methods": {
-          "shell.heartbeat": {
-            "count": 2,
-            "ok": 2,
-            "failed": 0,
-            "medianMs": 0.07,
-            "shapes": [
-              "{\"visible\":\"boolean\"}"
-            ]
-          }
-        },
-        "events": {}
-      },
-      "nativeSummary": {
-        "totalRequests": 4,
-        "totalEvents": 0,
-        "methods": {
-          "shell.heartbeat": {
-            "count": 4,
-            "ok": 4,
-            "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -4925,7 +4955,7 @@
             "count": 2,
             "ok": 2,
             "failed": 0,
-            "medianMs": 0.07,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]
@@ -4934,14 +4964,14 @@
         "events": {}
       },
       "nativeSummary": {
-        "totalRequests": 4,
+        "totalRequests": 3,
         "totalEvents": 0,
         "methods": {
           "shell.heartbeat": {
-            "count": 4,
-            "ok": 4,
+            "count": 3,
+            "ok": 3,
             "failed": 0,
-            "medianMs": 0.06,
+            "medianMs": 0.05,
             "shapes": [
               "{\"visible\":\"boolean\"}"
             ]

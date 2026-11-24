@@ -75,31 +75,31 @@ Totals: DONE 24, PARTIAL 0, MISSING 1, BROKEN 0 (of 25).
 
 ## Library
 
-Totals: DONE 6, PARTIAL 7, MISSING 6, BROKEN 2 (of 21).
+Totals: DONE 21, PARTIAL 0, MISSING 0, BROKEN 0 (of 21).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Hero / home deck (selected game, Play, ... menu) | components/shell/HomeDeck.tsx:15 | exo-ui/src/library.rs:409 | PARTIAL | rpc: library.get. Smoke: renders correctly with covers; press on the card is not tracked (room-shell-library report). |
-| Shelf row of covers (scroll, arrows, focus ring) | components/shell/LibraryShelf.tsx:1 | exo-ui/src/library.rs:856 | DONE |  |
-| Multiple shelves (Continue playing, Recently added, Favorites, Folders) | components/shell/useShelves.ts:51 | exo-ui/src/library.rs:856 | PARTIAL | Single shelf + All games; no dynamic shelf set. |
-| All games grid | components/shell/LibraryPane.tsx:23 | exo-ui/src/library.rs:298 | DONE | rpc: library.get.  |
-| Library search overlay | components/shell/useLibrarySearch.ts:38 | exo-ui/src/library.rs:10 | DONE | shell-bar-press-search uninvestigated. |
-| Sort (name, recent, playtime, size) | components/shell/LibraryHead.tsx:132 | exo-ui/src/library.rs:808 | DONE |  |
-| Filter popover (Genre, Mode, Friends, Store) | components/shell/LibraryHead.tsx:4 | exo-ui/src/library.rs:10 | PARTIAL | Genre/Mode/Friends added by room-shell-library; React also filters by store/tag/installed. |
-| Select mode + LibrarySelectBar (multi-select, bulk hide/uninstall/folder) | components/shell/LibrarySelectBar.tsx:14 | — | MISSING | Absent. |
-| Folders (create, edit, cover cropper, reorder, move earlier/later, delete) | components/shell/FolderSheet.tsx:23 | exo-ui/src/menus.rs:352 | BROKEN | rpc: library.folderArt. menus.rs:722 and :1591 push "Folder management coming soon" toast; FolderSheet/Card/Panel/Cropper all absent. |
-| Drag to reorder / drop into folder | components/shell/FolderCard.tsx:22 | — | MISSING | No drag-drop anywhere in native. |
-| Gifts shelf (claimable Steam/Epic gifts) | components/shell/GiftsShelf.tsx:75 | — | MISSING | rpc: gifts.list, gifts.answer. gifts.changed event not handled. |
-| Add game (+ button, file picker, portable) | components/shell/LibraryHead.tsx:1 | exo-ui/src/library.rs:584 | PARTIAL | Button + palette entry exist; no custom-game metadata editing. |
-| Refresh all (library.refreshAll, folder art refresh) | components/shell/useLiveLibraryRefresh.ts:11 | exo-ui/src/state.rs:3035 | PARTIAL | rpc: library.refresh. library.refreshAll never called. |
-| Game card context menu: Play / Install | components/shell/GameMenu.tsx:9 | exo-ui/src/menus.rs:311 | DONE | rpc: game.launch.  |
-| Game card menu: Play as <account> | components/shell/GameMenu.tsx:76 | — | MISSING | rpc: game.launch. No multi-account launch. |
-| Game card menu: Open folder, Properties, Hide/Unhide | components/shell/GameMenu.tsx:78 | exo-ui/src/menus.rs:333 | DONE | rpc: game.openFolder.  |
-| Game card menu: New folder / add to folder | components/shell/GameMenu.tsx:82 | exo-ui/src/menus.rs:348 | BROKEN | Shows "Folder management coming soon". |
-| Folder card menu (Edit, Move earlier/later, Delete) | components/shell/GameMenu.tsx:25 | — | MISSING |  |
-| Running game state + Stop; hold windows (wait for game) | components/shell/useGameHolds.ts:8 | exo-ui/src/library.rs:29 | PARTIAL | rpc: game.stop. game.optimizeHeld / game.optimizedAgain events not handled; no HoldWindow. |
-| Keyboard grid nav / type-ahead | components/shell/LibraryPane.tsx:304 | — | MISSING |  |
-| Library empty / loading / error states | components/shell/LibraryPane.tsx:30 | exo-ui/src/library.rs:215 | PARTIAL | Empty ok; host error state not surfaced. |
+| Hero / home deck (selected game, Play, ... menu) | components/shell/HomeDeck.tsx:15 | exo-ui/src/library.rs:766 | DONE | rpc: library.get. Full HomeDeck with continue_order, press_on_down card tracking, gifts pill, inline search, More/Add menus, hero lockup + transfer progress. |
+| Shelf row of covers (scroll, arrows, focus ring) | components/shell/LibraryShelf.tsx:1 | exo-ui/src/library.rs:766 | DONE |  |
+| Multiple shelves (Continue playing, Recently added, Favorites, Folders) | components/shell/useShelves.ts:51 | exo-ui/src/library_state.rs:1136 | DONE | Dynamic shelves (Continue playing, All games with Folders, Hidden games) matching useShelves.ts; fixed hidden-games filter bug in state.rs. |
+| All games grid | components/shell/LibraryPane.tsx:23 | exo-ui/src/library.rs:1169 | DONE | rpc: library.get.  |
+| Library search overlay | components/shell/useLibrarySearch.ts:38 | exo-ui/src/library_state.rs:652 | DONE | Natural-language search parser + understood chips + clear button. |
+| Sort (name, recent, playtime, size) | components/shell/LibraryHead.tsx:132 | exo-ui/src/menus.rs:1765 | DONE | Persisted sortMode + Sort by / Show (All games, Hidden games) sections. |
+| Filter popover (Genre, Mode, Friends, Store) | components/shell/LibraryHead.tsx:4 | exo-ui/src/library.rs:363 | DONE | Full Show/Store/Genre/Mode chips, 420px flex-wrap popover, active chip bar, friends warm-up. |
+| Select mode + LibrarySelectBar (multi-select, bulk hide/uninstall/folder) | components/shell/LibrarySelectBar.tsx:14 | exo-ui/src/select_bar.rs:12 | DONE | Floating bottom-center pill bar with count, Shift-range pick, bulk Hide/Unhide, Add to folder popover, Uninstall/Remove in-place confirm, Select all/Clear/Done. |
+| Folders (create, edit, cover cropper, reorder, move earlier/later, delete) | components/shell/FolderSheet.tsx:23 | exo-ui/src/folders.rs:589 | DONE | rpc: library.folderArt, settings.set. FolderCard, FolderPanel (inline rename + 6 sorts), FolderSheet (8 colors, picker, custom art), FolderCropper (pan/zoom + PNG upload). |
+| Drag to reorder / drop into folder | components/shell/FolderCard.tsx:22 | exo-ui/src/folders.rs:110 | DONE | Rune exo-inputs drag/drop: reorder folders & folder games (DropReorder), drop game onto folder card, OS file drop for folder art & portable games. |
+| Gifts shelf (claimable Steam/Epic gifts) | components/shell/GiftsShelf.tsx:75 | exo-ui/src/gifts.rs:13 | DONE | rpc: gifts.list, gifts.answer; event: gifts.changed via AppState::register_event. Gifts pill + glass popover with Accept & Decline in-place confirm. |
+| Add game (+ button, file picker, portable) | components/shell/LibraryHead.tsx:1 | exo-ui/src/library_state.rs:1971 | DONE | rpc: shell.pickProgram, library.addCustom. + menu (New folder, Add a game) and OS file drop (.exe/.lnk/.bat/.cmd) on Library. |
+| Refresh all (library.refreshAll, folder art refresh) | components/shell/useLiveLibraryRefresh.ts:11 | exo-ui/src/library_state.rs:2051 | DONE | rpc: library.refreshAll. Live refresh notice, cover shine, 30-min periodic rescan, folder art cache refresh. |
+| Game card context menu: Play / Install | components/shell/GameMenu.tsx:9 | exo-ui/src/menus.rs:640 | DONE | rpc: game.launch.  |
+| Game card menu: Play as <account> | components/shell/GameMenu.tsx:76 | exo-ui/src/menus.rs:697 | DONE | rpc: accounts.list, accounts.switch, game.launch. Riot saved-account switching & launch. |
+| Game card menu: Open folder, Properties, Hide/Unhide | components/shell/GameMenu.tsx:78 | exo-ui/src/menus.rs:720 | DONE | rpc: game.openFolder.  |
+| Game card menu: New folder / add to folder | components/shell/GameMenu.tsx:82 | exo-ui/src/menus.rs:730 | DONE | New folder + per-folder toggle checkmarks (replaced stub toast). |
+| Folder card menu (Edit, Move earlier/later, Delete) | components/shell/GameMenu.tsx:25 | exo-ui/src/menus.rs:765 | DONE | Edit folder, Move earlier, Move later, Delete folder with in-place "Delete? Games stay" confirm. |
+| Running game state + Stop; hold windows (wait for game) | components/shell/useGameHolds.ts:8 | exo-ui/src/library_state.rs:2111 | DONE | rpc: game.stop; events: game.optimizeHeld, game.optimizedAgain via AppState::register_event. Per-game Starting/Closing holds + release timing. |
+| Keyboard grid nav / type-ahead | components/shell/LibraryPane.tsx:304 | exo-ui/src/library_state.rs:2313 | DONE | Ctrl+F, Ctrl+A, Escape, HomeDeck Left/Right, Grid Arrow/Home/End/PageUp/PageDown/Enter + letter/digit type-ahead. |
+| Library empty / loading / error states | components/shell/LibraryPane.tsx:30 | exo-ui/src/library.rs:693 | DONE | Loading state, empty state with Add a game / Refresh / Store actions, host error "Library unavailable" with Try again. |
 
 ## Game page
 
@@ -557,21 +557,21 @@ Owns: library.rs (+ new folders.rs, select_bar.rs, gifts.rs); game-card items in
 
 Depends on: Rune fork: drag-and-drop (pointer drag source/target, drop-to-reorder) and file drop events. RPC: library.folderArt, gifts.* exist.
 
-- `library-01` [PARTIAL] Hero / home deck (selected game, Play, ... menu)
-- `library-03` [PARTIAL] Multiple shelves (Continue playing, Recently added, Favorites, Folders)
-- `library-07` [PARTIAL] Filter popover (Genre, Mode, Friends, Store)
-- `library-08` [MISSING] Select mode + LibrarySelectBar (multi-select, bulk hide/uninstall/folder)
-- `library-09` [BROKEN] Folders (create, edit, cover cropper, reorder, move earlier/later, delete)
-- `library-10` [MISSING] Drag to reorder / drop into folder
-- `library-11` [MISSING] Gifts shelf (claimable Steam/Epic gifts)
-- `library-12` [PARTIAL] Add game (+ button, file picker, portable)
-- `library-13` [PARTIAL] Refresh all (library.refreshAll, folder art refresh)
-- `library-15` [MISSING] Game card menu: Play as <account>
-- `library-17` [BROKEN] Game card menu: New folder / add to folder
-- `library-18` [MISSING] Folder card menu (Edit, Move earlier/later, Delete)
-- `library-19` [PARTIAL] Running game state + Stop; hold windows (wait for game)
-- `library-20` [MISSING] Keyboard grid nav / type-ahead
-- `library-21` [PARTIAL] Library empty / loading / error states
+- `library-01` [DONE] Hero / home deck (selected game, Play, ... menu)
+- `library-03` [DONE] Multiple shelves (Continue playing, Recently added, Favorites, Folders)
+- `library-07` [DONE] Filter popover (Genre, Mode, Friends, Store)
+- `library-08` [DONE] Select mode + LibrarySelectBar (multi-select, bulk hide/uninstall/folder)
+- `library-09` [DONE] Folders (create, edit, cover cropper, reorder, move earlier/later, delete)
+- `library-10` [DONE] Drag to reorder / drop into folder
+- `library-11` [DONE] Gifts shelf (claimable Steam/Epic gifts)
+- `library-12` [DONE] Add game (+ button, file picker, portable)
+- `library-13` [DONE] Refresh all (library.refreshAll, folder art refresh)
+- `library-15` [DONE] Game card menu: Play as <account>
+- `library-17` [DONE] Game card menu: New folder / add to folder
+- `library-18` [DONE] Folder card menu (Edit, Move earlier/later, Delete)
+- `library-19` [DONE] Running game state + Stop; hold windows (wait for game)
+- `library-20` [DONE] Keyboard grid nav / type-ahead
+- `library-21` [DONE] Library empty / loading / error states
 
 #### WP3 Shell chrome: Island, Downloads, updater, notices, boot gate, shortcuts, palette (L, 18 items)
 

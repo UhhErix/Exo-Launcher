@@ -860,6 +860,7 @@ version = "0.1.0"
 dependencies = [
  "exo-kit",
  "exo-rpc",
+ "image",
  "rune",
  "rune-media",
  "serde_json",
