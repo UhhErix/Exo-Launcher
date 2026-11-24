@@ -1,5 +1,20 @@
 [
   {
+    "version": "3.30.3",
+    "items": [
+      {
+        "icon": "Mouse",
+        "title": "Reliable mouse profiles without repeat writes",
+        "detail": "Stops Finalmouse Starlight X profiles from repeatedly re-applying on connect, adds debounce for game profile switching, and protects mice with per-device write limits."
+      },
+      {
+        "icon": "Performance",
+        "title": "Cleaner Auto Tune finish",
+        "detail": "Keeps the Auto Tune completion view focused by dropping the long list of stages and showing only warnings or errors if something fails."
+      }
+    ]
+  },
+  {
     "version": "3.30.2",
     "items": [
       {

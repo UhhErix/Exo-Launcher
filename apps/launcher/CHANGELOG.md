@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.30.3 — November 24, 2026
+- **Exo Mouse no longer loops or overwrites your settings.** Matches saved pre-3.30.2 Finalmouse Starlight X click-mode profiles against 6-byte firmware 1.2.8 read-backs, removes the 60-second connect-time retry loop so settings write only when you change them or switch to a different profile, adds 2-second debounce/hysteresis and browser/launcher exclusions for game profile auto-switching, and guards HID writes per device with rate limiting and diagnostics. _Verified: on screen._
+- **Cleaner Auto Tune finish.** Drops the verbose what-changed list after Auto Tune completes, showing only warnings or errors when a stage fails. _Checked in code only._
+
 ## 3.30.2 — November 24, 2026
 - **Snip and fullscreen captures no longer show a black screen.** Waits for a real desktop frame from Desktop Duplication, retries transient access errors, falls back cleanly through Windows Graphics Capture and GDI BitBlt while rejecting blank frames, and reports capture errors instead of opening an empty snip overlay. _Verified: on screen._
 - **Finalmouse Starlight X (TMR-DS) Ultraclick & Intent Trigger.** Adds Ultraclick mode and the Intent Trigger toggle to Devices › Mouse for Finalmouse TMR-DS mice (with firmware-version checks and profile persistence). _Checked in code only._
