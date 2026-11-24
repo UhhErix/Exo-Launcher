@@ -1,0 +1,298 @@
+game "rdr2" {
+  title "Red Dead Redemption 2"
+  steam "1174180"
+  program "PlayRDR2.exe"
+  processes ["RDR2", "PlayRDR2"]
+  file $documents("Rockstar Games/Red Dead Redemption 2/Settings/system.xml")
+  format xml
+  group "graphics" {
+    set "textureQuality" = "kSettingLevel_Ultra"
+    set "anisotropicFiltering" = "4"
+    set "tessellation" = "kSettingLevel_Ultra"
+    set "POMQuality" = if gpu.strong { "kSettingLevel_High" } else { "kSettingLevel_Medium" }
+    set "shadowQuality" = if gpu.strong { "kSettingLevel_Ultra" } else { "kSettingLevel_High" }
+    set "farShadowQuality" = "kSettingLevel_Ultra"
+    set "shadowSoftShadows" = "kSettingLevel_Ultra"
+    set "shadowGrassShadows" = "kSettingLevel_Ultra"
+    set "shadowLongShadows" = "true"
+    set "ssao" = "kSettingLevel_High"
+    set "ssaoFullScreenEnabled" = "false"
+    set "lightingQuality" = if gpu.strong { "kSettingLevel_High" } else { "kSettingLevel_Medium" }
+    set "ambientLightingQuality" = "kSettingLevel_Ultra"
+    set "scatteringVolumeQuality" = "kSettingLevel_Medium"
+    set "volumetricsRaymarchQuality" = if gpu.strong { "kSettingLevel_Ultra" } else { "kSettingLevel_High" }
+    set "volumetricsLightingQuality" = "kSettingLevel_Ultra"
+    set "volumetricsRaymarchResolutionUnclamped" = "false"
+    set "reflectionQuality" = "kSettingLevel_Medium"
+    set "reflectionMSAA" = "0"
+    set "mirrorQuality" = "kSettingLevel_Ultra"
+    set "treeQuality" = "kSettingLevel_Ultra"
+    set "treeTessellationEnabled" = "false"
+    set "waterRefractionQuality" = "kSettingLevel_Medium"
+    set "waterReflectionQuality" = "kSettingLevel_Medium"
+    set "waterSimulationQuality" = "2"
+    set "particleQuality" = if gpu.strong { "kSettingLevel_High" } else { "kSettingLevel_Medium" }
+    set "particleLightingQuality" = if gpu.strong { "kSettingLevel_High" } else { "kSettingLevel_Medium" }
+    set "decalQuality" = "kSettingLevel_Ultra"
+    set "furDisplayQuality" = "kSettingLevel_Medium"
+  }
+  window {
+    borderless { set "windowed" = "2" }
+    fullscreen { set "windowed" = "0" }
+  }
+}
+
+game "cyberpunk2077" {
+  title "Cyberpunk 2077"
+  steam "1091500"
+  program "bin/x64/Cyberpunk2077.exe"
+  processes ["Cyberpunk2077"]
+  file $localappdata("CD Projekt Red/Cyberpunk 2077/UserSettings.json")
+  format cyberpunk_json
+  group "graphics" {
+    set "QuickPresets" = "Custom"
+    set "QuickPresets.index" = "0"
+    set "ColorPrecision" = "Medium"
+    set "ColorPrecision.index" = "0"
+    set "MaxDynamicDecals" = "Ultra"
+    set "MaxDynamicDecals.index" = "3"
+    set "ContactShadows" = "true"
+    set "Anisotropy" = "16"
+    set "Anisotropy.index" = "3"
+    set "ShadowMeshQuality" = "High"
+    set "ShadowMeshQuality.index" = "2"
+    set "LocalShadowsQuality" = if gpu.strong { "High" } else { "Medium" }
+    set "LocalShadowsQuality.index" = if gpu.strong { "3" } else { "2" }
+    set "CascadedShadowsRange" = "Medium"
+    set "CascadedShadowsRange.index" = "1"
+    set "CascadedShadowsResolution" = if gpu.strong { "High" } else { "Medium" }
+    set "CascadedShadowsResolution.index" = if gpu.strong { "2" } else { "1" }
+    set "DistantShadowsResolution" = "High"
+    set "DistantShadowsResolution.index" = "1"
+    set "VolumetricFogResolution" = "Medium"
+    set "VolumetricFogResolution.index" = "1"
+    set "VolumetricCloudsQuality" = "Medium"
+    set "VolumetricCloudsQuality.index" = "1"
+    set "ScreenSpaceReflectionsQuality" = if gpu.strong { "High" } else { "Medium" }
+    set "ScreenSpaceReflectionsQuality.index" = if gpu.strong { "3" } else { "2" }
+    set "AmbientOcclusion" = if gpu.strong { "Medium" } else { "Low" }
+    set "AmbientOcclusion.index" = if gpu.strong { "2" } else { "1" }
+    set "MirrorQuality" = "High"
+    set "MirrorQuality.index" = "2"
+    set "CrowdDensity" = "Medium"
+    set "CrowdDensity.index" = "1"
+  }
+}
+
+game "alanwake2" {
+  title "Alan Wake 2"
+  program "AlanWake2.exe"
+  processes ["AlanWake2"]
+  file $localappdata("Remedy/AlanWake2/renderer.ini")
+  format json
+  group "graphics" {
+    set "m_eHighQualityPost" = "0"
+    set "m_eVolumeLightQuality" = if gpu.strong { "1" } else { "0" }
+    set "m_eVolumetricSpotLightQuality" = "0"
+    set "m_eGIQuality" = "2"
+    set "m_eShadowResolutionQuality" = if gpu.strong { "2" } else { "1" }
+    set "m_eSSRQuality" = "1"
+    set "m_eScatteredEntityQuantity" = if gpu.strong { "2" } else { "1" }
+    set "m_bLensDistortion" = "false"
+  }
+  group "ray_off" when vram_gb < 12 {
+    set "m_eRTReflectionQuality" = "0"
+    set "m_eRTTransparentQuality" = "0"
+    set "m_eRTIndirectDiffuseQuality" = "0"
+    set "m_eRTReSTIRQuality" = "0"
+    set "m_eRTDebrisQuality" = "0"
+    set "m_ePTQuality" = "0"
+  }
+  group "upscaler" {
+    set "m_eSSAAMethod" = if gpu.rtx { "2" } else { "3" }
+  }
+}
+
+game "dyinglightbeast" {
+  title "Dying Light: The Beast"
+  steam "3008130"
+  program "ph_ft/work/bin/x64/DyingLightGame_TheBeast_x64_rwdi.exe"
+  processes ["DyingLightGame_TheBeast_x64_rwdi"]
+  file $documents("dying light the beast/out/settings/video.scr")
+  format scr
+  group "graphics" {
+    set "AsyncCompute" = "1"
+    set "TextureQuality" = "Medium"
+    set "LodQuality" = if gpu.strong { "1" } else { "0" }
+    set "LodMultiplier" = if gpu.strong { "150" } else { "130" }
+    set "ScreenSpaceShadows" = "1"
+    set "AmbientOcclusionQuality" = "1"
+    set "VoxelGiQuality" = "3"
+    set "ReflectionsQuality" = if gpu.strong { "2" } else { "1" }
+    set "FogQuality" = "1"
+  }
+  window {
+    borderless { set "WindowMode" = "1" }
+    fullscreen { set "WindowMode" = "2" }
+  }
+}
+
+game "dyinglight2" {
+  title "Dying Light 2"
+  steam "534380"
+  program "ph/work/bin/x64/DyingLightGame_x64_rwdi.exe"
+  processes ["DyingLightGame_x64_rwdi"]
+  file $documents("dying light 2/out/settings/video.scr")
+  format scr
+  group "graphics" {
+    set "GpuFxQuality" = "0"
+    set "ContactShadowsQuality" = "4"
+    set "AmbientOcclusionQuality" = if gpu.strong { "2" } else { "0" }
+    set "VoxelGiQuality" = "3"
+    set "ReflectionsQuality" = if gpu.strong { "1" } else { "0" }
+    set "FogQuality" = "0"
+  }
+  window {
+    borderless { set "WindowMode" = "1" }
+    fullscreen { set "WindowMode" = "2" }
+  }
+}
+
+game "crimsondesert" {
+  title "Crimson Desert"
+  steam "3321460"
+  program "bin64/CrimsonDesert.exe"
+  processes ["CrimsonDesert"]
+  file $localappdata("Pearl Abyss/CD/save/user_engine_option_save.xml")
+  format pearl_abyss_xml
+  group "graphics" {
+    set "Template" = "/OS_M_Windows::Custom.engineoptiongraphics"
+    set "_modelQualityLevelSelect" = if gpu.strong { "Ultra" } else { "High" }
+    set "_textureQualityLevelSelect" = "Ultra"
+    set "_shadowQualityLevelSelect" = if gpu.strong { "Ultra" } else { "Medium" }
+    set "_lightingQualityLevelSelect" = if gpu.strong { "Cinematic" } else { "Ultra" }
+    set "_reflectionQualityLevelSelect" = if gpu.strong { "Cinematic" } else { "Ultra" }
+    set "_enableAdvancedWeatherEffect" = "True"
+    set "_waterQualityLevelSelect" = "High"
+    set "_foliageDensityLevelSelect" = "High"
+    set "_volumetricFogQualityLevelSelect" = "High"
+    set "_effectQualityLevelSelect" = "High"
+    set "_simulationQualityLevelSelect" = "High"
+    set "_postProcessingQualityLevelSelect" = "Medium"
+  }
+}
+
+game "outlaws" {
+  title "Star Wars Outlaws"
+  steam "2842040"
+  program "Outlaws.exe"
+  processes ["Outlaws", "Outlaws_Plus"]
+  file $documents("My Games/Outlaws/graphic settings.cfg")
+  format lua
+  group "graphics" {
+    set "rtxdi" = "Off"
+    set "microdetail quality" = "High"
+    set "particle quality" = if gpu.strong { "Medium" } else { "Low" }
+    set "scatter density" = "Medium"
+    set "shadow quality2" = "High"
+    set "shadow proxies" = "true"
+    set "destruction quality" = "High"
+    set "terrain tessellation quality" = "Medium"
+    set "rtdiffuseRes" = "High"
+    set "rtspec" = "High"
+    set "rtspecRes" = "High"
+    set "bvhQuality" = "High"
+    set "volumetric clouds" = "Medium"
+  }
+}
+
+game "ue.Altar" {
+  title "The Elder Scrolls IV: Oblivion Remastered"
+  steam "2623190"
+  program "OblivionRemastered.exe"
+  processes ["OblivionRemastered", "Altar-Win64-Shipping", "Altar"]
+  file $documents("My Games/Oblivion Remastered/Saved/Config/Windows/GameUserSettings.ini")
+  format unreal_ini
+  group "graphics" {
+    set "sg.ViewDistanceQuality" = if gpu.strong { "2" } else { "1" }
+    set "sg.EffectsQuality" = if gpu.strong { "2" } else { "1" }
+    set "sg.FoliageQuality" = "1"
+    set "sg.ShadowQuality" = if gpu.strong { "2" } else { "1" }
+    set "sg.GlobalIlluminationQuality" = "2"
+    set "sg.ReflectionQuality" = "2"
+    set "sg.PostProcessQuality" = "2"
+    set "sg.TextureQuality" = if vram_gb > 8 { "2" } else { "0" }
+  }
+}
+
+game "ue.MGSDelta" {
+  title "Metal Gear Solid Delta: Snake Eater"
+  steam "2417610"
+  program "MGSDelta.exe"
+  processes ["MGSDelta", "MGSDelta-Win64-Shipping"]
+  file $localappdata("MGSDelta/Saved/Config/Windows/GameUserSettings.ini")
+  format unreal_ini
+  group "graphics" {
+    set "sg.ShadowQuality" = if gpu.strong { "2" } else { "1" }
+    set "sg.GlobalIlluminationQuality" = if gpu.strong { "2" } else { "1" }
+    set "sg.TextureQuality" = if vram_gb > 8 { "3" } else { "2" }
+  }
+}
+
+game "ue.Remnant2" {
+  title "Remnant II"
+  steam "1282100"
+  program "Remnant2.exe"
+  processes ["Remnant2", "Remnant2-Win64-Shipping"]
+  file $localappdata("Remnant2/Saved/Config/Windows/GameUserSettings.ini")
+  format unreal_ini
+  group "graphics" {
+    set "sg.ShadowQuality" = "1"
+    set "sg.PostProcessQuality" = if gpu.strong { "2" } else { "1" }
+    set "sg.FoliageQuality" = if gpu.strong { "3" } else { "2" }
+    set "sg.EffectsQuality" = "1"
+  }
+}
+
+game "cs2" {
+  title "Counter-Strike 2"
+  steam "730"
+  program "game/bin/win64/cs2.exe"
+  processes ["cs2"]
+  file $steam_userdata("730/local/cfg/cs2_video.txt")
+  format vdf
+  window {
+    borderless {
+      set "setting.fullscreen" = "0"
+      set "setting.nowindowborder" = "1"
+    }
+    fullscreen {
+      set "setting.fullscreen" = "1"
+      set "setting.nowindowborder" = "0"
+    }
+  }
+}
+
+game "poe2" {
+  title "Path of Exile 2"
+  steam "2694490"
+  program "PathOfExileSteam.exe"
+  processes ["PathOfExileSteam", "PathOfExile"]
+  file $documents("My Games/Path of Exile 2/poe2_production_Config.ini")
+  format ini
+  section "DISPLAY"
+  group "upscaler" when gpu.rtx {
+    set "upscale" = "DLSS"
+    set "upscale_quality" = "Quality"
+  }
+  window {
+    borderless {
+      set "fullscreen" = "false"
+      set "borderless_windowed_fullscreen" = "true"
+    }
+    fullscreen {
+      set "fullscreen" = "true"
+      set "borderless_windowed_fullscreen" = "false"
+    }
+  }
+}
