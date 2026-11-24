@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { host, type FrameGenMod, type GpuGame, type IntelFrameGen } from '../../lib/host'
 import { report } from '../../lib/report'
 import { Choice } from '../settings/Choice'
+import { Switch } from '../Switch'
 import { frameGenWord } from './frameGenWord'
 import { GameReading, type LineWord } from './GameLine'
 import { sheetMemory } from './useGameDetails'
@@ -75,12 +76,18 @@ const modRead = sheetMemory<FrameGenMod>()
  * (the last read shows at once while it is read again), Built into the game when the game's own runs on this card (an
  * RTX 40 or 50 included), and Not supported in this game only when the game has none and Exo has nothing to offer.
  */
+const LOSSLESS_STORE_URL = 'https://store.steampowered.com/app/993090/Lossless_Scaling/'
+
 export function FrameGenModRow({ gameId }: { gameId: string }) {
   const [state, setState] = useState<FrameGenMod | null>(() => modRead.get(gameId))
+  const [busy, setBusy] = useState<'on' | 'off' | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
     setState(modRead.get(gameId))
+    setBusy(null)
+    setError(null)
     host.dlssFrameGen(gameId).then(answer => {
       if (!live) return
       modRead.set(gameId, answer)
@@ -92,5 +99,45 @@ export function FrameGenModRow({ gameId }: { gameId: string }) {
   if (!state) return null
   if (!state.ok) return <GameReading name="Frame generation" word={{ text: 'Could not check', bad: true }} />
   if (state.state === 'hidden') return null
-  return <GameReading name="Frame generation" word={frameGenWord(state)} />
+
+  const toggle = (enabled: boolean) => {
+    setBusy(enabled ? 'on' : 'off')
+    setError(null)
+    host.dlssFrameGenSet(gameId, enabled)
+      .then(answer => {
+        if (!answer.ok) {
+          setError((answer.message ?? 'Could not update. Try again.').replace(/'/g, '’'))
+          if (answer.state && answer.state !== 'hidden') {
+            modRead.set(gameId, { ...answer, ok: true })
+            setState({ ...answer, ok: true })
+          }
+          return
+        }
+        modRead.set(gameId, answer)
+        setState(answer)
+      })
+      .catch(e => { report(e, 'FrameGenModRow.set'); setError('Could not update. Try again.') })
+      .finally(() => setBusy(null))
+  }
+
+  const word: LineWord | null = busy
+    ? { text: busy === 'on' ? 'Installing' : 'Turning off', working: true }
+    : error
+      ? { text: error, bad: true }
+      : frameGenWord(state)
+
+  const needsLossless = state.path === 'lossless' && state.lossless && !state.lossless.installed
+  const storeUrl = state.lossless?.storeUrl || LOSSLESS_STORE_URL
+
+  return (
+    <GameReading name="Frame generation" word={word}>
+      {needsLossless ? (
+        <button type="button" className="exo-set-btn is-compact" onClick={() => void host.openUrl(storeUrl).catch(e => report(e, 'FrameGenModRow.lossless'))}>
+          Get Lossless Scaling
+        </button>
+      ) : state.canToggle ? (
+        <Switch checked={state.state === 'on'} disabled={busy !== null} label="Frame generation" onChange={toggle} />
+      ) : null}
+    </GameReading>
+  )
 }

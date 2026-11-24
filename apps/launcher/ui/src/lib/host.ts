@@ -106,28 +106,28 @@ export type DlssRunResult = {
  * frame generation is the one for this card), off and on, broken (Exo's install was damaged, or the game is kept off
  * for that; reason says how), mod (another mod is in the game), note (Exo just took it out by itself, and why).
  */
+export type LosslessInfo = {
+  installed: boolean
+  storeUrl?: string | null
+  mode?: 'FIXED' | 'ADAPTIVE' | null
+  multiplier?: number | null
+  hotkey?: string | null
+}
+
 export type FrameGenMod = {
   ok: boolean
   state: 'hidden' | 'native' | 'off' | 'on' | 'broken' | 'mod' | 'note'
-  /** dlss: DLSSG SM86 runs NVIDIA's own frame generation; fsr: OptiScaler runs FSR's. */
-  path?: 'dlss' | 'fsr' | null
-  /** The mod and release in the game: "DLSSG SM86 0.4.1". */
+  path?: 'dlss' | 'mfg' | 'fsr' | 'optifg' | 'lossless' | null
+  package?: string | null
   version?: string | null
-  /** The last session, when the mod's log shows it. */
   session?: 'ran' | null
-  /** The other mod in the game; when broken by replaced, the one over Exo's loader, if Exo knows it. */
   mod?: string | null
-  /** The game's anti-cheat: a mod never goes into it, and the line says so. */
   antiCheat?: string | null
-  /** Why Exo took it out, or went back to the release before, by itself; or why it can't go in. */
   note?: string | null
-  /**
-   * Why it is broken. replaced: another mod's file is where Exo's loader was (Exo leaves it and keeps the game off);
-   * changed: another of Exo's files has other bytes (Exo leaves it); removed: Exo's files went (they go back once);
-   * gone: the game no longer ships DLSS Frame Generation. With hidden: unread (Exo couldn't read the game: no install,
-   * a Store app, a folder it can't open), card (no mod adds to this card; the line hides).
-   */
   reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
+  canToggle?: boolean
+  lossless?: LosslessInfo | null
+  message?: string | null
 }
 
 /**
@@ -2801,6 +2801,8 @@ export const host = {
     rawCall<{ ok: boolean; message?: string }>('dlss.consent', { id, allow, ...(allow && antiCheat ? { antiCheat } : {}) }),
   /** The game's Frame generation line. */
   dlssFrameGen: (id: string) => rawCall<FrameGenMod>('dlss.frameGen', { id }, 60_000),
+  dlssFrameGenSet: (id: string, enabled: boolean, options?: { mode?: 'FIXED' | 'ADAPTIVE'; multiplier?: number }) =>
+    rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled, ...(options ?? {}) }, 10 * 60_000),
   dlssNewer: () => rawCall<{ ok: boolean; items: { family: string; version: string }[] }>('dlss.newer', {}, 15_000),
   dlssDownloadNewer: () => rawCall<{ ok: boolean; message?: string | null }>('dlss.downloadNewer', {}, 10 * 60_000),
   shadersStatus: (id: string) => rawCall<ShaderStatus>('shaders.status', { id }),

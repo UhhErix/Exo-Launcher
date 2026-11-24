@@ -238,6 +238,7 @@ public sealed class PlayerDataTests : IDisposable
         ["keyboard-backups/wooting-1340-20261110-120000.json"] = Utf8("""{"schemaVersion":1,"model":"Wooting 60HE v2","productId":4928,"activeProfile":0,"profiles":[]}"""),
         ["exo-eq.json"] = Utf8("""{"version":1,"on":true}"""),
         ["frame-gen/games.json"] = Utf8("""{"steam:1":{"on":true,"wrote":["C:\\Users\\Player One\\Games\\x\\dlssg.dll"]}}"""),
+        ["frame-gen/lossless.json"] = Utf8("""{"steam:814380":{"GameId":"steam:814380","Title":"Sekiro","ExePath":"C:\\Games\\Sekiro\\sekiro.exe","Mode":"FIXED","Multiplier":2,"ExistedBefore":false,"PreviousProfileXml":null}}"""),
         ["keep.json"] = Utf8("""{"version":1,"games":{"cs2":{"entries":{"fps_max":{"target":"fps_max","intended":"0"}}}}}"""),
         ["session-recorder.json"] = Utf8("""{"version":1,"sessions":[{"game":"steam:1","version":"none","seconds":600,"frames":60000,"histogram":[0]}]}"""),
         ["autopilot-reports.json"] = Utf8("""{"version":1,"reports":[]}"""),

@@ -158,6 +158,7 @@
     "dlss.consent": "{ ok: boolean; message?: string }",
     "dlss.downloadNewer": "{ ok: boolean; message?: string | null }",
     "dlss.frameGen": "FrameGenMod",
+    "dlss.frameGenSet": "FrameGenMod",
     "dlss.newer": "{ ok: boolean; items: { family: string; version: string }[] }",
     "dlss.restore": "DlssRunResult",
     "dlss.status": "DlssStatus",

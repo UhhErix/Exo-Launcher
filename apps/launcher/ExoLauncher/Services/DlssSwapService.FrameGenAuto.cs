@@ -22,7 +22,7 @@ public sealed partial class DlssSwapService
     /// graphics inside a processor (a workstation Arc Pro).
     /// </summary>
     internal static FrameGenCard? FrameGenEverywhereCard(string? gpu) =>
-        FrameGenCardFor(gpu) is { DlssFrameGen: false, Class: not "arc-other" } card ? card : null;
+        FrameGenCardFor(gpu) is { Class: not "arc-other" } card ? card : null;
 
     /// <summary>
     /// Every installed game it works in gets Exo's frame generation (see the class summary), one after another, while no

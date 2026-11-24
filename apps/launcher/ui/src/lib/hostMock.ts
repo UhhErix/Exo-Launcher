@@ -1879,10 +1879,24 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   // OptiScaler (Control). ?riot=partial: another mod replaced Exo's loader.
   'dlss.frameGen': (p) => {
     const id = String(p?.id)
-    if (mockRiotPartial) return { ok: true, state: 'broken', path: 'dlss', version: 'DLSSG SM86 0.4.1', reason: 'replaced', mod: 'UE4SS' }
+    if (mockRiotPartial) return { ok: true, state: 'broken', path: 'dlss', package: 'DLSSG SM86', version: 'DLSSG SM86 0.4.2', reason: 'replaced', mod: 'UE4SS' }
     if (mockGpu || !/cyberpunk|control|rivals/.test(id)) return { ok: true, state: 'hidden' }
-    if (id.includes('rivals')) return { ok: true, state: 'note', path: 'dlss', antiCheat: 'NetEase anti-cheat', note: 'Not in games with anti-cheat' }
-    return id.includes('control') ? { ok: true, state: 'on', path: 'fsr', version: 'OptiScaler v0.9.4' } : { ok: true, state: 'on', path: 'dlss', version: 'DLSSG SM86 0.4.1', session: 'ran' }
+    if (id.includes('rivals')) return { ok: true, state: 'off', path: 'lossless', package: 'Lossless Scaling', antiCheat: 'NetEase anti-cheat', canToggle: false, lossless: { installed: false, storeUrl: 'https://store.steampowered.com/app/993090/Lossless_Scaling/', mode: 'FIXED', multiplier: 2, hotkey: null } }
+    return id.includes('control')
+      ? { ok: true, state: 'on', path: 'fsr', package: 'OptiScaler', version: 'OptiScaler v0.9.5', canToggle: true }
+      : { ok: true, state: 'on', path: 'dlss', package: 'DLSSG SM86', version: 'DLSSG SM86 0.4.2', session: 'ran', canToggle: true }
+  },
+  'dlss.frameGenSet': (p) => {
+    const enabled = Boolean(p?.enabled)
+    return {
+      ok: true,
+      state: enabled ? 'on' : 'off',
+      path: 'dlss',
+      package: 'DLSSG SM86',
+      version: enabled ? 'DLSSG SM86 0.4.2' : null,
+      canToggle: true,
+      message: enabled ? 'Turn on DLSS Frame Generation in the game' : 'Off.',
+    }
   },
   'shaders.status': mockShadersStatus,
   'shaders.prepare.games': () => ({ ok: true, games: MOCK_GAMES.filter(game => game.installed).slice(0, 2).map((game, at) => ({ id: game.id, title: at ? game.title : 'A Very Long Unreal Game Name: The Definitive Remastered Edition', state: mockPrepareRunning && !at ? 'running' : 'ready', message: null })) }),

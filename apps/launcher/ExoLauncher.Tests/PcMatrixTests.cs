@@ -402,8 +402,10 @@ public sealed class PcMatrixTests
         // an RTX 50 have NVIDIA's own, so no mod.
         foreach (var (own, vulkan) in new[] { (false, false), (true, false), (false, true) })
         {
-            var expected = card is null || series >= 40 ? null
+            var expected = card is null ? (own ? "native" : "lossless")
+                : series >= 40 ? "native"
                 : series is >= 20 && !vulkan ? "dlss"
+                : series is >= 20 && vulkan ? "mfg"
                 : own ? "native" : "fsr";
             var path = DlssSwapService.FrameGenPath(card, Game(own, vulkan));
             if (path != expected) yield return $"{(vulkan ? "Vulkan" : own ? "own and DLSS" : "DLSS-only")} game gets {path ?? "nothing"}, not {expected ?? "nothing"}";
