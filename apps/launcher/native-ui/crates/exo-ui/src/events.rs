@@ -41,6 +41,9 @@ pub enum HostEventKind {
     AutopilotLive,
     ShadersChanged,
     StoreChanged,
+    GiftsChanged,
+    GameOptimizeHeld,
+    GameOptimizedAgain,
     Raw,
     Disconnected,
 }
@@ -83,6 +86,9 @@ impl HostEventKind {
             HostEvent::AutopilotLive(_) => Self::AutopilotLive,
             HostEvent::ShadersChanged => Self::ShadersChanged,
             HostEvent::StoreChanged(_) => Self::StoreChanged,
+            HostEvent::GiftsChanged(_) => Self::GiftsChanged,
+            HostEvent::GameOptimizeHeld { .. } => Self::GameOptimizeHeld,
+            HostEvent::GameOptimizedAgain { .. } => Self::GameOptimizedAgain,
             HostEvent::Raw { .. } => Self::Raw,
             HostEvent::Disconnected(_) => Self::Disconnected,
         }

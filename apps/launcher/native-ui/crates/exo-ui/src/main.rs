@@ -9,11 +9,14 @@ mod discord_state;
 mod discord_voice;
 mod discord_voice_state;
 mod events;
+mod folders;
 mod game_page;
 mod gamepad;
+mod gifts;
 mod image_cache;
 mod key_modal;
 mod library;
+mod library_state;
 mod media_state;
 mod menus;
 mod music;
@@ -26,6 +29,7 @@ mod pc_apps;
 mod pc_devices;
 mod pc_state;
 mod pc_storage;
+mod select_bar;
 mod settings;
 mod setup;
 mod shell;
@@ -118,6 +122,9 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
             _ => {}
         }
     }
+    if library_state::handle_library_key(s, ev, tx) {
+        return true;
+    }
     if ev.key == Key::Escape {
         return s.dismiss_top_layer();
     }
@@ -135,7 +142,8 @@ fn setup_state(s: &mut AppState, waker: Waker) {
 fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let notices = s.sync_and_tick_notices(now, tx);
     let setup = s.setup_tick(now);
-    notices || setup
+    let lib = s.tick_library(now);
+    notices || setup || lib
 }
 
 #[cfg(windows)]
@@ -1121,6 +1129,107 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("library-search", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.library_search_open = true;
+    }),
+    ("library-folders", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.library_all_games = true;
+        let ordered: Vec<String> = s
+            .filtered_games()
+            .into_iter()
+            .map(|g| g.id.clone())
+            .collect();
+        if s.settings.library_folders.is_empty() && ordered.len() >= 3 {
+            s.settings.library_folders = vec![
+                exo_rpc::LibraryFolder {
+                    id: "f-favorites".into(),
+                    name: "Favorites".into(),
+                    color: Some("blue".into()),
+                    sort: Some("folder".into()),
+                    art: None,
+                    games: vec![ordered[0].clone(), ordered[1].clone()],
+                },
+                exo_rpc::LibraryFolder {
+                    id: "f-coop".into(),
+                    name: "Co-op".into(),
+                    color: Some("green".into()),
+                    sort: Some("folder".into()),
+                    art: None,
+                    games: vec![ordered[2].clone()],
+                },
+            ];
+        }
+    }),
+    ("library-folder-open", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.library_all_games = true;
+        let ordered: Vec<String> = s
+            .filtered_games()
+            .into_iter()
+            .map(|g| g.id.clone())
+            .collect();
+        if s.settings.library_folders.is_empty() && ordered.len() >= 2 {
+            s.settings.library_folders = vec![exo_rpc::LibraryFolder {
+                id: "f-favorites".into(),
+                name: "Favorites".into(),
+                color: Some("blue".into()),
+                sort: Some("folder".into()),
+                art: None,
+                games: vec![ordered[0].clone(), ordered[1].clone()],
+            }];
+        }
+        if let Some(first) = s.settings.library_folders.first().map(|f| f.id.clone()) {
+            s.open_folder_panel(&first, false);
+        }
+    }),
+    ("library-folder-sheet", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.library_all_games = true;
+        let init: Vec<String> = s
+            .filtered_games()
+            .into_iter()
+            .take(2)
+            .map(|g| g.id.clone())
+            .collect();
+        s.open_new_folder_sheet(init);
+    }),
+    ("library-select", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.enter_select_mode();
+        let picks: Vec<String> = s
+            .filtered_games()
+            .into_iter()
+            .take(2)
+            .map(|g| g.id.clone())
+            .collect();
+        for id in picks {
+            s.lib.picked.insert(id);
+        }
+    }),
+    ("library-gifts", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        if s.lib.gifts.is_empty() {
+            s.lib.gifts = vec![exo_rpc::StoreGift {
+                store: "steam".into(),
+                id: "demo-gift-1".into(),
+                title: "Hades II".into(),
+                image: None,
+                sender: Some("Alex".into()),
+                message: Some("Happy birthday!".into()),
+            }];
+        }
+        s.lib.gifts_open = true;
+    }),
+    ("library-empty", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.games.clear();
+        s.refreshing = false;
+        s.lib.library_error = None;
+    }),
+    ("library-error", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.games.clear();
+        s.refreshing = false;
+        s.lib.library_error = Some("Host connection failed".into());
     }),
     ("store", |s: &mut AppState| {
         s.switch_room(state::Room::Store)

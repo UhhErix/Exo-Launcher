@@ -60,10 +60,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::Duration;
 pub use types::{
-    ActionResult, ArtBase, ExoAccountState, Game, GameExtras, GameGetReply, GameProperties,
-    GamePropertySetReply, HostContract, HostEvent, InstallProgress, KeyPreview, LauncherSettings,
-    LibraryPayload, StoreArt, StoreGame, StoreHome, StoreLowest, StoreOffer, StoreOtherOffers,
-    StoreSearchReply, StoreShelf, StoreTile,
+    ActionResult, ArtBase, ExoAccountState, FolderArtReply, Game, GameExtras, GameGetReply,
+    GameProperties, GamePropertySetReply, HostContract, HostEvent, InstallProgress, KeyPreview,
+    LauncherSettings, LibraryFolder, LibraryPayload, LibraryRefreshAllReply, PickPathReply,
+    RiotAccounts, RiotSavedAccount, StoreAccountsReply, StoreArt, StoreGame, StoreGift, StoreGifts,
+    StoreHome, StoreLowest, StoreOffer, StoreOtherOffers, StoreSearchReply, StoreShelf, StoreTile,
+    UninstallReply,
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -157,6 +159,14 @@ pub const METHOD_GAME_EXTRAS: &str = "game.extras";
 pub const METHOD_GAME_LAUNCH: &str = "game.launch";
 pub const METHOD_GAME_STOP: &str = "game.stop";
 pub const METHOD_GAME_INSTALL: &str = "game.install";
+pub const METHOD_ACCOUNTS_LIST: &str = "accounts.list";
+pub const METHOD_ACCOUNTS_SWITCH: &str = "accounts.switch";
+pub const METHOD_GIFTS_ANSWER: &str = "gifts.answer";
+pub const METHOD_GIFTS_LIST: &str = "gifts.list";
+pub const METHOD_LIBRARY_FOLDER_ART: &str = "library.folderArt";
+pub const METHOD_LIBRARY_REFRESH_ALL: &str = "library.refreshAll";
+pub const METHOD_SHELL_PICK_FOLDER: &str = "shell.pickFolder";
+pub const METHOD_SHELL_PICK_PROGRAM: &str = "shell.pickProgram";
 pub const METHOD_GAME_UPDATE: &str = "game.update";
 pub const METHOD_GAME_UNINSTALL: &str = "game.uninstall";
 pub const METHOD_GAME_REPAIR: &str = "game.repair";
@@ -283,8 +293,16 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_KEYBOARD_READ,
     METHOD_KEYBOARD_RESTORE,
     METHOD_KEYBOARD_SETTINGS,
+    METHOD_ACCOUNTS_LIST,
+    METHOD_ACCOUNTS_SWITCH,
+    METHOD_GIFTS_ANSWER,
+    METHOD_GIFTS_LIST,
+    METHOD_LIBRARY_FOLDER_ART,
     METHOD_LIBRARY_GET,
     METHOD_LIBRARY_REFRESH,
+    METHOD_LIBRARY_REFRESH_ALL,
+    METHOD_SHELL_PICK_FOLDER,
+    METHOD_SHELL_PICK_PROGRAM,
     METHOD_GAME_GET,
     METHOD_GAME_EXTRAS,
     METHOD_GAME_LAUNCH,
@@ -1176,6 +1194,29 @@ fn parse_event(
         }
         "devices.changed" => Ok(HostEvent::DevicesChanged),
         "apps.changed" => Ok(HostEvent::AppsChanged),
+        "gifts.changed" => Ok(serde_json::from_str::<StoreGifts>(data_raw)
+            .map(HostEvent::GiftsChanged)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "game.optimizeHeld" => {
+            #[derive(Deserialize)]
+            struct TitleWire {
+                #[serde(default)]
+                title: String,
+            }
+            Ok(serde_json::from_str::<TitleWire>(data_raw)
+                .map(|t| HostEvent::GameOptimizeHeld { title: t.title })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "game.optimizedAgain" => {
+            #[derive(Deserialize)]
+            struct TitleWire {
+                #[serde(default)]
+                title: String,
+            }
+            Ok(serde_json::from_str::<TitleWire>(data_raw)
+                .map(|t| HostEvent::GameOptimizedAgain { title: t.title })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
         _ => Ok(raw_fallback(name, data_raw)),
     }
 }

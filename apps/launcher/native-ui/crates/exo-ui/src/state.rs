@@ -440,6 +440,7 @@ pub enum ContextMenuTarget {
     CaptureButton,
     SettingsButton,
     GameCard(String),
+    FolderCard(String),
     DiscordStatusMenu,
     DiscordAudioQuick {
         input: bool,
@@ -615,6 +616,7 @@ pub struct AppState {
     pub store_shelf_x: [f32; 4],
     pub filters: Vec<LibraryChip>,
     pub library_filter_open: bool,
+    pub lib: crate::library_state::LibraryExtraState,
     pub sort: LibrarySort,
     pub status: HostStatus,
     pub games: Vec<Game>,
@@ -692,7 +694,7 @@ impl AppState {
     pub fn with_demo_games() -> Self {
         let games = demo_games();
         let selected_game_id = games.first().map(|g| g.id.clone());
-        Self {
+        let mut s = Self {
             room: Room::Library,
             prev_room: Room::Library,
             room_dir: 1.0,
@@ -713,6 +715,7 @@ impl AppState {
             store_shelf_x: [0.0; 4],
             filters: Vec::new(),
             library_filter_open: false,
+            lib: crate::library_state::LibraryExtraState::default(),
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Standalone,
             games,
@@ -805,11 +808,14 @@ impl AppState {
             inflight_requests: HashMap::new(),
             #[cfg(windows)]
             inflight_discord_channel: None,
-        }
+        };
+        crate::library_state::register_library_wp2_events(&mut s);
+        s.selected_game_id = s.home_deck_games().first().map(|g| g.id.clone());
+        s
     }
 
     pub fn for_host_pipe() -> Self {
-        Self {
+        let mut s = Self {
             room: Room::Library,
             prev_room: Room::Library,
             room_dir: 1.0,
@@ -830,6 +836,7 @@ impl AppState {
             store_shelf_x: [0.0; 4],
             filters: Vec::new(),
             library_filter_open: false,
+            lib: crate::library_state::LibraryExtraState::default(),
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Connecting,
             games: Vec::new(),
@@ -895,7 +902,20 @@ impl AppState {
             inflight_requests: HashMap::new(),
             #[cfg(windows)]
             inflight_discord_channel: None,
-        }
+        };
+        crate::library_state::register_library_wp2_events(&mut s);
+        s
+    }
+
+    pub fn clock_secs_now(&self) -> f64 {
+        self.clock_secs
+    }
+
+    pub fn arm_confirm_key(&mut self, key: &str, tx: &mut Tx) {
+        const ARMED_SECS: f64 = 4.0;
+        let deadline = self.clock_secs + ARMED_SECS;
+        self.armed_confirm = Some((key.to_string(), deadline));
+        tx.wake_after(Duration::from_secs_f64(ARMED_SECS));
     }
 
     pub fn install_waker(&mut self, waker: Waker) {
@@ -1109,6 +1129,13 @@ impl AppState {
         self.capture_menu_open = false;
         self.library_more_open = false;
         self.library_add_open = false;
+        self.lib.gifts_open = false;
+        if room != Room::Library {
+            self.exit_select_mode();
+            self.close_folder_panel();
+            self.lib.folder_sheet = None;
+            self.lib.folder_cropper = None;
+        }
         self.context_menu = None;
         self.open_dropdown = None;
         if self.media.captures_open {
@@ -1154,6 +1181,14 @@ impl AppState {
         self.library_add_open = false;
         self.open_dropdown = None;
         self.discord.status_menu_open = matches!(target, ContextMenuTarget::DiscordStatusMenu);
+        if let ContextMenuTarget::GameCard(ref gid) = target
+            && self
+                .games
+                .iter()
+                .any(|g| g.id == *gid && g.store == "riot" && g.installed && !g.is_running)
+        {
+            self.load_riot_accounts();
+        }
         self.context_menu = Some(ContextMenuState {
             target,
             x,
@@ -1312,11 +1347,10 @@ impl AppState {
             .all(|g| Some(&g.id) != self.selected_game_id.as_ref())
         {
             self.selected_game_id = self
-                .filtered_games()
-                .into_iter()
-                .next()
-                .or_else(|| self.games.first())
-                .map(|g| g.id.clone());
+                .home_deck_games()
+                .first()
+                .map(|g| g.id.clone())
+                .or_else(|| self.games.first().map(|g| g.id.clone()));
         }
         if self.notice.as_deref() == Some("Connecting to Exo host…") {
             self.notice = None;
@@ -1345,6 +1379,9 @@ impl AppState {
             .unwrap_or("")
             .to_string();
         self.settings = settings;
+        if let Some(mode) = self.settings.sort_mode.as_deref() {
+            self.sort = LibrarySort::from_id(mode);
+        }
         if !self.setup.loaded && self.status == HostStatus::Connected {
             self.setup.loaded = true;
             if raw.is_empty() && !tour_seen {
@@ -1386,10 +1423,7 @@ impl AppState {
         let mut out: Vec<&Game> = self
             .games
             .iter()
-            .filter(|g| {
-                is_shelf_game(g, transfer_id, show_tools)
-                    && !self.settings.hidden_games.iter().any(|h| h == &g.id)
-            })
+            .filter(|g| is_shelf_game(g, transfer_id, show_tools))
             .filter(|g| chips_match(&self.filters, g, now_ms, &playing))
             .collect();
         let hidden = &self.settings.hidden_games;
@@ -1855,6 +1889,7 @@ impl AppState {
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
+        self.exit_select_mode();
         if self.status != HostStatus::Standalone {
             self.game_extras = None;
             self.game_props = None;
@@ -2490,6 +2525,30 @@ impl AppState {
         }
         if self.library_add_open {
             self.library_add_open = false;
+            return true;
+        }
+        if self.library_filter_open {
+            self.library_filter_open = false;
+            return true;
+        }
+        if self.lib.gifts_open {
+            self.lib.gifts_open = false;
+            return true;
+        }
+        if self.lib.folder_cropper.is_some() {
+            self.lib.folder_cropper = None;
+            return true;
+        }
+        if self.lib.folder_sheet.is_some() {
+            self.lib.folder_sheet = None;
+            return true;
+        }
+        if self.lib.open_folder_id.is_some() {
+            self.close_folder_panel();
+            return true;
+        }
+        if self.lib.selecting {
+            self.exit_select_mode();
             return true;
         }
         if self.pc.part_menu.is_some() {
@@ -3208,12 +3267,20 @@ impl AppState {
                     handle.update(move |s, _| match res {
                         Ok(lib) => {
                             let count = lib.games.len();
+                            s.lib.library_error = None;
+                            s.lib.refresh_error = None;
                             s.apply_library(lib);
                             s.notice = Some(format!("Library refreshed ({count} games)"));
                         }
                         Err(e) => {
+                            let msg = e.to_string();
                             s.refreshing = false;
-                            s.notice = Some(format!("Refresh failed: {e}"));
+                            if s.games.is_empty() {
+                                s.lib.library_error = Some(msg.clone());
+                            } else {
+                                s.lib.refresh_error = Some(msg.clone());
+                            }
+                            s.notice = Some(format!("Refresh failed: {msg}"));
                         }
                     });
                 },
@@ -3230,6 +3297,7 @@ impl AppState {
         self.apply_library(boot.library);
         self.apply_music_playback(boot.music_playback.playback);
         self.discord.status = boot.discord_status;
+        self.load_gifts(false);
         match self.room {
             Room::Discord if !self.discord.loaded => self.load_discord_room(),
             Room::Music => self.load_music_room(),
@@ -3405,6 +3473,7 @@ impl AppState {
                 let msg = e.to_string();
                 handle.update(move |s, _| {
                     s.refreshing = false;
+                    s.lib.library_error = Some(msg.clone());
                     s.status = HostStatus::Error(msg.clone());
                     s.notice = Some(format!("Failed to bootstrap host: {msg}"));
                 });

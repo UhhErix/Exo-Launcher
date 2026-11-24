@@ -913,6 +913,130 @@ pub struct StoreOtherOffers {
     pub lowest: Option<StoreLowest>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryFolder {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub art: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub games: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderArtReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub art: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryRefreshAllReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub achievements: u64,
+    #[serde(default)]
+    pub covers: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreGift {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub store: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub title: String,
+    #[serde(default)]
+    pub image: Option<String>,
+    #[serde(default)]
+    pub sender: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreGifts {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub steam_signed_in: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub gifts: Vec<StoreGift>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RiotSavedAccount {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub key: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub name: String,
+    #[serde(default)]
+    pub current: bool,
+    #[serde(default)]
+    pub saved: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub last_in: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RiotAccounts {
+    #[serde(default)]
+    pub current: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub accounts: Vec<RiotSavedAccount>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreAccountsReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub riot: Option<RiotAccounts>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PickPathReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub cancelled: bool,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UninstallReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub queued: bool,
+    #[serde(default)]
+    pub handoff_only: bool,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LauncherSettings {
@@ -954,6 +1078,10 @@ pub struct LauncherSettings {
     pub ui_prefs: HashMap<String, Value>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub hidden_games: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub library_folders: Vec<LibraryFolder>,
+    #[serde(default)]
+    pub sort_mode: Option<String>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub recent: Vec<String>,
 }
@@ -1004,6 +1132,23 @@ impl ArtBase {
             return None;
         }
         let candidate = Path::new(root).join(&decoded);
+        if candidate.is_file() {
+            Some(candidate)
+        } else {
+            None
+        }
+    }
+
+    pub fn resolve_folder_art(&self, value: &str) -> Option<PathBuf> {
+        if let Some(p) = self.resolve_local_cover(value) {
+            return Some(p);
+        }
+        let root = self.covers_dir.as_deref()?;
+        let leaf = value.trim().split('?').next().unwrap_or("");
+        if !is_safe_leaf(leaf) {
+            return None;
+        }
+        let candidate = Path::new(root).join(leaf);
         if candidate.is_file() {
             Some(candidate)
         } else {
@@ -1182,6 +1327,9 @@ pub enum HostEvent {
     AutopilotLive(Option<crate::pc_types::AutopilotLive>),
     ShadersChanged,
     StoreChanged(crate::events::StoreChangedEvent),
+    GiftsChanged(StoreGifts),
+    GameOptimizeHeld { title: String },
+    GameOptimizedAgain { title: String },
     Raw { event: String, data: Value },
     Disconnected(String),
 }

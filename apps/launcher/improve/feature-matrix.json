@@ -426,13 +426,13 @@
    "id": "library-01",
    "room": "Library",
    "feature": "Hero / home deck (selected game, Play, ... menu)",
-   "status": "PARTIAL",
+   "status": "DONE",
    "reactRef": "components/shell/HomeDeck.tsx:15",
-   "nativeRef": "exo-ui/src/library.rs:409",
+   "nativeRef": "exo-ui/src/library.rs:766",
    "rpc": [
     "library.get"
    ],
-   "notes": "Smoke: renders correctly with covers; press on the card is not tracked (room-shell-library report).",
+   "notes": "HomeDeck uses continue_order, press_on_down card tracking, gifts pill, inline search, More/Add menus, and hero lockup transfer/hold states.",
    "workPackage": "WP2"
   },
   {
@@ -441,7 +441,7 @@
    "feature": "Shelf row of covers (scroll, arrows, focus ring)",
    "status": "DONE",
    "reactRef": "components/shell/LibraryShelf.tsx:1",
-   "nativeRef": "exo-ui/src/library.rs:856",
+   "nativeRef": "exo-ui/src/library.rs:766",
    "rpc": [],
    "notes": "",
    "workPackage": null
@@ -450,11 +450,11 @@
    "id": "library-03",
    "room": "Library",
    "feature": "Multiple shelves (Continue playing, Recently added, Favorites, Folders)",
-   "status": "PARTIAL",
+   "status": "DONE",
    "reactRef": "components/shell/useShelves.ts:51",
-   "nativeRef": "exo-ui/src/library.rs:856",
+   "nativeRef": "exo-ui/src/library_state.rs:1136",
    "rpc": [],
-   "notes": "Single shelf + All games; no dynamic shelf set.",
+   "notes": "Dynamic shelves (Continue playing, All games with folders, Hidden games) matching useShelves.ts; fixed hidden-games filter bug in state.rs.",
    "workPackage": "WP2"
   },
   {
@@ -463,7 +463,7 @@
    "feature": "All games grid",
    "status": "DONE",
    "reactRef": "components/shell/LibraryPane.tsx:23",
-   "nativeRef": "exo-ui/src/library.rs:298",
+   "nativeRef": "exo-ui/src/library.rs:1169",
    "rpc": [
     "library.get"
    ],
@@ -476,9 +476,9 @@
    "feature": "Library search overlay",
    "status": "DONE",
    "reactRef": "components/shell/useLibrarySearch.ts:38",
-   "nativeRef": "exo-ui/src/library.rs:10",
+   "nativeRef": "exo-ui/src/library_state.rs:652",
    "rpc": [],
-   "notes": "shell-bar-press-search uninvestigated.",
+   "notes": "Natural-language search parser, understood chips, and clear button.",
    "workPackage": null
   },
   {
@@ -487,93 +487,105 @@
    "feature": "Sort (name, recent, playtime, size)",
    "status": "DONE",
    "reactRef": "components/shell/LibraryHead.tsx:132",
-   "nativeRef": "exo-ui/src/library.rs:808",
-   "rpc": [],
-   "notes": "",
+   "nativeRef": "exo-ui/src/menus.rs:1765",
+   "rpc": [
+    "settings.set"
+   ],
+   "notes": "Persisted sortMode and Sort by / Show (All games, Hidden games) menu sections.",
    "workPackage": null
   },
   {
    "id": "library-07",
    "room": "Library",
    "feature": "Filter popover (Genre, Mode, Friends, Store)",
-   "status": "PARTIAL",
+   "status": "DONE",
    "reactRef": "components/shell/LibraryHead.tsx:4",
-   "nativeRef": "exo-ui/src/library.rs:10",
+   "nativeRef": "exo-ui/src/library.rs:363",
    "rpc": [],
-   "notes": "Genre/Mode/Friends added by room-shell-library; React also filters by store/tag/installed.",
+   "notes": "Show/Store/Genre/Mode chips in 420px flex-wrap glass popover, active chip bar, and friends warm-up.",
    "workPackage": "WP2"
   },
   {
    "id": "library-08",
    "room": "Library",
    "feature": "Select mode + LibrarySelectBar (multi-select, bulk hide/uninstall/folder)",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/shell/LibrarySelectBar.tsx:14",
-   "nativeRef": null,
-   "rpc": [],
-   "notes": "Absent.",
+   "nativeRef": "exo-ui/src/select_bar.rs:12",
+   "rpc": [
+    "settings.set",
+    "game.uninstall",
+    "library.removeCustom"
+   ],
+   "notes": "Floating bottom-center bar with count, Shift-range selection, bulk Hide/Unhide, Add to folder popover, Uninstall/Remove in-place confirm, Select all/Clear/Done.",
    "workPackage": "WP2"
   },
   {
    "id": "library-09",
    "room": "Library",
    "feature": "Folders (create, edit, cover cropper, reorder, move earlier/later, delete)",
-   "status": "BROKEN",
+   "status": "DONE",
    "reactRef": "components/shell/FolderSheet.tsx:23",
-   "nativeRef": "exo-ui/src/menus.rs:352",
+   "nativeRef": "exo-ui/src/folders.rs:589",
    "rpc": [
-    "library.folderArt"
+    "library.folderArt",
+    "settings.set"
    ],
-   "notes": "menus.rs:722 and :1591 push \"Folder management coming soon\" toast; FolderSheet/Card/Panel/Cropper all absent.",
+   "notes": "FolderCard, FolderPanel (inline rename + 6 sorts), FolderSheet (8 colors, search, Add all not installed, custom art), and FolderCropper (pan/zoom + PNG upload).",
    "workPackage": "WP2"
   },
   {
    "id": "library-10",
    "room": "Library",
    "feature": "Drag to reorder / drop into folder",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/shell/FolderCard.tsx:22",
-   "nativeRef": null,
-   "rpc": [],
-   "notes": "No drag-drop anywhere in native.",
+   "nativeRef": "exo-ui/src/folders.rs:110",
+   "rpc": [
+    "settings.set"
+   ],
+   "notes": "Built on Rune exo-inputs drag/drop: DropReorder for folders and folder games, game drop onto FolderCard, and OS file drop for folder art and portable games.",
    "workPackage": "WP2"
   },
   {
    "id": "library-11",
    "room": "Library",
    "feature": "Gifts shelf (claimable Steam/Epic gifts)",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/shell/GiftsShelf.tsx:75",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/gifts.rs:13",
    "rpc": [
     "gifts.list",
     "gifts.answer"
    ],
-   "notes": "gifts.changed event not handled.",
+   "notes": "gifts.changed registered via AppState::register_event; GiftsPill and 560px glass popover with Accept and Decline in-place confirm.",
    "workPackage": "WP2"
   },
   {
    "id": "library-12",
    "room": "Library",
    "feature": "Add game (+ button, file picker, portable)",
-   "status": "PARTIAL",
+   "status": "DONE",
    "reactRef": "components/shell/LibraryHead.tsx:1",
-   "nativeRef": "exo-ui/src/library.rs:584",
-   "rpc": [],
-   "notes": "Button + palette entry exist; no custom-game metadata editing.",
+   "nativeRef": "exo-ui/src/library_state.rs:1971",
+   "rpc": [
+    "shell.pickProgram",
+    "library.addCustom"
+   ],
+   "notes": "Add menu (New folder, Add a game) plus OS file drop (.exe/.lnk/.bat/.cmd) on Library.",
    "workPackage": "WP2"
   },
   {
    "id": "library-13",
    "room": "Library",
    "feature": "Refresh all (library.refreshAll, folder art refresh)",
-   "status": "PARTIAL",
+   "status": "DONE",
    "reactRef": "components/shell/useLiveLibraryRefresh.ts:11",
-   "nativeRef": "exo-ui/src/state.rs:3035",
+   "nativeRef": "exo-ui/src/library_state.rs:2051",
    "rpc": [
-    "library.refresh"
+    "library.refreshAll"
    ],
-   "notes": "library.refreshAll never called.",
+   "notes": "Calls library.refreshAll with live refresh notice, cover shine, 30-min rescan timer, and folder art refresh.",
    "workPackage": "WP2"
   },
   {
@@ -582,7 +594,7 @@
    "feature": "Game card context menu: Play / Install",
    "status": "DONE",
    "reactRef": "components/shell/GameMenu.tsx:9",
-   "nativeRef": "exo-ui/src/menus.rs:311",
+   "nativeRef": "exo-ui/src/menus.rs:640",
    "rpc": [
     "game.launch"
    ],
@@ -593,13 +605,15 @@
    "id": "library-15",
    "room": "Library",
    "feature": "Game card menu: Play as <account>",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/shell/GameMenu.tsx:76",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/menus.rs:697",
    "rpc": [
+    "accounts.list",
+    "accounts.switch",
     "game.launch"
    ],
-   "notes": "No multi-account launch.",
+   "notes": "Lists Riot saved accounts and switches/launches via accounts.switch + game.launch.",
    "workPackage": "WP2"
   },
   {
@@ -608,7 +622,7 @@
    "feature": "Game card menu: Open folder, Properties, Hide/Unhide",
    "status": "DONE",
    "reactRef": "components/shell/GameMenu.tsx:78",
-   "nativeRef": "exo-ui/src/menus.rs:333",
+   "nativeRef": "exo-ui/src/menus.rs:720",
    "rpc": [
     "game.openFolder"
    ],
@@ -619,57 +633,63 @@
    "id": "library-17",
    "room": "Library",
    "feature": "Game card menu: New folder / add to folder",
-   "status": "BROKEN",
+   "status": "DONE",
    "reactRef": "components/shell/GameMenu.tsx:82",
-   "nativeRef": "exo-ui/src/menus.rs:348",
-   "rpc": [],
-   "notes": "Shows \"Folder management coming soon\".",
+   "nativeRef": "exo-ui/src/menus.rs:730",
+   "rpc": [
+    "settings.set"
+   ],
+   "notes": "New folder action + per-folder toggle checkmarks.",
    "workPackage": "WP2"
   },
   {
    "id": "library-18",
    "room": "Library",
    "feature": "Folder card menu (Edit, Move earlier/later, Delete)",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/shell/GameMenu.tsx:25",
-   "nativeRef": null,
-   "rpc": [],
-   "notes": "",
+   "nativeRef": "exo-ui/src/menus.rs:765",
+   "rpc": [
+    "settings.set"
+   ],
+   "notes": "Edit folder, Move earlier, Move later, Delete folder with in-place 'Delete? Games stay' confirm.",
    "workPackage": "WP2"
   },
   {
    "id": "library-19",
    "room": "Library",
    "feature": "Running game state + Stop; hold windows (wait for game)",
-   "status": "PARTIAL",
+   "status": "DONE",
    "reactRef": "components/shell/useGameHolds.ts:8",
-   "nativeRef": "exo-ui/src/library.rs:29",
+   "nativeRef": "exo-ui/src/library_state.rs:2111",
    "rpc": [
     "game.stop"
    ],
-   "notes": "game.optimizeHeld / game.optimizedAgain events not handled; no HoldWindow.",
+   "notes": "game.optimizeHeld / game.optimizedAgain registered via AppState::register_event; per-game Starting/Closing holds and timed release.",
    "workPackage": "WP2"
   },
   {
    "id": "library-20",
    "room": "Library",
    "feature": "Keyboard grid nav / type-ahead",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/shell/LibraryPane.tsx:304",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/library_state.rs:2313",
    "rpc": [],
-   "notes": "",
+   "notes": "Ctrl+F, Ctrl+A, Escape, HomeDeck Left/Right, Grid Arrow/Home/End/PageUp/PageDown/Enter, and letter/digit type-ahead.",
    "workPackage": "WP2"
   },
   {
    "id": "library-21",
    "room": "Library",
    "feature": "Library empty / loading / error states",
-   "status": "PARTIAL",
+   "status": "DONE",
    "reactRef": "components/shell/LibraryPane.tsx:30",
-   "nativeRef": "exo-ui/src/library.rs:215",
-   "rpc": [],
-   "notes": "Empty ok; host error state not surfaced.",
+   "nativeRef": "exo-ui/src/library.rs:693",
+   "rpc": [
+    "library.get"
+   ],
+   "notes": "Loading state, empty state with Add a game / Refresh / Store actions, and host error 'Library unavailable' with Try again.",
    "workPackage": "WP2"
   },
   {
