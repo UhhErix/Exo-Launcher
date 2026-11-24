@@ -198,6 +198,12 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.exo-ai-health-rows {
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: var(--exo-hair) solid var(--exo-float-line);
+}
+
 @keyframes exo-ai-dot-pulse {
   from {
     opacity: 0.45;

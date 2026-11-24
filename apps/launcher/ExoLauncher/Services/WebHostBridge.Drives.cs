@@ -11,7 +11,7 @@ namespace ExoLauncher.Services;
 /// </summary>
 public sealed partial class WebHostBridge
 {
-    private static readonly HashSet<string> DriveActions = ["cache", "flush", "optimize", "all"];
+    private static readonly HashSet<string> DriveActions = ["cache", "flush", "optimize", "trim", "all"];
 
     private async Task<object> SystemDrivesAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
@@ -19,8 +19,8 @@ public sealed partial class WebHostBridge
         var message = action is null ? null
             : DriveActions.Contains(action) ? await Task.Run(() => Drives.Change(action), ct).ConfigureAwait(false)
             : "Exo doesn't know that change.";
-        var (disks, optimize, plan) = await Task.Run(() => (Drives.ReadDisks(), Drives.ReadOptimize(), Drives.ReadPlanPower()), ct).ConfigureAwait(false);
-        var fixes = Drives.Fixes(disks, optimize, Drives.LoadBackup());
+        var (disks, optimize, trim, plan) = await Task.Run(() => (Drives.ReadDisks(), Drives.ReadOptimize(), Drives.ReadTrim(), Drives.ReadPlanPower()), ct).ConfigureAwait(false);
+        var fixes = Drives.Fixes(disks, optimize, Drives.LoadBackup(), trim);
         DriveSpace.Report? space = null;
         if (ReadBool(p, hasParams, "space") == true)
         {

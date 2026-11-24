@@ -60,6 +60,30 @@ internal static partial class BiosUpdate
     /// <summary>ASUS's BIOS page for a model, the one its support site opens by name.</summary>
     internal static string AsusPage(string model) => $"https://www.asus.com/supportonly/{Uri.EscapeDataString(model)}/helpdesk_bios/";
 
+    internal static string? SupportPage(string? maker, string? product)
+    {
+        var brand = PcAbout.Maker(maker);
+        var model = PcAbout.Real(product) ? product.Trim() : null;
+        return brand switch
+        {
+            "ASUS" => model is not null ? AsusPage(model) : "https://www.asus.com/support/download-center/",
+            "MSI" => model is not null ? $"https://www.msi.com/search/{Uri.EscapeDataString(model)}" : "https://www.msi.com/support/download",
+            "Gigabyte" => model is not null ? $"https://www.gigabyte.com/Search?kw={Uri.EscapeDataString(model)}" : "https://www.gigabyte.com/Support/Consumer/Download",
+            "ASRock" => model is not null ? $"https://www.asrock.com/support/index.asp?Model={Uri.EscapeDataString(model)}" : "https://www.asrock.com/support/index.asp",
+            "Biostar" => "https://www.biostar.com.tw/app/en/support/download.php",
+            "NZXT" => "https://support.nzxt.com/hc/en-us",
+            "EVGA" => "https://www.evga.com/support/download/",
+            "Supermicro" => "https://www.supermicro.com/en/support/resources/bios_ipmi.php",
+            "Dell" or "Alienware" => "https://www.dell.com/support/home/en-us/products",
+            "Lenovo" => "https://pcsupport.lenovo.com/",
+            "HP" => "https://support.hp.com/us-en/drivers",
+            "Acer" => "https://www.acer.com/us-en/support/drivers-and-manuals",
+            "Framework" => "https://knowledgebase.frame.work/bios-and-drivers-downloads-rJ3PaCexh",
+            "Intel" => "https://www.intel.com/content/www/us/en/download-center/home.html",
+            _ => null,
+        };
+    }
+
     private static async Task<Newest?> AsusAsync(string model, CancellationToken ct)
     {
         var url = $"https://www.asus.com/support/api/product.asmx/GetPDBIOS?website=global&model={Uri.EscapeDataString(model)}";

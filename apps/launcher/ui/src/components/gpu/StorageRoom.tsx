@@ -232,7 +232,7 @@ export function StorageRoom({
                 <h3 className="exo-st-subhead">Drive settings</h3>
                 <div className="exo-pc-menu-rows">
                   {drives.fixes.map(fix => (
-                    <Row key={fix.key} label={fix.label}>
+                    <Row key={fix.key} label={fix.label} detail={fix.detail}>
                       {fix.applied ? (
                         <State on>{fix.restart ? 'After restart' : 'Optimal'}</State>
                       ) : (

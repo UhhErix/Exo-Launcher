@@ -693,7 +693,7 @@ export type GpuGame = {
 
 /** System > This PC: one row per setup problem (none when all is well); power switches to Exo's plan for cpu, with Undo; chipset Exo updates (busy while it installs, applied while it waits for a restart, url only after a failed install). */
 export type PcHealthItem = {
-  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'pcie' | 'gpucable' | 'network' | NetworkItemKey | 'netlink'
+  key: 'ram' | 'ramchannel' | 'cpumicrocode' | 'ryzenbranch' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'pcie' | 'gpucable' | 'network' | NetworkItemKey | 'netlink'
   label: string
   detail: string
   url?: string | null
@@ -772,8 +772,8 @@ export type DriveInfo = {
 }
 
 /** A drive setting Exo fixes with Windows' permission: write caching on, write-cache flushing back on, Windows' weekly optimize able to run. */
-export type DriveFix = { key: 'cache' | 'flush' | 'optimize'; label: string; detail: string; applied: boolean; restart: boolean }
-export type DriveAction = 'cache' | 'flush' | 'optimize' | 'all'
+export type DriveFix = { key: 'cache' | 'flush' | 'optimize' | 'trim'; label: string; detail: string; applied: boolean; restart: boolean }
+export type DriveAction = 'cache' | 'flush' | 'optimize' | 'trim' | 'all'
 /** A game's last session whose drive came near its warning point or slowed itself (DriveHeat.cs): its peak °C and how long it slowed. */
 export type DriveHeat = { peak: number; warn?: number | null; slowedSeconds: number }
 export type DrivesState = { ok: boolean; message?: string | null; fixes: DriveFix[]; drives: DriveInfo[] }
@@ -3108,7 +3108,7 @@ export const host = {
   /** The card maker's own control panel opened as the user (NVIDIA Control Panel, AMD Software, Intel Graphics Software); message names one that isn't installed. */
   gpuControlPanel: () => rawCall<{ ok: boolean; message?: string | null }>('gpu.controlPanel', {}, 20_000),
   /** System > This PC: the checks; apply or undo Exo's power plan; gpusched opens Windows' Graphics settings; gamemode-on/off and gamebar-on (Exo keeps Game Bar off)/off (Exo puts it back) answer ok, and a sentence when Windows didn't take it. */
-  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
+  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'winupdate' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
   /** One item of Best settings › Network on (set now, back in Best settings) or off (put back as it was, left out of Best settings). */
   systemNetwork: (on: boolean, item: 'adapter' | 'dns' | 'tcp') => rawCall<PcHealth>('system.health', { action: on ? 'network-on' : 'network-off', item }, 240_000),
   /** PC › Overview: what this PC is (processor, memory, drives, board, BIOS, Windows, security, connection). */

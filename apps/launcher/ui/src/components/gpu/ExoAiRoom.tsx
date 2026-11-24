@@ -31,6 +31,7 @@ import { ThisPc, type PcPartMenu } from './PcOverview'
 import { PcPartMenus, StorageChip } from './PcPartMenus'
 import { SectionSlot } from './SectionHead'
 import { StorageRoom } from './StorageRoom'
+import { SetupRows } from './ThisPcTab'
 import type { PcLink } from './pcSections'
 import { usePcState, type PcState } from './usePcState'
 import {
@@ -426,6 +427,11 @@ export function ExoAiRoom({
 
             <section className="exo-system-panel exo-ai-specs" data-pc-part="overview" aria-label="This PC">
               <ThisPc state={state} chips={null} onMenu={setMenu} />
+              {state.health?.items.some(item => !item.applied && !item.current && item.key !== 'power' && item.key !== 'chipset' && !item.key.startsWith('net')) ? (
+                <div className="exo-ai-health-rows">
+                  <SetupRows place="needs" active={active} health={state.health} onHealth={setHealth} />
+                </div>
+              ) : null}
             </section>
           </div>
 

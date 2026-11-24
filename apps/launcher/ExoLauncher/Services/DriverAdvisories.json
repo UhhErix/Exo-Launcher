@@ -1,5 +1,5 @@
 {
-  "serial": 2026110801,
+  "serial": 2026112301,
   "advisories": [
     {
       "id": "nvidia-621.01-video-freeze",
@@ -194,6 +194,72 @@
       "minBuild": 26100,
       "url": "https://heise.de/-9984513",
       "date": "2024-10"
+    },
+    {
+      "id": "crucial-t500-p8cr001",
+      "device": "^ssd:.*(?:Crucial.*T500|CT\\d+T500)",
+      "from": null,
+      "before": "P8CR003",
+      "why": "write slowdowns and wake instability",
+      "do": "update",
+      "to": "P8CR003",
+      "url": "https://www.crucial.com/support/storage-executive",
+      "date": "2024-09"
+    },
+    {
+      "id": "crucial-p5-plus-p7cr401",
+      "device": "^ssd:.*(?:Crucial.*P5 Plus|CT\\d+P5PSSD8)",
+      "from": null,
+      "before": "P7CR403",
+      "why": "reduced write speeds and stability faults",
+      "do": "update",
+      "to": "P7CR403",
+      "url": "https://www.crucial.com/support/storage-executive",
+      "date": "2023-06"
+    },
+    {
+      "id": "skhynix-p41-slc-cache",
+      "device": "^ssd:.*(?:SHPP41|Platinum\\s+P41)",
+      "from": null,
+      "before": "51061A20",
+      "why": "SLC cache write speeds degrade over time",
+      "do": "update",
+      "to": "51061A20",
+      "url": "https://ssd.skhynix.com/download/",
+      "date": "2025-04"
+    },
+    {
+      "id": "solidigm-p44-pro-slc-cache",
+      "device": "^ssd:.*(?:SSDPFKKW|P44\\s+Pro)",
+      "from": null,
+      "before": "002C",
+      "why": "SLC cache write speeds degrade over time",
+      "do": "update",
+      "to": "002C",
+      "url": "https://www.solidigm.com/support-page/drivers-downloads/ka-01737.html",
+      "date": "2025-04"
+    },
+    {
+      "id": "kingston-kc3000-eifk31",
+      "device": "^ssd:.*(?:SKC3000|KC3000)",
+      "from": null,
+      "before": "EIFK31.7",
+      "why": "stability and power-state faults",
+      "do": "update",
+      "to": "EIFK31.7",
+      "url": "https://www.kingston.com/en/support/technical/ksm-firmware-update",
+      "date": "2024-05"
+    },
+    {
+      "id": "kingston-fury-renegade-eifk31",
+      "device": "^ssd:.*(?:SFYR|FURY\\s+Renegade)",
+      "from": null,
+      "before": "EIFK31.7",
+      "why": "stability and power-state faults",
+      "do": "update",
+      "to": "EIFK31.7",
+      "url": "https://www.kingston.com/en/support/technical/ksm-firmware-update",
+      "date": "2024-05"
     }
   ]
 }

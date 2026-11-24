@@ -233,6 +233,19 @@ internal static partial class Drives
         return maintenanceOff is null && serviceOff is null && taskOff is null ? null : new Optimize(taskOff == true, maintenanceOff == true, serviceOff == true);
     }
 
+    internal static TrimState? ReadTrim()
+    {
+        try
+        {
+            using var key = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64).OpenSubKey(FileSystemKey);
+            if (key is null) return null;
+            var ntfsOff = key.GetValue("NtfsDisableDeleteNotify") is int ntfs && ntfs != 0;
+            var refsOff = key.GetValue("RefsDisableDeleteNotify") is int refs && refs != 0;
+            return new TrimState(ntfsOff, refsOff);
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return null; }
+    }
+
     /// <summary>The optimize task turned off: its XML (schtasks /query /xml, no administrator rights) says Enabled false. Null when it can't be read.</summary>
     private static bool? TaskOff()
     {
@@ -275,7 +288,7 @@ internal static partial class Drives
     {
         try
         {
-            if (backup is null || backup.Flush.Count == 0 && backup.Optimize is null && backup.Cache is not { Count: > 0 })
+            if (backup is null || backup.Flush.Count == 0 && backup.Optimize is null && backup.Cache is not { Count: > 0 } && backup.Trim is null)
             {
                 DeletionGate.DeleteFile(BackupPath);
                 return true;
@@ -307,13 +320,16 @@ internal static partial class Drives
         {
             var disks = ReadDisks();
             var optimize = ReadOptimize();
+            var trim = ReadTrim();
             var before = LoadBackup();
             var flush = new List<FlushChange>(before?.Flush ?? []);
             var cache = new List<CacheChange>(before?.Cache ?? []);
             var optimizeKept = before?.Optimize;
+            var trimKept = before?.Trim;
             var writes = new List<(string Id, int Value)>();
             var cacheWrites = new List<(string Id, int? Value)>();
             OptimizeChange? on = null;
+            TrimChange? trimOn = null;
             if (action is "cache" or "all")
                 foreach (var disk in CachePending(disks))
                 {
@@ -331,20 +347,26 @@ internal static partial class Drives
                 on = new OptimizeChange(optimize.TaskOff, optimize.MaintenanceOff, optimize.ServiceOff);
                 optimizeKept ??= on;
             }
-            if (writes.Count == 0 && cacheWrites.Count == 0 && on is null) return null;
-            var lines = Commands(Path.Combine(Environment.SystemDirectory, "reg.exe"), Path.Combine(Environment.SystemDirectory, "schtasks.exe"), writes, on, cacheWrites);
+            if (action is "trim" or "all" && trim is { Off: true } && disks.Any(d => d.Kind is "NVMe SSD" or "SSD"))
+            {
+                trimOn = new TrimChange(trim.NtfsOff, trim.RefsOff);
+                trimKept ??= trimOn;
+            }
+            if (writes.Count == 0 && cacheWrites.Count == 0 && on is null && trimOn is null) return null;
+            var lines = Commands(Path.Combine(Environment.SystemDirectory, "reg.exe"), Path.Combine(Environment.SystemDirectory, "schtasks.exe"), writes, on, cacheWrites, trimOn);
             if (lines is null) return "Exo didn't recognize a drive, so nothing changed.";
-            if (!SaveBackup(new Backup(flush, optimizeKept, cache))) return "Your current settings couldn't be saved, so nothing changed.";
+            if (!SaveBackup(new Backup(flush, optimizeKept, cache, trimKept))) return "Your current settings couldn't be saved, so nothing changed.";
             if (ElevatedCommands.Run(lines, "Drives") is { } refused)
             {
                 SaveBackup(before);
                 return refused;
             }
-            AppLog.Info($"Drives: {action}: {writes.Count} flushing value(s), {cacheWrites.Count} write-caching value(s){(on is not null ? ", optimize on" : "")}.");
+            AppLog.Info($"Drives: {action}: {writes.Count} flushing value(s), {cacheWrites.Count} write-caching value(s){(on is not null ? ", optimize on" : "")}{(trimOn is not null ? ", TRIM on" : "")}.");
             var after = ReadDisks();
             if (writes.Count > 0 && FlushPending(after).Count > 0) return "Windows didn't take the change.";
             if (cacheWrites.Count > 0 && CachePending(after).Count > 0) return "Windows didn't take the change.";
             if (on is not null && ReadOptimize() is { Off: true }) return "Windows didn't take the change.";
+            if (trimOn is not null && ReadTrim() is { Off: true }) return "Windows didn't take the change.";
             return null;
         }
         finally { ChangeGate.Release(); }

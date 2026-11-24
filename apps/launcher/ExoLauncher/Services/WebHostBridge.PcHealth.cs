@@ -33,6 +33,7 @@ public sealed partial class WebHostBridge
             "network-off" => ReadString(p, hasParams, "item") is { } off ? NetworkBusy(off) ?? await Task.Run(() => NetworkBest.Shared.TurnOff(off), ct).ConfigureAwait(false) : "Exo doesn't know that setting.",
             "netcheck" => await Task.Run(() => { NetworkBest.Shared.Measure(); return (string?)null; }, ct).ConfigureAwait(false),
             "gpusched" => OpenWindowsSettings("ms-settings:display-advancedgraphics", "Graphics"),
+            "winupdate" => OpenWindowsSettings("ms-settings:windowsupdate", "Windows Update"),
             _ when IsWindowsSideAction(action) => await Task.Run(() => WindowsSideAction(action, WindowsGameMode.Shared, WindowsGameBar.Shared), ct).ConfigureAwait(false),
             _ => null,
         };

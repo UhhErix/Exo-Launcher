@@ -173,12 +173,31 @@ internal sealed class DriverAdvisories
     {
         a = a.Trim().ToUpperInvariant();
         b = b.Trim().ToUpperInvariant();
-        if (a.Length != b.Length || a.Length < 2) return null;
+        if (a.Length < 2 || b.Length < 2) return null;
         if (b.Length == 8 && b.EndsWith("WD", StringComparison.Ordinal))
-            return a.EndsWith("WD", StringComparison.Ordinal) && a[..3] == b[..3]
+            return a.Length == 8 && a.EndsWith("WD", StringComparison.Ordinal) && a[..3] == b[..3]
                 && int.TryParse(a[..6], NumberStyles.None, CultureInfo.InvariantCulture, out var x)
                 && int.TryParse(b[..6], NumberStyles.None, CultureInfo.InvariantCulture, out var y) ? x.CompareTo(y) : null;
-        return a[1..] == b[1..] && char.IsAsciiDigit(a[0]) && char.IsAsciiDigit(b[0]) ? a[0].CompareTo(b[0]) : null;
+        if (b.Length == 4 && char.IsAsciiLetter(b[3]) && int.TryParse(b[..3], NumberStyles.None, CultureInfo.InvariantCulture, out var sy))
+            return a.Length == 4 && a[3] == b[3] && int.TryParse(a[..3], NumberStyles.None, CultureInfo.InvariantCulture, out var sx)
+                ? sx.CompareTo(sy) : null;
+        if (b.Length == 8 && char.IsAsciiLetter(b[5]) && char.IsAsciiDigit(b[6]) && char.IsAsciiDigit(b[7])
+            && int.TryParse(b[..5], NumberStyles.None, CultureInfo.InvariantCulture, out var hy))
+            return a.Length == 8 && a[5..] == b[5..] && int.TryParse(a[..5], NumberStyles.None, CultureInfo.InvariantCulture, out var hx)
+                ? hx.CompareTo(hy) : null;
+        if (b.Length == 7 && char.IsAsciiLetter(b[0]) && char.IsAsciiDigit(b[1]) && char.IsAsciiLetter(b[2]) && char.IsAsciiLetter(b[3])
+            && int.TryParse(b[4..], NumberStyles.None, CultureInfo.InvariantCulture, out var cy))
+            return a.Length == 7 && a[..4] == b[..4] && int.TryParse(a[4..], NumberStyles.None, CultureInfo.InvariantCulture, out var cx)
+                ? cx.CompareTo(cy) : null;
+        var dotB = b.IndexOf('.');
+        if (dotB >= 5 && dotB < b.Length - 1 && int.TryParse(b[(dotB + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var ky))
+        {
+            var dotA = a.IndexOf('.');
+            return dotA == dotB && a[..dotA] == b[..dotB]
+                && int.TryParse(a[(dotA + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var kx)
+                ? kx.CompareTo(ky) : null;
+        }
+        return a.Length == b.Length && a[1..] == b[1..] && char.IsAsciiDigit(a[0]) && char.IsAsciiDigit(b[0]) ? a[0].CompareTo(b[0]) : null;
     }
 
     /// <summary>The feed's table when its signature verifies against <paramref name="key"/>, else null. The file is { payload: base64, signature: base64 }.</summary>

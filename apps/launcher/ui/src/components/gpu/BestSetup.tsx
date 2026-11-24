@@ -84,9 +84,9 @@ function frameGenStep(settings: LauncherSettings | null, onSave: (patch: Partial
 
 /** The drives' step: write caching, write-cache flushing and weekly optimize together (one Windows prompt), named for what this PC has. */
 function driveStep(drives: DrivesState | null): BestStep | null {
-  const fixes = (['cache', 'flush', 'optimize'] as const).map(key => drives?.fixes.find(fix => fix.key === key)).filter(fix => fix != null)
+  const fixes = (['cache', 'flush', 'optimize', 'trim'] as const).map(key => drives?.fixes.find(fix => fix.key === key)).filter(fix => fix != null)
   if (fixes.length === 0) return null
-  const names = fixes.map(fix => fix.key === 'cache' ? 'write caching' : fix.key === 'flush' ? 'write-cache flushing' : 'weekly optimize')
+  const names = fixes.map(fix => fix.key === 'cache' ? 'write caching' : fix.key === 'flush' ? 'write-cache flushing' : fix.key === 'trim' ? 'SSD TRIM' : 'weekly optimize')
   const listed = names.length === 1 ? `${names[0]} for your drives` : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
   const what = listed[0].toUpperCase() + listed.slice(1)
   return { key: 'drives', what: fixes.some(fix => fix.restart) ? `${what}, after a restart` : what, done: fixes.every(fix => fix.applied), run: async () => {
