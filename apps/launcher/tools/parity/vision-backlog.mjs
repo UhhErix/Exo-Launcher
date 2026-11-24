@@ -84,7 +84,7 @@ const WP_META = {
       'native-ui/crates/exo-ui/src/discord_voice.rs',
       'native-ui/crates/exo-ui/src/discord_voice_state.rs',
     ],
-    branch: 'none pushed to origin yet',
+    branch: 'origin/UhhErix/native-WP6 (8fe6185), origin/UhhErix/native-WP7 (3b95a54)',
   },
   WP8: {
     title: 'WP8 — Music',
@@ -111,10 +111,12 @@ const WP_META = {
     title: 'WP10 — Devices, Captures and Notes',
     owners: [
       'native-ui/crates/exo-ui/src/pc_devices.rs',
+      'native-ui/crates/exo-ui/src/devices_audio.rs',
+      'native-ui/crates/exo-ui/src/devices_controller.rs',
       'native-ui/crates/exo-ui/src/captures.rs',
       'native-ui/crates/exo-ui/src/video_decoder.rs',
     ],
-    branch: 'none pushed to origin yet',
+    branch: 'origin/UhhErix/native-WP10 (eb8b193)',
   },
   Rune: {
     title: 'Rune — Shared component, glass material, icon & type gaps',
@@ -279,6 +281,7 @@ function evaluateBranchStatus(item, finding, wp) {
   if (wp === 'WP5') {
     if (
       item.id === 'store-game-page' ||
+      item.id === 'store-game-media-tab' ||
       item.id === 'store-game-requirements' ||
       (item.id === 'store-search' && /search\s+results|discover\s+landing/i.test(hay))
     ) {
@@ -413,10 +416,31 @@ function evaluateBranchStatus(item, finding, wp) {
   }
 
   if (wp === 'WP6/WP7') {
+    if (item.id === 'discord-settings-sheet') {
+      return {
+        branchStatus: 'fixed_on_branch',
+        branchRef: 'origin/UhhErix/native-WP7 (3b95a54)',
+        branchNote: 'WP7 implements discord_settings.rs (Account, Voice, App, Privacy, Keybinds).',
+      }
+    }
+    if (item.id === 'discord-voice-call' || item.id === 'discord-voice-stream') {
+      return {
+        branchStatus: 'partial_on_branch',
+        branchRef: 'origin/UhhErix/native-WP7 (3b95a54)',
+        branchNote: 'WP7 updated discord_voice.rs / discord_voice_state.rs; re-verify voice stage and Go Live stream picker post-merge.',
+      }
+    }
+    if (/raw\s+unparsed\s+markdown|channel\s+mention/i.test(hay)) {
+      return {
+        branchStatus: 'open_gap',
+        branchRef: 'origin/UhhErix/native-WP6 (8fe6185)',
+        branchNote: 'Verify raw markdown link / channel mention parsing in discord_md.rs on WP6 post-merge.',
+      }
+    }
     return {
-      branchStatus: 'open_gap',
-      branchRef: 'none (no origin/UhhErix/native-WP6 or WP7 branch)',
-      branchNote: 'Open Discord parity gap; no WP6/WP7 branch pushed to origin yet.',
+      branchStatus: 'partial_on_branch',
+      branchRef: 'origin/UhhErix/native-WP6 (8fe6185), origin/UhhErix/native-WP7 (3b95a54)',
+      branchNote: 'WP6/WP7 heavily updated discord.rs, discord_chat.rs, and discord_voice.rs; re-verify post-merge.',
     }
   }
 
@@ -429,10 +453,29 @@ function evaluateBranchStatus(item, finding, wp) {
   }
 
   if (wp === 'WP10') {
+    if (item.id === 'devices-keyboard') {
+      return {
+        branchStatus: 'open_gap',
+        branchRef: 'origin/UhhErix/native-WP10 (eb8b193)',
+        branchNote: 'Wooting 60HE v2 3-column keyboard dashboard gap is outside WP10 audio/controller/captures scope.',
+      }
+    }
+    if (
+      item.id === 'devices-audio' ||
+      item.id === 'devices-controller' ||
+      item.id === 'shell-capture-sheet' ||
+      item.id === 'shell-capture-settings'
+    ) {
+      return {
+        branchStatus: 'fixed_on_branch',
+        branchRef: 'origin/UhhErix/native-WP10 (eb8b193)',
+        branchNote: 'WP10 implements devices_audio.rs, devices_controller.rs, captures.rs, and notes.rs; re-verify post-merge.',
+      }
+    }
     return {
-      branchStatus: 'open_gap',
-      branchRef: 'none (no origin/UhhErix/native-WP10 branch)',
-      branchNote: 'Open Devices/Captures/Notes parity gap; no WP10 branch pushed to origin yet.',
+      branchStatus: 'partial_on_branch',
+      branchRef: 'origin/UhhErix/native-WP10 (eb8b193)',
+      branchNote: 'WP10 updated Devices & Captures; re-verify mouse embed and capture popover post-merge.',
     }
   }
 
@@ -448,8 +491,9 @@ export async function generateVisionBacklog({
   outJsonPath = join(LAUNCHER_ROOT, 'improve', 'vision-parity.json'),
   outMdPath = join(LAUNCHER_ROOT, 'improve', 'vision-parity.md'),
   testedCommit = '526b2df',
-  totalSpendUsd = 2.4046,
-  totalApiCalls = 53,
+  totalSpendUsd = 3.1412,
+  totalApiCalls = 71,
+  followupSpendUsd = 0.7366,
 } = {}) {
   const report = JSON.parse(await readFile(resultsPath, 'utf8'))
   const entries = []
@@ -566,6 +610,7 @@ export async function generateVisionBacklog({
     model: report.visionSummary?.model || 'gemini-4-hydrogen',
     budgetUsd: 15.0,
     totalSpendUsd: Number(totalSpendUsd.toFixed(4)),
+    followupSpendUsd: Number(followupSpendUsd.toFixed(4)),
     totalApiCalls,
     totals,
     wpSummary,
@@ -591,7 +636,7 @@ function renderBacklogMarkdown(data) {
   lines.push(`- **Coverage:** **${data.totals.statesAnalyzed} / ${data.totals.statesTotal}** states in \`tools/parity/states.mjs\` analyzed (**${data.totals.statesSkipped}** skipped where React precondition was unmet in the test instance)`)
   lines.push(`- **Findings:** **${data.totals.blocker}** blockers, **${data.totals.major}** major, **${data.totals.minor}** minor (**${data.totals.findingsTotal}** total)`)
   lines.push(`- **Branch triage:** **${data.totals.openGap}** open gaps (**${data.totals.openBlockers}** open blockers, **${data.totals.openMajors}** open major) | **${data.totals.partialOnBranch}** partial/needs re-check on open WP branches | **${data.totals.fixedOnBranch}** already fixed on open/merged \`origin/UhhErix/native-WP*\` branches`)
-  lines.push(`- **API spend:** **$${data.totalSpendUsd.toFixed(4)}** across ${data.totalApiCalls} calls (budget cap: $${data.budgetUsd.toFixed(2)}; re-run verified 52/52 cache hits at $0.0000)`)
+  lines.push(`- **API spend:** **$${data.totalSpendUsd.toFixed(4)}** cumulative across ${data.totalApiCalls} calls (follow-up 18-state pass: **$${Number(data.followupSpendUsd || 0).toFixed(4)}** with 52/69 cached hits at $0.0000; budget cap: $${data.budgetUsd.toFixed(2)})`)
   lines.push('')
   lines.push('> Pixel metrics from `tools/parity/compare.mjs` remain ground truth. Vision adds structured descriptions, fix hints, and side-by-side crops (`apps/launcher/parity-report/vision-qa/crops/`, gitignored locally).')
   lines.push('')

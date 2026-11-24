@@ -113,8 +113,8 @@ export const STATES = [
       steps: [
         { type: 'click', selector: 'button.exo-capture-btn' },
         { type: 'wait', ms: 400 },
-        { type: 'clickText', selector: '[role="menu"] [role^="menuitem"], [popover]:popover-open button', text: /all captures|captures|notes/i },
-        { type: 'wait', ms: 700 },
+        { type: 'clickText', selector: '[role="menu"] [role^="menuitem"], [popover]:popover-open button', text: /^captures$/i },
+        { type: 'waitFor', selector: '[role="dialog"] button', timeoutMs: 5000 },
         { type: 'clickText', selector: '[role="dialog"] button', text: /settings/i },
         { type: 'wait', ms: 600 },
       ],
@@ -587,16 +587,12 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
-        { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
-        { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-tile-hit' },
-        { type: 'wait', ms: 700 },
-        { type: 'clickText', selector: 'button, [role="tab"]', text: /properties/i },
-        { type: 'wait', ms: 400 },
-        { type: 'clickText', selector: 'button, [role="tab"]', text: /installed files|files/i },
-        { type: 'wait', ms: 400 },
+        { type: 'click', selector: '.exo-home-more-btn, button[aria-label^="Details for"]', optional: true },
+        { type: 'waitFor', selector: '#exo-props-tab-files, .exo-game-props-tab', timeoutMs: 6000 },
+        { type: 'clickText', selector: '[role="tab"], button.exo-game-props-tab', text: /installed files|files/i },
+        { type: 'wait', ms: 450 },
       ],
-      openSelector: '.exo-game-page, [role="dialog"]',
+      openSelector: '.exo-game-page, .exo-game-props',
     },
     native: {
       scene: 'game-props-files',
@@ -613,16 +609,12 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
-        { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
-        { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-tile-hit' },
-        { type: 'wait', ms: 700 },
-        { type: 'clickText', selector: 'button, [role="tab"]', text: /properties/i },
-        { type: 'wait', ms: 400 },
-        { type: 'clickText', selector: 'button, [role="tab"]', text: /anti-cheat/i },
-        { type: 'wait', ms: 400 },
+        { type: 'click', selector: '.exo-home-more-btn, button[aria-label^="Details for"]', optional: true },
+        { type: 'waitFor', selector: '#exo-props-tab-general, .exo-game-props-tab', timeoutMs: 6000 },
+        { type: 'clickText', selector: '[role="tab"], button.exo-game-props-tab', text: /anti-cheat|general/i },
+        { type: 'wait', ms: 450 },
       ],
-      openSelector: '.exo-game-page, [role="dialog"]',
+      openSelector: '.exo-game-page, .exo-game-props',
     },
     native: {
       scene: 'game-props-anticheat',
@@ -639,16 +631,12 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
-        { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
-        { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-tile-hit' },
-        { type: 'wait', ms: 700 },
-        { type: 'clickText', selector: 'button, [role="tab"]', text: /properties/i },
-        { type: 'wait', ms: 400 },
-        { type: 'clickText', selector: 'button, [role="tab"]', text: /dlss|upscal/i },
-        { type: 'wait', ms: 400 },
+        { type: 'click', selector: '.exo-home-more-btn, button[aria-label^="Details for"]', optional: true },
+        { type: 'waitFor', selector: '#exo-props-tab-files, .exo-game-props-tab', timeoutMs: 6000 },
+        { type: 'clickText', selector: '[role="tab"], button.exo-game-props-tab', text: /dlss|upscal|installed files/i },
+        { type: 'wait', ms: 450 },
       ],
-      openSelector: '.exo-game-page, [role="dialog"]',
+      openSelector: '.exo-game-page, .exo-game-props',
     },
     native: {
       scene: 'game-props-dlss',
@@ -770,9 +758,11 @@ export const STATES = [
       room: 'Store',
       steps: [
         { type: 'clickText', selector: '.exo-store button, .exo-store [role="tab"]', text: /^Discover$/i, optional: true },
-        { type: 'wait', ms: 1500 },
-        { type: 'click', selector: '.exo-store-card, .exo-store-hero-stage' },
-        { type: 'wait', ms: 1400 },
+        { type: 'waitFor', selector: '.exo-store-hero-stage, .exo-store-card', timeoutMs: 8000 },
+        { type: 'click', selector: '.exo-store-hero-stage, .exo-store-card' },
+        { type: 'waitFor', selector: '.exo-sgp-stage', timeoutMs: 8000 },
+        { type: 'scroll', selector: '.exo-sgp, [data-room-scroll]', top: 380, intoView: '.exo-sgp-thumb' },
+        { type: 'waitFor', selector: '.exo-sgp-thumb', timeoutMs: 8000 },
         { type: 'click', selector: '.exo-sgp-thumb:nth-child(2), .exo-sgp-thumb' },
         { type: 'wait', ms: 500 },
       ],
@@ -951,13 +941,14 @@ export const STATES = [
     react: {
       room: 'Discord',
       steps: [
-        { type: 'wait', ms: 1600 },
+        { type: 'waitFor', selector: '.exo-dc-band-place.is-server', timeoutMs: 8000 },
         { type: 'click', selector: '.exo-dc-band-place.is-server' },
-        { type: 'wait', ms: 1500 },
+        { type: 'waitFor', selector: '.exo-dc-voice-channel > .exo-dc-item', timeoutMs: 8000 },
         { type: 'click', selector: '.exo-dc-voice-channel > .exo-dc-item' },
-        { type: 'wait', ms: 700 },
-        { type: 'clickText', selector: 'button.exo-dc-voice-join', text: /join voice/i },
-        { type: 'wait', ms: 1500 },
+        { type: 'waitFor', selector: 'button.exo-dc-voice-join, .exo-dc-voice-btn', timeoutMs: 6000 },
+        { type: 'clickText', selector: 'button.exo-dc-voice-join', text: /join voice/i, optional: true },
+        { type: 'waitFor', selector: '.exo-dc-voice-btn', timeoutMs: 10000 },
+        { type: 'wait', ms: 600 },
       ],
       openSelector: '.exo-dc-voice-btn',
     },
@@ -977,18 +968,19 @@ export const STATES = [
     react: {
       room: 'Discord',
       steps: [
-        { type: 'wait', ms: 1600 },
+        { type: 'waitFor', selector: '.exo-dc-band-place.is-server', timeoutMs: 8000 },
         { type: 'click', selector: '.exo-dc-band-place.is-server' },
-        { type: 'wait', ms: 1500 },
+        { type: 'waitFor', selector: '.exo-dc-voice-channel > .exo-dc-item', timeoutMs: 8000 },
         { type: 'click', selector: '.exo-dc-voice-channel > .exo-dc-item' },
-        { type: 'wait', ms: 700 },
+        { type: 'waitFor', selector: 'button.exo-dc-voice-join, .exo-dc-share > button.exo-dc-voice-btn', timeoutMs: 6000 },
         { type: 'clickText', selector: 'button.exo-dc-voice-join', text: /join voice/i, optional: true },
-        { type: 'wait', ms: 1500 },
+        { type: 'waitFor', selector: '.exo-dc-share > button.exo-dc-voice-btn', timeoutMs: 10000 },
         { type: 'click', selector: '.exo-dc-share > button.exo-dc-voice-btn' },
-        { type: 'wait', ms: 500 },
+        { type: 'waitFor', selector: '.exo-dc-golive, .exo-dc-golive-menu, [role="dialog"]', timeoutMs: 6000 },
+        { type: 'wait', ms: 400 },
       ],
-      openSelector: '.exo-dc-golive-menu, [role="dialog"]',
-      menuSelector: '.exo-dc-golive-menu [role^="menuitem"], .exo-dc-golive-menu button',
+      openSelector: '.exo-dc-golive, .exo-dc-golive-menu, [role="dialog"]',
+      menuSelector: '.exo-dc-golive-menu [role^="menuitem"], .exo-dc-golive button',
     },
     native: {
       scene: 'discord-voice',
@@ -1045,9 +1037,10 @@ export const STATES = [
     react: {
       room: 'Music',
       steps: [
-        { type: 'wait', ms: 1600 },
-        { type: 'clickText', selector: '.exo-music button, .exo-music a', text: /liked songs|songs/i },
-        { type: 'wait', ms: 1000 },
+        { type: 'waitFor', selector: '.exo-music:not(.is-concealed) .exo-music-bar-side button', timeoutMs: 25000 },
+        { type: 'clickText', selector: '.exo-music-side button, .exo-music button, .exo-music a', text: /liked songs|songs/i },
+        { type: 'waitFor', selector: '.exo-music-songs, .exo-music-track', timeoutMs: 8000 },
+        { type: 'wait', ms: 400 },
       ],
       openSelector: '.exo-music-songs, .exo-music-track',
     },
@@ -1066,11 +1059,13 @@ export const STATES = [
     react: {
       room: 'Music',
       steps: [
-        { type: 'wait', ms: 1600 },
-        { type: 'click', selector: '.exo-music-card, .exo-music-library-row' },
-        { type: 'wait', ms: 1000 },
+        { type: 'waitFor', selector: '.exo-music:not(.is-concealed) .exo-music-bar-side button', timeoutMs: 25000 },
+        { type: 'waitFor', selector: '.exo-music-library-row, .exo-music-card-open, .exo-music-card', timeoutMs: 8000 },
+        { type: 'click', selector: '.exo-music-library-row[data-kind="album"], .exo-music-library-row[data-kind="playlist"], .exo-music-card-open, .exo-music-library-row' },
+        { type: 'waitFor', selector: '.exo-music-page, .exo-music-track, .exo-music-header', timeoutMs: 8000 },
+        { type: 'wait', ms: 400 },
       ],
-      openSelector: '.exo-music-page, .exo-music-track',
+      openSelector: '.exo-music-page, .exo-music-track, .exo-music-header',
     },
     native: {
       scene: 'music',
@@ -1088,11 +1083,13 @@ export const STATES = [
     react: {
       room: 'Music',
       steps: [
-        { type: 'wait', ms: 1600 },
-        { type: 'click', selector: '.exo-music-card.is-artist, .exo-music-artist-link, .exo-music-card' },
-        { type: 'wait', ms: 1000 },
+        { type: 'waitFor', selector: '.exo-music:not(.is-concealed) .exo-music-bar-side button', timeoutMs: 25000 },
+        { type: 'waitFor', selector: '.exo-music-library-row, .exo-music-card-open, .exo-music-card', timeoutMs: 8000 },
+        { type: 'click', selector: '.exo-music-library-row[data-kind="artist"], .exo-music-card.is-artist, .exo-music-artist-link, .exo-music-card-open, .exo-music-library-row' },
+        { type: 'waitFor', selector: '.exo-music-artist, .exo-music-page, .exo-music-header', timeoutMs: 8000 },
+        { type: 'wait', ms: 400 },
       ],
-      openSelector: '.exo-music-artist, .exo-music-page',
+      openSelector: '.exo-music-artist, .exo-music-page, .exo-music-header',
     },
     native: {
       scene: 'music',
@@ -1110,11 +1107,12 @@ export const STATES = [
     react: {
       room: 'Music',
       steps: [
-        { type: 'wait', ms: 1600 },
-        { type: 'click', selector: 'button[aria-label*="Queue" i]' },
-        { type: 'wait', ms: 600 },
+        { type: 'waitFor', selector: '.exo-music:not(.is-concealed) button[aria-label="Queue"]', timeoutMs: 25000 },
+        { type: 'click', selector: 'button[aria-label="Queue"]' },
+        { type: 'waitFor', selector: '.exo-music-panel', timeoutMs: 5000 },
+        { type: 'wait', ms: 400 },
       ],
-      openSelector: '.exo-music-panel, [aria-label*="Queue" i]',
+      openSelector: '.exo-music-panel',
     },
     native: {
       scene: 'music-queue',
@@ -1131,11 +1129,12 @@ export const STATES = [
     react: {
       room: 'Music',
       steps: [
-        { type: 'wait', ms: 1600 },
-        { type: 'click', selector: 'button[aria-label*="Lyrics" i], button[aria-label*="Now playing" i]' },
-        { type: 'wait', ms: 600 },
+        { type: 'waitFor', selector: '.exo-music:not(.is-concealed) button[aria-label="Now playing"]', timeoutMs: 25000 },
+        { type: 'click', selector: 'button[aria-label="Now playing"]' },
+        { type: 'waitFor', selector: '.exo-music-panel', timeoutMs: 5000 },
+        { type: 'wait', ms: 400 },
       ],
-      openSelector: '.exo-music-panel, [role="tab"][aria-selected="true"]',
+      openSelector: '.exo-music-panel',
     },
     native: {
       scene: 'music-now-playing',
@@ -1152,9 +1151,10 @@ export const STATES = [
     react: {
       room: 'Music',
       steps: [
-        { type: 'wait', ms: 1600 },
-        { type: 'click', selector: 'button[aria-label*="Immersive" i], button[aria-label*="Full screen" i]' },
-        { type: 'wait', ms: 700 },
+        { type: 'waitFor', selector: '.exo-music:not(.is-concealed) button[aria-label="Immersive"]', timeoutMs: 25000 },
+        { type: 'click', selector: 'button[aria-label="Immersive"]' },
+        { type: 'waitFor', selector: '.exo-music-immersive, .exo-immersive', timeoutMs: 5000 },
+        { type: 'wait', ms: 500 },
       ],
       openSelector: '.exo-music-immersive, .exo-immersive',
     },
@@ -1174,9 +1174,10 @@ export const STATES = [
     react: {
       room: 'Music',
       steps: [
-        { type: 'wait', ms: 1600 },
+        { type: 'waitFor', selector: '.exo-music:not(.is-concealed) .exo-music-sort', timeoutMs: 25000 },
         { type: 'click', selector: '.exo-music-sort, button[aria-label*="Show and sort" i]' },
-        { type: 'wait', ms: 400 },
+        { type: 'waitFor', selector: '[role="menu"]', timeoutMs: 4000 },
+        { type: 'wait', ms: 300 },
       ],
       openSelector: '[role="menu"]',
       menuSelector: '[role="menu"] [role^="menuitem"]',
@@ -1198,9 +1199,12 @@ export const STATES = [
     react: {
       room: 'Music',
       steps: [
-        { type: 'wait', ms: 1600 },
+        { type: 'waitFor', selector: '.exo-music:not(.is-concealed) .exo-music-library-item', timeoutMs: 25000 },
+        { type: 'hover', selector: '.exo-music-library-item' },
+        { type: 'wait', ms: 250 },
         { type: 'click', selector: '.exo-music-library-more, button[aria-label^="More for"]' },
-        { type: 'wait', ms: 400 },
+        { type: 'waitFor', selector: '[role="menu"]', timeoutMs: 4000 },
+        { type: 'wait', ms: 300 },
       ],
       openSelector: '[role="menu"]',
       menuSelector: '[role="menu"] [role^="menuitem"]',
@@ -1238,11 +1242,12 @@ export const STATES = [
     react: {
       room: 'Devices',
       steps: [
-        { type: 'wait', ms: 1200 },
-        { type: 'clickText', selector: '.exo-device-card, button', text: /mouse/i },
-        { type: 'wait', ms: 1000 },
+        { type: 'waitFor', selector: '.exo-device-card', timeoutMs: 8000 },
+        { type: 'clickText', selector: '.exo-device-card, button', text: /mouse|starlight|dongle|viper|superlight|finalmouse|logitech|razer|g pro|deathadder/i },
+        { type: 'waitFor', selector: 'iframe, .exo-devices-mouse, .exo-device-page', timeoutMs: 8000 },
+        { type: 'wait', ms: 800 },
       ],
-      openSelector: 'iframe, .exo-device-page',
+      openSelector: 'iframe, .exo-devices-mouse:not(.is-away), .exo-device-page',
     },
     native: {
       scene: 'pc-devices-mouse',
@@ -1259,9 +1264,10 @@ export const STATES = [
     react: {
       room: 'Devices',
       steps: [
-        { type: 'wait', ms: 1200 },
+        { type: 'waitFor', selector: '.exo-device-card', timeoutMs: 8000 },
         { type: 'clickText', selector: '.exo-device-card, button', text: /keyboard|wooting/i },
-        { type: 'wait', ms: 900 },
+        { type: 'waitFor', selector: '.exo-device-page, .exo-kb-page', timeoutMs: 6000 },
+        { type: 'wait', ms: 500 },
       ],
       openSelector: '.exo-device-page, .exo-kb-page',
     },
@@ -1280,9 +1286,10 @@ export const STATES = [
     react: {
       room: 'Devices',
       steps: [
-        { type: 'wait', ms: 1200 },
-        { type: 'clickText', selector: '.exo-device-card, button', text: /audio|headphone|speaker|headset|iem/i },
-        { type: 'wait', ms: 900 },
+        { type: 'waitFor', selector: '.exo-device-card', timeoutMs: 8000 },
+        { type: 'clickText', selector: '.exo-device-card, button', text: /audio|headphone|speaker|headset|iem|3\.5 mm|jack|dac|ziigaat|realtek|focusrite/i },
+        { type: 'waitFor', selector: '.exo-device-page, .exo-audio-page', timeoutMs: 6000 },
+        { type: 'wait', ms: 500 },
       ],
       openSelector: '.exo-device-page, .exo-audio-page',
     },
@@ -1301,9 +1308,10 @@ export const STATES = [
     react: {
       room: 'Devices',
       steps: [
-        { type: 'wait', ms: 1200 },
-        { type: 'clickText', selector: '.exo-device-card, button', text: /controller|gamepad|dualsense|xbox/i },
-        { type: 'wait', ms: 900 },
+        { type: 'waitFor', selector: '.exo-device-card', timeoutMs: 8000 },
+        { type: 'clickText', selector: '.exo-device-card, button', text: /controller|gamepad|dualsense|xbox|dualshock|8bitdo/i },
+        { type: 'waitFor', selector: '.exo-device-page, .exo-pad-page', timeoutMs: 6000 },
+        { type: 'wait', ms: 500 },
       ],
       openSelector: '.exo-device-page, .exo-pad-page',
     },
