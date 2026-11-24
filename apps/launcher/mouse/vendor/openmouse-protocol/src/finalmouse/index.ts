@@ -87,6 +87,9 @@ export interface FinalmouseTelemetry {
   /** 0 = normal, 1 = early, 2 = late. Null until a 4-byte reply arrives. */
   clickReleaseL?: number | null;
   clickReleaseR?: number | null;
+  /** Bit 0: 0 = intent trigger on, 1 = off. Bit 1 (+2): Ultraclick active. Null until a 6-byte reply arrives. */
+  clickIntentL?: number | null;
+  clickIntentR?: number | null;
   /** Actuation steps in 0.01 mm units (1-40); 0 = not reported / uncalibrated. */
   tmrThrL?: number;
   tmrThrR?: number;
@@ -121,6 +124,13 @@ export interface FinalmouseProfileLed {
 export const FINALMOUSE_CLICK_MODE = { mechanical: 0, analog: 1 } as const;
 /** Release-point values (xpanel readback log: 0 = normal, 1 = early, 2 = late). */
 export const FINALMOUSE_RELEASE_POINT = { normal: 0, early: 1, late: 2 } as const;
+/** Intent-trigger values (xpanel: 0 = on, 1 = off; bit 1 = +2 locks Ultraclick at 0.10 mm). */
+export const FINALMOUSE_INTENT_TRIGGER = { on: 0, off: 1, ultraclickBit: 2 } as const;
+
+/** True when a side's intent-trigger byte has the Ultraclick bit (+2) set. */
+export function finalmouseIsUltraclick(intent: number | null | undefined): boolean {
+  return intent != null && (intent & FINALMOUSE_INTENT_TRIGGER.ultraclickBit) !== 0;
+}
 
 /**
  * TMR-DS actuation limits from xpanel (Bebg4M4T: min 0.01, max 0.40,
@@ -130,6 +140,7 @@ export const FINALMOUSE_TMR = {
   actuationMinMm: 0.01,
   actuationMaxMm: 0.4,
   actuationStepMm: 0.01,
+  ultraclickActuationMm: 0.1,
   rtMinUm: 150,
   rtMaxUm: 250,
   rtStepUm: 10,
@@ -218,23 +229,34 @@ export interface FinalmouseProfileData {
   enabled: number;
 }
 
-/** Encode command 31. Wire order is [modeR, modeL] with optional [relR, relL]. */
+/** Encode command 31. Wire order is [modeR, modeL], optional [relR, relL], optional [intentR, intentL]. */
 export function encodeFinalmouseClickMode(
   modeR: number,
   modeL: number,
   relR?: number,
   relL?: number,
+  intentR?: number,
+  intentL?: number,
 ): Uint8Array {
   for (const mode of [modeR, modeL]) {
     if (mode !== 0 && mode !== 1) throw new Error("Finalmouse click mode must be 0 (mechanical) or 1 (analog).");
   }
   const bytes = [modeR & 1, modeL & 1];
-  if (relR !== undefined || relL !== undefined) {
+  if (relR !== undefined || relL !== undefined || intentR !== undefined || intentL !== undefined) {
     if (relR === undefined || relL === undefined) throw new Error("Finalmouse release points must be set for both switches together.");
     for (const rel of [relR, relL]) {
       if (rel !== 0 && rel !== 1 && rel !== 2) throw new Error("Finalmouse release point must be 0 (normal), 1 (early) or 2 (late).");
     }
     bytes.push(relR, relL);
+    if (intentR !== undefined || intentL !== undefined) {
+      if (intentR === undefined || intentL === undefined) throw new Error("Finalmouse intent trigger must be set for both switches together.");
+      for (const intent of [intentR, intentL]) {
+        if (!Number.isInteger(intent) || intent < 0 || intent > 3) {
+          throw new Error("Finalmouse intent trigger must be 0 (on), 1 (off), or with +2 for Ultraclick.");
+        }
+      }
+      bytes.push(intentR, intentL);
+    }
   }
   return new Uint8Array(bytes);
 }
@@ -401,6 +423,10 @@ export function decodeFinalmouseReport(reportId: number, data: Uint8Array): Part
       if (payload.length >= 4) {
         update.clickReleaseR = payload[2]!;
         update.clickReleaseL = payload[3]!;
+      }
+      if (payload.length >= 6) {
+        update.clickIntentR = payload[4]!;
+        update.clickIntentL = payload[5]!;
       }
       return update;
     }

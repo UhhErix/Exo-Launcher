@@ -187,6 +187,8 @@ export class FinalmouseHidClient {
       finalmouseClickModeR: state.clickModeR ?? null,
       finalmouseClickReleaseL: state.clickReleaseL ?? null,
       finalmouseClickReleaseR: state.clickReleaseR ?? null,
+      finalmouseClickIntentL: state.clickIntentL ?? null,
+      finalmouseClickIntentR: state.clickIntentR ?? null,
       finalmouseTmrThrL: state.tmrThrL ?? null,
       finalmouseTmrThrR: state.tmrThrR ?? null,
       finalmouseTmrHystL: state.tmrHystL ?? null,
@@ -331,17 +333,32 @@ export class FinalmouseHidClient {
 
   /**
    * Starlight X click mode per switch (0 mechanical, 1 TMR analog) with an
-   * optional release point for both (0 normal, 1 early, 2 late). Analog
-   * needs that side calibrated; the device keeps the previous mode otherwise.
+   * optional release point for both (0 normal, 1 early, 2 late) and optional
+   * intent trigger / Ultraclick byte for both (0 on, 1 off, +2 Ultraclick).
    */
-  async setClickMode(modeL: number, modeR: number, relL?: number, relR?: number): Promise<void> {
+  async setClickMode(
+    modeL: number,
+    modeR: number,
+    relL?: number,
+    relR?: number,
+    intentL?: number,
+    intentR?: number,
+  ): Promise<void> {
     this.requireSlx("Click mode");
-    await this.write(this.txReport, FINALMOUSE_COMMAND.clickMode, encodeFinalmouseClickMode(modeR, modeL, relR, relL));
+    await this.write(
+      this.txReport,
+      FINALMOUSE_COMMAND.clickMode,
+      encodeFinalmouseClickMode(modeR, modeL, relR, relL, intentR, intentL),
+    );
     this.telemetry.clickModeL = modeL;
     this.telemetry.clickModeR = modeR;
     if (relL !== undefined && relR !== undefined) {
       this.telemetry.clickReleaseL = relL;
       this.telemetry.clickReleaseR = relR;
+    }
+    if (intentL !== undefined && intentR !== undefined) {
+      this.telemetry.clickIntentL = intentL;
+      this.telemetry.clickIntentR = intentR;
     }
   }
 

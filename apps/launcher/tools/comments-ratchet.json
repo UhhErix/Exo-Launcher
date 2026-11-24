@@ -1286,7 +1286,7 @@
     "mouse/scripts/css-design.mjs": 20,
     "mouse/src/App.tsx": 81,
     "mouse/src/CpuCore.tsx": 37,
-    "mouse/src/Finalmouse.tsx": 48,
+    "mouse/src/Finalmouse.tsx": 42,
     "mouse/src/GamePicker.tsx": 12,
     "mouse/src/Profiles.tsx": 87,
     "mouse/src/SensorAngle.tsx": 40,

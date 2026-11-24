@@ -1,8 +1,22 @@
 import { useState } from 'react'
 import type { MouseStatus } from '@openmouse/protocol/drivers/mouse-types'
+import { FINALMOUSE_INTENT_TRIGGER, finalmouseIsUltraclick } from '@openmouse/protocol/finalmouse'
 import { can } from './mouse'
 import type { Section } from './section'
-import { ColorField, Panel, Row, Segmented, Slider } from './ui'
+import { ColorField, Panel, Row, Segmented, Slider, Switch } from './ui'
+import {
+  buildClickModeArgs,
+  clickChoiceOf,
+  CUSTOM_LOD_FIRMWARE,
+  finalmouseIntentSupport,
+  finalmouseUltraclickSupport,
+  firmwarePartAtLeast,
+  LATE_FIRMWARE,
+  nextIntentForChoice,
+  parseFirmware,
+  ULTRACLICK_ACTUATION_STEPS,
+  type ClickChoice,
+} from './finalmouse-state'
 
 /**
  * Finalmouse facts from xpanel (xpanel.finalmouse.com, read with REA):
@@ -14,40 +28,15 @@ import { ColorField, Panel, Row, Segmented, Slider } from './ui'
  */
 const ACTUATION_DEFAULT = 25
 const RT_DEFAULT = 220
-const LATE_FIRMWARE = '1.1.1'
-const CUSTOM_LOD_FIRMWARE = '1.1.0'
 
 // xpanel's own names: TMR Analog, Smart Rapid Trigger, Actuation point, Release point, the TMR-DS panel.
-const CLICK = [{ value: 0, label: 'Mechanical' }, { value: 1, label: 'TMR Analog' }] as const
+const CLICK_UNREAD = [{ value: 0, label: 'Mechanical' }, { value: 1, label: 'TMR Analog' }] as const
+const CLICK_BASE = [{ value: 'mechanical' as ClickChoice, label: 'Mechanical' }, { value: 'analog' as ClickChoice, label: 'TMR Analog' }] as const
+const CLICK_WITH_ULTRA = [...CLICK_BASE, { value: 'ultraclick' as ClickChoice, label: 'Ultraclick' }] as const
 const RELEASE = [{ value: 0, label: 'Normal' }, { value: 1, label: 'Early' }, { value: 2, label: 'Late' }] as const
 
-/** Every version the mouse reports ("Mouse 1.1.1-5289564", "Dongle RF 1.1.1"), by what it is for. */
-function firmware(status: MouseStatus): Map<string, string> {
-  const map = new Map<string, string>()
-  for (const line of status.firmware ?? []) {
-    const m = /^(.*?)\s*(\d+(?:\.\d+)+)/.exec(line)
-    if (m) map.set(m[1].trim().toLowerCase(), m[2])
-  }
-  return map
-}
-
-function older(version: string, than: string): boolean {
-  const a = version.split('.').map(Number)
-  const b = than.split('.').map(Number)
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) < (b[i] ?? 0)
-  }
-  return false
-}
-
-/**
- * Whether the mouse's own firmware (which holds these settings) is at least `version`; null when the
- * mouse has not said, so a setting is offered rather than hidden. The receiver's versions are numbered
- * on their own and gate nothing.
- */
 function firmwareAtLeast(status: MouseStatus, version: string): boolean | null {
-  const mouse = firmware(status).get('mouse')
-  return mouse ? !older(mouse, version) : null
+  return firmwarePartAtLeast(status, 'mouse', version)
 }
 
 /** A Starlight X on its cable (361d:310, 311) keeps the profiles saved for it on its receiver (361d:300, 301). */
@@ -60,7 +49,7 @@ export function finalmouseProfileKey(id: string): string {
  * range: it reports its firmware when it does), or its firmware does not report that setting.
  */
 export function finalmouseUnread(status: MouseStatus): string {
-  return firmware(status).has('mouse') ? 'Not reported by this firmware' : 'Move the mouse to read it'
+  return parseFirmware(status).has('mouse') ? 'Not reported by this firmware' : 'Move the mouse to read it'
 }
 
 /**
@@ -89,8 +78,24 @@ export function FinalmousePanels(section: Section) {
 
 const TOGETHER = [{ value: 'both', label: 'Together' }, { value: 'apart', label: 'Separate' }] as const
 
-type Side = { mode: number; calibrated: boolean; thr: number; rt: number; rel: number | null | undefined }
-type SideSetters = { click: (v: number) => void; thr: (v: number) => void; rt: (v: number) => void; rel: (v: number) => void }
+type Side = {
+  mode: number
+  calibrated: boolean
+  thr: number
+  rt: number
+  rel: number | null | undefined
+  intent: number | null | undefined
+  choice: ClickChoice
+  ultraclick: boolean
+  intentOn: boolean
+}
+type SideSetters = {
+  click: (v: ClickChoice) => void
+  thr: (v: number) => void
+  rt: (v: number) => void
+  rel: (v: number) => void
+  intent: (on: boolean) => void
+}
 
 /**
  * The main switches. Both sides set alike show as one set of rows (Together,
@@ -124,7 +129,7 @@ function Switches({ status, client, apply, busy }: Section) {
     return (
       <Panel title="TMR-DS">
         <Row label="Click" value={unread}>
-          <Segmented label="Click" options={CLICK} value={null} onChange={v => void apply('setClickMode', v, v)} disabled={busy} />
+          <Segmented label="Click" options={CLICK_UNREAD} value={null} onChange={v => void apply('setClickMode', v, v)} disabled={busy} />
         </Row>
         {profileRow}
       </Panel>
@@ -132,8 +137,27 @@ function Switches({ status, client, apply, busy }: Section) {
   }
   const relL = status.finalmouseClickReleaseL
   const relR = status.finalmouseClickReleaseR
-  const left: Side = { mode: modeL, calibrated: status.finalmouseTmrThrL !== 0, thr: status.finalmouseTmrThrL || ACTUATION_DEFAULT, rt: status.finalmouseTmrHystL ?? RT_DEFAULT, rel: relL }
-  const right: Side = { mode: modeR, calibrated: status.finalmouseTmrThrR !== 0, thr: status.finalmouseTmrThrR || ACTUATION_DEFAULT, rt: status.finalmouseTmrHystR ?? RT_DEFAULT, rel: relR }
+  const intL = status.finalmouseClickIntentL
+  const intR = status.finalmouseClickIntentR
+  const intentSupport = finalmouseIntentSupport(status)
+  const ultraclickSupport = finalmouseUltraclickSupport(status)
+  const clickOptions = ultraclickSupport.supported ? CLICK_WITH_ULTRA : CLICK_BASE
+  const makeSide = (mode: number, thr: number | null | undefined, hyst: number | null | undefined, rel: number | null | undefined, intent: number | null | undefined): Side => {
+    const ultraclick = mode === 1 && finalmouseIsUltraclick(intent)
+    return {
+      mode,
+      calibrated: thr !== 0,
+      thr: thr || ACTUATION_DEFAULT,
+      rt: hyst ?? RT_DEFAULT,
+      rel,
+      intent,
+      choice: clickChoiceOf(mode, intent),
+      ultraclick,
+      intentOn: ultraclick ? true : intent === FINALMOUSE_INTENT_TRIGGER.on,
+    }
+  }
+  const left = makeSide(modeL, status.finalmouseTmrThrL, status.finalmouseTmrHystL, relL, intL)
+  const right = makeSide(modeR, status.finalmouseTmrThrR, status.finalmouseTmrHystR, relR, intR)
   const releases = relL != null && relR != null
   // Late: on firmware 1.1.1 or newer, or when the mouse's firmware is not known; dimmed, with why, on older.
   const lateNeeds = relL !== 2 && relR !== 2 && firmwareAtLeast(status, LATE_FIRMWARE) === false ? `Late needs firmware ${LATE_FIRMWARE}` : null
@@ -142,27 +166,42 @@ function Switches({ status, client, apply, busy }: Section) {
   const tmr = (l: number, r: number, hl: number, hr: number) => void apply('setTmrActuation', l / 100, r / 100, hl, hr)
   // The mouse takes both sides in one command. Release points ride along once it reported them or one
   // is picked (the other side Normal); a firmware without them reads back none, and the row says so.
-  const setModes = (l: number, r: number, rl = relL, rr = relR) =>
-    void (rl != null || rr != null ? apply('setClickMode', l, r, rl ?? 0, rr ?? 0) : apply('setClickMode', l, r))
+  const setModes = (l: number, r: number, rl = relL, rr = relR, il = intL, ir = intR) =>
+    void apply('setClickMode', ...buildClickModeArgs(l, r, rl, rr, il, ir))
+  const modeNum = (c: ClickChoice) => (c === 'mechanical' ? 0 : 1)
+  const intentBit = (on: boolean) => (on ? FINALMOUSE_INTENT_TRIGGER.on : FINALMOUSE_INTENT_TRIGGER.off)
   const pairable = left.calibrated && right.calibrated
-  const alike = left.mode === right.mode && left.thr === right.thr && left.rt === right.rt && left.rel === right.rel
+  const alike = left.choice === right.choice
+    && (left.choice === 'mechanical' || (
+      left.rel === right.rel
+      && left.rt === right.rt
+      && (left.choice === 'ultraclick' || (left.thr === right.thr && left.intentOn === right.intentOn))
+    ))
   const together = pairable && (pick ?? (alike ? 'both' : 'apart')) === 'both'
 
   const rows = (name: string, side: Side, set: SideSetters) => {
     const label = (what: string) => (name ? `${name} ${what.toLowerCase()}` : what)
+    const controlled = side.ultraclick ? 'Controlled by Ultraclick' : undefined
     return (
       <>
         <Row label={label('Click')}>
           {side.calibrated
-            ? <Segmented label={label('Click')} options={CLICK} value={side.mode} onChange={set.click} disabled={busy} />
+            ? <Segmented label={label('Click')} options={clickOptions} value={side.choice} onChange={set.click} disabled={busy} />
             : <span className="m-state">Mechanical</span>}
         </Row>
         {side.mode === 1 && actuation ? (
           <>
-            <Row label={label('Actuation point')}>
-              <Slider label={label('Actuation point')} min={1} max={40} step={1} value={side.thr} format={v => `${(v / 100).toFixed(2)} mm`}
-                onCommit={set.thr} disabled={busy} />
+            <Row label={label('Actuation point')} value={controlled}>
+              <Slider label={label('Actuation point')} min={1} max={40} step={1} value={side.ultraclick ? ULTRACLICK_ACTUATION_STEPS : side.thr}
+                format={v => `${(v / 100).toFixed(2)} mm`} onCommit={set.thr} disabled={busy || side.ultraclick} />
             </Row>
+            {intentSupport.supported ? (
+              <Row label={label('Intent Trigger')} value={controlled ?? (side.intent == null ? unread : undefined)}>
+                {side.ultraclick
+                  ? <span className="m-state">On</span>
+                  : <Switch label={label('Intent Trigger')} checked={side.intentOn} onChange={set.intent} disabled={busy || side.intent == null} />}
+              </Row>
+            ) : null}
             <Row label={label('Smart Rapid Trigger')} value={status.finalmouseTmrHystL == null ? unread : undefined}>
               <Slider label={label('Smart Rapid Trigger')} min={150} max={250} step={10} value={side.rt} format={v => `${v} µm`}
                 onCommit={set.rt} disabled={busy} />
@@ -185,26 +224,37 @@ function Switches({ status, client, apply, busy }: Section) {
       ) : null}
       {together ? rows('', left, {
         // Together writes the shown (left) values to both sides.
-        click: v => setModes(v, v, relL, relL),
+        click: v => {
+          const nextInt = nextIntentForChoice(v, left.intent)
+          setModes(modeNum(v), modeNum(v), relL, relL, nextInt, nextInt)
+        },
         thr: v => tmr(v, v, left.rt, left.rt),
         rt: v => tmr(left.thr, left.thr, v, v),
-        rel: v => setModes(left.mode, left.mode, v, v),
+        rel: v => setModes(left.mode, left.mode, v, v, left.intent, left.intent),
+        intent: on => setModes(left.mode, left.mode, relL, relL, intentBit(on), intentBit(on)),
       }) : (
         <>
           {rows('Left', left, {
-            click: v => setModes(v, modeR),
+            click: v => setModes(modeNum(v), modeR, relL, relR, nextIntentForChoice(v, left.intent), right.intent),
             thr: v => tmr(v, right.thr, left.rt, right.rt),
             rt: v => tmr(left.thr, right.thr, v, right.rt),
-            rel: v => setModes(modeL, modeR, v, relR),
+            rel: v => setModes(modeL, modeR, v, relR, intL, intR),
+            intent: on => setModes(modeL, modeR, relL, relR, intentBit(on), right.intent),
           })}
           {rows('Right', right, {
-            click: v => setModes(modeL, v),
+            click: v => setModes(modeL, modeNum(v), relL, relR, left.intent, nextIntentForChoice(v, right.intent)),
             thr: v => tmr(left.thr, v, left.rt, right.rt),
             rt: v => tmr(left.thr, right.thr, left.rt, v),
-            rel: v => setModes(modeL, modeR, relL, v),
+            rel: v => setModes(modeL, modeR, relL, v, intL, intR),
+            intent: on => setModes(modeL, modeR, relL, relR, left.intent, intentBit(on)),
           })}
         </>
       )}
+      {!ultraclickSupport.supported && ultraclickSupport.needs ? (
+        <Row label="Ultraclick" value={ultraclickSupport.needs}>
+          <span className="m-state">Update firmware</span>
+        </Row>
+      ) : null}
       {profileRow}
     </Panel>
   )
