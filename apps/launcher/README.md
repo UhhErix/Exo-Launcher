@@ -14,7 +14,7 @@
 
 ## Release source
 
-Source snapshot for Exo Launcher `3.30.2`.
+Source snapshot for Exo Launcher `3.30.3`.
 
 Exo Capture (`capture/`) is MIT licensed; third-party components
 keep their own licenses.
@@ -23,7 +23,7 @@ First-party source is [MIT licensed](LICENSE).
 
 ## Download
 
-See [Exo Launcher 3.30.2](docs/RELEASE_3.30.2.md) or [getexo.app](https://getexo.app/download/launcher) for release downloads.
+See [Exo Launcher 3.30.3](docs/RELEASE_3.30.3.md) or [getexo.app](https://getexo.app/download/launcher) for release downloads.
 Exo Launcher requires Windows 11 x64.
 
 **Open-source parts that ship with Exo** keep their own licenses, and their source is public:
