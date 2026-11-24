@@ -612,9 +612,9 @@ pub struct NoticeItem {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MiniBarSlot {
-    #[default]
     Inline,
     Medium,
+    #[default]
     Compact,
     Hidden,
 }
@@ -701,6 +701,7 @@ pub struct AppState {
     clock_secs: f64,
     pub refreshing: bool,
     pub palette_open: bool,
+    pub palette_needs_focus: bool,
     pub palette_query: TextEdit,
     pub palette_index: usize,
     pub visible_limit: usize,
@@ -745,7 +746,7 @@ impl AppState {
             room: Room::Library,
             prev_room: Room::Library,
             room_dir: 1.0,
-            mini_bar_slot: MiniBarSlot::Inline,
+            mini_bar_slot: MiniBarSlot::Compact,
             library_all_games: false,
             library_search_open: false,
             library_search: TextEdit::default(),
@@ -831,6 +832,7 @@ impl AppState {
             clock_secs: 0.0,
             refreshing: false,
             palette_open: false,
+            palette_needs_focus: false,
             palette_query: TextEdit::default(),
             palette_index: 0,
             visible_limit: 96,
@@ -867,7 +869,7 @@ impl AppState {
             room: Room::Library,
             prev_room: Room::Library,
             room_dir: 1.0,
-            mini_bar_slot: MiniBarSlot::Inline,
+            mini_bar_slot: MiniBarSlot::Compact,
             library_all_games: false,
             library_search_open: false,
             library_search: TextEdit::default(),
@@ -931,6 +933,7 @@ impl AppState {
             clock_secs: 0.0,
             refreshing: true,
             palette_open: false,
+            palette_needs_focus: false,
             palette_query: TextEdit::default(),
             palette_index: 0,
             visible_limit: 96,
@@ -2785,6 +2788,7 @@ impl AppState {
 
     pub fn open_palette(&mut self, tx: &mut Tx) {
         self.palette_open = true;
+        self.palette_needs_focus = false;
         self.palette_index = 0;
         self.palette_query.text.clear();
         self.palette_query.sync_invariants();
@@ -2795,6 +2799,7 @@ impl AppState {
 
     pub fn close_palette(&mut self) {
         self.palette_open = false;
+        self.palette_needs_focus = false;
         self.palette_index = 0;
         self.sync_chrome_layout();
     }
@@ -2850,40 +2855,235 @@ impl AppState {
         }
 
         if !query.is_empty() {
-            const PC_SECTIONS: [(&str, &str, &[&str]); 6] = [
+            const PC_SECTIONS: [(&str, &str, &str, &[&str]); 13] = [
                 (
-                    "this-pc",
+                    "overview",
                     "This PC",
-                    &["hardware", "cpu", "ram", "motherboard", "specs"],
+                    "Exo AI",
+                    &[
+                        "this pc",
+                        "about",
+                        "specs",
+                        "processor",
+                        "cpu",
+                        "cores",
+                        "graphics card",
+                        "gpu",
+                        "video memory",
+                        "vram",
+                        "memory",
+                        "ram",
+                        "windows version",
+                        "windows update",
+                        "build",
+                        "best settings",
+                    ],
                 ),
-                ("updates", "Updates", &["drivers", "windows", "firmware"]),
+                (
+                    "drivers",
+                    "Updates",
+                    "Exo AI",
+                    &[
+                        "updates",
+                        "update",
+                        "check for updates",
+                        "windows update",
+                        "drivers",
+                        "driver",
+                        "chipset",
+                        "bios",
+                        "firmware",
+                        "runtimes",
+                        "redistributables",
+                        "directx",
+                        "vulkan",
+                    ],
+                ),
                 (
                     "graphics",
                     "Graphics",
-                    &["gpu", "nvidia", "amd", "upscalers", "dlss"],
+                    "Exo AI",
+                    &[
+                        "nvidia",
+                        "radeon",
+                        "intel",
+                        "driver profile",
+                        "g-sync",
+                        "upscalers",
+                        "dlss",
+                        "fsr",
+                        "xess",
+                    ],
                 ),
-                ("shaders", "Shaders", &["compile", "cache", "stutter"]),
+                (
+                    "shaders",
+                    "Shaders",
+                    "Exo AI",
+                    &["shaders", "compile", "shader cache"],
+                ),
+                (
+                    "control",
+                    "Control Panel",
+                    "Exo AI",
+                    &[
+                        "control panel",
+                        "nvidia control panel",
+                        "nvcp",
+                        "3d settings",
+                        "adrenalin",
+                        "graphics command center",
+                    ],
+                ),
                 (
                     "display",
                     "Display",
-                    &["monitor", "screen", "hdr", "hz", "refresh"],
+                    "Exo AI",
+                    &[
+                        "screen",
+                        "monitor",
+                        "refresh rate",
+                        "hz",
+                        "hdr",
+                        "color",
+                        "scaling",
+                        "super resolution",
+                        "digital vibrance",
+                    ],
                 ),
                 (
-                    "storage",
-                    "Storage",
-                    &["drives", "disk", "compress", "space"],
+                    "board",
+                    "Motherboard",
+                    "Exo AI",
+                    &[
+                        "motherboard",
+                        "bios",
+                        "uefi",
+                        "recovery",
+                        "advanced startup",
+                        "secure boot",
+                        "tpm",
+                        "memory integrity",
+                    ],
+                ),
+                (
+                    "network",
+                    "Network",
+                    "Exo AI",
+                    &[
+                        "network",
+                        "internet",
+                        "ethernet",
+                        "wi-fi",
+                        "wifi",
+                        "wireless",
+                        "network adapter",
+                        "ping",
+                        "latency",
+                        "packet loss",
+                        "background scan",
+                    ],
+                ),
+                (
+                    "autopilot",
+                    "Autopilot",
+                    "Exo AI",
+                    &[
+                        "autopilot",
+                        "game optimizer",
+                        "game booster",
+                        "stutter",
+                        "frame times",
+                        "game mode",
+                        "background apps",
+                        "core parking",
+                        "standby list",
+                        "islc",
+                        "dpc latency",
+                        "vram",
+                    ],
+                ),
+                (
+                    "performance",
+                    "Performance",
+                    "Exo AI",
+                    &[
+                        "performance",
+                        "power plan",
+                        "gpu scheduling",
+                        "resizable bar",
+                        "rebar",
+                        "msi mode",
+                        "system tuning",
+                        "hpet",
+                        "page file",
+                        "virtual memory",
+                        "hvci",
+                        "restore point",
+                    ],
+                ),
+                (
+                    "drives",
+                    "Drives",
+                    "Exo AI",
+                    &[
+                        "drives",
+                        "storage",
+                        "ssd",
+                        "nvme",
+                        "hard drive",
+                        "disk",
+                        "disk space",
+                        "smart",
+                        "trim",
+                        "defrag",
+                        "write cache",
+                        "directstorage fast path",
+                    ],
+                ),
+                (
+                    "compress",
+                    "Compress games",
+                    "Exo AI",
+                    &[
+                        "compress",
+                        "compress games",
+                        "compression",
+                        "compactgui",
+                        "compact os",
+                        "free up space",
+                        "save space",
+                        "shrink games",
+                    ],
+                ),
+                (
+                    "apps",
+                    "Apps",
+                    "Apps",
+                    &[
+                        "apps",
+                        "uninstall",
+                        "programs",
+                        "leftovers",
+                        "clean up",
+                        "junk",
+                        "bloatware",
+                        "startup",
+                        "startup apps",
+                        "autostart",
+                        "temp files",
+                    ],
                 ),
             ];
-            for (sec_id, title, keywords) in PC_SECTIONS {
+            for (sec_id, title, detail, keywords) in PC_SECTIONS {
                 if title.to_lowercase().contains(&query)
-                    || "exo ai".contains(&query)
+                    || detail.to_lowercase().contains(&query)
                     || keywords.iter().any(|k| k.contains(&query))
                 {
                     items.push(PaletteItem {
                         id: format!("pal-pc-{sec_id}"),
                         group: "Go to",
                         title: title.into(),
-                        detail: Some("Exo AI".into()),
+                        detail: Some(detail.into()),
                         target: PaletteTarget::PcSection(sec_id),
                     });
                 }
@@ -2894,32 +3094,99 @@ impl AppState {
                 (
                     SettingsSection::General,
                     "General",
-                    &["text size", "motion", "startup"],
+                    &[
+                        "dark mode",
+                        "amoled",
+                        "pure black",
+                        "text size",
+                        "reduce motion",
+                        "animation",
+                        "startup",
+                        "start with windows",
+                        "window",
+                    ],
                 ),
                 (
                     SettingsSection::Account,
                     "Library",
-                    &["stores", "steam", "epic", "riot", "backups"],
+                    &[
+                        "game stores",
+                        "sign in",
+                        "account",
+                        "steam",
+                        "epic",
+                        "gog",
+                        "amazon",
+                        "riot",
+                        "ea",
+                        "ubisoft",
+                        "battle.net",
+                        "xbox",
+                        "offline mode",
+                        "soundtracks",
+                        "shaders",
+                    ],
                 ),
                 (
                     SettingsSection::Appearance,
                     "Downloads",
-                    &["install", "folder", "bandwidth"],
+                    &[
+                        "downloads",
+                        "install folder",
+                        "download hours",
+                        "automatic updates",
+                        "anti-cheat",
+                        "dlss",
+                        "fsr",
+                        "xess",
+                    ],
                 ),
                 (
                     SettingsSection::Graphics,
                     "In game",
-                    &["overlay", "capture", "fps"],
+                    &[
+                        "in game",
+                        "achievements",
+                        "pop-ups",
+                        "obs overlay url",
+                        "fps counter",
+                        "frame rate",
+                        "overlay",
+                        "gpu use",
+                        "vram",
+                        "ram",
+                        "battery",
+                    ],
                 ),
                 (
                     SettingsSection::Updates,
                     "Music",
-                    &["spotify", "apple music", "youtube"],
+                    &[
+                        "music",
+                        "music service",
+                        "spotify",
+                        "apple music",
+                        "youtube music",
+                        "lossless",
+                        "jam",
+                    ],
                 ),
                 (
                     SettingsSection::About,
                     "About",
-                    &["version", "update", "logs", "account"],
+                    &[
+                        "about",
+                        "version",
+                        "updates",
+                        "caches",
+                        "what's new",
+                        "changelog",
+                        "account",
+                        "privacy",
+                        "app data",
+                        "telemetry",
+                        "crash reports",
+                    ],
                 ),
             ];
             for (sec, title, keywords) in SETTINGS_PAGES {
@@ -2941,7 +3208,9 @@ impl AppState {
         let mut candidates: Vec<&Game> = self
             .games
             .iter()
-            .filter(|g| query.is_empty() || g.title.to_lowercase().contains(&query))
+            .filter(|g| {
+                g.id != "local:add" && (query.is_empty() || g.title.to_lowercase().contains(&query))
+            })
             .collect();
         candidates.sort_by_key(|a| a.title.to_lowercase());
 
@@ -3039,15 +3308,21 @@ impl AppState {
                 self.switch_room(Room::Settings);
             }
             PaletteTarget::PcSection(sec) => {
-                self.switch_room(Room::ExoAi);
-                match sec {
-                    "storage" => {
-                        self.pc.exo_ai_storage_open = true;
-                        self.load_pc_drives();
+                if sec == "apps" {
+                    self.switch_room(Room::Apps);
+                } else {
+                    self.switch_room(Room::ExoAi);
+                    match sec {
+                        "storage" | "drives" | "compress" => {
+                            self.pc.exo_ai_storage_open = true;
+                            self.load_pc_drives();
+                        }
+                        "graphics" => {
+                            self.pc.part_menu = Some(crate::pc_state::PcPartMenu::Graphics)
+                        }
+                        "display" => self.pc.part_menu = Some(crate::pc_state::PcPartMenu::Display),
+                        _ => self.pc.exo_ai_storage_open = false,
                     }
-                    "graphics" => self.pc.part_menu = Some(crate::pc_state::PcPartMenu::Graphics),
-                    "display" => self.pc.part_menu = Some(crate::pc_state::PcPartMenu::Display),
-                    _ => self.pc.exo_ai_storage_open = false,
                 }
             }
             PaletteTarget::OpenGame(id) => self.open_game_page(&id),

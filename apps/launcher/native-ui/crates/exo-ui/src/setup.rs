@@ -1,10 +1,13 @@
 use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
-    BG, FG, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, amoled_card,
-    exo_mark, fg_faint, fg_muted, glass_control_fill, glass_panel_opt, glass_rim_bottom,
-    glass_rim_top, good, hairline, hover_fill, icon_check, icon_gamepad, icon_headphones,
-    icon_keyboard, icon_microphone, icon_mouse, icon_shield, pressed_fill, scaled,
-    store_logo_or_fallback, type_body, type_page, type_small, warn,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, TRANSPARENT, amoled_card, exo_mark, fg_faint, fg_muted, glass_control_fill,
+    glass_panel_opt, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chat,
+    icon_check, icon_chevron_left, icon_chevron_right, icon_close, icon_gamepad, icon_headphones,
+    icon_keyboard, icon_library, icon_microphone, icon_mouse, icon_music, icon_search,
+    icon_settings, icon_shield, icon_sparkles, icon_store, modal_card_transition,
+    modal_scrim_transition, pressed_fill, scaled, scrim_fill, store_logo_or_fallback, subtle_fill,
+    type_body, type_control, type_page, type_small, type_title, warn,
 };
 use rune::{Align, Color, Cursor, El, Side, SurfaceFit, TextStyle, col, el, row, text};
 use serde_json::json;
@@ -28,21 +31,123 @@ pub const STAGE_TITLES: [&str; STAGES] = [
 const TOUR_STAGE: usize = 4;
 const DONE_STAGE: usize = 5;
 const TRACK_H: f32 = 64.0;
-const BEAT_HOLD_SECS: f64 = 0.45;
-const COACH_STEPS: [&str; 3] = ["1. Ctrl+K", "2. Open game", "3. Devices"];
-const BEATS: [(&str, &str); 3] = [
-    (
-        "Try instant search right here",
-        "The Library is live and unblocked. Press Ctrl+K or click the Search capsule to jump to any game, room, or device setting.",
-    ),
-    (
-        "Open a game",
-        "Click any cover to see its page, playtime and Play. Your library is in this room.",
-    ),
-    (
-        "Open a device",
-        "Pick a device to open its settings. Exo writes nothing there until you confirm.",
-    ),
+
+#[derive(Clone, Copy)]
+enum TourIcon {
+    New,
+    Library,
+    Search,
+    Store,
+    Discord,
+    Music,
+    Devices,
+    ExoAi,
+    Settings,
+}
+
+#[derive(Clone, Copy)]
+struct TourStepSpec {
+    id: &'static str,
+    title: &'static str,
+    body: &'static str,
+    hint: Option<&'static str>,
+    shortcut: Option<&'static str>,
+    room: Room,
+    anchor: Option<(&'static str, Align)>,
+    icon: TourIcon,
+}
+
+const TOUR_STEPS: [TourStepSpec; 9] = [
+    TourStepSpec {
+        id: "welcome",
+        title: "Welcome to Exo",
+        body: "Every game, chat, song, device, and Windows tweak lives in one fast launcher. Take a quick interactive spin through each room, or skip anytime.",
+        hint: Some("You can replay this tour anytime from Settings or Ctrl+K."),
+        shortcut: None,
+        room: Room::Library,
+        anchor: None,
+        icon: TourIcon::New,
+    },
+    TourStepSpec {
+        id: "library",
+        title: "Your unified Library",
+        body: "Steam, Epic, GOG, Riot, Xbox, and local installs sit on one poster deck. Hover or use arrow keys and controller sticks to browse, and open the menu on any game for details, upscalers, and properties.",
+        hint: None,
+        shortcut: Some("Ctrl+1"),
+        room: Room::Library,
+        anchor: Some(("nav-library", Align::Center)),
+        icon: TourIcon::Library,
+    },
+    TourStepSpec {
+        id: "search",
+        title: "Jump anywhere in two keystrokes",
+        body: "Search launches games, switches rooms, opens any setting, and pulls up your notes without touching the mouse.",
+        hint: None,
+        shortcut: Some("Ctrl+K"),
+        room: Room::Library,
+        anchor: Some(("search-capsule", Align::Start)),
+        icon: TourIcon::Search,
+    },
+    TourStepSpec {
+        id: "store",
+        title: "Store, wishlist, and gifts",
+        body: "Explore trending shelves, inspect game pages and specs, track your wishlist, and claim waiting store gifts in one place.",
+        hint: None,
+        shortcut: Some("Ctrl+2"),
+        room: Room::Store,
+        anchor: Some(("nav-store", Align::Center)),
+        icon: TourIcon::Store,
+    },
+    TourStepSpec {
+        id: "discord",
+        title: "Built-in Discord client",
+        body: "DMs, pinned chats, servers, voice calls, soundboard, and Go Live run natively inside Exo. Active calls float in a compact top-bar island whenever you switch rooms.",
+        hint: None,
+        shortcut: Some("Ctrl+3"),
+        room: Room::Discord,
+        anchor: Some(("nav-discord", Align::Center)),
+        icon: TourIcon::Discord,
+    },
+    TourStepSpec {
+        id: "music",
+        title: "Music and Immersive mode",
+        body: "Control Spotify, Apple Music, or YouTube Music from one player with queue, EQ, and synced lyrics. Press F while listening to fill the screen in Immersive mode.",
+        hint: None,
+        shortcut: Some("F"),
+        room: Room::Music,
+        anchor: Some(("nav-music", Align::Center)),
+        icon: TourIcon::Music,
+    },
+    TourStepSpec {
+        id: "devices",
+        title: "Devices without vendor bloat",
+        body: "Tune Exo Mouse, Wooting rapid trigger and profile backups, headset EQ, and controller stick calibration right from one room.",
+        hint: None,
+        shortcut: Some("Ctrl+5"),
+        room: Room::Devices,
+        anchor: Some(("nav-devices", Align::Center)),
+        icon: TourIcon::Devices,
+    },
+    TourStepSpec {
+        id: "exoai",
+        title: "Exo AI and Apps",
+        body: "Run one-click Auto Tune, update GPU and chipset drivers, inspect shaders and storage, or switch to Apps to clean leftovers and Windows startup clutter.",
+        hint: None,
+        shortcut: Some("Ctrl+6"),
+        room: Room::ExoAi,
+        anchor: Some(("nav-exo-ai", Align::Center)),
+        icon: TourIcon::ExoAi,
+    },
+    TourStepSpec {
+        id: "settings",
+        title: "Make Exo yours",
+        body: "Connect your game stores, sync Riot hours automatically, customize text size or Liquid Glass, and replay this tour anytime from Settings \u{203a} About.",
+        hint: None,
+        shortcut: Some("Ctrl+,"),
+        room: Room::Library,
+        anchor: Some(("nav-settings", Align::End)),
+        icon: TourIcon::Settings,
+    },
 ];
 const KNOWN_STORES: [&str; 9] = [
     "steam",
@@ -306,28 +411,45 @@ impl AppState {
     }
 
     pub fn setup_beat_skip(&mut self) {
-        self.advance_beat();
+        self.tour_next();
     }
 
-    fn advance_beat(&mut self) {
-        let Some(beat) = self.setup.beat else {
+    pub fn tour_next(&mut self) {
+        let Some(step) = self.setup.beat else {
             return;
         };
-        self.setup.beat_met_at = None;
-        if beat + 1 >= BEATS.len() {
+        if step + 1 >= TOUR_STEPS.len() {
             self.finish_tour();
             return;
         }
-        self.setup.beat = Some(beat + 1);
-        if beat + 1 == 2 {
+        self.tour_go(step + 1);
+    }
+
+    pub fn tour_back(&mut self) {
+        let Some(step) = self.setup.beat else {
+            return;
+        };
+        if step > 0 {
+            self.tour_go(step - 1);
+        }
+    }
+
+    pub fn tour_go(&mut self, index: usize) {
+        let step = index.min(TOUR_STEPS.len() - 1);
+        self.setup.beat = Some(step);
+        self.setup.beat_met_at = None;
+        let room = TOUR_STEPS[step].room;
+        if self.room != room {
+            self.switch_room(room);
+        }
+        if room == Room::Devices {
             self.pc.selected_device_id = None;
-            self.switch_room(Room::Devices);
             self.load_pc_devices();
         }
     }
 
     pub fn finish_tour(&mut self) {
-        let completed_all = self.setup.beat.is_some_and(|b| b + 1 >= BEATS.len());
+        let completed_all = self.setup.beat.is_some_and(|b| b + 1 >= TOUR_STEPS.len());
         self.setup.beat = None;
         self.setup.beat_met_at = None;
         if std::mem::take(&mut self.setup.tour_from_setup) {
@@ -342,7 +464,7 @@ impl AppState {
         self.setup_persist(true);
     }
 
-    pub fn setup_tick(&mut self, now: f64) -> bool {
+    pub fn setup_tick(&mut self, _now: f64) -> bool {
         let mut changed = false;
         if self.setup.stage == 3
             && self.setup.picks.is_none()
@@ -357,25 +479,6 @@ impl AppState {
                     .collect(),
             );
             changed = true;
-        }
-        if let Some(beat) = self.setup.beat {
-            let met = match beat {
-                0 => self.palette_open,
-                1 => self.open_game_id.is_some(),
-                _ => self.room == Room::Devices && self.pc.selected_device_id.is_some(),
-            };
-            match (met, self.setup.beat_met_at) {
-                (true, None) => {
-                    self.setup.beat_met_at = Some(now);
-                    changed = true;
-                }
-                (true, Some(at)) if now - at >= BEAT_HOLD_SECS => {
-                    self.advance_beat();
-                    changed = true;
-                }
-                (false, Some(_)) => self.setup.beat_met_at = None,
-                _ => {}
-            }
         }
         changed
     }
@@ -1720,14 +1823,13 @@ fn tour_stage(s: &AppState, scale: f32) -> El {
                 .pb(20.0)
                 .child(grid),
         );
-    let (title, body) = BEATS[0];
-    let card = glass_panel_opt("setup-tour-coach", 480.0, true)
+    let first = TOUR_STEPS[0];
+    let card = glass_panel_opt("setup-tour-coach", 408.0, true)
         .pin(None, Some(20.0), Some(24.0), None)
         .padding(20.0)
         .gap(14.0)
-        .child(coach_steps(0))
-        .child(text(title).font(type_page()).color(FG).wrap())
-        .child(text(body).font(type_body()).color(fg_muted()).wrap())
+        .child(text(first.title).font(type_page()).color(FG).wrap())
+        .child(text(first.body).font(type_body()).color(fg_muted()).wrap())
         .child(
             row()
                 .w_full()
@@ -1738,12 +1840,12 @@ fn tour_stage(s: &AppState, scale: f32) -> El {
                 .center_y()
                 .justify_between()
                 .child(
-                    text("Waiting for your action…")
+                    text("Interactive room tour")
                         .font(type_small())
                         .color(fg_muted()),
                 )
                 .child(pill(
-                    format!("Step 1 of {}", BEATS.len()),
+                    format!("1 / {}", TOUR_STEPS.len()),
                     fg_faint().alpha(0.2),
                     fg_muted(),
                 )),
@@ -2108,100 +2210,258 @@ pub fn view(s: &AppState, scale: f32) -> El {
     root
 }
 
-fn coach_anchor(s: &AppState, beat: usize) -> (String, Side, Align) {
-    match beat {
-        0 => ("search-capsule".into(), Side::Bottom, Align::End),
-        1 => {
-            let key = s
-                .games
-                .iter()
-                .find(|g| g.installed)
-                .map_or("nav-library".to_string(), |g| format!("tile-{}", g.id));
-            (key, Side::Bottom, Align::Start)
-        }
-        _ => ("nav-devices".into(), Side::Bottom, Align::Center),
+fn tour_step_icon(icon: TourIcon) -> El {
+    match icon {
+        TourIcon::New | TourIcon::ExoAi => icon_sparkles(18.0, FG),
+        TourIcon::Library => icon_library(18.0, FG),
+        TourIcon::Search => icon_search(18.0, FG),
+        TourIcon::Store => icon_store(18.0, FG),
+        TourIcon::Discord => icon_chat(18.0, FG),
+        TourIcon::Music => icon_music(18.0, FG),
+        TourIcon::Devices => icon_mouse(18.0, FG),
+        TourIcon::Settings => icon_settings(18.0, FG),
     }
 }
 
-fn coach_steps(active: usize) -> El {
-    let mut steps = row()
-        .w_full()
-        .padding(4.0)
-        .gap(4.0)
+pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
+    let Some(raw_step) = s.setup.beat else {
+        return Vec::new();
+    };
+    let step_idx = raw_step.min(TOUR_STEPS.len() - 1);
+    let spec = TOUR_STEPS[step_idx];
+    let total = TOUR_STEPS.len();
+    let is_first = step_idx == 0;
+    let is_last = step_idx + 1 == total;
+
+    let scrim = el()
+        .key("exo-tour-scrim")
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .fill(if spec.anchor.is_none() {
+            scrim_fill()
+        } else {
+            BG.alpha(0.48)
+        })
+        .hit()
+        .cursor(Cursor::Default)
+        .transition(modal_scrim_transition());
+
+    let badge = el()
+        .size(32.0, 32.0)
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill());
-    for (i, label) in COACH_STEPS.iter().enumerate() {
-        let on = i == active;
-        steps = steps.child(
-            row()
+        .fill(FG.alpha(0.08))
+        .center()
+        .child(tour_step_icon(spec.icon));
+
+    let close_btn = el()
+        .key("exo-tour-close")
+        .role("button")
+        .label("Skip tour")
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_scale(PRESS_SCALE)
+        .size(28.0, 28.0)
+        .radius(RADIUS_PILL)
+        .center()
+        .fill(TRANSPARENT)
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .motion(SPRING_QUICK)
+        .on_press(|s: &mut AppState| s.finish_tour())
+        .child(icon_close(14.0, fg_muted()));
+
+    let header = row()
+        .w_full()
+        .gap(10.0)
+        .center_y()
+        .child(badge)
+        .child(
+            text(spec.title)
+                .font(type_title())
+                .color(FG)
                 .grow(1.0)
                 .min_w(0.0)
-                .h(28.0)
+                .wrap(),
+        )
+        .child(
+            text(format!("{} / {}", step_idx + 1, total))
+                .font(type_small())
+                .color(fg_muted()),
+        )
+        .child(close_btn);
+
+    let body = text(spec.body).font(type_body()).color(fg_muted()).wrap();
+
+    let meta = (spec.shortcut.is_some() || spec.hint.is_some()).then(|| {
+        let mut r = row().w_full().gap(8.0).center_y();
+        if let Some(sc) = spec.shortcut {
+            r = r.child(
+                el().h(24.0)
+                    .px(8.0)
+                    .radius(RADIUS_PILL)
+                    .fill(subtle_fill())
+                    .border(1.0, hairline())
+                    .center()
+                    .child(text(sc).font(TextStyle::new(scaled(12.0), 500.0)).color(FG)),
+            );
+        }
+        if let Some(hint) = spec.hint {
+            r = r.child(
+                text(hint)
+                    .font(type_small())
+                    .color(fg_muted())
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .wrap(),
+            );
+        }
+        r
+    });
+
+    let mut dots = row()
+        .key("exo-tour-dots")
+        .role("tablist")
+        .label("Tour steps")
+        .w_full()
+        .justify_center()
+        .center_y()
+        .gap(2.0);
+    for (idx, item) in TOUR_STEPS.iter().enumerate() {
+        let active = idx == step_idx;
+        let dot_sz = if active { 8.4 } else { 6.0 };
+        dots = dots.child(
+            el().key(format!("exo-tour-dot-{}", item.id))
+                .role("tab")
+                .label(format!("Step {}: {}", idx + 1, item.title))
+                .checked(active)
+                .focusable(true)
+                .hit()
+                .cursor(Cursor::Pointer)
+                .size(28.0, 28.0)
                 .radius(RADIUS_PILL)
                 .center()
-                .fill(if on { FG.alpha(0.12) } else { FG.alpha(0.0) })
+                .fill(TRANSPARENT)
+                .on_press(move |s: &mut AppState| s.tour_go(idx))
                 .child(
-                    text(*label)
-                        .font(type_small())
-                        .color(if on { FG } else { fg_muted() }),
+                    el().size(dot_sz, dot_sz)
+                        .radius(RADIUS_PILL)
+                        .fill(if active { FG } else { FG.alpha(0.18) }),
                 ),
         );
     }
-    steps
-}
 
-pub fn coach(s: &AppState) -> El {
-    let beat = s.setup.beat.unwrap_or(0).min(BEATS.len() - 1);
-    let (title, body) = BEATS[beat];
-    let met = s.setup.beat_met_at.is_some();
-    let (anchor, side, align) = coach_anchor(s, beat);
-    let steps = coach_steps(beat);
-    let (status_text, status_ink) = if met {
-        ("Done", good())
+    let skip_btn = el()
+        .key("exo-tour-skip")
+        .role("button")
+        .label("Skip")
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_scale(PRESS_SCALE)
+        .h(30.0)
+        .px(12.0)
+        .radius(RADIUS_PILL)
+        .center()
+        .fill(glass_control_fill())
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .motion(SPRING_QUICK)
+        .on_press(|s: &mut AppState| s.finish_tour())
+        .child(text("Skip").font(type_control()).color(FG));
+
+    let mut actions = row().gap(8.0).center_y();
+    if !is_first {
+        actions = actions.child(
+            row()
+                .key("exo-tour-back")
+                .role("button")
+                .label("Back")
+                .focusable(true)
+                .hit()
+                .cursor(Cursor::Pointer)
+                .press_scale(PRESS_SCALE)
+                .h(30.0)
+                .pl(10.0)
+                .pr(12.0)
+                .gap(4.0)
+                .radius(RADIUS_PILL)
+                .center_y()
+                .fill(glass_control_fill())
+                .hover(hover_fill())
+                .press(pressed_fill())
+                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                .motion(SPRING_QUICK)
+                .on_press(|s: &mut AppState| s.tour_back())
+                .child(icon_chevron_left(14.0, FG))
+                .child(text("Back").font(type_control()).color(FG)),
+        );
+    }
+
+    let next_label = if is_first {
+        "Start tour"
+    } else if is_last {
+        "Done"
     } else {
-        ("Waiting for your action…", fg_muted())
+        "Next"
     };
-    glass_panel_opt("setup-coach", 480.0, true)
-        .anchored(anchor, side, align, 12.0)
+    let mut next_btn = row()
+        .key("exo-tour-next")
+        .role("button")
+        .label(next_label)
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_scale(PRESS_SCALE)
+        .h(30.0)
+        .pl(14.0)
+        .pr(if is_last { 14.0 } else { 10.0 })
+        .gap(4.0)
+        .radius(RADIUS_PILL)
+        .center_y()
+        .fill(FG)
+        .hover(FG.alpha(0.90))
+        .press(FG.alpha(0.80))
+        .motion(SPRING_QUICK)
+        .on_press(|s: &mut AppState| s.tour_next())
+        .child(text(next_label).font(type_control()).color(PRIMARY_FG));
+    if !is_last {
+        next_btn = next_btn.child(icon_chevron_right(14.0, PRIMARY_FG));
+    }
+    actions = actions.child(next_btn);
+
+    let footer = row()
+        .w_full()
+        .justify_between()
+        .center_y()
+        .gap(8.0)
+        .child(skip_btn)
+        .child(actions);
+
+    let mut card = glass_panel_opt("exo-tour-card", scaled(408.0), blur)
+        .role("dialog")
+        .label(spec.title)
+        .radius(RADIUS_PANEL)
         .padding(20.0)
         .gap(14.0)
-        .child(steps)
-        .child(text(title).font(type_page()).color(FG).wrap())
-        .child(text(body).font(type_body()).color(fg_muted()).wrap())
-        .child(
-            row()
-                .w_full()
-                .h(40.0)
-                .px(12.0)
-                .radius(RADIUS_SMALL)
-                .fill(glass_control_fill())
-                .center_y()
-                .justify_between()
-                .child(text(status_text).font(type_small()).color(status_ink))
-                .child(pill(
-                    format!("Step {} of {}", beat + 1, BEATS.len()),
-                    fg_faint().alpha(0.2),
-                    fg_muted(),
-                )),
-        )
-        .child(
-            row()
-                .w_full()
-                .justify_between()
-                .center_y()
-                .child(button(
-                    "setup-coach-skip-tour",
-                    "Skip tour",
-                    false,
-                    |s: &mut AppState| s.finish_tour(),
-                ))
-                .child(button(
-                    "setup-coach-skip-step",
-                    "Skip step",
-                    false,
-                    |s: &mut AppState| s.setup_beat_skip(),
-                )),
-        )
+        .transition(modal_card_transition())
+        .child(header)
+        .child(body)
+        .children(meta)
+        .child(dots)
+        .child(footer);
+
+    let positioned = if let Some((anchor_key, align)) = spec.anchor {
+        card = card.anchored(anchor_key, Side::Bottom, align, 16.0);
+        card
+    } else {
+        el().key("exo-tour-center")
+            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            .center()
+            .child(card)
+    };
+
+    vec![scrim, positioned]
 }
 
 pub fn return_bar(s: &AppState) -> El {

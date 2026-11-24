@@ -677,7 +677,10 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         || s.downloads.open
         || s.whats_new.mode.is_some()
         || s.whats_new.sheet_open
-        || s.store_ext.lightbox_index.is_some();
+        || s.store_ext.lightbox_index.is_some()
+        || s.media.captures_open
+        || s.discord.settings_open
+        || s.setup.beat.is_some();
     let budget = BlurBudget::compute(s, !s.notices.is_empty());
     cx.set_titlebar(exo_titlebar());
     cx.caption_color(if has_modal_scrim {
@@ -715,7 +718,6 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .focusable(true)
         .hit()
         .cursor(Cursor::Pointer)
-        .press_on_down()
         .press_scale(PRESS_SCALE)
         .w(200.0)
         .h(36.0)
@@ -755,9 +757,14 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
     let discord_badge_count = s.chrome.discord_badge_count;
+    let nav_px = if s.chrome.top_bar_width > 0.0 && s.chrome.top_bar_width < 1260.0 {
+        10.0
+    } else {
+        12.5
+    };
     let nav = glass_capsule_opt("nav-capsule", budget.top_bar_nav).children(
         Room::NAV_TABS.into_iter().map(|room| {
-            let active = s.room == room && !s.media.captures_open;
+            let active = s.room == room;
             let badge = (room == Room::Discord)
                 .then(|| discord_badge_el(discord_badge_count))
                 .flatten();
@@ -766,7 +773,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .flatten();
             let base = row()
                 .h(30.0)
-                .px(10.0)
+                .px(nav_px)
                 .gap(6.0)
                 .center_y()
                 .child(room_icon(room, false))
@@ -804,7 +811,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                         .motion(SPRING_MOVE)
                         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                         .h(30.0)
-                        .px(10.0)
+                        .px(nav_px)
                         .gap(6.0)
                         .center_y()
                         .radius(RADIUS_PILL)
@@ -826,7 +833,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .capture_status
         .as_ref()
         .and_then(|st| st.state.as_ref());
-    let replay_on = live_cap.is_some_and(|l| l.replay);
+    let replay_on = live_cap.is_some_and(|l| l.buffering);
     let recording = live_cap.is_some_and(|l| l.recording);
 
     let capture_btn = if recording {
@@ -1220,9 +1227,6 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if s.gamepad_connected {
         root = root.child(gamepad::bar_view(s));
     }
-    if s.setup.beat.is_some() {
-        root = root.child(setup::coach(s));
-    }
     if s.setup.return_to.is_some() && !s.setup.open {
         root = root.child(setup::return_bar(s));
     }
@@ -1243,6 +1247,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     if s.whats_new.sheet_open {
         root = root.children(whats_new::update_sheet_layers(s, budget.overlay));
+    }
+    if s.setup.beat.is_some() {
+        root = root.children(setup::tour_layers(s, budget.overlay));
     }
     if !s.notices.is_empty() {
         root = root.child(notice::view(s, scale, budget.toast));
@@ -1323,5 +1330,81 @@ mod tests {
         let mut tx = rune::Tx::default();
         assert!(!s.tick_shell_heartbeat(5.0, &mut tx));
         assert!(s.chrome.last_heartbeat_at.is_none());
+    }
+
+    #[test]
+    fn search_capsule_press_does_not_open_palette_until_release() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        let (x, y) = rt.find("search-capsule").expect("search-capsule");
+        rt.pointer_move(x, y);
+        rt.pointer_down(x, y);
+        rt.frame(1.0 / 60.0);
+        assert!(
+            !rt.state.palette_open,
+            "palette must stay closed while Search capsule is held down"
+        );
+        rt.pointer_up(x, y);
+        rt.frame(2.0 / 60.0);
+        assert!(rt.state.palette_open, "palette must open on click release");
+    }
+
+    #[test]
+    fn nav_capsule_centered_at_react_width_on_1080p() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        let (nav, _) = rt.presented("nav-capsule").expect("nav-capsule");
+        let center_x = nav[0] + nav[2] * 0.5;
+        assert!(
+            (center_x - 960.0).abs() < 1.5,
+            "nav center_x={center_x} expected ~960"
+        );
+        assert!(
+            nav[2] >= 624.0 && nav[2] <= 648.0,
+            "nav width={} expected ~636",
+            nav[2]
+        );
+    }
+
+    #[test]
+    fn tour_modal_opens_centered_nine_step_welcome_and_steps_through_rooms() {
+        let mut s = AppState::default();
+        s.start_tour();
+        assert_eq!(s.setup.beat, Some(0));
+        let mut rt = Runtime::new(s, view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        let (card, _) = rt.presented("exo-tour-card").expect("exo-tour-card");
+        let cx = card[0] + card[2] * 0.5;
+        let cy = card[1] + card[3] * 0.5;
+        assert!((cx - 960.0).abs() < 4.0, "tour card cx={cx}");
+        assert!((cy - 540.0).abs() < 4.0, "tour card cy={cy}");
+        assert!(rt.presented("exo-tour-next").is_some());
+        assert!(rt.presented("exo-tour-skip").is_some());
+        assert!(rt.presented("exo-tour-close").is_some());
+        assert!(rt.presented("exo-tour-back").is_none());
+
+        rt.update(|s, _| s.tour_go(3));
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.room, Room::Store);
+        assert!(rt.presented("exo-tour-back").is_some());
+
+        rt.update(|s, _| s.tour_back());
+        rt.frame(2.0 / 60.0);
+        assert_eq!(rt.state.setup.beat, Some(2));
+        assert_eq!(rt.state.room, Room::Library);
+
+        rt.update(|s, _| s.finish_tour());
+        rt.frame(3.0 / 60.0);
+        assert!(rt.state.setup.beat.is_none());
     }
 }
