@@ -24,6 +24,9 @@ internal static class FrameGenService
         var inspected = await scanTask.ConfigureAwait(false);
         var savedRoute = settings.FrameGenRouteFor(game.Id);
         var smoothOn = settings.SmoothMotionEnabled(game.Id);
+        var exoFlowAvailable = ExoFlowService.IsAvailable();
+        var exoFlowActive = exoFlowAvailable
+            && string.Equals(savedRoute, FrameGenRouter.RouteExternalExoFlow, StringComparison.OrdinalIgnoreCase);
         var intelChoice = gpu.Vendor == "intel" ? IntelProfileService.Shared.FrameGen(game.Id).Choice : "game";
         bool? afmfOverride = string.Equals(savedRoute, FrameGenRouter.RouteDriverAfmf, StringComparison.OrdinalIgnoreCase)
             ? true
@@ -49,7 +52,9 @@ internal static class FrameGenService
             SmoothMotionEnabled: smoothOn,
             AfmfOverride: afmfOverride,
             IntelXessOverride: intelChoice,
-            UserSelectedRoute: savedRoute);
+            UserSelectedRoute: savedRoute,
+            ExoFlowAvailable: exoFlowAvailable,
+            ExoFlowEnabled: exoFlowActive);
 
         return FrameGenRouter.Decide(gpu, input);
     }
@@ -144,6 +149,25 @@ internal static class FrameGenService
                 settings.SetFrameGenRoute(game.Id, target.Id);
             }
         }
+        else if (target.Id == FrameGenRouter.RouteExternalExoFlow)
+        {
+            if (!ExoFlowService.IsAvailable())
+            {
+                applyError = "Exo Flow sidecar (exo-flow.exe) was not found.";
+            }
+            else
+            {
+                await Task.Run(() =>
+                {
+                    var pc = GameSettings.ThisPc();
+                    if (GameSettings.For(game, pc) is { WindowMode: not null } profile)
+                        GameSettings.ChooseWindowMode(profile, GameSettings.Borderless);
+                }, ct).ConfigureAwait(false);
+                await ApplySmoothMotionAsync(game, false, settings, ct).ConfigureAwait(false);
+                settings.SetFrameGenRoute(game.Id, FrameGenRouter.RouteExternalExoFlow);
+                ExoFlowService.EnsureRunning();
+            }
+        }
         else if (target.Id == FrameGenRouter.RouteDriverAfmf)
         {
             settings.SetFrameGenRoute(game.Id, FrameGenRouter.RouteDriverAfmf);
@@ -167,6 +191,7 @@ internal static class FrameGenService
         CancellationToken ct)
     {
         var smErr = await ApplySmoothMotionAsync(game, false, settings, ct).ConfigureAwait(false);
+        await ExoFlowService.StopIfRunningAsync(ct).ConfigureAwait(false);
         if (GraphicsService.Vendor() == "intel")
             await Task.Run(() => IntelProfileService.Shared.SetFrameGen(game.Id, "game"), ct).ConfigureAwait(false);
         settings.SetFrameGenKeptOff(game.Id, true);

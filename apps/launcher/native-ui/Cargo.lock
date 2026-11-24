@@ -857,6 +857,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-flow"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "png 0.18.1",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
 name = "exo-kit"
 version = "0.1.0"
 dependencies = [

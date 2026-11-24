@@ -12,6 +12,7 @@ members = [
     "crates/exo-display",
     "crates/exo-light",
     "crates/exo-net-latency",
+    "crates/exo-flow",
 ]
 
 [workspace.package]

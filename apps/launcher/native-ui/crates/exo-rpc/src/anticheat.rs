@@ -46,6 +46,13 @@ impl AntiCheatClass {
     pub const fn allows_software_macros(self) -> bool {
         matches!(self.effective(), Self::OfflineAntiCheat)
     }
+
+    pub const fn allows_exo_flow(self) -> bool {
+        matches!(
+            self.effective(),
+            Self::OnlineNonCompetitivePve | Self::OfflineAntiCheat
+        )
+    }
 }
 
 #[cfg(test)]
@@ -127,5 +134,13 @@ mod tests {
             AntiCheatClass::Unknown.strictest(AntiCheatClass::OfflineAntiCheat),
             AntiCheatClass::Unknown
         );
+    }
+
+    #[test]
+    fn exo_flow_follows_shared_anti_cheat_class() {
+        assert!(!AntiCheatClass::CompetitivePvpOnline.allows_exo_flow());
+        assert!(!AntiCheatClass::Unknown.allows_exo_flow());
+        assert!(AntiCheatClass::OnlineNonCompetitivePve.allows_exo_flow());
+        assert!(AntiCheatClass::OfflineAntiCheat.allows_exo_flow());
     }
 }
