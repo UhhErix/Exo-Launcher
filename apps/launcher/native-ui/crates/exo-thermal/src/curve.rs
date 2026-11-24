@@ -129,12 +129,22 @@ pub fn interpolate_curve(points: &[CurvePoint], temp_c: f32) -> u8 {
     points.last().map(|p| p.pwm_pct.min(100)).unwrap_or(100)
 }
 
+pub const MIN_VALID_TEMP_C: f32 = -20.0;
+pub const MAX_VALID_TEMP_C: f32 = 150.0;
+
+pub fn is_valid_temp_c(temp_c: f32) -> bool {
+    temp_c.is_finite() && (MIN_VALID_TEMP_C..=MAX_VALID_TEMP_C).contains(&temp_c)
+}
+
 pub fn enforce_thermal_floor(
     raw_pwm: u8,
     temp_c: f32,
     is_cpu_domain: bool,
     configured_floor: u8,
 ) -> u8 {
+    if !is_valid_temp_c(temp_c) {
+        return 100;
+    }
     let mut pwm = raw_pwm.min(100);
     let active_threshold = if is_cpu_domain { 55.0 } else { 60.0 };
     if temp_c > active_threshold {
@@ -170,6 +180,10 @@ impl ChannelController {
     }
 
     pub fn step(&mut self, temp_c: f32) -> u8 {
+        if !is_valid_temp_c(temp_c) {
+            self.last_pwm = 100;
+            return 100;
+        }
         if temp_c >= 80.0 {
             self.latched_temp_c = temp_c;
             self.pending_up_ticks = 0;

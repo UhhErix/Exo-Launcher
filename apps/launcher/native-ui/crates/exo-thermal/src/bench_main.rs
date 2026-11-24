@@ -52,6 +52,7 @@ fn main() {
             domain: FanDomain::GpuNvidia,
             supports_zero_rpm: true,
             is_cpu_domain: false,
+            calibrated_min_rpm: 600,
         },
         FanChannelInfo {
             id: "case:intake".into(),
@@ -59,6 +60,7 @@ fn main() {
             domain: FanDomain::UsbAio,
             supports_zero_rpm: false,
             is_cpu_domain: true,
+            calibrated_min_rpm: 500,
         },
     ];
     let mock = MockFanBackend::new(channels, false);
@@ -83,31 +85,35 @@ fn main() {
             },
         );
 
-        {
-            let mut st = state.lock().unwrap();
-            st.sensors_c.insert(SensorKind::GpuCore, 42.0);
-            st.sensors_c.insert(SensorKind::GpuHotspot, 50.0);
-            st.sensors_c.insert(SensorKind::CpuTctl, 45.0);
-        }
-        for _ in 0..4 {
-            daemon.tick().unwrap();
+        for t in 0..4u64 {
+            let ms = t * 1000;
+            {
+                let mut st = state.lock().unwrap();
+                st.set_sensor(SensorKind::GpuCore, 42.0, ms);
+                st.set_sensor(SensorKind::GpuHotspot, 50.0, ms);
+                st.set_sensor(SensorKind::CpuTctl, 45.0, ms);
+            }
+            daemon.tick_at(ms).unwrap();
         }
         let baseline_case = state.lock().unwrap().current_pwm["case:intake"];
 
         for tick in 0..300usize {
+            let ms = (tick as u64 + 5) * 1000;
             {
                 let mut st = state.lock().unwrap();
+                st.set_sensor(SensorKind::GpuHotspot, 50.0, ms);
                 if tick == 20 || tick == 21 {
-                    st.sensors_c.insert(SensorKind::CpuTctl, 60.0);
+                    st.set_sensor(SensorKind::CpuTctl, 60.0, ms);
+                    st.set_sensor(SensorKind::GpuCore, 42.0, ms);
                 } else if (100..120).contains(&tick) {
-                    st.sensors_c.insert(SensorKind::CpuTctl, 74.0);
-                    st.sensors_c.insert(SensorKind::GpuCore, 72.0);
+                    st.set_sensor(SensorKind::CpuTctl, 74.0, ms);
+                    st.set_sensor(SensorKind::GpuCore, 72.0, ms);
                 } else {
-                    st.sensors_c.insert(SensorKind::CpuTctl, 45.0);
-                    st.sensors_c.insert(SensorKind::GpuCore, 42.0);
+                    st.set_sensor(SensorKind::CpuTctl, 45.0, ms);
+                    st.set_sensor(SensorKind::GpuCore, 42.0, ms);
                 }
             }
-            daemon.tick().unwrap();
+            daemon.tick_at(ms).unwrap();
             let cur = state.lock().unwrap().current_pwm["case:intake"];
             if (tick == 20 || tick == 21) && cur > baseline_case {
                 false_rev_ups += 1;

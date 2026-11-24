@@ -21,6 +21,13 @@ pub enum SensorKind {
     Coolant,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SensorReading {
+    pub temp_c: f32,
+    pub updated_at_ms: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FanChannelInfo {
@@ -29,12 +36,13 @@ pub struct FanChannelInfo {
     pub domain: FanDomain,
     pub supports_zero_rpm: bool,
     pub is_cpu_domain: bool,
+    pub calibrated_min_rpm: u32,
 }
 
 pub trait FanBackend: Send {
     fn is_laptop_locked(&self) -> bool;
     fn channels(&self) -> &[FanChannelInfo];
-    fn read_sensor_c(&self, sensor: SensorKind) -> Option<f32>;
+    fn read_sensor(&self, sensor: SensorKind) -> Option<SensorReading>;
     fn read_rpm(&self, channel_id: &str) -> Option<u32>;
     fn set_pwm_pct(&mut self, channel_id: &str, pwm_pct: u8) -> Result<(), String>;
     fn restore_auto(&mut self, channel_id: &str) -> Result<(), String>;
@@ -42,11 +50,24 @@ pub trait FanBackend: Send {
 
 #[derive(Debug, Clone, Default)]
 pub struct MockThermalState {
-    pub sensors_c: HashMap<SensorKind, f32>,
+    pub sensors: HashMap<SensorKind, SensorReading>,
     pub current_pwm: HashMap<String, u8>,
+    pub rpm_overrides: HashMap<String, u32>,
     pub pwm_writes: Vec<(String, u8)>,
     pub restored_channels: Vec<String>,
     pub driver_reset_active: bool,
+}
+
+impl MockThermalState {
+    pub fn set_sensor(&mut self, kind: SensorKind, temp_c: f32, updated_at_ms: u64) {
+        self.sensors.insert(
+            kind,
+            SensorReading {
+                temp_c,
+                updated_at_ms,
+            },
+        );
+    }
 }
 
 pub struct MockFanBackend {
@@ -78,19 +99,16 @@ impl FanBackend for MockFanBackend {
         &self.channels
     }
 
-    fn read_sensor_c(&self, sensor: SensorKind) -> Option<f32> {
-        self.state.lock().unwrap().sensors_c.get(&sensor).copied()
+    fn read_sensor(&self, sensor: SensorKind) -> Option<SensorReading> {
+        self.state.lock().unwrap().sensors.get(&sensor).copied()
     }
 
     fn read_rpm(&self, channel_id: &str) -> Option<u32> {
-        let pwm = self
-            .state
-            .lock()
-            .unwrap()
-            .current_pwm
-            .get(channel_id)
-            .copied()
-            .unwrap_or(35);
+        let st = self.state.lock().unwrap();
+        if let Some(&rpm) = st.rpm_overrides.get(channel_id) {
+            return Some(rpm);
+        }
+        let pwm = st.current_pwm.get(channel_id).copied().unwrap_or(35);
         if pwm == 0 {
             Some(0)
         } else {
