@@ -73,7 +73,18 @@ jobs:
             ${{ runner.os }}-rune-${{ steps.rust-key.outputs.toolchain }}-
 
       - name: Cargo test
-        run: cargo test --locked
+        shell: pwsh
+        run: |
+          $broken = Get-ChildItem -Path target -Directory -Filter 'webview2-com-sys*' -Recurse -ErrorAction SilentlyContinue | Where-Object {
+            $_.FullName -match '\\build\\' -and -not (Get-ChildItem -Path $_ -Filter 'WebView2LoaderStatic.lib' -Recurse -ErrorAction SilentlyContinue)
+          }
+          if ($broken) {
+            $broken | ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
+            Get-ChildItem -Path target -Directory -Filter 'webview2-com-sys*' -Recurse -ErrorAction SilentlyContinue | Where-Object {
+              $_.FullName -match '\\\.fingerprint\\'
+            } | ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
+          }
+          cargo test --locked
 
       - name: Prune stale target artifacts before cache save
         if: always()
@@ -88,6 +99,6 @@ jobs:
             }
             $cutoff = (Get-Date).AddDays(-7)
             Get-ChildItem -Path $target -Recurse -File | Where-Object {
-              $_.Extension -in @('.pdb') -or ($_.LastWriteTime -lt $cutoff -and $_.DirectoryName -match '(\\deps|\\build|\\.fingerprint)')
+              $_.Extension -in @('.pdb') -or ($_.LastWriteTime -lt $cutoff -and $_.DirectoryName -match '(\\deps|\\build|\\.fingerprint)' -and $_.DirectoryName -notmatch '\\build\\.+\\out(\\|$)')
             } | Remove-Item -Force
           }

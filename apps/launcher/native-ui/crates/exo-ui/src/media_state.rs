@@ -4436,6 +4436,15 @@ impl AppState {
         self.media.music_sign_in_status = None;
         self.media.music_start_gen = self.media.music_start_gen.wrapping_add(1);
         let generation = self.media.music_start_gen;
+        match service {
+            MusicService::Spotify => {
+                self.open_web_surface(crate::web_host::WebSurfaceKind::SpotifyPlayer);
+            }
+            MusicService::Apple => {
+                self.open_web_surface(crate::web_host::WebSurfaceKind::AppleMusicSignIn);
+            }
+            MusicService::YouTube => {}
+        }
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             rpc.call::<_, ActionResult>(

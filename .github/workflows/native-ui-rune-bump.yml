@@ -184,7 +184,7 @@ jobs:
             }
             $cutoff = (Get-Date).AddDays(-7)
             Get-ChildItem -Path $target -Recurse -File | Where-Object {
-              $_.Extension -in @('.pdb') -or ($_.LastWriteTime -lt $cutoff -and $_.DirectoryName -match '(\\deps|\\build|\\.fingerprint)')
+              $_.Extension -in @('.pdb') -or ($_.LastWriteTime -lt $cutoff -and $_.DirectoryName -match '(\\deps|\\build|\\.fingerprint)' -and $_.DirectoryName -notmatch '\\build\\.+\\out(\\|$)')
             } | Remove-Item -Force
           }
 

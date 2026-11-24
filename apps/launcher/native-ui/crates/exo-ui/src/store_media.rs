@@ -59,7 +59,11 @@ impl AppState {
         if let Some(ref p) = self.store_ext.trailer_player {
             p.pause();
         }
+        if let Some(ref mf) = self.store_ext.trailer_mf {
+            mf.stop();
+        }
         self.store_ext.trailer_player = None;
+        self.store_ext.trailer_mf = None;
         self.store_ext.trailer_url = None;
         self.store_ext.trailer_playing = false;
     }
@@ -99,6 +103,21 @@ impl AppState {
         let Some(url) = hls else {
             return;
         };
+        let source = crate::native_media::NativeMediaSource::classify(&url, None);
+        if source.uses_mf_dcomp() {
+            let session = crate::native_media::NativeMediaSession::start(
+                source,
+                self.store_ext.trailer_muted,
+                self.store_ext.waker.clone(),
+            );
+            self.store_ext.trailer_playing = !self.settings.reduce_motion;
+            if self.settings.reduce_motion {
+                session.pause();
+            }
+            self.store_ext.trailer_url = Some(url);
+            self.store_ext.trailer_mf = Some(Box::new(session));
+            return;
+        }
         let player = Player::url(url.clone());
         player.set_muted(self.store_ext.trailer_muted);
         if let Some(ref waker) = self.store_ext.waker {
@@ -123,6 +142,14 @@ impl AppState {
                 p.play();
                 self.store_ext.trailer_playing = true;
             }
+        } else if let Some(ref mf) = self.store_ext.trailer_mf {
+            if self.store_ext.trailer_playing {
+                mf.pause();
+                self.store_ext.trailer_playing = false;
+            } else {
+                mf.play();
+                self.store_ext.trailer_playing = true;
+            }
         }
     }
 
@@ -130,6 +157,9 @@ impl AppState {
         self.store_ext.trailer_muted = !self.store_ext.trailer_muted;
         if let Some(ref p) = self.store_ext.trailer_player {
             p.set_muted(self.store_ext.trailer_muted);
+        }
+        if let Some(ref mf) = self.store_ext.trailer_mf {
+            mf.set_muted(self.store_ext.trailer_muted);
         }
     }
 
@@ -214,7 +244,15 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
                 let player_state = player_ref.map(Player::state);
                 let failed = matches!(player_state, Some(PlayerState::Failed(_)));
 
-                if let Some(player) = player_ref
+                if let Some(mf) = s.store_ext.trailer_mf.as_ref()
+                    && mf.state() != crate::native_media::NativeMediaState::Failed
+                {
+                    stage = stage.child(
+                        el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                            .fill(BG)
+                            .native_surface(mf.surface(), SurfaceFit::Fit),
+                    );
+                } else if let Some(player) = player_ref
                     && !failed
                 {
                     stage = stage.child(

@@ -1263,6 +1263,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .on_press(|s: &mut AppState| s.wp4_open_report()),
         );
     }
+    if s.web_host.is_open() {
+        root = root.children(crate::web_host::overlay_layers(s, budget.overlay));
+    }
     if s.palette_open {
         root = root.children(palette::layers(s, budget.overlay));
     }
