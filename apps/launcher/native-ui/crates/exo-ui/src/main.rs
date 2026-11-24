@@ -29,6 +29,7 @@ mod game_props;
 mod gamepad;
 mod gifts;
 mod gpu_tuning;
+mod hud_overlay;
 mod hw_sensors;
 mod image_cache;
 mod island;
@@ -84,6 +85,8 @@ struct CliArgs {
     parity_probe: Option<String>,
     probe_points: Option<String>,
     native_autopilot: bool,
+    present_hud: Option<String>,
+    present_hud_secs: Option<u64>,
     passthrough: Vec<String>,
 }
 
@@ -92,6 +95,8 @@ fn split_cli_args() -> CliArgs {
     let mut parity_probe = None;
     let mut probe_points = None;
     let mut native_autopilot = false;
+    let mut present_hud = None;
+    let mut present_hud_secs = None;
     let mut passthrough = Vec::new();
     let mut iter = std::env::args();
     if let Some(exe) = iter.next() {
@@ -112,6 +117,12 @@ fn split_cli_args() -> CliArgs {
             probe_points = Some(path.to_string());
         } else if arg == "--native-autopilot" {
             native_autopilot = true;
+        } else if arg == "--present-hud" {
+            present_hud = iter.next();
+        } else if let Some(name) = arg.strip_prefix("--present-hud=") {
+            present_hud = Some(name.to_string());
+        } else if arg == "--present-hud-secs" {
+            present_hud_secs = iter.next().and_then(|v| v.parse().ok());
         } else {
             passthrough.push(arg);
         }
@@ -121,6 +132,8 @@ fn split_cli_args() -> CliArgs {
         parity_probe,
         probe_points,
         native_autopilot,
+        present_hud,
+        present_hud_secs,
         passthrough,
     }
 }
@@ -3435,6 +3448,11 @@ fn main() {
         return;
     }
 
+    if let Some(ref target_exe) = cli.present_hud {
+        run_standalone_present_hud(target_exe, cli.present_hud_secs.unwrap_or(15));
+        return;
+    }
+
     let headless_flag = rune_args
         .iter()
         .any(|a| a == "--snap" || a == "--tree" || a == "--script" || a == "--headless");
@@ -3573,6 +3591,86 @@ fn main() {
             .ok();
     }
 
+    let _hud_overlay = if !headless_flag {
+        Some(app.overlay(
+            hud_overlay::configured_overlay(),
+            exo_present::HudState::default(),
+        ))
+    } else {
+        None
+    };
+
+    app.run();
+}
+
+fn run_standalone_present_hud(target_exe: &str, duration_secs: u64) {
+    let spec = AppSpec::new(
+        "Exo Present HUD",
+        (320.0, 120.0),
+        || (),
+        |_, _| rune::el().w_full().h_full().fill(exo_kit::TRANSPARENT),
+    );
+    let mut app = App::new(spec)
+        .windowless()
+        .keep_running()
+        .glass(exo_kit::EXO_GLASS_POLICY)
+        .max_backdrop_blurs(1);
+    let hud_handle = app.overlay(
+        hud_overlay::configured_overlay(),
+        exo_present::HudState::default(),
+    );
+    let app_handle = app.handle();
+    let target = target_exe.to_string();
+    std::thread::Builder::new()
+        .name("exo-present-hud-loop".into())
+        .spawn(move || {
+            let cfg = exo_present::TraceConfig {
+                session_name: "ExoPresentHudLive".into(),
+                enable_kernel_display: false,
+                flush_timer_secs: 1,
+                record_raw_samples: false,
+                record_diag: false,
+            };
+            let Ok(mut sess) = exo_present::LiveEtwSession::start(cfg) else {
+                app_handle.quit();
+                return;
+            };
+            let t0 = std::time::Instant::now();
+            let limit = Duration::from_secs(duration_secs.max(2));
+            let items = [exo_present::HudItem::Low, exo_present::HudItem::FrameTime];
+            let extras = exo_present::HudExtras::default();
+            while t0.elapsed() < limit {
+                let pids = exo_present::find_pids_by_name(&target);
+                if !pids.is_empty() {
+                    sess.watch(&pids);
+                }
+                let (_fg_pid, hmon) = exo_present::foreground_pid_and_monitor();
+                let metrics = sess.snapshot();
+                if metrics.frame_count > 0 {
+                    let line = exo_present::format_hud_line(&metrics, &items, &extras);
+                    hud_overlay::sync_overlay(
+                        &hud_handle,
+                        true,
+                        exo_present::HudPosition::Right,
+                        line,
+                        hmon,
+                        t0.elapsed().as_secs(),
+                    );
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
+            hud_overlay::sync_overlay(
+                &hud_handle,
+                false,
+                exo_present::HudPosition::Right,
+                exo_present::HudLine::default(),
+                0,
+                0,
+            );
+            drop(sess);
+            app_handle.quit();
+        })
+        .ok();
     app.run();
 }
 
