@@ -1,6 +1,6 @@
 use rune::color::srgb_decode;
 use rune::{Color, Spring, TextStyle};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::cell::Cell;
 
 pub const GOEIST_FONT: &[u8] =
     include_bytes!("../../../../ExoLauncher/Assets/Fonts/Goeist-Variable.ttf");
@@ -8,15 +8,17 @@ pub const GOEIST_FONT: &[u8] =
 pub const FONTS: &[&[u8]] = &[GOEIST_FONT];
 pub const FONT_FAMILIES: (&str, &str) = ("Goeist", "ui-monospace");
 
-static TEXT_SCALE_BITS: AtomicU32 = AtomicU32::new(1.0_f32.to_bits());
+thread_local! {
+    static TEXT_SCALE: Cell<f32> = const { Cell::new(1.0) };
+}
 
 pub fn set_text_scale(scale: f32) {
     let clamped = scale.clamp(0.75, 1.5);
-    TEXT_SCALE_BITS.store(clamped.to_bits(), Ordering::Relaxed);
+    TEXT_SCALE.with(|cell| cell.set(clamped));
 }
 
 pub fn text_scale() -> f32 {
-    f32::from_bits(TEXT_SCALE_BITS.load(Ordering::Relaxed))
+    TEXT_SCALE.with(Cell::get)
 }
 
 pub fn scaled(px: f32) -> f32 {
