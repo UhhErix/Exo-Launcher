@@ -3514,6 +3514,8 @@ fn main() {
         }
     }
 
+    static WINDOW_VISIBLE: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(true);
     let handle = app.handle();
     let win_handle = handle.clone();
     app = app
@@ -3530,7 +3532,10 @@ fn main() {
         })
         .on_close(|s, _| s.close_mouse_panel())
         .on_quit(|s, _| s.close_mouse_panel())
-        .on_visibility(|s, visible, _| s.set_mouse_panel_window_visible(visible));
+        .on_visibility(|s, visible, _| {
+            WINDOW_VISIBLE.store(visible, std::sync::atomic::Ordering::Relaxed);
+            s.set_mouse_panel_window_visible(visible);
+        });
 
     if !headless_flag {
         let gp_handle = handle.clone();
@@ -3579,6 +3584,25 @@ fn main() {
                     event_handle.update_if(move |s, _| s.apply_host_event(ev));
                 }) {
                     Ok(client) => {
+                        let hb_client = std::sync::Arc::downgrade(&client);
+                        let _ = std::thread::Builder::new()
+                            .name("exo-heartbeat".into())
+                            .spawn(move || {
+                                while let Some(rpc) = hb_client.upgrade() {
+                                    if rpc.is_closed() {
+                                        break;
+                                    }
+                                    let visible =
+                                        WINDOW_VISIBLE.load(std::sync::atomic::Ordering::Relaxed);
+                                    let _ = rpc.call_raw(
+                                        "shell.heartbeat",
+                                        &serde_json::json!({ "visible": visible }),
+                                        |_| {},
+                                    );
+                                    drop(rpc);
+                                    std::thread::sleep(Duration::from_secs(1));
+                                }
+                            });
                         let rpc_for_boot = std::sync::Arc::clone(&client);
                         let boot_handle = connect_handle.clone();
                         connect_handle.update(move |s, _| {
