@@ -82,6 +82,36 @@ public sealed partial class WebHostBridge
             InvalidateGpuAndDisplayCaches();
     }
 
+    private static TimeSpan GpuProfileDeadline(JsonElement p, bool hasParams) =>
+        ReadString(p, hasParams, "action") is "apply" or "undo" ? TimeSpan.FromSeconds(25) : TimeSpan.FromSeconds(15);
+
+    internal static async Task<GpuProfileService.State> ReadProfileWithTimeoutAsync(
+        Func<CancellationToken, Task<GpuProfileService.State>> read,
+        Func<string?> vendor,
+        TimeSpan timeout,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await read(ct).WaitAsync(timeout, ct).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            Helpers.AppLog.Info($"GPU profile: driver probe did not answer within {timeout.TotalSeconds:0} s; returning partial state.");
+            return new GpuProfileService.State(
+                false,
+                "Your graphics driver is still starting. Try again.",
+                vendor(),
+                null,
+                0,
+                new GpuProfile.Screen(null, 0, false),
+                "none",
+                false,
+                false,
+                []);
+        }
+    }
+
     private async Task<object> GpuProfileAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
         var action = ReadString(p, hasParams, "action");
@@ -99,7 +129,11 @@ public sealed partial class WebHostBridge
         }
         else
         {
-            state = await ProfileCache.GetAsync(force, ct).ConfigureAwait(false);
+            state = await ReadProfileWithTimeoutAsync(
+                token => ProfileCache.GetAsync(force, token),
+                GraphicsService.Vendor,
+                TimeSpan.FromSeconds(12),
+                ct).ConfigureAwait(false);
         }
         return new
         {

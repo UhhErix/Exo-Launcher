@@ -29,7 +29,18 @@ import { focusWhenActive } from '../lib/focusTrap'
 import { settingsStoreRows } from '../lib/stores'
 import { AppsStep } from './onboarding/AppsStep'
 import { AccountStep, type AccountScreen } from './onboarding/AccountStep'
-import { STEPS, junkScanDue, waitsForJunkScan, type Feedback, type MissingRuntime, type StepId, type StoreCheckState } from './onboarding/model'
+import {
+  STEPS,
+  isPartialGpuProfile,
+  junkScanDue,
+  onboardingProbeReportLevel,
+  shouldRetryOnboardingProbe,
+  waitsForJunkScan,
+  type Feedback,
+  type MissingRuntime,
+  type StepId,
+  type StoreCheckState,
+} from './onboarding/model'
 import { StoresStep } from './onboarding/StoresStep'
 import { DiscordStep } from './onboarding/DiscordStep'
 import { PcStep } from './onboarding/PcStep'
@@ -155,14 +166,50 @@ export function OnboardingPanel({
       .finally(() => setJunkScanning(false))
   }, [step])
 
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
   const readPc = useCallback(async () => {
+    const retryLater = <T,>(call: () => Promise<T>, context: string, apply: (value: T) => void, delayMs: number) => {
+      window.setTimeout(() => {
+        if (!mountedRef.current) return
+        void call().then(
+          value => { if (mountedRef.current) apply(value) },
+          (error: unknown) => report(error, context, { level: onboardingProbeReportLevel(error) }),
+        )
+      }, delayMs)
+    }
+    const probe = <T,>(
+      call: () => Promise<T>,
+      context: string,
+      apply: (value: T) => void,
+      shouldRetryValue?: (value: T) => boolean,
+    ) => call().then(
+      value => {
+        if (!mountedRef.current) return
+        apply(value)
+        if (shouldRetryValue?.(value)) retryLater(call, context, apply, 2_000)
+      },
+      (error: unknown) => {
+        if (!mountedRef.current) return
+        if (shouldRetryOnboardingProbe(error, 0)) {
+          report(error, context, { level: 'warn' })
+          retryLater(call, context, apply, 1_500)
+          return
+        }
+        report(error, context, { level: onboardingProbeReportLevel(error) })
+      },
+    )
     await Promise.all([
-      host.gpuProfile().then(setGpu, (error: unknown) => report(error, 'OnboardingPanel.gpuProfile')),
-      host.systemHealth().then(setHealth, (error: unknown) => report(error, 'OnboardingPanel.systemHealth')),
+      probe(() => host.gpuProfile(), 'OnboardingPanel.gpuProfile', setGpu, isPartialGpuProfile),
+      probe(() => host.systemHealth(), 'OnboardingPanel.systemHealth', setHealth),
       host.systemDrives().then(setDrives, (error: unknown) => report(error, 'OnboardingPanel.systemDrives', { level: 'warn' })),
       host.systemTuning().then(setTuning, (error: unknown) => report(error, 'OnboardingPanel.systemTuning', { level: 'warn' })),
     ])
-    setPcRead(true)
+    if (mountedRef.current) setPcRead(true)
   }, [])
 
   useEffect(() => {

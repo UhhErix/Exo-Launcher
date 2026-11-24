@@ -24,3 +24,22 @@ export function junkScanDue(step: StepId, alreadyStarted: boolean): boolean {
 export function waitsForJunkScan(step: StepId): boolean {
   return step === 'discord'
 }
+
+const SLOW_PROBE_RE = /did not answer in time|didn(?:'|’)t answer|timed? ?out|still starting|canceled|cancelled/i
+
+export function isSlowProbeError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : String(error ?? '')
+  return SLOW_PROBE_RE.test(message)
+}
+
+export function onboardingProbeReportLevel(error: unknown): 'warn' | 'error' {
+  return isSlowProbeError(error) ? 'warn' : 'error'
+}
+
+export function shouldRetryOnboardingProbe(error: unknown, attempt: number): boolean {
+  return attempt < 1 && isSlowProbeError(error)
+}
+
+export function isPartialGpuProfile(profile: { ok: boolean; status: string; message?: string | null }): boolean {
+  return !profile.ok && profile.status === 'none' && isSlowProbeError(profile.message ?? '')
+}

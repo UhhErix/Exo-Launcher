@@ -14,6 +14,9 @@ namespace ExoLauncher.Services;
 /// </summary>
 public sealed partial class WebHostBridge
 {
+    private static TimeSpan SystemHealthDeadline(JsonElement p, bool hasParams) =>
+        string.IsNullOrWhiteSpace(ReadString(p, hasParams, "action")) ? TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(30);
+
     private static async Task<object> SystemAboutAsync(CancellationToken ct) => await PcAbout.ReadAsync(ct).ConfigureAwait(false);
 
     private async Task<object> SystemHealthAsync(JsonElement p, bool hasParams, CancellationToken ct)

@@ -32,4 +32,10 @@ public sealed class StoreLayoutCheckTests
     {
         Assert.False(LibraryService.IsLayoutUnrecognized(clientPresent: true, scanSucceeded: false, games: 0));
     }
+
+    [Fact]
+    public void AnInstalledClientWithRecognizedEmptyLayoutIsNotFlagged()
+    {
+        Assert.False(LibraryService.IsLayoutUnrecognized(clientPresent: true, scanSucceeded: true, games: 0, layoutRecognized: true));
+    }
 }
