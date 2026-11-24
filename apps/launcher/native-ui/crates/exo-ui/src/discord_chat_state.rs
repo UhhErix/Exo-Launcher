@@ -480,6 +480,14 @@ pub struct ImageMenuState {
     pub y: f32,
 }
 
+#[derive(Debug, Clone)]
+pub struct LightboxSlide {
+    pub src: String,
+    pub original_url: String,
+    pub caption: String,
+    pub alt: String,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ProfileOpenRequest<'a> {
     pub user_id: &'a str,
@@ -511,6 +519,8 @@ pub struct LinkCardsState {
     pub revealed_media: HashSet<String>,
     pub alt_shown: HashSet<String>,
     pub image_menu: Option<ImageMenuState>,
+    pub lightbox: rune::LightboxState,
+    pub lightbox_slides: Vec<LightboxSlide>,
     pub guild_colors: HashMap<String, HashMap<String, String>>,
     pub guild_colors_requested: HashSet<String>,
 }
@@ -1235,9 +1245,102 @@ pub fn discord_deeplink_target(deeplink: &str) -> Option<(Option<String>, String
 }
 
 impl AppState {
+    pub fn open_discord_lightbox(&mut self, slides: Vec<LightboxSlide>, index: usize) {
+        if slides.is_empty() {
+            return;
+        }
+        let clamped = index.min(slides.len() - 1);
+        self.discord.chat.links.image_menu = None;
+        self.discord.chat.links.lightbox_slides = slides;
+        self.discord.chat.links.lightbox.open(clamped);
+    }
+
+    pub fn open_channel_image_lightbox(
+        &mut self,
+        channel_id: &str,
+        clicked_src: &str,
+        clicked_orig: &str,
+        clicked_caption: &str,
+        clicked_alt: &str,
+    ) {
+        let mut slides = Vec::new();
+        let mut start = None;
+        if let Some(msgs) = self.discord.chat.messages_by_channel.get(channel_id) {
+            for msg in msgs {
+                for att in &msg.attachments {
+                    if !att.is_image() {
+                        continue;
+                    }
+                    let src = att
+                        .proxy_url
+                        .clone()
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or_else(|| att.url.clone());
+                    let orig = if att.url.is_empty() {
+                        src.clone()
+                    } else {
+                        att.url.clone()
+                    };
+                    if start.is_none() && (src == clicked_src || orig == clicked_orig) {
+                        start = Some(slides.len());
+                    }
+                    slides.push(LightboxSlide {
+                        src,
+                        original_url: orig,
+                        caption: att.filename.clone(),
+                        alt: att.description.clone().unwrap_or_default(),
+                    });
+                }
+                for emb in &msg.embeds {
+                    if let Some(ref im) = emb.image {
+                        let src = im
+                            .proxy_url
+                            .clone()
+                            .or_else(|| im.url.clone())
+                            .unwrap_or_default();
+                        if src.is_empty() {
+                            continue;
+                        }
+                        let orig = im.url.clone().unwrap_or_else(|| src.clone());
+                        if start.is_none() && (src == clicked_src || orig == clicked_orig) {
+                            start = Some(slides.len());
+                        }
+                        slides.push(LightboxSlide {
+                            src,
+                            original_url: orig,
+                            caption: emb.title.clone().unwrap_or_default(),
+                            alt: emb.title.clone().unwrap_or_default(),
+                        });
+                    }
+                }
+            }
+        }
+        if start.is_none() {
+            start = Some(slides.len());
+            slides.push(LightboxSlide {
+                src: clicked_src.to_string(),
+                original_url: clicked_orig.to_string(),
+                caption: clicked_caption.to_string(),
+                alt: clicked_alt.to_string(),
+            });
+        }
+        self.open_discord_lightbox(slides, start.unwrap_or(0));
+    }
+
+    pub fn close_discord_lightbox(&mut self) {
+        self.discord.chat.links.lightbox.close();
+        self.discord.chat.links.lightbox_slides.clear();
+    }
+
     pub fn dismiss_discord_chat_layer(&mut self) -> bool {
         if self.discord.chat.links.image_menu.is_some() {
             self.discord.chat.links.image_menu = None;
+            return true;
+        }
+        if self.discord.chat.links.lightbox.is_open() {
+            if self.discord.chat.links.lightbox.handle_escape() {
+                self.discord.chat.links.lightbox_slides.clear();
+            }
             return true;
         }
         if self.discord.chat.apps.active_modal.is_some() {
@@ -5702,5 +5805,39 @@ mod tests {
             discord_deeplink_target("https://discord.com/channels/111/222"),
             Some((Some("111".into()), "222".into(), None))
         );
+    }
+
+    #[test]
+    fn lightbox_gallery_navigation_zoom_and_escape() {
+        let mut s = AppState::with_demo_games();
+        s.open_discord_lightbox(
+            vec![
+                LightboxSlide {
+                    src: "https://cdn.discordapp.com/a.png".into(),
+                    original_url: "https://cdn.discordapp.com/a.png".into(),
+                    caption: "a.png".into(),
+                    alt: "Slide A".into(),
+                },
+                LightboxSlide {
+                    src: "https://cdn.discordapp.com/b.png".into(),
+                    original_url: "https://cdn.discordapp.com/b.png".into(),
+                    caption: "b.png".into(),
+                    alt: "Slide B".into(),
+                },
+            ],
+            0,
+        );
+        assert!(s.discord.chat.links.lightbox.is_open());
+        assert_eq!(s.discord.chat.links.lightbox.index(), Some(0));
+        assert!(s.discord.chat.links.lightbox.next(2));
+        assert_eq!(s.discord.chat.links.lightbox.index(), Some(1));
+        s.discord.chat.links.lightbox.zoom_in();
+        assert!(s.discord.chat.links.lightbox.is_zoomed());
+        assert!(s.dismiss_discord_chat_layer());
+        assert!(s.discord.chat.links.lightbox.is_open());
+        assert!(!s.discord.chat.links.lightbox.is_zoomed());
+        assert!(s.dismiss_discord_chat_layer());
+        assert!(!s.discord.chat.links.lightbox.is_open());
+        assert!(s.discord.chat.links.lightbox_slides.is_empty());
     }
 }

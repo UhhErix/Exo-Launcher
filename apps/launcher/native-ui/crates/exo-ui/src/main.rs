@@ -1295,6 +1295,78 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             s.open_discord_guild(&gid);
         }
     }),
+    ("discord-picker", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.open_expression_picker_for_composer(discord_chat_state::ExpressionTab::Emoji);
+    }),
+    ("discord-pins", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.toggle_discord_pins_drawer();
+    }),
+    ("discord-search", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.toggle_discord_search_drawer();
+    }),
+    ("discord-inbox", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_inbox(discord_chat_state::InboxTab::Unreads);
+    }),
+    ("discord-poll", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.open_poll_creator();
+    }),
+    ("discord-profile", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        let (uid, name, av) = s
+            .discord
+            .home
+            .dms
+            .first()
+            .map(|d| {
+                (
+                    d.user_id.clone().unwrap_or_else(|| "u-ada".into()),
+                    d.name.clone(),
+                    d.avatar.clone(),
+                )
+            })
+            .unwrap_or_else(|| ("u-ada".into(), "Ada".into(), None));
+        s.open_user_profile_dialog(discord_chat_state::ProfileOpenRequest {
+            user_id: &uid,
+            guild_id: None,
+            fallback_name: &name,
+            fallback_username: &name,
+            fallback_avatar: av.as_deref(),
+            full: true,
+            tab: discord_chat_state::ProfileTab::About,
+        });
+    }),
+    ("discord-create-dm", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+        s.open_create_dm_dialog();
+    }),
+    ("discord-invite", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        if let Some(gid) = s.discord.home.guilds.first().map(|g| g.id.clone()) {
+            s.open_discord_guild(&gid);
+            if let Some(cid) = s.active_chat_channel_id() {
+                let gname = s
+                    .discord
+                    .home
+                    .guilds
+                    .iter()
+                    .find(|g| g.id == gid)
+                    .map(|g| g.name.clone())
+                    .unwrap_or_else(|| "Server".into());
+                s.open_invite_dialog(&gname, &cid, Some("general"));
+            }
+        }
+    }),
     ("discord-voice", |s: &mut AppState| {
         s.switch_room(state::Room::Discord);
         let gid = s

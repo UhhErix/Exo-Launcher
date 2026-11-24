@@ -1,8 +1,8 @@
 use crate::discord::avatar_box;
 use crate::discord_chat_state::{
     ChatDrawer, ComponentPress, ExpressionTab, FileTextEntry, GiftCardEntry, ImageMenuState,
-    InviteCardEntry, ProfileOpenRequest, ProfileTab, extract_gift_codes, extract_invite_codes,
-    extract_spotify_jam_url, is_text_preview_filename,
+    InviteCardEntry, LightboxSlide, PendingAttachment, ProfileOpenRequest, ProfileTab,
+    extract_gift_codes, extract_invite_codes, extract_spotify_jam_url, is_text_preview_filename,
 };
 use crate::discord_md;
 use crate::discord_pickers;
@@ -16,12 +16,13 @@ use exo_kit::{
     icon_check, icon_close, icon_copy, icon_download, icon_edit, icon_external, icon_hash,
     icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply, icon_search, icon_send,
     icon_smile, icon_sparkles, icon_trash, popover_transition, pressed_fill, primary_button,
-    subtle_fill, type_body, type_control, type_label, type_page, type_section, type_small,
+    scrim_fill, subtle_fill, type_body, type_control, type_label, type_page, type_section,
+    type_small,
 };
 use exo_rpc::{DiscordAppComponent, DiscordAttachment, DiscordEmbed, DiscordMessage};
 use rune::{
-    Color, Cursor, El, GrowthSpec, ScrollSpec, Spring, SpringPair, SurfaceFit, Transition, Tx,
-    auto_grow, col, edit_access, el, row, text, text_input,
+    Color, Cursor, El, GrowthSpec, LightboxItem, ScrollSpec, Spring, SpringPair, SurfaceFit,
+    Transition, Tx, auto_grow, col, edit_access, el, lightbox, row, text, text_input,
 };
 use std::borrow::Cow;
 
@@ -167,6 +168,9 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
             .as_ref()
             .and_then(|m| m.url.clone())
             .unwrap_or_else(|| url.to_string());
+        let lb_src = url.to_string();
+        let lb_orig = orig_c.clone();
+        let lb_cap = embed.title.clone().unwrap_or_default();
         inner = inner.child(
             el().w(360.0)
                 .h(202.0)
@@ -174,6 +178,21 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
                 .clip_rounded(RADIUS_SMALL)
                 .cursor(Cursor::Pointer)
                 .hit()
+                .on_press(move |s: &mut AppState| {
+                    if let Some(cid) = s.active_chat_channel_id() {
+                        s.open_channel_image_lightbox(&cid, &lb_src, &lb_orig, &lb_cap, &lb_cap);
+                    } else {
+                        s.open_discord_lightbox(
+                            vec![LightboxSlide {
+                                src: lb_src.clone(),
+                                original_url: lb_orig.clone(),
+                                caption: lb_cap.clone(),
+                                alt: lb_cap.clone(),
+                            }],
+                            0,
+                        );
+                    }
+                })
                 .on_secondary_press(move |s: &mut AppState, p, _| {
                     s.discord.chat.links.image_menu = Some(ImageMenuState {
                         original_url: orig_c.clone(),
@@ -261,7 +280,10 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
         }
 
         let orig_menu = orig_url.clone();
-        let orig_open = orig_url.clone();
+        let lb_src = url.clone();
+        let lb_orig = orig_url.clone();
+        let lb_cap = att.filename.clone();
+        let lb_alt = att.description.clone().unwrap_or_default();
         let mut frame = el()
             .key(format!("dc-att-img-{}", att.id))
             .w(box_w)
@@ -272,7 +294,21 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
             .border(1.0, hairline())
             .cursor(Cursor::Pointer)
             .hit()
-            .on_press(move |s: &mut AppState| s.open_external_url(&orig_open))
+            .on_press(move |s: &mut AppState| {
+                if let Some(cid) = s.active_chat_channel_id() {
+                    s.open_channel_image_lightbox(&cid, &lb_src, &lb_orig, &lb_cap, &lb_alt);
+                } else {
+                    s.open_discord_lightbox(
+                        vec![LightboxSlide {
+                            src: lb_src.clone(),
+                            original_url: lb_orig.clone(),
+                            caption: lb_cap.clone(),
+                            alt: lb_alt.clone(),
+                        }],
+                        0,
+                    );
+                }
+            })
             .on_secondary_press(move |s: &mut AppState, p, _| {
                 s.discord.chat.links.image_menu = Some(ImageMenuState {
                     original_url: orig_menu.clone(),
@@ -1443,8 +1479,65 @@ fn message_row(
 
     if !msg.attachments.is_empty() {
         let mut att_col = col().w_full().gap(6.0).pt(2.0);
-        for att in &msg.attachments {
-            att_col = att_col.child(render_attachment(s, att, scale));
+        let img_indices: Vec<usize> = msg
+            .attachments
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.is_image())
+            .map(|(i, _)| i)
+            .collect();
+        if img_indices.len() >= 2 {
+            let cid_strip = channel_id.to_string();
+            let mid_strip = msg.id.clone();
+            let indices_k = img_indices.clone();
+            let indices_b = img_indices;
+            let cid_k = cid_strip.clone();
+            let mid_k = mid_strip.clone();
+            att_col = att_col.child(
+                row()
+                    .key(format!("dc-att-xscroll-{}", msg.id))
+                    .w_full()
+                    .h(268.0)
+                    .scroll_x()
+                    .child(
+                        row()
+                            .key(format!("dc-att-strip-{}", msg.id))
+                            .gap(8.0)
+                            .virtual_cols(
+                                indices_k.len(),
+                                280.0,
+                                move |s: &AppState, i: usize| {
+                                    let att_idx = indices_k[i];
+                                    s.discord
+                                        .chat
+                                        .messages_by_channel
+                                        .get(&cid_k)
+                                        .and_then(|v| v.iter().find(|m| m.id == mid_k))
+                                        .and_then(|m| m.attachments.get(att_idx))
+                                        .map(|a| Cow::Borrowed(a.id.as_str()))
+                                        .unwrap_or(Cow::Borrowed("missing"))
+                                },
+                                move |s: &AppState, i: usize| {
+                                    let att_idx = indices_b[i];
+                                    s.discord
+                                        .chat
+                                        .messages_by_channel
+                                        .get(&cid_strip)
+                                        .and_then(|v| v.iter().find(|m| m.id == mid_strip))
+                                        .and_then(|m| m.attachments.get(att_idx))
+                                        .map(|a| render_attachment(s, a, scale))
+                                        .unwrap_or_else(el)
+                                },
+                            ),
+                    ),
+            );
+            for att in msg.attachments.iter().filter(|a| !a.is_image()) {
+                att_col = att_col.child(render_attachment(s, att, scale));
+            }
+        } else {
+            for att in &msg.attachments {
+                att_col = att_col.child(render_attachment(s, att, scale));
+            }
         }
         body = body.child(att_col);
     }
@@ -1971,84 +2064,34 @@ pub fn timeline_and_composer(
     }
 
     if !s.discord.chat.pending_uploads.is_empty() {
-        let mut up_row = row().w_full().gap(6.0).flex_wrap();
-        for u in &s.discord.chat.pending_uploads {
-            let lid_mod = u.local_id.clone();
-            let lid_sp = u.local_id.clone();
-            let lid_rm = u.local_id.clone();
-            let status_txt = if u.uploading {
-                "Uploading…".into()
-            } else if let Some(ref e) = u.error {
-                e.clone()
-            } else if u.spoiler {
-                format!("Spoiler · {}", format_bytes(u.size))
-            } else {
-                format_bytes(u.size)
-            };
-            up_row = up_row.child(
-                row()
-                    .key(format!("dc-up-{}", u.local_id))
-                    .h(32.0)
-                    .px(10.0)
-                    .gap(6.0)
-                    .center_y()
-                    .radius(RADIUS_SMALL)
-                    .fill(card_surface())
-                    .border(
-                        1.0,
-                        if u.error.is_some() {
-                            bad().alpha(0.5)
-                        } else if u.spoiler {
-                            good().alpha(0.45)
-                        } else {
-                            glass_rim()
-                        },
-                    )
-                    .child(icon_paperclip(12.0, fg_muted()))
-                    .child(text(u.name.clone()).font(type_small()).color(FG))
-                    .child(text(status_txt).font(type_label()).color(fg_faint()))
-                    .child(
-                        tiny_action(
-                            format!("dc-up-ed-{}", u.local_id),
-                            "Modify attachment",
-                            false,
-                            icon_edit(11.0, fg_muted()),
-                        )
-                        .on_press(move |s: &mut AppState| s.open_modify_attachment(&lid_mod)),
-                    )
-                    .child(
-                        el().key(format!("dc-up-sp-{}", u.local_id))
-                            .px(5.0)
-                            .h(20.0)
-                            .radius(4.0)
-                            .fill(if u.spoiler {
-                                good().alpha(0.2)
-                            } else {
-                                subtle_fill()
-                            })
-                            .center()
-                            .cursor(Cursor::Pointer)
-                            .hit()
-                            .press_on_down()
-                            .on_press(move |s: &mut AppState| s.toggle_attachment_spoiler(&lid_sp))
-                            .child(text("SP").font(type_label()).color(if u.spoiler {
-                                good()
-                            } else {
-                                fg_muted()
-                            })),
-                    )
-                    .child(
-                        tiny_action(
-                            format!("dc-up-rm-{}", u.local_id),
-                            "Remove attachment",
-                            false,
-                            icon_close(11.0, fg_muted()),
-                        )
-                        .on_press(move |s: &mut AppState| s.remove_pending_upload(&lid_rm)),
-                    ),
-            );
-        }
-        composer_wrap = composer_wrap.child(up_row);
+        let count = s.discord.chat.pending_uploads.len();
+        composer_wrap = composer_wrap.child(
+            row()
+                .key("dc-up-xscroll")
+                .w_full()
+                .h(36.0)
+                .scroll_x()
+                .child(row().key("dc-up-strip").gap(6.0).virtual_cols(
+                    count,
+                    220.0,
+                    |s: &AppState, i: usize| {
+                        s.discord
+                            .chat
+                            .pending_uploads
+                            .get(i)
+                            .map(|u| Cow::Borrowed(u.local_id.as_str()))
+                            .unwrap_or(Cow::Borrowed("missing"))
+                    },
+                    |s: &AppState, i: usize| {
+                        s.discord
+                            .chat
+                            .pending_uploads
+                            .get(i)
+                            .map(pending_upload_chip)
+                            .unwrap_or_else(el)
+                    },
+                )),
+        );
     }
 
     if can_send {
@@ -2288,6 +2331,81 @@ pub fn timeline_and_composer(
     stage
 }
 
+fn pending_upload_chip(u: &PendingAttachment) -> El {
+    let lid_mod = u.local_id.clone();
+    let lid_sp = u.local_id.clone();
+    let lid_rm = u.local_id.clone();
+    let status_txt = if u.uploading {
+        "Uploading…".into()
+    } else if let Some(ref e) = u.error {
+        e.clone()
+    } else if u.spoiler {
+        format!("Spoiler · {}", format_bytes(u.size))
+    } else {
+        format_bytes(u.size)
+    };
+    row()
+        .key(format!("dc-up-{}", u.local_id))
+        .h(32.0)
+        .px(10.0)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_SMALL)
+        .fill(card_surface())
+        .border(
+            1.0,
+            if u.error.is_some() {
+                bad().alpha(0.5)
+            } else if u.spoiler {
+                good().alpha(0.45)
+            } else {
+                glass_rim()
+            },
+        )
+        .child(icon_paperclip(12.0, fg_muted()))
+        .child(text(u.name.clone()).font(type_small()).color(FG))
+        .child(text(status_txt).font(type_label()).color(fg_faint()))
+        .child(
+            tiny_action(
+                format!("dc-up-ed-{}", u.local_id),
+                "Modify attachment",
+                false,
+                icon_edit(11.0, fg_muted()),
+            )
+            .on_press(move |s: &mut AppState| s.open_modify_attachment(&lid_mod)),
+        )
+        .child(
+            el().key(format!("dc-up-sp-{}", u.local_id))
+                .px(5.0)
+                .h(20.0)
+                .radius(4.0)
+                .fill(if u.spoiler {
+                    good().alpha(0.2)
+                } else {
+                    subtle_fill()
+                })
+                .center()
+                .cursor(Cursor::Pointer)
+                .hit()
+                .press_on_down()
+                .on_press(move |s: &mut AppState| s.toggle_attachment_spoiler(&lid_sp))
+                .child(text("SP").font(type_label()).color(if u.spoiler {
+                    good()
+                } else {
+                    fg_muted()
+                })),
+        )
+        .child(
+            tiny_action(
+                format!("dc-up-rm-{}", u.local_id),
+                "Remove attachment",
+                false,
+                icon_close(11.0, fg_muted()),
+            )
+            .on_press(move |s: &mut AppState| s.remove_pending_upload(&lid_rm)),
+        )
+}
+
 pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
     match s.discord.chat.drawer {
         ChatDrawer::None => None,
@@ -2327,6 +2445,150 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
     }
     if let Some(el) = discord_pickers::app_modal_overlay(s, blur) {
         out.push(el);
+    }
+    if s.discord.chat.links.lightbox.is_open() && !s.discord.chat.links.lightbox_slides.is_empty() {
+        let slides = &s.discord.chat.links.lightbox_slides;
+        let mut lb_items = Vec::new();
+        let mut slide_urls = Vec::new();
+        for sl in slides {
+            if let Some(img) = s.remote_image_sized(&sl.src, 1400.0, scale) {
+                let mut item = LightboxItem::new(img.pixels().clone());
+                if !sl.caption.is_empty() {
+                    item = item.caption(sl.caption.clone());
+                }
+                if !sl.alt.is_empty() {
+                    item = item.alt(sl.alt.clone());
+                }
+                lb_items.push(item);
+                slide_urls.push(sl.original_url.clone());
+            }
+        }
+        if !lb_items.is_empty() {
+            let active_idx = s
+                .discord
+                .chat
+                .links
+                .lightbox
+                .current_index(lb_items.len())
+                .unwrap_or(0);
+            let active_orig = slide_urls.get(active_idx).cloned().unwrap_or_default();
+            if let Some(lb_el) = lightbox(
+                "dc-lightbox",
+                lb_items,
+                |st: &AppState| &st.discord.chat.links.lightbox,
+                |st: &mut AppState| &mut st.discord.chat.links.lightbox,
+            )
+            .backdrop_color(scrim_fill())
+            .surface_color(BG)
+            .text_color(FG)
+            .border_color(glass_rim())
+            .show_counter(true)
+            .show_zoom_controls(true)
+            .show_nav_buttons(true)
+            .on_close(|st: &mut AppState, _| {
+                st.discord.chat.links.lightbox_slides.clear();
+            })
+            .build(s)
+            {
+                out.push(lb_el);
+                if !active_orig.is_empty() {
+                    let orig_copy = active_orig.clone();
+                    let orig_save = active_orig.clone();
+                    let orig_open = active_orig;
+                    out.push(
+                        row()
+                            .key("dc-lightbox-actions")
+                            .pin(Some(20.0), None, None, Some(20.0))
+                            .padding(6.0)
+                            .gap(6.0)
+                            .center_y()
+                            .radius(RADIUS_PILL)
+                            .fill(BG)
+                            .border(1.0, glass_rim())
+                            .child(
+                                glass_button("dc-lb-copy", "Copy image", Some(icon_copy(12.0, FG)))
+                                    .on_press(move |st: &mut AppState| {
+                                        st.discord_image_action("copy", &orig_copy);
+                                    }),
+                            )
+                            .child(
+                                glass_button(
+                                    "dc-lb-save",
+                                    "Save image",
+                                    Some(icon_download(12.0, FG)),
+                                )
+                                .on_press(
+                                    move |st: &mut AppState| {
+                                        st.discord_image_action("save", &orig_save);
+                                    },
+                                ),
+                            )
+                            .child(
+                                glass_button(
+                                    "dc-lb-open",
+                                    "Open original",
+                                    Some(icon_external(12.0, FG)),
+                                )
+                                .on_press(
+                                    move |st: &mut AppState| {
+                                        st.open_external_url(&orig_open);
+                                    },
+                                ),
+                            ),
+                    );
+                }
+            }
+        } else if let Some(active) = slides.get(
+            s.discord
+                .chat
+                .links
+                .lightbox
+                .current_index(slides.len())
+                .unwrap_or(0),
+        ) {
+            let orig_open = active.original_url.clone();
+            out.push(
+                el().key("dc-lightbox-loading")
+                    .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .fill(scrim_fill())
+                    .center()
+                    .hit()
+                    .on_press(|st: &mut AppState| st.close_discord_lightbox())
+                    .child(
+                        col()
+                            .padding(20.0)
+                            .gap(12.0)
+                            .center()
+                            .radius(RADIUS_PANEL)
+                            .fill(BG)
+                            .border(1.0, glass_rim())
+                            .hit()
+                            .child(text("Loading image…").font(type_body()).color(FG))
+                            .child(
+                                row()
+                                    .gap(8.0)
+                                    .child(
+                                        glass_button(
+                                            "dc-lb-loading-open",
+                                            "Open original",
+                                            Some(icon_external(12.0, FG)),
+                                        )
+                                        .on_press(
+                                            move |st: &mut AppState| {
+                                                st.open_external_url(&orig_open);
+                                            },
+                                        ),
+                                    )
+                                    .child(
+                                        glass_button("dc-lb-loading-close", "Close", None)
+                                            .on_press(|st: &mut AppState| {
+                                                st.close_discord_lightbox();
+                                            }),
+                                    ),
+                            ),
+                    ),
+            );
+        }
     }
     if let Some(ref im) = s.discord.chat.links.image_menu {
         let copy_src = im.original_url.clone();

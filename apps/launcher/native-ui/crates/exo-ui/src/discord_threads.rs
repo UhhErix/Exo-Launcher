@@ -2090,7 +2090,7 @@ pub fn profile_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
     let card = col()
         .key("dc-profile-card")
         .w(width)
-        .max_h(640.0)
+        .h(if dlg.full { 580.0 } else { 460.0 })
         .radius(RADIUS_PANEL)
         .clip_rounded(RADIUS_PANEL)
         .fill(BG)
