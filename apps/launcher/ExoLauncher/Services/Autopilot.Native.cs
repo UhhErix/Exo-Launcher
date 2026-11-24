@@ -21,6 +21,8 @@ internal sealed class AutopilotNative : IAutopilotSystem
 
     public int Front() => (int)ForegroundWatcher.ForegroundProcess();
 
+    public IReadOnlyDictionary<int, GpuProcessLoad> GpuProcesses() => GpuProcessMonitor.Shared.SampleForAutopilot();
+
     public int? Read(Knob knob, int pid, long created)
     {
         var handle = Open(pid, created, QueryLimited | (knob == Knob.Io ? QueryInformation : 0));
@@ -181,14 +183,25 @@ internal static class Autopilot
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return PowerProfiles.CpuClass.Unknown; }
     });
 
-    internal static AutopilotSettings LiveSettings(AutopilotSettings? stored)
+    internal static AutopilotSettings LiveSettings(AutopilotSettings? stored) => (stored ?? new()).Copy();
+
+    internal static AutopilotSettings ApplyPatch(
+        AutopilotSettings? stored,
+        bool? on = null,
+        string? gamePriority = null,
+        bool? keepGameMode = null,
+        bool? coreParking = null,
+        List<string>? alwaysDemote = null,
+        List<string>? suspend = null)
     {
-        var copy = (stored ?? new()).Copy();
-        copy.On = true;
-        copy.GamePriority = "above";
-        copy.KeepGameMode = false;
-        copy.CoreParking = true;
-        return copy;
+        var next = LiveSettings(stored);
+        if (on is { } o) next.On = o;
+        if (gamePriority is { } gp) next.GamePriority = AutopilotSettings.NormalizePriority(gp);
+        if (keepGameMode is { } kgm) next.KeepGameMode = kgm;
+        if (coreParking is { } cp) next.CoreParking = cp;
+        if (alwaysDemote is not null) next.AlwaysDemote = alwaysDemote;
+        if (suspend is not null) next.Suspend = [.. suspend.Where(name => AutopilotSafety.WhyLeftAlone(name) is null)];
+        return next.Copy();
     }
 
     internal static AutopilotSettings Settings => LiveSettings(App.Services.Settings.Current.Autopilot);
@@ -217,11 +230,11 @@ internal static class Autopilot
     /// <summary>1:1 mouse movement without pointer acceleration; null when done, else the sentence.</summary>
     internal static string? HandMouseAccel()
     {
-        try { return MouseAccel.Apply(); }
+        try { return Settings.On ? MouseAccel.Apply() : MouseAccel.PutBack(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppLog.Warn("Autopilot: Mouse acceleration: " + ex.GetType().Name);
-            return "Windows didn't turn mouse acceleration off.";
+            return Settings.On ? "Windows didn't turn mouse acceleration off." : "Windows didn't put mouse acceleration back.";
         }
     }
 

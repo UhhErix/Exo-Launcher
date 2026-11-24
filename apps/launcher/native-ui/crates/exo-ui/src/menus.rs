@@ -2044,74 +2044,13 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
                 on_dismiss: dismiss,
             })
         }
-        OpenDropdown::GameDisplayMode => {
-            let current = s.game_display_mode.clone();
-            select_menu_layers(SelectMenuSpec {
-                id: "dd-game-display".into(),
-                trigger_key: "gp-display-mode-select".into(),
-                selected: current,
-                options: vec![
-                    SelectOption::new("borderless", "Borderless"),
-                    SelectOption::new("fullscreen", "Fullscreen"),
-                ],
-                width: 180.0,
-                align: Align::End,
-                blur,
-                gamepad_focus,
-                on_select: Rc::new(|s: &mut AppState, val: &str, _: &mut Tx| {
-                    s.set_game_display_mode(val);
-                }),
-                on_dismiss: dismiss,
-            })
-        }
-        OpenDropdown::GameLanguage => {
-            let current = s
-                .game_props
-                .as_ref()
-                .and_then(|p| p.language.as_deref())
-                .filter(|v| !v.is_empty())
-                .unwrap_or("english")
-                .to_ascii_lowercase();
-            let game_id = s.open_game_id.clone().unwrap_or_default();
-            let mut choices = vec![
-                ("english", "English"),
-                ("spanish", "Spanish"),
-                ("french", "French"),
-                ("german", "German"),
-                ("italian", "Italian"),
-                ("portuguese", "Portuguese"),
-                ("japanese", "Japanese"),
-                ("koreana", "Korean"),
-                ("schinese", "Chinese (Simplified)"),
-            ];
-            let mut options: Vec<SelectOption> = choices
-                .drain(..)
-                .map(|(v, l)| SelectOption::new(v, l))
-                .collect();
-            if !options.iter().any(|o| o.value == current) {
-                let mut chars = current.chars();
-                let pretty = match chars.next() {
-                    Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
-                    None => current.clone(),
-                };
-                options.insert(0, SelectOption::new(current.clone(), pretty));
-            }
-            select_menu_layers(SelectMenuSpec {
-                id: "dd-game-language".into(),
-                trigger_key: "gp-language-select".into(),
-                selected: current,
-                options,
-                width: 210.0,
-                align: Align::End,
-                blur,
-                gamepad_focus,
-                on_select: Rc::new(move |s: &mut AppState, val: &str, _: &mut Tx| {
-                    if !game_id.is_empty() {
-                        s.set_game_property(&game_id, "language", val);
-                    }
-                }),
-                on_dismiss: dismiss,
-            })
-        }
+        OpenDropdown::GameDisplayMode
+        | OpenDropdown::GameLanguage
+        | OpenDropdown::GameHdrMode
+        | OpenDropdown::GameIntelFrameGen
+        | OpenDropdown::GameBeta
+        | OpenDropdown::GameFolder
+        | OpenDropdown::GameAntiCheat
+        | OpenDropdown::GameUpscalerStop => crate::game_props::dropdown_overlay(s, which, blur),
     }
 }

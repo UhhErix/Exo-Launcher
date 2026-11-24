@@ -71,9 +71,11 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
     internal sealed record OsOverheadEntry(string Key, string Name, int Target, bool DesktopOnly);
 
+    internal const string LegacyPowerThrottlingKey = @"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling";
+    internal const string LegacyPowerThrottlingValue = "PowerThrottlingOff";
+
     internal static readonly OsOverheadEntry[] OsOverheadSettings =
     [
-        new(@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff", 1, DesktopOnly: true),
         new(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode", 0, DesktopOnly: false),
         new(@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests", 0, DesktopOnly: false),
     ];
@@ -208,6 +210,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         string? SelfExePath() => null;
         bool SupportsOsOverhead => false;
         bool IsLaptop() => false;
+        bool WindowsAsks() => ElevatedCommands.WindowsAsks();
         bool SupportsDeepPlaybook => false;
         string? StringValue(string key, string name) => null;
         string? UserString(string key, string name) => null;
@@ -403,16 +406,17 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
         if (system.SupportsOsOverhead)
         {
-            var laptop = system.IsLaptop();
-            var overheadEntries = OsOverheadSettings.Where(e => !e.DesktopOnly || !laptop).ToList();
-            var overheadOn = overheadEntries.All(e => system.Dword(e.Key, e.Name) == e.Target);
+            var needsPtMigration = NeedsPowerThrottlingMigration(saved, out _);
+            var overheadOn = !needsPtMigration && OsOverheadSettings.All(e => system.Dword(e.Key, e.Name) == e.Target);
             var overheadKept = saved.Kept.ContainsKey(OsOverheadKey);
             if (!overheadOn || overheadKept || Pending(OsOverheadKey))
             {
-                var label = laptop ? "P2P updates & Widgets off" : "Power throttling, P2P updates & Widgets off";
+                const string label = "P2P updates & Widgets off";
                 var detail = Tell(OsOverheadKey, overheadOn
-                    ? (laptop ? "Delivery Optimization P2P and background Widgets feeds are off." : "Power throttling, Delivery Optimization P2P, and background Widgets feeds are off.")
-                    : (laptop ? "Turns off Delivery Optimization P2P uploads and background Widgets/News feeds. Takes a restart." : "Turns off desktop power throttling, Delivery Optimization P2P uploads, and background Widgets/News feeds. Takes a restart."));
+                    ? "Delivery Optimization P2P and background Widgets feeds are off."
+                    : needsPtMigration
+                        ? "Removes legacy PowerThrottlingOff (which disables EcoQoS) and keeps Delivery Optimization P2P and Widgets off. Takes a restart."
+                        : "Turns off Delivery Optimization P2P uploads and background Widgets/News feeds. Takes a restart.");
                 items.Add(new(OsOverheadKey, label, detail,
                     overheadOn || (Pending(OsOverheadKey) && overheadKept), overheadKept, off.Contains(OsOverheadKey), false, Pending(OsOverheadKey)));
             }
@@ -567,6 +571,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         string? clockWas = null, clockAfter = null, bcdWas = null, bcdAfter = null, mmWas = null, mmAfter = null;
         List<string> tasksAttempted = [];
         List<uint> winFeaturesAttempted = [];
+        var migratingPt = false;
+        int? migratingPtPrior = null;
         foreach (var key in wanted)
         {
             switch (key)
@@ -677,15 +683,20 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 }
                 case OsOverheadKey:
                 {
-                    var laptop = system.IsLaptop();
-                    var entries = OsOverheadSettings.Where(e => !e.DesktopOnly || !laptop).ToList();
-                    var priorEntries = entries.Select(e =>
+                    var priorEntries = OsOverheadSettings.Select(e =>
                     {
                         var prev = system.Dword(e.Key, e.Name);
                         return prev is { } p ? $"{e.Key}|{e.Name}={p.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"{e.Key}|{e.Name}=absent";
                     }).ToArray();
                     kept.TryAdd(key, new Was(Strings: priorEntries));
-                    foreach (var entry in entries)
+                    if (NeedsPowerThrottlingMigration(saved, out migratingPtPrior))
+                    {
+                        migratingPt = true;
+                        lines.Add(migratingPtPrior is { } v
+                            ? RegDword(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue, v)
+                            : RegDelete(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue));
+                    }
+                    foreach (var entry in OsOverheadSettings)
                         if (system.Dword(entry.Key, entry.Name) != entry.Target)
                             lines.Add(RegDword(entry.Key, entry.Name, entry.Target));
                     break;
@@ -898,12 +909,15 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 }
                 case OsOverheadKey:
                 {
-                    var laptop = system.IsLaptop();
-                    var entries = OsOverheadSettings.Where(e => !e.DesktopOnly || !laptop);
-                    if (entries.Any(e => system.Dword(e.Key, e.Name) != e.Target))
+                    var ptFailed = migratingPt && system.Dword(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue) != migratingPtPrior;
+                    if (ptFailed || OsOverheadSettings.Any(e => system.Dword(e.Key, e.Name) != e.Target))
                     {
                         after = Drop(after, prior, key);
                         said.Add("Windows didn't apply all OS overhead settings.");
+                    }
+                    else if (migratingPt && after.Kept.TryGetValue(key, out var existingWas))
+                    {
+                        after = after with { Kept = new(after.Kept) { [key] = StripLegacyPowerThrottling(existingWas) } };
                     }
                     break;
                 }
@@ -1223,6 +1237,71 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         return true;
     }
 
+    internal async Task<bool> MigrateLegacyPowerThrottlingAsync(bool allowPrompt = false)
+    {
+        if (!_gate.Wait(0)) return false;
+        try
+        {
+            var saved = Settled();
+            if (!saved.Kept.TryGetValue(OsOverheadKey, out var was) || !TryGetLegacyPowerThrottlingPrior(was, out var priorValue))
+                return false;
+            if (priorValue == 1 || system.Dword(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue) != 1)
+            {
+                var nextKept = new Dictionary<string, Was>(saved.Kept) { [OsOverheadKey] = StripLegacyPowerThrottling(was) };
+                Save(saved with { Kept = nextKept });
+                return false;
+            }
+            if (!allowPrompt && system.WindowsAsks()) return false;
+            var line = priorValue is { } v
+                ? RegDword(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue, v)
+                : RegDelete(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue);
+            if (!await system.Admin([line]).ConfigureAwait(false)) return false;
+            if (system.Dword(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue) != priorValue) return false;
+            var kept = new Dictionary<string, Was>(saved.Kept) { [OsOverheadKey] = StripLegacyPowerThrottling(was) };
+            var changed = new Dictionary<string, DateTimeOffset>(saved.Changed) { [OsOverheadKey] = now() };
+            Save(saved with { Kept = kept, Changed = changed });
+            AppLog.Info("System best settings: migrated legacy PowerThrottlingOff back to restore EcoQoS.");
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    internal static bool TryGetLegacyPowerThrottlingPrior(Was? was, out int? priorValue)
+    {
+        priorValue = null;
+        if (was?.Strings is not { Length: > 0 } entries) return false;
+        foreach (var entry in entries)
+        {
+            if (ParseOsOverheadRecord(entry) is { } rec
+                && rec.SubKey == LegacyPowerThrottlingKey
+                && rec.Name == LegacyPowerThrottlingValue)
+            {
+                priorValue = rec.Value;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool NeedsPowerThrottlingMigration(Saved saved, out int? priorValue)
+    {
+        priorValue = null;
+        if (!saved.Kept.TryGetValue(OsOverheadKey, out var was)) return false;
+        if (!TryGetLegacyPowerThrottlingPrior(was, out priorValue)) return false;
+        if (priorValue == 1) return false;
+        return system.Dword(LegacyPowerThrottlingKey, LegacyPowerThrottlingValue) == 1;
+    }
+
+    private static Was StripLegacyPowerThrottling(Was was)
+    {
+        if (was.Strings is not { Length: > 0 } entries) return was;
+        var filtered = entries.Where(e =>
+            ParseOsOverheadRecord(e) is not { } rec
+            || rec.SubKey != LegacyPowerThrottlingKey
+            || rec.Name != LegacyPowerThrottlingValue).ToArray();
+        return was with { Strings = filtered };
+    }
+
     private static (string SubKey, string Name, int? Value)? ParseOsOverheadRecord(string entry)
     {
         var eq = entry.LastIndexOf('=');
@@ -1230,7 +1309,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         if (bar <= 0 || eq <= bar + 1) return null;
         var subKey = entry[..bar];
         var valName = entry[(bar + 1)..eq];
-        if (!OsOverheadSettings.Any(s => s.Key == subKey && s.Name == valName)) return null;
+        var isLegacyPt = subKey == LegacyPowerThrottlingKey && valName == LegacyPowerThrottlingValue;
+        if (!isLegacyPt && !OsOverheadSettings.Any(s => s.Key == subKey && s.Name == valName)) return null;
         var rawVal = entry[(eq + 1)..];
         if (rawVal == "absent") return (subKey, valName, null);
         return int.TryParse(rawVal, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var prevVal)

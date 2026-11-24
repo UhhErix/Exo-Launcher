@@ -96,7 +96,8 @@ internal sealed partial class RuneHostSession
         }
 
         uiExe ??= readEnv("EXO_RUNE_UI_PATH");
-        var explicitRune = string.Equals(uiMode, "rune", StringComparison.OrdinalIgnoreCase);
+        var explicitRune = string.Equals(uiMode, "rune", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(uiMode, "native", StringComparison.OrdinalIgnoreCase);
         if (!explicitRune)
         {
             var bundledUi = Path.Combine(AppContext.BaseDirectory, "exo-ui.exe");

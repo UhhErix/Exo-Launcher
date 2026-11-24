@@ -583,6 +583,7 @@ public sealed class AppSettings
     public Dictionary<string, string> SteamOverlayPrior { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Per-game opt-in for NVIDIA driver Smooth Motion (<c>0xB0D384C0</c>) on RTX 40/50 when not using native DLSS-G.</summary>
     public Dictionary<string, bool> SmoothMotion { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> FrameGenRoute { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>
     /// Devices > controller > Sound in Windows: controllers' own speakers and microphones as Windows audio devices.
     /// Off by default: Exo turns them off whenever a controller connects, so Windows never switches your sound to one.
@@ -648,9 +649,16 @@ public sealed class AutopilotSettings
 
     internal AutopilotSettings Copy() => new()
     {
-        On = On, GamePriority = GamePriority is "high" or "normal" ? GamePriority : "above", KeepGameMode = KeepGameMode, CoreParking = CoreParking,
+        On = On, GamePriority = NormalizePriority(GamePriority), KeepGameMode = KeepGameMode, CoreParking = CoreParking,
         AlwaysDemote = [.. (AlwaysDemote ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(200)],
         Suspend = [.. (Suspend ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(50)],
+    };
+
+    internal static string NormalizePriority(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "high" => "high",
+        "normal" => "normal",
+        _ => "above",
     };
 }
 
