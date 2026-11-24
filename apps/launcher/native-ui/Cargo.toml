@@ -1,10 +1,19 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/exo-auth",
     "crates/exo-rpc",
     "crates/exo-kit",
+    "crates/exo-macros",
+    "crates/exo-macros-worker",
+    "crates/exo-controller",
     "crates/exo-ui",
     "crates/exo-shaders",
+    "crates/exo-thermal",
+    "crates/exo-display",
+    "crates/exo-light",
+    "crates/exo-net-latency",
+    "crates/exo-flow",
 ]
 
 [workspace.package]

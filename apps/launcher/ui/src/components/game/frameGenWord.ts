@@ -10,28 +10,34 @@ const curly = (text: string) => text.replace(/'/g, '’')
  * release in the game. One plain sentence each, never a file name: another mod over Exo's loader is named when Exo
  * knows it.
  */
+function brokenWord(state: FrameGenMod): LineWord {
+  if (state.reason === 'replaced') return { text: `${curly(state.mod ?? 'Another mod')} replaced Exo’s loader`, bad: true }
+  if (state.reason === 'changed') return { text: 'Exo’s files were changed', bad: true }
+  if (state.reason === 'gone') return { text: 'This game no longer has DLSS Frame Generation', bad: true }
+  return { text: 'Exo’s files were removed', bad: true }
+}
+
 export function frameGenWord(state: FrameGenMod): LineWord | null {
-  // Hidden is about Exo's mod route, not the game: an RTX 40 or 50 with a frame generation game reads native instead.
   if (state.state === 'hidden') return { text: state.reason === 'unread' ? 'Could not check' : 'Not supported in this game' }
-  if (state.state === 'native') return { text: 'Built into the game' }
+  if (state.state === 'native') return { text: state.package ? `Built into the game · ${curly(state.package)}` : 'Built into the game' }
   if (state.state === 'mod') return { text: curly(state.mod ?? 'A mod') }
   if (state.state === 'note') return { text: curly(state.note ?? '') }
-  if (state.state === 'broken') {
-    if (state.reason === 'replaced') return { text: `${curly(state.mod ?? 'Another mod')} replaced Exo’s loader`, bad: true }
-    if (state.reason === 'changed') return { text: 'Exo’s files were changed', bad: true }
-    if (state.reason === 'gone') return { text: 'This game no longer has DLSS Frame Generation', bad: true }
-    return { text: 'Exo’s files were removed', bad: true }
-  }
+  if (state.state === 'broken') return brokenWord(state)
   if (state.note) return { text: curly(state.note) }
-  if (state.state === 'off') return { text: 'Off' }
-  return state.state === 'on' && state.version ? { text: curly(state.version) } : null
+  if (state.state === 'off') {
+    return { text: state.package ? `Off · ${curly(state.package)}` : 'Off' }
+  }
+  if (state.state === 'on') {
+    const label = state.version ?? state.package
+    return label ? { text: curly(label) } : null
+  }
+  return null
 }
 
 const TIER_HINTS: Record<string, string | undefined> = {
   native: 'Built in',
   mod: 'Mod',
   driver: 'Driver',
-  external: 'External',
 }
 
 const XESS_LABELS: Record<string, string> = {
@@ -47,13 +53,13 @@ export function routeShortLabel(route: FrameGenRoute | undefined): string {
     case 'native_dlss': return 'Built in · DLSS'
     case 'native_fsr': return 'Built in · FSR 3'
     case 'native_xess': return 'Built in · XeSS'
-    case 'mod_optiscaler': return 'OptiScaler'
+    case 'mod_optiscaler': return route.label.includes('OptiScaler FG') ? 'OptiScaler FG' : 'OptiScaler'
     case 'mod_dlssg': return 'DLSSG SM86'
+    case 'mod_mfg': return 'MFG Unlocker'
     case 'mod_other': return curly(route.label)
     case 'driver_smooth_motion': return route.active ? 'Smooth Motion' : 'Smooth Motion · Off'
     case 'driver_afmf': return route.active ? 'AFMF' : 'AFMF · Off'
     case 'driver_xess_override': return route.choiceValue && route.choiceValue !== 'game' ? `XeSS ${route.choiceValue}` : 'XeSS override'
-    case 'external_lossless_scaling': return route.active ? 'Lossless Scaling' : 'Lossless Scaling · Off'
     default: return 'Not available'
   }
 }

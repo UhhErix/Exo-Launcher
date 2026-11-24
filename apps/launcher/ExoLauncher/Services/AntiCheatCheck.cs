@@ -1093,6 +1093,8 @@ internal static partial class AntiCheatCheck
     /// <summary>The kept answer (<see cref="AnswerCache"/>): walked now only when the game changed or was never walked.</summary>
     internal static Answer Cached(GameEntry game) => Kept.For(game);
 
+    internal static Answer? PeekCached(GameEntry game) => Kept.Peek(game);
+
     /// <summary>
     /// For a place that must not wait at all (a game starting): the kept answer, else the store, id and title's
     /// (<see cref="Quick"/>) while a walk runs behind for the next ask.

@@ -5,7 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+exo-controller = { path = "../exo-controller" }
 exo-kit = { path = "../exo-kit" }
+exo-macros = { path = "../exo-macros" }
 exo-rpc = { path = "../exo-rpc" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 rune.workspace = true

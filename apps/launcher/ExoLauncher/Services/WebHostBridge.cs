@@ -689,6 +689,11 @@ public sealed partial class WebHostBridge
                 "exoAccount.reset" => await ExoAccountResetAsync(paramsEl, hasParams).ConfigureAwait(true),
             "exoAccount.probe" => await ExoAccountProbeAsync().ConfigureAwait(true),
             "exoAccount.codeConfirmed" => ExoAccountCodeConfirmed(),
+            "exoAccount.passkeyStatus" => await ExoAccountPasskeyStatusAsync().ConfigureAwait(true),
+            "exoAccount.passkeyRegister" => await ExoAccountPasskeyRegisterAsync(paramsEl, hasParams).ConfigureAwait(true),
+            "exoAccount.passkeySignIn" => await ExoAccountPasskeySignInAsync(paramsEl, hasParams).ConfigureAwait(true),
+            "exoAccount.passkeyDelete" => await ExoAccountPasskeyDeleteAsync(paramsEl, hasParams).ConfigureAwait(true),
+            "auth.nativeProviders" => AuthNativeProviders(),
                 "stores.outages" => StoresOutages(),
                 "stores.playOffline" => await StoresPlayOfflineAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "steam.setOffline" => await SteamSetOfflineAsync(paramsEl, hasParams).ConfigureAwait(true),
@@ -892,6 +897,7 @@ public sealed partial class WebHostBridge
                 "dlss.restore" => await DlssRestoreAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "dlss.consent" => await DlssConsentAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "dlss.frameGen" => await DlssFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "dlss.frameGenSet" => await DlssFrameGenSetAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.frameGen" => await GameFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.frameCap" => await GameFrameCapAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.capLab.run" => await GameCapLabRunAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
@@ -3422,6 +3428,7 @@ public sealed partial class WebHostBridge
         buyUrl = Storefront.BuyUrl(g),
         // The Library's search and Filter menu (racing, co-op ...): Steam's own record, already in memory.
         tags = SteamAppTags.For(g),
+        antiCheatClass = AntiCheatClass.WireClass(g, AntiCheatCheck.PeekCached(g)),
         };
     }
 

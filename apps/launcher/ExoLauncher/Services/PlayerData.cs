@@ -359,7 +359,7 @@ internal static class PlayerData
         new("s.1.0.cod26.txt", "GameSettings", Why.Elsewhere, "Call of Duty's settings file"),
         new("cs2_video.txt", "GameSettings", Why.Elsewhere, "Counter-Strike 2's video settings"),
         new("GameUserSettings.ini", "EpicPlaytime,GameHdr,GameSettings,GameGraphicsFeatures", Why.Elsewhere, "an Unreal game's own settings"),
-        new("Engine.ini", "GameHdr,GameGraphicsFeatures", Why.Elsewhere, "an Unreal game's engine settings"),
+        new("Engine.ini", "DlssSwapService,GameHdr,GameGraphicsFeatures", Why.Elsewhere, "an Unreal game's engine settings"),
         new("settings/settings.ini", "ScsKillerStatus", Why.Elsewhere, "a Stingray game's own settings file, read to identify its engine"),
         new("TASystemSettings.ini", "GameSettings", Why.Elsewhere, "a game's own system settings"),
         new("Remedy/CONTROLResonant/renderer.ini", "GameSettings", Why.Elsewhere, "Control's renderer settings"),
@@ -367,12 +367,11 @@ internal static class PlayerData
         new("renderer.ini", "GameSettings", Why.Elsewhere, "a Remedy game's renderer settings"),
         new("poe2_production_Config.ini", "GameSettings", Why.Elsewhere, "Path of Exile 2's settings"),
         new("UserSettings.json", "GameSettings,GameGraphicsFeatures", Why.Elsewhere, "a game's user settings"),
-        new("LocalStorage.db", "GameGraphicsFeatures", Why.Elsewhere, "Wuthering Waves' local settings database"),
+        new("LocalStorage.db", "DlssSwapService,GameGraphicsFeatures", Why.Elsewhere, "Wuthering Waves' local settings database"),
         new("Sekiro/GraphicsConfig.xml", "GameGraphicsFeatures", Why.Elsewhere, "Sekiro's graphics configuration"),
         new("SpecialK.ini", "DlssSwapService,GameGraphicsFeatures", Why.Elsewhere, "Special K's configuration in a game's folder"),
         new("system.xml", "GameSettings", Why.Elsewhere, "a game's system settings XML"),
         new("user_engine_option_save.xml", "GameSettings", Why.Elsewhere, "a game's saved engine options"),
-        new("settings.xml", "LosslessScalingConfig", Why.Elsewhere, "Lossless Scaling's own settings file, updated for per-game AutoScale profiles"),
         new("GameSettings.ini", "GameSettings", Why.Elsewhere, "Rainbow Six Siege's settings file in Ubisoft's profile folder"),
         new("videoconfig.txt", "GameSettings", Why.Elsewhere, "Apex Legends' video config file"),
         new("Overwatch/Settings/Settings_v0.ini", "GameSettings", Why.Elsewhere, "Overwatch 2's settings file"),
@@ -512,7 +511,8 @@ internal static class PlayerData
         new("Assets/device-images.json", "DeviceImages", Why.Shipped, "the device picture links Exo ships"),
         new("Assets/Overlay/sample-icon.png", "AchievementIconCache", Why.Shipped, "the sample achievement icon Exo ships"),
         new("helixsr_weights.bin", "DlssSwapService", Why.Shipped, "HelixSR's model weights, downloaded"),
-        new("dlssnr_on_amd_weights.bin", "DlssSwapService", Why.Shipped, "the DLSS denoiser on AMD mod's weights, downloaded"),    ];
+        new("dlssnr_on_amd_weights.bin", "DlssSwapService", Why.Shipped, "the DLSS denoiser on AMD mod's weights, downloaded"),
+        new("oauth-clients.json", "NativeAuthProviders", Why.ThisPc, "optional official OAuth client IDs configured for native provider sign-in"),    ];
 
     /// <summary>Every (path, type) the two lists claim.</summary>
     internal static IEnumerable<(string Path, string Place)> AllClaims() =>

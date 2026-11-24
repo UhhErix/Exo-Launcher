@@ -167,6 +167,60 @@ public sealed partial class WebHostBridge
         await ExoAccountSettings.ResetAsync(PathHelper.AppDataDir,
             ReadString(p, hasParams, "email") ?? "", ReadString(p, hasParams, "code") ?? "", ReadString(p, hasParams, "password") ?? "");
 
+    private nint AccountOwnerHwnd(JsonElement p, bool hasParams)
+    {
+        if (hasParams && p.TryGetProperty("ownerHwnd", out var raw) && raw.ValueKind == JsonValueKind.Number && raw.TryGetUInt64(out var h) && h != 0)
+            return (nint)h;
+        return App.MainAppWindow is { } w ? WinRT.Interop.WindowNative.GetWindowHandle(w) : 0;
+    }
+
+    private async Task<object> ExoAccountPasskeyStatusAsync()
+    {
+        var st = await ExoAccountService.PasskeyStatusAsync(PathHelper.AppDataDir).ConfigureAwait(true);
+        return new
+        {
+            supported = st.Supported,
+            apiVersion = st.ApiVersion,
+            platformAvailable = st.PlatformAvailable,
+            passkeys = st.Passkeys.Select(p => new { id = p.Id, label = p.Label, created = p.Created, lastUsed = p.LastUsed, flagged = p.Flagged }).ToArray(),
+        };
+    }
+
+    private async Task<object> ExoAccountPasskeyRegisterAsync(JsonElement p, bool hasParams) =>
+        await ExoAccountService.RegisterPasskeyAsync(
+            PathHelper.AppDataDir,
+            AccountOwnerHwnd(p, hasParams),
+            ReadString(p, hasParams, "label"),
+            ReadString(p, hasParams, "password")).ConfigureAwait(true);
+
+    private async Task<object> ExoAccountPasskeySignInAsync(JsonElement p, bool hasParams) =>
+        await ExoAccountService.SignInWithPasskeyAsync(
+            PathHelper.AppDataDir,
+            AccountOwnerHwnd(p, hasParams)).ConfigureAwait(true);
+
+    private async Task<object> ExoAccountPasskeyDeleteAsync(JsonElement p, bool hasParams)
+    {
+        var id = ReadString(p, hasParams, "id");
+        if (string.IsNullOrWhiteSpace(id)) return new ExoAccountOutcome(false, AccountMessages.Generic, "bad-request", null, false, null);
+        return await ExoAccountService.DeletePasskeyAsync(PathHelper.AppDataDir, id).ConfigureAwait(true);
+    }
+
+    private object AuthNativeProviders()
+    {
+        var providers = NativeAuthProviders.LoadStatuses(PathHelper.AppDataDir);
+        return new
+        {
+            providers = providers.Select(p => new
+            {
+                provider = p.Provider,
+                displayName = p.DisplayName,
+                flow = p.Flow,
+                available = p.Available,
+                note = p.Note,
+            }).ToArray(),
+        };
+    }
+
     /// <summary>Export my data: every page of the account, written as one JSON file the person picks (CLIENT.md 5).</summary>
     private async Task<object> ExoAccountExportAsync()
     {

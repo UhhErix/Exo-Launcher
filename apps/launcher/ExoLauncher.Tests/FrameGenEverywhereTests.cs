@@ -94,13 +94,6 @@ public sealed class FrameGenEverywhereTests
     }
 
     [Theory]
-    // Their own frame generation.
-    [InlineData("NVIDIA GeForce RTX 4070")]
-    [InlineData("NVIDIA GeForce RTX 4060 Laptop GPU")]
-    [InlineData("NVIDIA RTX 2000 Ada Generation")]
-    [InlineData("NVIDIA GeForce RTX 5080")]
-    [InlineData("NVIDIA GeForce RTX 5070 Ti")]
-    // No card a mod helps, or a name that doesn't say which chip it is.
     [InlineData("NVIDIA GeForce GTX 750 Ti")]
     [InlineData("NVIDIA GeForce GTX 680")]
     [InlineData("NVIDIA GeForce MX450")]
@@ -112,7 +105,6 @@ public sealed class FrameGenEverywhereTests
     [InlineData("AMD Radeon Graphics")]
     [InlineData("AMD Radeon(TM) Vega 8 Graphics")]
     [InlineData("AMD Radeon Vega 3 Graphics")]
-    // Raven Ridge's and Picasso's Vega graphics, named "RX Vega".
     [InlineData("AMD Radeon(TM) RX Vega 11 Graphics")]
     [InlineData("AMD Radeon RX Vega 10 Graphics")]
     [InlineData("Intel(R) UHD Graphics 770")]
@@ -152,7 +144,7 @@ public sealed class FrameGenEverywhereTests
     [InlineData("AMD Radeon Graphics", "AMD Ryzen 7 7700X", false)]
     [InlineData("AMD Radeon Graphics", "AMD Ryzen 5 5600G with Radeon Graphics", false)]
     [InlineData("AMD Radeon Graphics", null, false)]
-    [InlineData("NVIDIA GeForce RTX 4070", "AMD Ryzen Z1 Extreme", false)]
+    [InlineData("NVIDIA GeForce RTX 4070", "AMD Ryzen Z1 Extreme", true)]
     public void AHandheldsRadeonIsKnownByItsProcessor(string gpu, string? cpu, bool helped)
     {
         Assert.Equal(helped, FrameGenEverywhereCard(ExoLauncher.Helpers.SystemSpecs.FrameGenName(gpu, cpu)) is not null);

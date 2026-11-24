@@ -16,11 +16,12 @@ internal static class FrameGenRouter
     internal const string RouteNativeXess = "native_xess";
     internal const string RouteModOptiScaler = "mod_optiscaler";
     internal const string RouteModDlssg = "mod_dlssg";
+    internal const string RouteModMfg = "mod_mfg";
     internal const string RouteModOther = "mod_other";
     internal const string RouteDriverSmoothMotion = "driver_smooth_motion";
     internal const string RouteDriverAfmf = "driver_afmf";
     internal const string RouteDriverXessOverride = "driver_xess_override";
-    internal const string RouteExternalLossless = "external_lossless_scaling";
+    internal const string RouteExternalExoFlow = "external_exo_flow";
     internal const string RouteUnavailable = "unavailable";
 
     internal sealed record FrameGenGpu(
@@ -177,10 +178,10 @@ internal static class FrameGenRouter
         bool SmoothMotionEnabled = false,
         bool? AfmfOverride = null,
         string IntelXessOverride = "game",
-        bool LosslessScalingInstalled = false,
-        bool LosslessScalingEnabled = false,
         string? UserSelectedRoute = null,
-        bool Dx12Mode = true);
+        bool Dx12Mode = true,
+        bool ExoFlowAvailable = false,
+        bool ExoFlowEnabled = false);
 
     internal sealed record FrameGenRoute(
         string Id,
@@ -200,7 +201,10 @@ internal static class FrameGenRouter
         string? Reason = null,
         string? HowToEnable = null,
         string? ChoiceValue = null,
-        IReadOnlyList<string>? Choices = null);
+        IReadOnlyList<string>? Choices = null,
+        bool RequiresRiskConfirm = false,
+        string? RiskWarning = null,
+        string? AntiCheat = null);
 
     internal sealed record FrameGenDecision(
         string BestRouteId,
@@ -225,31 +229,6 @@ internal static class FrameGenRouter
                 RouteUnavailable, RouteUnavailable, "unavailable", reason, false, false, reason, how, [route], input.ModStatus);
         }
 
-        if (input.IsRiot)
-        {
-            var reason = "Exo never changes Riot games or games with Vanguard";
-            var how = "Use in-game graphics settings only. Riot Vanguard blocks modifications and competitive play benefits from lowest latency.";
-            var route = new FrameGenRoute(
-                Id: RouteUnavailable,
-                Tier: TierUnavailable,
-                Kind: RouteUnavailable,
-                Label: "Not available",
-                Status: "blocked",
-                Summary: reason,
-                GpuSupported: false,
-                GpuNote: gpu.Name,
-                AntiCheatVerdict: "blocked",
-                AntiCheatNote: reason,
-                AutoEnable: false,
-                LatencyNote: "Competitive Riot games should stay off frame generation for lowest input latency.",
-                Selectable: false,
-                Active: false,
-                Reason: reason,
-                HowToEnable: how);
-            return new FrameGenDecision(
-                RouteUnavailable, RouteUnavailable, "unavailable", reason, false, false, reason, how, [route], input.ModStatus);
-        }
-
         if (!input.Readable && !input.IsWutheringWaves)
         {
             var reason = "Could not check this game's files";
@@ -263,10 +242,29 @@ internal static class FrameGenRouter
         var isCompetitive = FluidMotionFrames.IsCompetitive(input.FluidFacts);
         var apiUnsupported = HasUnsupportedLegacyApi(input.FluidFacts);
         var mod = input.ModStatus;
+        var entry = new Models.GameEntry
+        {
+            Id = input.GameId,
+            Title = input.Title,
+            Store = input.IsRiot ? Models.StoreKind.Riot : Models.StoreKind.Steam,
+        };
+        var antiCheatLabel = input.IsRiot
+            ? DlssSwapService.RiotVanguard
+            : input.AntiCheat.Label ?? mod?.AntiCheat;
+        var effectiveAnswer = input.IsRiot
+            ? new AntiCheatCheck.Answer(AntiCheatCheck.Kind.Found, [DlssSwapService.RiotVanguard], "riot")
+            : input.AntiCheat.Kind == AntiCheatCheck.Kind.None && antiCheatLabel is not null
+                ? FrameGenAntiCheat.AnswerFor(entry, antiCheatLabel)
+                : input.AntiCheat;
+        var acClass = FrameGenAntiCheat.Classify(entry, effectiveAnswer);
+        var dllPolicy = AntiCheatClass.DllPolicyFor(acClass);
+        var isOptInPve = dllPolicy == DllModPolicy.OptInWithBanRiskConfirmation;
+        var isOfflineAcMode = dllPolicy == DllModPolicy.AllowedWithOfflineNote && effectiveAnswer.Kind == AntiCheatCheck.Kind.None;
+        var blocksMods = !isOptInPve && (!input.AllowsPlacedMods || FrameGenAntiCheat.IsDllDisallowed(entry, effectiveAnswer));
 
         if (mod is { State: "on" or "broken" or "mod" } || (mod is { State: "note", Note: { Length: > 0 } noteText } && noteText.StartsWith("Coming out:", StringComparison.Ordinal)))
         {
-            routes.Add(BuildActiveOrBrokenModRoute(gpu, input, mod));
+            routes.Add(BuildActiveOrBrokenModRoute(gpu, input, mod, isOfflineAcMode, isOptInPve, entry));
         }
 
         var shipsDlss = input.ShipsDlssFg || (input.IsWutheringWaves && input.Dx12Mode) || WikiHasTech(input.FluidFacts.Wiki, "dlss");
@@ -274,23 +272,35 @@ internal static class FrameGenRouter
         var shipsXess = input.ShipsXessFg || (input.IsWutheringWaves && input.Dx12Mode) || WikiHasTech(input.FluidFacts.Wiki, "xess");
         var shipsXessDll = input.ShipsXessFgDll || (input.IsWutheringWaves && input.Dx12Mode);
 
-        AddNativeRoutes(routes, gpu, input, shipsDlss, shipsFsr, shipsXess);
+        AddNativeRoutes(routes, gpu, input, shipsDlss, shipsFsr, shipsXess, isOptInPve);
 
         var hasUsableNative = routes.Any(r => r.Tier == TierNative);
+        var hasActiveMod = routes.Any(r => r.Tier == TierMod);
 
-        if (input.AllowsPlacedMods && !input.IsWutheringWaves && mod is { State: "off" })
+        if (!hasActiveMod && !hasUsableNative && !blocksMods && !isOptInPve && !input.IsWutheringWaves && mod is { State: "off" })
         {
-            routes.Add(BuildAvailableModRoute(gpu, input, mod));
+            routes.Add(BuildAvailableModRoute(gpu, input, mod, entry, isOfflineAcMode, isOptInPve, antiCheatLabel, allowAuto: !isOfflineAcMode));
+            hasActiveMod = true;
         }
 
         AddDriverRoutes(routes, gpu, input, isCompetitive, apiUnsupported, hasUsableNative, shipsDlss, shipsXessDll);
 
-        AddExternalLosslessRoute(routes, gpu, input, isCompetitive);
+        var allowsExoFlow = acClass is GameAntiCheatClass.NoAntiCheat
+            or GameAntiCheatClass.OfflineAntiCheat
+            or GameAntiCheatClass.OnlineNonCompetitivePve
+            && effectiveAnswer.Kind != AntiCheatCheck.Kind.Unknown
+            && !isCompetitive;
+        AddExternalExoFlowRoute(routes, gpu, input, acClass, allowsExoFlow);
+
+        if (!hasActiveMod && (isOptInPve || (!blocksMods && !hasUsableNative)))
+        {
+            routes.Add(BuildAvailableModRoute(gpu, input, mod, entry, isOfflineAcMode, isOptInPve, antiCheatLabel, allowAuto: !isOfflineAcMode && !isOptInPve));
+        }
 
         if (routes.Count == 0)
         {
-            var (reason, how) = BuildUnavailableReason(gpu, input, isCompetitive, apiUnsupported, shipsDlss, shipsFsr, shipsXess);
-            var verdict = input.AntiCheat.AssumeProtected ? "blocked" : "safe";
+            var (reason, how) = BuildUnavailableReason(gpu, input, entry, effectiveAnswer, antiCheatLabel, blocksMods, isCompetitive, apiUnsupported, shipsDlss, shipsFsr, shipsXess);
+            var verdict = blocksMods || input.AntiCheat.AssumeProtected ? "blocked" : "safe";
             var unavailable = MakeUnavailable(gpu, input, reason, how, verdict);
             return new FrameGenDecision(
                 RouteUnavailable, RouteUnavailable, "unavailable", reason, false, false, reason, how, [unavailable], mod);
@@ -318,12 +328,15 @@ internal static class FrameGenRouter
         FrameGenGameInput input,
         bool shipsDlss,
         bool shipsFsr,
-        bool shipsXess)
+        bool shipsXess,
+        bool autoEnableConfig = false)
     {
         var fsrSupported = input.IsWutheringWaves ? gpu.SupportsFsrFgWuWa : gpu.SupportsFsrFg;
         var dx12Hint = input.IsWutheringWaves ? " Requires DirectX 12 in Wuthering Waves." : "";
         var latency = "Lowest latency: uses game motion vectors and in-game Reflex, Anti-Lag, or XeLL." + dx12Hint;
-        var acNote = "Safe: built into the game with no files placed or hooked.";
+        var acNote = "Safe: built into the game with no DLLs placed or hooked.";
+        var configAuto = input.IsWutheringWaves && autoEnableConfig;
+        var configHow = configAuto ? "Enabled automatically via LocalStorage and Engine.ini settings in Best settings." : null;
 
         void TryAddDlss()
         {
@@ -341,10 +354,11 @@ internal static class FrameGenRouter
                 GpuNote: $"{gpu.Name} supports NVIDIA DLSS Frame Generation.",
                 AntiCheatVerdict: "safe",
                 AntiCheatNote: acNote,
-                AutoEnable: false,
+                AutoEnable: configAuto && routes.Count == 0,
                 LatencyNote: latency,
                 Selectable: true,
-                Active: !input.SmoothMotionEnabled && !input.LosslessScalingEnabled));
+                Active: !input.SmoothMotionEnabled && !input.ExoFlowEnabled,
+                HowToEnable: configHow));
         }
 
         void TryAddFsr()
@@ -361,10 +375,11 @@ internal static class FrameGenRouter
                 GpuNote: $"{gpu.Name} supports AMD FSR 3 Frame Generation.",
                 AntiCheatVerdict: "safe",
                 AntiCheatNote: acNote,
-                AutoEnable: false,
+                AutoEnable: configAuto && routes.Count == 0,
                 LatencyNote: latency,
                 Selectable: true,
-                Active: !input.SmoothMotionEnabled && !input.LosslessScalingEnabled));
+                Active: !input.SmoothMotionEnabled && !input.ExoFlowEnabled,
+                HowToEnable: configHow));
         }
 
         void TryAddXess()
@@ -381,10 +396,11 @@ internal static class FrameGenRouter
                 GpuNote: $"{gpu.Name} supports Intel XeSS Frame Generation.",
                 AntiCheatVerdict: "safe",
                 AntiCheatNote: acNote,
-                AutoEnable: false,
+                AutoEnable: configAuto && routes.Count == 0,
                 LatencyNote: latency,
                 Selectable: true,
-                Active: !input.SmoothMotionEnabled && !input.LosslessScalingEnabled));
+                Active: !input.SmoothMotionEnabled && !input.ExoFlowEnabled,
+                HowToEnable: configHow));
         }
 
         if (gpu.Vendor == "nvidia")
@@ -405,7 +421,7 @@ internal static class FrameGenRouter
         }
     }
 
-    private static FrameGenRoute BuildActiveOrBrokenModRoute(FrameGenGpu gpu, FrameGenGameInput input, DlssSwapService.FrameGenStatus mod)
+    private static FrameGenRoute BuildActiveOrBrokenModRoute(FrameGenGpu gpu, FrameGenGameInput input, DlssSwapService.FrameGenStatus mod, bool isOfflineAcMode, bool isOptInPve, Models.GameEntry entry)
     {
         if (mod.State == "mod")
         {
@@ -419,7 +435,7 @@ internal static class FrameGenRouter
                 Summary: modName,
                 GpuSupported: true,
                 GpuNote: $"{gpu.Name} runs the existing third-party frame generation mod.",
-                AntiCheatVerdict: input.AllowsPlacedMods ? "safe" : "blocked",
+                AntiCheatVerdict: input.AllowsPlacedMods ? (isOfflineAcMode ? "offline" : "safe") : isOptInPve ? "confirm" : "blocked",
                 AntiCheatNote: "Existing third-party mod in the game folder; Exo leaves it untouched.",
                 AutoEnable: false,
                 LatencyNote: "Uses in-game motion vectors; latency depends on the installed mod.",
@@ -427,9 +443,14 @@ internal static class FrameGenRouter
                 Active: true);
         }
 
-        var isOpti = mod.Path != "dlss";
-        var id = isOpti ? RouteModOptiScaler : RouteModDlssg;
-        var label = mod.Version ?? (isOpti ? "OptiScaler" : "DLSSG SM86");
+        var (id, defaultLabel) = mod.Path switch
+        {
+            "dlss" => (RouteModDlssg, "DLSSG SM86"),
+            "mfg" => (RouteModMfg, "MFG Unlocker"),
+            "optifg" => (RouteModOptiScaler, "OptiScaler FG"),
+            _ => (RouteModOptiScaler, "OptiScaler"),
+        };
+        var label = mod.Version ?? mod.Package ?? defaultLabel;
         var broken = mod.State == "broken";
         var summary = broken
             ? mod.Reason switch
@@ -440,6 +461,15 @@ internal static class FrameGenRouter
                 _ => "Exo's files were removed",
             }
             : mod.Note ?? label;
+        var allowedNow = input.AllowsPlacedMods || isOptInPve;
+        var acVerdict = !allowedNow ? "blocked" : isOfflineAcMode ? "offline" : isOptInPve ? "confirm" : "safe";
+        var acNote = !allowedNow
+            ? "Anti-cheat detected; Exo will remove placed files."
+            : isOfflineAcMode
+                ? FrameGenAntiCheat.OfflineNote(entry)
+                : isOptInPve
+                    ? FrameGenAntiCheat.BanRiskWarning(entry, input.AntiCheat.Name ?? input.AntiCheat.Label)
+                    : "Safe: no anti-cheat detected in this game.";
         return new FrameGenRoute(
             Id: id,
             Tier: TierMod,
@@ -449,20 +479,37 @@ internal static class FrameGenRouter
             Summary: summary,
             GpuSupported: true,
             GpuNote: $"{gpu.Name} supports {label}.",
-            AntiCheatVerdict: input.AllowsPlacedMods ? "safe" : "blocked",
-            AntiCheatNote: input.AllowsPlacedMods ? "Safe: no anti-cheat detected in this game." : "Anti-cheat detected; Exo will remove placed files.",
-            AutoEnable: !broken && input.AllowsPlacedMods,
+            AntiCheatVerdict: acVerdict,
+            AntiCheatNote: acNote,
+            AutoEnable: !broken && input.AllowsPlacedMods && !isOfflineAcMode && !isOptInPve,
             LatencyNote: "Low latency: hooks in-game motion vectors and pacing.",
-            Selectable: input.AllowsPlacedMods && !broken,
+            Selectable: allowedNow && !broken,
             Active: !broken,
             Reason: broken ? summary : null);
     }
 
-    private static FrameGenRoute BuildAvailableModRoute(FrameGenGpu gpu, FrameGenGameInput input, DlssSwapService.FrameGenStatus mod)
+    private static FrameGenRoute BuildAvailableModRoute(FrameGenGpu gpu, FrameGenGameInput input, DlssSwapService.FrameGenStatus? mod, Models.GameEntry entry, bool isOfflineAcMode, bool isOptInPve, string? antiCheatLabel, bool allowAuto = true)
     {
-        var isOpti = mod.Path != "dlss";
-        var id = isOpti ? RouteModOptiScaler : RouteModDlssg;
-        var label = isOpti ? "OptiScaler" : "DLSSG SM86";
+        var path = mod?.Path;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = gpu.Vendor == "nvidia" && gpu.Series is 20 or 30 && input.ShipsDlssFg
+                ? "dlss"
+                : input.ShipsDlssFg
+                    ? "fsr"
+                    : "optifg";
+        }
+        var (id, defaultLabel) = path switch
+        {
+            "dlss" => (RouteModDlssg, "DLSSG SM86"),
+            "mfg" => (RouteModMfg, "MFG Unlocker"),
+            "optifg" => (RouteModOptiScaler, "OptiScaler FG"),
+            _ => (RouteModOptiScaler, "OptiScaler"),
+        };
+        var label = mod?.Package ?? defaultLabel;
+        var offlineNote = isOfflineAcMode ? FrameGenAntiCheat.OfflineNote(entry) : null;
+        var warning = isOptInPve ? mod?.RiskWarning ?? FrameGenAntiCheat.BanRiskWarning(entry, input.AntiCheat.Name ?? antiCheatLabel) : null;
+        var needsConfirm = isOptInPve && mod?.RiskAccepted != true;
         return new FrameGenRoute(
             Id: id,
             Tier: TierMod,
@@ -471,13 +518,17 @@ internal static class FrameGenRouter
             Status: "off",
             Summary: $"Off · {label} ready",
             GpuSupported: true,
-            GpuNote: $"{gpu.Name} supports {label} for FSR frame generation.",
-            AntiCheatVerdict: "safe",
-            AntiCheatNote: "Safe: clean game with no anti-cheat (Placed files allowed).",
-            AutoEnable: true,
-            LatencyNote: "Low latency: hooks in-game motion vectors and Reflex/FSR pacing. Clean games only.",
+            GpuNote: $"{gpu.Name} supports {label}.",
+            AntiCheatVerdict: isOfflineAcMode ? "offline" : isOptInPve ? "confirm" : "safe",
+            AntiCheatNote: warning ?? offlineNote ?? "Safe: clean game with no anti-cheat (Placed files allowed).",
+            AutoEnable: allowAuto && !isOfflineAcMode && !isOptInPve,
+            LatencyNote: "Low latency: hooks in-game motion vectors and Reflex/FSR pacing.",
             Selectable: true,
-            Active: false);
+            Active: false,
+            HowToEnable: offlineNote,
+            RequiresRiskConfirm: needsConfirm,
+            RiskWarning: warning,
+            AntiCheat: isOptInPve ? (antiCheatLabel ?? input.AntiCheat.Name) : null);
     }
 
     private static void AddDriverRoutes(
@@ -568,31 +619,6 @@ internal static class FrameGenRouter
         }
     }
 
-    private static void AddExternalLosslessRoute(
-        List<FrameGenRoute> routes,
-        FrameGenGpu gpu,
-        FrameGenGameInput input,
-        bool isCompetitive)
-    {
-        if (!input.LosslessScalingInstalled || isCompetitive) return;
-        var active = input.LosslessScalingEnabled;
-        routes.Add(new FrameGenRoute(
-            Id: RouteExternalLossless,
-            Tier: TierExternal,
-            Kind: RouteExternalLossless,
-            Label: "Lossless Scaling",
-            Status: active ? "active" : "available",
-            Summary: active ? "Lossless Scaling · On" : "Lossless Scaling · Ready",
-            GpuSupported: true,
-            GpuNote: $"Works on {gpu.Name} (any GPU via external capture).",
-            AntiCheatVerdict: "safe",
-            AntiCheatNote: "Safe: external Windows Graphics Capture overlay; touches no game files or memory.",
-            AutoEnable: false,
-            LatencyNote: "Adds ~1–2 frames of capture latency. Requires Borderless or Windowed mode; keep off in competitive games.",
-            Selectable: true,
-            Active: active));
-    }
-
     private static FrameGenRoute ResolveSelectedRoute(
         List<FrameGenRoute> routes,
         FrameGenGameInput input,
@@ -605,8 +631,8 @@ internal static class FrameGenRouter
         }
         if (input.SmoothMotionEnabled && routes.FirstOrDefault(r => r.Id == RouteDriverSmoothMotion) is { } sm)
             return sm;
-        if (input.LosslessScalingEnabled && routes.FirstOrDefault(r => r.Id == RouteExternalLossless) is { } ls)
-            return ls;
+        if (input.ExoFlowEnabled && routes.FirstOrDefault(r => r.Id == RouteExternalExoFlow) is { } ef)
+            return ef;
         if (routes.FirstOrDefault(r => r.Id == RouteDriverXessOverride && r.Active) is { } xess)
             return xess;
         if (input.AfmfOverride == true && routes.FirstOrDefault(r => r.Id == RouteDriverAfmf) is { } afmf)
@@ -647,15 +673,79 @@ internal static class FrameGenRouter
         return ("unavailable", selected.Summary, false, false);
     }
 
+    private static void AddExternalExoFlowRoute(
+        List<FrameGenRoute> routes,
+        FrameGenGpu gpu,
+        FrameGenGameInput input,
+        GameAntiCheatClass acClass,
+        bool allowsExoFlow)
+    {
+        if (!input.ExoFlowAvailable || !allowsExoFlow) return;
+        var active = input.ExoFlowEnabled;
+        var acNote = acClass switch
+        {
+            GameAntiCheatClass.OnlineNonCompetitivePve =>
+                "Safe for online PvE: zero-injection Windows Graphics Capture + DirectComposition overlay; touches no game files, DLLs, or memory.",
+            GameAntiCheatClass.OfflineAntiCheat =>
+                "Safe in offline play: zero-injection Windows Graphics Capture + DirectComposition overlay; touches no game files, DLLs, or memory.",
+            _ =>
+                "Safe: zero-injection Windows Graphics Capture + DirectComposition overlay; touches no game files, DLLs, or memory.",
+        };
+        routes.Add(new FrameGenRoute(
+            Id: RouteExternalExoFlow,
+            Tier: TierExternal,
+            Kind: RouteExternalExoFlow,
+            Label: "Exo Flow",
+            Status: active ? "active" : "available",
+            Summary: active ? "Exo Flow · On" : "Exo Flow · Ready",
+            GpuSupported: true,
+            GpuNote: $"Works on {gpu.Name} (DX12 optical-flow compute, DP4a + FP16 fallback).",
+            AntiCheatVerdict: "safe",
+            AntiCheatNote: acNote,
+            AutoEnable: false,
+            LatencyNote: "Adds ~1 base frame + ~1–2 ms compute latency. Requires Borderless or Windowed mode; keep off in competitive games.",
+            Selectable: true,
+            Active: active));
+    }
+
     private static (string Reason, string HowToEnable) BuildUnavailableReason(
         FrameGenGpu gpu,
         FrameGenGameInput input,
+        Models.GameEntry entry,
+        AntiCheatCheck.Answer effectiveAnswer,
+        string? antiCheatLabel,
+        bool blocksMods,
         bool isCompetitive,
         bool apiUnsupported,
         bool shipsDlss,
         bool shipsFsr,
         bool shipsXess)
     {
+        if (blocksMods)
+        {
+            if (input.IsWutheringWaves && !input.Dx12Mode)
+            {
+                return (
+                    FrameGenAntiCheat.OnlineBlockedMessage,
+                    "Switch Wuthering Waves to DirectX 12 for built-in FSR 3 / XeSS frame generation.");
+            }
+            var acClass = FrameGenAntiCheat.Classify(entry, effectiveAnswer);
+            if (acClass == GameAntiCheatClass.OfflineAntiCheat)
+            {
+                return (
+                    FrameGenAntiCheat.OnlineBlockedMessage,
+                    "Choose this game's official offline (without anti-cheat) launch mode to use frame generation mods.");
+            }
+            var acName = input.IsRiot
+                ? DlssSwapService.RiotVanguard
+                : string.IsNullOrWhiteSpace(antiCheatLabel) || AntiCheatCheck.IsUnknownLabel(antiCheatLabel)
+                    ? "Anti-cheat"
+                    : antiCheatLabel;
+            return (
+                FrameGenAntiCheat.OnlineBlockedMessage,
+                $"{acName} blocks DLL mods; only built-in or signed driver frame generation can run safely here.");
+        }
+
         if (isCompetitive)
         {
             return (
@@ -669,53 +759,21 @@ internal static class FrameGenRouter
             var apiText = apis.Count > 0 ? string.Join("/", apis).ToUpperInvariant() : "legacy DirectX";
             return (
                 $"Not supported · {apiText}",
-                "Driver frame generation requires DirectX 11, DirectX 12, Vulkan, or OpenGL. Install Lossless Scaling on Steam (App 993090) for windowed capture interpolation.");
+                "Frame generation requires DirectX 11, DirectX 12, Vulkan, or OpenGL.");
         }
 
         if (input.IsWutheringWaves && !input.Dx12Mode)
         {
             return (
                 "Off · DirectX 12 required for built-in frame generation",
-                "Switch Wuthering Waves to DirectX 12 for built-in frame generation, or install Lossless Scaling on Steam (App 993090) for zero-injection frame generation.");
-        }
-
-        var acName = input.AntiCheat.Name ?? input.AntiCheat.Label;
-        if (!input.AllowsPlacedMods && !string.IsNullOrWhiteSpace(acName))
-        {
-            if (gpu.Vendor == "nvidia" && !gpu.SupportsSmoothMotionHardware)
-            {
-                return (
-                    $"Off · {acName} blocks mods",
-                    $"NVIDIA Smooth Motion requires an RTX 40 or 50 GPU ({gpu.Name} is not supported). Install Lossless Scaling on Steam (App 993090) for zero-injection frame generation.");
-            }
-            if (gpu.Vendor == "nvidia" && gpu.SupportsSmoothMotionHardware && !gpu.SupportsSmoothMotionDriver)
-            {
-                return (
-                    $"Off · {acName} blocks mods; update NVIDIA driver for Smooth Motion",
-                    "Update to NVIDIA driver 581.08+ (RTX 40) or 572.16+ (RTX 50) for Smooth Motion, or install Lossless Scaling on Steam (App 993090).");
-            }
-            if (gpu.Vendor == "amd" && !gpu.SupportsAfmfHardware)
-            {
-                return (
-                    $"Off · {acName} blocks mods",
-                    $"AMD Fluid Motion Frames requires RX 6000+ or Radeon 700M/800M+ ({gpu.Name} is not supported). Install Lossless Scaling on Steam (App 993090) for zero-injection frame generation.");
-            }
-            if (gpu.Vendor == "intel")
-            {
-                return (
-                    $"Off · {acName} blocks mods",
-                    "Intel has no universal driver frame generation for games without libxess_fg.dll. Install Lossless Scaling on Steam (App 993090) for zero-injection frame generation.");
-            }
-            return (
-                $"Off · {acName} blocks mods",
-                "Install Lossless Scaling on Steam (App 993090) for zero-injection frame generation without touching game files.");
+                "Switch Wuthering Waves to DirectX 12 for built-in frame generation.");
         }
 
         if (gpu.Vendor == "nvidia" && gpu.SupportsSmoothMotionHardware && !gpu.SupportsSmoothMotionDriver)
         {
             return (
                 "Not available · Update NVIDIA driver for Smooth Motion",
-                "Update to NVIDIA driver 581.08+ (RTX 40) or 572.16+ (RTX 50) to enable Smooth Motion, or install Lossless Scaling on Steam (App 993090).");
+                "Update to NVIDIA driver 581.08+ (RTX 40) or 572.16+ (RTX 50) to enable Smooth Motion.");
         }
 
         if (gpu.Vendor == "nvidia" && !gpu.SupportsSmoothMotionHardware)
@@ -725,26 +783,26 @@ internal static class FrameGenRouter
                 : "Not built into this game";
             return (
                 reason,
-                $"NVIDIA Smooth Motion requires RTX 40/50. Install Lossless Scaling on Steam (App 993090) for external frame generation on {gpu.Name}.");
+                $"NVIDIA Smooth Motion requires RTX 40/50, and this game has no supported mod route on {gpu.Name}.");
         }
 
         if (gpu.Vendor == "intel" && !shipsXess)
         {
             return (
                 "Not built into this game",
-                "Intel's XeSS-FG override only works in games with libxess_fg.dll. Install Lossless Scaling on Steam (App 993090) for external frame generation.");
+                "Intel's XeSS-FG override only works in games with libxess_fg.dll.");
         }
 
         if (gpu.Vendor == "amd" && !gpu.SupportsAfmfHardware)
         {
             return (
                 $"Not supported on {gpu.Name}",
-                "AMD Fluid Motion Frames requires RX 6000+ or Radeon 700M/800M+. Install Lossless Scaling on Steam (App 993090) for external frame generation.");
+                "AMD Fluid Motion Frames requires RX 6000+ or Radeon 700M/800M+.");
         }
 
         return (
             "Not supported in this game",
-            "Install Lossless Scaling on Steam (App 993090) for external frame generation on any GPU.");
+            "No built-in, mod, or driver frame generation route applies to this game.");
     }
 
     private static FrameGenRoute MakeUnavailable(
@@ -756,7 +814,7 @@ internal static class FrameGenRouter
     {
         var acNote = acVerdict switch
         {
-            "blocked" => $"{input.AntiCheat.Name ?? "Anti-cheat"} blocks placed mods; only built-in, signed driver, or external capture routes are safe.",
+            "blocked" => $"{input.AntiCheat.Name ?? "Anti-cheat"} blocks placed mods; only built-in or signed driver routes are safe.",
             "unreadable" => "Could not inspect the game's files or anti-cheat status.",
             _ => "No anti-cheat block.",
         };

@@ -9,25 +9,6 @@ internal static class FrameGenService
 
     internal sealed record RouteResult(bool Ok, FrameGenRouter.FrameGenDecision? Decision, string? Message = null);
 
-    internal static void WatchLaunches(LaunchOrchestrator launcher, SettingsService settings)
-    {
-        launcher.GameLaunching += game =>
-        {
-            try
-            {
-                if (!string.Equals(settings.FrameGenRouteFor(game.Id), FrameGenRouter.RouteExternalLossless, StringComparison.OrdinalIgnoreCase))
-                    return;
-                var ls = LosslessScalingConfig.DetectLive();
-                if (ls.Installed && ls.ExePath is not null)
-                    LosslessScalingConfig.LaunchMinimizedIfNeeded(ls.ExePath);
-            }
-            catch (Exception ex)
-            {
-                AppLog.Warn("FrameGen launch hook failed: " + ex.Message);
-            }
-        };
-    }
-
     internal static async Task<FrameGenRouter.FrameGenDecision> ResolveAsync(
         GameEntry game,
         DlssSwapService dlss,
@@ -43,12 +24,10 @@ internal static class FrameGenService
         var inspected = await scanTask.ConfigureAwait(false);
         var savedRoute = settings.FrameGenRouteFor(game.Id);
         var smoothOn = settings.SmoothMotionEnabled(game.Id);
+        var exoFlowAvailable = ExoFlowService.IsAvailable();
+        var exoFlowActive = exoFlowAvailable
+            && string.Equals(savedRoute, FrameGenRouter.RouteExternalExoFlow, StringComparison.OrdinalIgnoreCase);
         var intelChoice = gpu.Vendor == "intel" ? IntelProfileService.Shared.FrameGen(game.Id).Choice : "game";
-        var lsInfo = LosslessScalingConfig.DetectLive();
-        var lsActive = lsInfo.Installed
-            && (string.Equals(savedRoute, FrameGenRouter.RouteExternalLossless, StringComparison.OrdinalIgnoreCase)
-                || (lsInfo.SettingsPath is not null && File.Exists(lsInfo.SettingsPath)
-                    && LosslessScalingConfig.HasAutoScaleProfile(TryReadText(lsInfo.SettingsPath), game.Title, inspected.ExePath)));
         bool? afmfOverride = string.Equals(savedRoute, FrameGenRouter.RouteDriverAfmf, StringComparison.OrdinalIgnoreCase)
             ? true
             : string.Equals(savedRoute, "off", StringComparison.OrdinalIgnoreCase)
@@ -73,9 +52,9 @@ internal static class FrameGenService
             SmoothMotionEnabled: smoothOn,
             AfmfOverride: afmfOverride,
             IntelXessOverride: intelChoice,
-            LosslessScalingInstalled: lsInfo.Installed,
-            LosslessScalingEnabled: lsActive,
-            UserSelectedRoute: savedRoute);
+            UserSelectedRoute: savedRoute,
+            ExoFlowAvailable: exoFlowAvailable,
+            ExoFlowEnabled: exoFlowActive);
 
         return FrameGenRouter.Decide(gpu, input);
     }
@@ -86,14 +65,10 @@ internal static class FrameGenService
         string? xessOverride,
         DlssSwapService dlss,
         SettingsService settings,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool acceptRisk = false,
+        string? shownAntiCheat = null)
     {
-        if (AntiCheatCheck.IsRiot(game))
-        {
-            var blocked = await ResolveAsync(game, dlss, settings, ct).ConfigureAwait(false);
-            return new RouteResult(false, blocked, "Exo never changes Riot games or games with Vanguard.");
-        }
-
         var gpu = await Task.Run(ReadGpu, ct).ConfigureAwait(false);
         var current = await ResolveAsync(game, dlss, settings, ct).ConfigureAwait(false);
 
@@ -120,51 +95,88 @@ internal static class FrameGenService
 
         var target = current.Routes.FirstOrDefault(r => string.Equals(r.Id, routeId, StringComparison.OrdinalIgnoreCase));
         if (target is null || !target.Selectable)
+        {
+            var isModRequest = string.Equals(routeId, FrameGenRouter.RouteModOptiScaler, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(routeId, FrameGenRouter.RouteModDlssg, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(routeId, FrameGenRouter.RouteModMfg, StringComparison.OrdinalIgnoreCase);
+            if (isModRequest)
+            {
+                var currentAntiCheat = await Task.Run(() => dlss.AntiCheatNow(game, ct), ct).ConfigureAwait(false);
+                if (FrameGenAntiCheat.IsDllDisallowed(game, currentAntiCheat))
+                    return new RouteResult(false, current, FrameGenAntiCheat.OnlineBlockedMessage);
+            }
             return new RouteResult(false, current, target?.Reason ?? "That frame generation route is not available for this game.");
+        }
 
         string? applyError = null;
         if (target.Id == FrameGenRouter.RouteDriverSmoothMotion)
         {
             applyError = await ApplySmoothMotionAsync(game, true, settings, ct).ConfigureAwait(false);
             if (applyError is null)
-            {
-                await DisableLosslessIfEnabledAsync(game, settings, ct).ConfigureAwait(false);
                 settings.SetFrameGenRoute(game.Id, FrameGenRouter.RouteDriverSmoothMotion);
-            }
         }
-        else if (target.Id == FrameGenRouter.RouteExternalLossless)
+        else if (target.Id is FrameGenRouter.RouteModOptiScaler or FrameGenRouter.RouteModDlssg or FrameGenRouter.RouteModMfg)
         {
-            applyError = await ApplyLosslessScalingAsync(game, true, dlss, settings, ct).ConfigureAwait(false);
-            if (applyError is null)
+            var currentAntiCheat = await Task.Run(() => dlss.AntiCheatNow(game, ct), ct).ConfigureAwait(false);
+            if (FrameGenAntiCheat.IsDllDisallowed(game, currentAntiCheat))
+                return new RouteResult(false, current, FrameGenAntiCheat.OnlineBlockedMessage);
+
+            string? acceptedAntiCheat = null;
+            if (currentAntiCheat is not null && FrameGenAntiCheat.IsDllOptInWithConsent(game, currentAntiCheat))
             {
-                await ApplySmoothMotionAsync(game, false, settings, ct).ConfigureAwait(false);
-                settings.SetFrameGenRoute(game.Id, FrameGenRouter.RouteExternalLossless);
+                var savedConsent = settings.GraphicsModConsent(game.Id);
+                if (string.Equals(savedConsent, currentAntiCheat, StringComparison.OrdinalIgnoreCase))
+                {
+                    acceptedAntiCheat = currentAntiCheat;
+                }
+                else if (acceptRisk && (string.IsNullOrWhiteSpace(shownAntiCheat) || string.Equals(shownAntiCheat, currentAntiCheat, StringComparison.OrdinalIgnoreCase)))
+                {
+                    settings.SetGraphicsModConsent(game.Id, currentAntiCheat);
+                    AppLog.Info($"Frame generation consent: gameId={game.Id}; anti-cheat {currentAntiCheat}; user accepted the risk.");
+                    acceptedAntiCheat = currentAntiCheat;
+                }
+                else
+                {
+                    return new RouteResult(false, current, FrameGenAntiCheat.BanRiskWarning(game, currentAntiCheat));
+                }
             }
-        }
-        else if (target.Id is FrameGenRouter.RouteModOptiScaler or FrameGenRouter.RouteModDlssg)
-        {
-            var ac = AntiCheatCheck.Cached(game);
-            if (!AntiCheatCheck.Allows(game, ac, AntiCheatCheck.Change.FrameGenMod))
-                return new RouteResult(false, current, AntiCheatCheck.SentenceFor(game, ac.Label ?? "anti-cheat", AntiCheatCheck.Change.FrameGenMod));
             settings.SetFrameGenKeptOff(game.Id, false);
-            var (ok, message) = await dlss.FrameGenOnAsync(game, SystemSpecs.FrameGenGpu, ct).ConfigureAwait(false);
+            var (ok, message) = await dlss.FrameGenOnAsync(game, SystemSpecs.FrameGenGpu, ct, auto: false, acceptedAntiCheat: acceptedAntiCheat).ConfigureAwait(false);
             if (!ok) applyError = message;
             else
             {
                 await ApplySmoothMotionAsync(game, false, settings, ct).ConfigureAwait(false);
-                await DisableLosslessIfEnabledAsync(game, settings, ct).ConfigureAwait(false);
                 settings.SetFrameGenRoute(game.Id, target.Id);
+            }
+        }
+        else if (target.Id == FrameGenRouter.RouteExternalExoFlow)
+        {
+            if (!ExoFlowService.IsAvailable())
+            {
+                applyError = "Exo Flow sidecar (exo-flow.exe) was not found.";
+            }
+            else
+            {
+                await Task.Run(() =>
+                {
+                    var pc = GameSettings.ThisPc();
+                    if (GameSettings.For(game, pc) is { WindowMode: not null } profile)
+                        GameSettings.ChooseWindowMode(profile, GameSettings.Borderless);
+                }, ct).ConfigureAwait(false);
+                await ApplySmoothMotionAsync(game, false, settings, ct).ConfigureAwait(false);
+                settings.SetFrameGenRoute(game.Id, FrameGenRouter.RouteExternalExoFlow);
+                ExoFlowService.EnsureRunning();
             }
         }
         else if (target.Id == FrameGenRouter.RouteDriverAfmf)
         {
-            await DisableLosslessIfEnabledAsync(game, settings, ct).ConfigureAwait(false);
             settings.SetFrameGenRoute(game.Id, FrameGenRouter.RouteDriverAfmf);
         }
         else if (target.Tier == FrameGenRouter.TierNative)
         {
             await ApplySmoothMotionAsync(game, false, settings, ct).ConfigureAwait(false);
-            await DisableLosslessIfEnabledAsync(game, settings, ct).ConfigureAwait(false);
+            if (GameSettings.IsWutheringWavesEntry(game) || GameSettings.IsWutheringWaves(game))
+                await Task.Run(() => DlssSwapService.ApplyWuWaNativeFrameGenConfig(game, gpu.Name, target.Id), ct).ConfigureAwait(false);
             settings.SetFrameGenRoute(game.Id, target.Id);
         }
 
@@ -179,12 +191,12 @@ internal static class FrameGenService
         CancellationToken ct)
     {
         var smErr = await ApplySmoothMotionAsync(game, false, settings, ct).ConfigureAwait(false);
-        var lsErr = await DisableLosslessIfEnabledAsync(game, settings, ct).ConfigureAwait(false);
+        await ExoFlowService.StopIfRunningAsync(ct).ConfigureAwait(false);
         if (GraphicsService.Vendor() == "intel")
             await Task.Run(() => IntelProfileService.Shared.SetFrameGen(game.Id, "game"), ct).ConfigureAwait(false);
         settings.SetFrameGenKeptOff(game.Id, true);
         await Task.Run(() => dlss.FrameGenOff(game), ct).ConfigureAwait(false);
-        return smErr ?? lsErr;
+        return smErr;
     }
 
     private static async Task<string?> ApplySmoothMotionAsync(
@@ -234,45 +246,6 @@ internal static class FrameGenService
         }, ct).ConfigureAwait(false);
     }
 
-    private static async Task<string?> ApplyLosslessScalingAsync(
-        GameEntry game,
-        bool on,
-        DlssSwapService dlss,
-        SettingsService settings,
-        CancellationToken ct)
-    {
-        return await Task.Run<string?>(() =>
-        {
-            var ls = LosslessScalingConfig.DetectLive();
-            if (!ls.Installed || string.IsNullOrWhiteSpace(ls.SettingsPath))
-                return "Lossless Scaling (Steam App 993090) is not installed.";
-            var exe = ResolveGameExe(game);
-            if (exe is null)
-                return "Could not find this game's executable for Lossless Scaling.";
-            var (ok, error) = LosslessScalingConfig.ConfigureProfile(ls.SettingsPath, game.Title, exe, on);
-            if (!ok) return error;
-            if (on)
-            {
-                var pc = GameSettings.ThisPc();
-                if (GameSettings.For(game, pc) is { WindowMode: not null } profile)
-                    GameSettings.ChooseWindowMode(profile, GameSettings.Borderless);
-            }
-            return null;
-        }, ct).ConfigureAwait(false);
-    }
-
-    private static async Task<string?> DisableLosslessIfEnabledAsync(GameEntry game, SettingsService settings, CancellationToken ct)
-    {
-        if (!string.Equals(settings.FrameGenRouteFor(game.Id), FrameGenRouter.RouteExternalLossless, StringComparison.OrdinalIgnoreCase))
-            return null;
-        var ls = LosslessScalingConfig.DetectLive();
-        if (!ls.Installed || string.IsNullOrWhiteSpace(ls.SettingsPath)) return null;
-        var exe = await Task.Run(() => ResolveGameExe(game), ct).ConfigureAwait(false);
-        if (exe is null) return null;
-        var (ok, err) = await Task.Run(() => LosslessScalingConfig.ConfigureProfile(ls.SettingsPath, game.Title, exe, false), ct).ConfigureAwait(false);
-        return ok ? null : err;
-    }
-
     private sealed record InspectedGame(
         bool Readable,
         bool IsWuWa,
@@ -282,15 +255,14 @@ internal static class FrameGenService
         bool ShipsFsr,
         bool ShipsXess,
         bool ShipsXessDll,
-        DlssSwapService.FrameGenStatus? ModStatus,
-        string? ExePath);
+        DlssSwapService.FrameGenStatus? ModStatus);
 
     private static InspectedGame InspectGame(GameEntry game, DlssSwapService dlss, FrameGenRouter.FrameGenGpu gpu, CancellationToken ct)
     {
         var isWuWa = GameSettings.IsWutheringWavesEntry(game) || GameSettings.IsWutheringWaves(game);
         if (!game.Installed)
         {
-            return new InspectedGame(false, isWuWa, default, false, false, false, false, false, null, null);
+            return new InspectedGame(false, isWuWa, default, false, false, false, false, false, null);
         }
 
         var status = dlss.GetStatus(game, refresh: false, consented: null, ct);
@@ -302,7 +274,6 @@ internal static class FrameGenService
         var readable = !(modStatus.State == "hidden" && modStatus.Reason == "unread") || isWuWa;
         var antiCheat = AntiCheatCheck.Cached(game);
         var allowsPlaced = AntiCheatCheck.Allows(game, antiCheat, AntiCheatCheck.Change.FrameGenMod);
-        var exePath = ResolveGameExe(game);
 
         return new InspectedGame(
             Readable: readable,
@@ -313,8 +284,7 @@ internal static class FrameGenService
             ShipsFsr: shipsFsr,
             ShipsXess: shipsXessDll,
             ShipsXessDll: shipsXessDll,
-            ModStatus: modStatus,
-            ExePath: exePath);
+            ModStatus: modStatus);
     }
 
     private static FrameGenRouter.FrameGenGpu ReadGpu()
@@ -370,11 +340,5 @@ internal static class FrameGenService
             if ((child.Attributes & FileAttributes.ReparsePoint) != 0) continue;
             CollectExes(child.FullName, found, depth + 1);
         }
-    }
-
-    private static string? TryReadText(string path)
-    {
-        try { return File.ReadAllText(path); }
-        catch { return null; }
     }
 }

@@ -255,11 +255,11 @@ public sealed class AppServices
         IntelProfileService.Shared.Start(Launcher);
         // Properties › Anti-cheat: a Steam game the player starts from Steam's entry without its anti-cheat.
         AntiCheatCheck.ChoseWithoutAntiCheat = game => Settings.SteamWithoutAntiCheat(game.Id);
+        DlssSwapService.FrameGenConsentLookup = id => Settings.GraphicsModConsent(id);
         // Its shader recorder goes in only for a session Exo starts, through Exo Shaders' engine (DlssSwapService.SessionMods.cs).
         DlssSwapService.RecorderSwitch = (id, on, ct) => ShadersHost.RecorderSetAsync(id, on, ct);
         // Frame generation Exo put into a game: checked as each game starts and ends, and kept on the mod's newest release.
         DlssSwapService.WatchFrameGen(Launcher, Settings, Library);
-        FrameGenService.WatchLaunches(Launcher, Settings);
         // Open Exo when Windows starts: the Run value follows the switch (an update or a moved install puts its path right).
         var startWithWindows = Settings.Current.StartWithWindows;
         _ = Task.Run(() => StartWithWindows.Apply(startWithWindows));

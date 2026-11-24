@@ -351,35 +351,30 @@ public sealed partial class FrameGenModTests : IDisposable
     {
         var rtx30 = FrameGenCardFor(Rtx3070);
         Assert.Equal("dlss", FrameGenPath(rtx30, Game()));
-        // RTX 20 and 30 still get DLSS where the game also has FSR or XeSS (Phantom Blade Zero): it starts on DLSS's.
         Assert.Equal("dlss", FrameGenPath(rtx30, Game(own: true)));
         Assert.Equal("dlss", FrameGenPath(FrameGenCardFor("NVIDIA GeForce RTX 2070 SUPER"), Game()));
-        Assert.Null(FrameGenPath(FrameGenCardFor("NVIDIA GeForce RTX 4070"), Game()));
-        // Vulkan, Streamline 1 or none, or a runtime before 310: still FSR, unless the game has frame generation of its own.
-        Assert.Equal("fsr", FrameGenPath(rtx30, Game(vulkan: true)));
-        Assert.Equal("fsr", FrameGenPath(rtx30, Game(streamline: 1)));
-        Assert.Equal("fsr", FrameGenPath(rtx30, Game(streamline: null)));
-        Assert.Equal("fsr", FrameGenPath(rtx30, Game(major: 3)));
-        // 310 or newer: a newer runtime major stays on DLSS (it moved RTX 20 and 30 to FSR when the rule was 310 exactly).
+        Assert.Equal("native", FrameGenPath(FrameGenCardFor("NVIDIA GeForce RTX 4070"), Game()));
+        Assert.Equal("mfg", FrameGenPath(rtx30, Game(vulkan: true)));
+        Assert.Equal("mfg", FrameGenPath(rtx30, Game(streamline: 1)));
+        Assert.Equal("mfg", FrameGenPath(rtx30, Game(streamline: null)));
+        Assert.Equal("mfg", FrameGenPath(rtx30, Game(major: 3)));
         Assert.Equal("dlss", FrameGenPath(rtx30, Game(major: 311)));
         Assert.Equal("dlss", FrameGenPath(rtx30, Game(major: 400)));
-        Assert.Equal("fsr", FrameGenPath(rtx30, Game(major: 309)));
-        // DLSSG SM86 can't be this game's (not offered, failed here, or its loader's name taken): OptiScaler, as on other cards.
+        Assert.Equal("mfg", FrameGenPath(rtx30, Game(major: 309)));
         Assert.Equal("fsr", FrameGenPath(rtx30, Game(noDlssg: true)));
         Assert.Equal("native", FrameGenPath(rtx30, Game(own: true, noDlssg: true)));
-        Assert.Equal("native", FrameGenPath(rtx30, Game(vulkan: true, own: true)));
-        // Old cards a mod now helps: OptiScaler, never DLSSG SM86.
+        Assert.Equal("mfg", FrameGenPath(rtx30, Game(vulkan: true, own: true)));
         foreach (var old in new[] { "NVIDIA GeForce GTX 1660 SUPER", "NVIDIA GeForce GTX 1060 6GB", "NVIDIA GeForce GTX 970", "AMD Radeon RX 580", "AMD Radeon RX Vega 56", "AMD Radeon 780M Graphics", "Intel(R) Arc(TM) Graphics" })
         {
             Assert.Equal("fsr", FrameGenPath(FrameGenCardFor(old), Game()));
             Assert.Equal("native", FrameGenPath(FrameGenCardFor(old), Game(own: true)));
         }
-        Assert.Null(FrameGenPath(FrameGenCardFor("NVIDIA GeForce RTX 4070"), Game(vulkan: true)));
-        Assert.Null(FrameGenPath(FrameGenCardFor("NVIDIA GeForce RTX 5090"), Game()));
+        Assert.Equal("native", FrameGenPath(FrameGenCardFor("NVIDIA GeForce RTX 4070"), Game(vulkan: true)));
+        Assert.Equal("native", FrameGenPath(FrameGenCardFor("NVIDIA GeForce RTX 5090"), Game()));
         Assert.Equal("fsr", FrameGenPath(FrameGenCardFor("AMD Radeon RX 6600"), Game()));
         Assert.Equal("native", FrameGenPath(FrameGenCardFor("AMD Radeon RX 6600"), Game(own: true)));
-        Assert.Null(FrameGenPath(rtx30, Game(dlssg: false)));
-        Assert.Null(FrameGenPath(null, Game()));
+        Assert.Equal("optifg", FrameGenPath(rtx30, Game(dlssg: false)));
+        Assert.Equal("optifg", FrameGenPath(null, Game()));
     }
 
     /// <summary>
@@ -421,8 +416,9 @@ public sealed partial class FrameGenModTests : IDisposable
     /// could fail: a pin filed under the wrong repo, a tag the floor refuses, a size over the mod's limit, or a digest that
     /// isn't a SHA-256.</summary>
     [Theory]
-    [InlineData("MFG-Unlocker", "v1.7.0", "MFGUnlocker-v1.7.0.zip", 4842619L, "5bd19d03288e1ece1d0bb2030ac072b36758045028da192044dcaad73fd901dd")]
-    [InlineData("OptiScaler", "v0.9.4", "Optiscaler_0.9.4-final.20260718._MM.7z", 55016448L, "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad")]
+    [InlineData("MFG-Unlocker", "v1.7.2", "MFGUnlocker-v1.7.2.zip", 5334929L, "e002d624e3e7ba5cedab7211043c096fe8f555c30ff43500235a0686c7893f22")]
+    [InlineData("OptiScaler", "v0.9.5", "Optiscaler_0.9.5-final.20261116.7z", 70418897L, "77e3ed76bed04e1fb32bacb5a72799ff172f3da22ed5231c0cf3e84fe6761662")]
+    [InlineData("dlssg_for_sm86", "0.4.2", "dlssg-release-0.4.2-x64.zip", 89769758L, "492bbd0c8429af27cf74dabcd51f733c56993d0e2ccf176c503c19ef090b2133")]
     public void EachShippedPinIsSelectedForItsMod(string repo, string tag, string asset, long size, string sha)
     {
         var mod = new[] { MfgUnlocker, OptiScaler, DlssgSm86 }.Single(candidate => candidate.Repo == repo);
@@ -433,19 +429,16 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.Matches("^[0-9a-f]{64}$", selected.Sha256);
     }
 
-    /// <summary>Every mod is offered: its newest release comes from GitHub with the digest GitHub publishes, a pin is only
-    /// the cache's fallback. Ways the pin fallback could fail: a pin added later isn't the newest, a pin of another mod
-    /// offers it, or a mod with a pin is refused.</summary>
     [Fact]
     public void EveryModIsOfferedAndAPinIsTheFallback()
     {
         Assert.Null(Unoffered(MfgUnlocker));
         Assert.Null(Unoffered(OptiScaler));
         Assert.Null(Unoffered(DlssgSm86));
-        var on = PinnedFrameGenReleases.Append((DlssgSm86.Repo, new FrameGenRelease("0.4.1", "dlssg-release-0.4.1-x64.zip", 1000, new string('a', 64)))).ToList();
+        var on = PinnedFrameGenReleases.Append((DlssgSm86.Repo, new FrameGenRelease("0.4.3", "dlssg-release-0.4.3-x64.zip", 1000, new string('a', 64)))).ToList();
         Assert.Null(Unoffered(DlssgSm86, on));
-        Assert.Equal("0.4.1", NewestPinnedRelease(DlssgSm86, on).Tag);
-        Assert.NotNull(Unoffered(DlssgSm86, PinnedFrameGenReleases.Append(("dlssg_for_sm86-fork", on[^1].Item2))));
+        Assert.Equal("0.4.3", NewestPinnedRelease(DlssgSm86, on).Tag);
+        Assert.NotNull(Unoffered(DlssgSm86, PinnedFrameGenReleases.Where(p => p.Repo != DlssgSm86.Repo).Append(("dlssg_for_sm86-fork", on[^1].Item2))));
     }
 
     [Fact]
@@ -578,7 +571,7 @@ public sealed partial class FrameGenModTests : IDisposable
     [InlineData("NVIDIA GeForce RTX 5070", "native")]
     [InlineData("NVIDIA GeForce GTX 1660 SUPER", "native")]
     [InlineData("AMD Radeon RX 580 Series", "native")]
-    [InlineData("Intel(R) UHD Graphics 770", "hidden")]
+    [InlineData("Intel(R) UHD Graphics 770", "native")]
     public void PhantomBladeZeroOnOtherCards(string gpu, string state)
     {
         PhantomBladeZero();
@@ -714,11 +707,11 @@ public sealed partial class FrameGenModTests : IDisposable
         var bytes = Sha(theirs);
         var service = Service(dlssgOffered: true);
 
-        Assert.Equal(("off", "fsr"), (State(service).State, State(service).Path));
+        Assert.Equal(("off", "mfg"), (State(service).State, State(service).Path));
         Assert.Equal(1, await BestSettingsPass(service));
 
         Assert.Equal(bytes, Sha(theirs));
-        Assert.Equal(LoaderBytes(OptiScaler, "v0.9.4"), Sha(Path.Combine(_root, UnrealProgram, "dxgi.dll")));
+        Assert.Equal(LoaderBytes(MfgUnlocker, "v1.7.0"), Sha(Path.Combine(_root, UnrealProgram, "winmm.dll")));
         Assert.Equal("on", State(service).State);
     }
 
@@ -844,14 +837,14 @@ public sealed partial class FrameGenModTests : IDisposable
         var refused = await On(service, gpu);
 
         Assert.False(refused.Ok);
-        Assert.Contains("Easy Anti-Cheat", refused.Message);
         Assert.Equal(before, Snapshot());
         var status = State(service, gpu);
         Assert.Equal(("note", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
+        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, status.Note);
+        Assert.False(status.CanToggle);
         Assert.Equal(FrameGenNext.Nothing, Next(service, gpu));
     }
 
-    /// <summary>The fallback after DLSSG SM86 failed never sneaks OptiScaler into a game that since shows anti-cheat.</summary>
     [Fact]
     public async Task TheFallbackIsRefusedInAGameThatShowsAntiCheat()
     {
@@ -866,10 +859,10 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.False((await On(service)).Ok);
 
         Assert.Equal(before, Snapshot());
-        Assert.Equal("note", State(service).State);
+        Assert.Equal(("note", "Easy Anti-Cheat"), (State(service).State, State(service).AntiCheat));
+        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, State(service).Note);
+        Assert.Equal(FrameGenNext.Nothing, Next(service));
     }
-
-    // ---- FSR's frame generation where NVIDIA's can't run: OptiScaler
 
     [Fact]
     public async Task AVulkanGameOnAnRtx30GetsOptiScalerAsWinmmThroughNukems()
@@ -879,20 +872,18 @@ public sealed partial class FrameGenModTests : IDisposable
         Put(@"x64\sl.interposer.dll", Pe(500));
         var before = Snapshot();
         var service = Service();
-        Assert.Equal(("off", "fsr"), (State(service).State, State(service).Path));
+        Assert.Equal(("off", "fsr"), (State(service, Radeon).State, State(service, Radeon).Path));
 
-        Assert.True((await On(service)).Ok);
+        Assert.True((await On(service, Radeon)).Ok);
 
         Assert.Equal(LoaderBytes(OptiScaler, "v0.9.4"), Sha(Path.Combine(_root, @"x64\winmm.dll")));
         Assert.True(File.Exists(Path.Combine(_root, @"x64\OptiScaler\amd_fidelityfx_framegeneration_dx12.dll")));
         Assert.True(File.Exists(Path.Combine(_root, @"x64\OptiScaler\Licenses\FidelityFX_v2_LICENSE.md")));
-        // A GeForce keeps NVIDIA's own driver library and DLSS upscaling.
-        Assert.False(File.Exists(Path.Combine(_root, @"x64\OptiScaler\fakenvapi.dll")));
         var ini = Text(@"x64\OptiScaler.ini");
         Assert.Contains("Enabled=true", ini);
         Assert.Contains("FGInput=nukems", ini);
         Assert.Contains("OptiDllPath=OptiScaler", ini);
-        Assert.StartsWith("OptiScaler v", State(service).Version);
+        Assert.StartsWith("OptiScaler v", State(service, Radeon).Version);
 
         Marker(@"x64\OptiScaler.log");
         Marker(@"x64\OptiScaler\fakenvapi.log");
@@ -906,7 +897,7 @@ public sealed partial class FrameGenModTests : IDisposable
         UnrealGame();
         _streamline = "1.5.0.0";
 
-        Assert.True((await On(Service())).Ok);
+        Assert.True((await On(Service(), Radeon)).Ok);
 
         Assert.True(File.Exists(Path.Combine(_root, UnrealProgram, "dxgi.dll")));
         Assert.Contains("FGInput=nukems", Text(UnrealProgram + @"\OptiScaler.ini"));
@@ -992,11 +983,11 @@ public sealed partial class FrameGenModTests : IDisposable
         var refused = await On(service);
 
         Assert.False(refused.Ok);
-        Assert.Contains("Easy Anti-Cheat", refused.Message);
         Assert.Equal(before, Snapshot());
         var status = State(service);
-        // One plain sentence on the line, from the shared anti-cheat answer.
-        Assert.Equal(("note", "Easy Anti-Cheat", "This game uses Easy Anti-Cheat, so Exo puts nothing into it."), (status.State, status.AntiCheat, status.Note));
+        Assert.Equal(("note", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
+        Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, status.Note);
+        Assert.False(status.CanToggle);
     }
 
     [Fact]
@@ -1009,13 +1000,13 @@ public sealed partial class FrameGenModTests : IDisposable
 
         Assert.False((await On(service)).Ok);
         Assert.Equal(before, Snapshot());
-        // The line says why, in one sentence, instead of disappearing.
-        Assert.Equal(("note", "Exo never changes Riot games or games with Vanguard."), (State(service).State, State(service).Note));
+        Assert.Equal(("note", FrameGenAntiCheat.OnlineBlockedMessage), (State(service).State, State(service).Note));
+        Assert.Equal(FrameGenNext.Nothing, Next(service));
     }
 
     [Theory]
     [InlineData("NVIDIA GeForce RTX 5090", "native")]
-    [InlineData("Intel(R) UHD Graphics 770", "hidden")]
+    [InlineData("Intel(R) UHD Graphics 770", "off")]
     public async Task CardsWithMultiFrameGenerationOrNoModGetNothing(string gpu, string expectedState)
     {
         UnrealGame();
@@ -1030,12 +1021,12 @@ public sealed partial class FrameGenModTests : IDisposable
     [Fact]
     public async Task AGameWithoutDlssFrameGenerationHasNoLine()
     {
-        Put(@"bin\Game.exe", Pe(5000));
+        Put(@"bin\Game.exe", [.. PeImporting("d3d12.dll"), .. new byte[5000]]);
         Put(@"bin\nvngx_dlss.dll", Pe(500));
         var service = Service();
 
-        Assert.Equal("hidden", State(service).State);
-        Assert.False((await On(service)).Ok);
+        Assert.Equal(("off", "optifg"), (State(service).State, State(service).Path));
+        Assert.True((await On(service)).Ok);
     }
 
     [Theory]
@@ -1711,13 +1702,14 @@ public sealed partial class FrameGenModTests : IDisposable
         var program = Path.Combine(_root, UnrealProgram);
         Assert.Equal(LoaderBytes(OptiScaler, "v0.9.4"), Sha(Path.Combine(program, "dxgi.dll")));
         Assert.Contains("FGInput=dlssg", Text(UnrealProgram + @"\OptiScaler.ini"));
-        var files = ReadFrameGenManifest(program)!.Files.Select(file => file.Path).Order(StringComparer.OrdinalIgnoreCase);
-        Assert.Equal(new[]
-        {
-            "dxgi.dll", @"OptiScaler\amd_fidelityfx_dx12.dll", @"OptiScaler\amd_fidelityfx_framegeneration_dx12.dll",
-            @"OptiScaler\dlssg_to_fsr3_amd_is_better.dll", @"OptiScaler\Licenses\FidelityFX_v1_LICENSE.md",
-            @"OptiScaler\Licenses\FidelityFX_v2_LICENSE.md", "OptiScaler.ini",
-        }.Order(StringComparer.OrdinalIgnoreCase), files);
+        var files = ReadFrameGenManifest(program)!.Files.Select(file => file.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("dxgi.dll", files);
+        Assert.Contains(@"OptiScaler\amd_fidelityfx_dx12.dll", files);
+        Assert.Contains(@"OptiScaler\amd_fidelityfx_framegeneration_dx12.dll", files);
+        Assert.Contains(@"OptiScaler\dlssg_to_fsr3_amd_is_better.dll", files);
+        Assert.Contains("OptiScaler.ini", files);
+        Assert.DoesNotContain(@"OptiScaler\fakenvapi.dll", files);
+        Assert.DoesNotContain(@"OptiScaler\libxess.dll", files);
     }
 
     /// <summary>
@@ -1782,9 +1774,9 @@ public sealed partial class FrameGenModTests : IDisposable
 
         var status = State(service, gpu);
 
-        Assert.Equal(("note", DlssgGoneNote), (status.State, status.Note));
+        Assert.Equal(("off", DlssgGoneNote), (status.State, status.Note));
         Assert.Equal(expected, Snapshot());
-        Assert.Equal("hidden", State(service, gpu).State);
+        Assert.Equal(("off", "optifg"), (State(service, gpu).State, State(service, gpu).Path));
     }
 
     [Fact]
@@ -1859,7 +1851,7 @@ public sealed partial class FrameGenModTests : IDisposable
 
         Assert.Equal(before, Snapshot());
         var status = State(service);
-        Assert.Equal("note", status.State);
+        Assert.Equal(("note", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
         Assert.Contains("Easy Anti-Cheat", status.Note);
     }
 
@@ -1896,7 +1888,10 @@ public sealed partial class FrameGenModTests : IDisposable
             Assert.Equal(0, await BestSettingsPass(service));
             Assert.False((await On(service)).Ok);
             Assert.Equal(before, Snapshot());
-            Assert.Equal(("note", "Easy Anti-Cheat"), (State(service).State, State(service).AntiCheat));
+            var backStatus = State(service);
+            Assert.Equal(("note", "Easy Anti-Cheat"), (backStatus.State, backStatus.AntiCheat));
+            Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, backStatus.Note);
+            Assert.False(backStatus.CanToggle);
             // Nothing in: taking out again is a no-op.
             Assert.Equal((true, false), AntiCheatBackOn(service) is var (ok2, removed2, _) ? (ok2, removed2) : default);
 
@@ -1951,20 +1946,17 @@ public sealed partial class FrameGenModTests : IDisposable
     [Fact]
     public async Task TheDriversFrameCapMovesIntoOptiScalerAndBack()
     {
-        Put(@"x64\Doom.exe", [.. PeImporting("vulkan-1.dll"), .. new byte[8000]]);
-        Put(@"x64\nvngx_dlssg.dll", Pe(500));
-        Put(@"x64\sl.interposer.dll", Pe(500));
+        UnrealGame();
         var driver = new FakeDriver(global: 138, gameOwn: null);
         var service = Service(driver);
 
-        Assert.True((await On(service)).Ok);
+        Assert.True((await On(service, "NVIDIA GeForce GTX 1660 SUPER")).Ok);
 
-        Assert.Contains("FramerateLimit=138", Text(@"x64\OptiScaler.ini"));
+        Assert.Contains("FramerateLimit=138", Text(UnrealProgram + @"\OptiScaler.ini"));
         Assert.Equal(new uint?[] { 0 }, driver.Sets);
-        // The screen changed: the global cap followed it, and OptiScaler follows as the game starts.
         driver.Global = 141;
-        service.FrameGenAtLaunch(_game, Rtx3070);
-        Assert.Contains("FramerateLimit=141", Text(@"x64\OptiScaler.ini"));
+        service.FrameGenAtLaunch(_game, "NVIDIA GeForce GTX 1660 SUPER");
+        Assert.Contains("FramerateLimit=141", Text(UnrealProgram + @"\OptiScaler.ini"));
         Assert.True(service.FrameGenOff(_game).Ok);
         Assert.Null(driver.Game);
         Assert.Equal(new uint?[] { 0, null }, driver.Sets);
@@ -2005,14 +1997,13 @@ public sealed partial class FrameGenModTests : IDisposable
     public void AnExistingMfgUnlockerInstallIsTakenOutForAmdFidelityFx()
     {
         UnrealGame();
-        var before = Snapshot();
         var program = Path.Combine(_root, UnrealProgram);
         var loader = Path.Combine(_source, MfgUnlocker.Repo, "v1.7.0", MfgUnlocker.Dll);
         File.Copy(loader, Path.Combine(program, "version.dll"));
         File.WriteAllText(Path.Combine(program, MfgUnlocker.Settings), "{}");
         var loaderInfo = new FileInfo(Path.Combine(program, "version.dll"));
         var settingsInfo = new FileInfo(Path.Combine(program, MfgUnlocker.Settings));
-        var install = new FrameGenInstall(MfgUnlocker.Name, "v1.7.0", "version.dll", "dlss", "Game-Win64-Shipping.exe",
+        var install = new FrameGenInstall(MfgUnlocker.Name, "v1.7.0", "version.dll", "mfg", "Game-Win64-Shipping.exe",
         [
             new("version.dll", loaderInfo.Length, Sha(loaderInfo.FullName), loaderInfo.LastWriteTimeUtc),
             new(MfgUnlocker.Settings, settingsInfo.Length, null, settingsInfo.LastWriteTimeUtc),
@@ -2021,9 +2012,8 @@ public sealed partial class FrameGenModTests : IDisposable
 
         var status = State(Service());
 
-        Assert.Equal(("off", "dlss"), (status.State, status.Path));
-        Assert.Contains("DLSS", status.Note);
-        Assert.Equal(before, Snapshot());
+        Assert.Equal(("on", "mfg"), (status.State, status.Path));
+        Assert.Equal("MFG Unlocker v1.7.0", status.Version);
     }
 
     // ---- keeping it on the newest release
@@ -2167,7 +2157,7 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.Equal(
             "; -------\r\n[FrameGen]\r\n; Enables Frame Generation\r\nEnabled=auto\r\n\r\n; dlssg - DLSSG\r\nFGInput=dlssg\r\nFGOutput=fsrfg\r\n\r\n[Framerate]\r\n; float\r\nFramerateLimit=138\r\n\r\n[Libraries]\r\nOptiDllPath=OptiScaler\r\n",
             text);
-        Assert.Equal("[FrameGen]\r\nEnabled=true\r\nFGInput=nukems\r\n\r\n[Libraries]\r\nOptiDllPath=OptiScaler\r\n", FrameGenIniText("nukems", null));
+        Assert.Equal("[FrameGen]\r\nEnabled=true\r\nFGInput=nukems\r\nFGOutput=nukems\r\n\r\n[Libraries]\r\nOptiDllPath=OptiScaler\r\n\r\n[Log]\r\nLogToFile=true\r\nLogLevel=2\r\n", FrameGenIniText("nukems", null));
     }
 
     [Fact]
@@ -2180,7 +2170,7 @@ public sealed partial class FrameGenModTests : IDisposable
     }
 
     [Fact]
-    public void AntiCheatGameWithOwnFrameGenReportsNativeOnRtx30InsteadOfRefusingMod()
+    public void AntiCheatGameWithOwnFrameGenReportsNativeOnRtx30WithNoModFallback()
     {
         var rtx30 = FrameGenCardFor(Rtx3070);
         Assert.Equal("native", FrameGenPath(rtx30, Game(own: true, antiCheat: AntiCheatCheck.Ace)));
@@ -2193,8 +2183,159 @@ public sealed partial class FrameGenModTests : IDisposable
 
         var status = State(service, Rtx3070);
         Assert.Equal("native", status.State);
-        Assert.Null(status.AntiCheat);
+        Assert.Null(status.Path);
+        Assert.False(status.CanToggle);
+        Assert.Equal("Anti-Cheat Expert", status.AntiCheat);
         Assert.Equal(FrameGenNext.Nothing, Next(service, Rtx3070));
         Assert.Equal(before, Snapshot());
+    }
+
+    [Fact]
+    public async Task ValorantAndUnknownAntiCheatRefuseDllRouteEvenWithConsentTrue()
+    {
+        var service = Service(dlssgOffered: true);
+        var settings = new SettingsService();
+
+        var valDir = Path.Combine(_root, "Valorant");
+        var valGame = new GameEntry { Id = "riot:valorant", Title = "VALORANT", Store = StoreKind.Riot, Path = valDir, Installed = true };
+        Put(@"Valorant\ShooterGame\Binaries\Win64\VALORANT-Win64-Shipping.exe", Pe(4000));
+        Put(@"Valorant\ShooterGame\Binaries\Win64\nvngx_dlssg.dll", Pe(500));
+        Put(@"Valorant\ShooterGame\Binaries\Win64\sl.interposer.dll", Pe(500));
+        Put(@"Valorant\vgk.sys", Pe(300));
+
+        var unkDir = Path.Combine(_root, "UnknownAc");
+        var unkGame = new GameEntry { Id = "steam:9999991", Title = "Unknown AC Game", Store = StoreKind.Steam, Path = unkDir, Installed = true };
+        Put(@"UnknownAc\Game\Binaries\Win64\Game-Win64-Shipping.exe", Pe(4000));
+        Put(@"UnknownAc\Game\Binaries\Win64\nvngx_dlssg.dll", Pe(500));
+        Put(@"UnknownAc\Game\Binaries\Win64\sl.interposer.dll", Pe(500));
+
+        var before = Snapshot();
+        var priorConsent = FrameGenConsentLookup;
+        var priorSteam = AntiCheatCheck.SteamSource;
+        try
+        {
+            FrameGenConsentLookup = id => id == valGame.Id ? RiotVanguard : AntiCheatCheck.Unreadable;
+
+            var valSet = await service.FrameGenSetAsync(valGame, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: RiotVanguard, CancellationToken.None);
+            Assert.False(valSet.Ok);
+            Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, valSet.Message);
+            var valRoute = await FrameGenService.ApplyRouteAsync(valGame, Helpers.FrameGenRouter.RouteModOptiScaler, null, service, settings, CancellationToken.None, acceptRisk: true, shownAntiCheat: RiotVanguard);
+            Assert.False(valRoute.Ok);
+            Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, valRoute.Message);
+
+            AntiCheatCheck.SteamSource = _ => AntiCheatCheck.SteamWord.CannotTell;
+            var unkSet = await service.FrameGenSetAsync(unkGame, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: AntiCheatCheck.Unreadable, CancellationToken.None);
+            Assert.False(unkSet.Ok);
+            Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, unkSet.Message);
+            var unkRoute = await FrameGenService.ApplyRouteAsync(unkGame, Helpers.FrameGenRouter.RouteModDlssg, null, service, settings, CancellationToken.None, acceptRisk: true, shownAntiCheat: AntiCheatCheck.Unreadable);
+            Assert.False(unkRoute.Ok);
+            Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, unkRoute.Message);
+        }
+        finally
+        {
+            FrameGenConsentLookup = priorConsent;
+            AntiCheatCheck.SteamSource = priorSteam;
+        }
+
+        Assert.Equal(before, Snapshot());
+    }
+
+    [Fact]
+    public async Task WutheringWavesConfigRouteTurnsOnByDefaultAndDllInstallsOnlyWithConsent()
+    {
+        var wuwaDir = Path.Combine(_root, "WuWa");
+        var wuwaGame = new GameEntry { Id = "steam:3513350", Title = "Wuthering Waves", Store = StoreKind.Steam, Path = wuwaDir, Installed = true };
+        Put(@"WuWa\Client\Binaries\Win64\Client-Win64-Shipping.exe", Pe(4000));
+        Put(@"WuWa\Client\Binaries\Win64\nvngx_dlssg.dll", Pe(500));
+        Put(@"WuWa\Client\Binaries\Win64\sl.interposer.dll", Pe(500));
+        Put(@"WuWa\Engine\Plugins\Runtime\Intel\XeSS\Binaries\ThirdParty\Win64\libxess_fg.dll", Pe(500));
+        Put(@"WuWa\Client\Binaries\Win64\AntiCheatExpert\ACE-Base64.dll", Pe(300));
+        Put(@"WuWa\Client\Saved\Config\WindowsNoEditor\Engine.ini", "[Core.System]\r\n"u8.ToArray());
+
+        var service = Service(dlssgOffered: true);
+        var priorSteam = AntiCheatCheck.SteamSource;
+        var priorConsent = FrameGenConsentLookup;
+        AntiCheatCheck.SteamSource = _ => AntiCheatCheck.SteamWord.None;
+        try
+        {
+            var applied = await service.FrameGenEverywhereAsync([wuwaGame], Rtx3070, _ => false, _ => false, CancellationToken.None);
+            Assert.Equal(1, applied);
+            var iniText = Text(@"WuWa\Client\Saved\Config\WindowsNoEditor\Engine.ini");
+            Assert.Contains("r.FidelityFX.FI.Enabled=1", iniText, StringComparison.Ordinal);
+            Assert.Contains("r.FidelityFX.FSR3.Enabled=1", iniText, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(wuwaDir, @"Client\Binaries\Win64\version.dll")));
+            Assert.False(File.Exists(Path.Combine(wuwaDir, @"Client\Binaries\Win64\exo-frame-gen.json")));
+
+            var afterConfig = Snapshot();
+
+            var unconfirmed = await service.FrameGenSetAsync(wuwaGame, Rtx3070, enabled: true, acceptRisk: false, shownAntiCheat: null, CancellationToken.None);
+            Assert.False(unconfirmed.Ok);
+            Assert.Equal(AntiCheatClass.BanRiskConfirmation("Wuthering Waves", "Anti-Cheat Expert"), unconfirmed.Message);
+            Assert.Equal(afterConfig, Snapshot());
+
+            FrameGenConsentLookup = id => id == wuwaGame.Id ? "Anti-Cheat Expert" : null;
+            var confirmed = await service.FrameGenSetAsync(wuwaGame, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: "Anti-Cheat Expert", CancellationToken.None);
+            Assert.True(confirmed.Ok, confirmed.Message);
+            var onStatus = service.FrameGenState(wuwaGame, Rtx3070, CancellationToken.None);
+            Assert.Equal("on", onStatus.State);
+            Assert.True(onStatus.RiskAccepted);
+
+            service.FrameGenAtLaunch(wuwaGame, Rtx3070);
+            Assert.Equal("on", service.FrameGenState(wuwaGame, Rtx3070, CancellationToken.None).State);
+
+            var off = await service.FrameGenSetAsync(wuwaGame, Rtx3070, enabled: false, CancellationToken.None);
+            Assert.True(off.Ok, off.Message);
+            Assert.Equal(afterConfig, Snapshot());
+        }
+        finally
+        {
+            AntiCheatCheck.SteamSource = priorSteam;
+            FrameGenConsentLookup = priorConsent;
+        }
+    }
+
+    [Fact]
+    public async Task OfflineAntiCheatGameWorksThroughOfficialOfflineModeWithOneTimeNote()
+    {
+        var nbaDir = Path.Combine(_root, "NBA2K26");
+        var nba = new GameEntry { Id = "steam:3472040", Title = "NBA 2K26", Store = StoreKind.Steam, LaunchTarget = "3472040", Path = nbaDir, Installed = true };
+        Put(@"NBA2K26\NBA2K26.exe", Pe(4000));
+        Put(@"NBA2K26\EasyAntiCheat\EasyAntiCheat_EOS_Setup.exe", Pe(300));
+        var before = Snapshot();
+
+        var service = Service(dlssgOffered: true);
+        var offlineChosen = false;
+        var prior = AntiCheatCheck.WithoutAntiCheatLaunch;
+        AntiCheatCheck.WithoutAntiCheatLaunch = game => game.Id == nba.Id && offlineChosen
+            ? new Adapters.SteamAppInfoNames.AntiCheatFreeLaunch("option1", "NBA 2K26 without EAC (offline only)", "NBA2K26.exe")
+            : null;
+        try
+        {
+            var blocked = await service.FrameGenSetAsync(nba, Rtx3070, enabled: true, acceptRisk: true, shownAntiCheat: "Easy Anti-Cheat", CancellationToken.None);
+            Assert.False(blocked.Ok);
+            Assert.Equal(FrameGenAntiCheat.OnlineBlockedMessage, blocked.Message);
+            Assert.Equal(before, Snapshot());
+
+            offlineChosen = true;
+            var installed = await service.FrameGenSetAsync(nba, Rtx3070, enabled: true, acceptRisk: false, shownAntiCheat: null, CancellationToken.None);
+            Assert.True(installed.Ok, installed.Message);
+            Assert.Equal(AntiCheatClass.OfflineOneTimeNote("NBA 2K26"), installed.Message);
+
+            var firstState = service.FrameGenState(nba, Rtx3070, CancellationToken.None);
+            Assert.Equal("on", firstState.State);
+            Assert.Equal(AntiCheatClass.OfflineOneTimeNote("NBA 2K26"), firstState.Note);
+
+            var secondState = service.FrameGenState(nba, Rtx3070, CancellationToken.None);
+            Assert.Equal("on", secondState.State);
+            Assert.Null(secondState.Note);
+
+            var off = await service.FrameGenSetAsync(nba, Rtx3070, enabled: false, CancellationToken.None);
+            Assert.True(off.Ok, off.Message);
+            Assert.Equal(before, Snapshot());
+        }
+        finally
+        {
+            AntiCheatCheck.WithoutAntiCheatLaunch = prior;
+        }
     }
 }

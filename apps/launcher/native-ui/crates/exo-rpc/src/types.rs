@@ -97,6 +97,8 @@ pub struct Game {
     pub launch_target: Option<String>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub includes: Vec<GameInclude>,
+    #[serde(default)]
+    pub anti_cheat_class: crate::anticheat::AntiCheatClass,
     #[serde(default, deserialize_with = "null_as_default")]
     pub variants: Vec<GameVariant>,
     #[serde(default)]
@@ -704,6 +706,12 @@ pub struct FrameGenRoute {
     pub choice_value: Option<String>,
     #[serde(default)]
     pub choices: Vec<String>,
+    #[serde(default)]
+    pub requires_risk_confirm: bool,
+    #[serde(default)]
+    pub risk_warning: Option<String>,
+    #[serde(default)]
+    pub anti_cheat: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

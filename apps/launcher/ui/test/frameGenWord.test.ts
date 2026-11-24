@@ -48,6 +48,10 @@ test('the mod that replaced Exo’s loader is named when Exo knows it', () => {
 test('what Exo did by itself shows before the release, and off and on read as before', () => {
   assert.deepEqual(frameGenWord({ ok: true, state: 'off', note: 'Taken out: the game updated' }), { text: 'Taken out: the game updated' })
   assert.deepEqual(frameGenWord({ ok: true, state: 'off' }), { text: 'Off' })
-  assert.deepEqual(frameGenWord({ ok: true, state: 'on', version: 'OptiScaler v0.9.4' }), { text: 'OptiScaler v0.9.4' })
+  assert.deepEqual(frameGenWord({ ok: true, state: 'off', path: 'dlss', package: 'DLSSG SM86' }), { text: 'Off · DLSSG SM86' })
+  assert.deepEqual(frameGenWord({ ok: true, state: 'off', path: 'optifg', package: 'OptiScaler FG' }), { text: 'Off · OptiScaler FG' })
+  assert.deepEqual(frameGenWord({ ok: true, state: 'native', path: 'dlss', package: 'DLSSG SM86' }), { text: 'Built into the game · DLSSG SM86' })
+  assert.deepEqual(frameGenWord({ ok: true, state: 'note', antiCheat: 'Anti-Cheat Expert', note: 'Mods would get you banned' }), { text: 'Mods would get you banned' })
+  assert.deepEqual(frameGenWord({ ok: true, state: 'on', version: 'OptiScaler v0.9.5' }), { text: 'OptiScaler v0.9.5' })
   assert.equal(frameGenWord({ ok: true, state: 'on' }), null)
 })

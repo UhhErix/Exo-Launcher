@@ -235,11 +235,11 @@ fn collect_fossilize(dir: &Path, depth: usize, out: &mut Vec<FossilizeArchiveInf
 
 pub fn classify_status_label(profile: &GameShaderProfile) -> (&'static str, &'static str) {
     match profile.anti_cheat.class {
-        AntiCheatClass::CompetitivePvP | AntiCheatClass::Unknown => {
+        AntiCheatClass::CompetitivePvpOnline | AntiCheatClass::Unknown => {
             ("ready", "Driver-cache warm only (anti-cheat protected)")
         }
-        AntiCheatClass::OnlinePvE => ("ready", "File routes ready (DLL opt-in)"),
-        AntiCheatClass::Offline => {
+        AntiCheatClass::OnlineNonCompetitivePve => ("ready", "File routes ready (DLL opt-in)"),
+        AntiCheatClass::OfflineAntiCheat => {
             if profile.estimated_pipelines > 0 {
                 ("ready", "Ready to compile")
             } else {
