@@ -1,5 +1,40 @@
 [
   {
+    "version": "3.30.0",
+    "items": [
+      {
+        "icon": "Mic",
+        "title": "Even louder and steadier Discord voices",
+        "detail": "Upgrades Level voices to BS.1770 LUFS per-speaker leveling with target loudness choices, a soft-knee limiter, and optional mic auto gain."
+      },
+      {
+        "icon": "Performance",
+        "title": "More per-game Optimize profiles",
+        "detail": "Improves Call of Duty and Rocket League tuning and adds safe profiles for Rainbow Six Siege, Apex Legends, Overwatch 2, and Minecraft Java with per-setting toggles."
+      },
+      {
+        "icon": "FrameGen",
+        "title": "One Frame generation row for every GPU",
+        "detail": "Unifies built-in DLSS/FSR/XeSS frame generation, NVIDIA Smooth Motion, AMD Fluid Motion Frames, OptiScaler, and Lossless Scaling on every game page."
+      },
+      {
+        "icon": "ThisPc",
+        "title": "Smarter Autopilot, Exo AI & System tuning",
+        "detail": "Audits System tweaks against benchmarks, migrates legacy myth keys, pauses background downloads while you play, and honors your saved Exo AI and Autopilot choices."
+      },
+      {
+        "icon": "Monitor",
+        "title": "Hardware, SSD TRIM & laptop HDR health checks",
+        "detail": "Checks Intel 13th/14th Gen microcode, single-channel RAM, Ryzen branch-prediction updates, SSD TRIM and firmware, and laptop HDR peak-brightness mismatches."
+      },
+      {
+        "icon": "Download",
+        "title": "Fixed .NET runtime installs & quieter notices",
+        "detail": "Fixes .NET Desktop Runtime installs failing with a missing installer file and keeps running-game notices out of error reports."
+      }
+    ]
+  },
+  {
     "version": "3.29.1",
     "items": [
       {
