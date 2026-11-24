@@ -670,7 +670,8 @@ internal sealed partial class SystemTuning
         if (key == GameIndexingKey)
         {
             foreach (var folder in was.Strings ?? [])
-                if (system.FolderNotContentIndexed(folder) == true && !system.SetFolderNotContentIndexed(folder, false))
+                if (system.FolderNotContentIndexed(folder) == true
+                    && (!system.SetFolderNotContentIndexed(folder, false) || system.FolderNotContentIndexed(folder) != false))
                     return "Windows didn't put Search indexing back. Try again.";
             return CompleteNonAdminTurnOff(saved, key);
         }

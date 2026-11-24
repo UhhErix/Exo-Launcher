@@ -17,6 +17,8 @@ public sealed class OsTweaksTests : IDisposable
         public Dictionary<(string, string), int> Dwords { get; } = new();
         public Dictionary<(string, string), string> StringValues { get; } = new();
         public Dictionary<string, string> BcdFlags { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, bool> Folders { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public long Hz { get; set; } = 10_000_000;
         public bool MemoryCompressionOn { get; set; } = true;
         public long TotalMemKb { get; set; } = 16_777_216L;
         public int OsBuildValue { get; set; } = Win11_24H2Build;
@@ -29,7 +31,15 @@ public sealed class OsTweaksTests : IDisposable
 
         private readonly Dictionary<string, string> _answers = new(StringComparer.OrdinalIgnoreCase);
 
-        public long Frequency() => 10_000_000;
+        public long Frequency() => Hz;
+        public IReadOnlyList<string> GameFolders() => [.. Folders.Keys];
+        public bool? FolderNotContentIndexed(string folderPath) => Folders.TryGetValue(folderPath, out var v) ? v : null;
+        public bool SetFolderNotContentIndexed(string folderPath, bool notIndexed)
+        {
+            if (!Folders.ContainsKey(folderPath)) return false;
+            Folders[folderPath] = notIndexed;
+            return true;
+        }
         public int? Dword(string key, string name) => Dwords.TryGetValue((key, name), out var v) ? v : null;
         public string[]? Strings(string key, string name) => [WindowsManaged];
         public bool Exists(string key) => false;
@@ -58,9 +68,9 @@ public sealed class OsTweaksTests : IDisposable
         {
             if (line.Contains("bcdedit.exe", StringComparison.OrdinalIgnoreCase))
             {
-                var del = Regex.Match(line, @"/deletevalue \{current\} (\S+)", RegexOptions.IgnoreCase);
+                var del = Regex.Match(line, @"/deletevalue \{current\} ([A-Za-z0-9_.-]+)", RegexOptions.IgnoreCase);
                 if (del.Success) BcdFlags.Remove(del.Groups[1].Value);
-                var set = Regex.Match(line, @"/set \{current\} (\S+) (\S+)", RegexOptions.IgnoreCase);
+                var set = Regex.Match(line, @"/set \{current\} ([A-Za-z0-9_.-]+) ([A-Za-z0-9_.-]+)", RegexOptions.IgnoreCase);
                 if (set.Success) BcdFlags[set.Groups[1].Value] = set.Groups[2].Value;
                 var enumOut = Regex.Match(line, @"/enum \{current\} > ""([^""]+)""");
                 if (enumOut.Success)
@@ -209,9 +219,11 @@ public sealed class OsTweaksTests : IDisposable
     }
 
     [Fact]
-    public async Task Harmful_tweak_cleaners_fix_network_throttling_paging_executive_trim_and_useplatformtick()
+    public async Task Harmful_tweak_cleaners_show_honest_lines_and_undo_to_exact_original_values()
     {
-        var sys = new FakeTuningSystem();
+        var sys = new FakeTuningSystem { Hz = HpetHz };
+        sys.BcdFlags["useplatformclock"] = "Yes";
+        sys.BcdFlags["useplatformtick"] = "Yes";
         sys.Dwords[(MmcssKey, NetworkThrottlingValue)] = -1;
         sys.Dwords[(MemoryManagement, DisablePagingExecValue)] = 1;
         sys.Dwords[(FileSystemKey, DisableDeleteNotifyValue)] = 1;
@@ -219,21 +231,60 @@ public sealed class OsTweaksTests : IDisposable
         var tuning = new SystemTuning(sys, savedPath, () => new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.Zero));
 
         var initial = tuning.Read().Items;
-        Assert.Contains(initial, i => i.Key == NetworkThrottlingKey && !i.On);
-        Assert.Contains(initial, i => i.Key == PagingExecutiveKey && !i.On);
-        Assert.Contains(initial, i => i.Key == TrimEnabledKey && !i.On);
+        var timerItem = Assert.Single(initial, i => i.Key == TimerKey);
+        Assert.False(timerItem.On);
+        Assert.Contains("Another tool", timerItem.Detail, StringComparison.Ordinal);
+        var netItem = Assert.Single(initial, i => i.Key == NetworkThrottlingKey);
+        Assert.False(netItem.On);
+        Assert.Contains("Another tool", netItem.Detail, StringComparison.Ordinal);
+        var pageItem = Assert.Single(initial, i => i.Key == PagingExecutiveKey);
+        Assert.False(pageItem.On);
+        Assert.Contains("Another tool", pageItem.Detail, StringComparison.Ordinal);
+        var trimItem = Assert.Single(initial, i => i.Key == TrimEnabledKey);
+        Assert.False(trimItem.On);
+        Assert.Contains("Another tool", trimItem.Detail, StringComparison.Ordinal);
+        Assert.Empty(sys.Runs);
 
-        Assert.Null(await tuning.ApplyAsync([NetworkThrottlingKey, PagingExecutiveKey, TrimEnabledKey]));
+        Assert.Null(await tuning.ApplyAsync([TimerKey, NetworkThrottlingKey, PagingExecutiveKey, TrimEnabledKey]));
+        Assert.False(sys.BcdFlags.ContainsKey("useplatformclock"));
+        Assert.False(sys.BcdFlags.ContainsKey("useplatformtick"));
         Assert.Equal(10, sys.Dwords[(MmcssKey, NetworkThrottlingValue)]);
         Assert.Equal(0, sys.Dwords[(MemoryManagement, DisablePagingExecValue)]);
         Assert.Equal(0, sys.Dwords[(FileSystemKey, DisableDeleteNotifyValue)]);
 
+        Assert.Null(await tuning.TurnOffAsync(TimerKey));
+        Assert.Equal("Yes", sys.BcdFlags["useplatformclock"]);
+        Assert.Equal("Yes", sys.BcdFlags["useplatformtick"]);
+
         Assert.Null(await tuning.TurnOffAsync(NetworkThrottlingKey));
         Assert.Equal(-1, sys.Dwords[(MmcssKey, NetworkThrottlingValue)]);
 
-        var timerLines = TimerLines("was.txt", "after.txt");
-        Assert.Contains(timerLines, l => l.Contains("useplatformclock", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(timerLines, l => l.Contains("useplatformtick", StringComparison.OrdinalIgnoreCase));
+        Assert.Null(await tuning.TurnOffAsync(PagingExecutiveKey));
+        Assert.Equal(1, sys.Dwords[(MemoryManagement, DisablePagingExecValue)]);
+
+        Assert.Null(await tuning.TurnOffAsync(TrimEnabledKey));
+        Assert.Equal(1, sys.Dwords[(FileSystemKey, DisableDeleteNotifyValue)]);
+    }
+
+    [Fact]
+    public async Task Game_folder_not_content_indexed_records_prior_state_and_reverts_cleanly()
+    {
+        var sys = new FakeTuningSystem();
+        sys.Folders[@"D:\Games\CS2"] = false;
+        sys.Folders[@"D:\Games\AlreadyExcluded"] = true;
+        var savedPath = Path.Combine(_dir, "indexing.json");
+        var tuning = new SystemTuning(sys, savedPath, () => new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.Zero));
+
+        Assert.False(tuning.Read().Items.Single(i => i.Key == GameIndexingKey).On);
+        Assert.Null(await tuning.ApplyAsync([GameIndexingKey]));
+        Assert.Empty(sys.Runs);
+        Assert.True(sys.Folders[@"D:\Games\CS2"]);
+        Assert.True(sys.Folders[@"D:\Games\AlreadyExcluded"]);
+        Assert.True(tuning.Read().Items.Single(i => i.Key == GameIndexingKey).CanUndo);
+
+        Assert.Null(await tuning.TurnOffAsync(GameIndexingKey));
+        Assert.False(sys.Folders[@"D:\Games\CS2"]);
+        Assert.True(sys.Folders[@"D:\Games\AlreadyExcluded"]);
     }
 
     [Fact]
@@ -336,43 +387,116 @@ public sealed class OsTweaksTests : IDisposable
         Assert.Equal(10000u, AutopilotNative.ChooseTimerResolution(156250u, 10000u));
     }
 
-    private sealed class FakePauseSystem : IGameSessionDownloadPauseSystem
+    private sealed class FakePauseSystem(string journalPath) : IGameSessionDownloadPauseSystem
     {
         public List<Guid> ActiveJobs { get; } = [Guid.NewGuid(), Guid.NewGuid()];
-        public List<Guid> ResumedJobs { get; } = [];
-        public List<string> RunningServices { get; } = ["BITS:paused", "DoSvc:stopped", "wuauserv:stopped", "WSearch:stopped"];
-        public List<string> ResumedServices { get; } = [];
+        public HashSet<Guid> SuspendedJobs { get; } = [];
+        public Dictionary<string, ServiceSnapshot> Services { get; } = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["BITS"] = new("BITS", 3, "running", CanPause: true, CanStop: true),
+            ["DoSvc"] = new("DoSvc", 2, "running", CanPause: false, CanStop: true),
+            ["wuauserv"] = new("wuauserv", 3, "stopped", CanPause: false, CanStop: true),
+            ["WSearch"] = new("WSearch", 4, "running", CanPause: false, CanStop: true),
+        };
+        public HashSet<string> RefuseControl { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<string> TouchedServices { get; } = [];
+        public bool JournalExistedBeforeEveryMutation { get; private set; } = true;
 
-        public IReadOnlyList<Guid> SuspendActiveBitsJobs() => [.. ActiveJobs];
-        public int ResumeBitsJobs(IEnumerable<Guid> jobIds) { var l = jobIds.ToList(); ResumedJobs.AddRange(l); return l.Count; }
-        public IReadOnlyList<string> PauseRunningServices(IEnumerable<string> names) => [.. RunningServices];
-        public int ResumeServices(IEnumerable<string> names) { var l = names.ToList(); ResumedServices.AddRange(l); return l.Count; }
+        private void CheckJournalWritten(string expectedToken)
+        {
+            if (!File.Exists(journalPath) || !File.ReadAllText(journalPath).Contains(expectedToken, StringComparison.OrdinalIgnoreCase))
+                JournalExistedBeforeEveryMutation = false;
+        }
+
+        public IReadOnlyList<Guid> ListActiveBitsJobs() => [.. ActiveJobs.Where(j => !SuspendedJobs.Contains(j))];
+
+        public bool SuspendBitsJob(Guid jobId)
+        {
+            CheckJournalWritten(jobId.ToString());
+            return SuspendedJobs.Add(jobId);
+        }
+
+        public bool ResumeBitsJob(Guid jobId) => SuspendedJobs.Remove(jobId);
+
+        public ServiceSnapshot? QueryService(string serviceName) => Services.TryGetValue(serviceName, out var s) ? s : null;
+
+        public bool PauseService(string serviceName)
+        {
+            CheckJournalWritten(serviceName);
+            TouchedServices.Add("pause:" + serviceName);
+            if (RefuseControl.Contains(serviceName)) return false;
+            Services[serviceName] = Services[serviceName] with { State = "paused" };
+            return true;
+        }
+
+        public bool StopService(string serviceName)
+        {
+            CheckJournalWritten(serviceName);
+            TouchedServices.Add("stop:" + serviceName);
+            if (RefuseControl.Contains(serviceName)) return false;
+            Services[serviceName] = Services[serviceName] with { State = "stopped" };
+            return true;
+        }
+
+        public bool ContinueService(string serviceName)
+        {
+            TouchedServices.Add("continue:" + serviceName);
+            Services[serviceName] = Services[serviceName] with { State = "running" };
+            return true;
+        }
+
+        public bool StartService(string serviceName)
+        {
+            TouchedServices.Add("start:" + serviceName);
+            Services[serviceName] = Services[serviceName] with { State = "running" };
+            return true;
+        }
     }
 
     [Fact]
-    public void Game_session_download_pause_holds_and_restores_bits_and_services_including_after_crash()
+    public void Game_session_download_pause_journals_before_stop_leaves_disabled_alone_recovers_crash_and_enforces_timeout()
     {
         var path = Path.Combine(_dir, "exo-download-pause.json");
-        var fake = new FakePauseSystem();
-        var pause = new GameSessionDownloadPause(fake, path, _ => { });
+        var fake = new FakePauseSystem(path);
+        var clock = new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.Zero);
+        var pause = new GameSessionDownloadPause(fake, path, _ => { }, () => clock, TimeSpan.FromHours(6));
 
         pause.SetGaming(true);
-        Assert.True(pause.Current().Active);
-        Assert.Equal(2, pause.Current().PausedBitsJobs);
-        Assert.Equal(4, pause.Current().PausedServices.Count);
+        Assert.True(fake.JournalExistedBeforeEveryMutation);
         Assert.True(File.Exists(path));
+        var rawJournal = File.ReadAllText(path);
+        Assert.Contains("\"originalStartType\":3", rawJournal, StringComparison.Ordinal);
+        Assert.Contains("\"originalState\":\"running\"", rawJournal, StringComparison.Ordinal);
+        Assert.DoesNotContain("WSearch", rawJournal, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("wuauserv", rawJournal, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(fake.TouchedServices, t => t.Contains("WSearch", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(fake.TouchedServices, t => t.Contains("wuauserv", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("paused", fake.Services["BITS"].State);
+        Assert.Equal("stopped", fake.Services["DoSvc"].State);
+        Assert.Equal(2, fake.SuspendedJobs.Count);
+
+        var afterCrash = new GameSessionDownloadPause(fake, path, _ => { }, () => clock, TimeSpan.FromHours(6));
+        Assert.Equal(4, afterCrash.Recover());
+        Assert.Equal("running", fake.Services["BITS"].State);
+        Assert.Equal("running", fake.Services["DoSvc"].State);
+        Assert.Empty(fake.SuspendedJobs);
+        Assert.False(File.Exists(path));
+        Assert.DoesNotContain(fake.TouchedServices, t => t.Contains("WSearch", StringComparison.OrdinalIgnoreCase));
 
         pause.SetGaming(false);
-        Assert.False(pause.Current().Active);
-        Assert.Equal(2, fake.ResumedJobs.Count);
-        Assert.Equal(4, fake.ResumedServices.Count);
+        pause.SetGaming(true);
+        clock = clock.AddHours(5);
+        Assert.Equal(0, pause.CheckTimeout());
+        Assert.Equal("paused", fake.Services["BITS"].State);
+        clock = clock.AddHours(1);
+        Assert.Equal(4, pause.CheckTimeout());
+        Assert.Equal("running", fake.Services["BITS"].State);
+        Assert.Equal("running", fake.Services["DoSvc"].State);
         Assert.False(File.Exists(path));
 
-        fake.ResumedJobs.Clear();
-        fake.ResumedServices.Clear();
         pause.SetGaming(true);
-        var recovered = new GameSessionDownloadPause(fake, path, _ => { });
-        Assert.Equal(6, recovered.Recover());
+        Assert.Equal(4, pause.OnPowerTransition("system resume"));
+        Assert.Equal("running", fake.Services["BITS"].State);
         Assert.False(File.Exists(path));
     }
 
@@ -387,6 +511,16 @@ public sealed class OsTweaksTests : IDisposable
         Assert.Contains(NetworkTune.Decide(eth, portable: false), r => r.Keyword == "*FlowControl" && r.To == "0");
         Assert.Empty(NetworkTune.Decide(eth, portable: true));
 
+        var best = new NetworkBest(
+            new NetworkTune(new FlowAdapters(eth), new NoOpWriter(), Path.Combine(_dir, "nt.json"), () => DateTimeOffset.UtcNow),
+            new EmptyNetSystem(),
+            Path.Combine(_dir, "nb.json"),
+            () => DateTimeOffset.UtcNow);
+        var adapterRow = Assert.Single(best.Read().Items, i => i.Key == NetworkBest.AdapterKey);
+        Assert.Contains("flow control", adapterRow.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reconnect", adapterRow.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.False(adapterRow.On);
+
         var ryzenWin10 = PcHealth.Decide(new PcHealth.Reading([], null, "AMD Ryzen 7 9800X3D", null, null, null, OsBuild: 19045));
         Assert.Contains(ryzenWin10, i => i.Key == "os-ryzen-24h2");
 
@@ -398,5 +532,28 @@ public sealed class OsTweaksTests : IDisposable
 
         var intelMissingDtt = PcHealth.Decide(new PcHealth.Reading([], null, "Intel(R) Core(TM) i7-14700K", null, null, null, CpuHybridProbe: true, OsBuild: 26100, IntelDttRunning: false));
         Assert.Contains(intelMissingDtt, i => i.Key == "intel-apo");
+    }
+
+    private sealed class FlowAdapters(NetworkTune.Adapter adapter) : NetworkTune.IAdapters
+    {
+        public IReadOnlyList<NetworkTune.Adapter> List() => [adapter];
+        public IReadOnlyDictionary<string, NetworkTune.Param>? Params(string key) => adapter.Params;
+        public bool Portable() => false;
+    }
+
+    private sealed class NoOpWriter : NetworkTune.IWriter
+    {
+        public string? Write(IReadOnlyList<(NetworkTune.Adapter Adapter, IReadOnlyList<(string Keyword, string? Value)> Values)> writes) => null;
+    }
+
+    private sealed class EmptyNetSystem : NetworkBest.ISystem
+    {
+        public IReadOnlyList<CloudflareDns.Adapter> Adapters() => [];
+        public IReadOnlySet<string> Registered() => new HashSet<string>();
+        public NetworkBest.Tcp? Tcp() => null;
+        public (int? Code, string? Problem) Elevated(string script) => (NetworkBest.Ran, null);
+        public bool StillRunning() => false;
+        public bool Online() => true;
+        public NetworkBest.Sample Measure() => new(null, null, null, null);
     }
 }
