@@ -96,7 +96,7 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         var items = new List<Item>();
         var net = tune.Read();
         if (net.Pending.Count > 0)
-            items.Add(new(AdapterKey, "Adapter settings for games", Capital(string.Join("; ", net.Pending.Select(p => NetworkTune.Names(p.Rules) + (net.Pending.Count > 1 ? $" on your {(p.Adapter.Wireless ? "Wi-Fi" : "Ethernet")}" : "")))), false, net.Applied, off.Contains(AdapterKey)));
+            items.Add(new(AdapterKey, "Adapter settings for games", Capital(string.Join("; ", net.Pending.Select(p => NetworkTune.Names(p.Rules) + (net.Pending.Count > 1 ? $" on your {(p.Adapter.Wireless ? "Wi-Fi" : "Ethernet")}" : "")))) + ". Briefly reconnects the adapter for a few seconds.", false, net.Applied, off.Contains(AdapterKey)));
         else if (net.Applied)
             items.Add(new(AdapterKey, "Adapter settings for games", "Power saving that drops the link is off.", true, true, off.Contains(AdapterKey)));
 
@@ -132,17 +132,17 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
     /// </summary>
     internal string? Apply(IReadOnlyCollection<string>? only = null)
     {
-        if (!Monitor.TryEnter(_gate)) return Busy;
+        if (Interlocked.Exchange(ref _busy, 1) != 0) return Busy;
         try { return Logged(system.StillRunning() ? Busy : ApplyNow(only)); }
-        finally { Monitor.Exit(_gate); }
+        finally { Interlocked.Exchange(ref _busy, 0); }
     }
 
     /// <summary>Turns one item off: puts back what Exo recorded for it and keeps it out of Best settings until it's on again.</summary>
     internal string? TurnOff(string key)
     {
-        if (!Monitor.TryEnter(_gate)) return Busy;
+        if (Interlocked.Exchange(ref _busy, 1) != 0) return Busy;
         try { return Logged(system.StillRunning() ? Busy : TurnOffNow(key)); }
-        finally { Monitor.Exit(_gate); }
+        finally { Interlocked.Exchange(ref _busy, 0); }
     }
 
     /// <summary>What the player is told reaches app.log too.</summary>
@@ -152,7 +152,7 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         return said;
     }
 
-    private readonly object _gate = new();
+    private int _busy;
     internal const string Busy = "Exo is still changing your network settings. Try again when it's done.";
 
     private string? ApplyNow(IReadOnlyCollection<string>? only)

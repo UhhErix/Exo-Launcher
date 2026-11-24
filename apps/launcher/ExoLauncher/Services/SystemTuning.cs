@@ -36,18 +36,22 @@ namespace ExoLauncher.Services;
 internal sealed partial class SystemTuning(SystemTuning.ISystem system, string path, Func<DateTimeOffset> now)
 {
     internal const string TimerKey = "timer", SchedulingKey = "scheduling", PagefileKey = "pagefile", CacheKey = "cache",
-        CaptureServiceKey = "captureService", VrrLfcKey = "vrrLfc", PrivacyKey = "privacy",
+        CaptureServiceKey = "captureService", NetworkThrottlingKey = "networkThrottling", PagingExecutiveKey = "pagingExecutive",
+        TrimEnabledKey = "trimEnabled", VrrLfcKey = "vrrLfc", PrivacyKey = "privacy",
         TasksKey = "tasks", WinFeaturesKey = "winFeatures", OsOverheadKey = "osOverhead",
         ServicesKey = "services", IntegrityKey = "integrity", VrrKey = "vrr", MouseAccelKey = "mouseAccel";
+
+    internal const string PowerThrottlingKey = @"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling";
+    internal const string PowerThrottlingOffValue = "PowerThrottlingOff";
 
     /// <summary>The items Use best settings sets: each only puts back a Windows default a tweak changed.</summary>
     internal static readonly string[] Defaults =
     [
-        TimerKey, SchedulingKey, PagefileKey, CacheKey, CaptureServiceKey, VrrLfcKey, PrivacyKey,
-        TasksKey, WinFeaturesKey, OsOverheadKey,
-        KernelLatencyKey, UsbPowerKey, AiTelemetryKey, StorageFsKey, GamingUxKey, AmdGpuPowerKey, HagsKey,
-        MpoOffKey, HibernateOffKey, BackgroundAppsKey, SvcHostSplitKey, GpuPstateKey, CpuMitigationsKey,
-        BootLatencyKey, MemCompressionKey,
+        TimerKey, SchedulingKey, PagefileKey, CacheKey, CaptureServiceKey,
+        NetworkThrottlingKey, PagingExecutiveKey, TrimEnabledKey,
+        VrrLfcKey, PrivacyKey, TasksKey, WinFeaturesKey, OsOverheadKey,
+        KernelLatencyKey, UsbPowerKey, AiTelemetryKey, StorageFsKey, EdgeBackgroundKey, GameIndexingKey,
+        GamingUxKey, AmdGpuPowerKey, HagsKey, HibernateOffKey, BackgroundAppsKey,
     ];
 
     internal static readonly (string Path, string Label)[] TrimmedTasks =
@@ -78,6 +82,12 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     [
         new(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode", 0, DesktopOnly: false),
         new(@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests", 0, DesktopOnly: false),
+        new(@"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers", 1, DesktopOnly: false),
+    ];
+
+    internal static readonly OsOverheadEntry[] LegacyOsOverheadSettings =
+    [
+        new(PowerThrottlingKey, PowerThrottlingOffValue, 1, DesktopOnly: true),
     ];
 
     internal const string DisplayClassRoot = @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
@@ -101,7 +111,12 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// <summary>The items only their own switch sets.</summary>
     internal static readonly string[] OptIn =
     [
-        ServicesKey, IntegrityKey, VrrKey, MouseAccelKey,
+        ServicesKey, IntegrityKey, MpoOffKey, GpuPstateKey, CpuMitigationsKey, MemCompressionKey, VrrKey, MouseAccelKey,
+    ];
+
+    internal static readonly string[] RetiredKeys =
+    [
+        BootLatencyKey, SvcHostSplitKey,
     ];
 
     internal static readonly string[] Keys = [.. Defaults, .. OptIn];
@@ -218,6 +233,10 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         IReadOnlyList<string> UsbRootHubKeys() => [];
         IReadOnlyList<string> AmdDisplayClassKeys() => [];
         long TotalMemoryKb() => 0;
+        int OsBuild() => Win11_24H2Build;
+        IReadOnlyList<string> GameFolders() => [];
+        bool? FolderNotContentIndexed(string folderPath) => null;
+        bool SetFolderNotContentIndexed(string folderPath, bool notIndexed) => false;
     }
 
     private static readonly HashSet<string> HvciGameKeys = new(StringComparer.Ordinal)
@@ -254,7 +273,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// What Exo keeps: the items the player turned off, what each changed item held, when each was last changed (a restart
     /// finishes it), and items a press found nothing to change for (the HPET Windows picks itself on this PC).
     /// </summary>
-    internal sealed record Saved(List<string> Off, Dictionary<string, Was> Kept, Dictionary<string, DateTimeOffset> Changed, List<string> Native, List<LatencyTrace.Result>? Latency = null);
+    internal sealed record Saved(List<string> Off, Dictionary<string, Was> Kept, Dictionary<string, DateTimeOffset> Changed, List<string> Native, List<LatencyTrace.Result>? Latency = null, int MigrationVersion = 0, List<string>? RevertedByMigration = null);
 
     /// <summary>
     /// One item: <paramref name="On"/> Exo's setting is in place; <paramref name="Restart"/> it was changed (or put back) since
@@ -263,11 +282,11 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// </summary>
     internal sealed record Item(string Key, string Label, string Detail, bool On, bool CanUndo, bool Off, bool OptIn, bool Restart, string? Blocked = null, bool NeedsRestart = true);
 
-    internal sealed record State(IReadOnlyList<Item> Items)
+    internal sealed record State(IReadOnlyList<Item> Items, MigrationState? Migration = null)
     {
         /// <summary>Every item Best settings sets is set or turned off by the player.</summary>
         internal bool Applied => Items.Where(i => !i.OptIn).All(i => i.On || i.Off || i.Blocked is not null);
-        internal bool Restart => Items.Any(i => i.Restart);
+        internal bool Restart => Items.Any(i => i.Restart) || Migration is { Pending: false, Restart: true };
     }
 
     /// <summary>The items as they are, a timer change Exo didn't see finish settled first (unless a change is running now).</summary>
@@ -316,7 +335,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             items.Add(new(TimerKey, "Windows' own timer", Tell(TimerKey, hpet ? "Windows still reads the platform clock (HPET)." : "Games read the processor's fast clock, not the platform clock (HPET)."),
                 timerKept && (!hpet || Pending(TimerKey)), timerKept, off.Contains(TimerKey), false, Pending(TimerKey)));
         else if (hpet && !saved.Native.Contains(TimerKey))
-            items.Add(new(TimerKey, "Windows' own timer", "A tweak forced the platform clock (HPET), so every clock read a game makes waits on it. Takes a restart.", false, false, off.Contains(TimerKey), false, false));
+            items.Add(new(TimerKey, "Windows' own timer", "Another tool forced the platform clock (HPET / useplatformtick), so every clock read a game makes waits on it; Exo can undo it. Takes a restart.", false, false, off.Contains(TimerKey), false, false));
 
         // Scheduling: Programs, or anything that gives the foreground a longer, boosted turn (takes effect immediately, no restart).
         var separation = system.Dword(PriorityControl, Separation);
@@ -360,6 +379,29 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             items.Add(new(CaptureServiceKey, "Screen Capture Service",
                 captureDisabled ? "Disabled by a tweak, which breaks Windows screen capture and Game Bar. Sets it back to Manual." : "Set to Manual so Windows starts it when needed.",
                 !captureDisabled, captureKept, off.Contains(CaptureServiceKey), false, false, null, NeedsRestart: false));
+
+        var netThrottle = system.Dword(MmcssKey, NetworkThrottlingValue);
+        var netThrottleBroken = netThrottle == -1;
+        var netThrottleKept = saved.Kept.ContainsKey(NetworkThrottlingKey);
+        if (netThrottleBroken || netThrottleKept || Pending(NetworkThrottlingKey))
+            items.Add(new(NetworkThrottlingKey, "Network throttling default",
+                Tell(NetworkThrottlingKey, netThrottleBroken ? "Another tool set NetworkThrottlingIndex to 0xFFFFFFFF, which increases NDIS.sys DPC latency; Exo can restore Windows' default (10) and undo it back. Takes a restart." : "Restored to Windows' default (10) so NDIS.sys DPC latency stays low."),
+                !netThrottleBroken, netThrottleKept, off.Contains(NetworkThrottlingKey), false, Pending(NetworkThrottlingKey)));
+
+        var pagingExec = system.Dword(MemoryManagement, DisablePagingExecValue);
+        var pagingExecSet = pagingExec == 1;
+        var pagingExecKept = saved.Kept.ContainsKey(PagingExecutiveKey);
+        if (pagingExecSet || pagingExecKept || Pending(PagingExecutiveKey))
+            items.Add(new(PagingExecutiveKey, "Kernel paging default",
+                Tell(PagingExecutiveKey, pagingExecSet ? "Another tool set DisablePagingExecutive to 1, wasting RAM on unused drivers with no FPS gain; Exo can restore Windows' default (0) and undo it back. Takes a restart." : "Restored to Windows' default (0)."),
+                !pagingExecSet, pagingExecKept, off.Contains(PagingExecutiveKey), false, Pending(PagingExecutiveKey)));
+
+        var trimDisabled = system.Dword(FileSystemKey, DisableDeleteNotifyValue) == 1;
+        var trimKept = saved.Kept.ContainsKey(TrimEnabledKey);
+        if (trimDisabled || trimKept || Pending(TrimEnabledKey))
+            items.Add(new(TrimEnabledKey, "SSD TRIM enabled",
+                Tell(TrimEnabledKey, trimDisabled ? "Another tool disabled NTFS TRIM (DisableDeleteNotify=1), which degrades SSD write latency over time; Exo can re-enable it and undo it back. Takes a restart." : "NTFS TRIM is enabled."),
+                !trimDisabled, trimKept, off.Contains(TrimEnabledKey), false, Pending(TrimEnabledKey)));
 
         var nvidiaAdapters = system.NvidiaDisplayClassKeys().Where(k => NvidiaClassKeyPattern().IsMatch(k)).ToList();
         var vrrLfcKept = saved.Kept.ContainsKey(VrrLfcKey);
@@ -411,12 +453,12 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             var overheadKept = saved.Kept.ContainsKey(OsOverheadKey);
             if (!overheadOn || overheadKept || Pending(OsOverheadKey))
             {
-                const string label = "P2P updates & Widgets off";
+                const string label = "P2P updates, Widgets & auto-reboot off";
                 var detail = Tell(OsOverheadKey, overheadOn
-                    ? "Delivery Optimization P2P and background Widgets feeds are off."
+                    ? "Delivery Optimization P2P uploads, Widgets feeds, and unexpected update reboots are off (EcoQoS stays intact)."
                     : needsPtMigration
-                        ? "Removes legacy PowerThrottlingOff (which disables EcoQoS) and keeps Delivery Optimization P2P and Widgets off. Takes a restart."
-                        : "Turns off Delivery Optimization P2P uploads and background Widgets/News feeds. Takes a restart.");
+                        ? "Removes legacy PowerThrottlingOff (which disables EcoQoS) and keeps Delivery Optimization P2P, Widgets, and unexpected update reboots off. Takes a restart."
+                        : "Turns off Delivery Optimization P2P uploads, background Widgets feeds, and unexpected update reboots while keeping Windows Update active. Takes a restart.");
                 items.Add(new(OsOverheadKey, label, detail,
                     overheadOn || (Pending(OsOverheadKey) && overheadKept), overheadKept, off.Contains(OsOverheadKey), false, Pending(OsOverheadKey)));
             }
@@ -457,7 +499,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     accelOff, true, false, true, false, null, NeedsRestart: false));
             }
         }
-        return new State(items);
+        return new State(items, ReadMigrationState(saved, Pending));
     }
 
     internal static bool HasToken(string? data, string name, string expectedValue) =>
@@ -560,7 +602,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             if (!Save(saved)) return "Exo couldn't save your choice, so nothing changed.";
         }
         var state = StateOf(saved);
-        var asked = state.Items.Where(i => !i.On && (only?.Contains(i.Key) ?? ((!i.OptIn || (includePlaybookExtras && (i.Key == ServicesKey || i.Key == IntegrityKey))) && !i.Off && !saved.Off.Contains(i.Key)))).ToList();
+        var asked = state.Items.Where(i => !i.On && (only?.Contains(i.Key) ?? ((!i.OptIn || (includePlaybookExtras && i.Key == ServicesKey)) && !i.Off && !saved.Off.Contains(i.Key)))).ToList();
         if (asked.FirstOrDefault(i => i.Blocked is not null) is { } held && only is not null) return held.Blocked;
         var wanted = asked.Where(i => i.Blocked is null).Select(i => i.Key).ToList();
         if (wanted.Count == 0) return null;
@@ -568,7 +610,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         var lines = new List<string>();
         var kept = new Dictionary<string, Was>(saved.Kept);
         var said = new List<string>();
-        string? clockWas = null, clockAfter = null, bcdWas = null, bcdAfter = null, mmWas = null, mmAfter = null;
+        string? clockWas = null, clockAfter = null, mmWas = null, mmAfter = null;
         List<string> tasksAttempted = [];
         List<uint> winFeaturesAttempted = [];
         var migratingPt = false;
@@ -617,6 +659,27 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                         kept.TryAdd(key, new Was(Services: [new ServiceWas(CaptureServiceName, svc.Start, svc.Delayed)]));
                         lines.Add(Sc(CaptureServiceName, "demand"));
                     }
+                    break;
+                }
+                case NetworkThrottlingKey:
+                {
+                    var was = system.Dword(MmcssKey, NetworkThrottlingValue);
+                    kept.TryAdd(key, new Was(was, Absent: was is null));
+                    lines.Add(RegDword(MmcssKey, NetworkThrottlingValue, 10));
+                    break;
+                }
+                case PagingExecutiveKey:
+                {
+                    var was = system.Dword(MemoryManagement, DisablePagingExecValue);
+                    kept.TryAdd(key, new Was(was, Absent: was is null));
+                    lines.Add(RegDword(MemoryManagement, DisablePagingExecValue, 0));
+                    break;
+                }
+                case TrimEnabledKey:
+                {
+                    var was = system.Dword(FileSystemKey, DisableDeleteNotifyValue);
+                    kept.TryAdd(key, new Was(was, Absent: was is null));
+                    lines.Add(RegDword(FileSystemKey, DisableDeleteNotifyValue, 0));
                     break;
                 }
                 case VrrLfcKey:
@@ -731,12 +794,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 }
                 case GamingUxKey:
                 case BackgroundAppsKey:
+                case GameIndexingKey:
                     PrepareDeepNonAdminBackup(key, kept);
-                    break;
-                case BootLatencyKey:
-                    bcdWas = system.Answer();
-                    bcdAfter = system.Answer();
-                    lines.AddRange(BootLatencyLines(bcdWas, bcdAfter));
                     break;
                 case MemCompressionKey:
                     mmWas = system.Answer();
@@ -771,7 +830,6 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             if (!await system.Admin(steps).ConfigureAwait(false))
             {
                 if (clockWas is not null) { system.ReadAnswer(clockWas); system.ReadAnswer(clockAfter!); }
-                if (bcdWas is not null) { system.ReadAnswer(bcdWas); system.ReadAnswer(bcdAfter!); }
                 if (mmWas is not null) { system.ReadAnswer(mmWas); system.ReadAnswer(mmAfter!); }
                 if (point is not null) system.ReadAnswer(point);
                 Save(prior);
@@ -855,6 +913,18 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     after = Drop(after, prior, key);
                     said.Add("Windows didn't restore Screen Capture Service.");
                     break;
+                case NetworkThrottlingKey when system.Dword(MmcssKey, NetworkThrottlingValue) == -1:
+                    after = Drop(after, prior, key);
+                    said.Add("Windows didn't restore NetworkThrottlingIndex.");
+                    break;
+                case PagingExecutiveKey when system.Dword(MemoryManagement, DisablePagingExecValue) == 1:
+                    after = Drop(after, prior, key);
+                    said.Add("Windows didn't restore DisablePagingExecutive.");
+                    break;
+                case TrimEnabledKey when system.Dword(FileSystemKey, DisableDeleteNotifyValue) == 1:
+                    after = Drop(after, prior, key);
+                    said.Add("Windows didn't re-enable NTFS TRIM.");
+                    break;
                 case VrrLfcKey:
                 {
                     var adapters = system.NvidiaDisplayClassKeys().Where(k => NvidiaClassKeyPattern().IsMatch(k)).ToList();
@@ -925,21 +995,6 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     after = Drop(after, prior, key);
                     said.Add("Windows didn't turn Memory Integrity off.");
                     break;
-                case BootLatencyKey:
-                {
-                    if (SettleBootLatency(system.ReadAnswer(bcdWas!), system.ReadAnswer(bcdAfter!)) is { } bootPrior)
-                    {
-                        var nextKept = new Dictionary<string, Was>(after.Kept) { [BootLatencyKey] = new Was(Strings: bootPrior) };
-                        var nextChanged = new Dictionary<string, DateTimeOffset>(after.Changed) { [BootLatencyKey] = now() };
-                        after = after with { Kept = nextKept, Changed = nextChanged };
-                    }
-                    else
-                    {
-                        after = Drop(after, prior, key);
-                        said.Add("Windows didn't apply boot latency settings.");
-                    }
-                    break;
-                }
                 case MemCompressionKey:
                 {
                     if (SettleMemCompression(system.ReadAnswer(mmWas!), system.ReadAnswer(mmAfter!)) is { } mmRecord)
@@ -979,7 +1034,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
     private async Task<string?> TurnOffNowAsync(string key)
     {
-        if (!Keys.Contains(key)) return "Exo doesn't know that setting.";
+        if (!Keys.Contains(key) && !RetiredKeys.Contains(key)) return "Exo doesn't know that setting.";
         var saved = Settled();
         if (saved.Kept.TryGetValue(key, out var was))
         {
@@ -1035,7 +1090,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 return Save(saved with { Kept = keptPrivacy, Off = offPrivacy }) ? null : "Exo couldn't save your choice.";
             }
             if (TryTurnOffDeepNonAdmin(key, was, saved) is { } deepNonAdminResult) return deepNonAdminResult;
-            if (key == GamingUxKey || key == BackgroundAppsKey) return null;
+            if (key is GamingUxKey or BackgroundAppsKey or GameIndexingKey) return null;
             if (key == MemCompressionKey)
             {
                 if (was.Strings is not [var mmTok] || (mmTok != "was=true" && mmTok != "was=false"))
@@ -1072,6 +1127,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     PagefileKey => SameStrings(system.Strings(MemoryManagement, PagingFiles), was.Strings),
                     CacheKey => system.Dword(MemoryManagement, LargeSystemCache) == was.Value,
                     CaptureServiceKey => was.Services is [var cs] && system.Service(cs.Name) is { } nowCs && nowCs.Start == cs.Start,
+                    NetworkThrottlingKey => system.Dword(MmcssKey, NetworkThrottlingValue) == was.Value,
+                    PagingExecutiveKey => system.Dword(MemoryManagement, DisablePagingExecValue) == was.Value,
+                    TrimEnabledKey => system.Dword(FileSystemKey, DisableDeleteNotifyValue) == was.Value,
                     VrrLfcKey => VerifyVrrLfcReverted(was),
                     TasksKey => VerifyTasksReverted(was),
                     WinFeaturesKey => VerifyWinFeaturesReverted(was),
@@ -1080,7 +1138,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     ServicesKey => was.Services!.All(s => system.Service(s.Name) is { } now && now.Start == s.Start && now.Delayed == s.Delayed),
                     IntegrityKey => system.Dword(Hvci, "Enabled") == was.Value,
                     _ when IsDeepPlaybookKey(key) => VerifyDeepReverted(key, was),
-                    _ => Forced(system.ReadAnswer(check!)) == true,
+                    _ => VerifyTimerReverted(was, system.ReadAnswer(check!)),
                 };
                 if (!back) return "Windows didn't put it back. Try again.";
                 var kept = new Dictionary<string, Was>(saved.Kept);
@@ -1150,13 +1208,16 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// <summary>The lines that put back what <paramref name="was"/> recorded; null when the record holds something Exo wouldn't write.</summary>
     internal static IReadOnlyList<string>? Revert(string key, Was was, string? selfExe = null) => key switch
     {
-        TimerKey => was.Clock ? [$"{Tool("bcdedit.exe")} /set {{current}} useplatformclock true"] : [],
+        TimerKey => RevertTimer(was),
         SchedulingKey => [was.Absent ? RegDelete(PriorityControl, Separation) : RegDword(PriorityControl, Separation, was.Value ?? Programs)],
         PagefileKey => was.Absent ? [RegDelete(MemoryManagement, PagingFiles)] : was.Strings is { } s && s.All(SafeText().IsMatch) ? [RegStrings(MemoryManagement, PagingFiles, s)] : null,
         CacheKey => [was.Absent ? RegDelete(MemoryManagement, LargeSystemCache) : RegDword(MemoryManagement, LargeSystemCache, was.Value ?? 0)],
         CaptureServiceKey => was.Services is [var cs] && cs.Name == CaptureServiceName
             ? [Sc(cs.Name, cs.Start switch { 2 => cs.Delayed ? "delayed-auto" : "auto", 3 => "demand", 4 => "disabled", _ => "demand" })]
             : null,
+        NetworkThrottlingKey => [was.Absent ? RegDelete(MmcssKey, NetworkThrottlingValue) : RegDword(MmcssKey, NetworkThrottlingValue, was.Value ?? 10)],
+        PagingExecutiveKey => [was.Absent ? RegDelete(MemoryManagement, DisablePagingExecValue) : RegDword(MemoryManagement, DisablePagingExecValue, was.Value ?? 0)],
+        TrimEnabledKey => [was.Absent ? RegDelete(FileSystemKey, DisableDeleteNotifyValue) : RegDword(FileSystemKey, DisableDeleteNotifyValue, was.Value ?? 0)],
         VrrLfcKey => RevertVrrLfc(was),
         TasksKey => RevertTasks(was),
         WinFeaturesKey => RevertWinFeatures(was, selfExe),
@@ -1310,7 +1371,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         var subKey = entry[..bar];
         var valName = entry[(bar + 1)..eq];
         var isLegacyPt = subKey == LegacyPowerThrottlingKey && valName == LegacyPowerThrottlingValue;
-        if (!isLegacyPt && !OsOverheadSettings.Any(s => s.Key == subKey && s.Name == valName)) return null;
+        if (!isLegacyPt
+            && !OsOverheadSettings.Any(s => s.Key == subKey && s.Name == valName)
+            && !LegacyOsOverheadSettings.Any(s => s.Key == subKey && s.Name == valName)) return null;
         var rawVal = entry[(eq + 1)..];
         if (rawVal == "absent") return (subKey, valName, null);
         return int.TryParse(rawVal, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var prevVal)
@@ -1390,6 +1453,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     [
         TimerRead(was),
         $"({Tool("findstr.exe")} /i /c:\"useplatformclock\" \"{Quoted(was)}\" >nul && {Tool("bcdedit.exe")} /deletevalue {{current}} useplatformclock)",
+        $"({Tool("findstr.exe")} /i /c:\"useplatformtick\" \"{Quoted(was)}\" >nul && {Tool("bcdedit.exe")} /deletevalue {{current}} useplatformtick)",
         TimerRead(after),
     ];
 
@@ -1404,9 +1468,63 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// The platform clock forced in a boot entry read (<see cref="TimerRead"/>): true when the value is there (seen in any
     /// read, even one cut short), false when bcdedit read the entry and it isn't, null when the read didn't happen or failed.
     /// </summary>
+    private static readonly string[] ForcedTimerFlagNames = ["useplatformclock", "useplatformtick"];
+
+    internal static string[] ExtractForcedTimerFlags(string bcdOutput)
+    {
+        var list = new List<string>();
+        foreach (var flag in ForcedTimerFlagNames)
+        {
+            if (ExtractBcdFlagValue(bcdOutput, flag) is { } val && SafeBcdTokenPattern().IsMatch(val))
+                list.Add($"{flag}={val}");
+        }
+        return [.. list];
+    }
+
+    private static IReadOnlyList<string>? RevertTimer(Was was)
+    {
+        if (was.Strings is { Length: > 0 } entries)
+        {
+            var lines = new List<string>(entries.Length);
+            foreach (var entry in entries)
+            {
+                var eq = entry.IndexOf('=');
+                if (eq <= 0 || eq >= entry.Length - 1) return null;
+                var flag = entry[..eq];
+                var val = entry[(eq + 1)..];
+                if (!ForcedTimerFlagNames.Any(f => f.Equals(flag, StringComparison.OrdinalIgnoreCase)) || !SafeBcdTokenPattern().IsMatch(val))
+                    return null;
+                lines.Add($"{Tool("bcdedit.exe")} /set {{current}} {flag} {val}");
+            }
+            return lines;
+        }
+        return was.Clock ? [$"{Tool("bcdedit.exe")} /set {{current}} useplatformclock true"] : [];
+    }
+
+    private static bool VerifyTimerReverted(Was was, string? rawCheck)
+    {
+        if (rawCheck is null) return false;
+        if (was.Strings is { Length: > 0 } entries)
+        {
+            if (!rawCheck.Contains(ReadOk, StringComparison.Ordinal)) return false;
+            foreach (var entry in entries)
+            {
+                var eq = entry.IndexOf('=');
+                if (eq <= 0 || eq >= entry.Length - 1) return false;
+                var flag = entry[..eq];
+                var expected = entry[(eq + 1)..];
+                if (!string.Equals(ExtractBcdFlagValue(rawCheck, flag), expected, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
+        }
+        return Forced(rawCheck) == true;
+    }
+
     internal static bool? Forced(string? read) =>
         read is null ? null
-        : read.Contains("useplatformclock", StringComparison.OrdinalIgnoreCase) ? true
+        : read.Contains("useplatformclock", StringComparison.OrdinalIgnoreCase)
+            || read.Contains("useplatformtick", StringComparison.OrdinalIgnoreCase) ? true
         : read.Contains(ReadOk, StringComparison.Ordinal) ? false
         : null;
 
@@ -1462,11 +1580,17 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     {
         note = null;
         if (!saved.Kept.TryGetValue(TimerKey, out var record) || record.Probe is not { } probe) return saved;
-        var forced = Forced(system.ReadAnswer(probe, keep: true));
+        var rawProbe = system.ReadAnswer(probe, keep: true);
+        var forced = Forced(rawProbe);
         var kept = new Dictionary<string, Was>(saved.Kept);
         var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
         var native = saved.Native;
-        if (forced == true) { kept[TimerKey] = new Was(Clock: true); changed[TimerKey] = record.ProbeAt ?? now(); }
+        if (forced == true)
+        {
+            var flags = rawProbe is not null ? ExtractForcedTimerFlags(rawProbe) : [];
+            kept[TimerKey] = new Was(Clock: true, Strings: flags.Length > 0 ? flags : null);
+            changed[TimerKey] = record.ProbeAt ?? now();
+        }
         else if (record.Clock) kept[TimerKey] = record with { Probe = null, ProbeAt = null };
         else kept.Remove(TimerKey);
         if (forced == false && !record.Clock)
@@ -1484,7 +1608,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         var saved = Load();
         var settled = Settle(saved, out _);
         if (!ReferenceEquals(settled, saved) && Save(settled)) system.ReadAnswer(saved.Kept[TimerKey].Probe!);
-        return settled;
+        return AutoAdvanceCleanMigration(settled);
     }
 
     private Saved Load()

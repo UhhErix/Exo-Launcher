@@ -55,12 +55,23 @@ pub enum HostEventKind {
     AutopilotReport,
     AutopilotLive,
     ShadersChanged,
+    ShadersEvent,
+    AccountsProgress,
+    BackupStopped,
+    ComponentsFailed,
+    GiftsChanged,
     StoreChanged,
     StoreSale,
     GameAchievements,
     GameOptimizedAgain,
     GameOptimizeHeld,
     CompressProgress,
+    GpuDriver,
+    GpuDriverInstall,
+    DriversStep,
+    BiosProgress,
+    RuntimesProgress,
+    ShadersRebuild,
     Raw,
     Disconnected,
 }
@@ -117,12 +128,23 @@ impl HostEventKind {
             HostEvent::AutopilotReport(_) => Self::AutopilotReport,
             HostEvent::AutopilotLive(_) => Self::AutopilotLive,
             HostEvent::ShadersChanged => Self::ShadersChanged,
+            HostEvent::ShadersEvent(_) => Self::ShadersEvent,
+            HostEvent::AccountsProgress(_) => Self::AccountsProgress,
+            HostEvent::BackupStopped(_) => Self::BackupStopped,
+            HostEvent::ComponentsFailed(_) => Self::ComponentsFailed,
+            HostEvent::GiftsChanged(_) => Self::GiftsChanged,
             HostEvent::StoreChanged(_) => Self::StoreChanged,
             HostEvent::StoreSale(_) => Self::StoreSale,
             HostEvent::GameAchievements(_) => Self::GameAchievements,
             HostEvent::GameOptimizedAgain(_) => Self::GameOptimizedAgain,
             HostEvent::GameOptimizeHeld(_) => Self::GameOptimizeHeld,
             HostEvent::CompressProgress(_) => Self::CompressProgress,
+            HostEvent::GpuDriver(_) => Self::GpuDriver,
+            HostEvent::GpuDriverInstall(_) => Self::GpuDriverInstall,
+            HostEvent::DriversStep(_) => Self::DriversStep,
+            HostEvent::BiosProgress { .. } => Self::BiosProgress,
+            HostEvent::RuntimesProgress(_) => Self::RuntimesProgress,
+            HostEvent::ShadersRebuild(_) => Self::ShadersRebuild,
             HostEvent::Raw { .. } => Self::Raw,
             HostEvent::Disconnected(_) => Self::Disconnected,
         }
@@ -152,6 +174,7 @@ impl EventRegistry {
         register_pc(&mut reg);
         register_store(&mut reg);
         register_game(&mut reg);
+        crate::settings_state::register_wp4_events(&mut reg);
         reg
     }
 
@@ -538,6 +561,60 @@ fn register_pc(reg: &mut EventRegistry) {
     reg.on(HostEventKind::ShadersChanged, |state, _| {
         state.apply_shaders_changed();
         state.room == Room::Library || state.room == Room::ExoAi
+    });
+    reg.on(HostEventKind::GpuDriver, |state, ev| {
+        let HostEvent::GpuDriver(prog) = ev else {
+            return false;
+        };
+        state.handle_gpu_driver_progress(prog)
+    });
+    reg.on(HostEventKind::GpuDriverInstall, |state, ev| {
+        let HostEvent::GpuDriverInstall(step) = ev else {
+            return false;
+        };
+        state.handle_gpu_driver_install_event(step)
+    });
+    reg.on(HostEventKind::DriversStep, |state, ev| {
+        let HostEvent::DriversStep(step) = ev else {
+            return false;
+        };
+        state.handle_driver_step_event(step)
+    });
+    reg.on(HostEventKind::BiosProgress, |state, ev| {
+        let HostEvent::BiosProgress { share } = ev else {
+            return false;
+        };
+        state.handle_bios_progress_event(share)
+    });
+    reg.on(HostEventKind::CompressProgress, |state, ev| {
+        let HostEvent::CompressProgress(cp) = ev else {
+            return false;
+        };
+        state.handle_compress_progress_event(&cp.id, cp.compress)
+    });
+    reg.on(HostEventKind::RuntimesProgress, |state, ev| {
+        let HostEvent::RuntimesProgress(prog) = ev else {
+            return false;
+        };
+        state.handle_runtimes_progress_event(prog)
+    });
+    reg.on(HostEventKind::ShadersEvent, |state, ev| {
+        let HostEvent::ShadersEvent(se) = ev else {
+            return false;
+        };
+        state.handle_shaders_event(&se.name, &se.data)
+    });
+    reg.on(HostEventKind::ShadersRebuild, |state, ev| {
+        let HostEvent::ShadersRebuild(rb) = ev else {
+            return false;
+        };
+        state.handle_shaders_rebuild_event(rb)
+    });
+    reg.on(HostEventKind::GameRunState, |state, _| {
+        state.on_pc_blocker_changed()
+    });
+    reg.on(HostEventKind::DiscordVoice, |state, _| {
+        state.on_pc_blocker_changed()
     });
 }
 

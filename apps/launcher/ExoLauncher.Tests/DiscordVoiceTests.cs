@@ -678,10 +678,11 @@ public sealed class VoiceChainTests
     public void TheCallsCpuIsReadAsAShareOfOneCore()
     {
         var before = VoiceAudio.ThreadCpu();
-        var watch = System.Diagnostics.Stopwatch.StartNew();
         double spin = 0;
-        while (watch.ElapsedMilliseconds < 100) spin += Math.Sqrt(spin + 1);
-        Assert.True(VoiceAudio.ThreadCpu() > before, $"no thread time counted ({spin})");
+        long after = before;
+        for (var batch = 0; batch < 50_000 && (after = VoiceAudio.ThreadCpu()) <= before; batch++)
+            for (var i = 0; i < 10_000; i++) spin += Math.Sqrt(spin + 1);
+        Assert.True(after > before, $"no thread time counted ({spin})");
         Assert.Equal(47.0, VoiceConnection.CoreShare(282_000_000, 600_000_000), 6);
         Assert.Equal(0d, VoiceConnection.CoreShare(-5, 600_000_000));
         Assert.Equal(0d, VoiceConnection.CoreShare(5, 0));

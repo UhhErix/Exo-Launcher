@@ -90,6 +90,7 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
         new("GigaLite", "0", "Gigabit Lite on", Wireless: false),
         // Intel's DMA coalescing holds packets to save power; off by default, back off if something turned it on.
         new("DMACoalescing", "0", "DMA coalescing on", Wireless: false),
+        new("*FlowControl", "0", "flow control on", Wireless: false, DesktopOnly: true),
         // Buffers an "optimizer" shrank: too few and the adapter runs out of them under a download's load.
         new("*ReceiveBuffers", "", "network buffers shrunk", Wireless: false, UpToDefault: true),
         new("*TransmitBuffers", "", "network buffers shrunk", Wireless: false, UpToDefault: true),
