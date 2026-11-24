@@ -34,6 +34,50 @@ fn spoiler_hidden_bg() -> Color {
     hex(0x28282f, 1.0)
 }
 
+fn format_discord_timestamp(unix: i64, style: &str) -> String {
+    if style == "R" {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(unix);
+        let diff = unix - now;
+        let abs = diff.abs();
+        let unit = if abs < 60 {
+            format!("{abs}s")
+        } else if abs < 3600 {
+            format!("{}m", abs / 60)
+        } else if abs < 86_400 {
+            format!("{}h", abs / 3600)
+        } else {
+            format!("{}d", abs / 86_400)
+        };
+        return if diff >= 0 {
+            format!("in {unit}")
+        } else {
+            format!("{unit} ago")
+        };
+    }
+    let days = unix.div_euclid(86_400);
+    let secs = unix.rem_euclid(86_400);
+    let hour = secs / 3600;
+    let minute = (secs % 3600) / 60;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if m <= 2 { y + 1 } else { y };
+    match style {
+        "t" | "T" => format!("{hour:02}:{minute:02}"),
+        "d" | "D" => format!("{year:04}-{m:02}-{d:02}"),
+        _ => format!("{year:04}-{m:02}-{d:02} {hour:02}:{minute:02}"),
+    }
+}
+
 pub fn parse_inline(input: &str, mentions: &[DiscordUser], reveal_spoilers: bool) -> ParsedInline {
     let mut plain = String::with_capacity(input.len());
     let mut spans = Vec::new();
@@ -179,6 +223,19 @@ pub fn parse_inline(input: &str, mentions: &[DiscordUser], reveal_spoilers: bool
                 i = i + 2 + close_rel;
                 continue;
             }
+            if let Some(rid) = token.strip_prefix("@&")
+                && rid.chars().all(|c| c.is_ascii_digit())
+            {
+                let start = plain.len();
+                plain.push_str(" @role ");
+                let end = plain.len();
+                let mut sp = Span::new(start, end).bg(mention_bg(), 2.0);
+                sp.color = Some(mention_fg());
+                sp.weight = Some(560.0);
+                spans.push(sp);
+                i = i + 2 + close_rel;
+                continue;
+            }
             if let Some(cid) = token.strip_prefix('#')
                 && cid.chars().all(|c| c.is_ascii_digit())
             {
@@ -205,10 +262,13 @@ pub fn parse_inline(input: &str, mentions: &[DiscordUser], reveal_spoilers: bool
                 continue;
             }
             if let Some(rest) = token.strip_prefix("t:") {
-                let ts_part = rest.split(':').next().unwrap_or("");
-                if ts_part.parse::<i64>().is_ok() {
+                let mut parts = rest.split(':');
+                let ts_part = parts.next().unwrap_or("");
+                let style = parts.next().unwrap_or("f");
+                if let Ok(unix) = ts_part.parse::<i64>() {
+                    let formatted = format_discord_timestamp(unix, style);
                     let start = plain.len();
-                    plain.push_str(&format!(" {ts_part}s "));
+                    plain.push_str(&format!(" {formatted} "));
                     let end = plain.len();
                     let mut sp = Span::new(start, end).bg(subtle_fill(), 2.0);
                     sp.color = Some(fg_muted());
@@ -377,6 +437,18 @@ pub fn render_markdown(
             continue;
         }
 
+        if let Some(sub) = line.strip_prefix("-# ") {
+            blocks = blocks.child(render_inline_text(
+                sub,
+                mentions,
+                type_label(),
+                fg_faint(),
+                msg_id,
+                reveal_spoilers,
+            ));
+            idx += 1;
+            continue;
+        }
         if let Some(h) = line.strip_prefix("### ") {
             blocks = blocks.child(render_inline_text(
                 h,
@@ -420,6 +492,7 @@ pub fn render_markdown(
             if cur.trim_start().starts_with("```")
                 || cur.starts_with("> ")
                 || cur == ">"
+                || cur.starts_with("-# ")
                 || cur.starts_with("# ")
                 || cur.starts_with("## ")
                 || cur.starts_with("### ")
@@ -473,5 +546,9 @@ mod tests {
 
         let revealed = parse_inline("||secret||", &mentions, true);
         assert_eq!(revealed.plain, "secret");
+
+        let role_ts = parse_inline("Ping <@&999> at <t:1700000000:d>", &mentions, false);
+        assert!(role_ts.plain.contains("@role"));
+        assert!(role_ts.plain.contains("2023-11-14"));
     }
 }

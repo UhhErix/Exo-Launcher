@@ -5,7 +5,10 @@ mod discord;
 mod discord_chat;
 mod discord_chat_state;
 mod discord_md;
+mod discord_pickers;
+mod discord_search;
 mod discord_state;
+mod discord_threads;
 mod discord_voice;
 mod discord_voice_state;
 mod events;
@@ -119,7 +122,19 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
     }
     if ev.key == Key::Escape {
+        if s.room == state::Room::Discord && s.dismiss_discord_chat_layer() {
+            return true;
+        }
         return s.dismiss_top_layer();
+    }
+    if ev.key == Key::Up
+        && s.room == state::Room::Discord
+        && s.discord.chat.composer.text.is_empty()
+        && s.discord.chat.editing.is_none()
+        && s.discord.chat.apps.active_command.is_none()
+    {
+        s.begin_edit_last_own_message();
+        return s.discord.chat.editing.is_some();
     }
     false
 }

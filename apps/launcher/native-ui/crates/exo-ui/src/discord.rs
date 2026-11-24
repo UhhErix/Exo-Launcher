@@ -1325,7 +1325,13 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
         false,
         icon_inbox(18.0, if s.discord.inbox_open { FG } else { fg_muted() }),
     )
-    .on_press(|s: &mut AppState| s.discord.inbox_open = !s.discord.inbox_open);
+    .on_press(|s: &mut AppState| {
+        if s.discord.inbox_open {
+            s.discord.inbox_open = false;
+        } else {
+            s.open_discord_inbox(crate::discord_chat_state::InboxTab::ForYou);
+        }
+    });
 
     panel_frame(
         row()
@@ -1822,10 +1828,7 @@ fn dm_sidebar(s: &AppState, sc: f32, scale: f32) -> El {
                 false,
                 icon_plus(16.0, fg_muted()),
             )
-            .on_press(|s: &mut AppState| {
-                s.open_discord_place(DiscordPlace::Home);
-                s.discord.add_friend_open = true;
-            }),
+            .on_press(|s: &mut AppState| s.open_create_dm_dialog()),
         )
     };
 
@@ -3288,6 +3291,9 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                         DiscordMemberItem::Member(m) => {
                             let offline = m.status == "offline";
                             let uid = m.id.clone();
+                            let gid_open = gid.to_string();
+                            let name_open = m.name.clone();
+                            let av_open = m.avatar.clone();
                             let uid_ctx = m.id.clone();
                             let gid_ctx = gid.to_string();
                             let name_ctx = m.name.clone();
@@ -3332,7 +3338,19 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                                     .opacity(if offline { 0.55 } else { 1.0 })
                                     .hit()
                                     .press_on_down()
-                                    .on_press(move |s: &mut AppState| s.open_dm_with_friend(&uid))
+                                    .on_press(move |s: &mut AppState| {
+                                        s.open_user_profile_dialog(
+                                            crate::discord_chat_state::ProfileOpenRequest {
+                                                user_id: &uid,
+                                                guild_id: Some(&gid_open),
+                                                fallback_name: &name_open,
+                                                fallback_username: "",
+                                                fallback_avatar: av_open.as_deref(),
+                                                full: false,
+                                                tab: crate::discord_chat_state::ProfileTab::About,
+                                            },
+                                        );
+                                    })
                                     .on_secondary_press(move |s: &mut AppState, pos, _| {
                                         s.open_context_menu(
                                             ContextMenuTarget::DiscordMember {
@@ -3540,6 +3558,29 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                             ),
                     );
                 }
+                if let Some(ref uid) = dm.user_id {
+                    let uid_c = uid.clone();
+                    let nm_c = dm.name.clone();
+                    let un_c = dm.username.clone().unwrap_or_default();
+                    let av_c = dm.avatar.clone();
+                    panel = panel.child(
+                        glass_button("dc-dm-full-profile", "View full profile", None).on_press(
+                            move |s: &mut AppState| {
+                                s.open_user_profile_dialog(
+                                    crate::discord_chat_state::ProfileOpenRequest {
+                                        user_id: &uid_c,
+                                        guild_id: None,
+                                        fallback_name: &nm_c,
+                                        fallback_username: &un_c,
+                                        fallback_avatar: av_c.as_deref(),
+                                        full: true,
+                                        tab: crate::discord_chat_state::ProfileTab::About,
+                                    },
+                                );
+                            },
+                        ),
+                    );
+                }
             }
             Some(panel)
         }
@@ -3569,98 +3610,6 @@ fn shop_placeholder(sc: f32) -> El {
             .font(font_px(13.0 * sc, 400.0))
             .color(fg_muted()),
     )
-}
-
-fn inbox_panel(s: &AppState, sc: f32) -> El {
-    let mut list = col().w_full().gap(4.0).px(12.0).pb(12.0);
-    if s.discord.unreads.is_empty() {
-        list = list.child(
-            text("All caught up.")
-                .font(font_px(13.0 * sc, 400.0))
-                .color(fg_muted())
-                .py(12.0),
-        );
-    } else {
-        for u in &s.discord.unreads {
-            let gid = u.guild_id.clone();
-            let cid = u.channel_id.clone();
-            list = list.child(
-                row()
-                    .key(format!("dc-inbox-{}", u.channel_id))
-                    .cursor(Cursor::Pointer)
-                    .w_full()
-                    .h(44.0 * sc)
-                    .px(10.0)
-                    .gap(10.0)
-                    .center_y()
-                    .radius(RADIUS_CARD)
-                    .fill(card_surface())
-                    .hover(hover_fill())
-                    .hover_motion(Spring::NONE, SPRING_QUICK)
-                    .hit()
-                    .press_on_down()
-                    .on_press(move |s: &mut AppState| {
-                        s.discord.inbox_open = false;
-                        s.open_discord_guild(&gid);
-                        s.open_discord_channel(&cid);
-                    })
-                    .child(icon_hash(15.0, fg_muted()))
-                    .child(
-                        col()
-                            .grow(1.0)
-                            .min_w(0.0)
-                            .child(
-                                text(u.name.clone())
-                                    .font(font_px(13.0 * sc, 600.0))
-                                    .color(FG)
-                                    .truncate(),
-                            )
-                            .child(
-                                text(u.guild.clone())
-                                    .font(font_px(11.0 * sc, 400.0))
-                                    .color(fg_muted())
-                                    .truncate(),
-                            ),
-                    )
-                    .child(if u.mentions > 0 {
-                        mention_badge(u.mentions, None, sc)
-                    } else {
-                        unread_dot_row(FG)
-                    }),
-            );
-        }
-    }
-
-    panel_frame(col().key("dc-inbox-panel").w(320.0 * sc).h_full())
-        .child(
-            row()
-                .w_full()
-                .h(48.0 * sc)
-                .px(16.0)
-                .justify_between()
-                .center_y()
-                .child(text("Inbox").font(font_px(15.0 * sc, 600.0)).color(FG))
-                .child(
-                    icon_btn(
-                        "dc-inbox-close".into(),
-                        "Close inbox",
-                        false,
-                        false,
-                        icon_close(15.0, fg_muted()),
-                    )
-                    .on_press(|s: &mut AppState| s.discord.inbox_open = false),
-                ),
-        )
-        .child(
-            col()
-                .grow(1.0)
-                .w_full()
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(list),
-        )
 }
 
 pub fn can_show_room(s: &AppState) -> bool {
@@ -3693,7 +3642,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
             .child(server_left_rail(s, guild, sc, scale))
             .child(channel_or_dm_stage(s, sc, scale, budget));
         if s.discord.inbox_open {
-            body = body.child(inbox_panel(s, sc));
+            body = body.child(crate::discord_search::inbox_panel(s, sc, scale));
         } else if !on_voice || !s.discord.voice_ui.show_voice_chat {
             if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
                 body = body.child(drawer);
@@ -3706,7 +3655,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
             .child(dm_sidebar(s, sc, scale))
             .child(channel_or_dm_stage(s, sc, scale, budget));
         if s.discord.inbox_open {
-            body = body.child(inbox_panel(s, sc));
+            body = body.child(crate::discord_search::inbox_panel(s, sc, scale));
         } else if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
             body = body.child(drawer);
         } else if let Some(panel) = right_members_panel(s, sc, scale) {
@@ -3721,7 +3670,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
                 friends_panel(s, sc, scale)
             });
         if s.discord.inbox_open {
-            body = body.child(inbox_panel(s, sc));
+            body = body.child(crate::discord_search::inbox_panel(s, sc, scale));
         }
     }
 
@@ -3740,6 +3689,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
 
 pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
     let mut out = discord_voice::voice_overlay_layers(s, blur);
+    out.extend(discord_chat::chat_overlay_layers(s, blur, 1.0));
     if s.discord.settings_open {
         out.push(discord_settings_modal(s, blur));
     }

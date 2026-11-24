@@ -1099,6 +1099,9 @@ impl AppState {
         if self.room == Room::Devices && room != Room::Devices && self.pc.mouse_panel_open {
             self.close_mouse_panel();
         }
+        if self.room == Room::Discord && room != Room::Discord && self.discord.signin.is_some() {
+            self.cancel_discord_signin();
+        }
         if self.room != Room::Settings && room == Room::Settings {
             self.prev_room = self.room;
         }
