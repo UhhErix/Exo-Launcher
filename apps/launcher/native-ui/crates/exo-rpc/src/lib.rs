@@ -1,6 +1,7 @@
 pub mod base64;
 pub mod discord_types;
 pub mod events;
+pub mod macro_types;
 pub mod media_types;
 pub mod pc_types;
 pub mod pipe;
@@ -27,6 +28,10 @@ pub use events::{
     AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
     GameRunStateEvent, InstallQueueEvent, LaunchStatusEvent, MusicVolumeEvent, PausedDownloadItem,
     RequestId, ShellBootstrap, StoreChangedEvent,
+};
+pub use macro_types::{
+    MacroBinding, MacroDeviceCapability, MacroGamePolicy, MacroInputSpec, MacroLatencySummary,
+    MacroLayer, MacroProfile, MacroStateSnapshot, MacroStep, MacroTrigger,
 };
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
@@ -95,6 +100,14 @@ pub const METHOD_CAPTURE_SETTINGS: &str = "capture.settings";
 pub const METHOD_CAPTURE_STATUS: &str = "capture.status";
 pub const METHOD_DEVICES_IMAGE: &str = "devices.image";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
+pub const METHOD_MACROS_ACTIVATE_PROFILE: &str = "macros.activateProfile";
+pub const METHOD_MACROS_CONFIRM_GAME: &str = "macros.confirmGame";
+pub const METHOD_MACROS_DELETE_PROFILE: &str = "macros.deleteProfile";
+pub const METHOD_MACROS_RECORD: &str = "macros.record";
+pub const METHOD_MACROS_SAVE_PROFILE: &str = "macros.saveProfile";
+pub const METHOD_MACROS_SET_ENABLED: &str = "macros.setEnabled";
+pub const METHOD_MACROS_STATE: &str = "macros.state";
+pub const METHOD_MACROS_TEST_RUN: &str = "macros.testRun";
 pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
 pub const METHOD_DISCORD_ACK: &str = "discord.ack";
 pub const METHOD_DISCORD_AUDIO: &str = "discord.audio";

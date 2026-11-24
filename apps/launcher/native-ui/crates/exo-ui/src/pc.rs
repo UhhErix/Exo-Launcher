@@ -6,7 +6,7 @@ use exo_kit::{
     filter_pill, float_line, glass_button, glass_control_fill, glass_rim_bottom, glass_rim_top,
     good, hover_fill, icon_app_window, icon_check, icon_chevron_down, icon_chevron_left, icon_cpu,
     icon_gamepad, icon_hard_drive, icon_headphones, icon_keyboard, icon_monitor, icon_mouse,
-    icon_refresh, icon_search, icon_trash, icon_volume, icon_volume_off, pressed_fill,
+    icon_refresh, icon_search, icon_trash, icon_volume, icon_volume_off, icon_zap, pressed_fill,
     primary_button, progress_bar, scaled, surface_card, type_body, type_control, type_label,
     type_page, type_section, type_small, type_title, warn,
 };
@@ -468,6 +468,10 @@ fn audio_detail(s: &AppState) -> El {
 }
 
 fn devices_room(s: &AppState, scale: f32) -> El {
+    if s.pc.macros_open {
+        return crate::macros::view(s, scale);
+    }
+
     let devices =
         s.pc.devices
             .as_ref()
@@ -548,8 +552,17 @@ fn devices_room(s: &AppState, scale: f32) -> El {
         .center_y()
         .child(text("Devices").font(type_title()).color(FG))
         .child(
-            glass_button("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)))
-                .on_press(|s: &mut AppState| s.load_pc_devices()),
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(
+                    glass_button("dev-macros", "Macros", Some(icon_zap(14.0, FG)))
+                        .on_press(|s: &mut AppState| s.pc.macros_open = true),
+                )
+                .child(
+                    glass_button("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)))
+                        .on_press(|s: &mut AppState| s.load_pc_devices()),
+                ),
         );
 
     let mut ordered: Vec<&PeripheralCard> = Vec::new();

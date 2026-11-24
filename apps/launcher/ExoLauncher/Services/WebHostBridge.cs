@@ -382,6 +382,7 @@ public sealed partial class WebHostBridge
         StopGiftsTimer();
         DetachAppsCache();
         UnwatchDevices();
+        UnwatchMacros();
         UnwatchEq();
         Interlocked.Exchange(ref _versionWatch, null)?.Dispose();
         Interlocked.Exchange(ref _steamClientPoll, null)?.Dispose();
@@ -507,8 +508,11 @@ public sealed partial class WebHostBridge
     }
 
     /// <summary>Same flags game.get projects for this exact id.</summary>
-    private void OnGameRunStateChanged(string gameId, GameRunState state) =>
+    private void OnGameRunStateChanged(string gameId, GameRunState state)
+    {
         PostEvent("game.runState", new { id = gameId, isRunning = state.IsRunning, canStop = state.CanStop });
+        _services.Macros.ObserveGameRunState(gameId, state.IsRunning);
+    }
 
     private void OnLibraryUpdated()
     {
@@ -1010,6 +1014,14 @@ public sealed partial class WebHostBridge
                 "mouse.profiles.set" => MouseFileSet("profiles.json", "profiles", paramsEl, hasParams),
                 "mouse.presets.get" => await Task.Run(() => MouseFileGet("presets.json", "presets")).ConfigureAwait(false),
                 "mouse.presets.set" => MouseFileSet("presets.json", "presets", paramsEl, hasParams),
+                "macros.state" => await Task.Run(MacrosState).ConfigureAwait(false),
+                "macros.saveProfile" => await Task.Run(() => MacrosSaveProfile(paramsEl, hasParams)).ConfigureAwait(false),
+                "macros.deleteProfile" => await Task.Run(() => MacrosDeleteProfile(paramsEl, hasParams)).ConfigureAwait(false),
+                "macros.activateProfile" => await Task.Run(() => MacrosActivateProfile(paramsEl, hasParams)).ConfigureAwait(false),
+                "macros.setEnabled" => await Task.Run(() => MacrosSetEnabled(paramsEl, hasParams)).ConfigureAwait(false),
+                "macros.confirmGame" => await Task.Run(() => MacrosConfirmGame(paramsEl, hasParams)).ConfigureAwait(false),
+                "macros.record" => await Task.Run(() => MacrosRecord(paramsEl, hasParams)).ConfigureAwait(false),
+                "macros.testRun" => await Task.Run(() => MacrosTestRun(paramsEl, hasParams, requestToken), requestToken).ConfigureAwait(false),
                 "hid.open" or "hid.close" or "hid.sendReport" or "hid.sendFeatureReport" or "hid.receiveFeatureReport" or "hid.receiveInputReport"
                     => await Task.Run(() => HidCallAsync(method, paramsEl, hasParams, requestToken)).ConfigureAwait(false),
                 _ => throw new UserFacingException($"Unknown method: {method}")

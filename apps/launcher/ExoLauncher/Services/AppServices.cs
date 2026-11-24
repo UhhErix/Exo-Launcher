@@ -48,6 +48,8 @@ public sealed class AppServices
     /// <summary>HID devices for the Devices room's mouse module.</summary>
     internal Hid.HidService Hid => _hid.Value;
     private readonly Lazy<Hid.HidService> _hid = new(() => new Hid.HidService());
+    internal Macros.MacroService Macros => _macros ??= new Macros.MacroService(this);
+    private Macros.MacroService? _macros;
 
     private readonly Lazy<IReadOnlyList<IStoreAdapter>> _adapters;
     private readonly Lazy<LibraryService> _library;

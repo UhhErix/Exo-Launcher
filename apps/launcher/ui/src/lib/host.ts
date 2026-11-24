@@ -1958,6 +1958,7 @@ export interface HostEventMap {
   'hid.changed': Record<string, never>
   /** A device arrived or left, or Windows' default speakers or microphone changed (once things settle): list devices again. */
   'devices.changed': Record<string, never>
+  'macros.changed': { reason: string; activeProfileId: string | null; softwarePausedForAntiCheat: boolean; pauseReason: string | null }
   /** The controller page's live view, at most 60 a second while it's on. */
   'controller.state': ControllerState
   /** Exo Capture's state changed: buffering, recording, hotkeys, or it stopped. */
@@ -3182,6 +3183,21 @@ export const host = {
   /** Exo Mouse's presets and per-mouse values (an opaque object it owns), kept in Exo's data folder like its profiles. */
   mousePresetsGet: () => rawCall<{ ok: boolean; message?: string; data?: unknown }>('mouse.presets.get'),
   mousePresetsSet: (p: Record<string, unknown>) => rawCall<{ ok: boolean; message?: string }>('mouse.presets.set', p),
+  macrosState: () => rawCall<MacroStateSnapshot>('macros.state'),
+  macrosSaveProfile: (profile: MacroProfile) =>
+    rawCall<{ ok: boolean; message?: string | null; profile?: MacroProfile | null }>('macros.saveProfile', { profile }),
+  macrosDeleteProfile: (id: string) =>
+    rawCall<{ ok: boolean; message?: string | null }>('macros.deleteProfile', { id }),
+  macrosActivateProfile: (id: string) =>
+    rawCall<{ ok: boolean; message?: string | null; softwarePaused?: boolean }>('macros.activateProfile', { id }),
+  macrosSetEnabled: (enabled: boolean) =>
+    rawCall<{ ok: boolean; enabled: boolean }>('macros.setEnabled', { enabled }),
+  macrosConfirmGame: (gameId: string, confirmed: boolean) =>
+    rawCall<{ ok: boolean; message?: string | null; policy?: MacroGamePolicy | null }>('macros.confirmGame', { gameId, confirmed }),
+  macrosRecord: (start: boolean, macroId?: string | null) =>
+    rawCall<{ ok: boolean; recording: boolean; macroId?: string | null }>('macros.record', { start, ...(macroId ? { macroId } : {}) }),
+  macrosTestRun: (profileId: string, bindingId: string) =>
+    rawCall<MacroTestRunResult>('macros.testRun', { profileId, bindingId }),
   keysPreview: () =>
     rawCall<{ ok: boolean; looksLikeKey?: boolean; store?: string; key?: string }>('keys.preview'),
   keysActivate: (key: string, store?: string) =>
@@ -3189,4 +3205,128 @@ export const host = {
       key,
       ...(store ? { store } : {}),
     }),
+}
+
+export type MacroInputSpec = {
+  deviceKind: 'keyboard' | 'mouse' | 'controller'
+  deviceId?: string | null
+  code: string
+}
+
+export type MacroTrigger = {
+  chord: MacroInputSpec[]
+  chordWindowMs: number
+  layerId: string
+  mode: 'once' | 'repeat' | 'hold' | 'toggle'
+  repeatCount: number
+  jitterMs: number
+  swallowInput: boolean
+}
+
+export type MacroStep = {
+  id: string
+  kind: 'keyDown' | 'keyUp' | 'mouseDown' | 'mouseUp' | 'mouseMove' | 'mouseWheel' | 'padButtonDown' | 'padButtonUp' | 'padAxis' | 'delay' | 'text' | 'launchApp' | 'layer'
+  code?: string | null
+  dx?: number | null
+  dy?: number | null
+  value?: number | null
+  delayMs: number
+  text?: string | null
+  appPath?: string | null
+  layerId?: string | null
+}
+
+export type MacroBinding = {
+  id: string
+  name: string
+  enabled: boolean
+  delivery: 'software' | 'onboard'
+  onboardDeviceId?: string | null
+  trigger: MacroTrigger
+  steps: MacroStep[]
+  updatedAt: string
+}
+
+export type MacroLayer = {
+  id: string
+  name: string
+  activation: 'base' | 'hold' | 'toggle'
+  trigger?: MacroInputSpec | null
+}
+
+export type MacroProfile = {
+  id: string
+  name: string
+  isDefault: boolean
+  gameIds: string[]
+  appExecutables: string[]
+  activeLayerId: string
+  layers: MacroLayer[]
+  bindings: MacroBinding[]
+}
+
+export type MacroGamePolicy = {
+  gameId: string
+  title: string
+  antiCheatKind: 'none' | 'found' | 'possiblyVac' | 'unknown'
+  antiCheatNames: string[]
+  antiCheatLabel?: string | null
+  requiresConfirmation: boolean
+  confirmed: boolean
+  autoEnableAllowed: boolean
+  softwareWarning?: string | null
+  onboardNote: string
+}
+
+export type MacroDeviceCapability = {
+  id: string
+  name: string
+  kind: 'mouse' | 'keyboard' | 'controller'
+  supportsOnboard: boolean
+  protocol?: string | null
+  connection?: string | null
+}
+
+export type MacroLatencySummary = {
+  samples: number
+  p50Us: number
+  p95Us: number
+  p99Us: number
+  maxUs: number
+  targetUs: number
+}
+
+export type MacroStepTrace = {
+  stepId: string
+  kind: string
+  targetOffsetMs: number
+  actualOffsetMs: number
+  errorUs: number
+}
+
+export type MacroTestRunResult = {
+  ok: boolean
+  message?: string | null
+  delivery: 'software' | 'onboard'
+  totalMs: number
+  latency: MacroLatencySummary
+  trace: MacroStepTrace[]
+}
+
+export type MacroStateSnapshot = {
+  ok: boolean
+  enabled: boolean
+  activeProfileId: string
+  activeGameId?: string | null
+  softwarePausedForAntiCheat: boolean
+  pauseReason?: string | null
+  recording: boolean
+  recordingMacroId?: string | null
+  debounceMs: number
+  exitGraceMs: number
+  hardwareWriteCooldownMs: number
+  profiles: MacroProfile[]
+  devices: MacroDeviceCapability[]
+  gamePolicies: MacroGamePolicy[]
+  latency: MacroLatencySummary
 }

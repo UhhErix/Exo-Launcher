@@ -4,9 +4,11 @@ use exo_rpc::{
     DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
     DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, ExoAccountState, ExoAiFans, ExoAiGaming,
     ExoAiState, HdrState, InstalledAppItem, KeyboardBackupSummary, KeyboardProfileSlot,
-    KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard, ShaderPrepareGame,
-    ShaderSnapGame, ShadersAddonStatus, StartupItem, StartupListReply, SystemAbout,
-    SystemTuningState, TuningItem, UpdateCheckReply, UpdateProgress,
+    KeyboardReadReply, LatencyReport, LatencySample, MacroBinding, MacroDeviceCapability,
+    MacroGamePolicy, MacroInputSpec, MacroLatencySummary, MacroLayer, MacroProfile,
+    MacroStateSnapshot, MacroStep, MacroTrigger, PeripheralCard, ShaderPrepareGame, ShaderSnapGame,
+    ShadersAddonStatus, StartupItem, StartupListReply, SystemAbout, SystemTuningState, TuningItem,
+    UpdateCheckReply, UpdateProgress,
 };
 use rune::TextEdit;
 use std::collections::HashMap;
@@ -105,6 +107,10 @@ pub struct SettingsAndPcState {
     pub exo_ai_storage_open: bool,
     pub armed_uninstall: Option<(String, u64)>,
     pub armed_uninstall_seq: u64,
+    pub macros_open: bool,
+    pub macros_state: Option<MacroStateSnapshot>,
+    pub macros_selected_profile: String,
+    pub macros_selected_binding: Option<String>,
 }
 
 impl SettingsAndPcState {
@@ -631,6 +637,10 @@ impl SettingsAndPcState {
             exo_ai_storage_open: false,
             armed_uninstall: None,
             armed_uninstall_seq: 0,
+            macros_open: false,
+            macros_state: Some(demo_macros_state()),
+            macros_selected_profile: "desktop".into(),
+            macros_selected_binding: Some("seed-onboard-remap".into()),
         }
     }
 
@@ -679,7 +689,202 @@ impl SettingsAndPcState {
             exo_ai_storage_open: false,
             armed_uninstall: None,
             armed_uninstall_seq: 0,
+            macros_open: false,
+            macros_state: None,
+            macros_selected_profile: "desktop".into(),
+            macros_selected_binding: None,
         }
+    }
+}
+
+fn demo_macros_state() -> MacroStateSnapshot {
+    MacroStateSnapshot {
+        ok: true,
+        enabled: true,
+        active_profile_id: "desktop".into(),
+        active_game_id: None,
+        software_paused_for_anti_cheat: false,
+        pause_reason: None,
+        recording: false,
+        recording_macro_id: None,
+        debounce_ms: 350,
+        exit_grace_ms: 1500,
+        hardware_write_cooldown_ms: 2000,
+        profiles: vec![
+            MacroProfile {
+                id: "desktop".into(),
+                name: "Desktop".into(),
+                is_default: true,
+                game_ids: Vec::new(),
+                app_executables: Vec::new(),
+                active_layer_id: "base".into(),
+                layers: vec![
+                    MacroLayer {
+                        id: "base".into(),
+                        name: "Base".into(),
+                        activation: "base".into(),
+                        trigger: None,
+                    },
+                    MacroLayer {
+                        id: "shift".into(),
+                        name: "Shift layer".into(),
+                        activation: "hold".into(),
+                        trigger: Some(MacroInputSpec {
+                            device_kind: "mouse".into(),
+                            device_id: None,
+                            code: "Mouse4".into(),
+                        }),
+                    },
+                ],
+                bindings: vec![
+                    MacroBinding {
+                        id: "seed-onboard-remap".into(),
+                        name: "Mouse 5 to Push-to-Talk".into(),
+                        enabled: true,
+                        delivery: "onboard".into(),
+                        onboard_device_id: Some("mouse-1".into()),
+                        trigger: MacroTrigger {
+                            chord: vec![MacroInputSpec {
+                                device_kind: "mouse".into(),
+                                device_id: Some("mouse-1".into()),
+                                code: "Mouse5".into(),
+                            }],
+                            chord_window_ms: 45,
+                            layer_id: "base".into(),
+                            mode: "hold".into(),
+                            repeat_count: 1,
+                            jitter_ms: 0,
+                            swallow_input: true,
+                        },
+                        steps: vec![
+                            MacroStep {
+                                id: "s1".into(),
+                                kind: "keyDown".into(),
+                                code: Some("F13".into()),
+                                delay_ms: 0.0,
+                                ..MacroStep::default()
+                            },
+                            MacroStep {
+                                id: "s2".into(),
+                                kind: "delay".into(),
+                                delay_ms: 12.0,
+                                ..MacroStep::default()
+                            },
+                            MacroStep {
+                                id: "s3".into(),
+                                kind: "keyUp".into(),
+                                code: Some("F13".into()),
+                                delay_ms: 0.0,
+                                ..MacroStep::default()
+                            },
+                        ],
+                        updated_at: "2026-11-24T00:00:00Z".into(),
+                    },
+                    MacroBinding {
+                        id: "seed-chord-clip".into(),
+                        name: "Controller LB + RB to Clip".into(),
+                        enabled: true,
+                        delivery: "software".into(),
+                        onboard_device_id: None,
+                        trigger: MacroTrigger {
+                            chord: vec![
+                                MacroInputSpec {
+                                    device_kind: "controller".into(),
+                                    device_id: None,
+                                    code: "LB".into(),
+                                },
+                                MacroInputSpec {
+                                    device_kind: "controller".into(),
+                                    device_id: None,
+                                    code: "RB".into(),
+                                },
+                            ],
+                            chord_window_ms: 45,
+                            layer_id: "base".into(),
+                            mode: "once".into(),
+                            repeat_count: 1,
+                            jitter_ms: 0,
+                            swallow_input: true,
+                        },
+                        steps: vec![
+                            MacroStep {
+                                id: "c1".into(),
+                                kind: "keyDown".into(),
+                                code: Some("F10".into()),
+                                delay_ms: 0.0,
+                                ..MacroStep::default()
+                            },
+                            MacroStep {
+                                id: "c2".into(),
+                                kind: "delay".into(),
+                                delay_ms: 16.0,
+                                ..MacroStep::default()
+                            },
+                            MacroStep {
+                                id: "c3".into(),
+                                kind: "keyUp".into(),
+                                code: Some("F10".into()),
+                                delay_ms: 0.0,
+                                ..MacroStep::default()
+                            },
+                        ],
+                        updated_at: "2026-11-24T00:00:00Z".into(),
+                    },
+                ],
+            },
+        ],
+        devices: vec![
+            MacroDeviceCapability {
+                id: "mouse-1".into(),
+                name: "Finalmouse Starlight X".into(),
+                kind: "mouse".into(),
+                supports_onboard: true,
+                protocol: Some("openmouse".into()),
+                connection: Some("wireless".into()),
+            },
+            MacroDeviceCapability {
+                id: "kb-1".into(),
+                name: "Wooting 60HE+".into(),
+                kind: "keyboard".into(),
+                supports_onboard: true,
+                protocol: Some("wooting-hid".into()),
+                connection: Some("usb".into()),
+            },
+        ],
+        game_policies: vec![
+            MacroGamePolicy {
+                game_id: "riot:valorant".into(),
+                title: "VALORANT".into(),
+                anti_cheat_kind: "found".into(),
+                anti_cheat_names: vec!["Riot Vanguard".into()],
+                anti_cheat_label: Some("Riot Vanguard".into()),
+                requires_confirmation: true,
+                confirmed: false,
+                auto_enable_allowed: false,
+                software_warning: Some("Uses Riot Vanguard. Software macros and injected input can break this game's rules and risk a ban.".into()),
+                onboard_note: "Onboard device memory remaps run in hardware with no software injection risk.".into(),
+            },
+            MacroGamePolicy {
+                game_id: "steam:413150".into(),
+                title: "Stardew Valley".into(),
+                anti_cheat_kind: "none".into(),
+                anti_cheat_names: Vec::new(),
+                anti_cheat_label: None,
+                requires_confirmation: false,
+                confirmed: false,
+                auto_enable_allowed: true,
+                software_warning: None,
+                onboard_note: "Onboard device memory remaps run in hardware with no software injection risk.".into(),
+            },
+        ],
+        latency: MacroLatencySummary {
+            samples: 24,
+            p50_us: 180.0,
+            p95_us: 410.0,
+            p99_us: 620.0,
+            max_us: 740.0,
+            target_us: 1000.0,
+        },
     }
 }
 

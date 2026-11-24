@@ -1,6 +1,6 @@
 import '../styles/devices-room.css'
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { ChevronLeft, Refresh } from '../brand/icons'
+import { Bolt, ChevronLeft, Refresh } from '../brand/icons'
 import { host, onHostEvent, type Peripheral } from '../lib/host'
 import { MOUSE_ORIGIN, postToMouse } from '../lib/mouseRelay'
 import { onMouseState, type MouseState } from '../lib/mouseState'
@@ -12,6 +12,7 @@ import { DeviceArt, type ArtKind } from './devices/art'
 import { AudioPage, type Wearing } from './devices/AudioPage'
 import { ControllerPage } from './devices/ControllerPage'
 import { KeyboardPage } from './devices/KeyboardPage'
+import { MacrosPage } from './devices/MacrosPage'
 import { portShort } from './devices/ports'
 import { railWidth } from './devices/rail'
 import { readWearing, saveWearing } from './devices/wearing'
@@ -57,7 +58,7 @@ export function DevicesRoom({ active }: { active: boolean }) {
   const cards = cardsFor(devices, mouse, wearing).filter(card => deviceHasPage(card.kind, card.device?.lab))
   const pictures = usePictures(cards)
   // A device that went (unplugged) takes its page with it.
-  useEffect(() => { if (page !== 'overview' && !cards.some(card => card.id === page)) setPage('overview') }, [cards, page])
+  useEffect(() => { if (page !== 'overview' && page !== 'macros' && !cards.some(card => card.id === page)) setPage('overview') }, [cards, page])
   const current = cards.find(card => card.id === page) ?? null
   // Back from a page the cards are simply there, the one you left folding back into place: they rose in once.
   const [returned, setReturned] = useState(false)
@@ -92,6 +93,7 @@ export function DevicesRoom({ active }: { active: boolean }) {
         {current?.kind === 'keyboard' && current.device ? (
           <KeyboardPage card={current.device} name={current.name} status={current.status} art={<Picture card={current} url={pictures[current.id]} wash />} />
         ) : null}
+        {page === 'macros' ? <MacrosPage /> : null}
         <MouseFrame shown={page === 'mouse'} visible={active && foreground && page === 'mouse'} />
       </div>
     </main>
@@ -211,6 +213,9 @@ function Overview({ hidden, cards, pictures, known, failed, scanning, rise, onRe
       <header className="exo-devices-head">
         <h1>{cards.length === 0 && known && !failed ? 'No devices to set up' : 'Devices'}</h1>
         <div className="exo-devices-head-end">
+          <button type="button" className="exo-set-btn" onClick={() => onOpen('macros')}>
+            <Bolt size={16} />Macros
+          </button>
           <button type="button" className="exo-set-btn" disabled={scanning} onClick={onRescan}>
             <Refresh size={16} className={scanning ? 'exo-spin' : undefined} />Rescan
           </button>

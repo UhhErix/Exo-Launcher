@@ -89,6 +89,7 @@ internal static class PlayerData
         new("web-client-preferences.json", Shape.JsonObject, 64 * 1024, Sync.Choice + " (music-service); the permission answers stay on this PC", ["web-client-preferences.json@WebClientPreferences"]),
         new("mouse/profiles.json", Shape.JsonObject, 512 * 1024, Sync.ThisPc + ": a profile is for the mouse on this PC", ["profiles.json@WebHostBridge"]),
         new("mouse/presets.json", Shape.JsonObject, 512 * 1024, Sync.ThisPc + ": presets are for the mouse on this PC", ["presets.json@WebHostBridge"]),
+        new("macros/macros.json", Shape.JsonObject, 512 * 1024, Sync.ThisPc + ": macro profiles, bindings and per-game anti-cheat confirmations on this PC", ["macros/macros.json@MacroService"]),
         new("controllers/games.json", Shape.JsonArray, Small, Sync.ThisPc + ": per-game controller settings for the pads on this PC", ["controllers/games.json@ControllerLab"]),
         new("controllers/*.json", Shape.JsonObject, Small, Sync.ThisPc + ": a pad's own memory (its factory calibration) is kept where the pad was read", []),
         new("keyboard-backups/*.json", Shape.JsonObject, Small, Sync.ThisPc + ": Wooting keyboard profile backups saved on this PC", []),

@@ -12,6 +12,7 @@ mod game_page;
 mod gamepad;
 mod key_modal;
 mod library;
+mod macros;
 mod media_state;
 mod music;
 mod notice;

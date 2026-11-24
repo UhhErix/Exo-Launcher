@@ -243,6 +243,7 @@ public sealed class PlayerDataTests : IDisposable
         ["autopilot-reports.json"] = Utf8("""{"version":1,"reports":[]}"""),
         ["autopilot-journal.json"] = Utf8("""{"version":1,"entries":[]}"""),
         ["game-settings/kept.json"] = Utf8("""{"cs2":{"file":"C:/Users/Player One/Saved/cs2_video.txt"}}"""),
+        ["macros/macros.json"] = Utf8("""{"version":1,"enabled":true,"activeProfileId":"desktop","profiles":[],"consents":[]}"""),
         ["game-settings/window-modes.json"] = Utf8("""{"steam:730":"borderless"}"""),
         ["game-settings/cs2.on.json"] = Utf8("""{"lines":[]}"""),
         ["game-settings/cs2.nvidia.json"] = Utf8("""{"values":[]}"""),
