@@ -51,7 +51,9 @@ accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "caaa6a71c7
 accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "caaa6a71c732fe7f3bc623d60283961f15ac1cdf" }
 
 [profile.release]
+opt-level = "s"
 lto = "thin"
 codegen-units = 1
-strip = true
+debug = "line-tables-only"
+strip = false
 panic = "abort"

@@ -110,10 +110,12 @@ Copy-Item (Join-Path $repo 'capture\out\obs') $captureAddon -Recurse -Force
 # without them, so a missing part stops the build, and the voice libraries must also load here.
 $voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'exo_voice_ml.dll', 'onnxruntime.dll'
 if (Test-Path (Join-Path $publish.FullName 'sherpa-onnx-c-api.dll')) { throw 'sherpa-onnx-c-api.dll must not ship; exo_voice_ml.dll replaces it.' }
-$parts = $voice + 'ExoLauncher.exe', 'exo-ui.exe', 'wwwroot\index.html', 'wwwroot\mouse\index.html', 'steam-ipc\ExoLauncher.SteamIpc.exe',
+$parts = $voice + 'ExoLauncher.exe', 'exo-ui.exe', 'wwwroot\mouse\index.html', 'wwwroot\changelog.gz', 'steam-ipc\ExoLauncher.SteamIpc.exe',
     'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe'
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($missing) { throw "The app folder lacks $($missing -join ', ')." }
+$leakedPdbs = @(Get-ChildItem -Recurse -File -Filter '*.pdb' $publish.FullName)
+if ($leakedPdbs.Count -gt 0) { throw "Debug symbols leaked into publish: $(($leakedPdbs | ForEach-Object Name) -join ', ')" }
 $dead = $voice | Where-Object {
     $handle = [IntPtr]::Zero
     -not [Runtime.InteropServices.NativeLibrary]::TryLoad((Join-Path $publish.FullName $_), [ref]$handle)
@@ -122,6 +124,30 @@ if ($dead) { throw "These won't load: $($dead -join ', ')." }
 
 $artifacts = Join-Path $repo 'artifacts'
 New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
+$symbols = Join-Path $artifacts 'symbols'
+if (Test-Path $symbols) { Remove-Item $symbols -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $symbols | Out-Null
+$symbolCandidates = @(
+    (Join-Path $repo 'ExoLauncher\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\ExoLauncher.pdb'),
+    (Join-Path $repo 'ExoLauncher.SteamIpc\bin\x64\Release\native-publish\ExoLauncher.SteamIpc.pdb'),
+    (Join-Path $repo 'capture\out\ExoCapture.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_ui.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_shaders_service.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_voice_ml.pdb')
+)
+foreach ($pdb in $symbolCandidates) {
+    if (Test-Path $pdb) { Copy-Item $pdb $symbols -Force }
+}
+$voiceSymbols = Join-Path $repo 'voice\out\symbols'
+if (Test-Path $voiceSymbols) {
+    Get-ChildItem $voiceSymbols -Filter '*.pdb' -ErrorAction SilentlyContinue | Copy-Item -Destination $symbols -Force
+}
+$symbolsZip = Join-Path $artifacts 'ExoLauncher-symbols.zip'
+if (Test-Path $symbolsZip) { Remove-Item $symbolsZip -Force }
+$symbolFiles = @(Get-ChildItem $symbols -Filter '*.pdb' -ErrorAction SilentlyContinue)
+if ($symbolFiles.Count -gt 0) {
+    Compress-Archive -Path ($symbolFiles | ForEach-Object FullName) -DestinationPath $symbolsZip -CompressionLevel Optimal
+}
 $setup = Join-Path $artifacts 'ExoLauncher-Setup.exe'
 # Exo Setup's window (setup\): Exo's own screens in WebView2. It goes into the app as its uninstaller too.
 pwsh -NoProfile -File (Join-Path $repo 'setup\build.ps1')

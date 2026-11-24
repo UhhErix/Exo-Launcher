@@ -20,8 +20,15 @@
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
-    <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+    <OptimizationPreference>Size</OptimizationPreference>
     <StackTraceSupport>true</StackTraceSupport>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <DebugType>pdbonly</DebugType>
+    <StripSymbols>true</StripSymbols>
     <Product>Exo Capture</Product>
     <Company>Exo</Company>
     <Copyright>Copyright (c) 2026 Erix (UhhErix)</Copyright>
