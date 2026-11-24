@@ -19,6 +19,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
     internal const int MaxMessageBytes = ExoBridgeProtocol.MaxImageRequestCharacters;
     internal const int MaxVideoFrameBytes = 8 * 1024 * 1024;
     internal const int MaxVideoMetaBytes = 64 * 1024;
+    internal const int ReliableQueueCapacity = 2048;
     private const int StreamQueueCapacity = 64;
     private const int MediaQueueCapacity = 16;
     private const int WriteBatchBytes = 64 * 1024;
@@ -29,10 +30,11 @@ public sealed class NamedPipeHostTransport : IHostTransport
     private readonly int _maxMessageBytes;
 
     private readonly CancellationTokenSource _cts = new();
-    private readonly Channel<ExoWireOutboundFrame> _reliable = Channel.CreateUnbounded<ExoWireOutboundFrame>(new UnboundedChannelOptions
+    private readonly Channel<ExoWireOutboundFrame> _reliable = Channel.CreateBounded<ExoWireOutboundFrame>(new BoundedChannelOptions(ReliableQueueCapacity)
     {
         SingleReader = true,
         SingleWriter = false,
+        FullMode = BoundedChannelFullMode.Wait,
     });
     private readonly Channel<ExoWireOutboundFrame> _stream = Channel.CreateBounded<ExoWireOutboundFrame>(new BoundedChannelOptions(StreamQueueCapacity)
     {
@@ -110,7 +112,11 @@ public sealed class NamedPipeHostTransport : IHostTransport
     {
         if (Volatile.Read(ref _detached) || utf8Json.Length == 0) return;
         if (_reliable.Writer.TryWrite(new ExoWireOutboundFrame(utf8Json, utf8Json.Length, pooled: false, isBinaryWire: false)))
+        {
             SignalOutbound();
+            return;
+        }
+        DisconnectStalledClient();
     }
 
     internal void PostWireFrame(ExoWireOutboundFrame frame, bool reliable = true)
@@ -121,8 +127,21 @@ public sealed class NamedPipeHostTransport : IHostTransport
             return;
         }
         var written = reliable ? _reliable.Writer.TryWrite(frame) : _stream.Writer.TryWrite(frame);
-        if (written) SignalOutbound();
-        else frame.Release();
+        if (written)
+        {
+            SignalOutbound();
+            return;
+        }
+        frame.Release();
+        if (reliable) DisconnectStalledClient();
+    }
+
+    private void DisconnectStalledClient()
+    {
+        AppLog.Warn("NamedPipeHostTransport: reliable outbound queue full; disconnecting stalled client.");
+        NamedPipeServerStream? pipe;
+        lock (_pipeGate) pipe = _activePipe;
+        try { pipe?.Dispose(); } catch { }
     }
 
     internal void PostWireResponse(ulong reqId, ushort methodId, bool ok, object? result, string? error)
