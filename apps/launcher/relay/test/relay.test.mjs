@@ -112,6 +112,17 @@ for (const evict of [false, true]) {
         assert.equal((await fetch(base + path)).status, 404, path)
       await assert.rejects(open(`ws://127.0.0.1:${relay.port}/v1/nope`))
     })
+
+    test('closing a misbehaving socket broadcasts GONE at most once', async () => {
+      const topic = fresh()
+      const [a, b] = await Promise.all([open(url(topic)), open(url(topic))])
+      b.ws.send('text-not-binary')
+      assert.equal(await b.closed, 1003)
+      const gone = await a.next()
+      assert.equal(gone.kind, 2)
+      await quiet(a)
+      a.ws.close()
+    })
   })
 }
 

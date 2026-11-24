@@ -97,7 +97,7 @@ export default {
 
     try {
       const found = await cover(input, env, ctx, address)
-      if (found.url) return json({ ok: true, url: found.url, source: found.source })
+      if (found.url) return json({ ok: true, url: found.url, source: found.source }, 200, { 'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800' })
       // partial: some store could not be asked, so this is not a final answer and nothing was remembered.
       return json(found.partial ? { ok: false, miss: true, partial: true } : { ok: false, miss: true }, 404)
     } catch (e) {

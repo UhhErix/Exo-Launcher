@@ -652,4 +652,18 @@ describe('/health', () => {
     for (let i = 0; i < 20; i++) expect((await get({ COVERS: counting })).status).toBe(200)
     expect(reads).toBe(1)
   })
+
+  it('caches cover hits at the edge while keeping misses and health no-store', async () => {
+    storeSearch([{ type: 'app', id: 1145360, name: 'Hades' }])
+    posterAt('1145360')
+    const hit = await ask('title=Hades')
+    expect(hit.status).toBe(200)
+    expect(hit.headers.get('Cache-Control')).toBe('public, max-age=86400, stale-while-revalidate=604800')
+    everyStoreSaysNo('nonexistent-xyz-game')
+    const miss = await ask('title=Nonexistent+XYZ+Game')
+    expect(miss.status).toBe(404)
+    expect(miss.headers.get('Cache-Control')).toBe('no-store')
+    const healthRes = await get()
+    expect(healthRes.headers.get('Cache-Control')).toBe('no-store')
+  })
 })

@@ -269,3 +269,27 @@ test('account deletion takes the items too', async () => {
   assert.equal(env.DB.rows('items').length, 0)
   assert.equal(env.DB.rows('accounts').length, 0)
 })
+
+test('pull at current seq skips items queries and answers 304 for matching ETag', async () => {
+  const env = account()
+  const { phone, laptop } = await setup(env)
+  await put(env, phone, [item('launcher', 'settings', 'theme', '{"dark":true}')])
+  const first = await pull(env, laptop)
+  const etag = first.headers.get('etag')
+  assert.equal(etag, `"seq-${first.body.cursor}"`)
+  let itemQueries = 0
+  const realPrepare = env.DB.prepare.bind(env.DB)
+  env.DB.prepare = (sql) => {
+    if (sql.includes('FROM items')) itemQueries++
+    return realPrepare(sql)
+  }
+  const idle = await pull(env, laptop, first.body.cursor)
+  assert.equal(idle.status, 200)
+  assert.deepEqual(idle.body, { items: [], cursor: first.body.cursor, more: false })
+  assert.equal(idle.headers.get('etag'), etag)
+  assert.equal(itemQueries, 0)
+  const cached = await call(env, 'GET', `/v1/sync?after=${first.body.cursor}`, { token: laptop, headers: { 'If-None-Match': `W/${etag}` } })
+  assert.equal(cached.status, 304)
+  assert.equal(cached.headers.get('etag'), etag)
+  assert.equal(itemQueries, 0)
+})

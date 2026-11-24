@@ -5,6 +5,7 @@ import { deleteInstall, insertEvents, installEventsSince, runRetention, utcDay }
 import { addCrashIndex, deleteCrashReports, pruneCrashIndex, removeCrashIndex } from './crash-store.js'
 import { ContactError, contactLimits, parseContact } from './contact.js'
 import { ALERT_AT, alertOf, claimAlert, countReport, dailyMessage, digestOf, discordBody, heldBack, isDiscordWebhook, pausedAlert, pruneAlertDays, pruneCrashDays, userAlertOf } from './triage.js'
+import { isVersionSkew } from './fingerprint.js'
 import { fileCrash, fileUserReport, flush, pruneIssueDays, queueUserReport } from './issues.js'
 import { gitHubOf } from './github.js'
 import { parseUserReport, userLimits } from './user-report.js'
@@ -62,9 +63,10 @@ export default {
 async function triage(env, report, key, day) {
   if (!env.TELEMETRY) return
   const withGitHub = gitHubOf(env) !== null
+  const versionSkew = isVersionSkew(report)
   try {
     const total = await countReport(env.TELEMETRY, report, key, day)
-    if (!withGitHub && ALERT_AT.includes(total)) {
+    if (!versionSkew && !withGitHub && ALERT_AT.includes(total)) {
       const does = await claimAlert(env.TELEMETRY, day)
       if (does === 'send') await tellTeam(env, alertOf(report, total))
       else if (does === 'pause') await tellTeam(env, pausedAlert(day))
