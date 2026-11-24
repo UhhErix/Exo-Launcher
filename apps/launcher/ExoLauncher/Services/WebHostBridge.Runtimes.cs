@@ -37,7 +37,7 @@ public sealed partial class WebHostBridge
             message = result.Message,
             declined = result.Declined,
             canceled = result.Canceled,
-            results = result.Results.Select(r => new { id = r.Id, name = r.Name, outcome = r.Outcome, message = r.Message, code = r.Code }),
+            results = result.Results.Select(r => new { id = r.Id, name = r.Name, outcome = r.Outcome, message = r.Message, code = r.Code, detail = r.Detail }),
             items = result.Items,
         };
     }
