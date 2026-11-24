@@ -6,9 +6,10 @@ const loadRegistry = (devices: readonly HIDDevice[]) =>
   import('@openmouse/protocol/drivers/registry-lazy').then(m => m.loadRegistryForDevices(devices))
 import type { MouseStatus } from '@openmouse/protocol/drivers/mouse-types'
 import { capabilitiesForFormat } from '@openmouse/protocol/drivers/logitech/onboard-profiles'
-import { exoHid, onHostEvent } from './exo-hid'
+import { exoHid, onHostEvent, tell } from './exo-hid'
 import { loadSaved, saveValue, savedValue } from './saved'
 import { attachRazerAngle } from './razer-angle'
+import { WriteRateLimiter, notifyManualMouseWrite } from './profile-logic'
 
 /** One connectable device: the interface its best driver wants. */
 /** others: the product's other interfaces, the next best first, tried when this one won't open (a Razer receiver's). */
@@ -108,8 +109,12 @@ function rememberHostBunnyHop(id: string, ms: unknown) {
  * Every change goes through `apply`, which reads the mouse back so what
  * shows is what the mouse took.
  */
+const writeLimiter = new WriteRateLimiter()
+
 export function useMouse() {
   const [state, setState] = useState<MouseState>({ phase: 'looking', candidates: [], current: null, brand: '', status: null, error: null, busy: false, readAt: 0 })
+  const statusRef = useRef<MouseStatus | null>(null)
+  statusRef.current = state.status
   const client = useRef<SupportedClient | null>(null)
   /** The open mouse's id, which keeps what it can't report (withHostBunnyHop). */
   const openId = useRef('')
@@ -236,9 +241,19 @@ export function useMouse() {
    * Runs setters in order (a failing one does not stop the rest), then reads the mouse back
    * once; resolves to what the mouse took, or null with the first failure as the error.
    */
-  const applyAll = useCallback(async (steps: Step[]): Promise<MouseStatus | null> => {
+  const applyAll = useCallback(async (steps: Step[], options?: { source?: 'user' | 'profile' }): Promise<MouseStatus | null> => {
     const c = client.current
     if (!c) return null
+    if (steps.length === 0) return statusRef.current
+    const devKey = openId.current || 'unknown'
+    const decision = writeLimiter.tryAcquire(devKey)
+    if (!decision.allowed) {
+      const msg = 'Stopped writing to your mouse because too many setting changes fired in a row.'
+      setState(s => ({ ...s, error: msg }))
+      tell({ notice: msg })
+      return null
+    }
+    if (options?.source !== 'profile') notifyManualMouseWrite()
     writing.current++
     setState(s => ({ ...s, busy: true, error: null }))
     try {

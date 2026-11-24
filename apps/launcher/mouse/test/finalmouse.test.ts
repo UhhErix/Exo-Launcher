@@ -147,7 +147,9 @@ test('Ultraclick bit preserves bit-0 Intent Trigger preference across mode trans
   assert.equal(nextIntentForChoice('analog', 2), 0)
   assert.equal(nextIntentForChoice('analog', 3), 1)
   assert.equal(nextIntentForChoice('analog', null), null)
-  assert.equal(nextIntentForChoice('mechanical', 3), 3)
+  assert.equal(nextIntentForChoice('mechanical', 3), 1)
+  assert.equal(nextIntentForChoice('mechanical', 2), 0)
+  assert.equal(nextIntentForChoice('mechanical', null), null)
 
   assert.deepEqual(buildClickModeArgs(1, 1, 0, 0, 2, 2), [1, 1, 0, 0, 2, 2])
   assert.deepEqual(buildClickModeArgs(1, 1, 0, 0, null, null), [1, 1, 0, 0])
