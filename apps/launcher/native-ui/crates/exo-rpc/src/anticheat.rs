@@ -62,6 +62,14 @@ impl AntiCheatClass {
         true
     }
 
+    pub const fn allows_windows_audio_apo(self) -> bool {
+        true
+    }
+
+    pub const fn forbids_audio_process_hooking(self) -> bool {
+        true
+    }
+
     pub const fn allows_signed_upscaler_swap(self, ban_risk_confirmed: bool) -> bool {
         match self.effective() {
             Self::OfflineAntiCheat => true,
@@ -332,5 +340,15 @@ mod tests {
         assert!(AntiCheatClass::CompetitivePvpOnline.forbids_game_tree_set_rights());
         assert!(AntiCheatClass::Unknown.forbids_game_tree_set_rights());
         assert!(!AntiCheatClass::OfflineAntiCheat.forbids_game_tree_set_rights());
+
+        for variant in [
+            AntiCheatClass::CompetitivePvpOnline,
+            AntiCheatClass::OnlineNonCompetitivePve,
+            AntiCheatClass::OfflineAntiCheat,
+            AntiCheatClass::Unknown,
+        ] {
+            assert!(variant.allows_windows_audio_apo());
+            assert!(variant.forbids_audio_process_hooking());
+        }
     }
 }

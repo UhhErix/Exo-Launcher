@@ -24,6 +24,7 @@ members = [
     "crates/exo-upscale",
     "crates/exo-voice-ml",
     "crates/exo-fg-bridge",
+    "crates/exo-audio-apo",
 ]
 
 [workspace.package]

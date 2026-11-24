@@ -839,6 +839,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-audio-apo"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
+ "exo-rpc",
+ "flate2",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
 name = "exo-auth"
 version = "0.1.0"
 dependencies = [
