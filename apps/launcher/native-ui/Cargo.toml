@@ -11,6 +11,7 @@ members = [
     "crates/exo-power-guard",
     "crates/exo-sensors",
     "crates/exo-gpu",
+    "crates/exo-present",
     "crates/exo-ui",
     "crates/exo-shaders",
     "crates/exo-thermal",

@@ -963,6 +963,16 @@ name = "exo-power-guard"
 version = "0.1.0"
 
 [[package]]
+name = "exo-present"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "exo-rpc"
 version = "0.1.0"
 dependencies = [
@@ -1006,6 +1016,7 @@ dependencies = [
  "exo-kit",
  "exo-macros",
  "exo-power-guard",
+ "exo-present",
  "exo-rpc",
  "exo-sensors",
  "image",
