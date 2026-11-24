@@ -1,7 +1,9 @@
 use crate::discord_admin::{self, PAGE_BROWSE, PAGE_GUIDE, PAGE_MEMBERS};
 use crate::discord_chat;
+use crate::discord_md;
 use crate::discord_settings;
 use crate::discord_state::{DiscordFriendsTab, DiscordPlace, DiscordSettingsPage};
+use crate::discord_threads::parse_hex_color;
 use crate::discord_voice;
 use crate::shell::BlurBudget;
 use crate::state::{AppState, ContextMenuTarget};
@@ -962,7 +964,9 @@ fn band_guild_button(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) ->
         );
     }
 
-    if guild.in_voice > 0 {
+    let my_voice_here = s.discord.voice.state != "off"
+        && s.discord.voice.guild_id.as_deref() == Some(guild.id.as_str());
+    if guild.in_voice > 0 || my_voice_here {
         btn = btn.child(
             el().pin(Some(0.0), None, None, Some(0.0))
                 .size(20.0, 20.0)
@@ -1326,7 +1330,13 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
         false,
         icon_inbox(18.0, if s.discord.inbox_open { FG } else { fg_muted() }),
     )
-    .on_press(|s: &mut AppState| s.discord.inbox_open = !s.discord.inbox_open);
+    .on_press(|s: &mut AppState| {
+        if s.discord.inbox_open {
+            s.discord.inbox_open = false;
+        } else {
+            s.open_discord_inbox(crate::discord_chat_state::InboxTab::ForYou);
+        }
+    });
 
     let scroll_right_btn = el()
         .key("dc-band-scroll-right")
@@ -1606,11 +1616,21 @@ fn pinned_dm_ids(s: &AppState) -> Vec<String> {
     ids
 }
 
-fn dm_subtitle(dm: &DiscordDm) -> Option<String> {
+fn dm_subtitle(s: &AppState, dm: &DiscordDm) -> Option<String> {
     if let Some(ref line) = dm.line
         && !line.is_empty()
     {
         return Some(line.clone());
+    }
+    if let Some(last) = s
+        .discord
+        .chat
+        .messages_by_channel
+        .get(&dm.id)
+        .and_then(|v| v.last())
+        && let Some(preview) = crate::discord_chat_state::dm_preview_from_message(last)
+    {
+        return Some(preview);
     }
     if let Some(ref sub) = dm.subtitle
         && !sub.is_empty()
@@ -1654,7 +1674,7 @@ fn dm_row(s: &AppState, dm: &DiscordDm, active: bool, sc: f32, scale: f32) -> El
             .color(name_color)
             .truncate(),
     );
-    if let Some(sub) = dm_subtitle(dm) {
+    if let Some(sub) = dm_subtitle(s, dm) {
         body = body.child(
             text(sub)
                 .font(font_px(12.0 * sc, 400.0))
@@ -1842,10 +1862,7 @@ fn dm_sidebar(s: &AppState, sc: f32, scale: f32) -> El {
                 false,
                 icon_plus(16.0, fg_muted()),
             )
-            .on_press(|s: &mut AppState| {
-                s.open_discord_place(DiscordPlace::Home);
-                s.discord.add_friend_open = true;
-            }),
+            .on_press(|s: &mut AppState| s.open_create_dm_dialog()),
         )
     };
 
@@ -3251,10 +3268,11 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32, budget: BlurBudget) ->
                             scale,
                         ))
                         .child(
-                            col()
+                            row()
                                 .grow(1.0)
                                 .min_w(0.0)
-                                .gap(1.0)
+                                .gap(8.0)
+                                .center_y()
                                 .child(
                                     text(dm.name.clone())
                                         .font(font_px(14.0 * sc, 600.0))
@@ -3262,35 +3280,52 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32, budget: BlurBudget) ->
                                         .truncate(),
                                 )
                                 .child(
-                                    text(
+                                    text(if dm.group {
+                                        let count =
+                                            dm.members.as_ref().map(|m| m.len() + 1).unwrap_or(2);
+                                        format!("{count} Members")
+                                    } else {
                                         dm.subtitle
                                             .clone()
-                                            .or_else(|| {
-                                                dm.username.clone().map(|u| format!("@{u}"))
+                                            .filter(|sub| !sub.is_empty())
+                                            .unwrap_or_else(|| {
+                                                status_label(
+                                                    dm.status.as_deref().unwrap_or("offline"),
+                                                )
+                                                .into()
                                             })
-                                            .unwrap_or_else(|| "Direct message".into()),
-                                    )
-                                    .font(font_px(11.0 * sc, 400.0))
+                                    })
+                                    .font(font_px(12.0 * sc, 400.0))
                                     .color(fg_muted())
                                     .truncate(),
                                 ),
                         ),
                 )
-                .child(
+                .child({
+                    let dm_id_vid = dm.id.clone();
                     row()
-                        .gap(6.0)
+                        .gap(4.0)
                         .center_y()
-                        .child(discord_chat::header_tools(s))
                         .child(
-                            if in_call {
-                                glass_button(
-                                    "dc-dm-leave",
-                                    "End call",
-                                    Some(icon_phone_off(13.0, bad())),
-                                )
-                            } else {
-                                glass_button("dc-dm-call", "Voice call", Some(icon_phone(13.0, FG)))
-                            }
+                            icon_btn(
+                                if in_call {
+                                    "dc-dm-leave".into()
+                                } else {
+                                    "dc-dm-call".into()
+                                },
+                                if in_call {
+                                    "End call"
+                                } else {
+                                    "Start a voice call"
+                                },
+                                in_call,
+                                in_call,
+                                if in_call {
+                                    icon_phone_off(16.0, bad())
+                                } else {
+                                    icon_phone(16.0, fg_muted())
+                                },
+                            )
                             .on_press(move |s: &mut AppState| {
                                 if in_call {
                                     s.leave_discord_voice();
@@ -3298,13 +3333,32 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32, budget: BlurBudget) ->
                                     s.join_discord_voice(None, &dm_id);
                                 }
                             }),
-                        ),
-                );
+                        )
+                        .child(
+                            icon_btn(
+                                "dc-dm-video".into(),
+                                "Start a video call",
+                                false,
+                                false,
+                                exo_kit::icon_camera(16.0, fg_muted()),
+                            )
+                            .on_press(move |s: &mut AppState| {
+                                if !in_call {
+                                    s.join_discord_voice(None, &dm_id_vid);
+                                }
+                            }),
+                        )
+                        .child(discord_chat::header_tools(s))
+                });
 
             let chat_body = discord_chat::timeline_and_composer(
                 s,
                 &dm.id,
-                format!("Message {}…", dm.name),
+                if dm.group {
+                    format!("Message {}", dm.name)
+                } else {
+                    format!("Message @{}", dm.name)
+                },
                 dm.name.clone(),
                 dm.subtitle
                     .clone()
@@ -3348,6 +3402,11 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32, budget: BlurBudget) ->
                 );
             }
 
+            let guild_prefix = s
+                .discord
+                .active_guild()
+                .map(|g| format!("{} · ", g.name))
+                .unwrap_or_else(|| "· ".into());
             let header = row()
                 .w_full()
                 .h(head_h)
@@ -3365,17 +3424,17 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32, budget: BlurBudget) ->
                         .child(icon_hash(16.0, fg_muted()))
                         .child(
                             text(ch.name.clone())
-                                .font(font_px(14.0 * sc, 600.0))
+                                .font(font_px(15.0 * sc, 600.0))
                                 .color(FG),
                         )
                         .child(if let Some(ref topic) = ch.topic {
-                            text(format!("· {topic}"))
+                            text(format!("{guild_prefix}{topic}"))
                                 .font(font_px(12.0 * sc, 400.0))
                                 .color(fg_muted())
                                 .grow(1.0)
                                 .truncate()
                         } else if let Some(ref st) = ch.status {
-                            text(format!("· {st}"))
+                            text(format!("{guild_prefix}{st}"))
                                 .font(font_px(12.0 * sc, 400.0))
                                 .color(fg_muted())
                                 .grow(1.0)
@@ -3389,7 +3448,7 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32, budget: BlurBudget) ->
             let stage_pane = discord_chat::timeline_and_composer(
                 s,
                 &ch.id,
-                format!("Message #{}…", ch.name),
+                format!("Message #{}", ch.name),
                 format!("Welcome to #{}", ch.name),
                 ch.topic
                     .clone()
@@ -3433,6 +3492,9 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                         DiscordMemberItem::Member(m) => {
                             let offline = m.status == "offline";
                             let uid = m.id.clone();
+                            let gid_open = gid.to_string();
+                            let name_open = m.name.clone();
+                            let av_open = m.avatar.clone();
                             let uid_ctx = m.id.clone();
                             let gid_ctx = gid.to_string();
                             let name_ctx = m.name.clone();
@@ -3492,7 +3554,19 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                                     .opacity(if offline { 0.55 } else { 1.0 })
                                     .hit()
                                     .press_on_down()
-                                    .on_press(move |s: &mut AppState| s.open_dm_with_friend(&uid))
+                                    .on_press(move |s: &mut AppState| {
+                                        s.open_user_profile_dialog(
+                                            crate::discord_chat_state::ProfileOpenRequest {
+                                                user_id: &uid,
+                                                guild_id: Some(&gid_open),
+                                                fallback_name: &name_open,
+                                                fallback_username: "",
+                                                fallback_avatar: av_open.as_deref(),
+                                                full: false,
+                                                tab: crate::discord_chat_state::ProfileTab::About,
+                                            },
+                                        );
+                                    })
                                     .on_secondary_press(move |s: &mut AppState, pos, _| {
                                         s.open_context_menu(
                                             ContextMenuTarget::DiscordMember {
@@ -3574,16 +3648,16 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
         }
         DiscordPlace::Messages => {
             let dm = s.discord.active_dm()?;
-            let mut panel = panel_frame(
-                col()
-                    .key("dc-dm-info")
-                    .w(people_w)
-                    .h_full()
-                    .px(16.0)
-                    .py(16.0)
-                    .gap(12.0),
-            );
             if dm.group {
+                let mut panel = panel_frame(
+                    col()
+                        .key("dc-dm-info")
+                        .w(people_w)
+                        .h_full()
+                        .px(16.0)
+                        .py(16.0)
+                        .gap(12.0),
+                );
                 let members = dm.members.as_deref().unwrap_or(&[]);
                 panel = panel.child(
                     text(format!("Members · {}", members.len() + 1))
@@ -3642,24 +3716,47 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                     );
                 }
                 panel = panel.child(list);
+                Some(panel)
             } else {
                 let uid_opt = dm.user_id.as_deref();
                 let loaded = uid_opt.and_then(|u| s.discord.profiles_by_user.get(u));
                 let prof = loaded.and_then(|r| r.profile.as_ref());
                 let banner_url = prof.and_then(|p| {
-                    p.user.banner.as_deref().map(|hash| {
-                        format!(
-                            "https://cdn.discordapp.com/banners/{}/{hash}.webp?size=600",
-                            p.user.id
-                        )
-                    })
-                });
-                let accent_rgb = prof.and_then(|p| {
                     p.user_profile
                         .as_ref()
-                        .and_then(|up| up.accent_color)
-                        .or(p.user.accent_color)
+                        .and_then(|up| up.banner.as_deref())
+                        .or(p.user.banner.as_deref())
+                        .filter(|b| !b.is_empty())
+                        .map(|hash| {
+                            if hash.starts_with("http") {
+                                hash.to_string()
+                            } else {
+                                format!(
+                                    "https://cdn.discordapp.com/banners/{}/{hash}.png?size=600",
+                                    p.user.id
+                                )
+                            }
+                        })
                 });
+                let accent_color = prof
+                    .and_then(|p| {
+                        p.user_profile
+                            .as_ref()
+                            .and_then(|up| up.accent_color)
+                            .or(p.user.accent_color)
+                            .or_else(|| {
+                                p.user_profile
+                                    .as_ref()
+                                    .and_then(|up| up.theme_colors.as_ref())
+                                    .and_then(|tc| tc.first().copied())
+                            })
+                    })
+                    .filter(|&c| c != 0)
+                    .map(|c| hex(c, 1.0))
+                    .or_else(|| {
+                        prof.and_then(|p| p.user.banner_color.as_deref())
+                            .and_then(parse_hex_color)
+                    });
                 let banner_el = if let Some(ref burl) = banner_url
                     && let Some(img) = s.discord_remote_image_sized(burl, 600.0, scale)
                 {
@@ -3670,7 +3767,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                 } else {
                     el().w_full()
                         .h(105.0)
-                        .fill(accent_rgb.map(|c| hex(c, 1.0)).unwrap_or_else(subtle_fill))
+                        .fill(accent_color.unwrap_or_else(subtle_fill))
                 };
 
                 let avatar_wrap = el().w_full().h(46.0).child(
@@ -3721,7 +3818,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                         .child(styled_name_text(
                             text(dm.name.clone()).font(type_title()),
                             dm.look.as_ref(),
-                            FG,
+                            accent_color.unwrap_or(FG),
                         ))
                         .children(
                             (!sub_handle.is_empty())
@@ -3741,8 +3838,11 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                     if !p.badges.is_empty() {
                         let mut badge_row = row().gap(6.0).wrap().center_y();
                         for b in &p.badges {
-                            let url =
-                                format!("https://cdn.discordapp.com/badge-icons/{}.png", b.icon);
+                            let url = if b.icon.starts_with("http") {
+                                b.icon.clone()
+                            } else {
+                                format!("https://cdn.discordapp.com/badge-icons/{}.png", b.icon)
+                            };
                             if let Some(img) = s.discord_remote_image_sized(&url, 48.0, scale) {
                                 badge_row = badge_row.child(
                                     el().size(22.0, 22.0)
@@ -3758,16 +3858,11 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                         .user_profile
                         .as_ref()
                         .and_then(|up| up.bio.as_deref())
-                        .filter(|t| !t.is_empty())
-                        .or_else(|| p.user.bio.as_deref().filter(|t| !t.is_empty()));
+                        .filter(|t| !t.trim().is_empty())
+                        .or_else(|| p.user.bio.as_deref().filter(|t| !t.trim().is_empty()));
                     if let Some(bio_txt) = bio {
-                        body = body.child(
-                            text(bio_txt.to_string())
-                                .font(type_small())
-                                .color(FG)
-                                .w_full()
-                                .wrap(),
-                        );
+                        body =
+                            body.child(discord_md::render_markdown(bio_txt, &[], &p.user.id, true));
                     }
 
                     if let Some(since) = format_snowflake_date(&p.user.id) {
@@ -3909,7 +4004,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                     let mf_list = uid_opt.and_then(|u| s.discord.mutual_friends_by_user.get(u));
                     let mf_count = p
                         .mutual_friends_count
-                        .unwrap_or_else(|| mf_list.map(|v| v.len() as i32).unwrap_or(0));
+                        .unwrap_or_else(|| mf_list.map(|v| v.len() as u32).unwrap_or(0));
                     if mf_count > 0 || mf_list.is_some_and(|v| !v.is_empty()) {
                         let mut flist = col().w_full().gap(4.0).child(
                             text(format!("Mutual friends — {mf_count}"))
@@ -3923,20 +4018,16 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                                     .as_deref()
                                     .filter(|n| !n.is_empty())
                                     .unwrap_or(&f.username);
-                                let fav = f.avatar.as_deref().map(|h| {
-                                    format!(
-                                        "https://cdn.discordapp.com/avatars/{}/{h}.webp?size=64",
-                                        f.id
-                                    )
-                                });
+                                let fav = f.avatar_url();
                                 let fid = f.id.clone();
+                                let show_handle = !f.username.is_empty() && f.username != fname;
                                 flist = flist.child(
                                     row()
                                         .key(format!("dc-pf-mf-{}", f.id))
                                         .cursor(Cursor::Pointer)
                                         .hit()
                                         .w_full()
-                                        .h(34.0)
+                                        .h(if show_handle { 40.0 } else { 34.0 })
                                         .px(6.0)
                                         .gap(8.0)
                                         .center_y()
@@ -3949,17 +4040,28 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                                             s,
                                             fav.as_deref(),
                                             fname,
-                                            24.0,
-                                            12.0,
+                                            26.0,
+                                            13.0,
                                             None,
                                             false,
                                             scale,
                                         ))
                                         .child(
-                                            text(fname.to_string())
-                                                .font(type_small())
-                                                .color(FG)
-                                                .truncate(),
+                                            col()
+                                                .grow(1.0)
+                                                .min_w(0.0)
+                                                .child(
+                                                    text(fname.to_string())
+                                                        .font(type_small())
+                                                        .color(FG)
+                                                        .truncate(),
+                                                )
+                                                .children(show_handle.then(|| {
+                                                    text(f.username.clone())
+                                                        .font(type_label())
+                                                        .color(fg_muted())
+                                                        .truncate()
+                                                })),
                                         ),
                                 );
                             }
@@ -3970,20 +4072,28 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                     }
                 }
 
-                panel = panel_frame(col().key("dc-dm-info").w(people_w).h_full()).child(
-                    col()
-                        .grow(1.0)
-                        .w_full()
-                        .min_h(0.0)
-                        .scroll(ScrollSpec {
-                            stick_bottom: false,
-                        })
-                        .child(banner_el)
-                        .child(avatar_wrap)
-                        .child(body),
-                );
+                Some(
+                    panel_frame(
+                        col()
+                            .key("dc-dm-info")
+                            .w(people_w)
+                            .h_full()
+                            .clip_rounded(RADIUS_PANEL),
+                    )
+                    .child(
+                        col()
+                            .grow(1.0)
+                            .w_full()
+                            .min_h(0.0)
+                            .scroll(ScrollSpec {
+                                stick_bottom: false,
+                            })
+                            .child(banner_el)
+                            .child(avatar_wrap)
+                            .child(body),
+                    ),
+                )
             }
-            Some(panel)
         }
         DiscordPlace::Home => None,
     }
@@ -4022,98 +4132,6 @@ fn format_snowflake_date(id: &str) -> Option<String> {
     Some(format!("{mon} {d}, {year}"))
 }
 
-fn inbox_panel(s: &AppState, sc: f32) -> El {
-    let mut list = col().w_full().gap(4.0).px(12.0).pb(12.0);
-    if s.discord.unreads.is_empty() {
-        list = list.child(
-            text("All caught up.")
-                .font(font_px(13.0 * sc, 400.0))
-                .color(fg_muted())
-                .py(12.0),
-        );
-    } else {
-        for u in &s.discord.unreads {
-            let gid = u.guild_id.clone();
-            let cid = u.channel_id.clone();
-            list = list.child(
-                row()
-                    .key(format!("dc-inbox-{}", u.channel_id))
-                    .cursor(Cursor::Pointer)
-                    .w_full()
-                    .h(44.0 * sc)
-                    .px(10.0)
-                    .gap(10.0)
-                    .center_y()
-                    .radius(RADIUS_CARD)
-                    .fill(card_surface())
-                    .hover(hover_fill())
-                    .hover_motion(Spring::NONE, SPRING_QUICK)
-                    .hit()
-                    .press_on_down()
-                    .on_press(move |s: &mut AppState| {
-                        s.discord.inbox_open = false;
-                        s.open_discord_guild(&gid);
-                        s.open_discord_channel(&cid);
-                    })
-                    .child(icon_hash(15.0, fg_muted()))
-                    .child(
-                        col()
-                            .grow(1.0)
-                            .min_w(0.0)
-                            .child(
-                                text(u.name.clone())
-                                    .font(font_px(13.0 * sc, 600.0))
-                                    .color(FG)
-                                    .truncate(),
-                            )
-                            .child(
-                                text(u.guild.clone())
-                                    .font(font_px(11.0 * sc, 400.0))
-                                    .color(fg_muted())
-                                    .truncate(),
-                            ),
-                    )
-                    .child(if u.mentions > 0 {
-                        mention_badge(u.mentions, None, sc)
-                    } else {
-                        unread_dot_row(FG)
-                    }),
-            );
-        }
-    }
-
-    panel_frame(col().key("dc-inbox-panel").w(320.0 * sc).h_full())
-        .child(
-            row()
-                .w_full()
-                .h(48.0 * sc)
-                .px(16.0)
-                .justify_between()
-                .center_y()
-                .child(text("Inbox").font(font_px(15.0 * sc, 600.0)).color(FG))
-                .child(
-                    icon_btn(
-                        "dc-inbox-close".into(),
-                        "Close inbox",
-                        false,
-                        false,
-                        icon_close(15.0, fg_muted()),
-                    )
-                    .on_press(|s: &mut AppState| s.discord.inbox_open = false),
-                ),
-        )
-        .child(
-            col()
-                .grow(1.0)
-                .w_full()
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(list),
-        )
-}
-
 pub fn can_show_room(s: &AppState) -> bool {
     s.discord.home.me.is_some()
         && s.discord.status.state != "signedOut"
@@ -4144,7 +4162,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
             .child(server_left_rail(s, guild, sc, scale))
             .child(channel_or_dm_stage(s, sc, scale, budget));
         if s.discord.inbox_open {
-            body = body.child(inbox_panel(s, sc));
+            body = body.child(crate::discord_search::inbox_panel(s, sc, scale));
         } else if !on_voice || !s.discord.voice_ui.show_voice_chat {
             if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
                 body = body.child(drawer);
@@ -4157,7 +4175,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
             .child(dm_sidebar(s, sc, scale))
             .child(channel_or_dm_stage(s, sc, scale, budget));
         if s.discord.inbox_open {
-            body = body.child(inbox_panel(s, sc));
+            body = body.child(crate::discord_search::inbox_panel(s, sc, scale));
         } else if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
             body = body.child(drawer);
         } else if let Some(panel) = right_members_panel(s, sc, scale) {
@@ -4172,7 +4190,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
                 friends_panel(s, sc, scale)
             });
         if s.discord.inbox_open {
-            body = body.child(inbox_panel(s, sc));
+            body = body.child(crate::discord_search::inbox_panel(s, sc, scale));
         }
     }
 
@@ -4215,6 +4233,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
 pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
     let mut out = discord_voice::voice_overlay_layers(s, blur);
     out.extend(discord_admin::overlay_layers(s, blur));
+    out.extend(discord_chat::chat_overlay_layers(s, blur, 1.0));
     if s.discord.settings_open {
         out.push(discord_settings::settings_modal(s, blur));
     }

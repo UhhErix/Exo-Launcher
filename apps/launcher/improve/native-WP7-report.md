@@ -145,3 +145,37 @@ All executed fresh after the final edit:
 - `node apps/launcher/tools/check-comments.mjs`: exit 0 (`2383 legacy files, 243 zero-comment files`; ratchet tightened for stale entries from `feat/native-polish-2` merge)
 - `node --test apps/launcher/tools/parity/parity.test.mjs`: exit 0 (8/8 passed)
 - `git merge-base --is-ancestor origin/feat/native-polish-2 HEAD`: exit 0
+
+---
+
+## WP6 + WP7 Merge, Deduplication & Final Vision Pass (`origin/UhhErix/native-WP6` `fe3d1cb`)
+
+- **Merged `origin/UhhErix/native-WP6` (`fe3d1cb8b20861a54e7c14b2a3ae6f3851c1cd17`)** into `UhhErix/native-WP7` while keeping all `EventRegistry` handlers (`events.rs`), all 8 Rune `exo-inputs` `e6c0716a` pins, all WP6 chat/markdown/picker/search/inbox/polls/interactions work, and all WP7 voice/calls/servers/settings/admin work.
+- **Deduplicated overlapping implementations**:
+  - **DM profile sidebar (`exo-ui/src/discord.rs`)**: kept ONE implementation backed by `discord.profile` RPC (`profiles_by_user` + `mutual_friends_by_user` + synced `dm_profile_cache`), folding in WP6's visual improvements (`clip_rounded(RADIUS_PANEL)`, `user_profile.banner` / `http*` URL support, `theme_colors`/`banner_color` accent fallback, `discord_md::render_markdown` bio, and display name + username rows in Mutual friends); removed duplicate `dm_profile_sidebar`, `ensure_dm_profile_loaded`, `save_dm_sidebar_note`, `dm_sidebar_note*`, and `format_snowflake_member_since`.
+  - **Pinned-DM default**: kept ONE `default_dm_id()` in `discord_chat_state.rs` (skipping `request`/`spam` DMs and honoring `discordPinnedDms` + overrides); removed duplicate `first_visible_dm_id()` from `discord_state.rs`.
+  - **RPC types & events (`exo-rpc`, `exo-ui/src/events.rs`)**: deduplicated `DiscordProfile*`, `DiscordAdminReply`, `DiscordColorsReply`, `DiscordDmLineEvent`, `DiscordNotifyEvent`/`DiscordNoticeEvent`, `DiscordNotifyClearEvent`, `DiscordOpenEvent`, `DiscordReportReply`, `DiscordThreadCreate*`, `FriendsBadgeReply`, `METHOD_DISCORD_PROFILE`, and `HostEvent`/`HostEventKind` variants; renamed Account Settings connection DTO to `DiscordAccountConnection`; merged `DiscordColors` handler to refresh both WP6 chat colors and WP7 guild colors.
+  - **Extra vision items (`vision-parity.md` `1478414`)**:
+    - `music-immersive#05`: removed the extra top-right floating circular `'X'` close button (`music-immersion-close`) from `immersion_view` in `exo-ui/src/music.rs`.
+    - `discord-voice-stream-09`: ensured active guild pill in `discord.rs` (`band_guild_tile`) shows the green voice speaker badge whenever `s.discord.voice` is active in that guild.
+  - **Comment ratchet**: restored `apps/launcher/tools/comments-ratchet.json` from `cdbec1f` and verified `node tools/check-comments.mjs` with `ui/` and `mouse/` `npm ci` installed (`2383 legacy files, 253 zero-comment files`).
+- **Final Unified Signed-In Parity (9 `discord-*` states, 1920x1080 scale 1)**:
+  - **CRITICAL=0, HIGH=0, MEDIUM=8, LOW=0, PASS=1, SKIP=0**
+  - **Open=0, Menus=0 (10/10, 15/15, 8/8, 3/3), Glass=0 (all 9 pass, 0 late), Pixels >15=0, Mean abs pixel diff = 9.17**
+  - `discord-server-channel`: **PASS (score 0, 5.98 px, 11/11 cursors, 3/3 glass)**
+  - `discord-dm`: **8.73 px, 11/11 cursors, 3/3 glass**
+  - `discord-dm-context-menu`: **9.43 px, 15/15 menus, 21/21 cursors, 4/4 glass**
+  - `discord-home`: **7.61 px, 10/10 cursors, 3/3 glass**
+  - `discord-status-menu`: **7.75 px, 10/10 menus, 20/21 cursors, 4/4 glass**
+  - `discord-channel-context-menu`: **7.66 px, 8/8 menus, 18/19 cursors, 4/4 glass**
+  - `discord-voice-call`: **14.99 px, 11/11 cursors, pass glass**
+  - `discord-voice-stream`: **14.81 px, 3/3 menus, 14/14 cursors, 6/6 glass**
+  - `discord-settings-sheet`: **5.57 px, 18/21 cursors, 5/5 glass**
+- **Final Verification Gates (all exit 0)**:
+  - `cargo fmt --check`: exit 0
+  - `cargo clippy --workspace -- -D warnings`: exit 0
+  - `cargo clippy --workspace --tests -- -D warnings`: exit 0
+  - `cargo test --workspace`: exit 0 (`exo-kit` 4, `exo-rpc` 26 + 1 ignored, `exo-ui` 147 — **177 passed, 0 failed**)
+  - `cargo build --bin exo-ui` & `cargo build --release -p exo-ui`: exit 0
+  - `node apps/launcher/tools/check-comments.mjs` (after `ui/` and `mouse/` `npm ci`): exit 0
+  - `node --test apps/launcher/tools/parity/parity.test.mjs`: exit 0 (8/8)

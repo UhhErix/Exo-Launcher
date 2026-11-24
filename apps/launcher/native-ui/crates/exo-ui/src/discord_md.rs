@@ -5,6 +5,7 @@ use exo_kit::{
 };
 use exo_rpc::DiscordUser;
 use rune::{Color, El, Span, TextStyle, col, el, row, text};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct ParsedInline {
@@ -34,7 +35,62 @@ fn spoiler_hidden_bg() -> Color {
     hex(0x28282f, 1.0)
 }
 
+fn format_discord_timestamp(unix: i64, style: &str) -> String {
+    if style == "R" {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(unix);
+        let diff = unix - now;
+        let abs = diff.abs();
+        let unit = if abs < 60 {
+            format!("{abs}s")
+        } else if abs < 3600 {
+            format!("{}m", abs / 60)
+        } else if abs < 86_400 {
+            format!("{}h", abs / 3600)
+        } else {
+            format!("{}d", abs / 86_400)
+        };
+        return if diff >= 0 {
+            format!("in {unit}")
+        } else {
+            format!("{unit} ago")
+        };
+    }
+    let days = unix.div_euclid(86_400);
+    let secs = unix.rem_euclid(86_400);
+    let hour = secs / 3600;
+    let minute = (secs % 3600) / 60;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if m <= 2 { y + 1 } else { y };
+    match style {
+        "t" | "T" => format!("{hour:02}:{minute:02}"),
+        "d" | "D" => format!("{year:04}-{m:02}-{d:02}"),
+        _ => format!("{year:04}-{m:02}-{d:02} {hour:02}:{minute:02}"),
+    }
+}
+
+#[cfg(test)]
 pub fn parse_inline(input: &str, mentions: &[DiscordUser], reveal_spoilers: bool) -> ParsedInline {
+    let empty = HashMap::new();
+    parse_inline_with_channels(input, mentions, &empty, reveal_spoilers)
+}
+
+pub fn parse_inline_with_channels(
+    input: &str,
+    mentions: &[DiscordUser],
+    channels: &HashMap<String, String>,
+    reveal_spoilers: bool,
+) -> ParsedInline {
     let mut plain = String::with_capacity(input.len());
     let mut spans = Vec::new();
     let mut strikes = Vec::new();
@@ -179,14 +235,42 @@ pub fn parse_inline(input: &str, mentions: &[DiscordUser], reveal_spoilers: bool
                 i = i + 2 + close_rel;
                 continue;
             }
+            if let Some(rid) = token.strip_prefix("@&")
+                && rid.chars().all(|c| c.is_ascii_digit())
+            {
+                let start = plain.len();
+                plain.push_str(" @role ");
+                let end = plain.len();
+                let mut sp = Span::new(start, end).bg(mention_bg(), 2.0);
+                sp.color = Some(mention_fg());
+                sp.weight = Some(560.0);
+                spans.push(sp);
+                i = i + 2 + close_rel;
+                continue;
+            }
             if let Some(cid) = token.strip_prefix('#')
                 && cid.chars().all(|c| c.is_ascii_digit())
             {
                 let start = plain.len();
-                plain.push_str(" #channel ");
+                let label = channels
+                    .get(cid)
+                    .map(|name| format!(" #{name} "))
+                    .unwrap_or_else(|| " #channel ".into());
+                plain.push_str(&label);
                 let end = plain.len();
-                let mut sp = Span::new(start, end).bg(mention_bg(), 2.0);
-                sp.color = Some(mention_fg());
+                let mut sp = Span::new(start, end).bg(subtle_fill(), 2.0);
+                sp.color = Some(FG);
+                sp.weight = Some(540.0);
+                spans.push(sp);
+                i = i + 2 + close_rel;
+                continue;
+            }
+            if token.starts_with("https://") || token.starts_with("http://") {
+                let start = plain.len();
+                plain.push_str(token);
+                let end = plain.len();
+                let mut sp = Span::new(start, end);
+                sp.color = Some(link_fg());
                 spans.push(sp);
                 i = i + 2 + close_rel;
                 continue;
@@ -205,10 +289,13 @@ pub fn parse_inline(input: &str, mentions: &[DiscordUser], reveal_spoilers: bool
                 continue;
             }
             if let Some(rest) = token.strip_prefix("t:") {
-                let ts_part = rest.split(':').next().unwrap_or("");
-                if ts_part.parse::<i64>().is_ok() {
+                let mut parts = rest.split(':');
+                let ts_part = parts.next().unwrap_or("");
+                let style = parts.next().unwrap_or("f");
+                if let Ok(unix) = ts_part.parse::<i64>() {
+                    let formatted = format_discord_timestamp(unix, style);
                     let start = plain.len();
-                    plain.push_str(&format!(" {ts_part}s "));
+                    plain.push_str(&format!(" {formatted} "));
                     let end = plain.len();
                     let mut sp = Span::new(start, end).bg(subtle_fill(), 2.0);
                     sp.color = Some(fg_muted());
@@ -234,6 +321,33 @@ pub fn parse_inline(input: &str, mentions: &[DiscordUser], reveal_spoilers: bool
             spans.push(sp);
             i += word.len();
             continue;
+        }
+
+        if bytes[i] == b'['
+            && let Some(mid) = input[i + 1..].find("](")
+        {
+            let label = &input[i + 1..i + 1 + mid];
+            let url_start = i + 1 + mid + 2;
+            if !label.is_empty()
+                && !label.contains('\n')
+                && let Some(close_paren) = input[url_start..].find(')')
+            {
+                let raw_url = input[url_start..url_start + close_paren]
+                    .trim()
+                    .trim_start_matches('<')
+                    .trim_end_matches('>');
+                if raw_url.starts_with("https://") || raw_url.starts_with("http://") {
+                    let start = plain.len();
+                    plain.push_str(label);
+                    let end = plain.len();
+                    let mut sp = Span::new(start, end);
+                    sp.color = Some(FG);
+                    sp.underline = Some(FG);
+                    spans.push(sp);
+                    i = url_start + close_paren + 1;
+                    continue;
+                }
+            }
         }
 
         if input[i..].starts_with("https://") || input[i..].starts_with("http://") {
@@ -267,12 +381,13 @@ pub fn parse_inline(input: &str, mentions: &[DiscordUser], reveal_spoilers: bool
 fn render_inline_text(
     line: &str,
     mentions: &[DiscordUser],
+    channels: &HashMap<String, String>,
     style: TextStyle,
     color: Color,
     msg_id: &str,
     reveal_spoilers: bool,
 ) -> El {
-    let parsed = parse_inline(line, mentions, reveal_spoilers);
+    let parsed = parse_inline_with_channels(line, mentions, channels, reveal_spoilers);
     let mut t = text(parsed.plain)
         .font(style)
         .color(color)
@@ -302,6 +417,17 @@ fn render_inline_text(
 pub fn render_markdown(
     content: &str,
     mentions: &[DiscordUser],
+    msg_id: &str,
+    reveal_spoilers: bool,
+) -> El {
+    let empty = HashMap::new();
+    render_markdown_with_channels(content, mentions, &empty, msg_id, reveal_spoilers)
+}
+
+pub fn render_markdown_with_channels(
+    content: &str,
+    mentions: &[DiscordUser],
+    channels: &HashMap<String, String>,
     msg_id: &str,
     reveal_spoilers: bool,
 ) -> El {
@@ -368,6 +494,7 @@ pub fn render_markdown(
                     .child(col().grow(1.0).min_w(0.0).child(render_inline_text(
                         &joined,
                         mentions,
+                        channels,
                         type_body(),
                         fg_muted(),
                         msg_id,
@@ -377,10 +504,24 @@ pub fn render_markdown(
             continue;
         }
 
+        if let Some(sub) = line.strip_prefix("-# ") {
+            blocks = blocks.child(render_inline_text(
+                sub,
+                mentions,
+                channels,
+                type_label(),
+                fg_faint(),
+                msg_id,
+                reveal_spoilers,
+            ));
+            idx += 1;
+            continue;
+        }
         if let Some(h) = line.strip_prefix("### ") {
             blocks = blocks.child(render_inline_text(
                 h,
                 mentions,
+                channels,
                 type_section(),
                 FG,
                 msg_id,
@@ -393,6 +534,7 @@ pub fn render_markdown(
             blocks = blocks.child(render_inline_text(
                 h,
                 mentions,
+                channels,
                 type_title(),
                 FG,
                 msg_id,
@@ -405,6 +547,7 @@ pub fn render_markdown(
             blocks = blocks.child(render_inline_text(
                 h,
                 mentions,
+                channels,
                 type_title(),
                 FG,
                 msg_id,
@@ -420,6 +563,7 @@ pub fn render_markdown(
             if cur.trim_start().starts_with("```")
                 || cur.starts_with("> ")
                 || cur == ">"
+                || cur.starts_with("-# ")
                 || cur.starts_with("# ")
                 || cur.starts_with("## ")
                 || cur.starts_with("### ")
@@ -434,6 +578,7 @@ pub fn render_markdown(
             blocks = blocks.child(render_inline_text(
                 &joined,
                 mentions,
+                channels,
                 type_body(),
                 FG,
                 msg_id,
@@ -473,5 +618,21 @@ mod tests {
 
         let revealed = parse_inline("||secret||", &mentions, true);
         assert_eq!(revealed.plain, "secret");
+
+        let role_ts = parse_inline("Ping <@&999> at <t:1700000000:d>", &mentions, false);
+        assert!(role_ts.plain.contains("@role"));
+        assert!(role_ts.plain.contains("2023-11-14"));
+
+        let mut ch_map = HashMap::new();
+        ch_map.insert("12345".into(), "rules".into());
+        let linked = parse_inline_with_channels(
+            "[Download Exo Launcher](https://getexo.app/download/launcher) · See <#12345>",
+            &mentions,
+            &ch_map,
+            false,
+        );
+        assert!(linked.plain.contains("Download Exo Launcher"));
+        assert!(!linked.plain.contains("https://"));
+        assert!(linked.plain.contains("#rules"));
     }
 }

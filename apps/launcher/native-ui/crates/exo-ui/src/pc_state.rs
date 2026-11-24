@@ -1924,7 +1924,6 @@ mod wp9_tests {
             state: "running".into(),
             ready: 3,
             total: 8,
-            ..Default::default()
         })));
         assert_eq!(s.pc.shaders_rebuild.as_ref().map(|r| r.ready), Some(3));
 

@@ -11,8 +11,8 @@ use exo_kit::{
     type_section, type_small, type_title, warn,
 };
 use exo_rpc::{
-    ActionResult, DiscordAccount, DiscordAccountReply, DiscordAccountSettings,
-    DiscordAuthorizedApp, DiscordClientSettings, DiscordColorsReply, DiscordConnection,
+    ActionResult, DiscordAccount, DiscordAccountConnection, DiscordAccountReply,
+    DiscordAccountSettings, DiscordAuthorizedApp, DiscordClientSettings, DiscordColorsReply,
     DiscordCustomStatus, DiscordFontReply, DiscordKeybind, DiscordMicLevel, DiscordMicMonitorReply,
     DiscordServerTagOption, DiscordSession, DiscordUserSettingsReply, METHOD_DISCORD_ACCOUNT,
     METHOD_DISCORD_CLIENT_SETTINGS, METHOD_DISCORD_COLORS, METHOD_DISCORD_FONT,
@@ -235,7 +235,7 @@ pub struct DiscordSettingsState {
     pub sessions_loading: bool,
     pub devices_view: bool,
     pub apps: Vec<DiscordAuthorizedApp>,
-    pub connections: Vec<DiscordConnection>,
+    pub connections: Vec<DiscordAccountConnection>,
     pub apps_loaded: bool,
     pub server_tags: Vec<DiscordServerTagOption>,
     pub active_tag_guild: Option<String>,
@@ -574,7 +574,8 @@ impl AppState {
                     if let Ok(rep) = res
                         && rep.ok
                         && let Some(data) = rep.data
-                        && let Ok(list) = serde_json::from_value::<Vec<DiscordConnection>>(data)
+                        && let Ok(list) =
+                            serde_json::from_value::<Vec<DiscordAccountConnection>>(data)
                     {
                         s.discord.settings_ext.connections = list;
                     }

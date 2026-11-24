@@ -6,19 +6,18 @@ use crate::state::{AppState, ContextMenuTarget, HostStatus, Room};
 use exo_rpc::discord_types::{DISCORD_SNAPSHOT_VERSION, DiscordDiskSnapshot, DiscordRestricted};
 use exo_rpc::{
     ActionResult, DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel,
-    DiscordChannels, DiscordDm, DiscordDmLineEvent, DiscordDmMember, DiscordFriend,
-    DiscordFriendActionReply, DiscordFriendsReply, DiscordGuild, DiscordHome, DiscordMe,
-    DiscordMember, DiscordMemberItem, DiscordMemberList, DiscordMessagesReply,
-    DiscordMutualFriendsReply, DiscordNoticeEvent, DiscordNotifyClearEvent, DiscordOpenEvent,
-    DiscordPresenceEvent, DiscordProfileReply, DiscordProfileUser, DiscordRailItem, DiscordRich,
-    DiscordSignInStep, DiscordStateEvent, DiscordStatus, DiscordTtsEvent, DiscordUnreadChannel,
-    DiscordUnreadEvent, DiscordUnreadsReply, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
-    FriendsBadgeReply, METHOD_DISCORD_ACCOUNTS, METHOD_DISCORD_CHANNEL, METHOD_DISCORD_CHANNELS,
+    DiscordChannels, DiscordDm, DiscordDmMember, DiscordFriend, DiscordFriendActionReply,
+    DiscordFriendsReply, DiscordGuild, DiscordHome, DiscordMe, DiscordMember, DiscordMemberItem,
+    DiscordMemberList, DiscordMessagesReply, DiscordPresenceEvent, DiscordProfileReply,
+    DiscordRailItem, DiscordRich, DiscordSignInStep, DiscordStateEvent, DiscordStatus,
+    DiscordTtsEvent, DiscordUnreadChannel, DiscordUnreadEvent, DiscordUnreadsReply, DiscordUser,
+    DiscordVoice, DiscordVoiceMember, DiscordVoiceReply, FriendsBadgeReply,
+    METHOD_DISCORD_ACCOUNTS, METHOD_DISCORD_CHANNEL, METHOD_DISCORD_CHANNELS,
     METHOD_DISCORD_FRIEND, METHOD_DISCORD_FRIENDS, METHOD_DISCORD_HOME, METHOD_DISCORD_MARK_READ,
-    METHOD_DISCORD_MEMBERS, METHOD_DISCORD_MESSAGE_ACTION, METHOD_DISCORD_MESSAGES,
-    METHOD_DISCORD_PROFILE, METHOD_DISCORD_RING, METHOD_DISCORD_SERVER, METHOD_DISCORD_SET_STATUS,
-    METHOD_DISCORD_SIGN_IN, METHOD_DISCORD_SIGN_OUT, METHOD_DISCORD_STATUS, METHOD_DISCORD_STREAM,
-    METHOD_DISCORD_UNREADS, METHOD_DISCORD_VIEW, METHOD_DISCORD_VOICE, METHOD_FRIENDS_BADGE,
+    METHOD_DISCORD_MEMBERS, METHOD_DISCORD_MESSAGES, METHOD_DISCORD_PROFILE, METHOD_DISCORD_RING,
+    METHOD_DISCORD_SERVER, METHOD_DISCORD_SET_STATUS, METHOD_DISCORD_SIGN_IN,
+    METHOD_DISCORD_SIGN_OUT, METHOD_DISCORD_STATUS, METHOD_DISCORD_STREAM, METHOD_DISCORD_UNREADS,
+    METHOD_DISCORD_VIEW, METHOD_DISCORD_VOICE, METHOD_FRIENDS_BADGE,
 };
 use rune::TextEdit;
 use serde_json::json;
@@ -203,7 +202,7 @@ pub struct DiscordState {
     pub admin: DiscordAdminState,
     pub friends_badge_count: i32,
     pub profiles_by_user: HashMap<String, DiscordProfileReply>,
-    pub mutual_friends_by_user: HashMap<String, Vec<DiscordProfileUser>>,
+    pub mutual_friends_by_user: HashMap<String, Vec<DiscordUser>>,
     pub profile_note_user: Option<String>,
     pub profile_note_input: TextEdit,
     pub hydrated_dm_lines: HashSet<String>,
@@ -873,7 +872,7 @@ impl AppState {
         }
         self.discord.unreads = snap.unreads;
         if self.discord.active_dm_id.is_none() {
-            self.discord.active_dm_id = self.first_visible_dm_id();
+            self.discord.active_dm_id = self.default_dm_id();
         }
         self.discord.from_snapshot = true;
         self.discord.loaded = true;
@@ -978,6 +977,7 @@ impl AppState {
                     }
                 },
             );
+            self.fetch_friends_badge();
             self.call_host_async(
                 METHOD_DISCORD_ACCOUNTS,
                 json!({}),
@@ -1014,7 +1014,7 @@ impl AppState {
                 json!({}),
                 |s, res: Result<FriendsBadgeReply, String>| {
                     if let Ok(rep) = res {
-                        s.discord.friends_badge_count = rep.count;
+                        s.discord.friends_badge_count = rep.count as i32;
                     }
                 },
             );
@@ -1050,7 +1050,19 @@ impl AppState {
                         s.discord.from_snapshot = false;
                         s.discord.loaded = true;
                         if s.discord.active_dm_id.is_none() {
-                            s.discord.active_dm_id = s.first_visible_dm_id();
+                            s.discord.active_dm_id = s.default_dm_id();
+                        }
+                        if s.discord.place == DiscordPlace::Messages
+                            && let Some(dm_id) = s.discord.active_dm_id.clone()
+                            && let Some(uid) = s
+                                .discord
+                                .home
+                                .dms
+                                .iter()
+                                .find(|d| d.id == dm_id && !d.group)
+                                .and_then(|d| d.user_id.clone())
+                        {
+                            s.load_discord_profile(&uid, None);
                         }
                         s.hydrate_missing_dm_lines();
                         if let Some(gid) = active_guild {
@@ -1285,7 +1297,7 @@ impl AppState {
         } else if action == "close" {
             self.discord.home.dms.retain(|d| d.id != channel_id);
             if self.discord.active_dm_id.as_deref() == Some(channel_id) {
-                self.discord.active_dm_id = self.first_visible_dm_id();
+                self.discord.active_dm_id = self.default_dm_id();
             }
         }
         if self.status != HostStatus::Connected {
@@ -1418,25 +1430,6 @@ impl AppState {
         );
     }
 
-    pub fn discord_message_action(&mut self, channel_id: &str, message_id: &str, action: &str) {
-        if self.status != HostStatus::Connected {
-            return;
-        }
-        #[cfg(windows)]
-        self.call_host_async(
-            METHOD_DISCORD_MESSAGE_ACTION,
-            json!({ "channelId": channel_id, "messageId": message_id, "action": action }),
-            |s, res: Result<ActionResult, String>| {
-                if let Ok(rep) = res
-                    && !rep.ok
-                    && let Some(msg) = rep.message
-                {
-                    s.notice = Some(msg);
-                }
-            },
-        );
-    }
-
     pub fn discord_ring_dm(&mut self, dm_id: &str) {
         self.join_discord_voice(None, dm_id);
         if self.status != HostStatus::Connected {
@@ -1507,44 +1500,6 @@ impl AppState {
         self.discord.chat.composer = TextEdit::new(&cur);
     }
 
-    pub fn first_visible_dm_id(&self) -> Option<String> {
-        let mut pinned_ids: Vec<String> = self
-            .settings
-            .ui_prefs
-            .get("discordPinnedDms")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .filter(|id| !self.discord.unpinned_dm_overrides.contains(id))
-                    .collect()
-            })
-            .unwrap_or_default();
-        for id in &self.discord.pinned_dm_overrides {
-            if !pinned_ids.contains(id) {
-                pinned_ids.push(id.clone());
-            }
-        }
-        for pid in &pinned_ids {
-            if self
-                .discord
-                .home
-                .dms
-                .iter()
-                .any(|d| d.id == *pid && !d.request && !d.spam)
-            {
-                return Some(pid.clone());
-            }
-        }
-        self.discord
-            .home
-            .dms
-            .iter()
-            .find(|d| !d.request && !d.spam)
-            .or_else(|| self.discord.home.dms.first())
-            .map(|d| d.id.clone())
-    }
-
     pub fn sync_collapsed_categories(&mut self, chans: &DiscordChannels) {
         for ch in &chans.channels {
             if ch.kind == "category" {
@@ -1561,7 +1516,7 @@ impl AppState {
         if self.status != HostStatus::Connected {
             return;
         }
-        let first_pinned = self.first_visible_dm_id();
+        let first_pinned = self.default_dm_id();
         let mut targets: Vec<String> = Vec::new();
         if let Some(pid) = first_pinned
             && !self.discord.hydrated_dm_lines.contains(&pid)
@@ -1653,6 +1608,10 @@ impl AppState {
                         {
                             s.discord.profile_note_input = TextEdit::new(note);
                         }
+                        s.discord
+                            .chat
+                            .dm_profile_cache
+                            .insert(format!("{uid}:"), rep.clone());
                         s.discord.profiles_by_user.insert(uid, rep);
                     }
                 },
@@ -1660,7 +1619,7 @@ impl AppState {
             self.call_host_async(
                 METHOD_DISCORD_PROFILE,
                 json!({ "userId": uid_mf, "mutualFriends": true }),
-                move |s, res: Result<DiscordMutualFriendsReply, String>| {
+                move |s, res: Result<DiscordProfileReply, String>| {
                     if let Ok(rep) = res
                         && let Some(friends) = rep.friends
                     {
@@ -1701,7 +1660,7 @@ impl AppState {
         if place == DiscordPlace::Messages {
             self.discord.active_guild_id = None;
             if self.discord.active_dm_id.is_none() {
-                self.discord.active_dm_id = self.first_visible_dm_id();
+                self.discord.active_dm_id = self.default_dm_id();
             }
             if let Some(dm_id) = self.discord.active_dm_id.clone() {
                 if !self.discord.chat.messages_by_channel.contains_key(&dm_id) {
@@ -1722,12 +1681,13 @@ impl AppState {
     }
 
     pub fn open_discord_dm(&mut self, dm_id: &str) {
+        let prev = self.active_chat_channel_id();
         self.discord.place = DiscordPlace::Messages;
         self.discord.active_guild_id = None;
         self.discord.active_dm_id = Some(dm_id.to_string());
         self.discord.shop_open = false;
         self.discord.inbox_open = false;
-        self.discord.chat.reply_to = None;
+        self.switch_composer_draft(prev.as_deref(), Some(dm_id));
         self.discord.chat.editing = None;
         self.discord.chat.drawer = ChatDrawer::None;
         self.load_discord_messages(dm_id, None);
@@ -1854,8 +1814,9 @@ impl AppState {
 
     pub fn open_discord_channel(&mut self, channel_id: &str) {
         self.discord.admin.active_server_page = None;
+        let prev = self.active_chat_channel_id();
         self.discord.active_channel_id = Some(channel_id.to_string());
-        self.discord.chat.reply_to = None;
+        self.switch_composer_draft(prev.as_deref(), Some(channel_id));
         self.discord.chat.editing = None;
         self.discord.chat.drawer = ChatDrawer::None;
         let is_forum = self
@@ -2323,58 +2284,6 @@ impl AppState {
             self.discord.voice_ui.ringing_channel_id = Some(rung.clone());
         }
         self.discord.voice = voice;
-    }
-
-    pub fn handle_discord_dm_line(&mut self, ev: DiscordDmLineEvent) -> bool {
-        if let Some(dm) = self
-            .discord
-            .home
-            .dms
-            .iter_mut()
-            .find(|d| d.id == ev.channel_id)
-        {
-            dm.line = ev.line;
-            if ev.at.is_some() {
-                dm.last_at = ev.at;
-            }
-            return self.room == Room::Discord;
-        }
-        false
-    }
-
-    pub fn handle_discord_open(&mut self, ev: DiscordOpenEvent) -> bool {
-        self.switch_room(Room::Discord);
-        if let Some(gid) = ev.guild_id {
-            self.open_discord_guild(&gid);
-            if let Some(name) = ev.name.as_deref()
-                && ev.parent_id.is_some()
-            {
-                self.open_discord_thread(&ev.channel_id, name, false);
-            } else {
-                self.open_discord_channel(&ev.channel_id);
-            }
-        } else {
-            self.open_discord_dm(&ev.channel_id);
-        }
-        true
-    }
-
-    pub fn handle_discord_notify(&mut self, ev: DiscordNoticeEvent) -> bool {
-        if self.discord.settings_ext.streamer_mode {
-            return false;
-        }
-        let place = ev
-            .place
-            .as_deref()
-            .or(ev.server.as_deref())
-            .map(|p| format!(" ({p})"))
-            .unwrap_or_default();
-        self.notice = Some(format!("{}{place}: {}", ev.author, ev.body));
-        true
-    }
-
-    pub fn handle_discord_notify_clear(&mut self, _ev: DiscordNotifyClearEvent) -> bool {
-        false
     }
 
     pub fn handle_discord_tts(&mut self, ev: DiscordTtsEvent) -> bool {

@@ -21,6 +21,14 @@ pub enum HostEventKind {
     DiscordMessage,
     DiscordReaction,
     DiscordTyping,
+    DiscordPollVote,
+    DiscordInteraction,
+    DiscordColors,
+    DiscordOpen,
+    DiscordDmLine,
+    DiscordNotify,
+    DiscordNotifyClear,
+    FriendsBadge,
     DiscordVideo,
     DiscordVideoFrame,
     DiscordGoLive,
@@ -29,18 +37,11 @@ pub enum HostEventKind {
     DiscordCall,
     DiscordCallSong,
     DiscordCamera,
-    DiscordColors,
-    DiscordDmLine,
     DiscordKeybind,
     DiscordMicLevel,
-    DiscordNotify,
-    DiscordNotifyClear,
-    DiscordOpen,
     DiscordTts,
     DiscordUserSettings,
     DiscordVideoKeyframe,
-    DiscordInteraction,
-    DiscordPollVote,
     DevicesChanged,
     AppsChanged,
     MusicVolume,
@@ -94,6 +95,14 @@ impl HostEventKind {
             HostEvent::DiscordMessage(_) => Self::DiscordMessage,
             HostEvent::DiscordReaction(_) => Self::DiscordReaction,
             HostEvent::DiscordTyping(_) => Self::DiscordTyping,
+            HostEvent::DiscordPollVote(_) => Self::DiscordPollVote,
+            HostEvent::DiscordInteraction(_) => Self::DiscordInteraction,
+            HostEvent::DiscordColors { .. } => Self::DiscordColors,
+            HostEvent::DiscordOpen(_) => Self::DiscordOpen,
+            HostEvent::DiscordDmLine(_) => Self::DiscordDmLine,
+            HostEvent::DiscordNotify(_) => Self::DiscordNotify,
+            HostEvent::DiscordNotifyClear(_) => Self::DiscordNotifyClear,
+            HostEvent::FriendsBadge { .. } => Self::FriendsBadge,
             HostEvent::DiscordVideo(_) => Self::DiscordVideo,
             HostEvent::DiscordVideoFrame(_) => Self::DiscordVideoFrame,
             HostEvent::DiscordGoLive(_) => Self::DiscordGoLive,
@@ -102,18 +111,11 @@ impl HostEventKind {
             HostEvent::DiscordCall(_) => Self::DiscordCall,
             HostEvent::DiscordCallSong(_) => Self::DiscordCallSong,
             HostEvent::DiscordCamera { .. } => Self::DiscordCamera,
-            HostEvent::DiscordColors { .. } => Self::DiscordColors,
-            HostEvent::DiscordDmLine(_) => Self::DiscordDmLine,
             HostEvent::DiscordKeybind { .. } => Self::DiscordKeybind,
             HostEvent::DiscordMicLevel(_) => Self::DiscordMicLevel,
-            HostEvent::DiscordNotify(_) => Self::DiscordNotify,
-            HostEvent::DiscordNotifyClear(_) => Self::DiscordNotifyClear,
-            HostEvent::DiscordOpen(_) => Self::DiscordOpen,
             HostEvent::DiscordTts(_) => Self::DiscordTts,
             HostEvent::DiscordUserSettings(_) => Self::DiscordUserSettings,
             HostEvent::DiscordVideoKeyframe { .. } => Self::DiscordVideoKeyframe,
-            HostEvent::DiscordInteraction(_) => Self::DiscordInteraction,
-            HostEvent::DiscordPollVote(_) => Self::DiscordPollVote,
             HostEvent::DevicesChanged => Self::DevicesChanged,
             HostEvent::AppsChanged => Self::AppsChanged,
             HostEvent::MusicVolume(_) => Self::MusicVolume,
@@ -409,6 +411,54 @@ fn register_discord(reg: &mut EventRegistry) {
         };
         state.handle_discord_typing(tp)
     });
+    reg.on(HostEventKind::DiscordPollVote, |state, ev| {
+        let HostEvent::DiscordPollVote(pv) = ev else {
+            return false;
+        };
+        state.handle_discord_poll_vote(pv)
+    });
+    reg.on(HostEventKind::DiscordInteraction, |state, ev| {
+        let HostEvent::DiscordInteraction(ix) = ev else {
+            return false;
+        };
+        state.handle_discord_interaction(*ix)
+    });
+    reg.on(HostEventKind::DiscordColors, |state, ev| {
+        let HostEvent::DiscordColors { guild_id } = ev else {
+            return false;
+        };
+        state.handle_discord_colors(&guild_id) | state.handle_discord_colors_event(&guild_id)
+    });
+    reg.on(HostEventKind::DiscordOpen, |state, ev| {
+        let HostEvent::DiscordOpen(op) = ev else {
+            return false;
+        };
+        state.handle_discord_open(op)
+    });
+    reg.on(HostEventKind::DiscordDmLine, |state, ev| {
+        let HostEvent::DiscordDmLine(dl) = ev else {
+            return false;
+        };
+        state.handle_discord_dm_line(dl)
+    });
+    reg.on(HostEventKind::DiscordNotify, |state, ev| {
+        let HostEvent::DiscordNotify(nt) = ev else {
+            return false;
+        };
+        state.handle_discord_notify(*nt)
+    });
+    reg.on(HostEventKind::DiscordNotifyClear, |state, ev| {
+        let HostEvent::DiscordNotifyClear(nc) = ev else {
+            return false;
+        };
+        state.handle_discord_notify_clear(nc)
+    });
+    reg.on(HostEventKind::FriendsBadge, |state, ev| {
+        let HostEvent::FriendsBadge { count } = ev else {
+            return false;
+        };
+        state.handle_friends_badge(count)
+    });
     reg.on(HostEventKind::DiscordVideo, |state, ev| {
         let HostEvent::DiscordVideo(vid) = ev else {
             return false;
@@ -468,18 +518,6 @@ fn register_discord(reg: &mut EventRegistry) {
         state.handle_discord_camera_event(&cam_state);
         state.room == Room::Discord
     });
-    reg.on(HostEventKind::DiscordColors, |state, ev| {
-        let HostEvent::DiscordColors { guild_id } = ev else {
-            return false;
-        };
-        state.handle_discord_colors_event(&guild_id)
-    });
-    reg.on(HostEventKind::DiscordDmLine, |state, ev| {
-        let HostEvent::DiscordDmLine(ev) = ev else {
-            return false;
-        };
-        state.handle_discord_dm_line(ev)
-    });
     reg.on(HostEventKind::DiscordKeybind, |state, ev| {
         let HostEvent::DiscordKeybind { action } = ev else {
             return false;
@@ -491,24 +529,6 @@ fn register_discord(reg: &mut EventRegistry) {
             return false;
         };
         state.handle_discord_mic_level(lvl)
-    });
-    reg.on(HostEventKind::DiscordNotify, |state, ev| {
-        let HostEvent::DiscordNotify(n) = ev else {
-            return false;
-        };
-        state.handle_discord_notify(*n)
-    });
-    reg.on(HostEventKind::DiscordNotifyClear, |state, ev| {
-        let HostEvent::DiscordNotifyClear(c) = ev else {
-            return false;
-        };
-        state.handle_discord_notify_clear(c)
-    });
-    reg.on(HostEventKind::DiscordOpen, |state, ev| {
-        let HostEvent::DiscordOpen(o) = ev else {
-            return false;
-        };
-        state.handle_discord_open(o)
     });
     reg.on(HostEventKind::DiscordTts, |state, ev| {
         let HostEvent::DiscordTts(t) = ev else {
@@ -523,8 +543,6 @@ fn register_discord(reg: &mut EventRegistry) {
         state.handle_discord_user_settings_event(&patch)
     });
     reg.on(HostEventKind::DiscordVideoKeyframe, |_state, _ev| false);
-    reg.on(HostEventKind::DiscordInteraction, |_state, _ev| false);
-    reg.on(HostEventKind::DiscordPollVote, |_state, _ev| false);
 }
 
 fn register_pc(reg: &mut EventRegistry) {
