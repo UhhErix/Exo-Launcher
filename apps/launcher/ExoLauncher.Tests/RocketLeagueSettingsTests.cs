@@ -55,7 +55,7 @@ public sealed class RocketLeagueSettingsTests
         Assert.All(file.Settings, l => Assert.True(l.Index < screenshot));
         // Only keys the profile names: resolution, display mode and the menu's other choices are never lines.
         Assert.DoesNotContain(file.Settings, l => l.Name is "ResX" or "Fullscreen" or "Borderless" or "UseVsync" or "DetailMode" or "ScreenPercentage" or "UncappedFramerate");
-        Assert.Equal(17, file.Settings.Count);
+        Assert.Equal(19, file.Settings.Count);
     }
 
     [Fact]

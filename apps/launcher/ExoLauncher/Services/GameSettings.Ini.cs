@@ -40,6 +40,7 @@ internal static partial class GameSettings
         var newLine = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         var lines = text.Split(newLine);
         var settings = new List<Line>();
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
         var live = false;
         for (var i = 0; i < lines.Length; i++)
         {
@@ -50,8 +51,11 @@ internal static partial class GameSettings
                 continue;
             }
             if (!live || IniLine().Match(lines[i]) is not { Success: true } m || !keys.TryGetValue(m.Groups["name"].Value, out var allowed)) continue;
+            var name = m.Groups["name"].Value;
+            var again = seen.GetValueOrDefault(name);
+            seen[name] = again + 1;
             var value = m.Groups["value"];
-            settings.Add(new Line(i, m.Groups["name"].Value, m.Groups["name"].Value, value.Value,
+            settings.Add(new Line(i, name, again == 0 ? name : $"{name}#{again}", value.Value,
                 allowed == Toggle ? ToggleChoices(value.Value) : allowed, value.Index, value.Length));
         }
         return new SettingsFile(lines, newLine, bom, settings, latin1);

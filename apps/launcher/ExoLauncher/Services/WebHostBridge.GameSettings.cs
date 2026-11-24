@@ -16,13 +16,32 @@ public sealed partial class WebHostBridge
         var game = await FindGameAsync(ReadString(p, hasParams, "id"), ct).ConfigureAwait(false);
         if (game is null) return new { ok = false, message = "Game not found." };
         var group = ReadString(p, hasParams, "group");
+        var key = ReadString(p, hasParams, "key");
         var all = ReadBool(p, hasParams, "all") == true;
         var on = ReadBool(p, hasParams, "on");
         var mode = ReadString(p, hasParams, "mode");
         var smoothMotion = ReadBool(p, hasParams, "smoothMotion");
+        var jvm = ReadBool(p, hasParams, "jvm");
+        var modsAction = ReadString(p, hasParams, "modsAction");
+        var instanceId = ReadString(p, hasParams, "instanceId");
+        var pc = GameSettings.ThisPc();
+        var isMinecraft = GameSettings.IsMinecraftJava(game);
+
+        if (isMinecraft && modsAction is "install" or "undo")
+        {
+            var instances = GameSettings.DiscoverMinecraftInstances();
+            var target = instances.FirstOrDefault(i => string.Equals(i.Id, instanceId, StringComparison.OrdinalIgnoreCase));
+            if (target is null)
+                return new { ok = false, message = "Minecraft instance not found." };
+            var modResult = modsAction == "install"
+                ? await GameSettings.InstallMinecraftPerformanceModsAsync(target, ct: ct).ConfigureAwait(false)
+                : GameSettings.UndoMinecraftPerformanceMods(target.Id);
+            if (!modResult.Ok)
+                return new { ok = false, message = modResult.Message };
+        }
+
         return await Task.Run(object () =>
         {
-            var pc = GameSettings.ThisPc();
             var supportsSmooth = GameSettings.SupportsSmoothMotion(game, pc);
             if (smoothMotion is true && !supportsSmooth)
                 return new { ok = false, message = "Smooth Motion requires Wuthering Waves on an RTX 40 or 50 GPU." };
@@ -51,14 +70,75 @@ public sealed partial class WebHostBridge
                 _services.Settings.SetSmoothMotion(game.Id, false);
                 profile = GameSettings.For(game, pc, false)!;
             }
-            if ((group is not null || all) && on is { } turnOn)
+            if (key is not null && on is { } keyOn)
+            {
+                if (running) return new { ok = false, message = $"Close {profile.Title} first." };
+                if (!GameSettings.SetKey(profile, key, keyOn, profile.Program?.Invoke(game)))
+                    return new { ok = false, message = "Could not save. Try again." };
+            }
+            else if ((group is not null || all) && on is { } turnOn)
             {
                 if (running) return new { ok = false, message = $"Close {profile.Title} first." };
                 if (GameSettings.ApplyWithNvidia(game, profile, group, all, turnOn, includePerGamePower: true) is { } refused)
                     return new { ok = false, message = refused };
+                if (isMinecraft && all)
+                {
+                    foreach (var inst in GameSettings.DiscoverMinecraftInstances())
+                    {
+                        if (turnOn) GameSettings.ApplyMinecraftJvm(inst, pc.RamGb);
+                        else GameSettings.UndoMinecraftJvm(inst);
+                    }
+                }
+            }
+            if (isMinecraft && jvm is { } wantJvm)
+            {
+                if (running) return new { ok = false, message = $"Close {profile.Title} first." };
+                var instances = GameSettings.DiscoverMinecraftInstances();
+                var targets = string.IsNullOrEmpty(instanceId)
+                    ? instances
+                    : instances.Where(i => string.Equals(i.Id, instanceId, StringComparison.OrdinalIgnoreCase)).ToList();
+                foreach (var inst in targets)
+                {
+                    if (wantJvm) GameSettings.ApplyMinecraftJvm(inst, pc.RamGb);
+                    else GameSettings.UndoMinecraftJvm(inst);
+                }
             }
             var summary = GameSettings.InspectState(game, profile, includePerGamePower: true);
-            var groups = summary.Groups?.Select(state => new { id = state.Id, label = state.Label, on = state.On, exo = state.Exo }).ToList();
+            var groups = summary.Groups?.Select(state => new
+            {
+                id = state.Id,
+                label = state.Label,
+                on = state.On,
+                exo = state.Exo,
+                changes = state.Changes?.Select(change => new
+                {
+                    key = change.Key,
+                    current = change.Current,
+                    target = change.Target,
+                    applied = change.Applied,
+                    kept = change.Kept,
+                }).ToList(),
+            }).ToList();
+            var primaryFile = string.IsNullOrEmpty(profile.File) ? null : GameSettings.Read(profile);
+            var advice = profile.Advice?.Invoke(primaryFile);
+            object? minecraft = isMinecraft
+                ? new
+                {
+                    heapGb = GameSettings.ComputeMinecraftHeapGb(pc.RamGb),
+                    instances = GameSettings.DiscoverMinecraftInstances().Select(inst => new
+                    {
+                        id = inst.Id,
+                        name = inst.Name,
+                        launcher = inst.Launcher,
+                        gameVersion = inst.GameVersion,
+                        loader = inst.Loader,
+                        isFabric = inst.IsFabric,
+                        jvmApplied = GameSettings.IsMinecraftJvmApplied(inst.Id),
+                        canInstallMods = inst.IsFabric && !string.IsNullOrWhiteSpace(inst.GameVersion) && !string.IsNullOrEmpty(inst.ModsDir),
+                        modsInstalled = GameSettings.InstalledMinecraftMods(inst.Id).Select(m => m.Slug).ToList(),
+                    }).ToList(),
+                }
+                : null;
             bool? smoothMotionState = supportsSmooth ? _services.Settings.SmoothMotionEnabled(game.Id) : null;
             return new
             {
@@ -73,6 +153,8 @@ public sealed partial class WebHostBridge
                 again = GameSettings.Again(profile),
                 windowMode = profile.WindowMode,
                 smoothMotion = smoothMotionState,
+                advice,
+                minecraft,
             };
         }, ct).ConfigureAwait(false);
     }
