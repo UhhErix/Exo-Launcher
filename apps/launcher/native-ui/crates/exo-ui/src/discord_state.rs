@@ -835,7 +835,6 @@ impl AppState {
         let Some(snap) = read_discord_snapshot(&path) else {
             return false;
         };
-        let first_dm = snap.home.dms.first().map(|d| d.id.clone());
         self.discord.home = snap.home;
         self.discord.friends = snap.friends;
         self.discord.blocked = snap.blocked;
@@ -844,7 +843,7 @@ impl AppState {
         }
         self.discord.unreads = snap.unreads;
         if self.discord.active_dm_id.is_none() {
-            self.discord.active_dm_id = first_dm;
+            self.discord.active_dm_id = self.default_dm_id();
         }
         self.discord.from_snapshot = true;
         self.discord.loaded = true;
@@ -992,7 +991,6 @@ impl AppState {
                 json!({}),
                 |s, res: Result<DiscordHome, String>| {
                     if let Ok(home) = res {
-                        let first_dm = home.dms.first().map(|d| d.id.clone());
                         let active_guild = s.discord.active_guild_id.clone();
                         let voice_guild_ids: Vec<String> = home
                             .guilds
@@ -1005,7 +1003,12 @@ impl AppState {
                         s.discord.from_snapshot = false;
                         s.discord.loaded = true;
                         if s.discord.active_dm_id.is_none() {
-                            s.discord.active_dm_id = first_dm;
+                            s.discord.active_dm_id = s.default_dm_id();
+                        }
+                        if s.discord.place == DiscordPlace::Messages
+                            && let Some(dm_id) = s.discord.active_dm_id.clone()
+                        {
+                            s.ensure_dm_profile_loaded(&dm_id);
                         }
                         if let Some(gid) = active_guild {
                             s.load_discord_guild(&gid, false);
@@ -1269,7 +1272,7 @@ impl AppState {
         } else if action == "close" {
             self.discord.home.dms.retain(|d| d.id != channel_id);
             if self.discord.active_dm_id.as_deref() == Some(channel_id) {
-                self.discord.active_dm_id = self.discord.home.dms.first().map(|d| d.id.clone());
+                self.discord.active_dm_id = self.default_dm_id();
             }
         }
         if self.status != HostStatus::Connected {
@@ -1485,12 +1488,13 @@ impl AppState {
         if place == DiscordPlace::Messages {
             self.discord.active_guild_id = None;
             if self.discord.active_dm_id.is_none() {
-                self.discord.active_dm_id = self.discord.home.dms.first().map(|d| d.id.clone());
+                self.discord.active_dm_id = self.default_dm_id();
             }
-            if let Some(dm_id) = self.discord.active_dm_id.clone()
-                && !self.discord.chat.messages_by_channel.contains_key(&dm_id)
-            {
-                self.load_discord_messages(&dm_id, None);
+            if let Some(dm_id) = self.discord.active_dm_id.clone() {
+                if !self.discord.chat.messages_by_channel.contains_key(&dm_id) {
+                    self.load_discord_messages(&dm_id, None);
+                }
+                self.ensure_dm_profile_loaded(&dm_id);
             }
         }
     }
@@ -1506,6 +1510,7 @@ impl AppState {
         self.discord.chat.editing = None;
         self.discord.chat.drawer = ChatDrawer::None;
         self.load_discord_messages(dm_id, None);
+        self.ensure_dm_profile_loaded(dm_id);
         if self.status != HostStatus::Connected {
             return;
         }

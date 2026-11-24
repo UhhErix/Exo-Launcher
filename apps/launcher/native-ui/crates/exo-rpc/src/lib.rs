@@ -31,7 +31,7 @@ pub use discord_chat_types::{
     DiscordRolePersonCan, DiscordSaveData, DiscordSavedMessage, DiscordSavedReply,
     DiscordServerCardReply, DiscordSticker, DiscordStickerGroup, DiscordStickerItem,
     DiscordStickersReply, DiscordThreadCreateReply, DiscordThreadCreated, FriendsBadgeReply,
-    OpenUrlReply, SpotifyLinkReply,
+    SpotifyLinkReply,
 };
 pub use discord_types::{
     DiscordAccountItem, DiscordAccountsReply, DiscordAttachment, DiscordAudioDevice,

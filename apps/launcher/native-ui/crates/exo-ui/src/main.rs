@@ -1122,16 +1122,50 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 ) {
                     state.discord.unreads = unreads.channels;
                 }
-                if sc == "discord-messages"
-                    && let Some(dm_id) = state.discord.active_dm_id.clone()
-                    && let Ok(rep) = client.call_blocking::<_, exo_rpc::DiscordMessagesReply>(
-                        exo_rpc::METHOD_DISCORD_MESSAGES,
-                        &serde_json::json!({ "channelId": dm_id, "limit": 40 }),
-                        Duration::from_secs(6),
-                    )
-                    && let Some(msgs) = rep.messages
-                {
-                    state.discord.chat.messages_by_channel.insert(dm_id, msgs);
+                if sc == "discord-messages" {
+                    if let Some(def_dm) = state.default_dm_id() {
+                        state.discord.active_dm_id = Some(def_dm);
+                    }
+                    if let Some(dm_id) = state.discord.active_dm_id.clone() {
+                        if let Ok(rep) = client.call_blocking::<_, exo_rpc::DiscordMessagesReply>(
+                            exo_rpc::METHOD_DISCORD_MESSAGES,
+                            &serde_json::json!({ "channelId": dm_id, "limit": 40 }),
+                            Duration::from_secs(6),
+                        ) && let Some(mut msgs) = rep.messages
+                        {
+                            msgs.reverse();
+                            state
+                                .discord
+                                .chat
+                                .messages_by_channel
+                                .insert(dm_id.clone(), msgs);
+                            state.backfill_dm_line(&dm_id);
+                        }
+                        if let Some(uid) = state
+                            .discord
+                            .home
+                            .dms
+                            .iter()
+                            .find(|d| d.id == dm_id)
+                            .and_then(|d| d.user_id.clone())
+                            && let Ok(prof) = client
+                                .call_blocking::<_, exo_rpc::DiscordProfileReply>(
+                                    exo_rpc::METHOD_DISCORD_PROFILE,
+                                    &serde_json::json!({ "userId": uid }),
+                                    Duration::from_secs(5),
+                                )
+                        {
+                            if let Some(ref n) = prof.note {
+                                state.discord.chat.dm_sidebar_note_uid = Some(uid.clone());
+                                state.discord.chat.dm_sidebar_note.text = n.clone();
+                            }
+                            state
+                                .discord
+                                .chat
+                                .dm_profile_cache
+                                .insert(format!("{uid}:"), prof);
+                        }
+                    }
                 }
                 if (sc == "discord-server" || sc == "discord-voice")
                     && let Some(gid) = state.discord.home.guilds.first().map(|g| g.id.clone())

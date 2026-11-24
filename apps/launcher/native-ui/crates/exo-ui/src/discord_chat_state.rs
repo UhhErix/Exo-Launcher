@@ -26,7 +26,7 @@ use exo_rpc::{
     METHOD_DISCORD_REPORT, METHOD_DISCORD_SAVED, METHOD_DISCORD_SEARCH, METHOD_DISCORD_SEND,
     METHOD_DISCORD_SERVER, METHOD_DISCORD_STICKER, METHOD_DISCORD_STICKERS, METHOD_DISCORD_THREAD,
     METHOD_DISCORD_TYPING, METHOD_DISCORD_UNREADS, METHOD_DISCORD_UPLOAD, METHOD_FRIENDS_BADGE,
-    METHOD_SHELL_OPEN_URL, METHOD_SPOTIFY_LINK, OpenUrlReply, SpotifyLinkReply, base64,
+    METHOD_SPOTIFY_LINK, SpotifyLinkReply, base64,
 };
 use rune::TextEdit;
 use serde_json::{Value, json};
@@ -555,6 +555,8 @@ pub struct DiscordChatState {
     pub inbox: InboxState,
     pub profile_dialog: Option<ProfileDialogState>,
     pub dm_profile_cache: HashMap<String, DiscordProfileReply>,
+    pub dm_sidebar_note_uid: Option<String>,
+    pub dm_sidebar_note: TextEdit,
     pub create_dm: Option<CreateDmState>,
     pub invite_dialog: Option<InviteDialogState>,
     pub forward_dialog: Option<ForwardDialogState>,
@@ -604,6 +606,8 @@ impl DiscordChatState {
             inbox: InboxState::default(),
             profile_dialog: None,
             dm_profile_cache: HashMap::new(),
+            dm_sidebar_note_uid: None,
+            dm_sidebar_note: TextEdit::default(),
             create_dm: None,
             invite_dialog: None,
             forward_dialog: None,
@@ -749,6 +753,7 @@ impl DiscordChatState {
                         ],
                         footer: Some(DiscordEmbedFooter {
                             text: Some("wgpu DX12 · Goeist Variable".into()),
+                            ..Default::default()
                         }),
                         ..Default::default()
                     }],
@@ -1462,21 +1467,81 @@ impl AppState {
         );
     }
 
-    pub fn open_external_url(&mut self, url: &str) {
+    pub fn default_dm_id(&self) -> Option<String> {
+        let mut pinned_ids: Vec<String> = self
+            .settings
+            .ui_prefs
+            .get("discordPinnedDms")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .filter(|id| !self.discord.unpinned_dm_overrides.contains(id))
+                    .collect()
+            })
+            .unwrap_or_default();
+        for id in &self.discord.pinned_dm_overrides {
+            if !pinned_ids.contains(id) {
+                pinned_ids.push(id.clone());
+            }
+        }
+        for pid in &pinned_ids {
+            if self.discord.home.dms.iter().any(|d| d.id == *pid) {
+                return Some(pid.clone());
+            }
+        }
+        self.discord.home.dms.first().map(|d| d.id.clone())
+    }
+
+    pub fn ensure_dm_profile_loaded(&mut self, dm_id: &str) {
+        let Some(uid) = self
+            .discord
+            .home
+            .dms
+            .iter()
+            .find(|d| d.id == dm_id)
+            .and_then(|d| d.user_id.clone())
+        else {
+            return;
+        };
+        let cache_key = format!("{uid}:");
+        let cached_note = self
+            .discord
+            .chat
+            .dm_profile_cache
+            .get(&cache_key)
+            .and_then(|c| c.note.clone())
+            .unwrap_or_default();
+        if self.discord.chat.dm_sidebar_note_uid.as_deref() != Some(uid.as_str()) {
+            self.discord.chat.dm_sidebar_note_uid = Some(uid.clone());
+            let mut te = TextEdit::default();
+            te.text = cached_note;
+            self.discord.chat.dm_sidebar_note = te;
+        }
+        if !self.discord.chat.dm_profile_cache.contains_key(&cache_key) {
+            self.fetch_user_profile(&uid, None);
+        }
+    }
+
+    pub fn save_dm_sidebar_note(&mut self, user_id: &str) {
+        let note = self.discord.chat.dm_sidebar_note.text.clone();
+        let cache_key = format!("{user_id}:");
+        if let Some(entry) = self.discord.chat.dm_profile_cache.get_mut(&cache_key) {
+            entry.note = Some(note.clone());
+        }
         if self.status != HostStatus::Connected {
-            self.notice = Some(format!("Link: {url}"));
+            self.notice = Some("Note saved".into());
             return;
         }
         #[cfg(windows)]
         self.call_host_async(
-            METHOD_SHELL_OPEN_URL,
-            json!({ "url": url }),
-            |s, res: Result<OpenUrlReply, String>| {
+            METHOD_DISCORD_PROFILE,
+            json!({ "action": "note", "userId": user_id, "note": note }),
+            |s, res: Result<ActionResult, String>| {
                 if let Ok(rep) = res
                     && !rep.ok
-                    && let Some(lookalike) = rep.lookalike
                 {
-                    s.notice = Some(format!("Blocked lookalike link ({lookalike})"));
+                    s.notice = Some(rep.message.unwrap_or_else(|| "Couldn't save note.".into()));
                 }
             },
         );
@@ -1550,8 +1615,11 @@ impl AppState {
                     } else {
                         *entry = page;
                     }
-                    if !is_older && let Some(mid) = newest_id {
-                        s.ack_discord_channel(&cid, &mid);
+                    if !is_older {
+                        s.backfill_dm_line(&cid);
+                        if let Some(mid) = newest_id {
+                            s.ack_discord_channel(&cid, &mid);
+                        }
                     }
                     if let Some(gid) = s.discord.active_guild_id.clone() {
                         s.fetch_discord_colors(&gid, author_ids);
@@ -5433,6 +5501,30 @@ impl AppState {
         true
     }
 
+    pub fn backfill_dm_line(&mut self, channel_id: &str) {
+        let Some(last) = self
+            .discord
+            .chat
+            .messages_by_channel
+            .get(channel_id)
+            .and_then(|v| v.last())
+        else {
+            return;
+        };
+        let preview = dm_preview_from_message(last);
+        if let Some(preview) = preview
+            && let Some(dm) = self
+                .discord
+                .home
+                .dms
+                .iter_mut()
+                .find(|d| d.id == channel_id)
+            && dm.line.as_deref().is_none_or(|l| l.trim().is_empty())
+        {
+            dm.line = Some(preview);
+        }
+    }
+
     pub fn handle_discord_dm_line(&mut self, ev: DiscordDmLineEvent) -> bool {
         if let Some(dm) = self
             .discord
@@ -5840,4 +5932,79 @@ mod tests {
         assert!(!s.discord.chat.links.lightbox.is_open());
         assert!(s.discord.chat.links.lightbox_slides.is_empty());
     }
+
+    #[test]
+    fn default_dm_prefers_pinned_and_backfills_preview_and_formats_time() {
+        let mut s = AppState::with_demo_games();
+        let unpinned_first = s.discord.home.dms[0].id.clone();
+        let second_id = s.discord.home.dms[1].id.clone();
+        assert_eq!(s.default_dm_id().as_deref(), Some(unpinned_first.as_str()));
+
+        s.discord.pinned_dm_overrides.insert(second_id.clone());
+        assert_eq!(s.default_dm_id().as_deref(), Some(second_id.as_str()));
+
+        s.discord.home.dms[1].line = None;
+        s.discord.chat.messages_by_channel.insert(
+            second_id.clone(),
+            vec![DiscordMessage {
+                id: "9001".into(),
+                channel_id: second_id.clone(),
+                content: "vc".into(),
+                timestamp: "2026-11-18T12:21:00.000Z".into(),
+                ..Default::default()
+            }],
+        );
+        s.backfill_dm_line(&second_id);
+        assert_eq!(s.discord.home.dms[1].line.as_deref(), Some("vc"));
+
+        let msg = &s.discord.chat.messages_by_channel[&second_id][0];
+        assert_eq!(msg.time_short_12h(), "12:21 PM");
+        assert_eq!(msg.day_label(), "November 18, 2026");
+
+        let morning = DiscordMessage {
+            timestamp: "2026-11-14T00:18:00.000Z".into(),
+            ..Default::default()
+        };
+        assert_eq!(morning.time_short_12h(), "12:18 AM");
+        assert_eq!(morning.day_label(), "November 14, 2026");
+    }
+}
+
+pub fn dm_preview_from_message(msg: &DiscordMessage) -> Option<String> {
+    let text = msg.content.trim();
+    if !text.is_empty() {
+        let first = text.lines().next().unwrap_or(text).trim();
+        if !first.is_empty() {
+            return Some(first.to_string());
+        }
+    }
+    if let Some(att) = msg.attachments.first() {
+        return Some(if att.is_image() {
+            "Sent an image".into()
+        } else if att
+            .content_type
+            .as_deref()
+            .is_some_and(|ct| ct.starts_with("video/"))
+        {
+            "Sent a video".into()
+        } else {
+            att.filename.clone()
+        });
+    }
+    if let Some(st) = msg.sticker_items.first() {
+        return Some(st.name.clone());
+    }
+    if let Some(em) = msg.embeds.first() {
+        if let Some(ref t) = em.title
+            && !t.trim().is_empty()
+        {
+            return Some(t.trim().to_string());
+        }
+        if let Some(ref d) = em.description
+            && !d.trim().is_empty()
+        {
+            return Some(d.trim().to_string());
+        }
+    }
+    None
 }

@@ -771,6 +771,10 @@ pub struct DiscordEmbedProvider {
 pub struct DiscordEmbedFooter {
     #[serde(default)]
     pub text: Option<String>,
+    #[serde(default)]
+    pub icon_url: Option<String>,
+    #[serde(default)]
+    pub proxy_icon_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -956,8 +960,55 @@ impl DiscordMessage {
         String::new()
     }
 
+    pub fn time_short_12h(&self) -> String {
+        if let Some(t_pos) = self.timestamp.find('T') {
+            let rest = &self.timestamp[t_pos + 1..];
+            if rest.len() >= 5
+                && let (Ok(h24), Ok(min)) = (rest[0..2].parse::<u32>(), rest[3..5].parse::<u32>())
+            {
+                let suffix = if h24 >= 12 { "PM" } else { "AM" };
+                let h12 = match h24 % 12 {
+                    0 => 12,
+                    n => n,
+                };
+                return format!("{h12}:{min:02} {suffix}");
+            }
+        }
+        String::new()
+    }
+
     pub fn day_key(&self) -> &str {
         self.timestamp.get(..10).unwrap_or("")
+    }
+
+    pub fn day_label(&self) -> String {
+        let dk = self.day_key();
+        if dk.len() == 10
+            && let (Ok(y), Ok(m), Ok(d)) = (
+                dk[0..4].parse::<u32>(),
+                dk[5..7].parse::<u32>(),
+                dk[8..10].parse::<u32>(),
+            )
+        {
+            const MONTHS: [&str; 12] = [
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ];
+            if (1..=12).contains(&m) {
+                return format!("{} {d}, {y}", MONTHS[(m - 1) as usize]);
+            }
+        }
+        dk.to_string()
     }
 }
 

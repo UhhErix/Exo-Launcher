@@ -10,14 +10,14 @@ use crate::discord_search;
 use crate::discord_threads;
 use crate::state::{AppState, ContextMenuTarget};
 use exo_kit::{
-    BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_BASE, SPRING_FLIGHT, SPRING_QUICK, bad, fg_faint, fg_muted, glass_button, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_bell_off, icon_bookmark,
-    icon_check, icon_close, icon_copy, icon_download, icon_edit, icon_external, icon_hash,
-    icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply, icon_search, icon_send,
-    icon_smile, icon_sparkles, icon_trash, popover_transition, pressed_fill, primary_button,
-    scrim_fill, subtle_fill, type_body, type_control, type_label, type_page, type_section,
-    type_small,
+    glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_arrow_up, icon_bell_off,
+    icon_bookmark, icon_check, icon_close, icon_copy, icon_download, icon_edit, icon_external,
+    icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply,
+    icon_search, icon_smile, icon_sparkles, icon_trash, popover_transition, pressed_fill,
+    primary_button, scrim_fill, subtle_fill, type_body, type_control, type_label, type_page,
+    type_section, type_small,
 };
 use exo_rpc::{DiscordAppComponent, DiscordAttachment, DiscordEmbed, DiscordMessage};
 use rune::{
@@ -89,7 +89,23 @@ fn tiny_action(key: String, label: &'static str, danger: bool, icon: El) -> El {
         .child(icon)
 }
 
-fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> El {
+fn channel_name_map(s: &AppState) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    for chans in s.discord.channels_by_guild.values() {
+        for ch in &chans.channels {
+            map.insert(ch.id.clone(), ch.name.clone());
+        }
+    }
+    map
+}
+
+fn embed_card(
+    s: &AppState,
+    embed: &DiscordEmbed,
+    channels: &std::collections::HashMap<String, String>,
+    msg_id: &str,
+    scale: f32,
+) -> El {
     let accent = embed
         .color
         .filter(|&c| c != 0)
@@ -133,7 +149,13 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
     if let Some(ref desc) = embed.description
         && !desc.is_empty()
     {
-        inner = inner.child(discord_md::render_markdown(desc, &[], msg_id, true));
+        inner = inner.child(discord_md::render_markdown_with_channels(
+            desc,
+            &[],
+            channels,
+            msg_id,
+            true,
+        ));
     }
     if !embed.fields.is_empty() {
         let mut frow = row().w_full().gap(12.0).flex_wrap();
@@ -141,13 +163,13 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
             let mut fc = col()
                 .gap(2.0)
                 .child(text(f.name.clone()).font(type_label()).color(fg_muted()))
-                .child(
-                    text(f.value.clone())
-                        .font(type_small())
-                        .color(FG)
-                        .w_full()
-                        .wrap(),
-                );
+                .child(discord_md::render_markdown_with_channels(
+                    &f.value,
+                    &[],
+                    channels,
+                    msg_id,
+                    true,
+                ));
             if f.inline {
                 fc = fc.min_w(130.0).grow(1.0);
             } else {
@@ -203,28 +225,36 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
                 .pixels_fit(img.pixels(), SurfaceFit::Fit),
         );
     }
-    if let Some(footer) = embed
-        .footer
-        .as_ref()
-        .and_then(|f| f.text.as_deref())
-        .filter(|s| !s.is_empty())
+    if let Some(ref f) = embed.footer
+        && let Some(footer_txt) = f.text.as_deref().filter(|t| !t.is_empty())
     {
-        inner = inner.child(
-            text(footer.to_string())
+        let mut frow = row().gap(6.0).center_y();
+        if let Some(icon_url) = f.proxy_icon_url.as_deref().or(f.icon_url.as_deref())
+            && let Some(img) = s.remote_image_sized(icon_url, 24.0, scale)
+        {
+            frow = frow.child(
+                el().size(16.0, 16.0)
+                    .radius(4.0)
+                    .clip_rounded(4.0)
+                    .pixels_fit(img.pixels(), SurfaceFit::Fit),
+            );
+        }
+        frow = frow.child(
+            text(footer_txt.to_string())
                 .font(type_label())
                 .color(fg_faint()),
         );
+        inner = inner.child(frow);
     }
 
     row()
-        .w(460.0)
-        .max_w(520.0)
+        .w(480.0)
+        .max_w(540.0)
         .px(12.0)
-        .py(10.0)
+        .py(8.0)
         .gap(10.0)
-        .radius(RADIUS_CARD)
-        .fill(card_surface())
-        .border(1.0, hairline())
+        .radius(RADIUS_SMALL)
+        .fill(Color::WHITE.alpha(0.025))
         .child(el().w(3.0).radius(2.0).fill(accent))
         .child(inner)
 }
@@ -1106,6 +1136,26 @@ fn system_message_row(s: &AppState, msg: &DiscordMessage) -> Option<El> {
                     .child(text(summary).font(type_small()).color(fg_muted()).wrap()),
             )
         }
+        6 => Some(
+            row()
+                .key(format!("dc-msg-row-{}", msg.id))
+                .w_full()
+                .px(16.0)
+                .py(6.0)
+                .gap(8.0)
+                .center_y()
+                .child(icon_pin(13.0, fg_muted()))
+                .child(
+                    text(format!("{name} pinned a message to this channel."))
+                        .font(type_small())
+                        .color(fg_muted()),
+                )
+                .child(
+                    text(msg.time_short_12h())
+                        .font(type_label())
+                        .color(fg_faint()),
+                ),
+        ),
         67 => Some(
             row()
                 .key(format!("dc-msg-row-{}", msg.id))
@@ -1120,7 +1170,11 @@ fn system_message_row(s: &AppState, msg: &DiscordMessage) -> Option<El> {
                         .font(type_small())
                         .color(fg_muted()),
                 )
-                .child(text(msg.time_short()).font(type_label()).color(fg_faint())),
+                .child(
+                    text(msg.time_short_12h())
+                        .font(type_label())
+                        .color(fg_faint()),
+                ),
         ),
         _ => None,
     }
@@ -1192,6 +1246,7 @@ fn message_row(
         } else {
             r.content.chars().take(80).collect()
         };
+        let r_av = r.author.avatar_url();
         let jump_gid = s.discord.active_guild_id.clone();
         let jump_cid = channel_id.to_string();
         let jump_mid = r.id.clone();
@@ -1206,7 +1261,23 @@ fn message_row(
                 .on_press(move |s: &mut AppState| {
                     s.jump_to_discord_message(jump_gid.as_deref(), &jump_cid, &jump_mid)
                 })
-                .child(icon_reply(11.0, fg_faint()))
+                .child(
+                    el().w(14.0)
+                        .h(10.0)
+                        .mt(4.0)
+                        .border_sides([1.5, 0.0, 0.0, 1.5], fg_faint())
+                        .radius(4.0),
+                )
+                .child(avatar_box(
+                    s,
+                    r_av.as_deref(),
+                    r.display_name(),
+                    16.0,
+                    8.0,
+                    None,
+                    false,
+                    scale,
+                ))
                 .child(
                     text(r.display_name().to_string())
                         .font(type_label())
@@ -1373,14 +1444,18 @@ fn message_row(
         );
         if msg.author.bot {
             header_left = header_left.child(
-                el().px(4.0)
+                row()
+                    .px(5.0)
                     .py(1.0)
+                    .gap(3.0)
+                    .center_y()
                     .radius(4.0)
                     .fill(subtle_fill())
-                    .child(text("App").font(type_label()).color(fg_muted())),
+                    .child(icon_check(10.0, FG))
+                    .child(text("App").font(type_label()).color(FG)),
             );
         }
-        let ts = msg.time_short();
+        let ts = msg.time_short_12h();
         if !ts.is_empty() {
             header_left = header_left.child(text(ts).font(type_label()).color(fg_faint()));
         }
@@ -1409,6 +1484,7 @@ fn message_row(
         );
     }
 
+    let ch_names = channel_name_map(s);
     if is_editing {
         if let Some((_, ref edit_buf)) = s.discord.chat.editing {
             body = body.child(
@@ -1456,7 +1532,13 @@ fn message_row(
         );
     } else if !msg.content.is_empty() {
         let md = el().key(format!("dc-msg-body-{}", msg.id)).w_full().child(
-            discord_md::render_markdown(&msg.content, &msg.mentions, &msg.id, reveal_spoilers),
+            discord_md::render_markdown_with_channels(
+                &msg.content,
+                &msg.mentions,
+                &ch_names,
+                &msg.id,
+                reveal_spoilers,
+            ),
         );
         if let Some(act) = actions.take() {
             body = body.child(
@@ -1572,7 +1654,7 @@ fn message_row(
 
     if (msg.flags & 4) == 0 {
         for embed in &msg.embeds {
-            body = body.child(embed_card(s, embed, &msg.id, scale));
+            body = body.child(embed_card(s, embed, &ch_names, &msg.id, scale));
         }
     }
 
@@ -1854,11 +1936,7 @@ fn message_row(
                     .gap(10.0)
                     .center_y()
                     .child(el().grow(1.0).h(1.0).fill(hairline()))
-                    .child(
-                        text(msg.day_key().to_string())
-                            .font(type_label())
-                            .color(fg_faint()),
-                    )
+                    .child(text(msg.day_label()).font(type_label()).color(fg_faint()))
                     .child(el().grow(1.0).h(1.0).fill(hairline())),
             )
             .child(line)
@@ -1912,7 +1990,7 @@ pub fn timeline_and_composer(
                 }),
             ),
         );
-    } else {
+    } else if msgs.is_empty() {
         feed = feed.child(
             col()
                 .w_full()
@@ -2159,7 +2237,9 @@ pub fn timeline_and_composer(
                     s.open_expression_picker_for_composer(ExpressionTab::Emoji);
                 }),
             )
-            .child(
+            .child({
+                let ready = !s.discord.chat.composer.text.trim().is_empty()
+                    || !s.discord.chat.pending_uploads.is_empty();
                 el().key("dc-composer-send")
                     .role("button")
                     .label("Send message")
@@ -2170,14 +2250,22 @@ pub fn timeline_and_composer(
                     .press_scale(PRESS_SCALE)
                     .size(30.0, 30.0)
                     .radius(RADIUS_PILL)
-                    .fill(FG)
-                    .hover(FG.alpha(0.92))
-                    .press(FG.alpha(0.82))
+                    .fill(if ready { FG } else { Color::TRANSPARENT })
+                    .border(1.0, if ready { FG } else { glass_rim() })
+                    .hover(if ready { FG.alpha(0.92) } else { hover_fill() })
+                    .press(if ready {
+                        FG.alpha(0.82)
+                    } else {
+                        pressed_fill()
+                    })
                     .center()
                     .motion(SPRING_QUICK)
                     .on_press_tx(send_with_launch)
-                    .child(icon_send(14.0, PRIMARY_FG)),
-            );
+                    .child(icon_arrow_up(
+                        14.0,
+                        if ready { PRIMARY_FG } else { fg_muted() },
+                    ))
+            });
         composer_wrap = composer_wrap.child(composer);
 
         let typing = s
@@ -2689,23 +2777,58 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
 }
 
 pub fn header_tools(s: &AppState) -> El {
+    let search_open = s.discord.chat.drawer == ChatDrawer::Search;
+    let pins_open = s.discord.chat.drawer == ChatDrawer::Pins;
     row()
-        .gap(GAP * 0.6)
+        .gap(4.0)
         .center_y()
         .child(
-            glass_button("dc-hdr-pins", "Pins", Some(icon_pin(13.0, FG)))
-                .on_press(|s: &mut AppState| s.toggle_discord_pins_drawer()),
+            el().key("dc-hdr-search")
+                .role("button")
+                .label("Search")
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .press_scale(PRESS_SCALE)
+                .size(32.0, 32.0)
+                .radius(RADIUS_PILL)
+                .fill(if search_open {
+                    subtle_fill()
+                } else {
+                    Color::TRANSPARENT
+                })
+                .hover(hover_fill())
+                .press(pressed_fill())
+                .center()
+                .motion(SPRING_QUICK)
+                .on_press(|s: &mut AppState| s.toggle_discord_search_drawer())
+                .child(icon_search(16.0, if search_open { FG } else { fg_muted() })),
         )
         .child(
-            glass_button(
-                "dc-hdr-search",
-                if s.discord.chat.drawer == ChatDrawer::Search {
-                    "Searching"
+            el().key("dc-hdr-pins")
+                .role("button")
+                .label("Pinned messages")
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .press_scale(PRESS_SCALE)
+                .size(32.0, 32.0)
+                .radius(RADIUS_PILL)
+                .fill(if pins_open {
+                    subtle_fill()
                 } else {
-                    "Search"
-                },
-                Some(icon_search(13.0, FG)),
-            )
-            .on_press(|s: &mut AppState| s.toggle_discord_search_drawer()),
+                    Color::TRANSPARENT
+                })
+                .hover(hover_fill())
+                .press(pressed_fill())
+                .center()
+                .motion(SPRING_QUICK)
+                .on_press(|s: &mut AppState| s.toggle_discord_pins_drawer())
+                .child(icon_more_horiz(
+                    16.0,
+                    if pins_open { FG } else { fg_muted() },
+                )),
         )
 }

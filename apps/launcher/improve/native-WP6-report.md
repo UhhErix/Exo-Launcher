@@ -57,3 +57,30 @@ All required gates ran after final edits and passed with exit code 0:
 - `cargo test --workspace` — **PASS** (`exo-kit` 4/4, `exo-rpc` 22/22 + 1 ignored bench, `exo-ui` 86/86 incl. all WP6 unit tests & motion gates)
 - `cargo build --release -p exo-ui` — **PASS**
 - `node apps/launcher/tools/check-comments.mjs` — **PASS** (0 comment-ban violations)
+
+## Follow-Up Pass (Merge `feat/native-polish-2` + Vision-Parity Blockers & Majors)
+
+### 1. Branch Integration (`d1aabf6`)
+- Merged `origin/feat/native-polish-2` (`acf8655`, including WP1, WP4, WP5, WP11, perf branches, and `EventRegistry` in `crates/exo-ui/src/events.rs`) into `UhhErix/native-WP6`.
+- Preserved `EventRegistry` and every handler from both sides (`register_shell`, `register_library`, `register_media`, `register_discord` incl. all 8 WP6 Discord/Friends push events, `register_pc`, `register_store`, `register_game`, `register_wp4_events`).
+- Preserved all 8 Rune fork pins at `e6c0716a660a97576b3e3951973c599b82bd11e7` in `Cargo.toml` / `Cargo.lock`.
+- Deduplicated `OpenUrlReply` (using `game_types::OpenUrlReply`) and `AppState::open_external_url` (using `game_actions.rs`).
+- Preserved merged `feature-matrix.json` / `feature-matrix.md` counts (WP1 + WP4 + WP5 + all 16 WP6 rows DONE).
+
+### 2. Vision-Parity Fixes (`origin/UhhErix/parity-vision-qa:apps/launcher/improve/vision-parity.md`)
+- **`discord-dm` & `discord-dm-context-menu` active DM & preview (blockers):** Added `AppState::default_dm_id()` preferring the first pinned DM (`settings.ui_prefs["discordPinnedDms"]` + local overrides) over the first unpinned DM across `discord_state.rs` and `main.rs` preload; added `backfill_dm_line()` + `dm_preview_from_message()` and reversed `discord.messages` preload order in `main.rs` so pinned DM rows immediately display their last-message preview line; removed redundant `"Online"` subtext fallback from `dm_subtitle`.
+- **`discord-dm` & `discord-dm-context-menu` right profile sidebar (blockers):** Replaced bare sidebar with `discord_threads::dm_profile_sidebar()` rendering the 104px banner art/accent band (supporting `accent_color`, `theme_colors`, `banner_color`, and `banner` image), overlapping 76px/68px circular avatar cutout, colored display name, `@username` + pronouns, badge chips, bio/activity, snowflake-derived `Member since`, `Connections`, inline editable `Note`, and clickable `Mutual servers` / `Mutual friends` rows; auto-fetched `discord.profile` on DM open and preloaded in `main.rs` `discord-messages`.
+- **`discord-channel-context-menu` & `discord-server-channel` markdown, channel pills & embeds (OPEN blockers):** Added `render_markdown_with_channels()` / `parse_inline_with_channels()` in `discord_md.rs` parsing `[label](https://...)` into underlined link labels (no raw brackets/URLs) and `<#channel_id>` into resolved `#<channel-name>` dark mention pills; updated `embed_card` to parse markdown + channel mentions in both description and field values, render borderless soft-filled embed surfaces with 3px accent bar, and render `footer.icon_url` / `proxy_icon_url`; updated bot badge to `✓ App`.
+- **Chat headers, timestamps, dividers, pinned notice, replies & composer (majors):**
+  - DM header: inline name + status (`Offline`/`Online`/activity) on left + 4 icon-only buttons (`Phone`, `Video`, `Search`, `...`) on right.
+  - Channel header: bolder `15px` channel title, `"{guild_name} · {topic}"` prefix, and icon-only `Search` + `...` buttons.
+  - Message feed: 12-hour AM/PM timestamps (`time_short_12h`), `"Month D, YYYY"` date dividers (`day_label`), pinned-message system row (`type == 6`), reply preview with curved connector + 16px sender avatar, and suppressed spurious `"Welcome to #<channel>"` hero banner when messages exist.
+  - Composer: `"Message @<name>"` / `"Message #<channel>"` placeholders (no ellipsis), smiley emoji picker button, and outlined dark circle upward-arrow send button (`icon_arrow_up`, solid white when ready).
+
+### 3. Follow-Up Gates (Fresh)
+- `cargo fmt --check` — **PASS** (exit 0)
+- `cargo clippy --workspace -- -D warnings` — **PASS** (exit 0)
+- `cargo test --workspace` — **PASS** (exit 0: `exo-kit` 4/4, `exo-rpc` 25/25 + 1 ignored live test, `exo-ui` 126/126 incl. new `default_dm_prefers_pinned_and_backfills_preview_and_formats_time` and link/channel markdown test)
+- `cargo build --release -p exo-ui` — **PASS** (exit 0)
+- `node apps/launcher/tools/check-comments.mjs` — **0 Rust / `native-ui` violations** (only the 12 pre-existing JSX baseline files from commit `526b2df` report stale ratchet entries because `ui/node_modules` is absent in this Orca worktree; `comments-ratchet.json` left untouched)
+- Visual parity re-snaps (`discord-messages`, `discord-server`, `discord-profile`, `discord-picker` at 1920×1080 scale 1) — visually verified clean.

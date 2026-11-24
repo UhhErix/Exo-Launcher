@@ -439,6 +439,8 @@ pub struct DiscordProfileUser {
     #[serde(default)]
     pub accent_color: Option<u32>,
     #[serde(default)]
+    pub banner_color: Option<String>,
+    #[serde(default)]
     pub banner: Option<String>,
     #[serde(default)]
     pub bot: bool,
@@ -1082,13 +1084,4 @@ pub struct DiscordNotifyClearEvent {
 pub struct FriendsBadgeReply {
     #[serde(default)]
     pub count: u32,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OpenUrlReply {
-    #[serde(default)]
-    pub ok: bool,
-    #[serde(default)]
-    pub lookalike: Option<String>,
 }
