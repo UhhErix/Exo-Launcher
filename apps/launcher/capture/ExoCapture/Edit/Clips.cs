@@ -485,7 +485,15 @@ internal static class Clips
         var w = Math.Min(480, video.Info.Width) & ~1;
         var h = Math.Max(2, (int)(w * (double)video.Info.Height / video.Info.Width)) & ~1;
         var frames = Transcode.Frames(gpu, path, w, h, new HashSet<int> { 0 }, CancellationToken.None);
-        if (frames.TryGetValue(0, out var pixels))
+        byte[]? pixels = frames.TryGetValue(0, out var first) ? first : null;
+        if ((pixels is null || Live.GoLive.IsAllBlack(pixels)) && video.Samples.Count > 1)
+        {
+            var fallbackIndex = Math.Min(Math.Max(1, video.Samples.Count / 4), 30);
+            var retry = Transcode.Frames(gpu, path, w, h, new HashSet<int> { fallbackIndex }, CancellationToken.None);
+            if (retry.TryGetValue(fallbackIndex, out var later) && !Live.GoLive.IsAllBlack(later))
+                pixels = later;
+        }
+        if (pixels is not null)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(thumbPath)!);
             Imaging.SaveJpeg(thumbPath, pixels, w, h);
