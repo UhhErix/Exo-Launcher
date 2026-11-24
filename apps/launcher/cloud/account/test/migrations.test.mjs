@@ -87,3 +87,18 @@ test('0007 adds devices with the hash of each device token, and starts empty: no
   assert.deepEqual(db.prepare('PRAGMA table_info(devices)').all().map(c => c.name), ['account', 'device', 'token_hash', 'prev_token_hash', 'first_seen', 'last_seen'])
   assert.equal(db.prepare('SELECT count(*) AS n FROM devices').get().n, 0)
 })
+
+test('0008 adds passkeys and webauthn_challenges without disturbing existing accounts or sessions', () => {
+  const db = migrated([...BEFORE_0004, '0004_drop_legacy.sql', '0005_counters.sql', '0006_keyring_and_pending.sql', '0007_devices.sql'])
+  db.exec("INSERT INTO accounts (id, email_mac, password_hash, recovery_mac, item_key, created) VALUES ('a', 'k1:x', 'h', 'k1:y', X'00', 1)")
+  db.exec(migration('0008_passkeys.sql'))
+  assert.deepEqual(
+    db.prepare('PRAGMA table_info(passkeys)').all().map(c => c.name),
+    ['credential_id', 'account', 'public_key_spki', 'alg', 'sign_count', 'sign_count_flagged', 'label', 'created', 'last_used'],
+  )
+  assert.deepEqual(
+    db.prepare('PRAGMA table_info(webauthn_challenges)').all().map(c => c.name),
+    ['challenge_hash', 'kind', 'account', 'expires'],
+  )
+  assert.deepEqual(db.prepare('SELECT id FROM accounts').all().map(r => r.id), ['a'])
+})
