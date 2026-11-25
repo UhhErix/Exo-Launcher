@@ -442,6 +442,10 @@ public sealed class NamedPipeHostTransportTests
         Assert.Equal(PathHelper.AppDataDir, psi.WorkingDirectory);
         Assert.NotEqual(Path.GetDirectoryName(fakeExe), psi.WorkingDirectory);
         Assert.Equal(["--pipe", "exo-dev-123"], psi.ArgumentList);
+        Assert.True(psi.RedirectStandardError);
+
+        Assert.Equal("ExoLauncher.Main", PackagedSmoke.ResolveInstanceKey([], isDisposable: false, @"C:\Users\Test\AppData\Local\ExoLauncher"));
+        Assert.Equal("ExoLauncher.Dev.data", PackagedSmoke.ResolveInstanceKey([], isDisposable: true, @"C:\Users\Test\Exo-Rune-Local\data"));
     }
 
     [Fact]

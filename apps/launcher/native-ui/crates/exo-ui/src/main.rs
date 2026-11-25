@@ -3763,7 +3763,52 @@ fn run_parity_probe(
     );
 }
 
+pub(crate) fn app_data_dir() -> std::path::PathBuf {
+    if let Ok(overridden) = std::env::var("EXO_LAUNCHER_DATA_DIR")
+        && !overridden.trim().is_empty()
+    {
+        return std::path::PathBuf::from(overridden);
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA")
+        && !local.trim().is_empty()
+    {
+        return std::path::PathBuf::from(local).join("ExoLauncher");
+    }
+    std::env::temp_dir().join("ExoLauncher")
+}
+
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("unknown panic");
+        let loc = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown".into());
+        let bt = std::backtrace::Backtrace::force_capture();
+        let summary = format!("exo-ui panic at {loc}: {payload}");
+        eprintln!("{summary}\n{bt}");
+        let logs = app_data_dir().join("logs");
+        if std::fs::create_dir_all(&logs).is_ok()
+            && let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(logs.join("exo-ui-panic.log"))
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "{summary}\n{bt}\n---");
+        }
+        default_hook(info);
+    }));
+}
+
 fn main() {
+    install_panic_hook();
     let cli = split_cli_args();
     let pipe_name = cli.pipe;
     let rune_args = cli.passthrough;

@@ -44,6 +44,8 @@ internal sealed partial class RuneHostSession
             UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = PathHelper.AppDataDir,
+            RedirectStandardError = true,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         psi.ArgumentList.Add("--pipe");
         psi.ArgumentList.Add(pipeName);
@@ -260,7 +262,13 @@ internal sealed partial class RuneHostSession
         using var transport = new NamedPipeHostTransport(options.PipeName);
         var bridge = new WebHostBridge(services, queue);
         using var stop = new ManualResetEventSlim(false);
-        bridge.RequestHostShutdown = () => stop.Set();
+        string? shutdownReason = null;
+        void TriggerStop(string reason)
+        {
+            Interlocked.CompareExchange(ref shutdownReason, reason, null);
+            stop.Set();
+        }
+        bridge.RequestHostShutdown = () => TriggerStop("host shutdown requested");
         bridge.Attach(transport);
         transport.Start();
         services.HdrHost.Start();
@@ -273,11 +281,13 @@ internal sealed partial class RuneHostSession
         ConsoleCancelEventHandler onCancel = (_, e) =>
         {
             e.Cancel = true;
-            stop.Set();
+            TriggerStop("console cancel");
         };
         Console.CancelKeyPress += onCancel;
 
         Process? uiProcess = null;
+        var stderrLines = new Queue<string>(40);
+        var stderrLock = new object();
         var jobHandle = IntPtr.Zero;
         try
         {
@@ -296,11 +306,21 @@ internal sealed partial class RuneHostSession
                     AppLog.Error("RuneHostSession: failed to start exo-ui.exe.");
                     return 3;
                 }
+                uiProcess.ErrorDataReceived += (_, e) =>
+                {
+                    if (string.IsNullOrWhiteSpace(e.Data)) return;
+                    lock (stderrLock)
+                    {
+                        if (stderrLines.Count >= 40) stderrLines.Dequeue();
+                        stderrLines.Enqueue(e.Data);
+                    }
+                };
+                uiProcess.BeginErrorReadLine();
                 jobHandle = BindChildToKillJob(uiProcess);
                 lock (ActiveUiLock) _activeUiProcess = uiProcess;
                 uiProcess.EnableRaisingEvents = true;
-                uiProcess.Exited += (_, _) => stop.Set();
-                if (uiProcess.HasExited) stop.Set();
+                uiProcess.Exited += (_, _) => TriggerStop("ui process exited");
+                if (uiProcess.HasExited) TriggerStop("ui already exited");
             }
 
             stop.Wait();
@@ -323,9 +343,35 @@ internal sealed partial class RuneHostSession
                 try
                 {
                     if (!uiProcess.HasExited) uiProcess.WaitForExit(1500);
+                    if (uiProcess.HasExited) uiProcess.WaitForExit();
+                }
+                catch { }
+            }
+            string[] capturedStderr;
+            lock (stderrLock) capturedStderr = [.. stderrLines];
+            var reason = Volatile.Read(ref shutdownReason) ?? "stop";
+            var uiExited = false;
+            int? uiExitCode = null;
+            if (uiProcess is not null)
+            {
+                try
+                {
+                    uiExited = uiProcess.HasExited;
+                    if (uiExited) uiExitCode = uiProcess.ExitCode;
                 }
                 catch { }
                 uiProcess.Dispose();
+            }
+            var stderrSummary = capturedStderr.Length > 0
+                ? $" stderr=[{string.Join(" | ", capturedStderr)}]"
+                : string.Empty;
+            if (uiExitCode is int code && code != 0)
+            {
+                AppLog.WriteImmediate("ERROR", $"RuneHostSession: stopping ({reason}); exo-ui exited with code {code}.{stderrSummary}");
+            }
+            else
+            {
+                AppLog.WriteImmediate("INFO", $"RuneHostSession: stopping ({reason}); uiExited={uiExited}{(uiExitCode is int c ? $", uiExitCode={c}" : string.Empty)}.{stderrSummary}");
             }
             if (jobHandle != IntPtr.Zero) CloseHandle(jobHandle);
             try { services.Shutdown(); } catch { }
