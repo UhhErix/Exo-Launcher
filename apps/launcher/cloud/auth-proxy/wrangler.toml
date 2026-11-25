@@ -10,6 +10,12 @@ routes = [{ pattern = "auth.getexo.app", custom_domain = true }]
 [observability]
 enabled = false
 
+[vars]
+EXO_OAUTH_GOOGLE_CLIENT_ID = ""
+EXO_OAUTH_BATTLENET_CLIENT_ID = ""
+EXO_OAUTH_RIOT_CLIENT_ID = ""
+EXO_OAUTH_EPIC_CLIENT_ID = ""
+
 [[ratelimits]]
 name = "TOKEN_EXCHANGE_LIMIT"
 namespace_id = "6101"
@@ -25,6 +31,12 @@ routes = []
 
 [env.dev.observability]
 enabled = false
+
+[env.dev.vars]
+EXO_OAUTH_GOOGLE_CLIENT_ID = ""
+EXO_OAUTH_BATTLENET_CLIENT_ID = ""
+EXO_OAUTH_RIOT_CLIENT_ID = ""
+EXO_OAUTH_EPIC_CLIENT_ID = ""
 
 [[env.dev.ratelimits]]
 name = "TOKEN_EXCHANGE_LIMIT"

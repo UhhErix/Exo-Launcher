@@ -8,21 +8,25 @@ const CLIENT_ID_RE = /^[^\s]{8,256}$/
 export const PROVIDERS = Object.freeze({
   google: Object.freeze({
     tokenUrl: 'https://oauth2.googleapis.com/token',
+    clientIdEnv: 'EXO_OAUTH_GOOGLE_CLIENT_ID',
     secretEnv: 'EXO_OAUTH_GOOGLE_CLIENT_SECRET',
     authMode: 'body',
   }),
   battlenet: Object.freeze({
     tokenUrl: 'https://oauth.battle.net/token',
+    clientIdEnv: 'EXO_OAUTH_BATTLENET_CLIENT_ID',
     secretEnv: 'EXO_OAUTH_BATTLENET_CLIENT_SECRET',
     authMode: 'basic',
   }),
   riot: Object.freeze({
     tokenUrl: 'https://auth.riotgames.com/token',
+    clientIdEnv: 'EXO_OAUTH_RIOT_CLIENT_ID',
     secretEnv: 'EXO_OAUTH_RIOT_CLIENT_SECRET',
     authMode: 'basic',
   }),
   epic: Object.freeze({
     tokenUrl: 'https://api.epicgames.dev/epic/oauth/v2/token',
+    clientIdEnv: 'EXO_OAUTH_EPIC_CLIENT_ID',
     secretEnv: 'EXO_OAUTH_EPIC_CLIENT_SECRET',
     authMode: 'basic',
   }),
@@ -110,6 +114,15 @@ function encodeBasic(clientId, clientSecret) {
   return `Basic ${btoa(binary)}`
 }
 
+function constantTimeEqual(a, b) {
+  const ab = new TextEncoder().encode(a)
+  const bb = new TextEncoder().encode(b)
+  if (ab.length !== bb.length) return false
+  let diff = 0
+  for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i]
+  return diff === 0
+}
+
 export function createHandler(fetchImpl = fetch) {
   return async function handle(request, env = {}) {
     const url = new URL(request.url)
@@ -127,6 +140,8 @@ export function createHandler(fetchImpl = fetch) {
     if (env.TOKEN_EXCHANGE_LIMIT && typeof env.TOKEN_EXCHANGE_LIMIT.limit === 'function') {
       const verdict = await env.TOKEN_EXCHANGE_LIMIT.limit({ key: `${providerName}:${ipKey(request)}` })
       if (!verdict?.success) return jsonError(429, 'slow-down')
+    } else if (env.__TEST_ALLOW_UNBOUND_LIMITER !== true) {
+      return jsonError(503, 'rate-limiter-unavailable')
     }
 
     const contentType = (request.headers.get('Content-Type') || '').toLowerCase()
@@ -143,15 +158,17 @@ export function createHandler(fetchImpl = fetch) {
       return jsonError(400, 'unsupported-grant-type')
     }
 
-    const clientId = (incoming.get('client_id') || '').trim()
-    if (!CLIENT_ID_RE.test(clientId)) {
-      return jsonError(400, 'invalid-client-id')
-    }
-
+    const pinnedClientIdRaw = env[provider.clientIdEnv]
+    const pinnedClientId = typeof pinnedClientIdRaw === 'string' ? pinnedClientIdRaw.trim() : ''
     const secretRaw = env[provider.secretEnv]
     const clientSecret = typeof secretRaw === 'string' ? secretRaw.trim() : ''
-    if (!clientSecret) {
+    if (!pinnedClientId || !clientSecret) {
       return jsonError(503, 'provider-not-configured')
+    }
+
+    const clientId = (incoming.get('client_id') || '').trim()
+    if (!CLIENT_ID_RE.test(clientId) || !constantTimeEqual(clientId, pinnedClientId)) {
+      return jsonError(400, 'invalid-client-id')
     }
 
     const forward = new URLSearchParams()

@@ -15,8 +15,8 @@ Providers that work natively without a secret (`Spotify`, `Discord`, `Microsoft 
 
 - **Strict allowlists:** Only the 4 providers above, only their exact upstream token URLs, only `grant_type=authorization_code` or `refresh_token`, and only `redirect_uri` matching `http://127.0.0.1:4782[3-5]/callback` (or documented Google loopback `http://(127.0.0.1|[::1]|localhost):<1024..65535>[/|/callback]`).
 - **PKCE enforced:** `authorization_code` requires a valid RFC 7636 `code_verifier` (43–128 unreserved characters).
-- **Secrets isolated:** Every `client_secret` lives exclusively in Cloudflare Wrangler secrets (`wrangler secret put`), never in GitHub repo variables/secrets, never in `wrangler.toml`, never echoed in responses, and never logged. Missing secrets fail closed with `503 provider-not-configured`.
-- **No logging, no CORS, bounded bodies, per-IP rate limit:** `[observability] enabled = false`, zero `console.*` calls, no `Access-Control-Allow-*` headers, 8 KiB request body cap (`413`), and Cloudflare edge `TOKEN_EXCHANGE_LIMIT` (`30/min` per provider + IP / IPv6 `/56`).
+- **Pinned `client_id` & isolated secrets:** Each provider pins its public `EXO_OAUTH_<P>_CLIENT_ID` in `wrangler.toml` `[vars]` (empty by default). Incoming requests must match the pinned `client_id` exactly (`400 invalid-client-id` otherwise), and an unset `client_id` or missing Wrangler secret fails closed with `503 provider-not-configured` so our secret is never paired with an unregistered `client_id`. Every `client_secret` lives exclusively in Cloudflare Wrangler secrets (`wrangler secret put`), never in GitHub repo variables/secrets, never in `wrangler.toml`, never echoed in responses, and never logged.
+- **No logging, no CORS, bounded bodies, fail-closed per-IP rate limit:** `[observability] enabled = false`, zero `console.*` calls, no `Access-Control-Allow-*` headers, 8 KiB request body cap (`413`), and Cloudflare edge `TOKEN_EXCHANGE_LIMIT` (`30/min` per provider + IP / IPv6 `/56`; fails closed with `503 rate-limiter-unavailable` if the binding is absent).
 
 ## Local Verification
 

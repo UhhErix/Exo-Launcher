@@ -20,6 +20,10 @@ class MockLimiter {
 
 function makeEnv(overrides = {}) {
   return {
+    EXO_OAUTH_GOOGLE_CLIENT_ID: 'official_google_1234',
+    EXO_OAUTH_BATTLENET_CLIENT_ID: 'official_bnet_1234',
+    EXO_OAUTH_RIOT_CLIENT_ID: 'official_riot_1234',
+    EXO_OAUTH_EPIC_CLIENT_ID: 'official_epic_1234',
     EXO_OAUTH_GOOGLE_CLIENT_SECRET: 'google_super_secret_value_1',
     EXO_OAUTH_BATTLENET_CLIENT_SECRET: 'bnet_super_secret_value_2',
     EXO_OAUTH_RIOT_CLIENT_SECRET: 'riot_super_secret_value_3',
@@ -48,6 +52,7 @@ test('all 4 confidential providers attach Wrangler secret, hit exact upstream UR
       expectedUrl: 'https://oauth2.googleapis.com/token',
       redirectUri: 'http://127.0.0.1:54321/callback',
       authMode: 'body',
+      clientId: 'official_google_1234',
       secret: 'google_super_secret_value_1',
     },
     {
@@ -55,6 +60,7 @@ test('all 4 confidential providers attach Wrangler secret, hit exact upstream UR
       expectedUrl: 'https://oauth.battle.net/token',
       redirectUri: 'http://127.0.0.1:47823/callback',
       authMode: 'basic',
+      clientId: 'official_bnet_1234',
       secret: 'bnet_super_secret_value_2',
     },
     {
@@ -62,6 +68,7 @@ test('all 4 confidential providers attach Wrangler secret, hit exact upstream UR
       expectedUrl: 'https://auth.riotgames.com/token',
       redirectUri: 'http://127.0.0.1:47824/callback',
       authMode: 'basic',
+      clientId: 'official_riot_1234',
       secret: 'riot_super_secret_value_3',
     },
     {
@@ -69,6 +76,7 @@ test('all 4 confidential providers attach Wrangler secret, hit exact upstream UR
       expectedUrl: 'https://api.epicgames.dev/epic/oauth/v2/token',
       redirectUri: 'http://127.0.0.1:47825/callback',
       authMode: 'basic',
+      clientId: 'official_epic_1234',
       secret: 'epic_super_secret_value_4',
     },
   ]
@@ -86,7 +94,7 @@ test('all 4 confidential providers attach Wrangler secret, hit exact upstream UR
     const res = await handler(
       formRequest(`/oauth/${tc.provider}/token`, {
         grant_type: 'authorization_code',
-        client_id: 'official_client_id_1234',
+        client_id: tc.clientId,
         client_secret: 'attacker_injected_secret',
         code: 'auth_code_xyz',
         code_verifier: VALID_VERIFIER,
@@ -115,12 +123,12 @@ test('all 4 confidential providers attach Wrangler secret, hit exact upstream UR
     assert.equal(sentBody.get('redirect_uri'), tc.redirectUri)
 
     if (tc.authMode === 'body') {
-      assert.equal(sentBody.get('client_id'), 'official_client_id_1234')
+      assert.equal(sentBody.get('client_id'), tc.clientId)
       assert.equal(sentBody.get('client_secret'), tc.secret)
       assert.equal(calls[0].init.headers.Authorization, undefined)
     } else {
       assert.equal(sentBody.get('client_secret'), null)
-      const expectedAuth = `Basic ${btoa(`official_client_id_1234:${tc.secret}`)}`
+      const expectedAuth = `Basic ${btoa(`${tc.clientId}:${tc.secret}`)}`
       assert.equal(calls[0].init.headers.Authorization, expectedAuth)
     }
   }
@@ -193,7 +201,7 @@ test('disallowed providers, redirects, grants, and missing PKCE code_verifier ar
     const res = await handler(
       formRequest('/oauth/battlenet/token', {
         grant_type: 'authorization_code',
-        client_id: 'official_client_1234',
+        client_id: 'official_bnet_1234',
         code: 'code_123',
         code_verifier: badVerifier,
         redirect_uri: 'http://127.0.0.1:47823/callback',
@@ -205,21 +213,21 @@ test('disallowed providers, redirects, grants, and missing PKCE code_verifier ar
   }
 
   const badRedirects = [
-    ['battlenet', 'http://127.0.0.1:47822/callback'],
-    ['battlenet', 'http://127.0.0.1:47826/callback'],
-    ['riot', 'http://localhost:47823/callback'],
-    ['epic', 'https://evil.example/callback'],
-    ['epic', 'http://127.0.0.1:47823/callback?extra=1'],
-    ['google', 'https://evil.example/callback'],
-    ['google', 'http://127.0.0.1:80/callback'],
-    ['google', 'https://127.0.0.1:54321/callback'],
-    ['google', 'http://127.0.0.1:54321/other'],
+    ['battlenet', 'official_bnet_1234', 'http://127.0.0.1:47822/callback'],
+    ['battlenet', 'official_bnet_1234', 'http://127.0.0.1:47826/callback'],
+    ['riot', 'official_riot_1234', 'http://localhost:47823/callback'],
+    ['epic', 'official_epic_1234', 'https://evil.example/callback'],
+    ['epic', 'official_epic_1234', 'http://127.0.0.1:47823/callback?extra=1'],
+    ['google', 'official_google_1234', 'https://evil.example/callback'],
+    ['google', 'official_google_1234', 'http://127.0.0.1:80/callback'],
+    ['google', 'official_google_1234', 'https://127.0.0.1:54321/callback'],
+    ['google', 'official_google_1234', 'http://127.0.0.1:54321/other'],
   ]
-  for (const [provider, uri] of badRedirects) {
+  for (const [provider, clientId, uri] of badRedirects) {
     const res = await handler(
       formRequest(`/oauth/${provider}/token`, {
         grant_type: 'authorization_code',
-        client_id: 'official_client_1234',
+        client_id: clientId,
         code: 'code_123',
         code_verifier: VALID_VERIFIER,
         redirect_uri: uri,
@@ -291,10 +299,77 @@ test('missing Wrangler secret fails closed with 503, per-IP rate limit returns 4
   assert.equal((await limited.json()).error, 'slow-down')
 })
 
-test('worker source has zero console logging and wrangler.toml disables observability', () => {
+test('worker source has zero console logging and wrangler.toml pins public client IDs and disables observability', () => {
   const src = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8')
   assert.doesNotMatch(src, /\bconsole\s*\./)
   const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8')
   assert.match(toml, /\[observability\]\s*\r?\nenabled = false/)
   assert.doesNotMatch(toml, /CLIENT_SECRET\s*=/)
+  assert.doesNotMatch(toml, /__TEST_ALLOW_UNBOUND_LIMITER/)
+  for (const key of ['EXO_OAUTH_GOOGLE_CLIENT_ID', 'EXO_OAUTH_BATTLENET_CLIENT_ID', 'EXO_OAUTH_RIOT_CLIENT_ID', 'EXO_OAUTH_EPIC_CLIENT_ID']) {
+    assert.match(toml, new RegExp(`${key}\\s*=\\s*""`))
+  }
+})
+
+test('client_id is pinned to EXO_OAUTH_<P>_CLIENT_ID: unset fails closed 503, mismatch fails 400 invalid-client-id', async () => {
+  let upstreamCalls = 0
+  const handler = createHandler(async () => {
+    upstreamCalls++
+    return new Response(JSON.stringify({ access_token: 'ok' }), { status: 200 })
+  })
+
+  const unsetRes = await handler(
+    formRequest('/oauth/epic/token', {
+      grant_type: 'authorization_code',
+      client_id: 'official_epic_1234',
+      code: 'c1',
+      code_verifier: VALID_VERIFIER,
+      redirect_uri: 'http://127.0.0.1:47823/callback',
+    }),
+    makeEnv({ EXO_OAUTH_EPIC_CLIENT_ID: '' }),
+  )
+  assert.equal(unsetRes.status, 503)
+  assert.equal((await unsetRes.json()).error, 'provider-not-configured')
+
+  const mismatchRes = await handler(
+    formRequest('/oauth/epic/token', {
+      grant_type: 'authorization_code',
+      client_id: 'attacker_other_client_id_9999',
+      code: 'c1',
+      code_verifier: VALID_VERIFIER,
+      redirect_uri: 'http://127.0.0.1:47823/callback',
+    }),
+    makeEnv(),
+  )
+  assert.equal(mismatchRes.status, 400)
+  assert.equal((await mismatchRes.json()).error, 'invalid-client-id')
+  assert.equal(upstreamCalls, 0)
+})
+
+test('missing TOKEN_EXCHANGE_LIMIT binding fails closed with 503 unless explicit test-only flag is set', async () => {
+  let upstreamCalls = 0
+  const handler = createHandler(async () => {
+    upstreamCalls++
+    return new Response(JSON.stringify({ access_token: 'ok' }), { status: 200 })
+  })
+
+  const req = () => formRequest('/oauth/google/token', {
+    grant_type: 'authorization_code',
+    client_id: 'official_google_1234',
+    code: 'c1',
+    code_verifier: VALID_VERIFIER,
+    redirect_uri: 'http://127.0.0.1:50000/callback',
+  })
+
+  const closedRes = await handler(req(), makeEnv({ TOKEN_EXCHANGE_LIMIT: undefined }))
+  assert.equal(closedRes.status, 503)
+  assert.equal((await closedRes.json()).error, 'rate-limiter-unavailable')
+  assert.equal(upstreamCalls, 0)
+
+  const testFlagRes = await handler(
+    req(),
+    makeEnv({ TOKEN_EXCHANGE_LIMIT: undefined, __TEST_ALLOW_UNBOUND_LIMITER: true }),
+  )
+  assert.equal(testFlagRes.status, 200)
+  assert.equal(upstreamCalls, 1)
 })
