@@ -32,6 +32,9 @@ public static class Program
     {
         StartupTiming.Begin();
         SetErrorMode(ErrorModeNoDialogs);
+        Helpers.CrashBreadcrumb.InstallNativeFilter();
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            Helpers.CrashBreadcrumb.Record("domain-unhandled", e.ExceptionObject as Exception);
         // Windows 11 only. Uninstall cleanup still runs on an older Windows, so an old copy can be removed.
         if (!args.Contains("--uninstall-cleanup", StringComparer.OrdinalIgnoreCase) && !WindowsRequirement.Supports(Environment.OSVersion.Version.Build))
         {
@@ -185,7 +188,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            Helpers.PendingReports.Record(ex);
+            Helpers.CrashBreadcrumb.Record("main-fatal", ex);
             try
             {
                 AppLog.Crash("Fatal startup exception", ex);
