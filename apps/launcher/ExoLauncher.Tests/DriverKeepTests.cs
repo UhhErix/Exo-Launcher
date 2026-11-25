@@ -1,3 +1,4 @@
+using ExoLauncher.Helpers;
 using ExoLauncher.Services;
 
 namespace ExoLauncher.Tests;
@@ -298,19 +299,26 @@ public sealed class DriverKeepTests
     {
         var folder = Path.Combine(Path.GetTempPath(), "keepdrv-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
-        var path = Path.Combine(folder, "keep.json");
-        File.WriteAllText(path, """{"version":1,"games":{}}""");
-        using var forced = Keep.ForcePathForTest(path);
+        try
+        {
+            var path = Path.Combine(folder, "keep.json");
+            File.WriteAllText(path, """{"version":1,"games":{}}""");
+            using var forced = Keep.ForcePathForTest(path);
 
-        var old = Keep.Load();
-        Assert.NotNull(old.Pc);
-        Assert.Null(old.Pc.Driver);
-        Assert.Null(old.Pc.DriverPutBack);
+            var old = Keep.Load();
+            Assert.NotNull(old.Pc);
+            Assert.Null(old.Pc.Driver);
+            Assert.Null(old.Pc.DriverPutBack);
 
-        Assert.True(Keep.Update(doc => doc.Pc.Driver = New));
-        var again = Keep.Load();
-        Assert.Equal(New, again.Pc.Driver);
-        Assert.Null(again.Pc.DriverPutBack);
+            Assert.True(Keep.Update(doc => doc.Pc.Driver = New));
+            var again = Keep.Load();
+            Assert.Equal(New, again.Pc.Driver);
+            Assert.Null(again.Pc.DriverPutBack);
+        }
+        finally
+        {
+            try { DeletionGate.DeleteDirectory(folder, recursive: true); } catch { }
+        }
     }
 
     [Fact]
