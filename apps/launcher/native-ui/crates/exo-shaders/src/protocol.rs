@@ -504,10 +504,26 @@ impl ServiceState {
                     "deployed": is_recorder_deployed(&dir),
                 }))
             }
-            "driver.setCacheLimit"
-            | "driver.setCleanupGuard"
-            | "cache.freeOldDriver"
-            | "asd.refresh" => {
+            "cache.freeOldDriver" => {
+                let current = crate::cache_guard::CacheProvenance {
+                    adapter_vendor: self.inventory.gpu.vendor_id,
+                    adapter_device: self.inventory.gpu.device_id,
+                    driver_version: self.inventory.gpu.driver_version.clone(),
+                    game_build: None,
+                };
+                let summary =
+                    crate::cache_guard::prune_old_driver_libraries(&self.data_dir, &current)?;
+                self.rev += 1;
+                Ok(json!({
+                    "ok": true,
+                    "inspected": summary.inspected,
+                    "keptValid": summary.kept_valid,
+                    "cleared": summary.cleared,
+                    "backedUpBytes": summary.backed_up_bytes,
+                    "backupPaths": summary.backup_paths,
+                }))
+            }
+            "driver.setCacheLimit" | "driver.setCleanupGuard" | "asd.refresh" => {
                 self.rev += 1;
                 Ok(json!({ "ok": true }))
             }
@@ -645,6 +661,43 @@ mod tests {
             .unwrap();
         assert_eq!(removed["deployed"], json!(false));
         assert!(!is_recorder_deployed(&game_dir));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cache_free_old_driver_keeps_valid_and_backs_up_stale_libraries() {
+        let root = std::env::temp_dir().join(format!("exo-proto-prune-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let data_dir = root.join("data");
+        let mut st = ServiceState::new(data_dir.clone(), false);
+        let vendor = st.inventory.gpu.vendor_id;
+        let device = st.inventory.gpu.device_id;
+        let current_drv = st.inventory.gpu.driver_version.clone();
+
+        let valid_lib = pipeline_library_path(&data_dir, "steam:valid");
+        let stale_lib = pipeline_library_path(&data_dir, "steam:stale");
+        crate::pso_format::write_pipeline_library(
+            &valid_lib,
+            vendor,
+            device,
+            &current_drv,
+            2,
+            b"valid",
+        )
+        .unwrap();
+        crate::pso_format::write_pipeline_library(
+            &stale_lib, vendor, device, "0.0.old", 2, b"stale",
+        )
+        .unwrap();
+
+        let res = st.handle_method("cache.freeOldDriver", None).unwrap();
+        assert_eq!(res["keptValid"], json!(1));
+        assert_eq!(res["cleared"], json!(1));
+        assert!(valid_lib.exists());
+        assert!(!stale_lib.exists());
+        let backup = res["backupPaths"][0].as_str().unwrap();
+        assert!(Path::new(backup).exists());
+
         let _ = fs::remove_dir_all(&root);
     }
 }

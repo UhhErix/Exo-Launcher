@@ -37,12 +37,39 @@ internal static class DeletionProtections
     /// <summary>Where the graphics drivers and DirectX keep shader caches, and Exo Shaders' own data. Exo's cleaners never delete inside them.</summary>
     internal static IReadOnlyList<string> ShaderRoots =>
     [
-        Path.Combine(Local, "D3DSCache"), Path.Combine(Local, "NVIDIA"), Path.Combine(LocalLow, "NVIDIA"), Path.Combine(Local, "AMD"),
+        Path.Combine(Local, "D3DSCache"), Path.Combine(Local, "NVIDIA"), Path.Combine(LocalLow, "NVIDIA"),
+        Path.Combine(Common, "NVIDIA Corporation", "NV_Cache"), Path.Combine(Local, "AMD"),
         Path.Combine(Local, "Intel"), Path.Combine(LocalLow, "Intel"), Path.Combine(Local, "SCSKiller"),
+        Path.Combine(Local, "ExoShaders"),
     ];
 
     /// <summary>Shader caches by the folder names Steam uses for them (steamapps\shadercache\&lt;app&gt;).</summary>
-    internal static readonly string[][] ShaderSegments = [["steamapps", "shadercache"]];
+    internal static readonly string[][] ShaderSegments =
+    [
+        ["steamapps", "shadercache"],
+        ["fozpipelinesv6"],
+        ["Saved", "PipelineCaches"],
+        ["Saved", "ShaderCache"],
+        ["cod22", "shadercache"],
+        ["cod23", "shadercache"],
+        ["cod24", "shadercache"],
+        ["cod25", "shadercache"],
+        ["cod26", "shadercache"],
+        ["Godot", "shader_cache"],
+    ];
+
+    internal static readonly string[] ShaderFileExtensions =
+    [
+        ".upipelinecache",
+        ".ushaderprecache",
+        ".foz",
+        ".psolib",
+        ".exopso",
+        ".exoplib",
+        ".dxcache",
+        ".nvph",
+        ".parc",
+    ];
 
     /// <summary>Exo's own data folder: the same override PathHelper reads, else %LocalAppData%\ExoLauncher.</summary>
     internal static string ExoDataDir
@@ -57,5 +84,6 @@ internal static class DeletionProtections
 
     private static string Local => Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     private static string LocalLow => Path.Combine(Path.GetDirectoryName(Local) ?? Local, "LocalLow");
+    private static string Common => Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
     private static string Documents => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 }

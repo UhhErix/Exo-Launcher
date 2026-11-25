@@ -1,3 +1,4 @@
+pub mod cache_guard;
 pub mod driver_cache;
 pub mod fossilize;
 pub mod game_cache;
