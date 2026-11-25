@@ -1,6 +1,9 @@
-use crate::config::{AuthError, OAuthClientConfig, OAuthProvider};
+use crate::config::OAuthProvider;
 #[cfg(windows)]
-use crate::http::{http_request, url_encode};
+use crate::config::{AuthError, OAuthClientConfig};
+#[cfg(windows)]
+use crate::http::http_request;
+use crate::http::url_encode;
 use crate::pkce::OAuthTokenSet;
 #[cfg(windows)]
 use crate::pkce::parse_token_response;
@@ -17,6 +20,8 @@ pub struct DeviceCodeChallenge {
     pub verification_uri_complete: Option<String>,
     #[serde(skip_serializing)]
     pub device_code: String,
+    #[serde(default)]
+    pub scopes: String,
     pub expires_in: u64,
     pub interval: u64,
 }
@@ -38,6 +43,40 @@ pub struct JellyfinQuickConnect {
     pub authenticated: bool,
 }
 
+pub fn build_device_start_body(provider: OAuthProvider, client_id: &str, scopes: &str) -> String {
+    let scope_key = match provider {
+        OAuthProvider::Twitch => "scopes",
+        _ => "scope",
+    };
+    format!(
+        "client_id={}&{}={}",
+        url_encode(client_id),
+        scope_key,
+        url_encode(scopes)
+    )
+}
+
+pub fn build_device_poll_body(
+    provider: OAuthProvider,
+    client_id: &str,
+    device_code: &str,
+    scopes: &str,
+) -> String {
+    match provider {
+        OAuthProvider::Twitch => format!(
+            "client_id={}&scopes={}&device_code={}&grant_type=urn:ietf:params:oauth:grant-type:device_code",
+            url_encode(client_id),
+            url_encode(scopes),
+            url_encode(device_code),
+        ),
+        _ => format!(
+            "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id={}&device_code={}",
+            url_encode(client_id),
+            url_encode(device_code),
+        ),
+    }
+}
+
 #[cfg(windows)]
 pub fn start_device_code(
     config: &OAuthClientConfig,
@@ -52,11 +91,7 @@ pub fn start_device_code(
         ))
     })?;
     let scope_str = scopes.unwrap_or_else(|| provider.default_scopes());
-    let body = format!(
-        "client_id={}&scope={}",
-        url_encode(client_id),
-        url_encode(scope_str)
-    );
+    let body = build_device_start_body(provider, client_id, scope_str);
     let resp = http_request(
         "POST",
         endpoint,
@@ -107,6 +142,7 @@ pub fn start_device_code(
             .and_then(Value::as_str)
             .map(ToString::to_string),
         device_code,
+        scopes: scope_str.to_string(),
         expires_in: val.get("expires_in").and_then(Value::as_u64).unwrap_or(600),
         interval: val
             .get("interval")
@@ -122,10 +158,16 @@ pub fn poll_device_code(
     challenge: &DeviceCodeChallenge,
 ) -> Result<DevicePollOutcome, AuthError> {
     let client_id = config.require_client_id(challenge.provider)?;
-    let body = format!(
-        "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id={}&device_code={}",
-        url_encode(client_id),
-        url_encode(&challenge.device_code),
+    let scopes = if challenge.scopes.is_empty() {
+        challenge.provider.default_scopes()
+    } else {
+        challenge.scopes.as_str()
+    };
+    let body = build_device_poll_body(
+        challenge.provider,
+        client_id,
+        &challenge.device_code,
+        scopes,
     );
     let resp = http_request(
         "POST",
@@ -148,6 +190,7 @@ pub fn poll_device_code(
         .ok()
         .and_then(|v| {
             v.get("error")
+                .or_else(|| v.get("message"))
                 .and_then(Value::as_str)
                 .map(ToString::to_string)
         })
@@ -156,7 +199,7 @@ pub fn poll_device_code(
         "authorization_pending" => Ok(DevicePollOutcome::Pending { slow_down: false }),
         "slow_down" => Ok(DevicePollOutcome::Pending { slow_down: true }),
         "access_denied" => Ok(DevicePollOutcome::Denied),
-        "expired_token" => Ok(DevicePollOutcome::Expired),
+        "expired_token" | "invalid device code" => Ok(DevicePollOutcome::Expired),
         _ => Err(AuthError::Protocol(format!(
             "device token poll HTTP {}: {}",
             resp.status, err

@@ -304,7 +304,7 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         [DECK_CARD_W, DECK_CARD_H],
         false,
         load_cover,
-        !active,
+        false,
     )
     .matched(flight_id.clone())
     .motion(SPRING_FLIGHT);
@@ -368,7 +368,9 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         })
         .child(art);
 
-    if game.is_running {
+    if active {
+        card = card.outline(2.0, 3.0, FG);
+    } else if game.is_running {
         card = card.outline(1.0, 2.0, good());
     }
     card = card.focus_ring(2.0, 3.0, FG);
@@ -849,13 +851,17 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         let is_update = game.update_available && game.installed && !game.is_running;
 
         let identity = if let Some(logo) = s.logo_image(game, scale) {
-            row().h(112.0).items_end().child(
-                el().max_w(460.0)
-                    .max_h(112.0)
-                    .w(400.0)
-                    .h(96.0)
-                    .pixels_fit(logo.pixels(), SurfaceFit::Fit),
-            )
+            let (lw, lh) = match logo.size() {
+                Some([iw, ih]) if iw > 0 && ih > 0 => {
+                    let s = (460.0 / iw as f32).min(112.0 / ih as f32).min(1.0);
+                    (iw as f32 * s, ih as f32 * s)
+                }
+                _ => (400.0, 96.0),
+            };
+            row()
+                .h(112.0)
+                .items_end()
+                .child(el().w(lw).h(lh).pixels_fit(logo.pixels(), SurfaceFit::Fit))
         } else {
             row().h(112.0).items_end().child(
                 text(game.title.clone())
@@ -982,7 +988,6 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
     };
 
     let right_tools = row()
-        .min_h(40.0)
         .gap(8.0)
         .center_y()
         .children(gifts_pill(s))

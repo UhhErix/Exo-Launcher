@@ -1053,6 +1053,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-host"
+version = "0.1.0"
+dependencies = [
+ "exo-display",
+ "exo-gpu",
+ "exo-policy",
+ "exo-sensors",
+ "exo-wire",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "exo-installer"
 version = "0.1.0"
 dependencies = [
@@ -1108,6 +1121,15 @@ dependencies = [
  "serde",
  "serde_json",
  "windows",
+]
+
+[[package]]
+name = "exo-policy"
+version = "0.1.0"
+dependencies = [
+ "exo-rpc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

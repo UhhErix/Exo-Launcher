@@ -1,16 +1,16 @@
 use crate::shell::room_icon;
 use crate::state::{AppState, PaletteItem, PaletteTarget, Room};
 use exo_kit::{
-    FG, RADIUS_SHEET, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, fg_muted,
-    glass_panel_opt, hairline, hover_fill, icon_chat, icon_close, icon_download, icon_gamepad,
-    icon_key, icon_minimize, icon_music, icon_notes, icon_pause, icon_play, icon_plus,
-    icon_refresh, icon_search, icon_server, icon_settings, icon_skip_back, icon_skip_forward,
-    icon_sparkles, modal_card_transition, scaled, scrim_fill, type_body, type_control, type_small,
+    FG, RADIUS_SHEET, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, fg_muted, hairline,
+    hover_fill, icon_chat, icon_close, icon_download, icon_gamepad, icon_key, icon_minimize,
+    icon_music, icon_notes, icon_pause, icon_play, icon_plus, icon_refresh, icon_search,
+    icon_server, icon_settings, icon_skip_back, icon_skip_forward, icon_sparkles,
+    modal_card_transition, scaled, scrim_fill, type_body, type_control, type_small,
 };
 use exo_rpc::{DiscordChannels, DiscordHome};
 use rune::{
-    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, Transition, Tx, col, edit_access, el, row, text,
-    text_input,
+    Cursor, El, Key, KeyEvent, LiquidGlass, ScrollSpec, Spring, Transition, Tx, col, edit_access,
+    el, row, text, text_input,
 };
 use serde_json::{Value, json};
 
@@ -420,7 +420,23 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
         Some(ref detail) => format!("{}{}", item.title, detail),
         None => item.title.clone(),
     };
-    let mut r = row()
+    let mut text_col = col().grow(1.0).min_w(0.0).child(
+        text(item.title)
+            .font(type_control())
+            .color(FG)
+            .w_full()
+            .truncate(),
+    );
+    if let Some(detail) = item.detail {
+        text_col = text_col.child(
+            text(detail)
+                .font(type_small())
+                .color(fg_muted())
+                .w_full()
+                .truncate(),
+        );
+    }
+    row()
         .key(format!("command-palette-{}", item.id))
         .role("option")
         .focus_selected(selected)
@@ -430,8 +446,9 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
         .cursor(Cursor::Pointer)
         .press_on_down()
         .w_full()
-        .h(scaled(44.0))
+        .min_h(scaled(44.0))
         .px(scaled(10.0))
+        .py(scaled(8.0))
         .gap(scaled(12.0))
         .center_y()
         .radius(RADIUS_SMALL + 2.0)
@@ -443,24 +460,7 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
             s.execute_palette_target(target.clone(), tx);
         })
         .child(icon)
-        .child(
-            text(item.title)
-                .font(type_control())
-                .color(FG)
-                .grow(1.0)
-                .min_w(0.0)
-                .truncate(),
-        );
-    if let Some(detail) = item.detail {
-        r = r.child(
-            text(detail)
-                .font(type_small())
-                .color(fg_muted())
-                .max_w(scaled(180.0))
-                .truncate(),
-        );
-    }
-    r
+        .child(text_col)
 }
 
 pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -579,11 +579,11 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
                         .w_full()
                         .px(scaled(10.0))
                         .pt(if last_group.is_some() {
-                            scaled(12.0)
+                            scaled(14.0)
                         } else {
-                            scaled(8.0)
+                            scaled(10.0)
                         })
-                        .pb(scaled(4.0))
+                        .pb(scaled(6.0))
                         .child(text(item.group).font(type_small()).color(fg_muted())),
                 );
                 last_group = Some(item.group);
@@ -613,10 +613,17 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
             )
     };
 
-    let card = glass_panel_opt("command-palette", scaled(576.0), blur)
+    let _ = blur;
+    let card = col()
+        .key("command-palette")
+        .w(scaled(576.0))
         .max_h(max_palette_h)
         .radius(RADIUS_SHEET)
+        .continuous_corners()
         .clip_rounded(RADIUS_SHEET)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .focus_return("search-capsule")
@@ -631,7 +638,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 
     let host = col()
         .key("palette-host")
-        .pin(Some(0.0), Some(68.0), Some(0.0), None)
+        .pin(Some(0.0), Some(130.0), Some(0.0), None)
         .items_center()
         .transition(Transition::none())
         .child(card);

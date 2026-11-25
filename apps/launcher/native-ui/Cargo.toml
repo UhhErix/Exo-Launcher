@@ -2,6 +2,8 @@
 resolver = "3"
 members = [
     "crates/exo-auth",
+    "crates/exo-policy",
+    "crates/exo-host",
     "crates/exo-wire",
     "crates/exo-rpc",
     "crates/exo-kit",
