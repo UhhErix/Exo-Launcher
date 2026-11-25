@@ -156,6 +156,7 @@ public sealed class LoudnessMeterTests
         }
         for (var f = 0; f < 30; f++) meter.Feed(frame);
 
+        GC.Collect(0, GCCollectionMode.Forced, blocking: true, compacting: false);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var f = 0; f < 100; f++) meter.Feed(frame);
         var after = GC.GetAllocatedBytesForCurrentThread();
@@ -323,6 +324,7 @@ public sealed class VoiceLoudnessLevelingTests
             leveling.Process(42, frame, -20f);
         }
 
+        GC.Collect(0, GCCollectionMode.Forced, blocking: true, compacting: false);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var f = 30; f < 130; f++)
         {
@@ -438,6 +440,7 @@ public sealed class SoftKneeLimiterTests
         foreach (var s in frame) peak = MathF.Max(peak, MathF.Abs(s));
         Assert.InRange(peak, amp * 0.99f, amp * 1.01f);
 
+        GC.Collect(0, GCCollectionMode.Forced, blocking: true, compacting: false);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var f = 0; f < 100; f++) limiter.Process(frame);
         var after = GC.GetAllocatedBytesForCurrentThread();
