@@ -1,5 +1,6 @@
 use crate::events::{EventRegistry, HostEventKind};
 use crate::notice::{NoticeActionKind, NoticeActionSpec, RichNoticeSpec};
+use crate::settings::set_btn;
 use crate::state::{AppState, NoticeTone, Room};
 use exo_kit::{
     BG, FG, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, bad, fg_muted, glass_button, glass_panel_opt,
@@ -7,11 +8,11 @@ use exo_kit::{
     icon_key, icon_library, icon_mic, icon_monitor, icon_mouse, icon_music, icon_notes, icon_play,
     icon_refresh, icon_scissors, icon_search, icon_server, icon_settings, icon_shield,
     icon_sparkles, icon_store, icon_trash, icon_volume, icon_zap, modal_card_transition,
-    primary_button, primary_button_dyn, progress_bar, scaled, selected_fill, type_body,
-    type_section, type_small, type_title,
+    primary_button, primary_button_dyn, progress_bar, scaled, scrim_fill, selected_fill, type_body,
+    type_small, type_title,
 };
 use exo_rpc::{HostEvent, UpdateProgress};
-use rune::{El, ScrollSpec, Transition, col, el, row, text};
+use rune::{Cursor, El, LiquidGlass, ScrollSpec, TextStyle, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::sync::OnceLock;
 
@@ -620,6 +621,22 @@ impl AppState {
         }
     }
 
+    pub fn apply_update_check_json(&mut self, val: &Value, allow_sheet: bool) {
+        let r = AppUpdateReply::from_json(val);
+        if let Some(st) = r.state.as_deref() {
+            self.accept_update_host_state(st);
+        }
+        self.whats_new.problem = r.problem;
+        if r.ok && r.update_available {
+            self.whats_new.latest = r.latest;
+            self.whats_new.upcoming = r.upcoming;
+            self.whats_new.not_now = r.not_now;
+            if allow_sheet {
+                self.whats_new.sheet_open = r.offer_on_open;
+            }
+        }
+    }
+
     pub fn startup_check_update(&mut self) {
         self.whats_new.host_state = "checking".into();
         self.whats_new.answered = false;
@@ -945,7 +962,7 @@ impl AppState {
 }
 
 fn whats_new_icon(name: &str) -> El {
-    let sz = 18.0;
+    let sz = 20.0;
     match name {
         "Library" => icon_library(sz, FG),
         "StoreBag" => icon_store(sz, FG),
@@ -1001,17 +1018,18 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
     }
     sections.extend(releases);
 
-    let mut list_col = col().w_full().gap(24.0).px(4.0);
+    let mut list_col = col().w_full().gap(28.0).px(4.0);
     for (idx, release) in sections.iter().enumerate() {
+        let line_h = scaled(13.0) * 1.35;
         let mut sec = col().w_full().gap(14.0);
         if idx > 0 || upcoming.is_none() {
             sec = sec.child(
                 text(release.version.clone())
-                    .font(type_section())
+                    .font(TextStyle::new(scaled(13.0), 600.0).lh(line_h))
                     .color(fg_muted()),
             );
         }
-        let mut items_col = col().w_full().gap(16.0);
+        let mut items_col = col().w_full().gap(18.0);
         for item in &release.items {
             let icon_circle = el()
                 .size(40.0, 40.0)
@@ -1021,12 +1039,17 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
                 .child(whats_new_icon(&item.icon));
             let mut words = col().grow(1.0).min_w(0.0).gap(2.0).child(
                 text(item.title.clone())
-                    .font(type_section())
+                    .font(TextStyle::new(scaled(13.0), 600.0).lh(line_h))
                     .color(FG)
                     .wrap(),
             );
             if !item.detail.is_empty() {
-                words = words.child(text(item.detail.clone()).font(type_body()).color(FG).wrap());
+                words = words.child(
+                    text(item.detail.clone())
+                        .font(TextStyle::new(scaled(13.0), 400.0).lh(line_h))
+                        .color(FG)
+                        .wrap(),
+                );
             }
             items_col = items_col.child(
                 row()
@@ -1044,7 +1067,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
     let mut foot = row().w_full().gap(10.0);
     if upcoming.is_some() {
         let busy = s.whats_new.busy();
-        let cont = glass_button("whats-new-continue", "Continue", None)
+        let cont = set_btn("whats-new-continue", "Continue", None)
             .grow(1.0)
             .justify_center()
             .on_press(|s: &mut AppState| s.close_whats_new());
@@ -1091,7 +1114,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .clip_fade_linear(0.0, 20.0, 0.0, 24.0)
+                .clip_fade_linear(0.0, 0.0, 0.0, 24.0)
                 .child(list_col),
         );
 
@@ -1108,21 +1131,29 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
 
     card_inner = card_inner.child(foot);
 
-    let card = glass_panel_opt("whats-new-sheet", scaled(540.0), blur)
+    let _ = blur;
+    let card = col()
+        .key("whats-new-sheet")
+        .w(scaled(540.0))
         .role("dialog")
         .label("Changelog")
         .max_h(scaled(760.0))
         .radius(RADIUS_SHEET)
+        .continuous_corners()
         .clip_rounded(RADIUS_SHEET)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(false, |s: &mut AppState| s.close_whats_new())
-        .modal_scrim(BG.alpha(0.56))
+        .modal_scrim(scrim_fill())
         .child(card_inner);
 
     let host = col()
         .key("whats-new-host")
-        .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .pt(52.0)
         .center()
         .transition(Transition::none())
         .child(card);

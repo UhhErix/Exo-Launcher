@@ -1863,7 +1863,7 @@ impl AppState {
     pub fn cover_image(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(320.0);
+        let dim = bucket_dim(384.0);
         let mut waiting_remote = false;
         for cand in game.portrait_art_candidates() {
             if cand.url.starts_with(COVER_CACHE_ORIGIN) {
@@ -3931,9 +3931,10 @@ impl AppState {
             }
         }
 
-        let mut candidates: Vec<&Game> = self
-            .games
-            .iter()
+        let (library_shelf, _, hidden_shelf) = self.shelf_shelves();
+        let mut candidates: Vec<Game> = library_shelf
+            .into_iter()
+            .chain(hidden_shelf)
             .filter(|g| {
                 g.id != "local:add" && (query.is_empty() || g.title.to_lowercase().contains(&query))
             })

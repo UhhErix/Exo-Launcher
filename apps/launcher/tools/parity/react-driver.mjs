@@ -207,6 +207,23 @@ function probeDomState(openSelector, menuSelector, lastTarget) {
     opened = true
   }
 
+  const isOpaqueBg = (el) => {
+    const bg = getComputedStyle(el).backgroundColor || ''
+    if (!bg || bg === 'transparent') return false
+    const rgba = bg.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/)
+    if (rgba) {
+      const a = rgba[4] === undefined ? 1 : Number(rgba[4])
+      return a >= 0.95
+    }
+    const slash = bg.match(/\/\s*([\d.]+)(%?)\s*\)/)
+    if (slash) {
+      const raw = Number(slash[1])
+      const a = slash[2] === '%' ? raw / 100 : raw
+      return a >= 0.95
+    }
+    return !bg.includes('rgba(') && !bg.includes('/')
+  }
+
   const isUnoccluded = (el, r) => {
     const x1 = Math.max(0, r.left)
     const y1 = Math.max(0, r.top)
@@ -224,30 +241,40 @@ function probeDomState(openSelector, menuSelector, lastTarget) {
       [x1 + ix, y2 - iy],
       [x2 - ix, y2 - iy],
     ]
+    const target = getComputedStyle(el).pointerEvents === 'none' && el.parentElement ? el.parentElement : el
     for (const [px, py] of pts) {
-      const hit = document.elementFromPoint(px, py)
-      if (!hit) continue
-      if (hit === el || el.contains(hit) || hit.contains(el)) return true
+      const stack = document.elementsFromPoint(px, py)
+      for (const hit of stack) {
+        if (hit === el || el.contains(hit) || hit === target || target.contains(hit)) return true
+        if (hit.contains(el)) continue
+        if (isOpaqueBg(hit)) break
+      }
     }
     return false
   }
 
+  const inertNodes = Array.from(document.querySelectorAll('[inert]'))
+  for (const n of inertNodes) n.inert = false
   const glass = []
-  for (const el of document.querySelectorAll('*')) {
-    if (!isVisible(el)) continue
-    const st = getComputedStyle(el)
-    const bf = st.backdropFilter || st.webkitBackdropFilter || 'none'
-    if (bf && bf !== 'none') {
-      const r = el.getBoundingClientRect()
-      if (!isUnoccluded(el, r)) continue
-      glass.push({
-        rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
-        backdropFilter: bf,
-        backgroundColor: st.backgroundColor,
-        className: typeof el.className === 'string' ? el.className.slice(0, 80) : '',
-        label: (el.getAttribute('aria-label') || el.getAttribute('role') || el.tagName.toLowerCase()).slice(0, 60),
-      })
+  try {
+    for (const el of document.querySelectorAll('*')) {
+      if (!isVisible(el)) continue
+      const st = getComputedStyle(el)
+      const bf = st.backdropFilter || st.webkitBackdropFilter || 'none'
+      if (bf && bf !== 'none') {
+        const r = el.getBoundingClientRect()
+        if (!isUnoccluded(el, r)) continue
+        glass.push({
+          rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+          backdropFilter: bf,
+          backgroundColor: st.backgroundColor,
+          className: typeof el.className === 'string' ? el.className.slice(0, 80) : '',
+          label: (el.getAttribute('aria-label') || el.getAttribute('role') || el.tagName.toLowerCase()).slice(0, 60),
+        })
+      }
     }
+  } finally {
+    for (const n of inertNodes) n.inert = true
   }
 
   const menuSel =

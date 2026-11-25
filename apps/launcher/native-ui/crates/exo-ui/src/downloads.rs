@@ -1,14 +1,14 @@
 use crate::events::{EventRegistry, HostEventKind};
+use crate::settings::set_btn;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, SPRING_QUICK,
-    TRANSPARENT, bad, fg_muted, glass_button, glass_panel_opt, hover_fill, icon_chevron_down,
-    icon_chevron_up, icon_close, icon_pause, icon_play, modal_card_transition, pressed_fill,
-    primary_button, scaled, switch_pill_keyed, track_fill, type_body, type_section, type_small,
-    type_title,
+    FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, SPRING_QUICK,
+    TRANSPARENT, bad, fg_muted, glass_button, hover_fill, icon_chevron_down, icon_chevron_up,
+    icon_close, icon_pause, icon_play, modal_card_transition, pressed_fill, primary_button, scaled,
+    scrim_fill, switch_pill_keyed, track_fill, type_body, type_section, type_small, type_title,
 };
 use exo_rpc::{ActionResult, HostEvent, InstallProgress};
-use rune::{Cursor, El, ScrollSpec, Transition, col, el, row, text};
+use rune::{Cursor, El, LiquidGlass, ScrollSpec, Transition, col, el, row, text};
 use serde_json::{Value, json};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -429,7 +429,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         b
     } else {
         let dis = busy_all || lines.is_empty();
-        let mut b = glass_button("dl-pause-all", "Pause all", Some(icon_pause(14.0, FG)))
+        let mut b = set_btn("dl-pause-all", "Pause all", Some(icon_pause(14.0, FG)))
             .disabled(dis)
             .cursor(if dis {
                 Cursor::NotAllowed
@@ -599,16 +599,24 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         body = body.child(group_section("Paused", rows));
     }
 
-    let card = glass_panel_opt("downloads-sheet", scaled(880.0), blur)
+    let _ = blur;
+    let card = col()
+        .key("downloads-sheet")
+        .w(scaled(880.0))
         .role("dialog")
         .label("Downloads")
         .max_h(scaled(760.0))
         .radius(RADIUS_SHEET)
+        .continuous_corners()
         .clip_rounded(RADIUS_SHEET)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(true, |s: &mut AppState| s.close_downloads())
-        .modal_scrim(BG.alpha(0.56))
+        .modal_live(["top-bar"])
+        .modal_scrim(scrim_fill())
         .child(
             col()
                 .w_full()
@@ -621,7 +629,8 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 
     let host = col()
         .key("downloads-host")
-        .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .pt(52.0)
         .center()
         .transition(Transition::none())
         .child(card);
