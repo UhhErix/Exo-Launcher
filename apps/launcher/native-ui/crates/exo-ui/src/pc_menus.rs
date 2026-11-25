@@ -4,15 +4,18 @@ use crate::pc_state::{
 };
 use crate::state::{AppState, Room};
 use exo_kit::{
-    BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_MOVE,
-    SPRING_QUICK, bad, fg_muted, float_line, glass_icon_circle, glass_panel_opt, good, hover_fill,
-    icon_check, icon_close, icon_cpu, icon_hard_drive, icon_monitor, modal_card_transition,
-    modal_scrim_transition, popover_transition_from, pressed_fill, progress_bar, scaled,
-    status_badge, subtle_fill, track_fill, type_body, type_control, type_page, type_section,
-    type_small, type_title, warn,
+    BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    SPRING_MOVE, SPRING_QUICK, bad, fg_muted, float_line, glass_panel_opt, glass_rim_bottom,
+    glass_rim_top, good, hover_fill, icon_check, icon_chevron_down, icon_close, icon_cpu,
+    icon_hard_drive, icon_monitor, modal_card_transition, modal_scrim_transition,
+    popover_transition_from, pressed_fill, progress_bar, scaled, slider_track, status_badge,
+    subtle_fill, track_fill, type_body, type_control, type_page, type_section, type_small,
+    type_title, warn,
 };
 use exo_rpc::{AutopilotLive, AutopilotReport, DriverProgress, DriverState, OutputColor};
-use rune::{Align, Cursor, El, Key, ScrollSpec, Side, TextStyle, col, el, row, text};
+use rune::{
+    Align, Cursor, El, Key, LiquidGlass, Phase, ScrollSpec, Side, TextStyle, col, el, row, text,
+};
 use serde_json::json;
 
 const NVIDIA_LICENSE: &str = "https://www.nvidia.com/en-us/drivers/nvidia-license/";
@@ -109,6 +112,7 @@ pub(crate) fn menu_row(
         .child(
             row()
                 .w_full()
+                .min_h(56.0)
                 .py(10.0)
                 .gap(12.0)
                 .justify_between()
@@ -286,17 +290,37 @@ pub(crate) fn driver_row_view(s: &AppState) -> Option<El> {
     let mut right = row().gap(6.0).center_y();
     if vendor == "nvidia" && !state.workstation {
         let is_studio = s.pc.gpu_driver_branch == "studio";
+        let branch_lbl = if is_studio { "Studio" } else { "Game Ready" };
         right = right.child(
-            menu_btn(
-                "gpu-driver-branch".into(),
-                if is_studio { "Studio" } else { "Game Ready" },
-                false,
-                false,
-                working,
-            )
-            .on_press(move |s: &mut AppState| {
-                s.set_gpu_driver_branch(if is_studio { "game" } else { "studio" });
-            }),
+            row()
+                .key("gpu-driver-branch")
+                .role("button")
+                .label(branch_lbl)
+                .cursor(if working {
+                    Cursor::NotAllowed
+                } else {
+                    Cursor::Pointer
+                })
+                .focusable(!working)
+                .disabled(working)
+                .hit()
+                .press_on_down()
+                .press_scale(PRESS_SCALE)
+                .h(28.0)
+                .px(12.0)
+                .gap(5.0)
+                .center_y()
+                .radius(RADIUS_PILL)
+                .fill(subtle_fill())
+                .hover(hover_fill())
+                .press(pressed_fill())
+                .border(1.0, float_line())
+                .motion(SPRING_QUICK)
+                .on_press(move |s: &mut AppState| {
+                    s.set_gpu_driver_branch(if is_studio { "game" } else { "studio" });
+                })
+                .child(text(branch_lbl).font(type_small()).color(FG))
+                .child(icon_chevron_down(12.0, fg_muted())),
         );
     }
     if working
@@ -645,25 +669,31 @@ fn display_menu_body(s: &AppState) -> El {
             .unwrap_or(&disp.displays[0]);
 
         if several {
-            let mut picks = row().gap(6.0).center_y();
-            for d in &disp.displays {
-                let did = d.id.clone();
-                let active = d.id == screen.id;
-                picks = picks.child(
-                    menu_btn(
-                        format!("disp-pick-{}", d.id),
-                        d.name.clone(),
-                        active,
-                        false,
-                        false,
-                    )
-                    .on_press(move |s: &mut AppState| {
-                        s.pc.selected_display_id = Some(did.clone());
-                        s.pc.display_error = None;
-                    }),
-                );
-            }
-            body = body.child(menu_row("Screen", None, None, picks));
+            let cur_idx = disp
+                .displays
+                .iter()
+                .position(|d| d.id == screen.id)
+                .unwrap_or(0);
+            let next_id = disp.displays[(cur_idx + 1) % disp.displays.len()]
+                .id
+                .clone();
+            body = body.child(menu_row(
+                "Screen",
+                None,
+                None,
+                menu_btn(
+                    format!("disp-pick-{}", screen.id),
+                    screen.name.clone(),
+                    false,
+                    false,
+                    false,
+                )
+                .child(icon_chevron_down(12.0, fg_muted()))
+                .on_press(move |s: &mut AppState| {
+                    s.pc.selected_display_id = Some(next_id.clone());
+                    s.pc.display_error = None;
+                }),
+            ));
         }
 
         if screen.refreshes.len() > 1 {
@@ -682,14 +712,14 @@ fn display_menu_body(s: &AppState) -> El {
                 "Refresh rate",
                 None,
                 err_for("refresh"),
-                menu_btn("disp-refresh".into(), cur_lbl, false, false, busy).on_press(
-                    move |s: &mut AppState| {
+                menu_btn("disp-refresh".into(), cur_lbl, false, false, busy)
+                    .child(icon_chevron_down(12.0, fg_muted()))
+                    .on_press(move |s: &mut AppState| {
                         let mut m = serde_json::Map::new();
                         m.insert("display".into(), json!(sid));
                         m.insert("refresh".into(), json!(next_hz));
                         s.run_gpu_display_change("set", "refresh", m);
-                    },
-                ),
+                    }),
             ));
         }
 
@@ -733,16 +763,16 @@ fn display_menu_body(s: &AppState) -> El {
                     "Color format",
                     None,
                     err_for("format"),
-                    menu_btn("disp-format".into(), cur_label, false, false, busy).on_press(
-                        move |s: &mut AppState| {
+                    menu_btn("disp-format".into(), cur_label, false, false, busy)
+                        .child(icon_chevron_down(12.0, fg_muted()))
+                        .on_press(move |s: &mut AppState| {
                             let mut m = serde_json::Map::new();
                             m.insert("display".into(), json!(sid));
                             m.insert("format".into(), json!(next_fmt));
                             m.insert("bpc".into(), json!(bpc));
                             m.insert("full".into(), json!(full));
                             s.run_gpu_display_change("set", "format", m);
-                        },
-                    ),
+                        }),
                 ));
             }
 
@@ -780,6 +810,7 @@ fn display_menu_body(s: &AppState) -> El {
                         false,
                         busy,
                     )
+                    .child(icon_chevron_down(12.0, fg_muted()))
                     .on_press(move |s: &mut AppState| {
                         let mut m = serde_json::Map::new();
                         m.insert("display".into(), json!(sid));
@@ -815,6 +846,7 @@ fn display_menu_body(s: &AppState) -> El {
                             false,
                             busy,
                         )
+                        .child(icon_chevron_down(12.0, fg_muted()))
                         .on_press(move |s: &mut AppState| {
                             let mut m = serde_json::Map::new();
                             m.insert("display".into(), json!(sid));
@@ -852,72 +884,82 @@ fn display_menu_body(s: &AppState) -> El {
 
         if let Some(ref ddc) = screen.ddc {
             if let Some(br) = ddc.brightness {
-                let sid_m = screen.id.clone();
-                let sid_p = screen.id.clone();
-                let lo = (br - 10).max(ddc.brightness_min);
-                let hi = (br + 10).min(ddc.brightness_max);
+                let sid = screen.id.clone();
+                let lo_b = ddc.brightness_min;
+                let hi_b = ddc.brightness_max.max(lo_b + 1);
+                let ratio = ((br - lo_b) as f32 / (hi_b - lo_b) as f32).clamp(0.0, 1.0);
                 body = body.child(menu_row(
                     "Monitor brightness",
                     None,
                     err_for("ddcBrightness"),
                     row()
-                        .gap(6.0)
+                        .gap(10.0)
                         .center_y()
                         .child(
-                            menu_btn("ddc-br-minus".into(), "−", false, false, busy).on_press(
-                                move |s: &mut AppState| {
-                                    let mut m = serde_json::Map::new();
-                                    m.insert("display".into(), json!(sid_m));
-                                    m.insert("brightness".into(), json!(lo));
-                                    s.run_gpu_display_change("ddc", "ddcBrightness", m);
-                                },
-                            ),
+                            slider_track(
+                                "ddc-br-slider",
+                                "Monitor brightness",
+                                180.0,
+                                ratio,
+                                false,
+                                busy,
+                            )
+                            .on_drag(move |s: &mut AppState, d, _| {
+                                if busy || d.phase != Phase::Up || d.cancelled() {
+                                    return;
+                                }
+                                let r = (d.x / d.w.max(1.0)).clamp(0.0, 1.0);
+                                let val = lo_b + ((hi_b - lo_b) as f32 * r).round() as i32;
+                                let mut m = serde_json::Map::new();
+                                m.insert("display".into(), json!(sid));
+                                m.insert("brightness".into(), json!(val));
+                                s.run_gpu_display_change("ddc", "ddcBrightness", m);
+                            }),
                         )
-                        .child(text(format!("{br}%")).font(type_small()).color(FG))
                         .child(
-                            menu_btn("ddc-br-plus".into(), "+", false, false, busy).on_press(
-                                move |s: &mut AppState| {
-                                    let mut m = serde_json::Map::new();
-                                    m.insert("display".into(), json!(sid_p));
-                                    m.insert("brightness".into(), json!(hi));
-                                    s.run_gpu_display_change("ddc", "ddcBrightness", m);
-                                },
-                            ),
+                            el().w(40.0)
+                                .justify_end()
+                                .child(text(format!("{br}%")).font(type_small()).color(fg_muted())),
                         ),
                 ));
             }
             if let Some(ct) = ddc.contrast {
-                let sid_m = screen.id.clone();
-                let sid_p = screen.id.clone();
-                let lo = (ct - 10).max(ddc.contrast_min);
-                let hi = (ct + 10).min(ddc.contrast_max);
+                let sid = screen.id.clone();
+                let lo_c = ddc.contrast_min;
+                let hi_c = ddc.contrast_max.max(lo_c + 1);
+                let ratio = ((ct - lo_c) as f32 / (hi_c - lo_c) as f32).clamp(0.0, 1.0);
                 body = body.child(menu_row(
                     "Monitor contrast",
                     None,
                     err_for("ddcContrast"),
                     row()
-                        .gap(6.0)
+                        .gap(10.0)
                         .center_y()
                         .child(
-                            menu_btn("ddc-ct-minus".into(), "−", false, false, busy).on_press(
-                                move |s: &mut AppState| {
-                                    let mut m = serde_json::Map::new();
-                                    m.insert("display".into(), json!(sid_m));
-                                    m.insert("contrast".into(), json!(lo));
-                                    s.run_gpu_display_change("ddc", "ddcContrast", m);
-                                },
-                            ),
+                            slider_track(
+                                "ddc-ct-slider",
+                                "Monitor contrast",
+                                180.0,
+                                ratio,
+                                false,
+                                busy,
+                            )
+                            .on_drag(move |s: &mut AppState, d, _| {
+                                if busy || d.phase != Phase::Up || d.cancelled() {
+                                    return;
+                                }
+                                let r = (d.x / d.w.max(1.0)).clamp(0.0, 1.0);
+                                let val = lo_c + ((hi_c - lo_c) as f32 * r).round() as i32;
+                                let mut m = serde_json::Map::new();
+                                m.insert("display".into(), json!(sid));
+                                m.insert("contrast".into(), json!(val));
+                                s.run_gpu_display_change("ddc", "ddcContrast", m);
+                            }),
                         )
-                        .child(text(format!("{ct}%")).font(type_small()).color(FG))
                         .child(
-                            menu_btn("ddc-ct-plus".into(), "+", false, false, busy).on_press(
-                                move |s: &mut AppState| {
-                                    let mut m = serde_json::Map::new();
-                                    m.insert("display".into(), json!(sid_p));
-                                    m.insert("contrast".into(), json!(hi));
-                                    s.run_gpu_display_change("ddc", "ddcContrast", m);
-                                },
-                            ),
+                            el().w(40.0)
+                                .justify_end()
+                                .child(text(format!("{ct}%")).font(type_small()).color(fg_muted())),
                         ),
                 ));
             }
@@ -934,40 +976,48 @@ fn display_menu_body(s: &AppState) -> El {
                 } else {
                     format!("{}{}", ctrl.value.round() as i64, ctrl.unit)
                 };
+                let span = (ctrl.max - ctrl.min).max(1.0);
+                let ratio = ((ctrl.value - ctrl.min) / span).clamp(0.0, 1.0) as f32;
                 let step = ctrl.step.max(1.0);
-                let lo = (ctrl.value - step).max(ctrl.min);
-                let hi = (ctrl.value + step).min(ctrl.max);
-                let sid_m = screen.id.clone();
-                let sid_p = screen.id.clone();
-                let k_m = ctrl.key.clone();
-                let k_p = ctrl.key.clone();
+                let cmin = ctrl.min;
+                let cmax = ctrl.max;
+                let sid = screen.id.clone();
+                let key_s = ctrl.key.clone();
                 body = body.child(menu_row(
                     ctrl.label.clone(),
                     None,
                     err_for(&ctrl.key),
                     row()
-                        .gap(6.0)
+                        .gap(10.0)
                         .center_y()
                         .child(
-                            menu_btn(format!("col-m-{}", ctrl.key), "−", false, false, busy)
-                                .on_press(move |s: &mut AppState| {
-                                    let mut m = serde_json::Map::new();
-                                    m.insert("display".into(), json!(sid_m));
-                                    m.insert("key".into(), json!(k_m));
-                                    m.insert("value".into(), json!(lo));
-                                    s.run_gpu_display_change("adjust", &k_m, m);
-                                }),
+                            slider_track(
+                                format!("col-slider-{}", ctrl.key),
+                                ctrl.label.clone(),
+                                180.0,
+                                ratio,
+                                false,
+                                busy,
+                            )
+                            .on_drag(move |s: &mut AppState, d, _| {
+                                if busy || d.phase != Phase::Up || d.cancelled() {
+                                    return;
+                                }
+                                let r = (d.x / d.w.max(1.0)).clamp(0.0, 1.0) as f64;
+                                let raw = cmin + r * (cmax - cmin);
+                                let snapped = (raw / step).round() * step;
+                                let val = snapped.clamp(cmin, cmax);
+                                let mut m = serde_json::Map::new();
+                                m.insert("display".into(), json!(sid));
+                                m.insert("key".into(), json!(key_s));
+                                m.insert("value".into(), json!(val));
+                                s.run_gpu_display_change("adjust", &key_s, m);
+                            }),
                         )
-                        .child(text(val_txt).font(type_small()).color(FG))
                         .child(
-                            menu_btn(format!("col-p-{}", ctrl.key), "+", false, false, busy)
-                                .on_press(move |s: &mut AppState| {
-                                    let mut m = serde_json::Map::new();
-                                    m.insert("display".into(), json!(sid_p));
-                                    m.insert("key".into(), json!(k_p));
-                                    m.insert("value".into(), json!(hi));
-                                    s.run_gpu_display_change("adjust", &k_p, m);
-                                }),
+                            el().w(40.0)
+                                .justify_end()
+                                .child(text(val_txt).font(type_small()).color(fg_muted())),
                         ),
                 ));
             }
@@ -2536,43 +2586,66 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
         };
         let head = row()
             .w_full()
-            .pt(16.0)
+            .pt(14.0)
             .px(20.0)
-            .pb(8.0)
+            .pb(10.0)
             .justify_between()
             .center_y()
             .child(text(title).font(type_section()).color(FG))
             .child(
-                glass_icon_circle(
-                    "pc-part-menu-close",
-                    close_label,
-                    28.0,
-                    icon_close(13.0, FG),
-                )
-                .on_press(|s: &mut AppState| {
-                    s.pc.part_menu = None;
-                    s.pc.armed_confirm = None;
-                }),
+                el().key("pc-part-menu-close")
+                    .role("button")
+                    .label(close_label)
+                    .focusable(true)
+                    .hit()
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .cursor(Cursor::Pointer)
+                    .size(28.0, 28.0)
+                    .radius(14.0)
+                    .center()
+                    .hover(hover_fill())
+                    .press(pressed_fill())
+                    .motion(SPRING_QUICK)
+                    .on_press(|s: &mut AppState| {
+                        s.pc.part_menu = None;
+                        s.pc.armed_confirm = None;
+                    })
+                    .child(icon_close(15.0, FG)),
             );
         let body = col()
             .key("pc-part-menu-scroll")
             .w_full()
-            .max_h(480.0)
+            .max_h(692.0)
             .px(20.0)
-            .pb(16.0)
+            .pb(10.0)
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
             .child(body_inner);
-        let card = glass_panel_opt("pc-part-menu", 560.0, blur)
+        let mut card = col()
+            .key("pc-part-menu")
+            .w(560.0)
+            .radius(RADIUS_PANEL)
+            .continuous_corners()
+            .clip_rounded(RADIUS_PANEL)
+            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+            .hit()
+            .cursor(Cursor::Default);
+        if blur {
+            card = card.liquid_glass(LiquidGlass::panel());
+        } else {
+            card = card.fill(BG);
+        }
+        let card = card
             .role("dialog")
             .label(title)
-            .anchored_fit(anchor_key, Side::Top, Align::Start, 10.0)
             .transition(popover_transition_from(rune::Vec2::new(0.0, 1.0)))
             .modal(true, |s: &mut AppState| {
                 s.pc.part_menu = None;
                 s.pc.armed_confirm = None;
             })
+            .modal_live(["top-bar"])
             .on_key(|s: &mut AppState, ev, _| {
                 if ev.key == Key::Escape {
                     if s.pc.armed_confirm.is_some() {
@@ -2587,7 +2660,22 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
             })
             .child(head)
             .child(body);
-        layers.push(card);
+        if which == PcPartMenu::Display {
+            layers.push(
+                row()
+                    .w_full()
+                    .h_full()
+                    .pt(64.0)
+                    .px(12.0)
+                    .pb(12.0)
+                    .items_end()
+                    .child(el().grow(1.22).min_w(0.0))
+                    .child(card)
+                    .child(el().grow(1.0).min_w(0.0)),
+            );
+        } else {
+            layers.push(card.anchored_fit(anchor_key, Side::Top, Align::Start, 10.0));
+        }
     }
 
     if let Some(cine) = auto_tune_cinema_layer(s, blur) {
