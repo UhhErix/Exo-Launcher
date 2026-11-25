@@ -1,9 +1,11 @@
 use exo_apo::endpoint_reg::{
-    KeepBackupLedger, MockRegistryStore, RegistryStore, one_click_rollback,
-    register_with_explicit_consent, uninstall_endpoint,
+    ApoSigningMode, AudioServiceController, EnableSystemEqRequest, KeepBackupLedger,
+    MockAudioServiceController, MockRegistryStore, RegistryStore, check_system_eq_health,
+    disable_system_eq, enable_system_eq, uninstall_endpoint,
 };
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 fn has_flag(args: &[String], flag: &str) -> bool {
@@ -47,6 +49,22 @@ fn is_process_elevated() -> bool {
     false
 }
 
+struct LoggingMockService {
+    inner: MockAudioServiceController,
+    log_path: Option<PathBuf>,
+}
+
+impl AudioServiceController for LoggingMockService {
+    fn restart_audio_service(&mut self) -> std::io::Result<()> {
+        self.inner.restart_audio_service()?;
+        if let Some(ref p) = self.log_path {
+            let mut file = fs::OpenOptions::new().create(true).append(true).open(p)?;
+            writeln!(file, "restart:Audiosrv")?;
+        }
+        Ok(())
+    }
+}
+
 fn load_ledger(path: &Path) -> Result<KeepBackupLedger, String> {
     if !path.exists() {
         return Ok(KeepBackupLedger::new());
@@ -82,7 +100,11 @@ fn validate_dll_path(dll: &str) -> Result<String, String> {
     Ok(p.to_string_lossy().into_owned())
 }
 
-fn run_with_store<R: RegistryStore>(args: &[String], store: &mut R) -> Result<String, String> {
+fn run_with_backends<R: RegistryStore, S: AudioServiceController>(
+    args: &[String],
+    store: &mut R,
+    service: &mut S,
+) -> Result<String, String> {
     let cmd = args.get(1).map(String::as_str).unwrap_or("");
     let ledger_path = PathBuf::from(arg_val(args, "--ledger").ok_or("--ledger is required")?);
 
@@ -95,15 +117,34 @@ fn run_with_store<R: RegistryStore>(args: &[String], store: &mut R) -> Result<St
                         .to_string(),
                 );
             }
+            let signed_mode = has_flag(args, "--signed");
+            let mode = if signed_mode {
+                ApoSigningMode::Signed
+            } else {
+                ApoSigningMode::UnsignedFreeRoute
+            };
+            let drm_accepted = has_flag(args, "--drm-disclosure-accepted");
             let endpoint = arg_val(args, "--endpoint").ok_or("--endpoint is required")?;
             let dll = validate_dll_path(&arg_val(args, "--dll").ok_or("--dll is required")?)?;
             let mut ledger = load_ledger(&ledger_path)?;
-            let outcome = register_with_explicit_consent(store, &mut ledger, &endpoint, &dll, true)
-                .map_err(|e| e.to_string())?;
+            let outcome = enable_system_eq(
+                store,
+                service,
+                &mut ledger,
+                EnableSystemEqRequest {
+                    endpoint_id: &endpoint,
+                    dll_path: &dll,
+                    mode,
+                    explicit_user_consent: true,
+                    drm_disclosure_accepted: drm_accepted,
+                },
+            )
+            .map_err(|e| e.to_string())?;
             save_ledger(&ledger_path, &ledger)?;
             Ok(format!(
-                "registered endpoint={} oem_preserved={} sysfx_disabled={}",
+                "registered endpoint={} mode={:?} oem_preserved={} sysfx_disabled={}",
                 outcome.endpoint_guid,
+                mode,
                 outcome.preserved_oem_clsids.len(),
                 outcome.sysfx_was_disabled
             ))
@@ -113,30 +154,41 @@ fn run_with_store<R: RegistryStore>(args: &[String], store: &mut R) -> Result<St
             if let Some(endpoint) = arg_val(args, "--endpoint") {
                 let restored = uninstall_endpoint(store, &mut ledger, &endpoint)
                     .map_err(|e| e.to_string())?;
+                service.restart_audio_service().map_err(|e| e.to_string())?;
                 save_ledger(&ledger_path, &ledger)?;
                 Ok(format!(
                     "rolled_back endpoint={endpoint} restored={restored}"
                 ))
             } else {
-                let outcome = one_click_rollback(store, &mut ledger).map_err(|e| e.to_string())?;
+                let outcome =
+                    disable_system_eq(store, service, &mut ledger).map_err(|e| e.to_string())?;
                 save_ledger(&ledger_path, &ledger)?;
                 Ok(format!(
-                    "rolled_back endpoints={} com_clsids={}",
-                    outcome.restored_endpoints, outcome.removed_com_clsids
+                    "rolled_back endpoints={} com_clsids={} prior_protected_dg={:?}",
+                    outcome.restored_endpoints,
+                    outcome.removed_com_clsids,
+                    outcome.restored_protected_audio_dg
                 ))
             }
+        }
+        "health" => {
+            let ledger = load_ledger(&ledger_path)?;
+            let audiodg_rejected = has_flag(args, "--audiodg-rejected");
+            let report = check_system_eq_health(store, &ledger, audiodg_rejected);
+            serde_json::to_string(&report).map_err(|e| format!("serialize health: {e}"))
         }
         "status" => {
             let ledger = load_ledger(&ledger_path)?;
             Ok(format!(
-                "status endpoints={} com_clsids={} dll={}",
+                "status enabled={} endpoints={} com_clsids={} dll={}",
+                ledger.system_eq_enabled,
                 ledger.endpoints.len(),
                 ledger.com_clsids_registered.len(),
                 ledger.registered_dll_path.as_deref().unwrap_or("none")
             ))
         }
         _ => Err(
-            "usage: exo-apo-helper <register|rollback|status> --ledger <PATH> [--endpoint <GUID> --dll <PATH> --explicit-user-consent] [--mock-store <PATH>]"
+            "usage: exo-apo-helper <register|rollback|health|status> --ledger <PATH> [--endpoint <GUID> --dll <PATH> --explicit-user-consent [--drm-disclosure-accepted | --signed]] [--mock-store <PATH>] [--mock-service-log <PATH>]"
                 .to_string(),
         ),
     }
@@ -151,7 +203,11 @@ fn run_cli(args: &[String]) -> Result<String, String> {
         } else {
             MockRegistryStore::new()
         };
-        let out = run_with_store(args, &mut store)?;
+        let mut service = LoggingMockService {
+            inner: MockAudioServiceController::new(),
+            log_path: arg_val(args, "--mock-service-log").map(PathBuf::from),
+        };
+        let out = run_with_backends(args, &mut store, &mut service)?;
         let saved = serde_json::to_string_pretty(&store)
             .map_err(|e| format!("serialize mock store: {e}"))?;
         fs::write(&p, saved).map_err(|e| format!("write mock store: {e}"))?;
@@ -169,7 +225,8 @@ fn run_cli(args: &[String]) -> Result<String, String> {
     #[cfg(windows)]
     {
         let mut store = exo_apo::endpoint_reg::Win32RegistryStore;
-        run_with_store(args, &mut store)
+        let mut service = exo_apo::endpoint_reg::Win32AudioServiceController;
+        run_with_backends(args, &mut store, &mut service)
     }
     #[cfg(not(windows))]
     {
@@ -193,7 +250,7 @@ mod tests {
     use super::*;
     use exo_apo::endpoint_reg::{
         AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE, PKEY_FX_ENDPOINT_EFFECT_CLSID,
-        RegValue, is_exo_registered_on_endpoint,
+        ReenableReason, RegValue, SystemEqHealthReport, is_exo_registered_on_endpoint,
     };
     use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -212,10 +269,11 @@ mod tests {
     }
 
     #[test]
-    fn cli_mock_flow_refuses_without_consent_registers_and_rolls_back() {
-        let dir = tmp_dir("cli");
+    fn cli_mock_flow_unsigned_route_snapshots_restarts_detects_reset_and_rolls_back() {
+        let dir = tmp_dir("cli-unsigned");
         let mock_path = dir.join("mock-reg.json");
         let ledger_path = dir.join("ledger.json");
+        let svc_log_path = dir.join("svc.log");
         let dll_path = dir.join("exo_apo.dll");
         fs::write(&dll_path, b"mock-apo-pe").unwrap();
 
@@ -227,14 +285,22 @@ mod tests {
             PKEY_FX_ENDPOINT_EFFECT_CLSID.to_string(),
             RegValue::String(oem_clsid.to_string()),
         );
-        initial_store.seed_endpoint(guid, fx.clone());
+        initial_store.seed_endpoint(guid, fx);
+        initial_store.ensure_key(AUDIO_POLICY_ROOT).unwrap();
+        initial_store
+            .write_value(
+                AUDIO_POLICY_ROOT,
+                DISABLE_PROTECTED_AUDIO_DG_VALUE,
+                &RegValue::Dword(0),
+            )
+            .unwrap();
         fs::write(
             &mock_path,
             serde_json::to_string_pretty(&initial_store).unwrap(),
         )
         .unwrap();
 
-        let no_consent_args = vec![
+        let base_reg = vec![
             "exo-apo-helper".into(),
             "register".into(),
             "--endpoint".into(),
@@ -245,36 +311,71 @@ mod tests {
             ledger_path.to_string_lossy().into_owned(),
             "--mock-store".into(),
             mock_path.to_string_lossy().into_owned(),
+            "--mock-service-log".into(),
+            svc_log_path.to_string_lossy().into_owned(),
         ];
-        let err = run_cli(&no_consent_args).unwrap_err();
-        assert!(err.contains("explicit user action"));
 
-        let mut consent_args = no_consent_args;
-        consent_args.push("--explicit-user-consent".into());
-        let reg_out = run_cli(&consent_args).unwrap();
+        let err_no_consent = run_cli(&base_reg).unwrap_err();
+        assert!(err_no_consent.contains("explicit user action"));
+
+        let mut no_disclosure = base_reg.clone();
+        no_disclosure.push("--explicit-user-consent".into());
+        let err_no_disclosure = run_cli(&no_disclosure).unwrap_err();
+        assert!(err_no_disclosure.contains("DRM protected-audio disclosure"));
+        assert!(!svc_log_path.exists());
+
+        let mut full_reg = no_disclosure;
+        full_reg.push("--drm-disclosure-accepted".into());
+        let reg_out = run_cli(&full_reg).unwrap();
         assert!(reg_out.contains("registered endpoint="));
         assert!(reg_out.contains("oem_preserved=1"));
 
         let after_reg: MockRegistryStore =
             serde_json::from_str(&fs::read_to_string(&mock_path).unwrap()).unwrap();
         assert!(is_exo_registered_on_endpoint(&after_reg, guid));
-        assert!(
+        assert_eq!(
             after_reg
                 .read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)
-                .unwrap()
-                .is_none()
+                .unwrap(),
+            Some(RegValue::Dword(1))
         );
+        let restarts_after_reg = fs::read_to_string(&svc_log_path)
+            .unwrap()
+            .lines()
+            .filter(|l| *l == "restart:Audiosrv")
+            .count();
+        assert_eq!(restarts_after_reg, 1);
 
-        let status_args = vec![
+        let health_args = vec![
             "exo-apo-helper".into(),
-            "status".into(),
+            "health".into(),
             "--ledger".into(),
             ledger_path.to_string_lossy().into_owned(),
             "--mock-store".into(),
             mock_path.to_string_lossy().into_owned(),
         ];
-        let status_out = run_cli(&status_args).unwrap();
-        assert!(status_out.contains("endpoints=1 com_clsids=3"));
+        let healthy: SystemEqHealthReport =
+            serde_json::from_str(&run_cli(&health_args).unwrap()).unwrap();
+        assert!(healthy.system_eq_enabled);
+        assert!(!healthy.needs_reenable);
+
+        let mut wiped = after_reg;
+        wiped
+            .write_value(
+                AUDIO_POLICY_ROOT,
+                DISABLE_PROTECTED_AUDIO_DG_VALUE,
+                &RegValue::Dword(0),
+            )
+            .unwrap();
+        fs::write(&mock_path, serde_json::to_string_pretty(&wiped).unwrap()).unwrap();
+
+        let reset_report: SystemEqHealthReport =
+            serde_json::from_str(&run_cli(&health_args).unwrap()).unwrap();
+        assert!(reset_report.needs_reenable);
+        assert_eq!(
+            reset_report.reason,
+            Some(ReenableReason::ProtectedAudioDgReset)
+        );
 
         let rollback_args = vec![
             "exo-apo-helper".into(),
@@ -283,6 +384,8 @@ mod tests {
             ledger_path.to_string_lossy().into_owned(),
             "--mock-store".into(),
             mock_path.to_string_lossy().into_owned(),
+            "--mock-service-log".into(),
+            svc_log_path.to_string_lossy().into_owned(),
         ];
         let rb_out = run_cli(&rollback_args).unwrap();
         assert!(rb_out.contains("rolled_back endpoints=1 com_clsids=3"));
@@ -290,7 +393,65 @@ mod tests {
         let after_rb: MockRegistryStore =
             serde_json::from_str(&fs::read_to_string(&mock_path).unwrap()).unwrap();
         assert_eq!(after_rb, initial_store);
+        assert_eq!(
+            after_rb
+                .read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)
+                .unwrap(),
+            Some(RegValue::Dword(0))
+        );
+        let restarts_after_rb = fs::read_to_string(&svc_log_path)
+            .unwrap()
+            .lines()
+            .filter(|l| *l == "restart:Audiosrv")
+            .count();
+        assert_eq!(restarts_after_rb, 2);
 
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cli_mock_signed_route_leaves_protected_audiodg_untouched() {
+        let dir = tmp_dir("cli-signed");
+        let mock_path = dir.join("mock-reg.json");
+        let ledger_path = dir.join("ledger.json");
+        let svc_log_path = dir.join("svc.log");
+        let dll_path = dir.join("exo_apo.dll");
+        fs::write(&dll_path, b"mock-apo-pe").unwrap();
+
+        let guid = "{9709e4ab-1234-5678-abcd-0123456789ab}";
+        let mut initial_store = MockRegistryStore::new();
+        initial_store.seed_endpoint(guid, BTreeMap::new());
+        fs::write(
+            &mock_path,
+            serde_json::to_string_pretty(&initial_store).unwrap(),
+        )
+        .unwrap();
+
+        let signed_args = vec![
+            "exo-apo-helper".into(),
+            "register".into(),
+            "--endpoint".into(),
+            guid.into(),
+            "--dll".into(),
+            dll_path.to_string_lossy().into_owned(),
+            "--ledger".into(),
+            ledger_path.to_string_lossy().into_owned(),
+            "--explicit-user-consent".into(),
+            "--signed".into(),
+            "--mock-store".into(),
+            mock_path.to_string_lossy().into_owned(),
+            "--mock-service-log".into(),
+            svc_log_path.to_string_lossy().into_owned(),
+        ];
+        run_cli(&signed_args).unwrap();
+        let after_reg: MockRegistryStore =
+            serde_json::from_str(&fs::read_to_string(&mock_path).unwrap()).unwrap();
+        assert!(
+            after_reg
+                .read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)
+                .unwrap()
+                .is_none()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }
