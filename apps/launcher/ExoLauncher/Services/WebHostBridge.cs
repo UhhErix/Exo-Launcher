@@ -752,6 +752,13 @@ public sealed partial class WebHostBridge
                 return;
             }
 
+            if (DiscordClient.DiscordParityMock.TryHandle(method, paramsEl, hasParams, out var mockResult))
+            {
+                if (!_detached && scope?.Token.IsCancellationRequested != true)
+                    PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: mockResult, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                return;
+            }
+
             object? result = method switch
             {
                 // The library's account checks (registry, store config files) run before its first await: off the UI thread.
