@@ -288,6 +288,19 @@ mod win_readonly {
         device_key: [u16; 128],
     }
 
+    impl DisplayDeviceW {
+        fn zeroed() -> Self {
+            Self {
+                cb: std::mem::size_of::<Self>() as u32,
+                device_name: [0; 32],
+                device_string: [0; 128],
+                state_flags: 0,
+                device_id: [0; 128],
+                device_key: [0; 128],
+            }
+        }
+    }
+
     #[repr(C)]
     struct DevModeW {
         dm_device_name: [u16; 32],
@@ -320,6 +333,43 @@ mod win_readonly {
         dm_reserved2: u32,
         dm_panning_width: u32,
         dm_panning_height: u32,
+    }
+
+    impl DevModeW {
+        fn zeroed() -> Self {
+            Self {
+                dm_device_name: [0; 32],
+                dm_spec_version: 0,
+                dm_driver_version: 0,
+                dm_size: std::mem::size_of::<Self>() as u16,
+                dm_driver_extra: 0,
+                dm_fields: 0,
+                dm_position_x: 0,
+                dm_position_y: 0,
+                dm_display_orientation: 0,
+                dm_display_fixed_output: 0,
+                dm_color: 0,
+                dm_duplex: 0,
+                dm_y_resolution: 0,
+                dm_tt_option: 0,
+                dm_collate: 0,
+                dm_form_name: [0; 32],
+                dm_log_pixels: 0,
+                dm_bits_per_pel: 0,
+                dm_pels_width: 0,
+                dm_pels_height: 0,
+                dm_display_flags: 0,
+                dm_display_frequency: 0,
+                dm_icm_method: 0,
+                dm_icm_intent: 0,
+                dm_media_type: 0,
+                dm_dither_type: 0,
+                dm_reserved1: 0,
+                dm_reserved2: 0,
+                dm_panning_width: 0,
+                dm_panning_height: 0,
+            }
+        }
     }
 
     #[link(name = "advapi32")]
@@ -380,19 +430,34 @@ mod win_readonly {
             .into_owned()
     }
 
-    pub fn read_hklm_string(subkey: &str, name: &str) -> Option<String> {
-        let sk = to_wide(subkey);
-        let vn = to_wide(name);
-        let mut hkey: isize = 0;
-        let rc = unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, sk.as_ptr(), 0, KEY_READ, &mut hkey) };
-        if rc != 0 {
-            return None;
+    struct RegKeyGuard(isize);
+
+    impl RegKeyGuard {
+        fn open_hklm_readonly(subkey: &str) -> Option<Self> {
+            let sk = to_wide(subkey);
+            let mut hkey: isize = 0;
+            let rc =
+                unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, sk.as_ptr(), 0, KEY_READ, &mut hkey) };
+            if rc == 0 { Some(Self(hkey)) } else { None }
         }
+    }
+
+    impl Drop for RegKeyGuard {
+        fn drop(&mut self) {
+            unsafe {
+                RegCloseKey(self.0);
+            }
+        }
+    }
+
+    pub fn read_hklm_string(subkey: &str, name: &str) -> Option<String> {
+        let key = RegKeyGuard::open_hklm_readonly(subkey)?;
+        let vn = to_wide(name);
         let mut kind = 0u32;
         let mut size = 0u32;
         let rc_len = unsafe {
             RegQueryValueExW(
-                hkey,
+                key.0,
                 vn.as_ptr(),
                 null_mut(),
                 &mut kind,
@@ -401,15 +466,12 @@ mod win_readonly {
             )
         };
         if rc_len != 0 || kind != REG_SZ || size == 0 || size > 4096 {
-            unsafe {
-                RegCloseKey(hkey);
-            }
             return None;
         }
         let mut bytes = vec![0u8; size as usize];
         let rc_val = unsafe {
             RegQueryValueExW(
-                hkey,
+                key.0,
                 vn.as_ptr(),
                 null_mut(),
                 &mut kind,
@@ -417,13 +479,11 @@ mod win_readonly {
                 &mut size,
             )
         };
-        unsafe {
-            RegCloseKey(hkey);
-        }
-        if rc_val != 0 {
+        if rc_val != 0 || kind != REG_SZ {
             return None;
         }
-        let u16s: Vec<u16> = bytes
+        let written = (size as usize).min(bytes.len());
+        let u16s: Vec<u16> = bytes[..written]
             .as_chunks::<2>()
             .0
             .iter()
@@ -434,31 +494,23 @@ mod win_readonly {
     }
 
     pub fn read_hklm_dword(subkey: &str, name: &str) -> Option<u32> {
-        let sk = to_wide(subkey);
+        let key = RegKeyGuard::open_hklm_readonly(subkey)?;
         let vn = to_wide(name);
-        let mut hkey: isize = 0;
-        let rc = unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, sk.as_ptr(), 0, KEY_READ, &mut hkey) };
-        if rc != 0 {
-            return None;
-        }
         let mut kind = 0u32;
-        let mut val = 0u32;
-        let mut size = 4u32;
+        let mut buf = [0u8; 4];
+        let mut size = buf.len() as u32;
         let rc_val = unsafe {
             RegQueryValueExW(
-                hkey,
+                key.0,
                 vn.as_ptr(),
                 null_mut(),
                 &mut kind,
-                (&mut val as *mut u32).cast::<u8>(),
+                buf.as_mut_ptr(),
                 &mut size,
             )
         };
-        unsafe {
-            RegCloseKey(hkey);
-        }
-        if rc_val == 0 && kind == REG_DWORD {
-            Some(val)
+        if rc_val == 0 && kind == REG_DWORD && size == 4 {
+            Some(u32::from_ne_bytes(buf))
         } else {
             None
         }
@@ -467,17 +519,16 @@ mod win_readonly {
     pub fn read_fixed_volumes() -> Vec<Value> {
         let mut buf = [0u16; 256];
         let len = unsafe { GetLogicalDriveStringsW(buf.len() as u32, buf.as_mut_ptr()) } as usize;
-        if len == 0 || len > buf.len() {
+        if len == 0 || len >= buf.len() {
             return Vec::new();
         }
         let mut out = Vec::new();
         let mut start = 0usize;
         while start < len {
-            let end = buf[start..len]
-                .iter()
-                .position(|&c| c == 0)
-                .map(|p| start + p)
-                .unwrap_or(len);
+            let Some(rel_end) = buf[start..len].iter().position(|&c| c == 0) else {
+                break;
+            };
+            let end = start + rel_end;
             if end == start {
                 break;
             }
@@ -520,8 +571,7 @@ mod win_readonly {
     pub fn read_active_displays() -> Vec<LiveDisplayRow> {
         let mut out = Vec::new();
         for idx in 0..16u32 {
-            let mut dd: DisplayDeviceW = unsafe { std::mem::zeroed() };
-            dd.cb = std::mem::size_of::<DisplayDeviceW>() as u32;
+            let mut dd = DisplayDeviceW::zeroed();
             let ok = unsafe { EnumDisplayDevicesW(null(), idx, &mut dd, 0) };
             if ok == 0 {
                 break;
@@ -532,8 +582,7 @@ mod win_readonly {
             let gdi_name = from_wide_buf(&dd.device_name);
             let id = gdi_name.trim_start_matches("\\\\.\\").to_owned();
             let main = dd.state_flags & DISPLAY_DEVICE_PRIMARY_DEVICE != 0;
-            let mut dm: DevModeW = unsafe { std::mem::zeroed() };
-            dm.dm_size = std::mem::size_of::<DevModeW>() as u16;
+            let mut dm = DevModeW::zeroed();
             let wide_name = to_wide(&gdi_name);
             let refresh = if unsafe {
                 EnumDisplaySettingsW(wide_name.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm)
