@@ -25,30 +25,28 @@ public static partial class AppLog
             await foreach (var entry in Pending.Reader.ReadAllAsync()) WriteLine(entry.Path, entry.Line);
         });
     }
-    // Source-generated so the first log call does not compile regexes at runtime.
-    [GeneratedRegex(@"(?i)\b((?:authorization:\s*)?bearer\s+)\S+", RegexOptions.CultureInvariant)]
-    private static partial Regex Bearer();
-    [GeneratedRegex(
-        @"(?i)\b(token|access[_-]?token|refresh[_-]?token|refresh|password|passwd|secret|client_secret|authorization|api[_-]?key|session|key|steam[_-]?login[_-]?secure|recovery[_ -]?code)\s*[:=]\s*\S+",
-        RegexOptions.CultureInvariant)]
-    private static partial Regex SecretAssignment();
-    // The generator does not support NonBacktracking. The quoted-string branch
-    // has disjoint alternatives and no nested quantifiers, so it stays linear.
-    [GeneratedRegex(
-        "(?i)[\"'](token|access[_-]?token|refresh[_-]?token|password|passwd|secret|client_secret|authorization|api[_-]?key|session|steam[_-]?login[_-]?secure|recovery[_-]?code)[\"']\\s*:\\s*(?:\"(?:\\\\.|[^\"\\\\])*\"|'[^']*'|[^,\\s}]+)",
-        RegexOptions.CultureInvariant)]
-    private static partial Regex QuotedSecretAssignment();
-    [GeneratedRegex(
-        @"(?i)\b(user[_-]?id|account[_-]?id|steam[_-]?id|friend[_-]?ids?|claimed[_-]?id|external[_-]?id|store[_-]?id|store[_-]?native[_-]?id)\s*[:=]\s*\S+",
-        RegexOptions.CultureInvariant)]
-    private static partial Regex IdentityAssignment();
-    private static readonly Regex EmailPattern = new(@"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+
+    internal const int MaxRedactInput = 256 * 1024;
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+    private static readonly Regex BearerPattern = new(
+        @"\b((?:authorization:\s*)?bearer\s+)\S+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, RegexTimeout);
+    private static readonly Regex SecretAssignmentPattern = new(
+        @"\b(token|access[_-]?token|refresh[_-]?token|refresh|password|passwd|secret|client_secret|authorization|api[_-]?key|session|key|steam[_-]?login[_-]?secure|recovery[_ -]?code)\s*[:=]\s*\S+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, RegexTimeout);
+    private static readonly Regex QuotedSecretAssignmentPattern = new(
+        @"[""'](token|access[_-]?token|refresh[_-]?token|password|passwd|secret|client_secret|authorization|api[_-]?key|session|steam[_-]?login[_-]?secure|recovery[_ -]?code)[""']\s*:\s*(?:""(?:\\.|[^""\\])*""|'[^']*'|[^""'\s,}]+)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, RegexTimeout);
+    private static readonly Regex IdentityAssignmentPattern = new(
+        @"\b(user[_-]?id|account[_-]?id|steam[_-]?id|friend[_-]?ids?|claimed[_-]?id|external[_-]?id|store[_-]?id|store[_-]?native[_-]?id)\s*[:=]\s*\S+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, RegexTimeout);
+    private static readonly Regex EmailPattern = new(@"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, RegexTimeout);
 
     // Secrets logged with no label: a three-part token (JWT, Discord) and a long opaque
     // run of mixed-case letters and digits (OAuth access tokens). Lowercase hex hashes,
     // which download checks log on purpose, are one case and stay readable.
-    private static readonly Regex DottedTokenPattern = new(@"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{16,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
-    private static readonly Regex OpaqueRunPattern = new(@"[A-Za-z0-9_+-]{40,}={0,2}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly Regex DottedTokenPattern = new(@"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{16,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, RegexTimeout);
+    private static readonly Regex OpaqueRunPattern = new(@"[A-Za-z0-9_+-]{40,}={0,2}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, RegexTimeout);
 
     public static void Info(string message) => Write("INFO", message);
     public static void Warn(string message) => Write("WARN", message);
@@ -92,7 +90,8 @@ public static partial class AppLog
         try
         {
             var path = LogPath.Value;
-            var redacted = Redact(message);
+            var bounded = message.Length > 32768 ? message[..32768] + " [truncated]" : message;
+            var redacted = Redact(bounded);
             if (redacted.Length > 32768) redacted = redacted[..32768] + " [truncated]";
             var line = $"[{DateTime.UtcNow:O}] {level} {redacted}{Environment.NewLine}";
             Pending.Writer.TryWrite((path, line));
@@ -159,27 +158,35 @@ public static partial class AppLog
     internal static string Redact(string message)
     {
         if (string.IsNullOrEmpty(message)) return message;
-        var text = QuotedSecretAssignment().Replace(message, "$1=[redacted]");
-        text = Bearer().Replace(text, "$1[redacted]");
-        text = SecretAssignment().Replace(text, "$1=[redacted]");
-        text = IdentityAssignment().Replace(text, "$1=[redacted]");
-        text = DottedTokenPattern.Replace(text, match =>
+        var text = message.Length > MaxRedactInput ? message[..MaxRedactInput] + " [truncated]" : message;
+        try
         {
-            var start = match.Index;
-            var end = start + match.Length;
-            if ((start > 0 && IsDottedTokenChar(text[start - 1])) || (end < text.Length && IsDottedTokenChar(text[end])))
-                return match.Value;
-            return "[redacted]";
-        });
-        text = OpaqueRunPattern.Replace(text, match =>
+            text = QuotedSecretAssignmentPattern.Replace(text, "$1=[redacted]");
+            text = BearerPattern.Replace(text, "$1[redacted]");
+            text = SecretAssignmentPattern.Replace(text, "$1=[redacted]");
+            text = IdentityAssignmentPattern.Replace(text, "$1=[redacted]");
+            text = DottedTokenPattern.Replace(text, match =>
+            {
+                var start = match.Index;
+                var end = start + match.Length;
+                if ((start > 0 && IsDottedTokenChar(text[start - 1])) || (end < text.Length && IsDottedTokenChar(text[end])))
+                    return match.Value;
+                return "[redacted]";
+            });
+            text = OpaqueRunPattern.Replace(text, match =>
+            {
+                var start = match.Index;
+                var end = start + match.Length;
+                if ((start > 0 && IsOpaqueRunChar(text[start - 1])) || (end < text.Length && IsOpaqueRunChar(text[end])))
+                    return match.Value;
+                return LooksLikeToken(match.ValueSpan) ? "[redacted]" : match.Value;
+            });
+            return EmailPattern.Replace(text, "[redacted-email]");
+        }
+        catch (RegexMatchTimeoutException)
         {
-            var start = match.Index;
-            var end = start + match.Length;
-            if ((start > 0 && IsOpaqueRunChar(text[start - 1])) || (end < text.Length && IsOpaqueRunChar(text[end])))
-                return match.Value;
-            return LooksLikeToken(match.ValueSpan) ? "[redacted]" : match.Value;
-        });
-        return EmailPattern.Replace(text, "[redacted-email]");
+            return "[redacted: log scrub timed out]";
+        }
     }
 
     private static bool IsDottedTokenChar(char c) => char.IsAsciiLetterOrDigit(c) || c is '_' or '-';

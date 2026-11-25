@@ -141,14 +141,35 @@ public static class ReportNames
 
     internal static bool IsInStackFrame(string text, int start, int length)
     {
-        var lineStart = start == 0 ? 0 : text.LastIndexOf('\n', start - 1) + 1;
+        const int maxFrameWindow = 1024;
+        int lineStart;
+        if (start == 0)
+        {
+            lineStart = 0;
+        }
+        else
+        {
+            var lookback = Math.Min(start, maxFrameWindow);
+            var nl = text.LastIndexOf('\n', start - 1, lookback);
+            if (nl < 0)
+            {
+                if (start > maxFrameWindow) return false;
+                lineStart = 0;
+            }
+            else
+            {
+                lineStart = nl + 1;
+            }
+        }
         var p = lineStart;
         while (p < text.Length && (text[p] == ' ' || text[p] == '\t')) p++;
         if (p + 3 > text.Length || !text.AsSpan(p, 3).Equals("at ".AsSpan(), StringComparison.Ordinal)) return false;
         var frameStart = p + 3;
         if (start < frameStart) return false;
-        var lineEnd = text.IndexOf('\n', frameStart);
-        if (lineEnd < 0) lineEnd = text.Length;
+        var remaining = Math.Min(text.Length - frameStart, maxFrameWindow);
+        var lineEnd = text.IndexOf('\n', frameStart, remaining);
+        if (lineEnd < 0) lineEnd = frameStart + remaining;
+        if (start + length > lineEnd) return false;
         var openParen = text.IndexOf('(', frameStart, lineEnd - frameStart);
         return openParen > frameStart && start + length <= openParen;
     }
@@ -166,10 +187,17 @@ public static class ReportNames
 
     private static bool IsInsideDotNetToken(string text, int start, int length)
     {
+        const int maxTokenSpan = 256;
+        var minStart = Math.Max(0, start - maxTokenSpan);
         var tokenStart = start;
-        while (tokenStart > 0 && (char.IsLetterOrDigit(text[tokenStart - 1]) || text[tokenStart - 1] is '.' or '_')) tokenStart--;
+        while (tokenStart > minStart && (char.IsLetterOrDigit(text[tokenStart - 1]) || text[tokenStart - 1] is '.' or '_')) tokenStart--;
+        if (tokenStart == minStart && tokenStart > 0 && (char.IsLetterOrDigit(text[tokenStart - 1]) || text[tokenStart - 1] is '.' or '_'))
+            return false;
+        var maxEnd = Math.Min(text.Length, start + length + maxTokenSpan);
         var tokenEnd = start + length;
-        while (tokenEnd < text.Length && (char.IsLetterOrDigit(text[tokenEnd]) || text[tokenEnd] is '.' or '_')) tokenEnd++;
+        while (tokenEnd < maxEnd && (char.IsLetterOrDigit(text[tokenEnd]) || text[tokenEnd] is '.' or '_')) tokenEnd++;
+        if (tokenEnd == maxEnd && tokenEnd < text.Length && (char.IsLetterOrDigit(text[tokenEnd]) || text[tokenEnd] is '.' or '_'))
+            return false;
         var fullLen = tokenEnd - tokenStart;
         return fullLen > length && IsDotNetNamespaceToken(text, tokenStart, fullLen);
     }
