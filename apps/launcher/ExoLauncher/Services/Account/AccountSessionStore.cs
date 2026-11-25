@@ -1,7 +1,10 @@
 using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text;
 using System.Text.Json;
 using ExoLauncher.Helpers;
 using ExoLauncher.Services;
+using Microsoft.Win32;
 
 namespace ExoLauncher.Services.Account;
 
@@ -154,18 +157,66 @@ internal static class AccountSessionStore
 internal static class AccountDevice
 {
     internal const string FileName = "device-id.txt";
+    private static readonly byte[] Salt = "Exo.AccountDevice.v1"u8.ToArray();
+
+    internal static Func<(string MachineGuid, string UserSid)?>? IdentityProvider { get; set; }
 
     internal static string Id(string dataDir)
     {
-        var path = Path.Combine(dataDir, FileName);
-        if (File.Exists(path))
-        {
-            var saved = File.ReadAllText(path).Trim();
-            if (IsValid(saved)) return saved;
-        }
+        if (PcId() is { } stable) return stable;
+        if (ReadLegacyId(dataDir) is { } saved) return saved;
         var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
-        File.WriteAllText(path, id);
+        File.WriteAllText(Path.Combine(dataDir, FileName), id);
         return id;
+    }
+
+    internal static string? PcId()
+    {
+        var identity = CurrentMachineIdentity();
+        return identity is { } pair ? DerivePcId(pair.MachineGuid, pair.UserSid) : null;
+    }
+
+    internal static string DerivePcId(string machineGuid, string userSid)
+    {
+        var payload = Encoding.UTF8.GetBytes($"{machineGuid.Trim()}|{userSid.Trim()}");
+        Span<byte> mac = stackalloc byte[32];
+        HMACSHA256.HashData(Salt, payload, mac);
+        return Convert.ToHexStringLower(mac[..16]);
+    }
+
+    internal static string? ReadLegacyId(string? dir)
+    {
+        if (string.IsNullOrWhiteSpace(dir)) return null;
+        try
+        {
+            var path = Path.Combine(dir, FileName);
+            if (!File.Exists(path)) return null;
+            var saved = File.ReadAllText(path).Trim();
+            return IsValid(saved) ? saved : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static (string MachineGuid, string UserSid)? CurrentMachineIdentity()
+    {
+        if (IdentityProvider is { } provider) return provider();
+        try
+        {
+            using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = hive.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography");
+            var guid = key?.GetValue("MachineGuid") as string;
+            using var identity = WindowsIdentity.GetCurrent();
+            var sid = identity.User?.Value;
+            if (string.IsNullOrWhiteSpace(guid) || string.IsNullOrWhiteSpace(sid)) return null;
+            return (guid.Trim(), sid.Trim());
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException or System.Security.SecurityException)
+        {
+            return null;
+        }
     }
 
     internal static bool IsValid(string id) =>

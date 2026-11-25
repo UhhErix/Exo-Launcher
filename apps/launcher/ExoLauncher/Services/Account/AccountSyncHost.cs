@@ -590,13 +590,15 @@ internal static class AccountSyncRuntime
 {
     internal static void Start(SettingsService settings, Func<StoreService> store)
     {
+        if (ExoAccountClient.RefusesRealService(PathHelper.AppDataDir, ExoAccountClient.Service, hasCustomHandler: false, HostMode.IsDisposable, HostMode.TestRun))
+            return;
         AccountSyncApply.Wishes = value => store().ApplySyncedWish(value);
         AccountSyncApply.WishItems = () => AccountSyncHooks.Current?.ItemsOf("wish") ?? [];
         AccountSyncApply.WriteWish = (id, value) => AccountSyncHooks.Current?.Write("wish", id, value);
         AccountSyncHost? host = null;
         host = new AccountSyncHost(
             PathHelper.AppDataDir,
-            new ExoAccountClient(),
+            new ExoAccountClient(dataDir: PathHelper.AppDataDir),
             () => AccountSessionStore.Load(PathHelper.AppDataDir),
             item => AccountSyncApply.Pulled(item, settings))
         {
