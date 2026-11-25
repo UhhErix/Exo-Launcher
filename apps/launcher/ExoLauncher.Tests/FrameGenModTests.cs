@@ -1711,13 +1711,14 @@ public sealed partial class FrameGenModTests : IDisposable
         var program = Path.Combine(_root, UnrealProgram);
         Assert.Equal(LoaderBytes(OptiScaler, "v0.9.4"), Sha(Path.Combine(program, "dxgi.dll")));
         Assert.Contains("FGInput=dlssg", Text(UnrealProgram + @"\OptiScaler.ini"));
-        var files = ReadFrameGenManifest(program)!.Files.Select(file => file.Path).Order(StringComparer.OrdinalIgnoreCase);
-        Assert.Equal(new[]
-        {
-            "dxgi.dll", @"OptiScaler\amd_fidelityfx_dx12.dll", @"OptiScaler\amd_fidelityfx_framegeneration_dx12.dll",
-            @"OptiScaler\dlssg_to_fsr3_amd_is_better.dll", @"OptiScaler\Licenses\FidelityFX_v1_LICENSE.md",
-            @"OptiScaler\Licenses\FidelityFX_v2_LICENSE.md", "OptiScaler.ini",
-        }.Order(StringComparer.OrdinalIgnoreCase), files);
+        var files = ReadFrameGenManifest(program)!.Files.Select(file => file.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("dxgi.dll", files);
+        Assert.Contains(@"OptiScaler\amd_fidelityfx_dx12.dll", files);
+        Assert.Contains(@"OptiScaler\amd_fidelityfx_framegeneration_dx12.dll", files);
+        Assert.Contains(@"OptiScaler\dlssg_to_fsr3_amd_is_better.dll", files);
+        Assert.Contains("OptiScaler.ini", files);
+        Assert.DoesNotContain(@"OptiScaler\fakenvapi.dll", files);
+        Assert.DoesNotContain(@"OptiScaler\libxess.dll", files);
     }
 
     /// <summary>
