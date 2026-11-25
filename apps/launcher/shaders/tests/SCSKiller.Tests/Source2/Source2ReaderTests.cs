@@ -86,7 +86,7 @@ public class Source2ReaderTests
         Assert.Equal(new EngineInfo(Source2Reader.Family, "72", null, "D3D11", false, null, OffersVulkan: true), engine);   // Source 2 games also run on Vulkan
         var index = reader.Index(game, engine, null, CancellationToken.None);
         Assert.Equal(new[] { Vs, Ps, Gs, Cs }.Select(Sha).Order(), index.Shaders.Keys.Order());
-        Assert.Equal([[Sha(Vs), Sha(Ps), Sha(Gs)], [Sha(Cs)]], index.Maps.Select(m => m.Shaders.ToList()));
+        Assert.Equal([[Sha(Ps), Sha(Gs), Sha(Vs)], [Sha(Cs)]], index.Maps.Select(m => m.Shaders.ToList()));
         Assert.All(index.Maps, m => Assert.Equal(Source2Reader.Platform, m.Platform));
 
         var got = new Dictionary<string, byte[]>();
