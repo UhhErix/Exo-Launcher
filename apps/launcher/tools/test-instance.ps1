@@ -40,7 +40,7 @@ if ($Stop -gt 0) {
 }
 
 if (-not $Folder) { throw '-Folder is required (the parent folder of the test data dir).' }
-$games = 'VALORANT-Win64-Shipping', 'LeagueOfLegends', 'cs2', 'dota2', 'FortniteClient-Win64-Shipping'
+$games = 'VALORANT-Win64-Shipping', 'VALORANT', 'League of Legends', 'LeagueOfLegends', 'TFTClient-Win64-Shipping', 'cs2', 'dota2', 'FortniteClient-Win64-Shipping', 'RobloxPlayerBeta'
 if (Get-Process -Name $games -ErrorAction SilentlyContinue) { throw 'A game is running. Not starting.' }
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -79,6 +79,7 @@ foreach ($key in $Env.Keys) { [Environment]::SetEnvironmentVariable([string]$key
 $env:EXO_LAUNCHER_DATA_DIR = $data
 $env:EXO_NO_ACTIVATE = '1'
 $env:EXO_WINDOW_RECT = "$x,$y,$w,$h"
+$env:EXO_UI = 'web'
 $env:EXO_CDP = '1'
 $env:EXO_CDP_PORT = "$port"
 

@@ -501,7 +501,16 @@ switch ($Command) {
         $wsMb = [math]::Round((($wv | Measure-Object -Property WorkingSet64 -Sum).Sum) / 1MB, 1)
         [ordered]@{ count = $wv.Count; workingSetMB = $wsMb; ms = [int]$sw.ElapsedMilliseconds } | ConvertTo-Json -Compress
     }
-    'udp' { $p = Get-ExoWindow; [ordered]@{ count = @(Get-NetUDPEndpoint -OwningProcess $p.Id -ErrorAction SilentlyContinue).Count } | ConvertTo-Json -Compress }
+    'udp' {
+        $ids = @(Get-Process ExoLauncher -ErrorAction SilentlyContinue | ForEach-Object Id)
+        $count = if ($ids.Count) { @(Get-NetUDPEndpoint -OwningProcess $ids -ErrorAction SilentlyContinue).Count } else { 0 }
+        [ordered]@{ count = $count; pids = $ids } | ConvertTo-Json -Compress
+    }
+    'games' {
+        $names = 'VALORANT-Win64-Shipping', 'VALORANT', 'League of Legends', 'LeagueOfLegends', 'TFTClient-Win64-Shipping', 'cs2', 'dota2', 'FortniteClient-Win64-Shipping', 'RobloxPlayerBeta'
+        $running = @(Get-Process -Name $names -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName -Unique | Sort-Object)
+        [ordered]@{ running = $running } | ConvertTo-Json -Compress
+    }
     'shown' {
         $ids = [int[]]@(Get-Process -Name $Name -ErrorAction SilentlyContinue | ForEach-Object Id)
         [ordered]@{ running = $ids.Count -gt 0; shown = @(if ($ids.Count) { [ExoWin]::Shown($ids) }) } | ConvertTo-Json -Compress
