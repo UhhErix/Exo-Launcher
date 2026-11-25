@@ -568,7 +568,7 @@
     "ExoLauncher/Helpers/AmdAdlx.Tuning.cs": 10,
     "ExoLauncher/Helpers/AmdAdlx.cs": 30,
     "ExoLauncher/Helpers/AppLog.Report.cs": 12,
-    "ExoLauncher/Helpers/AppLog.cs": 20,
+    "ExoLauncher/Helpers/AppLog.cs": 17,
     "ExoLauncher/Helpers/AppleMusicNative.cs": 52,
     "ExoLauncher/Helpers/AuthenticodeVerifier.cs": 19,
     "ExoLauncher/Helpers/BackgroundTrim.cs": 30,

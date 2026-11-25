@@ -65,24 +65,25 @@ internal sealed class SteamGameEulaPromptAutomator : IDisposable
             },
         };
         if (!process.Start()) return;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var errors = process.StandardError.ReadToEndAsync();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(seconds + 3));
+        var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        var errors = process.StandardError.ReadToEndAsync(timeout.Token);
         void StopOwnedWatcher() { try { if (!process.HasExited) ProcessTermination.Kill(process); } catch { } }
-        using var stop = timeout.Token.Register(StopOwnedWatcher);
         try
         {
+            using var stop = timeout.Token.Register(StopOwnedWatcher);
             await process.StandardInput.WriteAsync(script.AsMemory(), timeout.Token).ConfigureAwait(false);
             process.StandardInput.Close();
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
         finally
         {
+            try { timeout.Cancel(); } catch { }
             StopOwnedWatcher();
             // Drain both pipes, including cancellation/startup failures. A bad
             // accessibility provider cannot keep the launch handoff waiting.
-            try { await Task.WhenAll(output, errors).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); } catch { }
+            await ProcessOutput.DrainAndObserveAsync(output, errors, TimeSpan.FromSeconds(2), timeout).ConfigureAwait(false);
         }
         if (output.IsCompletedSuccessfully && output.Result.Contains("accepted-game-launch", StringComparison.Ordinal))
             AppLog.Info("Continued the requested game's Steam launch choice.");
