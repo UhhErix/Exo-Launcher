@@ -293,6 +293,7 @@ internal static partial class GameSettings
         string? currentBuild,
         string? backupRoot = null)
     {
+        if (HostMode.IsDisposable) return [];
         if (!IsCacheProvablyInvalid(recordedDriver, currentDriver, recordedBuild, currentBuild))
             return [];
         return ClearShaderCaches(caches, backupRoot);
