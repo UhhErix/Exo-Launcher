@@ -2387,7 +2387,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         shaders_card = shaders_card.child(
             el().w_full().py(16.0).child(
                 text(if !s.pc.shader_snap_games.is_empty() {
-                    "Every game is compiled"
+                    "Nothing waiting to compile"
                 } else {
                     "No games found"
                 })
