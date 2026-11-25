@@ -81,13 +81,14 @@ internal static class ExoScheduledTaskCleanup
                      Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) }) start.ArgumentList.Add(arg);
         using var process = new Process { StartInfo = start };
         if (!process.Start()) return false;
-        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
         budget.CancelAfter(TimeSpan.FromSeconds(4));
+        var copyOut = process.StandardOutput.BaseStream.CopyToAsync(Stream.Null, budget.Token);
+        var copyErr = process.StandardError.BaseStream.CopyToAsync(Stream.Null, budget.Token);
         try
         {
-            await Task.WhenAll(process.StandardOutput.BaseStream.CopyToAsync(Stream.Null, budget.Token),
-                process.StandardError.BaseStream.CopyToAsync(Stream.Null, budget.Token),
-                process.WaitForExitAsync(budget.Token)).ConfigureAwait(false);
+            await process.WaitForExitAsync(budget.Token).ConfigureAwait(false);
+            await Task.WhenAll(copyOut, copyErr).WaitAsync(TimeSpan.FromSeconds(1), budget.Token).ConfigureAwait(false);
             return process.ExitCode == 0;
         }
         catch (OperationCanceledException)
@@ -96,6 +97,11 @@ internal static class ExoScheduledTaskCleanup
             try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false); } catch { }
             ct.ThrowIfCancellationRequested();
             return false;
+        }
+        finally
+        {
+            try { budget.Cancel(); } catch { }
+            await ProcessOutput.DrainAndObserveAsync(copyOut, copyErr, TimeSpan.FromSeconds(1), budget).ConfigureAwait(false);
         }
     }
 }
