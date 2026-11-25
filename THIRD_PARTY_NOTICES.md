@@ -12,7 +12,7 @@ The [upstream source index](https://getexo.app/source) identifies corresponding 
 | --- | --- |
 | Nile, Legendary, gogdl, OptiScaler | GPL-3.0 |
 | Exo Mouse | AGPL-3.0-or-later |
-| Exo Shaders | GPL-3.0-or-later with the section 7 exception in `apps/launcher/shaders/LICENSE-EXCEPTION.txt` |
+| Exo Shaders (3.x releases; replaced by MIT Rust in `apps/launcher/native-ui/crates/exo-shaders` on `feat/native-polish-2`) | GPL-3.0-or-later (3.x archive at `getexo.app/source`); native Rust engine and recorder are MIT |
 | Exo Shield, Exo Frames, Exo Bridge | GPL-3.0 |
 | OBS Studio game capture hook, OpenRGB fork | GPL-2.0-or-later |
 | HeadsetControl fork | GPL-3.0-or-later |

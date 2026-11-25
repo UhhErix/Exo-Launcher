@@ -7,8 +7,10 @@ use std::path::Path;
 #[serde(rename_all = "camelCase")]
 pub enum RouteKind {
     DriverCacheScan,
-    OfflinePsoWarm,
+    FossilizeReplay,
+    RecordedLibraryCompile,
     FileRoute,
+    RecorderProxy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,7 +41,19 @@ pub fn evaluate_route(
     has_restore_record: bool,
 ) -> RouteDecision {
     match route {
-        RouteKind::DriverCacheScan | RouteKind::OfflinePsoWarm => RouteDecision::Allowed,
+        RouteKind::DriverCacheScan | RouteKind::FossilizeReplay => RouteDecision::Allowed,
+        RouteKind::RecordedLibraryCompile => {
+            if class.allows_offline_dll_mod() {
+                RouteDecision::Allowed
+            } else {
+                RouteDecision::Denied {
+                    reason: format!(
+                        "Anti-cheat policy ({}) forbids in-process D3D12 pipeline library loading; helper-only implicit warming is disabled.",
+                        class.as_wire_str()
+                    ),
+                }
+            }
+        }
         RouteKind::FileRoute if game_running => RouteDecision::Denied {
             reason: "Game is currently running; never modify game shader folders while active."
                 .into(),
@@ -61,6 +75,26 @@ pub fn evaluate_route(
                 note: "Offline game: game-folder shader cache file route allowed while closed with restore record.".into(),
             },
         },
+        RouteKind::RecorderProxy if game_running => RouteDecision::Denied {
+            reason: "Game is currently running; never deploy or remove the D3D12 recorder while active.".into(),
+        },
+        RouteKind::RecorderProxy if !has_restore_record => RouteDecision::Denied {
+            reason: "Recorder proxy requires a tracked manifest before writing.".into(),
+        },
+        RouteKind::RecorderProxy => {
+            if class.allows_offline_dll_mod() {
+                RouteDecision::AllowedWithNote {
+                    note: "Offline game: clean-room D3D12 recorder allowed while closed and removed after session.".into(),
+                }
+            } else {
+                RouteDecision::Denied {
+                    reason: format!(
+                        "Anti-cheat policy ({}) forbids D3D12 recorder proxy deployment.",
+                        class.as_wire_str()
+                    ),
+                }
+            }
+        }
     }
 }
 
@@ -157,7 +191,11 @@ mod tests {
         assert!(det.markers.is_empty());
         assert!(!evaluate_route(det.class, RouteKind::FileRoute, false, true).is_permitted());
         assert!(evaluate_route(det.class, RouteKind::DriverCacheScan, false, false).is_permitted());
-        assert!(evaluate_route(det.class, RouteKind::OfflinePsoWarm, false, false).is_permitted());
+        assert!(evaluate_route(det.class, RouteKind::FossilizeReplay, false, false).is_permitted());
+        assert!(
+            !evaluate_route(det.class, RouteKind::RecordedLibraryCompile, false, false)
+                .is_permitted()
+        );
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -189,7 +227,29 @@ mod tests {
         ] {
             assert!(!evaluate_route(class, RouteKind::FileRoute, false, true).is_permitted());
             assert!(evaluate_route(class, RouteKind::DriverCacheScan, false, false).is_permitted());
-            assert!(evaluate_route(class, RouteKind::OfflinePsoWarm, false, false).is_permitted());
+            assert!(evaluate_route(class, RouteKind::FossilizeReplay, false, false).is_permitted());
+            assert!(
+                !evaluate_route(class, RouteKind::RecordedLibraryCompile, false, false)
+                    .is_permitted()
+            );
         }
+        assert!(
+            evaluate_route(
+                AntiCheatClass::OfflineAntiCheat,
+                RouteKind::RecordedLibraryCompile,
+                false,
+                false
+            )
+            .is_permitted()
+        );
+        assert!(
+            !evaluate_route(
+                AntiCheatClass::OnlineNonCompetitivePve,
+                RouteKind::RecordedLibraryCompile,
+                false,
+                false
+            )
+            .is_permitted()
+        );
     }
 }

@@ -45,7 +45,7 @@ public sealed partial class DlssSwapService
     internal const string SessionHeldName = "held.json";
 
     /// <summary>The shader recorder's settings beside a game's program: where it sits, the recorder is in.</summary>
-    private const string RecorderSettingsName = "scskiller.ini";
+    internal const string RecorderSettingsName = "exo-shaders-recorder.json";
 
     private string SessionRoot => Path.Combine(Path.GetDirectoryName(FrameGenIndexPath)!, "session");
 

@@ -28,7 +28,7 @@ export function ShadersSection() {
   if (!present) return null
   return (
     <Section id="shaders" title="Shaders">
-      <Row label="Improve shader pre-compiling" detail="Adds a small d3d12.dll to supported games to cut shader stutter" error={error}>
+      <Row label="Improve shader pre-compiling" detail="Records D3D12 shaders during play in offline games so Exo can pre-compile them after driver updates" error={error}>
         <Switch checked={!!snap?.recorder?.auto} label="Improve shader pre-compiling" onChange={on => run('recorder.auto', { on })} />
       </Row>
     </Section>

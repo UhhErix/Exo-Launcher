@@ -51,7 +51,9 @@ internal static class DeletionGate
         if (clean && KeptBy(full, patterns))
             return "Exo keeps this: it holds sign-in data, a credential or a game save.";
 
-        var shader = policy.ShaderRoots.Any(root => Within(full, root)) || KeptBy(full, DeletionProtections.ShaderSegments);
+        var shader = policy.ShaderRoots.Any(root => Within(full, root) || Within(root, full))
+                     || KeptBy(full, DeletionProtections.ShaderSegments)
+                     || IsShaderCacheFile(full);
         if (shader)
         {
             if (clean) return "Exo Shaders owns shader caches, so Exo never deletes them.";
@@ -234,10 +236,18 @@ internal static class DeletionGate
         {
             var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
             foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", options))
-                if (KeptBy(entry.FullName, patterns)) return true;
+                if (KeptBy(entry.FullName, patterns)
+                    || KeptBy(entry.FullName, DeletionProtections.ShaderSegments)
+                    || IsShaderCacheFile(entry.FullName)) return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return true; }
         return false;
+    }
+
+    private static bool IsShaderCacheFile(string full)
+    {
+        var ext = Path.GetExtension(full);
+        return ext.Length > 0 && DeletionProtections.ShaderFileExtensions.Any(e => ext.Equals(e, StringComparison.OrdinalIgnoreCase));
     }
 }
 

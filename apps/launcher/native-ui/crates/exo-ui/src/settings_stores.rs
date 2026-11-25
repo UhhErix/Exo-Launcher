@@ -1302,7 +1302,7 @@ pub fn shaders_section(s: &AppState) -> Option<El> {
         "library-shaders",
         None,
         "Improve shader pre-compiling",
-        Some("Adds a small d3d12.dll to supported games to cut shader stutter".into()),
+        Some("Records D3D12 shaders during play in offline games so Exo can pre-compile them after driver updates".into()),
         s.wp4.shaders_error.clone(),
         hi,
         switch_pill("set-shaders-auto", "Improve shader pre-compiling", on)

@@ -1,0 +1,30 @@
+[package]
+name = "exo-shaders-recorder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "exo_d3d12_recorder"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+blake3 = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Security",
+    "Win32_System_LibraryLoader",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+exo-shaders = { path = "../exo-shaders" }
+windows = { version = "0.62", features = ["Win32_Graphics_Direct3D_Fxc"] }

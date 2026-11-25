@@ -557,66 +557,24 @@ public sealed class AntiCheatCheckTests : IDisposable
         Assert.NotNull(cache.Peek(game));
     }
 
-    // ------------------------------------------------------------------ Exo Shaders' table
+    // ------------------------------------------------------------------ Native Exo Shaders policy parity
 
-    /// <summary>Exo Shaders' Core folder in this repository (<c>shaders\src\SCSKiller.Core</c>), read only.</summary>
-    private static string ExoShadersCore() => Repo.PathOf("shaders", "src", "SCSKiller.Core");
-
-    private static string Block(string text, string start, string end)
+    [Fact]
+    public void NativeExoShadersPolicyMatchesOfflineAntiCheatRule()
     {
-        var at = text.IndexOf(start, StringComparison.Ordinal);
-        Assert.True(at >= 0, start + " was not found in Exo Shaders");
-        return text[at..text.IndexOf(end, at + start.Length, StringComparison.Ordinal)];
+        var anticheatRs = File.ReadAllText(Repo.PathOf("native-ui", "crates", "exo-rpc", "src", "anticheat.rs"));
+        var policyRs = File.ReadAllText(Repo.PathOf("native-ui", "crates", "exo-shaders", "src", "policy.rs"));
+        Assert.Contains("OfflineAntiCheat", anticheatRs);
+        Assert.Contains("CompetitivePvpOnline", anticheatRs);
+        Assert.Contains("OnlineNonCompetitivePve", anticheatRs);
+        Assert.Contains("allows_offline_dll_mod", anticheatRs);
+        Assert.Contains("RouteKind::RecorderProxy", policyRs);
+        Assert.Contains("allows_offline_dll_mod()", policyRs);
     }
 
     [Fact]
-    public void EveryExoShadersMarkerIsHereWithTheSameAntiCheatAndRule()
+    public void AntiCheatPrefixModulesAreMatchedByPrefix()
     {
-        var text = File.ReadAllText(Path.Combine(ExoShadersCore(), "Games", "GameFiles.cs"));
-        var block = Block(text, "(string Name, AntiCheat Kind)[] Markers =", "];");
-        var theirs = Regex.Matches(block, "\\(\"([^\"]+)\", AntiCheat\\.(\\w+)\\)").Select(m => (Name: m.Groups[1].Value, Kind: m.Groups[2].Value)).ToList();
-        Assert.True(theirs.Count > 50, "Exo Shaders' table was not read");
-        string[] Strings(string name) => [.. Regex.Matches(Block(text, name + " =", ";"), "@?\"([^\"]+)\"").Select(m => m.Groups[1].Value)];
-        var exeOnly = Strings("ExeMarkers");
-        var rootOnly = Strings("RootMarkers");
-        var problems = new List<string>();
-        foreach (var (name, kind) in theirs.Concat(rootOnly.Select(name => (Name: name, Kind: "Other"))))
-        {
-            var ours = Markers.FirstOrDefault(m => m.Pattern.Equals(name, StringComparison.OrdinalIgnoreCase));
-            if (ours.Pattern is null) { problems.Add(name + ": missing"); continue; }
-            var sameKind = kind switch
-            {
-                "EasyAntiCheat" => ours.AntiCheat == "Easy Anti-Cheat",
-                "BattlEye" => ours.AntiCheat == "BattlEye",
-                _ => ours.AntiCheat is not ("Easy Anti-Cheat" or "BattlEye"),
-            };
-            if (!sameKind) problems.Add($"{name}: {kind} there, {ours.AntiCheat} here");
-            var rule = exeOnly.Contains(name, StringComparer.OrdinalIgnoreCase) || rootOnly.Contains(name, StringComparer.OrdinalIgnoreCase) ? Rule.RootOrExe
-                : name.StartsWith('*') && name.EndsWith("_BE.exe", StringComparison.OrdinalIgnoreCase) ? Rule.Stub : (Rule?)null;
-            if (rule is { } want ? ours.Rule != want : ours.Rule is Rule.RootOrExe or Rule.Stub) problems.Add($"{name}: rule {ours.Rule}");
-        }
-        Assert.True(problems.Count == 0, "AntiCheatCheck and Exo Shaders differ: " + string.Join("; ", problems));
-    }
-
-    [Fact]
-    public void ExoShadersKnownGamesAndModulesAreHere()
-    {
-        var core = ExoShadersCore();
-        var files = File.ReadAllText(Path.Combine(core, "Games", "GameFiles.cs"));
-        var ids = Regex.Matches(Block(files, "AntiCheatIds =", ";"), "\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToList();
-        Assert.NotEmpty(ids);
-        Assert.All(ids, id => Assert.True(KnownGames.ContainsKey(id), id + " is not in KnownGames"));
-
-        using var verdicts = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "Games", "game-verdicts.json")));
-        foreach (var entry in verdicts.RootElement.GetProperty("games").EnumerateArray())
-        {
-            if (entry.GetProperty("verdict").GetString() != "anti-cheat") continue;
-            foreach (var id in entry.GetProperty("ids").EnumerateArray()) Assert.True(KnownGames.ContainsKey(id.GetString()!), id + " is not in KnownGames");
-            if (entry.TryGetProperty("exes", out var exes))
-                foreach (var exe in exes.EnumerateArray()) Assert.True(MarkerFor(exe.GetString()!) is not null, exe + " is not a marker");
-        }
-
-        // Prefix markers match by the start of a file's name.
         string[] prefixModules = ["EasyAntiCheat", "BEService", "BEClient", "BattlEye", "vgk", "vgc", "GameGuard", "Ricochet", "XIGNCODE"];
         Assert.All(prefixModules, module => Assert.True(ForFile(module + "x.dll") is not null, module + " is not matched by its start"));
     }

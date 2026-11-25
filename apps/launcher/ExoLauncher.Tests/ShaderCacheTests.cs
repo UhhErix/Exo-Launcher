@@ -56,13 +56,37 @@ public sealed class ShaderCacheTests : IDisposable
     {
         Fill(Make("Call of Duty HQ", "cod26", "shadercache", "nested"), "a.psolib", 10);
         Fill(Make("Call of Duty HQ", "cod26"), "settings.dat", 50);
+        var backupRoot = Make("backups");
 
-        GameSettings.ClearShaderCaches(GameSettings.ShaderCaches(Game())!);
+        var backups = GameSettings.ClearShaderCaches(GameSettings.ShaderCaches(Game())!, backupRoot);
 
+        Assert.Single(backups);
+        Assert.True(File.Exists(Path.Combine(backups[0], "nested", "a.psolib")));
+        Assert.Equal(10, new FileInfo(Path.Combine(backups[0], "nested", "a.psolib")).Length);
         Assert.False(Directory.Exists(Path.Combine(_dir, "Call of Duty HQ", "cod26", "shadercache")));
         Assert.True(File.Exists(Path.Combine(_dir, "Call of Duty HQ", "cod26", "settings.dat")));
         // Cleared and not yet built again: still offered, with nothing in it.
         Assert.Empty(GameSettings.ShaderCaches(Game())!);
+    }
+
+    [Fact]
+    public void ClearStaleShaderCachesKeepsValidAndUnknownCachesAndBacksUpStale()
+    {
+        Fill(Make("Call of Duty HQ", "cod26", "shadercache"), "techsets_global.psolib", 64);
+        var cacheDir = Path.Combine(_dir, "Call of Duty HQ", "cod26", "shadercache");
+        var backupRoot = Make("stale-backups");
+
+        Assert.Empty(GameSettings.ClearStaleShaderCaches([cacheDir], "595.79", "595.79", "100", "100", backupRoot));
+        Assert.True(Directory.Exists(cacheDir));
+
+        Assert.Empty(GameSettings.ClearStaleShaderCaches([cacheDir], null, "595.79", null, "100", backupRoot));
+        Assert.True(Directory.Exists(cacheDir));
+
+        var backups = GameSettings.ClearStaleShaderCaches([cacheDir], "590.10", "595.79", "100", "100", backupRoot);
+        Assert.Single(backups);
+        Assert.False(Directory.Exists(cacheDir));
+        Assert.True(File.Exists(Path.Combine(backups[0], "techsets_global.psolib")));
+        Assert.Equal(64, new FileInfo(Path.Combine(backups[0], "techsets_global.psolib")).Length);
     }
 
     [Fact]

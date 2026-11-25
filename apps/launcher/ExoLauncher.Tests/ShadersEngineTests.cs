@@ -6,7 +6,7 @@ using ExoLauncher.Services;
 namespace ExoLauncher.Tests;
 
 /// <summary>
-/// Exo's side of Exo Shaders (<see cref="ShadersAddon"/>) against the engine built from <c>shaders\</c>, run in its
+/// Exo's side of Exo Shaders (<see cref="ShadersAddon"/>) against the MIT Rust engine built from <c>native-ui\crates\exo-shaders</c>, run in its
 /// <c>--safe</c> mode on a temporary data folder (nothing compiled, recorded or deleted; the PC's games only read).
 /// Ways it could fail: Exo calls a method the engine's dispatcher doesn't have; a press doesn't start a stopped engine; an
 /// engine that exits after its idle wait leaves Exo thinking it runs, or fails the press that met it on its way out; the

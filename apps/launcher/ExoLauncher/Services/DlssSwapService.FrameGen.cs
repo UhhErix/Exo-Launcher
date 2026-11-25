@@ -138,10 +138,10 @@ public sealed partial class DlssSwapService
     /// <summary>
     /// DLSSG SM86's version.dll and the shader recorder's d3d12.dll in one game can hang it before its window opens, at no CPU,
     /// every launch (Hell is Us; either one alone starts it). Frame generation is what the player asked for, so the recorder
-    /// gives way. The recorder is active where its scskiller.ini sits beside the game's program.
+    /// gives way. The recorder is active where its exo-shaders-recorder.json sits beside the game's program.
     /// </summary>
     internal bool RecorderClashes(string gameId) =>
-        FrameGenFolderFor(gameId) is { } folder && ReadFrameGenManifest(folder) is { Out: false } install && install.Mod == DlssgSm86.Name && File.Exists(Path.Combine(folder, "scskiller.ini"));
+        FrameGenFolderFor(gameId) is { } folder && ReadFrameGenManifest(folder) is { Out: false } install && install.Mod == DlssgSm86.Name && File.Exists(Path.Combine(folder, RecorderSettingsName));
 
     private static FrameGenMod? FrameGenModNamed(string? name) =>
         FrameGenMods.FirstOrDefault(mod => mod.Name == name) ?? LegacyFrameGenMods.FirstOrDefault(mod => mod.Name == name);

@@ -586,7 +586,7 @@ public sealed partial class FrameGenModTests : IDisposable
         var service = Service();
         Assert.True((await On(service)).Ok);
         Assert.False(service.RecorderClashes(_game.Id));
-        File.WriteAllText(Path.Combine(_root, UnrealProgram, "scskiller.ini"), "[scskiller]");
+        File.WriteAllText(Path.Combine(_root, UnrealProgram, RecorderSettingsName), "{}");
         Assert.True(service.RecorderClashes(_game.Id));
         Assert.False(service.RecorderClashes("steam:0"));
     }

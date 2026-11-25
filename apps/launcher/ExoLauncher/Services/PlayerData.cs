@@ -399,7 +399,7 @@ internal static class PlayerData
         new("RTXMFG-Universal.json", "DlssSwapService", Why.Elsewhere, "the RTX MFG universal mod's manifest"),
         new("rtxmfg-universal.json", "DlssSwapService", Why.Elsewhere, "the RTX MFG universal mod's manifest, lower-case"),
         new("rtxmfg-universal.status.json", "DlssSwapService", Why.Elsewhere, "the RTX MFG universal mod's status file"),
-        new("scskiller.ini", "DlssSwapService", Why.Elsewhere, "the shader engine's settings in its folder"),
+        new("exo-shaders-recorder.json", "DlssSwapService", Why.Elsewhere, "the shader recorder's settings in a game's folder"),
         new("dlssnr_on_amd.ini", "DlssSwapService", Why.Elsewhere, "the DLSS denoiser on AMD mod's settings in a game's folder"),
         new("danielblnc_attribution.txt", "DlssSwapService", Why.Elsewhere, "the attribution note of the DLSS denoiser on AMD mod"),
         new("ue4ss-settings.ini", "DlssSwapService", Why.Elsewhere, "UE4SS's settings in a game's folder"),
