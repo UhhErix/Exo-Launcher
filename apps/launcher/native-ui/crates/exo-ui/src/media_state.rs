@@ -1,5 +1,6 @@
 use crate::pc_state::SettingsSection;
 use crate::state::{AppState, HostStatus, Room};
+use exo_rpc::media_types::{MUSIC_SNAPSHOT_VERSION, MusicDiskSnapshot, MusicServiceSnapshot};
 use exo_rpc::{
     ActionResult, CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto,
     CaptureStatusReply, DiscordCallSong, DiscordCallSongsReply, DiscordRich, JamSession,
@@ -18,7 +19,34 @@ use exo_rpc::{
 use rune::{Image, Player, TextEdit};
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::{Path, PathBuf};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+const MUSIC_SNAPSHOT_FILENAME: &str = "rune-music-snapshot.json";
+
+fn read_music_snapshot(path: &Path) -> Option<MusicDiskSnapshot> {
+    let bytes = std::fs::read(path).ok()?;
+    let snap: MusicDiskSnapshot = serde_json::from_slice(&bytes).ok()?;
+    if snap.version != MUSIC_SNAPSHOT_VERSION {
+        return None;
+    }
+    Some(snap)
+}
+
+fn write_music_snapshot(snap: &MusicDiskSnapshot, path: &Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    let data = serde_json::to_vec(snap)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    std::fs::write(&tmp, data)?;
+    if std::fs::rename(&tmp, path).is_err() {
+        let _ = std::fs::copy(&tmp, path);
+        let _ = std::fs::remove_file(&tmp);
+    }
+    Ok(())
+}
 
 const MUSIC_START_FAST_ATTEMPTS: u32 = 20;
 const MUSIC_START_FAST_POLL_MS: u64 = 500;
@@ -1673,11 +1701,108 @@ impl AppState {
         }
     }
 
+    pub(crate) fn music_snapshot_path(&self) -> Option<PathBuf> {
+        self.remote_cache_dir
+            .as_ref()
+            .and_then(|d| d.parent())
+            .map(|p| p.join(MUSIC_SNAPSHOT_FILENAME))
+    }
+
+    pub(crate) fn hydrate_music_snapshot(&mut self) -> bool {
+        if !self.media.music_home_sections.is_empty()
+            || !self.media.music_library.is_empty()
+            || !self.media.music_recent.is_empty()
+        {
+            return false;
+        }
+        let started = Instant::now();
+        let Some(path) = self.music_snapshot_path() else {
+            return false;
+        };
+        let Some(snap) = read_music_snapshot(&path) else {
+            return false;
+        };
+        let service_id = self.media.music_service.id();
+        let Some(entry) = snap.services.get(service_id) else {
+            return false;
+        };
+        if entry.home_sections.is_empty() && entry.library.is_empty() && entry.recent.is_empty() {
+            return false;
+        }
+        self.media.music_home_sections = entry.home_sections.clone();
+        self.media.music_recent = entry.recent.clone();
+        self.media.music_library = entry.library.clone();
+        self.media.music_library_filters = entry.library_filters.clone();
+        self.media.music_library_top_filters = entry.library_top_filters.clone();
+        self.media.music_library_sorts = entry.library_sorts.clone();
+        self.media.music_library_loaded = !self.media.music_library.is_empty();
+        self.media.music_home_loading = false;
+        let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+        eprintln!(
+            "music_first_paint_ms={elapsed_ms:.2} service={service_id} source=snapshot sections={} library={}",
+            self.media.music_home_sections.len(),
+            self.media.music_library.len()
+        );
+        true
+    }
+
+    pub(crate) fn save_music_snapshot(&self) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        if self.media.music_home_sections.is_empty()
+            && self.media.music_library.is_empty()
+            && self.media.music_recent.is_empty()
+        {
+            return;
+        }
+        let Some(path) = self.music_snapshot_path() else {
+            return;
+        };
+        let service_id = self.media.music_service.id().to_string();
+        let entry = MusicServiceSnapshot {
+            home_sections: self.media.music_home_sections.clone(),
+            recent: self.media.music_recent.clone(),
+            library: self.media.music_library.clone(),
+            library_filters: self.media.music_library_filters.clone(),
+            library_top_filters: self.media.music_library_top_filters.clone(),
+            library_sorts: self.media.music_library_sorts.clone(),
+        };
+        let _ = std::thread::Builder::new()
+            .name("exo-music-snap".into())
+            .spawn(move || {
+                let mut snap = read_music_snapshot(&path).unwrap_or(MusicDiskSnapshot {
+                    version: MUSIC_SNAPSHOT_VERSION,
+                    services: HashMap::new(),
+                });
+                snap.version = MUSIC_SNAPSHOT_VERSION;
+                snap.services.insert(service_id, entry);
+                let _ = write_music_snapshot(&snap, &path);
+            });
+    }
+
+    pub(crate) fn clear_music_snapshot_for_service(&self, service: MusicService) {
+        let Some(path) = self.music_snapshot_path() else {
+            return;
+        };
+        let service_id = service.id().to_string();
+        let _ = std::thread::Builder::new()
+            .name("exo-music-snap-clear".into())
+            .spawn(move || {
+                if let Some(mut snap) = read_music_snapshot(&path)
+                    && snap.services.remove(&service_id).is_some()
+                {
+                    let _ = write_music_snapshot(&snap, &path);
+                }
+            });
+    }
+
     pub fn load_music_room(&mut self) {
         if self.status == HostStatus::Standalone {
             return;
         }
         self.sync_music_service_from_settings();
+        self.hydrate_music_snapshot();
         if matches!(self.media.music_room_state, MusicRoomState::Error(_)) {
             self.media.music_room_state = MusicRoomState::Loading;
             self.media.music_room_message = None;
@@ -1913,6 +2038,7 @@ impl AppState {
                         } => {
                             if s.media.music_room_state == MusicRoomState::SignedOut {
                                 s.media.music_signed_in_services[idx] = false;
+                                s.clear_music_snapshot_for_service(service);
                             }
                             s.schedule_music_start_retry(
                                 service,
@@ -1922,8 +2048,12 @@ impl AppState {
                             );
                         }
                         MusicStartAction::Stop => {
-                            if s.media.music_room_state == MusicRoomState::SignedOut {
+                            if matches!(
+                                s.media.music_room_state,
+                                MusicRoomState::SignedOut | MusicRoomState::NotPremium
+                            ) {
                                 s.media.music_signed_in_services[idx] = false;
+                                s.clear_music_snapshot_for_service(service);
                             }
                         }
                     }
@@ -1992,6 +2122,7 @@ impl AppState {
                     if let Some(sections) = sections {
                         s.media.music_home_sections = sections;
                         s.media.music_home_loading = false;
+                        s.save_music_snapshot();
                         return;
                     }
                     if retry < 2
@@ -2041,6 +2172,7 @@ impl AppState {
                                     s.media.music_home_loading = false;
                                 }
                                 s.media.music_recent = data.items;
+                                s.save_music_snapshot();
                             });
                         }
                     },
@@ -2101,6 +2233,9 @@ impl AppState {
                                     s.media.music_library_sort = so;
                                 }
                                 s.media.music_folder_ref = data.folder;
+                                if unfiltered {
+                                    s.save_music_snapshot();
+                                }
                             }
                         }
                         Ok(reply) => {
@@ -5081,5 +5216,91 @@ mod tests {
         assert!(s.music_tick(1.0));
         assert!(s.media.music_sleep_deadline_ms.is_none());
         assert_eq!(s.media.playback.as_ref().unwrap().status, "paused");
+    }
+
+    #[test]
+    fn bench_music_snapshot_round_trip_and_first_paint_under_300ms() {
+        let base = std::env::temp_dir().join(format!("exo-music-snap-test-{}", now_epoch_ms()));
+        let cache_dir = base.join("remote-art");
+        std::fs::create_dir_all(&cache_dir).expect("create temp cache dir");
+
+        let mut writer = AppState::for_host_pipe();
+        writer.status = HostStatus::Connected;
+        writer.remote_cache_dir = Some(cache_dir.clone());
+        writer.media.music_service = MusicService::Spotify;
+        writer.media.music_home_sections = vec![PlayerSection {
+            title: "Jump back in".into(),
+            more: None,
+            items: (0..12)
+                .map(|i| PlayerCard {
+                    uri: format!("spotify:playlist:pl{i}"),
+                    kind: "playlist".into(),
+                    title: format!("Mix {i}"),
+                    subtitle: "Exo curated".into(),
+                    image: String::new(),
+                    url: None,
+                    pinned: i == 0,
+                    owned: true,
+                })
+                .collect(),
+        }];
+        writer.media.music_library = writer.media.music_home_sections[0].items.clone();
+        writer.media.music_recent = writer.media.music_home_sections[0].items[..4].to_vec();
+        writer.media.music_library_filters = vec![PlayerOption {
+            id: "playlists".into(),
+            name: "Playlists".into(),
+            detail: None,
+        }];
+        writer.media.music_library_top_filters = writer.media.music_library_filters.clone();
+
+        let snap_path = writer.music_snapshot_path().expect("snapshot path");
+        let mut disk = MusicDiskSnapshot {
+            version: MUSIC_SNAPSHOT_VERSION,
+            services: HashMap::new(),
+        };
+        disk.services.insert(
+            "spotify".into(),
+            MusicServiceSnapshot {
+                home_sections: writer.media.music_home_sections.clone(),
+                recent: writer.media.music_recent.clone(),
+                library: writer.media.music_library.clone(),
+                library_filters: writer.media.music_library_filters.clone(),
+                library_top_filters: writer.media.music_library_top_filters.clone(),
+                library_sorts: Vec::new(),
+            },
+        );
+        write_music_snapshot(&disk, &snap_path).expect("write music snapshot");
+
+        let started = Instant::now();
+        let mut s = AppState::for_host_pipe();
+        s.status = HostStatus::Connected;
+        s.remote_cache_dir = Some(cache_dir);
+        s.media.music_service = MusicService::Spotify;
+        s.media.music_room_state = MusicRoomState::Loading;
+        s.room = Room::Music;
+        assert!(s.hydrate_music_snapshot());
+        assert_eq!(s.media.music_home_sections.len(), 1);
+        assert_eq!(s.media.music_library.len(), 12);
+        assert!(s.media.music_library_loaded);
+        assert!(!s.media.music_home_loading);
+
+        let mut rt = rune::Runtime::new(
+            s,
+            |st, _| crate::music::view(st, 1.0),
+            (1920.0, 1080.0),
+            rune::Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+        assert!(
+            rt.find("music-wait").is_none(),
+            "cached music snapshot must bypass wait screen while music.start refreshes"
+        );
+        assert!(
+            elapsed_ms < 300.0,
+            "cached music first paint exceeded 300ms budget: {elapsed_ms:.2}ms"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

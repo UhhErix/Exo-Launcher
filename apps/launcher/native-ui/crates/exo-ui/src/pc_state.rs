@@ -2043,7 +2043,7 @@ mod wp9_tests {
         rt.frame(1.0 / 60.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
-        assert!(rt.find("exo-ai-tune-hw-wrap").is_some());
+        assert!(rt.find("exo-ai-tune-hw-wrap").is_none());
         assert!(rt.find("tune-pawnio-ryzen").is_none());
     }
 

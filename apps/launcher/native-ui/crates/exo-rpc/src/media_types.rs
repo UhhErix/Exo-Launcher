@@ -147,7 +147,7 @@ pub struct PlayerStartReply {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerCard {
     #[serde(default)]
@@ -168,7 +168,7 @@ pub struct PlayerCard {
     pub owned: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerLink {
     #[serde(default)]
@@ -177,7 +177,7 @@ pub struct PlayerLink {
     pub kind: String,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerOption {
     #[serde(default)]
@@ -258,7 +258,7 @@ impl PlayerTrack {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerSection {
     #[serde(default)]
@@ -1033,4 +1033,31 @@ pub fn format_duration_ms(ms: f64) -> String {
     } else {
         format!("{mins}:{secs:02}")
     }
+}
+
+pub const MUSIC_SNAPSHOT_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicServiceSnapshot {
+    #[serde(default)]
+    pub home_sections: Vec<PlayerSection>,
+    #[serde(default)]
+    pub recent: Vec<PlayerCard>,
+    #[serde(default)]
+    pub library: Vec<PlayerCard>,
+    #[serde(default)]
+    pub library_filters: Vec<PlayerOption>,
+    #[serde(default)]
+    pub library_top_filters: Vec<PlayerOption>,
+    #[serde(default)]
+    pub library_sorts: Vec<PlayerOption>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicDiskSnapshot {
+    pub version: u32,
+    #[serde(default)]
+    pub services: std::collections::HashMap<String, MusicServiceSnapshot>,
 }
