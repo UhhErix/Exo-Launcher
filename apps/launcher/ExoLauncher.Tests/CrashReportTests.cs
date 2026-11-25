@@ -238,4 +238,76 @@ public sealed class CrashReportTests
         Assert.DoesNotContain(Machine, payload.Excerpt);
         Assert.DoesNotContain(@"C:\", payload.Excerpt);
     }
+
+    [Fact]
+    public void PathologicalSingleLineInputsFinishQuicklyAndRemainRedacted()
+    {
+        var sb = new System.Text.StringBuilder(220_000);
+        sb.Append("Exo Launcher 3.30.3 · Windows 10.0.26300.0\nError (rpc): HostCallFailed\n");
+        for (var i = 0; i < 4000; i++)
+            sb.Append("a.com ");
+        sb.Append(" /home/erix/secret ");
+        sb.Append(@"\\fileserver\share\private.txt ");
+        sb.Append("\"token\": \"");
+        for (var i = 0; i < 8000; i++)
+            sb.Append("\\\"a");
+        sb.Append(" user=");
+        sb.Append(UserName);
+        sb.Append(" host=");
+        sb.Append(Machine);
+        sb.Append(' ');
+        for (var i = 0; i < 8000; i++)
+            sb.Append("a.");
+        var hugeError = new string('E', 50_000) + "HostCallFailedException";
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var payload = CrashReport.Build(hugeError, sb.ToString(), "3.30.3", "10.0.26300.0", UserName, Profile, Machine, "HostCallFailed");
+        var scrubbed = CrashReport.Scrub(sb.ToString(), UserName, Profile, Machine);
+        sw.Stop();
+
+        Assert.True(sw.ElapsedMilliseconds < 500, $"Scrub took {sw.ElapsedMilliseconds} ms (limit 500 ms)");
+        Assert.True(payload.Excerpt.Length <= CrashReport.MaxExcerpt);
+        Assert.DoesNotContain("a.com", payload.Excerpt);
+        Assert.DoesNotContain("/home/erix", payload.Excerpt);
+        Assert.DoesNotContain("fileserver", payload.Excerpt);
+        Assert.DoesNotContain(UserName, payload.Excerpt);
+        Assert.DoesNotContain(Machine, payload.Excerpt);
+        Assert.DoesNotContain("a.com", scrubbed);
+    }
+
+    [Fact]
+    public void OversizedLogLinesAndPathologicalQuotedSecretsStayFastInAppLogAndPendingReports()
+    {
+        var pathologicalQuoted = "\"token\": \"" + string.Concat(Enumerable.Repeat("\\\"x", 100_000));
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var redacted = AppLog.Redact(pathologicalQuoted);
+        sw.Stop();
+
+        Assert.True(sw.ElapsedMilliseconds < 500, $"AppLog.Redact took {sw.ElapsedMilliseconds} ms");
+        Assert.True(redacted.Length <= AppLog.MaxRedactInput + 32);
+
+        var giantLogLine = $"[2026-11-05T19:42:10.0000000Z] WARN Worker: "
+            + string.Concat(Enumerable.Repeat("a.com ", 30_000))
+            + @" C:\Users\Erix\secret.txt " + Machine;
+        var tempDir = Path.Combine(Path.GetTempPath(), "exo-pending-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var pending = new PendingReports(
+                tempDir,
+                () => Now,
+                () => new PendingReports.Identity("3.30.3", "10.0.26300.0", UserName, Profile, Machine),
+                () => [giantLogLine]);
+
+            var payload = pending.BuildPayload(new InvalidOperationException("boom"));
+            Assert.Equal("InvalidOperationException", payload.ErrorType);
+            Assert.True(payload.Excerpt.Length <= CrashReport.MaxExcerpt);
+            Assert.DoesNotContain(UserName, payload.Excerpt);
+            Assert.DoesNotContain(Machine, payload.Excerpt);
+            Assert.DoesNotContain(@"C:\Users\", payload.Excerpt);
+        }
+        finally
+        {
+            try { DeletionGate.DeleteDirectory(tempDir, recursive: true); } catch { }
+        }
+    }
 }

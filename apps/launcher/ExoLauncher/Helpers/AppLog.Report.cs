@@ -30,46 +30,66 @@ public static partial class AppLog
         "Couldn't", "Didn't", "Can't", "Not", "Nothing", "Check", "Sign", "Make", "Start", "Error", "Failed", "Unknown",
     };
 
-    [GeneratedRegex(@"\b[A-Z][A-Za-z0-9+]{2,}\b", RegexOptions.CultureInvariant)]
-    private static partial Regex ProperWord();
+    private static readonly Regex ProperWordPattern = new(@"\b[A-Z][A-Za-z0-9+]{2,}\b", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, RegexTimeout);
 
     /// <summary>The names an error says (Riot, OpenAL, Spotify): log lines that mention one belong with it, whatever the room.</summary>
-    internal static string[] NamesIn(string error) =>
-        [.. ProperWord().Matches(error).Select(m => m.Value).Where(word => !CommonWords.Contains(word)).Distinct(StringComparer.OrdinalIgnoreCase).Take(6)];
+    internal static string[] NamesIn(string error)
+    {
+        if (string.IsNullOrEmpty(error)) return [];
+        var slice = error.Length > 2000 ? error[..2000] : error;
+        try
+        {
+            return [.. ProperWordPattern.Matches(slice).Select(m => m.Value).Where(word => !CommonWords.Contains(word)).Distinct(StringComparer.OrdinalIgnoreCase).Take(6)];
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return [];
+        }
+    }
 
     private const int MaxReportEntries = 300;
     private const int MaxReportChars = 256 * 1024;
+    private const int MaxEntryChars = 32 * 1024;
 
-    [GeneratedRegex(@"^\[(?<at>[0-9T:.\-]+Z)\] (?<level>[A-Z]+) ", RegexOptions.CultureInvariant)]
-    private static partial Regex EntryHead();
+    private static readonly Regex EntryHeadPattern = new(@"^\[(?<at>[0-9T:.\-]+Z)\] (?<level>[A-Z]+) ", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, RegexTimeout);
 
     /// <summary>The report for the error <paramref name="error"/> shown in <paramref name="area"/>, from the log's <paramref name="lines"/>.</summary>
     internal static string ReportFor(string error, string area, IEnumerable<string> lines, DateTime nowUtc, string version, string windows, string userName, string profile)
     {
-        string[] words = [.. Areas.TryGetValue(area, out var known) ? known : [], .. NamesIn(error)];
-        var picked = new List<string>();
-        foreach (var entry in Entries(lines))
+        var label = string.IsNullOrWhiteSpace(area) ? "app" : area;
+        try
         {
-            var head = EntryHead().Match(entry);
-            if (!head.Success || !DateTime.TryParse(head.Groups["at"].Value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at)) continue;
-            var age = nowUtc - at.ToUniversalTime();
-            if (age > TimeSpan.FromHours(2) || age < -TimeSpan.FromMinutes(5)) continue;
-            var trouble = head.Groups["level"].Value is "WARN" or "ERROR" or "CRASH";
-            var mine = words.Any(word => entry.Contains(word, StringComparison.OrdinalIgnoreCase));
-            if (mine || trouble && age <= TimeSpan.FromMinutes(30)) picked.Add(entry);
+            string[] words = [.. Areas.TryGetValue(area, out var known) ? known : [], .. NamesIn(error)];
+            var picked = new List<string>();
+            foreach (var entry in Entries(lines))
+            {
+                var headSlice = entry.Length > 64 ? entry[..64] : entry;
+                var head = EntryHeadPattern.Match(headSlice);
+                if (!head.Success || !DateTime.TryParse(head.Groups["at"].Value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at)) continue;
+                var age = nowUtc - at.ToUniversalTime();
+                if (age > TimeSpan.FromHours(2) || age < -TimeSpan.FromMinutes(5)) continue;
+                var trouble = head.Groups["level"].Value is "WARN" or "ERROR" or "CRASH";
+                var mine = words.Any(word => entry.Contains(word, StringComparison.OrdinalIgnoreCase));
+                if (mine || trouble && age <= TimeSpan.FromMinutes(30)) picked.Add(entry);
+            }
+            if (picked.Count > MaxReportEntries) picked = picked[^MaxReportEntries..];
+            var boundedError = error.Length > 2000 ? error[..2000] : error;
+            var report = new StringBuilder()
+                .AppendLine($"Exo Launcher {version} · Windows {windows} · {nowUtc:yyyy-MM-dd HH:mm} UTC")
+                .AppendLine($"Error ({label}): {boundedError.Trim()}")
+                .AppendLine()
+                .AppendLine(picked.Count == 0 ? "Nothing in Exo's log about it from the last two hours." : $"Exo's log ({picked.Count} entries):");
+            foreach (var entry in picked)
+            {
+                if (report.Length + entry.Length + 2 > MaxReportChars) break;
+                report.AppendLine(entry);
+            }
+            return Personal(Redact(report.ToString()), userName, profile);
         }
-        if (picked.Count > MaxReportEntries) picked = picked[^MaxReportEntries..];
-        var report = new StringBuilder()
-            .AppendLine($"Exo Launcher {version} · Windows {windows} · {nowUtc:yyyy-MM-dd HH:mm} UTC")
-            .AppendLine($"Error ({(string.IsNullOrWhiteSpace(area) ? "app" : area)}): {error.Trim()}")
-            .AppendLine()
-            .AppendLine(picked.Count == 0 ? "Nothing in Exo's log about it from the last two hours." : $"Exo's log ({picked.Count} entries):");
-        foreach (var entry in picked)
+        catch (RegexMatchTimeoutException)
         {
-            if (report.Length + entry.Length + 2 > MaxReportChars) break;
-            report.AppendLine(entry);
+            return $"Exo Launcher {version} · Windows {windows} · {nowUtc:yyyy-MM-dd HH:mm} UTC\nError ({label}): <redacted>\n<log omitted: scrub fallback>";
         }
-        return Personal(Redact(report.ToString()), userName, profile);
     }
 
     /// <summary>The log's entries: a line that doesn't start with a time (a crash's stack) belongs to the entry above it.</summary>
@@ -80,8 +100,17 @@ public static partial class AppLog
         {
             if (line.StartsWith('[') && entry is not null) { yield return entry.ToString(); entry = null; }
             if (line.Length == 0) continue;
-            if (entry is null) entry = new StringBuilder(line);
-            else entry.Append('\n').Append(line);
+            if (entry is null)
+            {
+                var slice = line.Length > MaxEntryChars ? line[..MaxEntryChars] : line;
+                entry = new StringBuilder(slice);
+            }
+            else if (entry.Length < MaxEntryChars)
+            {
+                var remaining = MaxEntryChars - entry.Length - 1;
+                if (remaining > 0)
+                    entry.Append('\n').Append(line.Length > remaining ? line[..remaining] : line);
+            }
         }
         if (entry is not null) yield return entry.ToString();
     }
