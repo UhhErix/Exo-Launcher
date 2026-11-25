@@ -555,15 +555,24 @@ fn settle_setup_host(client: &exo_rpc::RpcClient, state: &mut AppState) {
 #[cfg(windows)]
 fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
     let mut state = AppState::for_host_pipe();
+    let live_pad: std::sync::Arc<std::sync::Mutex<Option<exo_rpc::ControllerStateEvent>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(None));
     let (mut client, bootstrapped) = {
         let mut connected = None;
         let mut got_boot = false;
-        for attempt in 0..5 {
-            if let Ok(c) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(6), |_| {}) {
+        for attempt in 0..12 {
+            let live_pad_cb = std::sync::Arc::clone(&live_pad);
+            if let Ok(c) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(3), move |ev| {
+                if let exo_rpc::HostEvent::ControllerState(cs) = ev
+                    && let Ok(mut slot) = live_pad_cb.lock()
+                {
+                    *slot = Some(cs);
+                }
+            }) {
                 if let Ok(boot) = c.call_blocking::<_, exo_rpc::ShellBootstrap>(
                     exo_rpc::METHOD_SHELL_BOOTSTRAP,
                     &serde_json::json!({}),
-                    Duration::from_secs(12),
+                    Duration::from_secs(15),
                 ) {
                     state.apply_bootstrap(boot);
                     if !matches!(scene, Some("library-folders") | Some("library-folder-open")) {
@@ -574,16 +583,17 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     }
                     state.whats_new.boot_hold_active = false;
                     state.whats_new.answered = true;
+                    state.whats_new.host_state = "idle".into();
                     connected = Some(c);
                     got_boot = true;
                     break;
                 }
-                if attempt == 4 {
+                if attempt == 11 {
                     connected = Some(c);
                 }
             }
-            if attempt < 4 {
-                std::thread::sleep(Duration::from_millis(150));
+            if attempt < 11 {
+                std::thread::sleep(Duration::from_millis(250));
             }
         }
         let Some(c) = connected else {
@@ -598,6 +608,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
         state.refreshing = false;
         state.whats_new.boot_hold_active = false;
         state.whats_new.answered = true;
+        state.whats_new.host_state = "idle".into();
     }
     if let Ok(badge) = client.call_blocking::<_, serde_json::Value>(
         "friends.badge",
@@ -1612,11 +1623,22 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
                 state.apply_eq_state(eq);
             }
-            if let Ok(list) = client.call_blocking::<_, exo_rpc::DevicesListReply>(
-                exo_rpc::METHOD_DEVICES_LIST,
-                &serde_json::json!({}),
-                Duration::from_secs(8),
-            ) {
+            let mut devices_list = None;
+            for attempt in 0..3 {
+                if let Ok(list) = client.call_blocking::<_, exo_rpc::DevicesListReply>(
+                    exo_rpc::METHOD_DEVICES_LIST,
+                    &serde_json::json!({}),
+                    Duration::from_secs(15),
+                ) && !list.devices.is_empty()
+                {
+                    devices_list = Some(list);
+                    break;
+                }
+                if attempt < 2 {
+                    std::thread::sleep(Duration::from_millis(400));
+                }
+            }
+            if let Some(list) = devices_list {
                 for dev in &list.devices {
                     if let Ok(reply) = client.call_blocking::<_, exo_rpc::DevicesImageReply>(
                         exo_rpc::METHOD_DEVICES_IMAGE,
@@ -1713,6 +1735,28 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                         Duration::from_secs(5),
                     ) {
                         state.pc.controller_ui.steam_input = Some(si);
+                    }
+                    if scene == Some("pc-devices-controller") {
+                        let _ = client.call_blocking::<_, serde_json::Value>(
+                            exo_rpc::METHOD_CONTROLLER_WATCH,
+                            &serde_json::json!({ "id": pid, "on": true }),
+                            Duration::from_secs(3),
+                        );
+                        for _ in 0..20 {
+                            if let Ok(slot) = live_pad.lock()
+                                && let Some(ref cs) = *slot
+                                && cs.id == *pid
+                            {
+                                state.pc.controller_ui.live = Some(cs.clone());
+                                break;
+                            }
+                            std::thread::sleep(Duration::from_millis(25));
+                        }
+                        let _ = client.call_blocking::<_, serde_json::Value>(
+                            exo_rpc::METHOD_CONTROLLER_WATCH,
+                            &serde_json::json!({ "id": pid, "on": false }),
+                            Duration::from_secs(3),
+                        );
                     }
                 }
                 state.pc.audio_output_id = out_id;
