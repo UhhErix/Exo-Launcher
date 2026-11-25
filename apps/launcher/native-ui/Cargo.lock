@@ -1059,10 +1059,12 @@ dependencies = [
  "exo-display",
  "exo-gpu",
  "exo-policy",
+ "exo-rpc",
  "exo-sensors",
  "exo-wire",
  "serde",
  "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1198,6 +1200,7 @@ dependencies = [
  "exo-controller",
  "exo-gpu",
  "exo-hid-devices",
+ "exo-host",
  "exo-kit",
  "exo-macros",
  "exo-power-guard",

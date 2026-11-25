@@ -3711,6 +3711,7 @@ fn main() {
                         connect_handle.update(move |s, _| {
                             let router = s.video_router.clone();
                             client.set_video_frame_handler(move |frame| router.try_push(frame));
+                            exo_host::shadow::attach_live_shadow_observer(&client);
                             s.rpc = Some(client);
                             s.handle = Some(boot_handle.clone());
                             s.status = state::HostStatus::Connected;

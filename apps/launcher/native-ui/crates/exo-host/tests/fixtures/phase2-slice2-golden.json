@@ -1,0 +1,908 @@
+{
+  "schemaVersion": 1,
+  "recordedFrom": "ExoLauncher.Host (net10.0-windows10.0.26100.0, win-x64, Release, --host-pipe)",
+  "families": {
+    "sensors": {
+      "method": "system.health",
+      "params": {},
+      "recordedDotnet": {
+        "ok": true,
+        "items": [
+          {
+            "key": "power",
+            "label": "Power plan",
+            "detail": "Exo's plan",
+            "applied": true,
+            "canUndo": true,
+            "busy": false,
+            "cpu": "Ryzen 5 5600X",
+            "current": false,
+            "held": false,
+            "off": false
+          },
+          {
+            "key": "network",
+            "label": "Network",
+            "detail": "Exo's network settings for games",
+            "applied": true,
+            "canUndo": true,
+            "busy": false,
+            "current": false,
+            "held": false,
+            "off": false
+          },
+          {
+            "key": "net-adapter",
+            "label": "Adapter settings for games",
+            "detail": "Power saving that drops the link is off.",
+            "applied": true,
+            "canUndo": true,
+            "busy": false,
+            "current": false,
+            "held": false,
+            "off": false
+          },
+          {
+            "key": "net-dns",
+            "label": "Cloudflare DNS, encrypted",
+            "detail": "Faster lookups, and your DNS is private.",
+            "applied": true,
+            "canUndo": true,
+            "busy": false,
+            "current": false,
+            "held": false,
+            "off": false
+          }
+        ]
+      }
+    },
+    "gpuProfile": {
+      "method": "gpu.profile",
+      "params": {},
+      "recordedDotnet": {
+        "ok": true,
+        "vendor": "nvidia",
+        "gpu": "RTX 3070",
+        "series": 30,
+        "screen": {
+          "name": "VG248",
+          "hz": 165,
+          "vrr": true
+        },
+        "status": "applied",
+        "canUndo": true,
+        "driverUpdated": false,
+        "items": [],
+        "lowLatency": "on",
+        "vrrEnabled": true,
+        "rebar": true,
+        "cacheFreeGb": 194,
+        "details": [
+          {
+            "key": "lowLatency",
+            "label": "Low latency mode",
+            "value": "On",
+            "current": "On",
+            "state": "unavailable"
+          },
+          {
+            "key": "power",
+            "label": "Power management",
+            "value": "Normal (per-game max)",
+            "current": "Normal",
+            "state": "on"
+          },
+          {
+            "key": "textureFiltering",
+            "label": "Texture filtering",
+            "value": "Quality",
+            "current": "Quality",
+            "state": "on"
+          },
+          {
+            "key": "shaderCache",
+            "label": "Shader cache",
+            "value": "Unlimited",
+            "current": "Unlimited",
+            "state": "on"
+          },
+          {
+            "key": "gsync",
+            "label": "G-SYNC / VRR",
+            "value": "Full screen",
+            "current": "On",
+            "state": "on"
+          },
+          {
+            "key": "dlss",
+            "label": "DLSS overrides",
+            "value": "Latest · Preset K / F / A",
+            "state": "unavailable"
+          },
+          {
+            "key": "rebar",
+            "label": "Resizable BAR",
+            "value": "On",
+            "state": "on"
+          }
+        ],
+        "skipped": true,
+        "features": [
+          {
+            "key": "lowLatency",
+            "label": "Low latency",
+            "state": "unavailable"
+          },
+          {
+            "key": "dlssPresets",
+            "label": "DLSS presets",
+            "state": "unavailable"
+          }
+        ]
+      }
+    },
+    "gpuProcesses": {
+      "method": "gpu.processes",
+      "params": {
+        "limit": 10
+      },
+      "recordedDotnet": {
+        "ok": true,
+        "adapters": [
+          {
+            "luid": "0x00000000_0x00008403",
+            "name": "NVIDIA GeForce RTX 3070",
+            "vendorId": 4318,
+            "dedicatedBytes": 8406433792,
+            "sharedBytes": 8544600064,
+            "software": false
+          }
+        ],
+        "processes": [
+          {
+            "pid": 1448,
+            "name": "dwm",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 238919680,
+            "nonLocalBytes": 0,
+            "protectedReason": "part of Windows"
+          },
+          {
+            "pid": 18364,
+            "name": "exo-ui",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 89108480,
+            "nonLocalBytes": 0
+          },
+          {
+            "pid": 18216,
+            "name": "Orca",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 73805824,
+            "nonLocalBytes": 0
+          },
+          {
+            "pid": 25016,
+            "name": "testhost",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 10485760,
+            "nonLocalBytes": 0
+          },
+          {
+            "pid": 2352,
+            "name": "explorer",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 9347072,
+            "nonLocalBytes": 0,
+            "protectedReason": "part of Windows"
+          },
+          {
+            "pid": 928,
+            "name": "csrss",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 5890048,
+            "nonLocalBytes": 0,
+            "protectedReason": "part of Windows"
+          },
+          {
+            "pid": 4,
+            "name": "System",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 4235264,
+            "nonLocalBytes": 0,
+            "protectedReason": "part of Windows"
+          },
+          {
+            "pid": 7124,
+            "name": "TextInputHost",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 28672,
+            "nonLocalBytes": 0,
+            "protectedReason": "part of Windows"
+          },
+          {
+            "pid": 15080,
+            "name": "SearchHost",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 28672,
+            "nonLocalBytes": 0,
+            "protectedReason": "part of Windows"
+          },
+          {
+            "pid": 2024,
+            "name": "ShellExperienceHost",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 24576,
+            "nonLocalBytes": 0,
+            "protectedReason": "part of Windows"
+          }
+        ],
+        "answer": {
+          "summary": "GPU compute is idle; dwm holds the most VRAM (228 MB).",
+          "topVram": {
+            "pid": 1448,
+            "name": "dwm",
+            "adapterLuid": "0x00000000_0x00008403",
+            "adapterName": "NVIDIA GeForce RTX 3070",
+            "totalPercent": 0,
+            "engines": [],
+            "localBytes": 238919680,
+            "nonLocalBytes": 0,
+            "protectedReason": "part of Windows"
+          },
+          "hogs": []
+        }
+      }
+    },
+    "gpuTuningState": {
+      "method": "gpu.tuning.state",
+      "params": {},
+      "recordedDotnet": {
+        "ok": true,
+        "mode": "auto",
+        "pausedAfterCrash": false,
+        "canReapply": false,
+        "queuedPending": false,
+        "statusLine": "Auto (stock) · NVML fallback",
+        "live": {
+          "tempC": 39,
+          "clockMhz": 1950,
+          "watts": 57.411
+        },
+        "capabilities": {
+          "vendor": "nvidia",
+          "generation": "Ampere",
+          "deviceId": "nvidia:NVIDIA GeForce RTX 3070",
+          "deviceName": "NVIDIA GeForce RTX 3070",
+          "backend": "nvml",
+          "fallbackReason": "Private NVAPI struct version did not answer on this driver; switched to NVML.",
+          "isLaptop": false,
+          "lockedByMaker": false,
+          "requiresWaiver": false,
+          "waiverAccepted": false,
+          "persistsInDriver": false,
+          "needsResidentForFanCurve": true,
+          "persistenceNote": "NVML fallback active: clocks and power limit re-apply at sign-in; software fan curves require Exo to stay open.",
+          "supportsCurveEditor": false,
+          "supportsUndervoltSearch": true,
+          "coreClockOffsetMhz": {
+            "min": -1000,
+            "max": 1000,
+            "step": 15,
+            "default": 0,
+            "supported": true
+          },
+          "coreMinClockMhz": {
+            "min": 0,
+            "max": 0,
+            "step": 1,
+            "default": 0,
+            "supported": false
+          },
+          "coreMaxClockMhz": {
+            "min": 0,
+            "max": 0,
+            "step": 1,
+            "default": 0,
+            "supported": false
+          },
+          "voltageMv": {
+            "min": 0,
+            "max": 0,
+            "step": 1,
+            "default": 0,
+            "supported": false
+          },
+          "voltageOffsetMv": {
+            "min": 0,
+            "max": 0,
+            "step": 1,
+            "default": 0,
+            "supported": false
+          },
+          "memoryClockOffsetMhz": {
+            "min": -2000,
+            "max": 6000,
+            "step": 25,
+            "default": 0,
+            "supported": true
+          },
+          "memoryMaxClockMhz": {
+            "min": 0,
+            "max": 0,
+            "step": 1,
+            "default": 0,
+            "supported": false
+          },
+          "powerLimitPercent": {
+            "min": 0,
+            "max": 0,
+            "step": 1,
+            "default": 0,
+            "supported": false
+          },
+          "powerLimitWatts": {
+            "min": 100,
+            "max": 265,
+            "step": 5,
+            "default": 240,
+            "supported": true
+          },
+          "tempLimitC": {
+            "min": 0,
+            "max": 0,
+            "step": 1,
+            "default": 0,
+            "supported": false
+          },
+          "clockLockMhz": {
+            "min": 600,
+            "max": 2100,
+            "step": 15,
+            "default": 2100,
+            "supported": true
+          },
+          "memoryTimingLevels": [],
+          "vfCurvePoints": [],
+          "fanCount": 2,
+          "supportsHardwareFanCurve": false,
+          "supportsSoftwareFanCurve": true,
+          "supportsZeroRpm": false,
+          "fanMaxPoints": 5,
+          "fanSpeedPercent": {
+            "min": 30,
+            "max": 100,
+            "step": 1,
+            "default": 50,
+            "supported": true
+          },
+          "fanTempC": {
+            "min": 30,
+            "max": 95,
+            "step": 1,
+            "default": 60,
+            "supported": true
+          }
+        },
+        "factoryDefaults": {
+          "mode": "auto",
+          "coreClockOffsetMhz": 0,
+          "memoryClockOffsetMhz": 0,
+          "powerLimitWatts": 240,
+          "clockLockMhz": 0
+        },
+        "current": {
+          "mode": "auto",
+          "coreClockOffsetMhz": 0,
+          "memoryClockOffsetMhz": 0,
+          "powerLimitWatts": 240
+        },
+        "saved": {
+          "mode": "auto"
+        },
+        "test": {
+          "running": false,
+          "kind": "idle",
+          "phase": "idle",
+          "elapsedSec": 0,
+          "totalSec": 0,
+          "passes": 0,
+          "checksumOk": true,
+          "rolledBack": false
+        }
+      }
+    },
+    "systemInfo": {
+      "method": "system.about",
+      "params": {},
+      "recordedDotnet": {
+        "name": "EXO-DESKTOP",
+        "processor": "AMD Ryzen 5 5600X",
+        "cores": 6,
+        "threads": 12,
+        "graphics": "NVIDIA GeForce RTX 3070",
+        "videoMemoryGb": 8,
+        "directX": "12 Ultimate",
+        "resizableBar": true,
+        "memoryGb": 16,
+        "memoryType": "DDR4",
+        "memorySpeed": 3600,
+        "memoryRated": 3600,
+        "memorySlotsUsed": 2,
+        "memorySlots": 4,
+        "motherboard": "ASUS ROG STRIX B550-F GAMING WIFI II",
+        "bios": "3645",
+        "biosDate": "2026-09-10",
+        "windows": "Windows 11 Pro",
+        "windowsVersion": "26H2",
+        "build": "26300.9974",
+        "secureBoot": true,
+        "tpm": "2.0",
+        "memoryIntegrity": true,
+        "network": "Ethernet",
+        "networkMbps": 2500,
+        "windowsRelease": {
+          "name": "Windows 11",
+          "version": "26H2",
+          "build": "26300.9974",
+          "newest": "26H2",
+          "newestBuild": 26300,
+          "upToDate": true,
+          "insider": false
+        },
+        "networkAdapter": "Intel Ethernet Controller I226-V"
+      }
+    },
+    "displayInfo": {
+      "method": "gpu.display",
+      "params": {
+        "action": "state"
+      },
+      "recordedDotnet": {
+        "ok": true,
+        "displays": [
+          {
+            "id": "DISPLAY1",
+            "name": "VG248",
+            "main": true,
+            "hdr": false,
+            "hdrSupported": false,
+            "vendor": "nvidia",
+            "refresh": 165,
+            "refreshLabel": "164.92 Hz",
+            "refreshes": [
+              48,
+              50,
+              59,
+              60,
+              75,
+              85,
+              100,
+              120,
+              144,
+              165
+            ],
+            "color": {
+              "format": "rgb",
+              "bpc": 8,
+              "full": true
+            },
+            "auto": false,
+            "supported": [
+              {
+                "format": "rgb",
+                "bpc": 6,
+                "full": true
+              },
+              {
+                "format": "rgb",
+                "bpc": 6,
+                "full": false
+              },
+              {
+                "format": "rgb",
+                "bpc": 8,
+                "full": true
+              },
+              {
+                "format": "rgb",
+                "bpc": 8,
+                "full": false
+              },
+              {
+                "format": "444",
+                "bpc": 8,
+                "full": false
+              },
+              {
+                "format": "422",
+                "bpc": 8,
+                "full": false
+              }
+            ],
+            "best": {
+              "refresh": 165,
+              "color": {
+                "format": "rgb",
+                "bpc": 8,
+                "full": true
+              },
+              "scaling": true,
+              "over": true,
+              "videoHdr": false
+            },
+            "isBest": true,
+            "adjust": {
+              "nvidia": false,
+              "controls": [
+                {
+                  "key": "brightness",
+                  "label": "Brightness",
+                  "value": 50,
+                  "min": 0,
+                  "max": 100,
+                  "step": 1,
+                  "normal": 50,
+                  "unit": "%"
+                },
+                {
+                  "key": "contrast",
+                  "label": "Contrast",
+                  "value": 50,
+                  "min": 0,
+                  "max": 100,
+                  "step": 1,
+                  "normal": 50,
+                  "unit": "%"
+                },
+                {
+                  "key": "gamma",
+                  "label": "Gamma",
+                  "value": 100,
+                  "min": 30,
+                  "max": 280,
+                  "step": 1,
+                  "normal": 100,
+                  "unit": ""
+                },
+                {
+                  "key": "vibrance",
+                  "label": "Digital vibrance",
+                  "value": 50,
+                  "min": 0,
+                  "max": 100,
+                  "step": 1,
+                  "normal": 50,
+                  "unit": "%"
+                },
+                {
+                  "key": "hue",
+                  "label": "Hue",
+                  "value": 0,
+                  "min": 0,
+                  "max": 359,
+                  "step": 1,
+                  "normal": 0,
+                  "unit": "°"
+                }
+              ]
+            },
+            "ddc": {
+              "brightness": 100,
+              "brightnessMin": 0,
+              "brightnessMax": 100,
+              "contrast": 100,
+              "contrastMin": 0,
+              "contrastMax": 100
+            },
+            "scaling": {
+              "mode": "aspect",
+              "gpu": true,
+              "over": true
+            }
+          },
+          {
+            "id": "DISPLAY2",
+            "name": "onn 100002487",
+            "main": false,
+            "hdr": false,
+            "hdrSupported": false,
+            "vendor": "nvidia",
+            "refresh": 60,
+            "refreshLabel": "60 Hz",
+            "refreshes": [
+              50,
+              59,
+              60
+            ],
+            "color": {
+              "format": "rgb",
+              "bpc": 12,
+              "full": true
+            },
+            "auto": false,
+            "supported": [
+              {
+                "format": "rgb",
+                "bpc": 8,
+                "full": true
+              },
+              {
+                "format": "rgb",
+                "bpc": 8,
+                "full": false
+              },
+              {
+                "format": "rgb",
+                "bpc": 10,
+                "full": true
+              },
+              {
+                "format": "rgb",
+                "bpc": 10,
+                "full": false
+              },
+              {
+                "format": "rgb",
+                "bpc": 12,
+                "full": true
+              },
+              {
+                "format": "rgb",
+                "bpc": 12,
+                "full": false
+              },
+              {
+                "format": "444",
+                "bpc": 8,
+                "full": false
+              },
+              {
+                "format": "444",
+                "bpc": 10,
+                "full": false
+              },
+              {
+                "format": "444",
+                "bpc": 12,
+                "full": false
+              },
+              {
+                "format": "422",
+                "bpc": 8,
+                "full": false
+              },
+              {
+                "format": "422",
+                "bpc": 10,
+                "full": false
+              },
+              {
+                "format": "422",
+                "bpc": 12,
+                "full": false
+              }
+            ],
+            "best": {
+              "refresh": 60,
+              "color": {
+                "format": "rgb",
+                "bpc": 12,
+                "full": true
+              },
+              "scaling": true,
+              "over": true,
+              "videoHdr": false
+            },
+            "isBest": true,
+            "adjust": {
+              "nvidia": false,
+              "controls": [
+                {
+                  "key": "brightness",
+                  "label": "Brightness",
+                  "value": 50,
+                  "min": 0,
+                  "max": 100,
+                  "step": 1,
+                  "normal": 50,
+                  "unit": "%"
+                },
+                {
+                  "key": "contrast",
+                  "label": "Contrast",
+                  "value": 50,
+                  "min": 0,
+                  "max": 100,
+                  "step": 1,
+                  "normal": 50,
+                  "unit": "%"
+                },
+                {
+                  "key": "gamma",
+                  "label": "Gamma",
+                  "value": 100,
+                  "min": 30,
+                  "max": 280,
+                  "step": 1,
+                  "normal": 100,
+                  "unit": ""
+                },
+                {
+                  "key": "vibrance",
+                  "label": "Digital vibrance",
+                  "value": 50,
+                  "min": 0,
+                  "max": 100,
+                  "step": 1,
+                  "normal": 50,
+                  "unit": "%"
+                },
+                {
+                  "key": "hue",
+                  "label": "Hue",
+                  "value": 0,
+                  "min": 0,
+                  "max": 359,
+                  "step": 1,
+                  "normal": 0,
+                  "unit": "°"
+                }
+              ]
+            },
+            "ddc": {
+              "brightness": 39,
+              "brightnessMin": 0,
+              "brightnessMax": 100,
+              "contrast": 20,
+              "contrastMin": 0,
+              "contrastMax": 100
+            },
+            "scaling": {
+              "mode": "aspect",
+              "gpu": true,
+              "over": true
+            }
+          }
+        ],
+        "video": {
+          "superResolution": 5,
+          "hdr": 0
+        }
+      }
+    },
+    "hdrState": {
+      "method": "hdr.state",
+      "params": {},
+      "recordedDotnet": {
+        "supported": false,
+        "internal": false,
+        "colorMode": "sdr",
+        "displays": [
+          {
+            "name": "VG248",
+            "gdiName": "\\\\.\\DISPLAY1",
+            "devicePath": "\\\\?\\DISPLAY#AUS24AC#5&00000000&0&UID0001#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            "main": true,
+            "supported": false,
+            "on": false,
+            "internal": false,
+            "connector": "dp",
+            "colorMode": "sdr",
+            "peakHealth": {
+              "status": "unknown"
+            }
+          },
+          {
+            "name": "100002487",
+            "gdiName": "\\\\.\\DISPLAY2",
+            "devicePath": "\\\\?\\DISPLAY#ONN0101#5&00000000&0&UID0002#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            "main": false,
+            "supported": false,
+            "on": false,
+            "internal": false,
+            "connector": "hdmi",
+            "colorMode": "acm",
+            "peakHealth": {
+              "status": "unknown"
+            }
+          }
+        ]
+      }
+    },
+    "driveInfo": {
+      "method": "system.drives",
+      "params": {},
+      "recordedDotnet": {
+        "ok": true,
+        "fixes": [],
+        "drives": [
+          {
+            "id": "0",
+            "model": "Samsung SSD 990 PRO with Heatsink 2TB",
+            "kind": "NVMe SSD",
+            "link": {
+              "gen": 4,
+              "width": 4,
+              "maxGen": 4,
+              "maxWidth": 4
+            },
+            "firmware": "8B2QJXD7",
+            "firmwareSlots": 3,
+            "vendor": {
+              "name": "Samsung",
+              "tool": "Samsung Magician",
+              "url": "https://semiconductor.samsung.com/consumer-storage/support/tools/"
+            },
+            "temperature": {
+              "now": 39,
+              "warn": 82,
+              "critical": 85
+            },
+            "health": {
+              "lifeUsed": 7,
+              "spare": 100,
+              "writtenTb": 150.4,
+              "hours": 4747,
+              "powerCycles": 539,
+              "unsafeShutdowns": 140,
+              "mediaErrors": 0
+            },
+            "volumes": [
+              {
+                "letter": "C:",
+                "totalGb": 1861.9326133728027,
+                "freeGb": 194.2258529663086
+              }
+            ],
+            "driver": "Microsoft NVMe (StorNVMe)",
+            "writeCache": true,
+            "headroom": 10,
+            "power": {
+              "state": 0,
+              "full": true,
+              "plan": "Exo",
+              "exo": true
+            },
+            "nvme": {
+              "sector": 512,
+              "fourK": false
+            },
+            "games": [],
+            "verdicts": []
+          }
+        ]
+      }
+    }
+  }
+}
