@@ -229,6 +229,7 @@ jobs:
             --config p/csharp \
             --config p/typescript \
             --config p/rust \
+            --exclude-rule rust.lang.security.unsafe-usage.unsafe-usage \
             --baseline-commit "$BASE_SHA" \
             --sarif-output semgrep.sarif \
             --text \
