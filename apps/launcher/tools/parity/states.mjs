@@ -1054,7 +1054,10 @@ export const STATES = [
     },
     native: {
       scene: 'store-game',
-      script: [{ t: 0.1, type: 'tap', fromReactTarget: true }],
+      script: [
+        { t: 0.05, type: 'wheel', x: 960, y: 540, dy: -629 },
+        { t: 0.25, type: 'tap', fromReactTarget: true },
+      ],
       expect: { room: 'Store', storeGameOpen: true },
     },
   },
@@ -1079,7 +1082,7 @@ export const STATES = [
     },
     native: {
       scene: 'store-game',
-      script: [{ t: 0.1, type: 'wheel', x: 960, y: 540, dy: 900 }],
+      script: [{ t: 0.1, type: 'wheel', x: 960, y: 540, dy: -900 }],
       expect: { room: 'Store', storeGameOpen: true },
     },
   },

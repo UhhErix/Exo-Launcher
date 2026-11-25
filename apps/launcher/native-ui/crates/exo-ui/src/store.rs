@@ -1,9 +1,9 @@
 use crate::state::{AppState, InputMode, title_hue};
 use crate::store_page::{HERO_ROTATE_SECS, find_owned_game};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, glass_button,
-    glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, good, hover_fill,
+    glass_control_fill, glass_icon_circle_opt, glass_rim_bottom, glass_rim_top, good, hover_fill,
     icon_arrow_right, icon_bookmark_filled, icon_check, icon_chevron_left, icon_chevron_right,
     icon_close, icon_refresh, icon_search, pressed_fill, scaled, selected_fill, type_body,
     type_control, type_section, type_small, type_title,
@@ -254,6 +254,17 @@ fn tile_meta_row(tile: &StoreTile) -> Option<El> {
     None
 }
 
+fn store_grid_card_width(viewport_w: f32) -> f32 {
+    let usable = if viewport_w > 0.0 {
+        (viewport_w - 20.0).max(160.0)
+    } else {
+        1900.0
+    };
+    let gap = 16.0_f32;
+    let cols = (((usable + gap) / (156.0 + gap)).floor() as usize).max(1);
+    ((usable - (cols.saturating_sub(1) as f32) * gap) / cols as f32).max(120.0)
+}
+
 pub fn store_tile_card(
     tile: &StoreTile,
     scope: &str,
@@ -261,6 +272,18 @@ pub fn store_tile_card(
     s: &AppState,
     scale: f32,
 ) -> El {
+    store_tile_card_sized(tile, scope, from_shelf, s, scale, 168.0)
+}
+
+fn store_tile_card_sized(
+    tile: &StoreTile,
+    scope: &str,
+    from_shelf: Option<&str>,
+    s: &AppState,
+    scale: f32,
+    card_w: f32,
+) -> El {
+    let card_h = card_w * 1.5;
     let hue = title_hue(&tile.name);
     let img = best_poster_image(s, tile, scale);
     let card_key = format!("store-tile-{scope}-{}", tile.app_id);
@@ -273,7 +296,7 @@ pub fn store_tile_card(
 
     let mut poster = el()
         .key(format!("store-poster-{scope}-{}", tile.app_id))
-        .size(168.0, 252.0)
+        .size(card_w, card_h)
         .mb(4.0)
         .radius(RADIUS_CARD)
         .continuous_corners()
@@ -281,7 +304,20 @@ pub fn store_tile_card(
         .matched(flight_id.clone())
         .motion(SPRING_FLIGHT);
     if let Some(loaded) = img {
-        poster = poster.pixels_fit(loaded.pixels(), SurfaceFit::Fill);
+        let is_wide = loaded.size().is_some_and(|[iw, ih]| iw > ih);
+        if is_wide {
+            poster = poster
+                .linear_gradient(
+                    0.35,
+                    [(0.0, oklch(0.24, 0.06, hue)), (1.0, oklch(0.08, 0.02, hue))],
+                )
+                .child(
+                    el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                        .pixels_fit(loaded.pixels(), SurfaceFit::Fit),
+                );
+        } else {
+            poster = poster.pixels_fit(loaded.pixels(), SurfaceFit::Fill);
+        }
     } else {
         poster = poster.linear_gradient(
             0.35,
@@ -295,8 +331,7 @@ pub fn store_tile_card(
                 .size(28.0, 28.0)
                 .radius(RADIUS_PILL)
                 .center()
-                .fill(BG.alpha(0.64))
-                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
                 .child(icon_bookmark_filled(14.0, FG)),
         );
     }
@@ -313,9 +348,10 @@ pub fn store_tile_card(
         .focusable(true)
         .hit()
         .cursor(Cursor::Pointer)
+        .hover_group()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .w(168.0)
+        .w(card_w)
         .gap(4.0)
         .offset(0.0, if hovered { -3.0 } else { 0.0 })
         .offset_motion(SPRING_MOVE)
@@ -388,7 +424,7 @@ pub fn store_tile_card(
         if gamepad {
             lib_btn = lib_btn.focus_ring(2.0, 3.0, FG);
         }
-        col().w(168.0).items_start().child(card).child(lib_btn)
+        col().w(card_w).items_start().child(card).child(lib_btn)
     } else {
         card
     }
@@ -436,11 +472,12 @@ pub fn store_shelf_row(
         .child(text(title.to_string()).font(type_title()).color(FG));
 
     if can_prev || can_next {
-        let mut prev_btn = glass_icon_circle(
+        let mut prev_btn = glass_icon_circle_opt(
             prev_key,
             "Previous",
             32.0,
             icon_chevron_left(14.0, if can_prev { FG } else { fg_muted() }),
+            false,
         )
         .opacity(if can_prev { 1.0 } else { 0.35 });
         if can_prev {
@@ -457,11 +494,12 @@ pub fn store_shelf_row(
             prev_btn = prev_btn.focus_ring(2.0, 3.0, FG);
         }
 
-        let mut next_btn = glass_icon_circle(
+        let mut next_btn = glass_icon_circle_opt(
             next_key,
             "Next",
             32.0,
             icon_chevron_right(14.0, if can_next { FG } else { fg_muted() }),
+            false,
         )
         .opacity(if can_next { 1.0 } else { 0.35 });
         if can_next {
@@ -690,6 +728,7 @@ fn wishlist_view(s: &AppState, scale: f32) -> El {
     }
     head = head.child(check_btn);
 
+    let grid_card_w = store_grid_card_width(s.lib.grid_width);
     let first_items: Vec<&StoreTile> = if sale.is_empty() {
         items.iter().collect()
     } else {
@@ -705,7 +744,7 @@ fn wishlist_view(s: &AppState, scale: f32) -> El {
             .children(
                 first_items
                     .into_iter()
-                    .map(|t| store_tile_card(t, "wish-sale", None, s, scale)),
+                    .map(|t| store_tile_card_sized(t, "wish-sale", None, s, scale, grid_card_w)),
             ),
     );
 
@@ -727,10 +766,9 @@ fn wishlist_view(s: &AppState, scale: f32) -> El {
                     .px(10.0)
                     .flex_wrap()
                     .gap(16.0)
-                    .children(
-                        rest.into_iter()
-                            .map(|t| store_tile_card(t, "wish-rest", None, s, scale)),
-                    ),
+                    .children(rest.into_iter().map(|t| {
+                        store_tile_card_sized(t, "wish-rest", None, s, scale, grid_card_w)
+                    })),
             );
     }
     body
@@ -779,6 +817,7 @@ fn search_view(s: &AppState, scale: f32) -> El {
         );
     }
 
+    let grid_card_w = store_grid_card_width(s.lib.grid_width);
     body.child(
         row()
             .w_full()
@@ -789,7 +828,7 @@ fn search_view(s: &AppState, scale: f32) -> El {
             .children(
                 results
                     .iter()
-                    .map(|t| store_tile_card(t, "search", None, s, scale)),
+                    .map(|t| store_tile_card_sized(t, "search", None, s, scale, grid_card_w)),
             ),
     )
 }
@@ -852,8 +891,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                 el().px(12.0)
                     .py(4.0)
                     .radius(RADIUS_PILL)
-                    .fill(glass_control_fill())
-                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                    .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
                     .child(
                         text(hero_when(hero.when.as_deref()))
                             .font(type_small())
@@ -869,8 +907,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                     .gap(6.0)
                     .center_y()
                     .radius(RADIUS_PILL)
-                    .fill(glass_control_fill())
-                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                    .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
                     .child(icon_bookmark_filled(12.0, FG))
                     .child(text("On your wishlist").font(type_small()).color(FG)),
             );
@@ -893,8 +930,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                 .px(14.0)
                 .center_y()
                 .radius(12.0)
-                .fill(BG.alpha(0.56))
-                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
                 .child(
                     text(hero.name.clone())
                         .font(TextStyle::new(scaled(20.0), 650.0))
@@ -1041,7 +1077,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         });
 
     let mut search_bar = row()
-        .w(260.0)
+        .w(360.0)
         .h(32.0)
         .px(12.0)
         .gap(8.0)
@@ -1075,8 +1111,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .py(2.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
         .child(
             tab_pill("store-tab-discover", "Discover", active_home, gamepad).on_press(
                 |s: &mut AppState| {
@@ -1123,7 +1158,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
     }
     right_tools = right_tools.child(search_bar);
     if active_home {
-        let mut refresh_btn = glass_icon_circle(
+        let mut refresh_btn = glass_icon_circle_opt(
             "store-refresh",
             if s.store_ext.home_refreshing {
                 "Refreshing the store"
@@ -1132,6 +1167,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
             },
             32.0,
             icon_refresh(14.0, FG),
+            false,
         )
         .opacity(if s.store_ext.home_refreshing {
             0.55

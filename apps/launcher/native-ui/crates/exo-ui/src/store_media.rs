@@ -1,11 +1,10 @@
 use crate::state::{AppState, HostStatus, InputMode, title_hue};
 use exo_kit::{
     BG, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_FLIGHT, SPRING_MOVE,
-    SPRING_QUICK, fg_muted, float_line, glass_control_fill, glass_icon_circle,
-    glass_icon_circle_opt, glass_rim, glass_rim_bottom, glass_rim_top, hover_fill,
-    icon_chevron_left, icon_chevron_right, icon_close, icon_maximize, icon_pause, icon_play,
-    icon_volume, icon_volume_off, modal_card_transition, modal_scrim_transition, pressed_fill,
-    scrim_fill, track_fill, type_control, type_small,
+    SPRING_QUICK, fg_muted, float_line, glass_control_fill, glass_icon_circle_opt, glass_rim,
+    glass_rim_bottom, glass_rim_top, hover_fill, icon_chevron_left, icon_chevron_right, icon_close,
+    icon_maximize, icon_pause, icon_play, icon_volume, icon_volume_off, modal_card_transition,
+    modal_scrim_transition, pressed_fill, scrim_fill, track_fill, type_control, type_small,
 };
 use exo_rpc::{StoreArt, StoreGame};
 use rune::{Cursor, El, SurfaceFit, col, el, oklch, row, text};
@@ -227,7 +226,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
     let mut stage = el()
         .key(format!("sg-banner-{}", game.app_id))
         .w_full()
-        .h(830.0)
+        .h(853.0)
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
@@ -244,14 +243,24 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
                 let player_state = player_ref.map(Player::state);
                 let failed = matches!(player_state, Some(PlayerState::Failed(_)));
 
+                let trailer_scrim = || {
+                    el().pin(Some(0.0), None, Some(0.0), Some(0.0))
+                        .h(180.0)
+                        .linear_gradient(
+                            std::f32::consts::PI,
+                            [(0.0, BG.alpha(0.0)), (1.0, BG.alpha(0.76))],
+                        )
+                };
                 if let Some(mf) = s.store_ext.trailer_mf.as_ref()
                     && mf.state() != crate::native_media::NativeMediaState::Failed
                 {
-                    stage = stage.child(
-                        el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-                            .fill(BG)
-                            .native_surface(mf.surface(), SurfaceFit::Fit),
-                    );
+                    stage = stage
+                        .child(
+                            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                                .fill(BG)
+                                .native_surface(mf.surface(), SurfaceFit::Fit),
+                        )
+                        .child(trailer_scrim());
                 } else if let Some(player) = player_ref
                     && !failed
                 {
@@ -268,6 +277,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
                                 .pixels_fit(img.pixels(), SurfaceFit::Fill),
                         );
                     }
+                    stage = stage.child(trailer_scrim());
                     if matches!(
                         player_state,
                         Some(PlayerState::Playing | PlayerState::Ready | PlayerState::Ended)
@@ -302,7 +312,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
                             .fill(BG.alpha(0.72))
                             .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                             .child(
-                                glass_icon_circle(
+                                glass_icon_circle_opt(
                                     "sg-trailer-play",
                                     if playing {
                                         "Pause trailer"
@@ -315,6 +325,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
                                     } else {
                                         icon_play(13.0, FG)
                                     },
+                                    false,
                                 )
                                 .on_press(|s: &mut AppState| s.store_toggle_trailer_play()),
                             )
@@ -328,7 +339,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
                             )
                             .child(text(time_label).font(type_small()).color(fg_muted()))
                             .child(
-                                glass_icon_circle(
+                                glass_icon_circle_opt(
                                     "sg-trailer-mute",
                                     if muted {
                                         "Unmute trailer"
@@ -341,13 +352,16 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
                                     } else {
                                         icon_volume(13.0, FG)
                                     },
+                                    false,
                                 )
                                 .on_press(|s: &mut AppState| s.store_toggle_trailer_mute()),
                             );
                         stage = stage.child(controls);
                     }
                 } else if let Some(img) = poster_img {
-                    stage = stage.pixels_fit(img.pixels(), SurfaceFit::Fill);
+                    stage = stage
+                        .pixels_fit(img.pixels(), SurfaceFit::Fill)
+                        .child(trailer_scrim());
                 } else {
                     stage = stage.linear_gradient(
                         0.35,
@@ -423,7 +437,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
             .cursor(Cursor::Pointer)
             .press_on_down()
             .press_scale(PRESS_SCALE)
-            .size(168.0, 95.0)
+            .size(182.5, 102.66)
             .radius(RADIUS_SMALL)
             .continuous_corners()
             .clip_rounded(RADIUS_SMALL)
@@ -477,7 +491,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
             .cursor(Cursor::Pointer)
             .press_on_down()
             .press_scale(PRESS_SCALE)
-            .size(168.0, 95.0)
+            .size(182.5, 102.66)
             .radius(RADIUS_SMALL)
             .continuous_corners()
             .clip_rounded(RADIUS_SMALL)
