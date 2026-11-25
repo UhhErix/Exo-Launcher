@@ -235,7 +235,10 @@ internal sealed class StoreAuthWindow
         }
     }
 
-    private async void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e) =>
+        _ = UiGuard.RunAsync(() => OnNewWindowRequestedAsync(sender, e), "StoreAuthWindow.NewWindow");
+
+    private async Task OnNewWindowRequestedAsync(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
         var target = e.Uri;
         var blank = string.IsNullOrWhiteSpace(target) ||

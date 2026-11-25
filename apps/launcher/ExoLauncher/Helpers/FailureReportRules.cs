@@ -77,6 +77,18 @@ public static class FailureReportRules
         return string.IsNullOrEmpty(context) ? text : $"{context}: {text}";
     }
 
+    public static string? SafeUpdateUrl(Uri? uri)
+    {
+        if (uri is null || !uri.IsAbsoluteUri) return null;
+        var host = uri.Host;
+        var path = uri.AbsolutePath;
+        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(path)) return null;
+        return $"{host}{path}";
+    }
+
+    public static string? SafeUpdateUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) ? SafeUpdateUrl(uri) : null;
+
     /// <summary>
     /// The generic reason for a failed update download, with the HTTP status when the server gave one.
     /// </summary>
@@ -85,7 +97,8 @@ public static class FailureReportRules
         var baseReason = ex is HttpRequestException { StatusCode: { } status }
             ? $"Update download failed (HTTP {(int)status})"
             : "Update download failed";
-        if (uri is null || string.IsNullOrWhiteSpace(uri.AbsolutePath)) return baseReason;
-        return $"{baseReason} on {uri.AbsolutePath}";
+        var safeUrl = SafeUpdateUrl(uri);
+        if (string.IsNullOrEmpty(safeUrl)) return baseReason;
+        return $"{baseReason} on {safeUrl}";
     }
 }

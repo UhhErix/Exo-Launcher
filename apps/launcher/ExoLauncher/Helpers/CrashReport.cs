@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 using ExoLauncher.Services;
 
 namespace ExoLauncher.Helpers;
@@ -31,6 +32,7 @@ public static partial class CrashReport
 {
     internal const string Endpoint = "https://reports.getexo.app/v1/report";
     internal const int MaxExcerpt = 8192;
+    internal const int MaxScrubInput = MaxExcerpt * 8;
 
     /// <summary>What a report holds. Nothing else is ever put in one. <see cref="InstallId"/> rides along, so Delete my data removes it.</summary>
     public sealed record Payload(string App, string Version, string OsBuild, string ErrorType, string Excerpt, string? InstallId = null);
@@ -50,14 +52,12 @@ public static partial class CrashReport
     [GeneratedRegex(@"(?<![A-Za-z0-9])/(?:home|Users|root)/[^\r\n""'|()\[\]]*", RegexOptions.CultureInvariant)]
     private static partial Regex UnixHome();
 
-    [GeneratedRegex(@"\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|gg|app|dev|local|lan|gl|tv|de|co|uk|us|xyz|ru|jp|me|edu|gov)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex HostName();
+    private static readonly Regex HostNamePattern = new(@"\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|gg|app|dev|local|lan|gl|tv|de|co|uk|us|xyz|ru|jp|me|edu|gov)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     [GeneratedRegex(@"\b\d{1,3}(?:\.\d{1,3}){3}\b", RegexOptions.CultureInvariant)]
     private static partial Regex IpAddress();
 
-    [GeneratedRegex(@"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex Email();
+    private static readonly Regex EmailPattern = new(@"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     [GeneratedRegex(@"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b", RegexOptions.CultureInvariant)]
     private static partial Regex GuidId();
@@ -74,19 +74,20 @@ public static partial class CrashReport
     [GeneratedRegex(@"^\d{1,4}(?:\.\d{1,4}){2}", RegexOptions.CultureInvariant)]
     private static partial Regex VersionHead();
 
+    private static readonly Regex EmailSweepPattern = new(@"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+
     /// <summary>What the service also refuses (cloud/reports/src/validate.js › PERSONAL). A line matching any is removed whole.</summary>
     private static readonly Regex[] Personal =
     [
-        WindowsPathSweep(), SharePathSweep(), UnixHomeSweep(), UrlSweep(), EmailSweep(),
-        new(@"\d{15,}", RegexOptions.CultureInvariant),
-        new(@"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{16,}", RegexOptions.CultureInvariant),
+        WindowsPathSweep(), SharePathSweep(), UnixHomeSweep(), UrlSweep(), EmailSweepPattern,
+        new(@"\d{15,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking),
+        new(@"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{16,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking),
     ];
 
     [GeneratedRegex(@"[A-Za-z]:\\|\b[A-Za-z]:/", RegexOptions.CultureInvariant)] private static partial Regex WindowsPathSweep();
     [GeneratedRegex(@"\\\\[^\s\\]+\\", RegexOptions.CultureInvariant)] private static partial Regex SharePathSweep();
     [GeneratedRegex(@"(^|[^A-Za-z0-9])/(home|Users)/", RegexOptions.CultureInvariant)] private static partial Regex UnixHomeSweep();
     [GeneratedRegex(@"[a-z][a-z0-9+.-]{1,15}://", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex UrlSweep();
-    [GeneratedRegex(@"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}", RegexOptions.CultureInvariant)] private static partial Regex EmailSweep();
 
     /// <summary>
     /// The report for an error, as the service takes it. <paramref name="report"/> is <see cref="AppLog.ReportFor"/>'s
@@ -133,15 +134,29 @@ public static partial class CrashReport
         return head + marker + kept;
     }
 
-    internal static Payload Build(string error, string report, string version, string windows, string userName, string profile, string machineName, string? kind = null)
+    internal static Payload Build(string error, string report, string version, string windows, string userName, string profile, string machineName, string? kind = null) =>
+        Build(error, report, version, windows, userName, profile, machineName, kind, Scrub);
+
+    internal static Payload Build(string error, string report, string version, string windows, string userName, string profile, string machineName, string? kind, Func<string, string, string, string, string> scrubber)
     {
         var raw = FitExcerpt(report, MaxExcerpt * 4);
-        var excerpt = Scrub(raw, userName, profile, machineName);
-        if (excerpt.Length > MaxExcerpt) excerpt = FitExcerpt(excerpt, MaxExcerpt);
-        excerpt = string.Join('\n', excerpt.Split('\n').Select(line => Personal.Any(p => p.IsMatch(line)) ? "<removed>" : line));
         var type = ClassifyErrorType(error, raw, kind);
         var head = VersionHead().Match(version);
-        return new Payload("launcher", head.Success ? head.Value : "0.0.0", OsBuild(windows), type, excerpt);
+        var ver = head.Success ? head.Value : "0.0.0";
+        var osBuild = OsBuild(windows);
+        string excerpt;
+        try
+        {
+            excerpt = scrubber(raw, userName, profile, machineName);
+            if (excerpt.Length > MaxExcerpt) excerpt = FitExcerpt(excerpt, MaxExcerpt);
+            excerpt = string.Join('\n', excerpt.Split('\n').Select(line => Personal.Any(p => p.IsMatch(line)) ? "<removed>" : line));
+        }
+        catch (Exception ex) when (ex is RegexMatchTimeoutException or ArgumentException)
+        {
+            AppLog.Warn($"Crash report ({type}): scrub fallback ({ex.GetType().Name}).");
+            excerpt = $"Exo Launcher {ver} · Windows {osBuild}\nError: {type}\n<excerpt omitted: scrub fallback>";
+        }
+        return new Payload("launcher", ver, osBuild, type, excerpt);
     }
 
     private static string ClassifyErrorType(string error, string raw, string? kind)
@@ -161,17 +176,54 @@ public static partial class CrashReport
     /// Sends one report of a known kind (Hang, WebView2Crash, DiscordGateway, CaptureCrash, StoreFailure, UpdateFailure) with the
     /// recent stripped log lines. Fire and forget: never throws; the client limits in <see cref="SendAsync"/> decide whether it leaves.
     /// </summary>
+    private static readonly Channel<(string Kind, string What, string Area)> SubmitQueue =
+        Channel.CreateBounded<(string, string, string)>(new BoundedChannelOptions(16)
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.DropOldest,
+        });
+    private static int s_submitWorkerStarted;
+
     public static void Submit(string kind, string what, string area = "")
+    {
+        try
+        {
+            if (Interlocked.Exchange(ref s_submitWorkerStarted, 1) == 0)
+                _ = Task.Run(DrainSubmitQueueAsync);
+            SubmitQueue.Writer.TryWrite((kind, what, area));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Crash report ({kind}): not queued ({ex.GetType().Name}).");
+        }
+    }
+
+    private static async Task DrainSubmitQueueAsync()
+    {
+        await foreach (var (kind, what, area) in SubmitQueue.Reader.ReadAllAsync().ConfigureAwait(false))
+            await SubmitCoreAsync(kind, what, area).ConfigureAwait(false);
+    }
+
+    internal static async Task SubmitCoreAsync(string kind, string what, string area = "")
     {
         try
         {
             var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             var version = AppServices.RunningVersion;
             var windows = Environment.OSVersion.Version.ToString();
-            var built = AppLog.ReportFor(what.Length > 2000 ? what[..2000] : what, area, AppLog.RecentLines(), DateTime.UtcNow,
-                version, windows, Environment.UserName, profile);
+            string built;
+            try
+            {
+                built = AppLog.ReportFor(what.Length > 2000 ? what[..2000] : what, area, AppLog.RecentLines(), DateTime.UtcNow,
+                    version, windows, Environment.UserName, profile);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                built = "";
+            }
             var payload = Build(what, built, version, windows, Environment.UserName, profile, Environment.MachineName, kind);
-            _ = SendAsync(payload);
+            await SendAsync(payload).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -289,7 +341,6 @@ public static partial class CrashReport
         AutomaticDecompression = DecompressionMethods.All,
         PooledConnectionLifetime = TimeSpan.FromMinutes(15),
     }));
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Regex> MachineRegexCache = new(StringComparer.OrdinalIgnoreCase);
 
     private static async Task<int> PostBodyAsync(string body, CancellationToken ct)
     {
@@ -301,6 +352,7 @@ public static partial class CrashReport
     /// <summary>The personal parts out of a report's text: paths, URLs, hosts and machine names, addresses, emails, ids.</summary>
     internal static string Scrub(string text, string userName, string profile, string machineName)
     {
+        if (text.Length > MaxScrubInput) text = FitExcerpt(text, MaxScrubInput);
         // Control characters but tab and newline are refused by the service: take them out first, so a report never fails on one.
         text = ControlChar().Replace(text.Replace("\r", ""), "");
         text = AppLog.Personal(AppLog.Redact(text), userName, profile);
@@ -309,16 +361,15 @@ public static partial class CrashReport
         text = SharePath().Replace(text, "<path>");
         text = WindowsPath().Replace(text, "<path>");
         text = UnixHome().Replace(text, "<path>");
-        text = Email().Replace(text, "<email>");
+        text = EmailPattern.Replace(text, "<email>");
         text = GuidId().Replace(text, "<id>");
         text = IpAddress().Replace(text, "<address>");
-        text = HostName().Replace(text, "<host>");
+        text = HostNamePattern.Replace(text, match =>
+            ReportNames.IsInStackFrame(text, match.Index, match.Length) || ReportNames.IsDotNetNamespaceToken(text, match.Index, match.Length)
+                ? match.Value
+                : "<host>");
         if (machineName.Length >= 3)
-        {
-            var pattern = MachineRegexCache.GetOrAdd(machineName, static name =>
-                new Regex($@"(?<![A-Za-z0-9-]){Regex.Escape(name)}(?![A-Za-z0-9-])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled));
-            text = pattern.Replace(text, "<host>");
-        }
+            text = AppLog.ReplaceWholeToken(text, machineName, "<host>", dashIsWordChar: true);
         return LongNumber().Replace(text, "<id>");
     }
 

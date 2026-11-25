@@ -1,7 +1,25 @@
 export const TOP_FRAMES = 3
+export const VERSION_SKEW = 'version-skew'
+export const TEST_RUN = 'test-run'
 
 const FRAME = /^\s*at\s+(.+?)\s*$/
 const ERROR_LINE = /^Error \([^)]*\):\s*(.*)$/
+const CI_OS_BUILD = /^10\.0\.26100(?:\.|$)/
+const CI_RUNNER_MARKER = /\b(?:windows-2025|GITHUB_ACTIONS|RUNNER_[A-Z0-9_]+|runner-[a-z0-9-]+)\b/i
+const TEST_SUITE_LOG = /\b(?:GpuPreferenceTests|WootingTests)\b/
+const PLUMBING_FRAMES = [
+  /^System\.Runtime\.CompilerServices\./,
+  /^System\.Runtime\.ExceptionServices\.ExceptionDispatchInfo\./,
+  /^System\.Threading\.Tasks\.(Task|ValueTask)\b/,
+  /^System\.Threading\.ExecutionContext\./,
+  /^Microsoft\.UI\.Dispatching\./,
+  /^WinRT\.ExceptionHelpers\./,
+  /^ABI\.System\./,
+]
+
+function isPlumbingFrame(frame) {
+  return PLUMBING_FRAMES.some((pattern) => pattern.test(frame))
+}
 
 export function normalizeFrame(frame) {
   return frame
@@ -29,6 +47,27 @@ export function normalizeMessage(line) {
 export function signatureOf(report) {
   const lines = report.excerpt.split('\n')
   const frames = []
+  const fallback = []
+  for (const line of lines) {
+    const match = FRAME.exec(line)
+    if (!match) continue
+    const frame = normalizeFrame(match[1])
+    if (!frame) continue
+    if (fallback.length < TOP_FRAMES && !fallback.includes(frame)) fallback.push(frame)
+    if (isPlumbingFrame(frame)) continue
+    if (!frames.includes(frame)) frames.push(frame)
+    if (frames.length === TOP_FRAMES) break
+  }
+  const picked = frames.length ? frames : fallback
+  const errorLine = lines.map((line) => ERROR_LINE.exec(line)?.[1]).find(Boolean)
+    ?? lines.find((line) => line.includes(report.errorType))
+    ?? ''
+  return { frames: picked, message: normalizeMessage(errorLine) }
+}
+
+export function legacySignatureOf(report) {
+  const lines = report.excerpt.split('\n')
+  const frames = []
   for (const line of lines) {
     const match = FRAME.exec(line)
     if (!match) continue
@@ -42,9 +81,44 @@ export function signatureOf(report) {
   return { frames, message: normalizeMessage(errorLine) }
 }
 
-export async function fingerprintOf(report) {
-  const { frames, message } = signatureOf(report)
-  const basis = [report.app, report.errorType, ...(frames.length ? frames : [message])].join('\n')
+export function errorMessageOf(report) {
+  const lines = String(report?.excerpt ?? '').split('\n')
+  const errorLine = lines.map((line) => ERROR_LINE.exec(line)?.[1]).find(Boolean)
+    ?? lines.find((line) => report?.errorType && line.includes(report.errorType))
+    ?? ''
+  return errorLine.trim()
+}
+
+export function isTestRun(report) {
+  if (!report || typeof report !== 'object') return false
+  if (String(report.version ?? '').trim() === '9.9.9') return true
+  const excerpt = String(report.excerpt ?? '')
+  if (TEST_SUITE_LOG.test(excerpt)) return true
+  if (CI_OS_BUILD.test(String(report.osBuild ?? '')) && CI_RUNNER_MARKER.test(excerpt)) return true
+  return false
+}
+
+export function isVersionSkew(report) {
+  if (report?.errorType !== 'HostCallFailed') return false
+  const message = errorMessageOf(report)
+  return /^(?:(?:HostCallFailed|RPC\s+[^:]+):\s*)?Unknown method:/i.test(message)
+}
+
+export function groupTypeOf(report) {
+  if (isTestRun(report)) return TEST_RUN
+  return isVersionSkew(report) ? VERSION_SKEW : report.errorType
+}
+
+async function hashSignature(app, errorType, { frames, message }) {
+  const basis = [app, errorType, ...(frames.length ? frames : [message])].join('\n')
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(basis)))
   return [...digest.slice(0, 8)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export async function fingerprintOf(report) {
+  return hashSignature(report.app, groupTypeOf(report), signatureOf(report))
+}
+
+export async function legacyFingerprintOf(report) {
+  return hashSignature(report.app, report.errorType, legacySignatureOf(report))
 }

@@ -38,6 +38,7 @@ public static partial class AppLog
         [.. ProperWord().Matches(error).Select(m => m.Value).Where(word => !CommonWords.Contains(word)).Distinct(StringComparer.OrdinalIgnoreCase).Take(6)];
 
     private const int MaxReportEntries = 300;
+    private const int MaxReportChars = 256 * 1024;
 
     [GeneratedRegex(@"^\[(?<at>[0-9T:.\-]+Z)\] (?<level>[A-Z]+) ", RegexOptions.CultureInvariant)]
     private static partial Regex EntryHead();
@@ -63,7 +64,11 @@ public static partial class AppLog
             .AppendLine($"Error ({(string.IsNullOrWhiteSpace(area) ? "app" : area)}): {error.Trim()}")
             .AppendLine()
             .AppendLine(picked.Count == 0 ? "Nothing in Exo's log about it from the last two hours." : $"Exo's log ({picked.Count} entries):");
-        foreach (var entry in picked) report.AppendLine(entry);
+        foreach (var entry in picked)
+        {
+            if (report.Length + entry.Length + 2 > MaxReportChars) break;
+            report.AppendLine(entry);
+        }
         return Personal(Redact(report.ToString()), userName, profile);
     }
 
@@ -85,9 +90,41 @@ public static partial class AppLog
     internal static string Personal(string text, string userName, string profile)
     {
         if (profile.Length > 3) text = text.Replace(profile, "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
-        if (userName.Length >= 3) text = Regex.Replace(text, $@"(?<![A-Za-z0-9]){Regex.Escape(userName)}(?![A-Za-z0-9])", "<user>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (userName.Length >= 3) text = ReplaceWholeToken(text, userName, "<user>", dashIsWordChar: false);
         return text;
     }
+
+    internal static string ReplaceWholeToken(string text, string token, string replacement, bool dashIsWordChar)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(token)) return text;
+        var idx = text.IndexOf(token, 0, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return text;
+        StringBuilder? sb = null;
+        var copied = 0;
+        while (idx >= 0)
+        {
+            var beforeOk = idx == 0 || !IsTokenChar(text[idx - 1], dashIsWordChar);
+            var end = idx + token.Length;
+            var afterOk = end >= text.Length || !IsTokenChar(text[end], dashIsWordChar);
+            if (beforeOk && afterOk)
+            {
+                sb ??= new StringBuilder(text.Length);
+                sb.Append(text, copied, idx - copied).Append(replacement);
+                copied = end;
+                idx = end < text.Length ? text.IndexOf(token, end, StringComparison.OrdinalIgnoreCase) : -1;
+            }
+            else
+            {
+                idx = idx + 1 < text.Length ? text.IndexOf(token, idx + 1, StringComparison.OrdinalIgnoreCase) : -1;
+            }
+        }
+        if (sb is null) return text;
+        sb.Append(text, copied, text.Length - copied);
+        return sb.ToString();
+    }
+
+    private static bool IsTokenChar(char c, bool dashIsWordChar) =>
+        char.IsAsciiLetterOrDigit(c) || (dashIsWordChar && c == '-');
 
     /// <summary>This run's and the last run's log, oldest first, read beside the writer.</summary>
     internal static IEnumerable<string> RecentLines()

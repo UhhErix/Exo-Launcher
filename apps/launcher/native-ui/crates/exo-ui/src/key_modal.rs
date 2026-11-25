@@ -1,13 +1,16 @@
 use crate::events::EventRegistry;
+use crate::settings::set_btn;
 use crate::state::{AppState, NoticeTone};
 use exo_kit::{
-    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_BASE, SPRING_QUICK, TRANSPARENT,
-    apply_glass, bad, fg_muted, glass_button, glass_panel_opt, glass_rim_bottom, glass_rim_top,
-    good, hover_fill, modal_card_transition, pressed_fill, primary_button_dyn, store_logo,
-    type_body, type_section, type_small,
+    FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE, SPRING_QUICK, TRANSPARENT,
+    bad, fg_faint, fg_muted, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good,
+    hover_fill, modal_card_transition, pressed_fill, primary_button_dyn, scrim_fill, store_logo,
+    subtle_fill, type_body, type_control, type_section, type_small,
 };
 use exo_rpc::{ActionResult, KeyPreview, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW};
-use rune::{Cursor, El, Key, Transition, Tx, col, edit_access, el, row, text, text_input};
+use rune::{
+    Cursor, El, Key, LiquidGlass, Transition, Tx, col, edit_access, el, row, text, text_input,
+};
 use serde_json::json;
 
 const KEY_STORES: [(&str, &str); 3] = [("steam", "Steam"), ("epic", "Epic"), ("gog", "GOG")];
@@ -214,18 +217,16 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         })
         .on_submit(|s: &mut AppState, tx| s.activate_key_with_store(tx));
 
-    let input_box = apply_glass(
-        row()
-            .w_full()
-            .h(32.0)
-            .px(12.0)
-            .center_y()
-            .cursor(Cursor::Text)
-            .radius(RADIUS_PILL)
-            .child(input),
-        ExoGlass::Control,
-        false,
-    );
+    let input_box = row()
+        .w_full()
+        .h(32.0)
+        .px(12.0)
+        .center_y()
+        .cursor(Cursor::Text)
+        .radius(RADIUS_PILL)
+        .fill(glass_still_control_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .child(input);
 
     let mut chips = row().gap(6.0).center_y();
     for (id, label) in KEY_STORES {
@@ -303,7 +304,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .key_modal
         .copied_until
         .is_some_and(|until| s.clock_secs() < until);
-    let mut copy_btn = glass_button(
+    let mut copy_btn = set_btn(
         "key-copy",
         if copied_active { "Copied" } else { "Copy key" },
         None,
@@ -314,7 +315,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
     } else {
         Cursor::Default
     })
-    .opacity(if can_submit { 1.0 } else { 0.45 });
+    .opacity(if can_submit { 1.0 } else { 0.4 });
     if can_submit {
         copy_btn = copy_btn.on_press_tx(|s: &mut AppState, tx| s.copy_key_to_clipboard(tx));
     }
@@ -324,17 +325,24 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
     } else {
         format!("Open {}", store_label_for_key(&s.key_modal.store))
     };
-    let mut submit_btn = primary_button_dyn("key-submit", open_label, None)
-        .disabled(!can_submit)
-        .cursor(if can_submit {
-            Cursor::Pointer
-        } else {
-            Cursor::NotAllowed
-        })
-        .opacity(if can_submit { 1.0 } else { 0.45 });
-    if can_submit {
-        submit_btn = submit_btn.on_press_tx(|s: &mut AppState, tx| s.activate_key_with_store(tx));
-    }
+    let submit_btn = if can_submit {
+        primary_button_dyn("key-submit", open_label, None)
+            .on_press_tx(|s: &mut AppState, tx| s.activate_key_with_store(tx))
+    } else {
+        row()
+            .key("key-submit")
+            .role("button")
+            .label(open_label.clone())
+            .disabled(true)
+            .hit()
+            .cursor(Cursor::NotAllowed)
+            .h(32.0)
+            .px(14.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(subtle_fill())
+            .child(text(open_label).font(type_control()).color(fg_faint()))
+    };
 
     let footer = row()
         .w_full()
@@ -342,20 +350,28 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .gap(8.0)
         .child(copy_btn)
         .child(
-            glass_button("key-cancel", "Cancel", None)
-                .on_press(|s: &mut AppState| s.close_key_modal()),
+            set_btn("key-cancel", "Cancel", None).on_press(|s: &mut AppState| s.close_key_modal()),
         )
         .child(submit_btn);
 
     content = content.child(footer);
 
-    let card = glass_panel_opt("activate-key-modal", 420.0, blur)
+    let _ = blur;
+    let card = col()
+        .key("activate-key-modal")
+        .w(420.0)
         .role("dialog")
         .label("Activate key")
+        .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(true, |s: &mut AppState| s.close_key_modal())
-        .modal_scrim(BG.alpha(0.52))
+        .modal_scrim(scrim_fill())
         .child(content);
 
     let host = col()

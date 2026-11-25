@@ -216,4 +216,26 @@ public sealed class CrashReportTests
     {
         Assert.Equal("https://reports.getexo.app/v1/report", CrashReport.Endpoint);
     }
+
+    [Fact]
+    public void ScrubTimeoutFallsBackToSafeExcerptWithoutCrashing()
+    {
+        var payload = CrashReport.Build(
+            "HostCallFailed",
+            @"C:\Users\Erix\secret.txt on DESKTOP-K3J9 for Erix",
+            "3.30.3",
+            "10.0.26300.0",
+            UserName,
+            Profile,
+            Machine,
+            "HostCallFailed",
+            (_, _, _, _) => throw new RegexMatchTimeoutException("input", "pattern", TimeSpan.FromSeconds(5)));
+
+        Assert.Equal("HostCallFailed", payload.ErrorType);
+        Assert.Equal("3.30.3", payload.Version);
+        Assert.Contains("scrub fallback", payload.Excerpt);
+        Assert.DoesNotContain(UserName, payload.Excerpt);
+        Assert.DoesNotContain(Machine, payload.Excerpt);
+        Assert.DoesNotContain(@"C:\", payload.Excerpt);
+    }
 }

@@ -1,5 +1,30 @@
 [
   {
+    "version": "3.31.0",
+    "items": [
+      {
+        "icon": "Compress",
+        "title": "Smaller install and faster startup",
+        "detail": "Trims unused runtime components and compresses the changelog so Exo takes less disk space and opens faster."
+      },
+      {
+        "icon": "Suspend",
+        "title": "Cleaner background WebView2 memory",
+        "detail": "Releases temporary store, gift, preview, and music browser hosts promptly on close so background processes do not linger."
+      },
+      {
+        "icon": "FrameGen",
+        "title": "Updated capture hook, GameInput, and frame generation",
+        "detail": "Updates the bundled OBS game capture hook to 33.0.3, GameInput to 4.1.315, OptiScaler to 0.9.5, MFG-Unlocker to 1.7.2, and Exo Shaders' ValvePak 7."
+      },
+      {
+        "icon": "Info",
+        "title": "More reliable crash reports and helper timeouts",
+        "detail": "Fixes crashes from timed-out helper output streams and keeps diagnostic reports readable without over-redacting harmless names."
+      }
+    ]
+  },
+  {
     "version": "3.29.0",
     "items": [
       {

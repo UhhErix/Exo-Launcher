@@ -5,19 +5,29 @@ use crate::pc_state::{
 use crate::pc_wp9_actions::UndoTarget;
 use crate::state::AppState;
 use exo_kit::{
-    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, TRANSPARENT, bad, fg_muted, float_line, good, hover_fill, icon_app_window,
-    icon_check, icon_chevron_down, icon_search, pressed_fill, scaled, subtle_fill, type_body,
-    type_control, type_small, warn,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK,
+    TRANSPARENT, bad, fg_muted, float_line, glass_rim_bottom, glass_rim_top, good, hex, hover_fill,
+    icon_check, icon_chevron_down, icon_chevron_up, icon_search, pressed_fill, scaled,
+    switch_pill_keyed, type_body, type_control, type_section, type_small, warn,
 };
-use exo_rpc::{AppFind, AppLeftover, InstalledAppItem, LeftoverSummary};
+use exo_rpc::{
+    AppFind, AppLeftover, InstalledAppItem, LeftoverSummary, StartupItem, StartupRemovedItem,
+};
 use rune::{
-    Cursor, El, Key, ScrollSpec, SurfaceFit, TextStyle, Transition, col, edit_access, el, row,
-    text, text_input,
+    Color, Cursor, El, Key, ScrollSpec, SurfaceFit, TextStyle, Transition, col, edit_access, el,
+    row, text, text_input,
 };
 
 const JUNK_WORTH: u64 = 100_000_000;
 const CACHE_WORTH: u64 = 50_000_000;
+
+fn apps_secondary() -> Color {
+    hex(0xdcdcdc, 1.0)
+}
+
+fn apps_danger_fg() -> Color {
+    hex(0xff7979, 1.0)
+}
 
 fn apps_pill(key: &'static str, label: &'static str, active: bool) -> El {
     el().key(key)
@@ -36,11 +46,11 @@ fn apps_pill(key: &'static str, label: &'static str, active: bool) -> El {
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
         .motion(SPRING_QUICK)
-        .child(
-            text(label)
-                .font(type_control())
-                .color(if active { PRIMARY_FG } else { fg_muted() }),
-        )
+        .child(text(label).font(type_control()).color(if active {
+            PRIMARY_FG
+        } else {
+            apps_secondary()
+        }))
 }
 
 fn flat_btn(
@@ -51,26 +61,20 @@ fn flat_btn(
     disabled: bool,
 ) -> El {
     let lbl = label.into();
-    let (fill, hover_bg, press_bg, fg, border_col) = if danger {
+    let (fill, hover_bg, press_bg, fg) = if danger {
         (
-            bad(),
-            bad().alpha(0.90),
-            bad().alpha(0.80),
-            PRIMARY_FG,
-            bad(),
-        )
-    } else if primary {
-        (FG, FG.alpha(0.90), FG.alpha(0.82), PRIMARY_FG, FG)
-    } else {
-        (
-            subtle_fill(),
+            FG.alpha(0.03),
             hover_fill(),
             pressed_fill(),
-            FG,
-            float_line(),
+            apps_danger_fg(),
         )
+    } else if primary {
+        (FG, FG.alpha(0.90), FG.alpha(0.82), PRIMARY_FG)
+    } else {
+        (FG.alpha(0.03), hover_fill(), pressed_fill(), FG)
     };
-    el().key(key)
+    let btn = el()
+        .key(key)
         .role("button")
         .label(lbl.clone())
         .cursor(if disabled {
@@ -83,16 +87,20 @@ fn flat_btn(
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(28.0)
-        .px(12.0)
+        .h(26.0)
+        .px(10.0)
         .center()
         .radius(RADIUS_PILL)
         .fill(fill)
         .hover(hover_bg)
         .press(press_bg)
-        .border(1.0, border_col)
         .motion(SPRING_QUICK)
-        .child(text(lbl).font(type_small()).color(fg))
+        .child(text(lbl).font(type_control()).color(fg));
+    if primary {
+        btn.border(1.0, FG)
+    } else {
+        btn.border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+    }
 }
 
 fn names_summary(list: &[String]) -> String {
@@ -198,7 +206,9 @@ fn ready_row(
         .child(
             row()
                 .w_full()
-                .py(10.0)
+                .min_h(60.0)
+                .pt(11.0)
+                .pb(9.0)
                 .gap(12.0)
                 .justify_between()
                 .center_y()
@@ -206,7 +216,7 @@ fn ready_row(
                     col()
                         .grow(1.0)
                         .min_w(0.0)
-                        .gap(2.0)
+                        .gap(5.0)
                         .child(
                             text(title)
                                 .font(type_control())
@@ -214,7 +224,8 @@ fn ready_row(
                                 .wrap(),
                         )
                         .children(
-                            detail.map(|d| text(d).font(type_small()).color(fg_muted()).wrap()),
+                            detail
+                                .map(|d| text(d).font(type_small()).color(apps_secondary()).wrap()),
                         )
                         .children(error.map(|e| text(e).font(type_small()).color(bad()).wrap())),
                 )
@@ -694,8 +705,16 @@ fn ready_section(s: &AppState, programs: &[InstalledAppItem]) -> El {
             let j_names: Vec<String> = junk
                 .iter()
                 .filter(|i| i.bytes > 0)
-                .map(|i| i.name.clone())
+                .map(|i| i.name.to_lowercase())
                 .collect();
+            let junk_detail = (!j_names.is_empty()).then(|| {
+                let s = names_summary(&j_names);
+                let mut chars = s.chars();
+                match chars.next() {
+                    Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                    None => s,
+                }
+            });
             let is_armed = armed == Some("junk-clean");
             let lbl = if is_armed {
                 format!("Delete {}?", format_bytes(total))
@@ -704,7 +723,7 @@ fn ready_section(s: &AppState, programs: &[InstalledAppItem]) -> El {
             };
             sec = sec.child(ready_row(
                 format!("{} of junk", format_bytes(total)),
-                (!j_names.is_empty()).then(|| names_summary(&j_names)),
+                junk_detail,
                 false,
                 s.pc.junk_cleaned.as_ref().and_then(|(_, e)| e.clone()),
                 flat_btn("apps-junk-clean".into(), lbl, false, true, busy).on_press(
@@ -806,40 +825,6 @@ fn ready_section(s: &AppState, programs: &[InstalledAppItem]) -> El {
         ));
     }
 
-    if s.pc.apps_list.as_ref().is_some_and(|l| l.edge_removed) {
-        sec = sec.child(ready_row(
-            "Microsoft Edge is blocked from returning".into(),
-            Some("Allow Windows to install Microsoft Edge again.".into()),
-            false,
-            None,
-            flat_btn("apps-allow-edge".into(), "Allow Edge", false, false, busy)
-                .on_press(|s: &mut AppState| s.allow_edge_browser()),
-        ));
-    }
-
-    let add_back: Vec<_> =
-        s.pc.windows_packages
-            .iter()
-            .filter(|p| p.add_back)
-            .collect();
-    for pkg in add_back {
-        let pid = pkg.id.clone();
-        sec = sec.child(ready_row(
-            format!("{} (removed)", pkg.name),
-            pkg.publisher.clone(),
-            false,
-            s.pc.apps_packages_error.clone(),
-            flat_btn(
-                format!("apps-pkg-addback-{}", pkg.id),
-                "Add back",
-                false,
-                false,
-                busy,
-            )
-            .on_press(move |s: &mut AppState| s.add_back_windows_package(&pid)),
-        ));
-    }
-
     sec
 }
 
@@ -884,17 +869,27 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
         el().size(28.0, 28.0)
             .radius(RADIUS_SMALL)
             .center()
-            .fill(FG.alpha(0.05))
+            .fill(FG.alpha(0.06))
             .child(
                 el().size(20.0, 20.0)
                     .pixels_fit(img.pixels(), SurfaceFit::Fit),
             )
     } else {
+        let initial = app
+            .name
+            .chars()
+            .next()
+            .map(|c| c.to_string())
+            .unwrap_or_default();
         el().size(28.0, 28.0)
             .radius(RADIUS_SMALL)
             .center()
-            .fill(FG.alpha(0.05))
-            .child(icon_app_window(15.0, fg_muted()))
+            .fill(FG.alpha(0.06))
+            .child(
+                text(initial)
+                    .font(TextStyle::new(scaled(12.0), 600.0))
+                    .color(fg_muted()),
+            )
     };
 
     let sub = app
@@ -939,8 +934,8 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             .hit()
             .press_on_down()
             .press_scale(PRESS_SCALE)
-            .h(30.0)
-            .px(12.0)
+            .h(26.0)
+            .px(10.0)
             .center()
             .radius(RADIUS_PILL)
             .fill(bad())
@@ -958,7 +953,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             })
             .child(
                 text("Confirm uninstall")
-                    .font(TextStyle::new(scaled(12.0), 500.0))
+                    .font(type_control())
                     .color(PRIMARY_FG),
             );
         row()
@@ -966,6 +961,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             .absolute(0.0, 0.0)
             .w_full()
             .h_full()
+            .pr(1.0)
             .justify_end()
             .center_y()
             .transition(Transition::opacity())
@@ -985,26 +981,26 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             .hit()
             .press_on_down()
             .press_scale(PRESS_SCALE)
-            .h(30.0)
-            .px(12.0)
+            .h(26.0)
+            .px(10.0)
             .center()
             .radius(RADIUS_PILL)
-            .fill(BG)
-            .border(1.0, float_line())
+            .fill(FG.alpha(0.03))
+            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .hover(hover_fill())
             .press(pressed_fill())
-            .group_opacity(0.0, 1.0)
             .on_press(move |s: &mut AppState| s.arm_or_confirm_uninstall(&id))
             .child(
                 text(action_word)
-                    .font(TextStyle::new(scaled(12.0), 500.0))
-                    .color(bad()),
+                    .font(type_control())
+                    .color(apps_danger_fg()),
             );
         row()
             .key(format!("app-uninst-slot-{}", app.id))
             .absolute(0.0, 0.0)
             .w_full()
             .h_full()
+            .pr(1.0)
             .justify_end()
             .center_y()
             .transition(Transition::opacity())
@@ -1013,7 +1009,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
 
     let mut content_row = row()
         .w_full()
-        .min_h(51.0)
+        .min_h(51.5)
         .py(6.0)
         .gap(12.0)
         .center_y()
@@ -1024,17 +1020,20 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             col()
                 .grow(1.0)
                 .min_w(0.0)
-                .gap(2.0)
+                .pt(1.0)
+                .gap(6.0)
                 .child(
                     text(app.name.clone())
                         .font(type_control())
                         .color(FG)
                         .truncate(),
                 )
-                .children(
-                    (!sub.is_empty())
-                        .then(|| text(sub).font(type_small()).color(fg_muted()).truncate()),
-                )
+                .children((!sub.is_empty()).then(|| {
+                    text(sub)
+                        .font(type_small())
+                        .color(apps_secondary())
+                        .truncate()
+                }))
                 .children(row_err.map(|e| text(e.clone()).font(type_small()).color(bad()).wrap())),
         );
     if show_last_used {
@@ -1042,7 +1041,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             el().w(scaled(112.0)).child(
                 text(last_used)
                     .font(type_small())
-                    .color(fg_muted())
+                    .color(apps_secondary())
                     .truncate(),
             ),
         );
@@ -1050,27 +1049,35 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
     content_row = content_row
         .child(
             row()
-                .w(scaled(80.0))
+                .w(scaled(72.0))
+                .pt(1.0)
                 .justify_end()
-                .child(text(size_txt).font(type_small()).color(fg_muted())),
+                .child(text(size_txt).font(type_small()).color(apps_secondary())),
         )
-        .child(el().w(scaled(140.0)).h(30.0).child(action_slot));
+        .child(el().w(scaled(108.0)).h(28.0).pt(2.0).child(action_slot));
 
     col()
         .key(format!("app-row-{}", app.id))
         .w_full()
-        .min_h(52.0)
+        .min_h(52.5)
         .child(el().w_full().h(1.0).fill(float_line()))
         .child(content_row)
 }
 
 fn sort_head_btn(key: &'static str, label: &'static str, by: AppsSortBy, s: &AppState) -> El {
     let active = s.pc.apps_sort_by == by;
-    let arrow = if active {
-        if s.pc.apps_sort_back { " ↑" } else { " ↓" }
-    } else {
-        ""
-    };
+    let mut inner = row().gap(4.0).center_y().child(
+        text(label)
+            .font(TextStyle::new(scaled(12.0), 500.0))
+            .color(if active { FG } else { apps_secondary() }),
+    );
+    if active {
+        inner = inner.child(if s.pc.apps_sort_back {
+            icon_chevron_up(12.0, FG)
+        } else {
+            icon_chevron_down(12.0, FG)
+        });
+    }
     el().key(key)
         .role("button")
         .label(format!("Sort by {label}"))
@@ -1085,11 +1092,588 @@ fn sort_head_btn(key: &'static str, label: &'static str, by: AppsSortBy, s: &App
                 s.pc.apps_sort_back = false;
             }
         })
+        .child(inner)
+}
+
+fn startup_detail(item: &StartupItem) -> String {
+    if let Some(ref st) = item.status
+        && !st.is_empty()
+    {
+        return st.clone();
+    }
+    if item.missing {
+        return "Its program is gone: safe to turn off".into();
+    }
+    let word = match item.verdict.as_deref() {
+        Some("remove") => Some("Safe to turn off"),
+        Some("keep") => Some("Worth keeping"),
+        _ => None,
+    };
+    if item.verdict.as_deref() == Some("remove") {
+        return word.unwrap_or("").into();
+    }
+    if let Some(ref without) = item.without
+        && !without.is_empty()
+    {
+        return without.clone();
+    }
+    if let Some(ref does) = item.does
+        && !does.is_empty()
+    {
+        return does.clone();
+    }
+    if let Some(w) = word {
+        return w.into();
+    }
+    if !item.command.is_empty() {
+        return format!("Runs {}", item.command);
+    }
+    item.source.clone()
+}
+
+fn is_windows_startup_id(id: &str) -> bool {
+    id.starts_with("run:")
+        || id.starts_with("run32:")
+        || id.starts_with("runonce:")
+        || id.starts_with("runonce32:")
+        || id.starts_with("folder:")
+        || id.starts_with("package:")
+}
+
+fn format_turned_off_day(iso: &str) -> String {
+    let date_part = iso.split('T').next().unwrap_or(iso);
+    let mut parts = date_part.split('-');
+    let (Some(y), Some(m), Some(d)) = (parts.next(), parts.next(), parts.next()) else {
+        return format!("Turned off {date_part}");
+    };
+    let month = match m.parse::<u32>().ok() {
+        Some(1) => "Jan",
+        Some(2) => "Feb",
+        Some(3) => "Mar",
+        Some(4) => "Apr",
+        Some(5) => "May",
+        Some(6) => "Jun",
+        Some(7) => "Jul",
+        Some(8) => "Aug",
+        Some(9) => "Sep",
+        Some(10) => "Oct",
+        Some(11) => "Nov",
+        Some(12) => "Dec",
+        _ => return format!("Turned off {date_part}"),
+    };
+    let day = d.parse::<u32>().unwrap_or(1);
+    format!("Turned off {month} {day}, {y}")
+}
+
+fn startup_tag_pill(label: &str, tone: Option<&str>) -> El {
+    let color = match tone {
+        Some("good") => good(),
+        Some("warn") => warn(),
+        _ => fg_muted(),
+    };
+    el().px(8.0)
+        .py(2.0)
+        .radius(RADIUS_PILL)
+        .fill(FG.alpha(0.06))
+        .center()
         .child(
-            text(format!("{label}{arrow}"))
+            text(label.to_string())
                 .font(TextStyle::new(scaled(12.0), 500.0))
-                .color(if active { FG } else { fg_muted() }),
+                .color(color),
         )
+}
+
+fn startup_icon_box(s: &AppState, name: &str, icon_key: Option<&str>) -> El {
+    if let Some(key) = icon_key
+        && let Some(img) = s.app_icon_image(key)
+    {
+        return el()
+            .size(28.0, 28.0)
+            .radius(RADIUS_SMALL)
+            .center()
+            .fill(FG.alpha(0.06))
+            .child(
+                el().size(20.0, 20.0)
+                    .pixels_fit(img.pixels(), SurfaceFit::Fit),
+            );
+    }
+    let initial = name
+        .chars()
+        .next()
+        .map(|c| c.to_string())
+        .unwrap_or_default();
+    el().size(28.0, 28.0)
+        .radius(RADIUS_SMALL)
+        .center()
+        .fill(FG.alpha(0.06))
+        .child(
+            text(initial)
+                .font(TextStyle::new(scaled(12.0), 600.0))
+                .color(apps_secondary()),
+        )
+}
+
+struct GroupedStartupItem<'a> {
+    item: &'a StartupItem,
+    ids: Vec<String>,
+}
+
+struct GroupedStartupRemoved<'a> {
+    item: &'a StartupRemovedItem,
+    ids: Vec<String>,
+}
+
+struct StartupOffRow {
+    id: String,
+    ids: Vec<String>,
+    name: String,
+    icon: Option<String>,
+    detail: String,
+    amount: String,
+    locked: bool,
+}
+
+fn group_startup_items<'a>(
+    items: impl Iterator<Item = &'a StartupItem>,
+) -> Vec<GroupedStartupItem<'a>> {
+    let mut out: Vec<GroupedStartupItem<'a>> = Vec::new();
+    let mut idx_by_name: std::collections::HashMap<&'a str, usize> =
+        std::collections::HashMap::new();
+    for item in items {
+        if let Some(&idx) = idx_by_name.get(item.name.as_str()) {
+            out[idx].ids.push(item.id.clone());
+        } else {
+            idx_by_name.insert(item.name.as_str(), out.len());
+            out.push(GroupedStartupItem {
+                item,
+                ids: vec![item.id.clone()],
+            });
+        }
+    }
+    out
+}
+
+fn group_startup_removed<'a>(
+    items: impl Iterator<Item = &'a StartupRemovedItem>,
+) -> Vec<GroupedStartupRemoved<'a>> {
+    let mut out: Vec<GroupedStartupRemoved<'a>> = Vec::new();
+    let mut idx_by_name: std::collections::HashMap<&'a str, usize> =
+        std::collections::HashMap::new();
+    for item in items {
+        if let Some(&idx) = idx_by_name.get(item.name.as_str()) {
+            out[idx].ids.push(item.id.clone());
+        } else {
+            idx_by_name.insert(item.name.as_str(), out.len());
+            out.push(GroupedStartupRemoved {
+                item,
+                ids: vec![item.id.clone()],
+            });
+        }
+    }
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+fn startup_line_row(
+    s: &AppState,
+    key: String,
+    name: &str,
+    icon_key: Option<&str>,
+    tag_label: &str,
+    tag_tone: Option<&str>,
+    detail: String,
+    amount: String,
+    error: Option<String>,
+    control: El,
+) -> El {
+    let leading = startup_icon_box(s, name, icon_key);
+    let title_row = row()
+        .w_full()
+        .gap(8.0)
+        .center_y()
+        .child(
+            text(name.to_string())
+                .font(type_control())
+                .color(FG)
+                .truncate(),
+        )
+        .child(startup_tag_pill(tag_label, tag_tone));
+    let copy = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(5.0)
+        .child(title_row)
+        .children((!detail.is_empty()).then(|| {
+            text(detail)
+                .font(type_small())
+                .color(apps_secondary())
+                .truncate()
+        }))
+        .children(error.map(|e| text(e).font(type_small()).color(bad()).wrap()));
+
+    col()
+        .key(key)
+        .w_full()
+        .min_h(55.0)
+        .child(el().w_full().h(1.0).fill(float_line()))
+        .child(
+            row()
+                .w_full()
+                .min_h(54.0)
+                .py(6.0)
+                .gap(12.0)
+                .center_y()
+                .hover(hover_fill())
+                .radius(RADIUS_SMALL)
+                .child(leading)
+                .child(copy)
+                .child(
+                    row()
+                        .w(scaled(72.0))
+                        .justify_end()
+                        .child(text(amount).font(type_small()).color(apps_secondary())),
+                )
+                .child(
+                    row()
+                        .w(scaled(108.0))
+                        .justify_end()
+                        .center_y()
+                        .child(control),
+                ),
+        )
+}
+
+fn startup_group_heading(title: String) -> El {
+    row()
+        .w_full()
+        .h(26.0)
+        .px(8.0)
+        .pb(6.0)
+        .center_y()
+        .child(text(title).font(type_section()).color(FG))
+}
+
+fn startup_tab_body(s: &AppState, q: &str) -> El {
+    let searching = !q.is_empty();
+    let items =
+        s.pc.startup_list
+            .as_ref()
+            .map(|l| l.items.as_slice())
+            .unwrap_or(&[]);
+    let removed_items =
+        s.pc.startup_list
+            .as_ref()
+            .map(|l| l.removed.as_slice())
+            .unwrap_or(&[]);
+
+    let grouped_items = group_startup_items(items.iter().filter(|i| {
+        if !searching {
+            return true;
+        }
+        let hay = format!(
+            "{} {} {}",
+            i.name,
+            i.publisher.as_deref().unwrap_or(""),
+            i.command
+        )
+        .to_lowercase();
+        hay.contains(q)
+    }));
+    let grouped_removed = group_startup_removed(
+        removed_items
+            .iter()
+            .filter(|r| !searching || r.name.to_lowercase().contains(q)),
+    );
+
+    let mut broken: Vec<&GroupedStartupItem> = Vec::new();
+    let mut on_items: Vec<&GroupedStartupItem> = Vec::new();
+    let mut bg_on_items: Vec<&GroupedStartupItem> = Vec::new();
+    let mut off_rows: Vec<StartupOffRow> = Vec::new();
+    let mut bg_off_rows: Vec<StartupOffRow> = Vec::new();
+
+    for g in &grouped_items {
+        if g.item.missing {
+            broken.push(g);
+        } else if g.item.source == "task" {
+            if g.item.enabled {
+                bg_on_items.push(g);
+            } else {
+                bg_off_rows.push(StartupOffRow {
+                    id: g.item.id.clone(),
+                    ids: g.ids.clone(),
+                    name: g.item.name.clone(),
+                    icon: g.item.icon.clone(),
+                    detail: startup_detail(g.item),
+                    amount: if g.item.memory > 0 {
+                        format_bytes(g.item.memory)
+                    } else {
+                        String::new()
+                    },
+                    locked: g.item.locked || g.item.read_only,
+                });
+            }
+        } else if g.item.enabled {
+            on_items.push(g);
+        } else {
+            off_rows.push(StartupOffRow {
+                id: g.item.id.clone(),
+                ids: g.ids.clone(),
+                name: g.item.name.clone(),
+                icon: g.item.icon.clone(),
+                detail: startup_detail(g.item),
+                amount: if g.item.memory > 0 {
+                    format_bytes(g.item.memory)
+                } else {
+                    String::new()
+                },
+                locked: g.item.locked || g.item.read_only,
+            });
+        }
+    }
+
+    for g in &grouped_removed {
+        let row = StartupOffRow {
+            id: g.item.id.clone(),
+            ids: g.ids.clone(),
+            name: g.item.name.clone(),
+            icon: g.item.icon.clone(),
+            detail: format_turned_off_day(&g.item.at),
+            amount: String::new(),
+            locked: g.item.locked,
+        };
+        if is_windows_startup_id(&g.item.id) {
+            off_rows.push(row);
+        } else {
+            bg_off_rows.push(row);
+        }
+    }
+
+    off_rows.sort_by_key(|a| a.name.to_lowercase());
+    bg_off_rows.sort_by_key(|a| a.name.to_lowercase());
+
+    let bg_count = bg_on_items.len() + bg_off_rows.len();
+
+    let mut list_col = col()
+        .key("pc-startup-scroll")
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .gap(17.0)
+        .pb(20.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        });
+
+    if broken.is_empty() && on_items.is_empty() && off_rows.is_empty() && bg_count == 0 {
+        let empty = if searching {
+            "Nothing matches"
+        } else {
+            "Nothing starts with Windows"
+        };
+        return list_col.child(
+            col()
+                .w_full()
+                .child(el().w_full().h(1.0).fill(float_line()))
+                .child(
+                    el().w_full()
+                        .py(16.0)
+                        .px(8.0)
+                        .child(text(empty).font(type_body()).color(fg_muted())),
+                ),
+        );
+    }
+
+    let render_on_row = |g: &GroupedStartupItem| -> El {
+        let required = g.item.locked || g.item.read_only;
+        let ids = g.ids.clone();
+        let err = g
+            .ids
+            .iter()
+            .find_map(|id| s.pc.startup_errors.get(id).cloned());
+        let amount = if g.item.memory > 0 {
+            format_bytes(g.item.memory)
+        } else {
+            String::new()
+        };
+        let ctrl = if required {
+            startup_tag_pill("Required", None)
+        } else {
+            switch_pill_keyed(
+                format!("startup-sw-{}", g.item.id),
+                format!("Turn off {}", g.item.name),
+                true,
+            )
+            .on_press(move |s: &mut AppState| s.toggle_startup_ids(ids.clone(), false))
+        };
+        startup_line_row(
+            s,
+            format!("startup-row-{}", g.item.id),
+            &g.item.name,
+            g.item.icon.as_deref(),
+            if required { "Required" } else { "On" },
+            if required { None } else { Some("good") },
+            startup_detail(g.item),
+            amount,
+            err,
+            ctrl,
+        )
+    };
+
+    let render_off_row = |r: &StartupOffRow| -> El {
+        let ids = r.ids.clone();
+        let err = r
+            .ids
+            .iter()
+            .find_map(|id| s.pc.startup_errors.get(id).cloned());
+        let ctrl = if r.locked {
+            startup_tag_pill("Required", None)
+        } else {
+            switch_pill_keyed(
+                format!("startup-sw-{}", r.id),
+                format!("Turn on {}", r.name),
+                false,
+            )
+            .on_press(move |s: &mut AppState| s.toggle_startup_ids(ids.clone(), true))
+        };
+        startup_line_row(
+            s,
+            format!("startup-row-{}", r.id),
+            &r.name,
+            r.icon.as_deref(),
+            "Off",
+            None,
+            r.detail.clone(),
+            r.amount.clone(),
+            err,
+            ctrl,
+        )
+    };
+
+    if !broken.is_empty() {
+        let mut head = row()
+            .w_full()
+            .px(8.0)
+            .pb(6.0)
+            .justify_between()
+            .center_y()
+            .child(
+                text(format!("Broken ({})", broken.len()))
+                    .font(type_section())
+                    .color(FG),
+            );
+        if broken.len() > 1 {
+            let all_ids: Vec<String> = broken.iter().flat_map(|g| g.ids.clone()).collect();
+            head = head.child(
+                flat_btn(
+                    "startup-clean-broken".into(),
+                    "Clean up broken",
+                    false,
+                    false,
+                    false,
+                )
+                .on_press(move |s: &mut AppState| s.toggle_startup_ids(all_ids.clone(), false)),
+            );
+        }
+        let mut sec = col().w_full().child(head);
+        for g in &broken {
+            let ids = g.ids.clone();
+            let err = g
+                .ids
+                .iter()
+                .find_map(|id| s.pc.startup_errors.get(id).cloned());
+            sec = sec.child(startup_line_row(
+                s,
+                format!("startup-row-{}", g.item.id),
+                &g.item.name,
+                g.item.icon.as_deref(),
+                "App removed",
+                Some("warn"),
+                "Its app was uninstalled · safe to remove".into(),
+                String::new(),
+                err,
+                flat_btn(
+                    format!("startup-rm-{}", g.item.id),
+                    "Remove",
+                    false,
+                    false,
+                    false,
+                )
+                .on_press(move |s: &mut AppState| s.toggle_startup_ids(ids.clone(), false)),
+            ));
+        }
+        list_col = list_col.child(sec);
+    }
+
+    if !on_items.is_empty() {
+        let mut sec = col().w_full().child(startup_group_heading(format!(
+            "Starts with Windows ({})",
+            on_items.len()
+        )));
+        for g in &on_items {
+            sec = sec.child(render_on_row(g));
+        }
+        list_col = list_col.child(sec);
+    }
+
+    if !off_rows.is_empty() {
+        let mut sec = col().w_full().child(startup_group_heading(format!(
+            "Turned off ({})",
+            off_rows.len()
+        )));
+        for r in &off_rows {
+            sec = sec.child(render_off_row(r));
+        }
+        list_col = list_col.child(sec);
+    }
+
+    if bg_count > 0 {
+        let mut sec = col().w_full();
+        if searching {
+            sec = sec.child(startup_group_heading(format!(
+                "Background tasks & services ({bg_count})"
+            )));
+        } else {
+            let open = s.pc.startup_bg_open;
+            sec = sec.child(el().w_full().h(1.0).fill(float_line())).child(
+                row()
+                    .key("startup-bg-toggle")
+                    .role("button")
+                    .label(format!("Background tasks & services ({bg_count})"))
+                    .cursor(Cursor::Pointer)
+                    .focusable(true)
+                    .hit()
+                    .w_full()
+                    .min_h(44.0)
+                    .px(8.0)
+                    .justify_between()
+                    .center_y()
+                    .radius(RADIUS_SMALL)
+                    .hover(hover_fill())
+                    .on_press(|s: &mut AppState| s.pc.startup_bg_open = !s.pc.startup_bg_open)
+                    .child(
+                        text(format!("Background tasks & services ({bg_count})"))
+                            .font(type_control())
+                            .color(apps_secondary()),
+                    )
+                    .child(if open {
+                        icon_chevron_up(14.0, apps_secondary())
+                    } else {
+                        icon_chevron_down(14.0, apps_secondary())
+                    }),
+            );
+        }
+        if s.pc.startup_bg_open || searching {
+            for g in &bg_on_items {
+                sec = sec.child(render_on_row(g));
+            }
+            for r in &bg_off_rows {
+                sec = sec.child(render_off_row(r));
+            }
+        }
+        list_col = list_col.child(sec);
+    }
+
+    list_col
 }
 
 pub(crate) fn apps_room(s: &AppState) -> El {
@@ -1130,7 +1714,7 @@ pub(crate) fn apps_room(s: &AppState) -> El {
                         .child(
                             text(format!("{main_count} apps · {}", format_bytes(total_bytes)))
                                 .font(type_body())
-                                .color(fg_muted()),
+                                .color(apps_secondary()),
                         ),
                 )
                 .child(
@@ -1157,6 +1741,7 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         )
         .child(
             row()
+                .hit()
                 .cursor(Cursor::Text)
                 .w(240.0)
                 .h(32.0)
@@ -1165,9 +1750,8 @@ pub(crate) fn apps_room(s: &AppState) -> El {
                 .gap(8.0)
                 .center_y()
                 .radius(RADIUS_PILL)
-                .liquid_glass(
-                    ExoGlass::Control.to_liquid_glass(false, exo_kit::glass_accessibility()),
-                )
+                .fill(TRANSPARENT)
+                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                 .child(icon_search(14.0, fg_muted()))
                 .child(
                     text_input(&s.pc.apps_query, type_body())
@@ -1182,164 +1766,7 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         );
 
     let body = if s.pc.apps_sub_tab == AppsSubTab::Startup {
-        let items =
-            s.pc.startup_list
-                .as_ref()
-                .map(|l| l.items.as_slice())
-                .unwrap_or(&[]);
-        let removed_items =
-            s.pc.startup_list
-                .as_ref()
-                .map(|l| l.removed.as_slice())
-                .unwrap_or(&[]);
-        let unneeded_count = items.iter().filter(|i| i.unneeded).count()
-            + s.pc
-                .startup_list
-                .as_ref()
-                .map(|l| l.extras.max(0) as usize)
-                .unwrap_or(0);
-
-        let mut list_col = col()
-            .key("pc-startup-scroll")
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .scroll(ScrollSpec {
-                stick_bottom: false,
-            });
-
-        if unneeded_count > 0 {
-            list_col = list_col.child(ready_row(
-                format!(
-                    "{unneeded_count} {} starting with Windows can go",
-                    if unneeded_count == 1 {
-                        "thing"
-                    } else {
-                        "things"
-                    }
-                ),
-                None,
-                false,
-                s.pc.startup_errors.get("clean").cloned(),
-                flat_btn(
-                    "startup-clean-all".into(),
-                    format!("Turn off {unneeded_count}"),
-                    true,
-                    false,
-                    false,
-                )
-                .on_press(|s: &mut AppState| s.startup_clean_unneeded()),
-            ));
-        }
-
-        for item in items.iter().filter(|i| {
-            q.is_empty()
-                || i.name.to_lowercase().contains(&q)
-                || i.publisher
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_lowercase()
-                    .contains(&q)
-        }) {
-            let id = item.id.clone();
-            let err = s.pc.startup_errors.get(&item.id).cloned();
-            let sub = item
-                .status
-                .clone()
-                .or_else(|| item.does.clone())
-                .unwrap_or_else(|| item.source.clone());
-            let ctrl = if item.locked || item.read_only {
-                text("Kept").font(type_small()).color(fg_muted())
-            } else {
-                flat_btn(
-                    format!("startup-rm-{}", item.id),
-                    "Turn off",
-                    false,
-                    false,
-                    false,
-                )
-                .on_press(move |s: &mut AppState| s.remove_startup_item(&id))
-            };
-            list_col = list_col.child(
-                col()
-                    .w_full()
-                    .min_h(52.0)
-                    .child(el().w_full().h(1.0).fill(float_line()))
-                    .child(
-                        row()
-                            .w_full()
-                            .py(8.0)
-                            .gap(12.0)
-                            .justify_between()
-                            .center_y()
-                            .child(
-                                col()
-                                    .grow(1.0)
-                                    .min_w(0.0)
-                                    .gap(2.0)
-                                    .child(text(item.name.clone()).font(type_control()).color(FG))
-                                    .child(text(sub).font(type_small()).color(fg_muted()).wrap())
-                                    .children(
-                                        err.map(|e| text(e).font(type_small()).color(bad()).wrap()),
-                                    ),
-                            )
-                            .child(ctrl),
-                    ),
-            );
-        }
-
-        if !removed_items.is_empty() {
-            list_col = list_col.child(
-                row().w_full().pt(16.0).pb(6.0).child(
-                    text(format!("Turned off ({})", removed_items.len()))
-                        .font(type_small())
-                        .color(fg_muted()),
-                ),
-            );
-            for rem in removed_items {
-                let id = rem.id.clone();
-                let err = s.pc.startup_errors.get(&rem.id).cloned();
-                list_col = list_col.child(
-                    col()
-                        .w_full()
-                        .min_h(48.0)
-                        .child(el().w_full().h(1.0).fill(float_line()))
-                        .child(
-                            row()
-                                .w_full()
-                                .py(8.0)
-                                .justify_between()
-                                .center_y()
-                                .child(
-                                    col()
-                                        .grow(1.0)
-                                        .min_w(0.0)
-                                        .gap(2.0)
-                                        .child(
-                                            text(rem.name.clone())
-                                                .font(type_control())
-                                                .color(fg_muted()),
-                                        )
-                                        .children(err.map(|e| {
-                                            text(e).font(type_small()).color(bad()).wrap()
-                                        })),
-                                )
-                                .child(
-                                    flat_btn(
-                                        format!("startup-restore-{}", rem.id),
-                                        "Put back",
-                                        false,
-                                        false,
-                                        false,
-                                    )
-                                    .on_press(move |s: &mut AppState| s.restore_startup_item(&id)),
-                                ),
-                        ),
-                );
-            }
-        }
-
-        list_col
+        startup_tab_body(s, &q)
     } else {
         let mut filtered: Vec<&InstalledAppItem> = programs
             .iter()
@@ -1484,7 +1911,7 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         }
         if !wide_select {
             table_head =
-                table_head.child(row().w(scaled(80.0)).justify_end().child(sort_head_btn(
+                table_head.child(row().w(scaled(72.0)).justify_end().child(sort_head_btn(
                     "apps-sort-size",
                     "Size",
                     AppsSortBy::Size,
@@ -1493,7 +1920,7 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         }
         table_head = table_head.child(
             row()
-                .min_w(scaled(140.0))
+                .min_w(scaled(108.0))
                 .justify_end()
                 .child(select_controls),
         );
@@ -1503,6 +1930,8 @@ pub(crate) fn apps_room(s: &AppState) -> El {
             .w_full()
             .grow(1.0)
             .min_h(0.0)
+            .gap(18.0)
+            .pb(20.0)
             .scroll(ScrollSpec {
                 stick_bottom: false,
             });
@@ -1531,19 +1960,21 @@ pub(crate) fn apps_room(s: &AppState) -> El {
             );
         }
 
+        let mut rows_col = col().w_full();
         for app in visible_main {
-            list_col = list_col.child(app_table_row(app, s, show_last_used));
+            rows_col = rows_col.child(app_table_row(app, s, show_last_used));
         }
         if visible_main.is_empty() && visible_parts.is_empty() {
-            list_col = list_col.child(
+            rows_col = rows_col.child(
                 el().w_full()
                     .py(24.0)
                     .child(text("No apps match").font(type_body()).color(fg_muted())),
             );
         }
-        if !visible_parts.is_empty() {
+        list_col = list_col.child(rows_col);
+        if !visible_parts.is_empty() || s.pc.apps_list.as_ref().is_some_and(|l| l.edge_removed) {
             let show_parts = searching || s.pc.apps_parts_open;
-            list_col = list_col.child(
+            let mut parts_sec = col().w_full().child(
                 row()
                     .key("apps-parts-toggle")
                     .role("button")
@@ -1557,24 +1988,60 @@ pub(crate) fn apps_room(s: &AppState) -> El {
                     .gap(6.0)
                     .center_y()
                     .on_press(|s: &mut AppState| s.pc.apps_parts_open = !s.pc.apps_parts_open)
-                    .child(icon_chevron_down(12.0, fg_muted()))
+                    .child(icon_chevron_down(12.0, apps_secondary()))
                     .child(
                         text(format!("Needed by Windows, games or Exo ({})", parts.len()))
                             .font(TextStyle::new(scaled(12.0), 500.0))
-                            .color(fg_muted()),
+                            .color(apps_secondary()),
                     ),
             );
             if show_parts {
                 for app in visible_parts {
-                    list_col = list_col.child(app_table_row(app, s, show_last_used));
+                    parts_sec = parts_sec.child(app_table_row(app, s, show_last_used));
+                }
+                if s.pc.apps_list.as_ref().is_some_and(|l| l.edge_removed) {
+                    let busy = s.pc.apps_busy_id.is_some();
+                    parts_sec = parts_sec.child(ready_row(
+                        "Microsoft Edge is blocked from returning".into(),
+                        Some("Allow Windows to install Microsoft Edge again.".into()),
+                        false,
+                        None,
+                        flat_btn("apps-allow-edge".into(), "Allow Edge", false, false, busy)
+                            .on_press(|s: &mut AppState| s.allow_edge_browser()),
+                    ));
+                }
+                let add_back: Vec<_> =
+                    s.pc.windows_packages
+                        .iter()
+                        .filter(|p| p.add_back)
+                        .collect();
+                for pkg in add_back {
+                    let pid = pkg.id.clone();
+                    let busy = s.pc.apps_busy_id.is_some();
+                    parts_sec = parts_sec.child(ready_row(
+                        format!("{} (removed)", pkg.name),
+                        pkg.publisher.clone(),
+                        false,
+                        s.pc.apps_packages_error.clone(),
+                        flat_btn(
+                            format!("apps-pkg-addback-{}", pkg.id),
+                            "Add back",
+                            false,
+                            false,
+                            busy,
+                        )
+                        .on_press(move |s: &mut AppState| s.add_back_windows_package(&pid)),
+                    ));
                 }
             }
+            list_col = list_col.child(parts_sec);
         }
 
         col()
             .w_full()
             .grow(1.0)
             .min_h(0.0)
+            .gap(12.0)
             .child(table_head)
             .children(s.pc.apps_errors.get("many").map(|err| {
                 el().w_full()
@@ -1591,12 +2058,12 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         .min_h(0.0)
         .pt(20.0)
         .px(24.0)
-        .pb(12.0)
+        .pb(8.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(BG)
-        .border(1.0, float_line())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(header)
         .child(body);
 
@@ -1604,9 +2071,9 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         .key("apps-room")
         .w_full()
         .h_full()
-        .pt(60.0)
-        .px(16.0)
-        .pb(16.0)
+        .pt(64.0)
+        .px(10.0)
+        .pb(20.0)
         .fill(BG)
         .on_key(|s: &mut AppState, ev, _| {
             if ev.key == Key::Escape {
@@ -1665,21 +2132,8 @@ mod tests {
             .presented("app-uninst-app:obs")
             .expect("app-uninst-app:obs at rest");
         assert!(
-            rest_op < 0.05,
-            "Uninstall button must be hidden at rest (opacity=0), got {rest_op}"
-        );
-
-        let (rx, ry) = rt.find("app-row-app:obs").expect("app-row-app:obs");
-        rt.pointer_move(rx, ry);
-        for _ in 0..30 {
-            rt.frame(1.0 / 60.0);
-        }
-        let (_, hover_op) = rt
-            .presented("app-uninst-app:obs")
-            .expect("app-uninst-app:obs on hover");
-        assert!(
-            hover_op > 0.95,
-            "Uninstall button must reveal on row hover (opacity=1), got {hover_op}"
+            rest_op > 0.95,
+            "Uninstall button must be visible at rest (opacity=1), got {rest_op}"
         );
 
         let (bx, by) = rt
@@ -1789,5 +2243,125 @@ mod tests {
                 "motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
             );
         }
+    }
+
+    #[test]
+    fn startup_format_turned_off_day_and_detail_precedence() {
+        assert_eq!(
+            super::format_turned_off_day("2026-11-19T14:22:00Z"),
+            "Turned off Nov 19, 2026"
+        );
+        assert_eq!(
+            super::format_turned_off_day("2026-01-05"),
+            "Turned off Jan 5, 2026"
+        );
+        assert!(super::is_windows_startup_id("run:Discord"));
+        assert!(super::is_windows_startup_id("folder:Wooting"));
+        assert!(!super::is_windows_startup_id("task:EdgeUpdate"));
+
+        let mut item = exo_rpc::StartupItem {
+            id: "run:foo".into(),
+            name: "Foo".into(),
+            command: "C:\\Foo\\foo.exe".into(),
+            source: "run".into(),
+            enabled: true,
+            ..Default::default()
+        };
+        assert_eq!(super::startup_detail(&item), "Runs C:\\Foo\\foo.exe");
+        item.does = Some("Runs in background".into());
+        assert_eq!(super::startup_detail(&item), "Runs in background");
+        item.without = Some("Exo needs this one to keep WebView2 up to date.".into());
+        assert_eq!(
+            super::startup_detail(&item),
+            "Exo needs this one to keep WebView2 up to date."
+        );
+        item.verdict = Some("remove".into());
+        assert_eq!(super::startup_detail(&item), "Safe to turn off");
+        item.missing = true;
+        assert_eq!(
+            super::startup_detail(&item),
+            "Its program is gone: safe to turn off"
+        );
+        item.status = Some("Blocked by policy".into());
+        assert_eq!(super::startup_detail(&item), "Blocked by policy");
+    }
+
+    #[test]
+    fn startup_tab_groups_and_toggles_background_section() {
+        let mut state = AppState::default();
+        state.switch_room(Room::Apps);
+        state.pc.apps_sub_tab = crate::pc_state::AppsSubTab::Startup;
+        state.pc.startup_list = Some(exo_rpc::StartupListReply {
+            ok: true,
+            message: None,
+            items: vec![
+                exo_rpc::StartupItem {
+                    id: "run:wooting-1".into(),
+                    name: "Wooting Background Service".into(),
+                    command: "wooting-bg-service.exe".into(),
+                    source: "run".into(),
+                    enabled: true,
+                    memory: 6_291_456,
+                    ..Default::default()
+                },
+                exo_rpc::StartupItem {
+                    id: "run:wooting-2".into(),
+                    name: "Wooting Background Service".into(),
+                    command: "wooting-bg-service.exe".into(),
+                    source: "run".into(),
+                    enabled: true,
+                    ..Default::default()
+                },
+                exo_rpc::StartupItem {
+                    id: "run:broken".into(),
+                    name: "GoneApp".into(),
+                    source: "run".into(),
+                    enabled: true,
+                    missing: true,
+                    ..Default::default()
+                },
+                exo_rpc::StartupItem {
+                    id: "task:bg-1".into(),
+                    name: "Background Sync".into(),
+                    source: "task".into(),
+                    enabled: true,
+                    ..Default::default()
+                },
+            ],
+            removed: vec![exo_rpc::StartupRemovedItem {
+                id: "run:claude".into(),
+                name: "Claude Remote Control".into(),
+                at: "2026-11-19T00:00:00Z".into(),
+                icon: None,
+                locked: false,
+            }],
+            extras: 0,
+        });
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        assert!(rt.find("startup-row-run:wooting-1").is_some());
+        assert!(
+            rt.find("startup-row-run:wooting-2").is_none(),
+            "Duplicate startup names should collapse into a single grouped row"
+        );
+        assert!(rt.find("startup-row-run:broken").is_some());
+        assert!(rt.find("startup-row-run:claude").is_some());
+        assert!(rt.find("startup-bg-toggle").is_some());
+        assert!(
+            rt.find("startup-row-task:bg-1").is_none(),
+            "Background tasks should start collapsed"
+        );
+
+        let (bx, by) = rt.find("startup-bg-toggle").expect("bg toggle hit");
+        rt.pointer_move(bx, by);
+        rt.pointer_down(bx, by);
+        rt.pointer_up(bx, by);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        assert!(rt.state.pc.startup_bg_open);
+        assert!(rt.find("startup-row-task:bg-1").is_some());
     }
 }

@@ -541,6 +541,22 @@ pub fn format_unix_timestamp(seconds: i64) -> String {
     format!("{day}, {h:02}:{m:02} UTC")
 }
 
+pub fn account_session_label(session: &ExoAccountSession) -> String {
+    let named = session
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty());
+    if session.this_pc {
+        match named {
+            Some(name) => format!("{name} (This PC)"),
+            None => "This PC".to_string(),
+        }
+    } else {
+        named.unwrap_or("Another PC").to_string()
+    }
+}
+
 pub fn normalize_recovery_code(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     for ch in raw.chars() {
@@ -1434,6 +1450,7 @@ pub struct SettingsUiState {
     pub account_sessions_open: bool,
     pub account_sessions: Option<Vec<ExoAccountSession>>,
     pub account_sessions_note: Option<String>,
+    pub account_session_confirm_remove: Option<String>,
     pub account_export_note: Option<String>,
     pub account_delete_open: bool,
     pub account_delete_pass: TextEdit,
@@ -1601,6 +1618,7 @@ impl Default for SettingsUiState {
             account_sessions_open: false,
             account_sessions: None,
             account_sessions_note: None,
+            account_session_confirm_remove: None,
             account_export_note: None,
             account_delete_open: false,
             account_delete_pass: TextEdit::new("").secure(),
@@ -3408,6 +3426,7 @@ impl AppState {
     }
 
     pub fn wp4_load_account_sessions(&mut self) {
+        self.wp4.account_session_confirm_remove = None;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             rpc.call::<_, ExoAccountSessionsReply>(
@@ -3435,6 +3454,7 @@ impl AppState {
     }
 
     pub fn wp4_revoke_account_session(&mut self, device: String) {
+        self.wp4.account_session_confirm_remove = None;
         self.wp4.account_sessions_note = None;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
@@ -4445,6 +4465,38 @@ mod tests {
         assert!(account_sheet_open(false, Some(&pending), false, 0, 0));
         assert!(!account_sheet_open(false, Some(&pending), false, 1, 0));
         assert!(account_sheet_open(true, Some(&pending), false, 1, 0));
+    }
+
+    #[test]
+    fn account_session_label_matches_react_for_this_pc_and_other_pcs() {
+        let this_named = ExoAccountSession {
+            device: "11111111111111111111111111111111".into(),
+            this_pc: true,
+            name: Some("ERIX".into()),
+            ..Default::default()
+        };
+        let this_unnamed = ExoAccountSession {
+            device: "11111111111111111111111111111111".into(),
+            this_pc: true,
+            name: Some("   ".into()),
+            ..Default::default()
+        };
+        let other_named = ExoAccountSession {
+            device: "22222222222222222222222222222222".into(),
+            this_pc: false,
+            name: Some("LAPTOP".into()),
+            ..Default::default()
+        };
+        let other_unnamed = ExoAccountSession {
+            device: "33333333333333333333333333333333".into(),
+            this_pc: false,
+            name: None,
+            ..Default::default()
+        };
+        assert_eq!(account_session_label(&this_named), "ERIX (This PC)");
+        assert_eq!(account_session_label(&this_unnamed), "This PC");
+        assert_eq!(account_session_label(&other_named), "LAPTOP");
+        assert_eq!(account_session_label(&other_unnamed), "Another PC");
     }
 
     #[test]

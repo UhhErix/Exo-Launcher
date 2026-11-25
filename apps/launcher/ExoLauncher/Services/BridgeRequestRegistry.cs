@@ -9,8 +9,13 @@ internal sealed class BridgeRequestRegistry
 
     internal static TimeSpan? Deadline(string method) => method switch
     {
-        "library.get" or "library.refresh" or "dlss.status" => TimeSpan.FromMinutes(2),
-        "app.checkUpdate" => TimeSpan.FromSeconds(30),
+        "library.get" or "library.refresh" or "dlss.status" or "system.interrupts" => TimeSpan.FromMinutes(2),
+        "devices.list" or "devices.usbMap" or "hid.list" or "system.about" or "autopilot.state" or "exoAi.state" => TimeSpan.FromSeconds(15),
+        "app.checkUpdate" or "store.game" or "runtimes.list" or "keep.status" or "gpu.display" or "gpu.profile" => TimeSpan.FromSeconds(30),
+        "store.home" or "system.tune" => TimeSpan.FromSeconds(45),
+        "store.wishlist" or "apps.list" or "apps.packages" or "startup.list" or "gpu.driver" => TimeSpan.FromSeconds(60),
+        "system.drives" => TimeSpan.FromSeconds(75),
+        "system.drivers" or "system.tuning" => TimeSpan.FromSeconds(240),
         "dlss.updateAll" or "dlss.downloadNewer" or "shaders.call" => TimeSpan.FromMinutes(10),
         _ => null,
     };

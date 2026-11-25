@@ -178,9 +178,15 @@ export async function runNativePass({
   await mkdir(nativeDir, { recursive: true })
 
   const pipe = `exo-parity-${randomBytes(4).toString('hex')}`
+  const useDiscordMock = states.some((s) => s.room === 'discord') && !seedDir
   const hostProc = spawn(resolvedHost, [`--host-pipe=${pipe}`], {
     cwd: dirname(resolvedHost),
-    env: { ...process.env, EXO_LAUNCHER_DATA_DIR: safeDataDir, EXO_NO_ACTIVATE: '1' },
+    env: {
+      ...process.env,
+      EXO_LAUNCHER_DATA_DIR: safeDataDir,
+      EXO_NO_ACTIVATE: '1',
+      ...(useDiscordMock ? { EXO_E2E_TEST_INSTANCE: '1', EXO_DISCORD_PARITY_MOCK: '1' } : {}),
+    },
     stdio: 'ignore',
     windowsHide: true,
   })
@@ -220,7 +226,10 @@ export async function runNativePass({
       if (scene && scene !== 'library') baseArgs.push('--scene', scene)
       if (scriptEvents) baseArgs.push('--script', scriptPath)
 
-      const snapRun = await runExe(resolvedUi, [...baseArgs, '--snap', pngPath, '--tree', treePath], 45000)
+      const snapArgs = scriptEvents
+        ? [...baseArgs, '--snap', pngPath, '--tree', treePath]
+        : [...baseArgs, '--frames', '18', '--fps', '60', '--snap', pngPath, '--tree', treePath]
+      const snapRun = await runExe(resolvedUi, snapArgs, 45000)
       const probeRun = await runExe(
         resolvedProbe,
         [...baseArgs, '--parity-probe', probePath, '--probe-points', pointsPath],

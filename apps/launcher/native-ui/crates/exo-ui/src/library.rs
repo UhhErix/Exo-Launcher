@@ -11,18 +11,18 @@ use crate::state::{
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, exo_play_button,
-    fg_faint, fg_muted, glass_button, glass_icon_circle, glass_icon_circle_opt, glass_panel_fill,
-    glass_panel_opt, glass_plate_fill, glass_rim, glass_rim_bottom, glass_rim_top,
+    fg_faint, fg_muted, glass_button, glass_button_opt, glass_icon_circle, glass_icon_circle_opt,
+    glass_panel_fill, glass_plate_fill, glass_rim, glass_rim_bottom, glass_rim_top,
     glass_still_control_fill, good, hover_fill, icon_check, icon_chevron_left, icon_chevron_right,
     icon_close, icon_download, icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus,
-    icon_search, icon_stop, popover_transition_for, pressed_fill, primary_button, progress_bar,
+    icon_search, popover_transition_for, pressed_fill, primary_button, progress_bar,
     select_trigger, store_logo, surface_card, type_body, type_control, type_first_run,
     type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, InstallProgress};
 use rune::{
-    Align, Cursor, El, Side, SurfaceFit, TextStyle, Tx, col, edit_access, el, oklch, row, text,
-    text_input,
+    Align, Cursor, El, LiquidGlass, Side, SurfaceFit, TextStyle, Tx, col, edit_access, el, oklch,
+    row, text, text_input,
 };
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -41,18 +41,19 @@ pub fn all_grid_metrics(viewport_w: f32) -> (usize, f32, f32) {
     } else {
         1900.0
     };
-    let min_tile_w = 154.0_f32;
+    let min_tile_w = 152.0_f32;
     let cols =
-        (((usable + ALL_GRID_GAP) / (min_tile_w + ALL_GRID_GAP)).floor() as usize).clamp(3, 18);
-    let tile_w =
+        (((usable + ALL_GRID_GAP) / (min_tile_w + ALL_GRID_GAP)).floor() as usize).clamp(1, 12);
+    let raw_w =
         ((usable - (cols.saturating_sub(1) as f32) * ALL_GRID_GAP) / cols as f32).max(120.0);
-    let tile_h = (tile_w * 1.5).round();
+    let tile_w = (raw_w * 100.0).floor() / 100.0;
+    let tile_h = tile_w * 1.5;
     (cols, tile_w, tile_h)
 }
 
 fn primary_verb(game: &Game) -> &'static str {
     if game.is_running {
-        if game.can_stop { "Stop" } else { "Resume" }
+        "Resume"
     } else if game.update_available {
         "Update"
     } else if game.installed {
@@ -294,7 +295,11 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
     let id_ctx = game.id.clone();
     let flight_id = format!("deck:{}", game.id);
     let hover_key = format!("tile-{}", game.id);
-    let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str());
+    let ctx_targeted = matches!(
+        s.context_menu.as_ref().map(|m| &m.target),
+        Some(ContextMenuTarget::GameCard(cid)) if cid == &game.id
+    );
+    let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str()) || ctx_targeted;
     let hover_key_cb = hover_key.clone();
     let scroll_key = hover_key.clone();
     let art = cover_surface(
@@ -304,7 +309,7 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         [DECK_CARD_W, DECK_CARD_H],
         false,
         load_cover,
-        !active,
+        false,
     )
     .matched(flight_id.clone())
     .motion(SPRING_FLIGHT);
@@ -320,9 +325,9 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
-        .press_on_down()
         .press_scale(PRESS_SCALE)
         .hover(hover_fill())
+        .press(pressed_fill())
         .size(DECK_CARD_W, DECK_CARD_H)
         .radius(RADIUS_CARD)
         .continuous_corners()
@@ -368,7 +373,9 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         })
         .child(art);
 
-    if game.is_running {
+    if active {
+        card = card.outline(2.0, 3.0, FG);
+    } else if game.is_running {
         card = card.outline(1.0, 2.0, good());
     }
     card = card.focus_ring(2.0, 3.0, FG);
@@ -399,32 +406,56 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
         sections.push(
             col()
                 .key(format!("library-filter-section-{}", section.to_lowercase()))
-                .gap(6.0)
-                .child(text(section).font(type_small()).color(fg_muted()))
-                .child(row().flex_wrap().gap(6.0).children(pills)),
+                .gap(4.0)
+                .child(
+                    el().w_full()
+                        .pt(if sections.is_empty() { 8.0 } else { 10.0 })
+                        .px(2.0)
+                        .pb(2.0)
+                        .child(text(section).font(type_small()).color(fg_muted())),
+                )
+                .child(row().flex_wrap().gap(4.0).children(pills)),
         );
     }
     if !s.filters.is_empty() {
         sections.push(
-            glass_button("library-filter-clear", "Clear all", None)
-                .on_press(|s: &mut AppState| s.filters.clear()),
+            el().pt(10.0).child(
+                glass_button_opt("library-filter-clear", "Clear all", None, false)
+                    .border(1.0, glass_rim())
+                    .h(28.0)
+                    .role("option")
+                    .label("Clear all")
+                    .on_press(|s: &mut AppState| s.filters.clear()),
+            ),
         );
     }
-    let panel = glass_panel_opt("library-filter-pop", 420.0, blur)
+    let _ = blur;
+    let panel = col()
+        .key("library-filter-pop")
+        .w(420.0)
+        .radius(RADIUS_CARD)
+        .continuous_corners()
+        .clip_rounded(RADIUS_CARD)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .transition(popover_transition_for(Side::Bottom, Align::End))
         .focus_group()
         .focus_return("all-games-filter")
         .anchored_fit("all-games-filter", Side::Bottom, Align::End, 4.0)
+        .pt(4.0)
         .px(12.0)
-        .py(12.0)
-        .gap(12.0)
+        .pb(14.0)
+        .gap(2.0)
         .children(sections);
     vec![
         el().key("library-filter-root")
-            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            .absolute(0.0, 0.0)
+            .size(0.0, 0.0)
             .modal_tx(true, |s: &mut AppState, _: &mut Tx| {
                 s.library_filter_open = false
             })
+            .modal_live(["top-bar", "all-games-filter"])
             .child(panel),
     ]
 }
@@ -433,7 +464,7 @@ fn filter_chip(chip: &LibraryChip, active: bool, idle: bool) -> El {
     let label = chip.label();
     let target = chip.clone();
     let color = if idle {
-        fg_faint()
+        fg_muted()
     } else if active {
         PRIMARY_FG
     } else {
@@ -451,22 +482,14 @@ fn filter_chip(chip: &LibraryChip, active: bool, idle: bool) -> El {
         } else {
             Cursor::Pointer
         })
-        .h(30.0)
-        .px(13.0)
+        .h(28.0)
+        .px(14.0)
         .radius(RADIUS_PILL)
         .center()
         .fill(if active { FG } else { TRANSPARENT })
-        .border(if active { 0.0 } else { 1.0 }, glass_rim())
+        .border(if active || idle { 0.0 } else { 1.0 }, glass_rim())
         .motion(SPRING_QUICK)
-        .child(
-            text(label)
-                .font(if active {
-                    type_section()
-                } else {
-                    type_control()
-                })
-                .color(color),
-        );
+        .child(text(label).font(type_small()).color(color));
     if idle {
         return pill;
     }
@@ -493,7 +516,11 @@ fn all_games_poster_tile(game: &Game, card_w: f32, card_h: f32, s: &AppState, sc
     let id_drag = game.id.clone();
     let flight_id = format!("grid:{}", game.id);
     let hover_key = format!("tile-{}", game.id);
-    let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str());
+    let ctx_targeted = matches!(
+        s.context_menu.as_ref().map(|m| &m.target),
+        Some(ContextMenuTarget::GameCard(cid)) if cid == &game.id
+    );
+    let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str()) || ctx_targeted;
     let selecting = s.lib.selecting;
     let picked = selecting && s.lib.picked.contains(&game.id);
     let transfer = active_transfer_for(s, game);
@@ -558,19 +585,26 @@ fn all_games_poster_tile(game: &Game, card_w: f32, card_h: f32, s: &AppState, sc
             });
     }
 
-    if hovered && transfer.is_none() {
+    if hovered && !ctx_targeted && transfer.is_none() {
         tile = tile.child(tile_plate(game));
     }
 
-    if picked {
-        tile = tile.outline(2.0, 2.0, FG).child(
-            el().pin(None, Some(8.0), Some(8.0), None)
-                .size(22.0, 22.0)
-                .radius(11.0)
-                .center()
-                .fill(FG)
-                .child(icon_check(14.0, PRIMARY_FG)),
-        );
+    if selecting {
+        let mut badge = el()
+            .pin(None, None, Some(8.0), Some(8.0))
+            .size(24.0, 24.0)
+            .radius(12.0)
+            .center()
+            .border(1.0, FG)
+            .fill(if picked {
+                FG
+            } else {
+                glass_still_control_fill()
+            });
+        if picked {
+            badge = badge.child(icon_check(14.0, PRIMARY_FG));
+        }
+        tile = tile.child(badge);
     } else if game.is_running {
         tile = tile.outline(1.0, 2.0, good());
     }
@@ -844,18 +878,21 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         };
         let gid_play = game.id.clone();
         let gid_more = game.id.clone();
-        let is_stop = game.is_running && game.can_stop;
         let is_install = !game.installed && !game.is_running;
         let is_update = game.update_available && game.installed && !game.is_running;
 
         let identity = if let Some(logo) = s.logo_image(game, scale) {
-            row().h(112.0).items_end().child(
-                el().max_w(460.0)
-                    .max_h(112.0)
-                    .w(400.0)
-                    .h(96.0)
-                    .pixels_fit(logo.pixels(), SurfaceFit::Fit),
-            )
+            let (lw, lh) = match logo.size() {
+                Some([iw, ih]) if iw > 0 && ih > 0 => {
+                    let s = (460.0 / iw as f32).min(112.0 / ih as f32).min(1.0);
+                    (iw as f32 * s, ih as f32 * s)
+                }
+                _ => (400.0, 96.0),
+            };
+            row()
+                .h(112.0)
+                .items_end()
+                .child(el().w(lw).h(lh).pixels_fit(logo.pixels(), SurfaceFit::Fit))
         } else {
             row().h(112.0).items_end().child(
                 text(game.title.clone())
@@ -867,8 +904,6 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
 
         let play_icon = if working || starting {
             None
-        } else if is_stop {
-            Some(icon_stop(14.0, PRIMARY_FG))
         } else if is_install || is_update {
             Some(icon_download(14.0, PRIMARY_FG))
         } else {
@@ -896,9 +931,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         };
         if !starting && !working {
             play_btn = play_btn.on_press(move |s: &mut AppState| {
-                if is_stop {
-                    s.stop_game_held(&gid_play);
-                } else if is_install {
+                if is_install {
                     s.install_game(&gid_play);
                 } else if is_update {
                     s.update_game(&gid_play);
@@ -982,7 +1015,6 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
     };
 
     let right_tools = row()
-        .min_h(40.0)
         .gap(8.0)
         .center_y()
         .children(gifts_pill(s))
@@ -1368,9 +1400,9 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
 
     let head = row()
         .w_full()
-        .pt(6.0)
+        .pt(7.0)
         .px(10.0)
-        .pb(12.0)
+        .pb(15.0)
         .gap(16.0)
         .center_y()
         .child(head_lead)
@@ -1394,7 +1426,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
             for word in &parsed.understood {
                 items.push(
                     row()
-                        .h(26.0)
+                        .h(28.0)
                         .px(10.0)
                         .gap(5.0)
                         .center_y()
@@ -1414,10 +1446,10 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                         .label(format!("Remove {}", chip.label()))
                         .cursor(Cursor::Pointer)
                         .hit()
-                        .h(26.0)
-                        .pl(10.0)
+                        .h(28.0)
+                        .pl(12.0)
                         .pr(8.0)
-                        .gap(5.0)
+                        .gap(6.0)
                         .center_y()
                         .radius(RADIUS_PILL)
                         .fill(FG)
@@ -1429,19 +1461,23 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                 );
             }
             if !s.filters.is_empty() {
-                items.push(glass_button("active-chips-clear", "Clear", None).on_press(
-                    |s: &mut AppState| {
-                        s.filters.clear();
-                        s.library_search.text.clear();
-                        s.library_search.sync_invariants();
-                    },
-                ));
+                items.push(
+                    glass_button_opt("active-chips-clear", "Clear", None, false)
+                        .border(1.0, glass_rim())
+                        .h(28.0)
+                        .on_press(|s: &mut AppState| {
+                            s.filters.clear();
+                            s.library_search.text.clear();
+                            s.library_search.sync_invariants();
+                        }),
+                );
             }
             Some(
                 row()
                     .w_full()
+                    .mt(-8.0)
                     .px(10.0)
-                    .pb(10.0)
+                    .pb(16.0)
                     .gap(6.0)
                     .center_y()
                     .children(items),
@@ -1453,9 +1489,9 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
     let shelf_head = row()
         .w_full()
         .h(37.0)
-        .pt(4.0)
+        .pt(5.0)
         .px(10.0)
-        .pb(6.0)
+        .pb(5.0)
         .center_y()
         .child(text(heading).font(type_title()).color(FG));
 
@@ -1715,8 +1751,8 @@ mod tests {
             .presented("capture-popover-menu")
             .expect("capture-popover-menu presented");
         assert!(
-            (menu_rect[1] - 56.0).abs() <= 1.0,
-            "expected captures popover y=56.0, got {}",
+            (menu_rect[1] - 48.0).abs() <= 1.0,
+            "expected captures popover y=48.0, got {}",
             menu_rect[1]
         );
         let btn_right = btn_rect[0] + btn_rect[2];
@@ -1822,8 +1858,8 @@ mod tests {
             (1280.0, 6, 8),
             (1440.0, 7, 9),
             (1920.0, 11, 11),
-            (2560.0, 14, 16),
-            (3840.0, 16, 18),
+            (2560.0, 12, 12),
+            (3840.0, 12, 12),
         ] {
             let (cols, w, h) = super::all_grid_metrics(vp);
             assert!(cols >= min_cols && cols <= max_cols, "vp={vp} cols={cols}");
@@ -1834,7 +1870,7 @@ mod tests {
                 row_w <= vp + 0.5,
                 "vp={vp} row_w={row_w} overflows viewport"
             );
-            assert!((h - (w * 1.5).round()).abs() < 0.01);
+            assert!((h - w * 1.5).abs() < 0.01);
         }
     }
 }

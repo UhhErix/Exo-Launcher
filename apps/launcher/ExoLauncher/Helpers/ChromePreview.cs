@@ -21,7 +21,9 @@ internal static class ChromePreview
         Environment.GetEnvironmentVariable("EXO_CHROME_PREVIEW") == "1" &&
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable));
 
-    internal static async void Show()
+    internal static void Show() => _ = UiGuard.RunAsync(ShowAsync, "ChromePreview.Show");
+
+    private static async Task ShowAsync()
     {
         CoreWebView2Environment? environment = null;
         var opened = new List<(Window Window, WebView2 View)>();

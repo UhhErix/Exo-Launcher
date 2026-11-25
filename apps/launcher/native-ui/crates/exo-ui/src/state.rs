@@ -1204,6 +1204,11 @@ impl AppState {
                 }
             }
             let mut preload_ids: Vec<&Game> = self.filtered_games().into_iter().take(60).collect();
+            for g in self.games.iter().filter(|g| g.installed) {
+                if !preload_ids.iter().any(|existing| existing.id == g.id) {
+                    preload_ids.push(g);
+                }
+            }
             for folder in &self.settings.library_folders {
                 for gid in folder.games.iter().take(4) {
                     if let Some(g) = self.games.iter().find(|g| g.id == *gid)
@@ -1863,7 +1868,7 @@ impl AppState {
     pub fn cover_image(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(320.0);
+        let dim = bucket_dim(384.0);
         let mut waiting_remote = false;
         for cand in game.portrait_art_candidates() {
             if cand.url.starts_with(COVER_CACHE_ORIGIN) {
@@ -2023,6 +2028,25 @@ impl AppState {
         let loaded = self
             .art_base
             .resolve_capture_thumb(url)
+            .map(|path| cache.file_capped(path, dim, scale));
+        self.images
+            .borrow_mut()
+            .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
+        loaded
+    }
+
+    pub fn capture_full_image(&self, url: &str, scale: f32) -> Option<Image> {
+        let cache = self.image_cache.as_ref()?;
+        self.sync_budget_for_scale(scale);
+        let dim = bucket_dim(1280.0);
+        let key = format!("cap-full:{url}");
+        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
+            return existing;
+        }
+        let loaded = self
+            .art_base
+            .resolve_capture_file(url)
+            .or_else(|| self.art_base.resolve_capture_thumb(url))
             .map(|path| cache.file_capped(path, dim, scale));
         self.images
             .borrow_mut()
@@ -3931,9 +3955,10 @@ impl AppState {
             }
         }
 
-        let mut candidates: Vec<&Game> = self
-            .games
-            .iter()
+        let (library_shelf, _, hidden_shelf) = self.shelf_shelves();
+        let mut candidates: Vec<Game> = library_shelf
+            .into_iter()
+            .chain(hidden_shelf)
             .filter(|g| {
                 g.id != "local:add" && (query.is_empty() || g.title.to_lowercase().contains(&query))
             })
@@ -4368,6 +4393,7 @@ impl AppState {
                     s.check_pending_notes_on_startup();
                     s.warm_store_on_startup();
                     s.wp4_warm_startup();
+                    s.check_system_eq_health_on_launch();
                 });
             }
             Err(e) => {
