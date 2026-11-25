@@ -8,7 +8,15 @@ license.workspace = true
 exo-display = { path = "../exo-display" }
 exo-gpu = { path = "../exo-gpu" }
 exo-policy = { path = "../exo-policy" }
+exo-rpc = { path = "../exo-rpc" }
 exo-sensors = { path = "../exo-sensors" }
 exo-wire = { path = "../exo-wire" }
 serde.workspace = true
 serde_json.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Pipes",
+] }

@@ -1,4 +1,4 @@
-use crate::backend::HostBackend;
+use crate::backend::{HostBackend, enforce_process_policy_on_payload};
 use exo_policy::anti_cheat::{
     Answer, Change, GameDescriptor, SteamWord, allows, by_title, classify, decide, dll_policy_for,
     for_store, known_game, refused_argument, wire_class,
@@ -11,6 +11,17 @@ use exo_policy::process_termination::{ProcessNode, plan_tree};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
+
+pub const PHASE2_SLICE2_READONLY_ROUTES: &[&str] = &[
+    "system.health",
+    "gpu.profile",
+    "gpu.processes",
+    "gpu.tuning.state",
+    "system.about",
+    "gpu.display",
+    "hdr.state",
+    "system.drives",
+];
 
 pub const PHASE2_ROUTES: &[&str] = &[
     "host.phase2.capabilities",
@@ -29,7 +40,37 @@ pub const PHASE2_ROUTES: &[&str] = &[
     "power.guard.status",
     "autopilot.status",
     "net.latency.status",
+    "system.health",
+    "gpu.profile",
+    "gpu.processes",
+    "gpu.tuning.state",
+    "system.about",
+    "gpu.display",
+    "hdr.state",
+    "system.drives",
 ];
+
+fn param_action(params: &Value) -> Option<&str> {
+    params
+        .get("action")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
+pub fn is_readonly_hardware_call(method: &str, params: &Value) -> bool {
+    match method {
+        "system.health" => param_action(params).is_none(),
+        "gpu.profile" => matches!(param_action(params), None | Some("state")),
+        "gpu.processes" => true,
+        "gpu.tuning.state" => true,
+        "system.about" => true,
+        "gpu.display" => matches!(param_action(params), None | Some("state")),
+        "hdr.state" => true,
+        "system.drives" => param_action(params).is_none(),
+        _ => false,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RouteError {
@@ -76,7 +117,10 @@ impl<B: HostBackend> HostRouter<B> {
             "host.phase2.capabilities" => Ok(RouteOutcome::Handled(json!({
                 "ok": true,
                 "phase": 2,
+                "slice": 2,
+                "shadowMode": true,
                 "inProcessRoutes": PHASE2_ROUTES,
+                "readonlyShadowRoutes": PHASE2_SLICE2_READONLY_ROUTES,
                 "wireSchemaMethods": exo_wire::METHODS.len(),
                 "wireSchemaEvents": exo_wire::EVENTS.len(),
                 "wireSchemaHash": format!("0x{:016x}", exo_wire::SCHEMA_HASH),
@@ -110,6 +154,43 @@ impl<B: HostBackend> HostRouter<B> {
             "net.latency.status" => Ok(RouteOutcome::Handled(
                 serde_json::to_value(self.backend.read_net_latency_status()).unwrap(),
             )),
+            "system.health" => {
+                if !is_readonly_hardware_call(method, params) {
+                    return Ok(RouteOutcome::FallbackToDotnet);
+                }
+                Ok(RouteOutcome::Handled(self.backend.read_system_health()))
+            }
+            "gpu.profile" => {
+                if !is_readonly_hardware_call(method, params) {
+                    return Ok(RouteOutcome::FallbackToDotnet);
+                }
+                Ok(RouteOutcome::Handled(self.backend.read_gpu_profile()))
+            }
+            "gpu.processes" => {
+                let limit = params
+                    .get("limit")
+                    .and_then(Value::as_u64)
+                    .map(|n| n.clamp(1, 100) as usize)
+                    .unwrap_or(25);
+                let mut payload = self.backend.read_gpu_processes(limit);
+                enforce_process_policy_on_payload(&mut payload);
+                Ok(RouteOutcome::Handled(payload))
+            }
+            "gpu.tuning.state" => Ok(RouteOutcome::Handled(self.backend.read_gpu_tuning_state())),
+            "system.about" => Ok(RouteOutcome::Handled(self.backend.read_system_about())),
+            "gpu.display" => {
+                if !is_readonly_hardware_call(method, params) {
+                    return Ok(RouteOutcome::FallbackToDotnet);
+                }
+                Ok(RouteOutcome::Handled(self.backend.read_gpu_display()))
+            }
+            "hdr.state" => Ok(RouteOutcome::Handled(self.backend.read_hdr_state())),
+            "system.drives" => {
+                if !is_readonly_hardware_call(method, params) {
+                    return Ok(RouteOutcome::FallbackToDotnet);
+                }
+                Ok(RouteOutcome::Handled(self.backend.read_system_drives()))
+            }
             _ => Ok(RouteOutcome::FallbackToDotnet),
         }
     }
@@ -253,33 +334,29 @@ impl<B: HostBackend> HostRouter<B> {
             .get("url")
             .and_then(Value::as_str)
             .ok_or_else(|| RouteError::InvalidParams("missing url".into()))?;
-        let verdict = check_url(url);
-        Ok(RouteOutcome::Handled(
-            serde_json::to_value(verdict).unwrap(),
-        ))
+        let res = check_url(url);
+        Ok(RouteOutcome::Handled(serde_json::to_value(res).unwrap()))
     }
 
     fn handle_player_data_lookup(&self, params: &Value) -> Result<RouteOutcome, RouteError> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct Reply {
+        struct Out {
             found: bool,
-            secret: bool,
             of_this_machine: bool,
-            max_bytes: u64,
+            secret: bool,
             ui_pref_syncs: Option<bool>,
         }
         let path = params.get("path").and_then(Value::as_str).unwrap_or("");
-        let ui_pref = params.get("uiPrefKey").and_then(Value::as_str);
-        let file = lookup(path);
-        let reply = Reply {
-            found: file.is_some(),
+        let pref = params.get("uiPrefKey").and_then(Value::as_str);
+        let entry = lookup(path);
+        let out = Out {
+            found: entry.is_some(),
+            of_this_machine: entry.is_some_and(|e| e.of_this_machine),
             secret: is_secret_file(path),
-            of_this_machine: file.is_some_and(|f| f.of_this_machine),
-            max_bytes: file.map_or(0, |f| f.max_bytes),
-            ui_pref_syncs: ui_pref.map(ui_pref_syncs),
+            ui_pref_syncs: pref.map(ui_pref_syncs),
         };
-        Ok(RouteOutcome::Handled(serde_json::to_value(reply).unwrap()))
+        Ok(RouteOutcome::Handled(serde_json::to_value(out).unwrap()))
     }
 
     fn handle_pe_audit(&self, params: &Value) -> Result<RouteOutcome, RouteError> {
@@ -306,17 +383,8 @@ mod tests {
     fn phase2_routes_dispatch_in_process_and_unmigrated_routes_fall_back_to_dotnet() {
         let router = HostRouter::new(MockHostBackend::default());
 
-        let caps = router
-            .dispatch("host.phase2.capabilities", &json!({}))
-            .unwrap();
-        let RouteOutcome::Handled(val) = caps else {
-            panic!("expected Handled");
-        };
-        assert_eq!(val["ok"], true);
-        assert_eq!(val["phase"], 2);
-        assert!(val["wireSchemaMethods"].as_u64().unwrap() > 350);
-
-        for &method in &[
+        for &route in &[
+            "host.phase2.capabilities",
             "gpu.control.overview",
             "sensors.audit",
             "display.monitors.readonly",
@@ -324,23 +392,70 @@ mod tests {
             "power.guard.status",
             "autopilot.status",
             "net.latency.status",
+            "system.health",
+            "gpu.profile",
+            "gpu.processes",
+            "gpu.tuning.state",
+            "system.about",
+            "gpu.display",
+            "hdr.state",
+            "system.drives",
         ] {
-            let out = router.dispatch(method, &json!({})).unwrap();
-            let RouteOutcome::Handled(payload) = out else {
-                panic!("expected in-process handling for {method}");
-            };
-            assert_eq!(payload["readOnly"], true, "expected readOnly on {method}");
+            let outcome = router.dispatch(route, &json!({})).unwrap();
+            assert!(
+                matches!(outcome, RouteOutcome::Handled(_)),
+                "expected {route} handled in-process"
+            );
         }
 
-        for &dotnet_method in &[
+        for &unmigrated in &[
             "library.get",
             "shell.bootstrap",
             "discord.state",
             "store.home",
+            "gpu.tuning.apply",
+            "gpu.tuning.reset",
+            "gpu.tuning.test",
+            "gpu.tuning.undervolt",
+            "gpu.tuning.waiver",
+            "hdr.calibrate",
+            "hid.write",
+            "mouse.apply",
+            "keyboard.apply",
+            "audio.setVolume",
         ] {
+            let outcome = router.dispatch(unmigrated, &json!({})).unwrap();
             assert_eq!(
-                router.dispatch(dotnet_method, &json!({})).unwrap(),
-                RouteOutcome::FallbackToDotnet
+                outcome,
+                RouteOutcome::FallbackToDotnet,
+                "expected {unmigrated} to stay on .NET host"
+            );
+        }
+    }
+
+    #[test]
+    fn write_actions_on_readonly_families_always_fall_back_to_dotnet() {
+        let router = HostRouter::new(MockHostBackend::default());
+        let write_calls = [
+            ("system.health", json!({ "action": "apply" })),
+            ("system.health", json!({ "action": "network" })),
+            ("system.health", json!({ "action": "gamemode-on" })),
+            ("gpu.profile", json!({ "action": "apply" })),
+            ("gpu.profile", json!({ "action": "undo" })),
+            ("gpu.display", json!({ "action": "set" })),
+            ("gpu.display", json!({ "action": "adjust" })),
+            ("gpu.display", json!({ "action": "ddc" })),
+            ("gpu.display", json!({ "action": "override" })),
+            ("system.drives", json!({ "action": "cache" })),
+            ("system.drives", json!({ "action": "trim" })),
+            ("system.drives", json!({ "action": "all" })),
+        ];
+        for (method, params) in write_calls {
+            assert!(!is_readonly_hardware_call(method, &params));
+            assert_eq!(
+                router.dispatch(method, &params).unwrap(),
+                RouteOutcome::FallbackToDotnet,
+                "write call {method} {params} must not execute in Rust slice 2"
             );
         }
     }
@@ -349,7 +464,7 @@ mod tests {
     fn policy_routes_enforce_hard_stops_in_process() {
         let router = HostRouter::new(MockHostBackend::default());
 
-        let RouteOutcome::Handled(ac) = router
+        let RouteOutcome::Handled(val) = router
             .dispatch(
                 "policy.antiCheat.decide",
                 &json!({
@@ -361,8 +476,21 @@ mod tests {
         else {
             panic!("expected Handled");
         };
-        assert_eq!(ac["class"], "competitivePvpOnline");
-        assert_eq!(ac["dllPolicy"], "disallowed");
+        assert_eq!(val["wireClass"], "competitivePvpOnline");
+        assert_eq!(val["dllPolicy"], "disallowed");
+        assert_eq!(val["allowsExoFlow"], false);
+
+        let RouteOutcome::Handled(arg) = router
+            .dispatch(
+                "policy.antiCheat.refusedArg",
+                &json!({ "arguments": "-dx12 -noeac" }),
+            )
+            .unwrap()
+        else {
+            panic!("expected Handled");
+        };
+        assert_eq!(arg["allowed"], false);
+        assert_eq!(arg["refused"], "-noeac");
 
         let RouteOutcome::Handled(tree) = router
             .dispatch(
@@ -371,7 +499,7 @@ mod tests {
                     "root": { "pid": 10, "name": "game.exe" },
                     "descendants": [
                         { "pid": 11, "name": "EasyAntiCheat_EOS.exe" },
-                        { "pid": 12, "name": "helper.exe" }
+                        { "pid": 12, "name": "worker.exe" }
                     ]
                 }),
             )

@@ -1150,6 +1150,23 @@ pub fn load_host_contract(json: &str) -> Result<HostContract, serde_json::Error>
 #[cfg(windows)]
 type MediaPipeSlot = Arc<Mutex<Option<(String, Arc<pipe::PipeHandle>)>>>;
 
+pub type ShadowObserver = Arc<dyn Fn(&str, Value, String, Duration) + Send + Sync>;
+
+pub const SHADOW_READONLY_METHODS: &[&str] = &[
+    "system.health",
+    "gpu.profile",
+    "gpu.processes",
+    "gpu.tuning.state",
+    "system.about",
+    "gpu.display",
+    "hdr.state",
+    "system.drives",
+];
+
+pub fn is_shadow_readonly_method(method: &str) -> bool {
+    SHADOW_READONLY_METHODS.contains(&method)
+}
+
 #[cfg(windows)]
 pub struct RpcClient {
     pipe: Arc<pipe::PipeHandle>,
@@ -1161,6 +1178,7 @@ pub struct RpcClient {
     video_handler: Arc<Mutex<Option<VideoFrameHandler>>>,
     media_pipe: MediaPipeSlot,
     wire_mode: ActiveWireMode,
+    shadow_observer: Arc<Mutex<Option<ShadowObserver>>>,
 }
 
 #[cfg(windows)]
@@ -1423,11 +1441,26 @@ impl RpcClient {
             video_handler,
             media_pipe,
             wire_mode,
+            shadow_observer: Arc::new(Mutex::new(None)),
         }))
     }
 
     pub fn wire_mode(&self) -> ActiveWireMode {
         self.wire_mode
+    }
+
+    pub fn set_shadow_observer(&self, observer: ShadowObserver) {
+        *self
+            .shadow_observer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(observer);
+    }
+
+    pub fn clear_shadow_observer(&self) {
+        *self
+            .shadow_observer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     pub fn set_video_frame_handler(
@@ -1515,6 +1548,33 @@ impl RpcClient {
                     return req_id;
                 }
             },
+        };
+        let callback: PendingCallback = if is_shadow_readonly_method(method) {
+            let obs = self
+                .shadow_observer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            if let Some(observer) = obs {
+                let method_owned = method.to_owned();
+                let params_val = serde_json::to_value(params).unwrap_or(Value::Null);
+                let started = std::time::Instant::now();
+                Box::new(move |res| {
+                    if let Ok(WirePayload::Json(ref raw)) = res {
+                        observer(
+                            &method_owned,
+                            params_val,
+                            raw.get().to_owned(),
+                            started.elapsed(),
+                        );
+                    }
+                    callback(res);
+                })
+            } else {
+                callback
+            }
+        } else {
+            callback
         };
         {
             let mut map = self.pending.lock().unwrap_or_else(|e| e.into_inner());
