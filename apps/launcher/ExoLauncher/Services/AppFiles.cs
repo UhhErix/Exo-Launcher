@@ -283,6 +283,32 @@ internal static class AppFiles
         catch (ZstdException ex) { throw new InvalidDataException($"{entry.Path} is not a zstd frame: {ex.Message}", ex); }
     }
 
+    internal static async Task<Manifest> UnpackAsync(string manifestPath, string packPath, string outDirectory, CancellationToken ct)
+    {
+        var manifest = Parse(await File.ReadAllBytesAsync(manifestPath, ct).ConfigureAwait(false))
+            ?? throw new InvalidDataException("Not a valid files.json.");
+        var packInfo = new FileInfo(packPath);
+        if (!packInfo.Exists || packInfo.Length != manifest.PackSize)
+            throw new InvalidDataException($"files.pack size mismatch (expected {manifest.PackSize}, got {(packInfo.Exists ? packInfo.Length : -1)}).");
+        var actualPackSha = await Sha256FileAsync(packPath, ct).ConfigureAwait(false);
+        if (!FixedTimeHexEquals(actualPackSha, manifest.PackSha256))
+            throw new InvalidDataException("files.pack SHA-256 did not match files.json.");
+
+        var root = System.IO.Path.GetFullPath(outDirectory);
+        Directory.CreateDirectory(root);
+        var rootPrefix = root.EndsWith(System.IO.Path.DirectorySeparatorChar) ? root : root + System.IO.Path.DirectorySeparatorChar;
+        await using var pack = new FileStream(packPath, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        foreach (var entry in manifest.Files)
+        {
+            var dest = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, entry.Path.Replace('/', System.IO.Path.DirectorySeparatorChar)));
+            if (!dest.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Unsafe output path: " + entry.Path);
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(dest)!);
+            await WriteVerifiedAsync(pack, entry, dest, ct).ConfigureAwait(false);
+        }
+        return manifest;
+    }
+
     internal static async Task<string> Sha256FileAsync(string path, CancellationToken ct)
     {
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 1 << 17, FileOptions.Asynchronous | FileOptions.SequentialScan);

@@ -85,6 +85,27 @@ if ($missingOAuth.Count -gt 0) {
     Write-Host "OAuth client IDs baked: [$bakedText]; missing: [$missingText]."
 }
 
+$deltaPubKey = [Environment]::GetEnvironmentVariable('EXO_DELTA_RELEASE_PUBKEY_HEX')
+if ([string]::IsNullOrWhiteSpace($deltaPubKey) -and $hasGh) {
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $fetchedKey = (& gh variable get EXO_DELTA_RELEASE_PUBKEY_HEX 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($fetchedKey)) {
+            [Environment]::SetEnvironmentVariable('EXO_DELTA_RELEASE_PUBKEY_HEX', $fetchedKey, 'Process')
+            $deltaPubKey = $fetchedKey
+        }
+    } catch {
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+}
+if ([string]::IsNullOrWhiteSpace($deltaPubKey)) {
+    Write-Warning 'EXO_DELTA_RELEASE_PUBKEY_HEX is not set; exo-installer will build without an embedded release key.'
+} else {
+    Write-Host "EXO_DELTA_RELEASE_PUBKEY_HEX embedded into exo-installer ($($deltaPubKey.Length) hex chars)."
+}
+
 # The release gate: the telemetry and crash-report tests (what may leave this PC, and in what shape) and the UI's tests,
 # run before anything is built or published.
 dotnet test --project ExoLauncher.Tests\ExoLauncher.Tests.csproj -c Release -p:Platform=x64 --filter "FullyQualifiedName~TelemetryTests|FullyQualifiedName~CrashSendTests|FullyQualifiedName~AppsConfirmReasonTests|FullyQualifiedName~NetworkDestinationsTests"
@@ -120,6 +141,8 @@ cargo build --release --locked -p exo-voice-ml
 if ($LASTEXITCODE) { throw "Exo Voice ML release build failed ($LASTEXITCODE)." }
 cargo build --release --locked -p exo-audio-apo --lib --bin exo-apo-helper
 if ($LASTEXITCODE) { throw "Exo Audio APO release build failed ($LASTEXITCODE)." }
+cargo build --release --locked -p exo-installer
+if ($LASTEXITCODE) { throw "Exo Installer release build failed ($LASTEXITCODE)." }
 Pop-Location
 dotnet publish ExoLauncher\ExoLauncher.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained -v q -nologo
 if ($LASTEXITCODE) { throw "dotnet publish failed ($LASTEXITCODE)." }
@@ -181,7 +204,8 @@ $symbolCandidates = @(
     (Join-Path $repo 'native-ui\target\release\exo_shaders_service.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_voice_ml.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_apo.pdb'),
-    (Join-Path $repo 'native-ui\target\release\exo_apo_helper.pdb')
+    (Join-Path $repo 'native-ui\target\release\exo_apo_helper.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_installer.pdb')
 )
 foreach ($pdb in $symbolCandidates) {
     if (Test-Path $pdb) { Copy-Item $pdb $symbols -Force }
@@ -243,20 +267,53 @@ $deltaPaths = @($deltaManifest.files | ForEach-Object { $_.path })
 foreach ($apoAsset in 'exo_apo.dll', 'exo-apo-helper.exe') {
     if ($deltaPaths -notcontains $apoAsset) { throw "Delta pack manifest files.json lacks $apoAsset." }
 }
+
+$installerBin = Join-Path $repo 'native-ui\target\release\exo-installer.exe'
+if (Test-Path $installerBin) { Copy-Item $installerBin (Join-Path $artifacts 'exo-installer.exe') -Force }
+
+$payloadZip = Join-Path $artifacts 'ExoLauncher-win-x64.zip'
+if (Test-Path $payloadZip) { Remove-Item $payloadZip -Force }
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::Open($payloadZip, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    foreach ($entry in $deltaManifest.files) {
+        $srcPath = if ($entry.setup -eq $true) {
+            Join-Path $packShell (Split-Path $entry.path -Leaf)
+        } else {
+            Join-Path $publish.FullName ($entry.path -replace '/', '\')
+        }
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $zip,
+            $srcPath,
+            $entry.path,
+            [System.IO.Compression.CompressionLevel]::Optimal)
+    }
+} finally {
+    $zip.Dispose()
+}
+$zipVerify = [System.IO.Compression.ZipFile]::OpenRead($payloadZip)
+try {
+    if ($zipVerify.Entries.Count -ne $deltaManifest.files.Count) {
+        throw "ExoLauncher-win-x64.zip entry count mismatch ($($zipVerify.Entries.Count) != $($deltaManifest.files.Count))."
+    }
+} finally {
+    $zipVerify.Dispose()
+}
+
 Remove-Item $packShell -Recurse -Force
 
 $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -Path "$setup.sha256" -Value "$hash  ExoLauncher-Setup.exe" -NoNewline -Encoding ascii
 Set-Content -Path (Join-Path $artifacts 'whats-new.json') -Value ($whatsNew | ConvertTo-Json -Depth 4) -NoNewline -Encoding utf8NoBOM
 Write-Output "Exo Launcher ${version}: $setup ($([math]::Round((Get-Item $setup).Length / 1MB, 1)) MB), SHA-256 $hash, Exo Shaders engine from shaders\ at $shadersCommit"
-Write-Output "File-level update: files.pack $([math]::Round((Get-Item (Join-Path $artifacts 'files.pack')).Length / 1MB, 1)) MB, installer revision $installerRevision"
+Write-Output "File-level update: files.pack $([math]::Round((Get-Item (Join-Path $artifacts 'files.pack')).Length / 1MB, 1)) MB, ExoLauncher-win-x64.zip $([math]::Round((Get-Item $payloadZip).Length / 1MB, 1)) MB, installer revision $installerRevision"
 
 # The release's file list and pack (and its What's New) on the GitHub release, beside the installer. Never replaced: an
 # install may already have read them.
 if ($Release) {
     $existing = @(gh release view $Release --repo UhhErix/Exo-Launcher --json assets --jq '.assets[].name')
     if ($LASTEXITCODE) { throw "GitHub release $Release was not found (create it first)." }
-    foreach ($asset in 'files.json', 'files.pack', 'whats-new.json') {
+    foreach ($asset in 'files.json', 'files.pack', 'whats-new.json', 'ExoLauncher-win-x64.zip') {
         if ($existing -contains $asset) { throw "$asset is already on $Release; delete it there first if this build replaces it." }
         gh release upload $Release (Join-Path $artifacts $asset) --repo UhhErix/Exo-Launcher
         if ($LASTEXITCODE) { throw "Uploading $asset to $Release failed ($LASTEXITCODE)." }

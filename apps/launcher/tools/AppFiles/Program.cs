@@ -43,7 +43,14 @@ switch (args.FirstOrDefault())
         }, new JsonSerializerOptions { WriteIndented = true }));
         return 0;
     }
+    case "unpack":
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var manifest = await AppFiles.UnpackAsync(Need("--manifest"), Need("--pack"), Need("--out"), CancellationToken.None);
+        Console.WriteLine($"unpacked {manifest.Files.Count} files ({manifest.Files.Sum(f => f.Size):N0} bytes) for {manifest.Version} ({started.Elapsed.TotalSeconds:0.0} s)");
+        return 0;
+    }
     default:
-        Console.Error.WriteLine("Usage: build --app <folder> [--setup <ExoSetup.exe>] --version X.Y.Z --installer <revision> --out <folder> | measure --manifest <files.json> --app <folder>");
+        Console.Error.WriteLine("Usage: build --app <folder> [--setup <ExoSetup.exe>] --version X.Y.Z --installer <revision> --out <folder> | measure --manifest <files.json> --app <folder> | unpack --manifest <files.json> --pack <files.pack> --out <folder>");
         return 2;
 }

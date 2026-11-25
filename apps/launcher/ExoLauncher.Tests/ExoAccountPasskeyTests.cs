@@ -108,7 +108,10 @@ public sealed class ExoAccountPasskeyTests
             Assert.All(empty, p =>
             {
                 Assert.False(p.Available);
-                Assert.Contains("Unavailable", p.Note);
+                Assert.Contains("classic sign-in", p.Note);
+                Assert.DoesNotContain("EXO_OAUTH_", p.Note);
+                Assert.DoesNotContain("oauth-clients.json", p.Note);
+                Assert.True(NativeAuthProviders.UsesClassicFallback(p.Provider, tempDir, _ => null, _ => null));
             });
 
             var emptyById = empty.ToDictionary(p => p.Provider, StringComparer.OrdinalIgnoreCase);
@@ -147,12 +150,15 @@ public sealed class ExoAccountPasskeyTests
             var byId = configured.ToDictionary(p => p.Provider, StringComparer.OrdinalIgnoreCase);
 
             Assert.True(byId["spotify"].Available);
+            Assert.False(NativeAuthProviders.UsesClassicFallback("spotify", tempDir, Env, Baked));
             Assert.True(byId["discord"].Available);
             Assert.True(byId["twitch"].Available);
             Assert.True(byId["riot"].Available);
             Assert.Contains("cloud token proxy", byId["riot"].Note);
             Assert.False(byId["epic"].Available);
+            Assert.True(NativeAuthProviders.UsesClassicFallback("epic", tempDir, Env, Baked));
             Assert.False(byId["microsoft"].Available);
+            Assert.True(NativeAuthProviders.UsesClassicFallback("microsoft", tempDir, Env, Baked));
         }
         finally
         {

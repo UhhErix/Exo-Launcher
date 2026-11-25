@@ -35,7 +35,14 @@ jobs:
           filter: blob:none
           sparse-checkout: |
             apps/launcher/native-ui
+            apps/launcher/tools/AppFiles
+            apps/launcher/ExoLauncher/Services/AppFiles.cs
+            apps/launcher/global.json
           persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
 
       - name: Build exo-delta signer
         shell: pwsh
@@ -44,7 +51,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           cargo build --release --locked -p exo-delta
 
-      - name: Download release payload zip(s)
+      - name: Download release payload tree(s)
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -58,13 +65,37 @@ jobs:
           if ($env:PREVIOUS_TAG -and $env:PREVIOUS_TAG -notmatch '^v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$') {
             throw 'previous_tag must match vMAJOR.MINOR.PATCH'
           }
-          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\exo-pack\new", "$env:RUNNER_TEMP\exo-pack\out" | Out-Null
-          gh release download $env:RELEASE_TAG --pattern 'ExoLauncher-win-x64.zip' --dir "$env:RUNNER_TEMP\exo-pack\new-zip"
-          Expand-Archive -Path "$env:RUNNER_TEMP\exo-pack\new-zip\ExoLauncher-win-x64.zip" -DestinationPath "$env:RUNNER_TEMP\exo-pack\new" -Force
+          function Resolve-ReleaseTree([string]$Tag, [string]$WorkRoot, [string]$OutDir) {
+            New-Item -ItemType Directory -Force -Path $WorkRoot, $OutDir | Out-Null
+            $assets = @(gh release view $Tag --json assets --jq '.assets[].name')
+            if ($LASTEXITCODE -ne 0) { throw "Could not list assets for release $Tag." }
+            if ($assets -contains 'ExoLauncher-win-x64.zip') {
+              $zipDir = Join-Path $WorkRoot 'zip'
+              New-Item -ItemType Directory -Force -Path $zipDir | Out-Null
+              gh release download $Tag --pattern 'ExoLauncher-win-x64.zip' --dir $zipDir
+              if ($LASTEXITCODE -ne 0) { throw "Failed to download ExoLauncher-win-x64.zip for $Tag." }
+              Expand-Archive -Path (Join-Path $zipDir 'ExoLauncher-win-x64.zip') -DestinationPath $OutDir -Force
+              return
+            }
+            if (($assets -contains 'files.json') -and ($assets -contains 'files.pack')) {
+              $packDir = Join-Path $WorkRoot 'pack'
+              New-Item -ItemType Directory -Force -Path $packDir | Out-Null
+              gh release download $Tag --pattern 'files.json' --pattern 'files.pack' --dir $packDir
+              if ($LASTEXITCODE -ne 0) { throw "Failed to download files.json/files.pack for $Tag." }
+              dotnet run --project apps/launcher/tools/AppFiles/AppFiles.csproj -c Release -- unpack `
+                --manifest (Join-Path $packDir 'files.json') `
+                --pack (Join-Path $packDir 'files.pack') `
+                --out $OutDir
+              if ($LASTEXITCODE -ne 0) { throw "Failed to unpack files.pack for $Tag." }
+              return
+            }
+            throw "Release $Tag lacks both ExoLauncher-win-x64.zip and files.json/files.pack."
+          }
+
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\exo-pack\out" | Out-Null
+          Resolve-ReleaseTree $env:RELEASE_TAG "$env:RUNNER_TEMP\exo-pack\new-src" "$env:RUNNER_TEMP\exo-pack\new"
           if ($env:PREVIOUS_TAG) {
-            New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\exo-pack\old" | Out-Null
-            gh release download $env:PREVIOUS_TAG --pattern 'ExoLauncher-win-x64.zip' --dir "$env:RUNNER_TEMP\exo-pack\old-zip"
-            Expand-Archive -Path "$env:RUNNER_TEMP\exo-pack\old-zip\ExoLauncher-win-x64.zip" -DestinationPath "$env:RUNNER_TEMP\exo-pack\old" -Force
+            Resolve-ReleaseTree $env:PREVIOUS_TAG "$env:RUNNER_TEMP\exo-pack\old-src" "$env:RUNNER_TEMP\exo-pack\old"
           }
 
       - name: Build and Ed25519-sign full.exopack and delta.exopack

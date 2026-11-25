@@ -50,13 +50,25 @@ internal static class NativeAuthProviders
         {
             var available = ids.ContainsKey(spec.Id);
             var note = !available
-                ? $"Unavailable: official {spec.DisplayName} OAuth client ID is not registered yet (configure {ConfigFileName} or {spec.EnvVar})."
+                ? $"Using classic sign-in for {spec.DisplayName}."
                 : spec.RequiresTokenProxy
                     ? $"Client ID configured for {FlowLabel(spec.Flow)}; confidential /token exchange requires cloud token proxy."
                     : $"Ready via {FlowLabel(spec.Flow)}.";
             list.Add(new ProviderStatus(spec.Id, spec.DisplayName, spec.Flow, available, note));
         }
         return list;
+    }
+
+    internal static bool UsesClassicFallback(
+        string providerId,
+        string dataDir,
+        Func<string, string?>? getEnv = null,
+        Func<string, string?>? getBaked = null)
+    {
+        var normalized = NormalizeProviderId(providerId);
+        if (normalized is null) return true;
+        var ids = LoadClientIds(dataDir, getEnv, getBaked);
+        return !ids.ContainsKey(normalized);
     }
 
     internal static Dictionary<string, string> LoadClientIds(

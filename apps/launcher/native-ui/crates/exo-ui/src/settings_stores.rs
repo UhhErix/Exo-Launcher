@@ -1083,20 +1083,8 @@ pub fn stores_section(s: &AppState) -> El {
             .child(get_box);
     }
 
-    if let Some(ref providers) = s.wp4.native_auth_providers
-        && !providers.is_empty()
-    {
-        for provider in providers {
-            let status_text = if provider.available {
-                "Ready"
-            } else {
-                "Unavailable"
-            };
-            let badge_color = if provider.available {
-                good()
-            } else {
-                fg_muted()
-            };
+    if let Some(ref providers) = s.wp4.native_auth_providers {
+        for provider in visible_native_auth_providers(providers) {
             card = card
                 .child(el().w_full().h(1.0).fill(hairline()))
                 .child(store_row_box(
@@ -1106,7 +1094,7 @@ pub fn stores_section(s: &AppState) -> El {
                     Some(provider.note.clone()),
                     None,
                     false,
-                    text(status_text).font(type_small()).color(badge_color),
+                    text("Ready").font(type_small()).color(good()),
                 ));
         }
     }
@@ -1315,4 +1303,50 @@ pub fn shaders_section(s: &AppState) -> Option<El> {
             .child(sec_head_with_action("Shaders", None))
             .child(card),
     )
+}
+
+fn visible_native_auth_providers(
+    providers: &[exo_rpc::NativeAuthProviderStatus],
+) -> Vec<&exo_rpc::NativeAuthProviderStatus> {
+    providers.iter().filter(|p| p.available).collect()
+}
+
+#[cfg(test)]
+mod native_auth_fallback_tests {
+    use super::visible_native_auth_providers;
+    use exo_rpc::NativeAuthProviderStatus;
+
+    #[test]
+    fn hides_unconfigured_providers_so_no_dead_native_rows_render() {
+        let all_missing = vec![
+            NativeAuthProviderStatus {
+                provider: "spotify".into(),
+                display_name: "Spotify".into(),
+                flow: "pkce-system-browser".into(),
+                available: false,
+                note: "Using classic sign-in for Spotify.".into(),
+            },
+            NativeAuthProviderStatus {
+                provider: "discord".into(),
+                display_name: "Discord".into(),
+                flow: "pkce-system-browser".into(),
+                available: false,
+                note: "Using classic sign-in for Discord.".into(),
+            },
+            NativeAuthProviderStatus {
+                provider: "epic".into(),
+                display_name: "Epic Games".into(),
+                flow: "pkce-system-browser".into(),
+                available: false,
+                note: "Using classic sign-in for Epic Games.".into(),
+            },
+        ];
+        assert!(visible_native_auth_providers(&all_missing).is_empty());
+
+        let mut mixed = all_missing;
+        mixed[0].available = true;
+        let visible = visible_native_auth_providers(&mixed);
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].provider, "spotify");
+    }
 }
