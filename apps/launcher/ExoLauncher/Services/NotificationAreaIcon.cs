@@ -114,28 +114,32 @@ internal sealed class NotificationAreaIcon : IDisposable
 
     private nint OnMessage(nint hwnd, uint message, nint wParam, nint lParam)
     {
-        if (ShouldRecreateAfterShellRestart(message, _taskbarCreatedMessage, _shown))
+        try
         {
-            // Explorer discards every notification-area icon when its taskbar process restarts, and the taskbar may be
-            // at another scale now: the size is read again. Without resetting _shown, Show() would think it survived.
-            _shown = false;
-            if (_icon != 0)
+            if (ShouldRecreateAfterShellRestart(message, _taskbarCreatedMessage, _shown))
             {
-                DestroyIcon(_icon);
-                _icon = 0;
+                // Explorer discards every notification-area icon when its taskbar process restarts, and the taskbar may be
+                // at another scale now: the size is read again. Without resetting _shown, Show() would think it survived.
+                _shown = false;
+                if (_icon != 0)
+                {
+                    DestroyIcon(_icon);
+                    _icon = 0;
+                }
+                Show();
             }
-            Show();
-        }
-        if (message == CallbackMessage)
-        {
-            // Under version 4 a press is its selection (NIN_SELECT, Enter's NIN_KEYSELECT) and the right press its menu,
-            // with where to draw it in wParam.
-            switch (unchecked((uint)lParam.ToInt64()) & 0xFFFF)
+            if (message == CallbackMessage)
             {
-                case NinSelect or NinKeySelect: _open(); break;
-                case WmContextMenu: ShowMenu(unchecked((short)wParam.ToInt64()), unchecked((short)(wParam.ToInt64() >> 16))); break;
+                // Under version 4 a press is its selection (NIN_SELECT, Enter's NIN_KEYSELECT) and the right press its menu,
+                // with where to draw it in wParam.
+                switch (unchecked((uint)lParam.ToInt64()) & 0xFFFF)
+                {
+                    case NinSelect or NinKeySelect: _open(); break;
+                    case WmContextMenu: ShowMenu(unchecked((short)wParam.ToInt64()), unchecked((short)(wParam.ToInt64() >> 16))); break;
+                }
             }
         }
+        catch { }
         return DefWindowProc(hwnd, message, wParam, lParam);
     }
 

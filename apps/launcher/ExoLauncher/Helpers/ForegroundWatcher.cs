@@ -155,7 +155,11 @@ internal sealed class ForegroundWatcher : IDisposable
 
     private void OnShow(nint hook, uint evt, nint hwnd, int idObject, int idChild, uint thread, uint time)
     {
-        if (Services.WindowStarts.IsTopLevelShow(evt, idObject, idChild, GetAncestor(hwnd, GaRoot) == hwnd)) RaiseActivity(hwnd);
+        try
+        {
+            if (Services.WindowStarts.IsTopLevelShow(evt, idObject, idChild, GetAncestor(hwnd, GaRoot) == hwnd)) RaiseActivity(hwnd);
+        }
+        catch { }
     }
 
     private static void RaiseActivity(nint hwnd)
@@ -171,15 +175,15 @@ internal sealed class ForegroundWatcher : IDisposable
 
     private void OnForeground(nint hook, uint evt, nint hwnd, int idObject, int idChild, uint thread, uint time)
     {
-        if (hwnd != IntPtr.Zero) RaiseActivity(hwnd);
-        var front = hwnd != IntPtr.Zero ? hwnd : GetForegroundWindow();
-        var inFront = ExoInFront(_window, front);
-        if (!inFront && front != IntPtr.Zero) _before = front;
-        if (inFront == _inFront) return;
-        _inFront = inFront;
-        // A native callback: an exception escaping here ends the process.
         try
         {
+            if (hwnd != IntPtr.Zero) RaiseActivity(hwnd);
+            var front = hwnd != IntPtr.Zero ? hwnd : GetForegroundWindow();
+            var inFront = ExoInFront(_window, front);
+            if (!inFront && front != IntPtr.Zero) _before = front;
+            if (inFront == _inFront) return;
+            _inFront = inFront;
+            // A native callback: an exception escaping here ends the process.
             if (inFront) Arrived(front);
             _changed(inFront);
         }
@@ -269,16 +273,23 @@ internal sealed class ForegroundWatcher : IDisposable
         private nint OnMessage(int code, nint wParam, nint lParam)
         {
             var hook = _hook;
-            // Most messages are none of the four: only the id is read for them.
-            if (code >= 0 && hook != IntPtr.Zero &&
-                (uint)Marshal.ReadInt32(lParam, 2 * IntPtr.Size) is WmActivate or WmShowWindow or WmActivateApp or WmWindowPosChanging)
+            try
             {
-                try { Trace(Marshal.PtrToStructure<CwpStruct>(lParam)); }
-                catch { /* a trace line is never worth a failed message */ }
+                // Most messages are none of the four: only the id is read for them.
+                if (code >= 0 && hook != IntPtr.Zero &&
+                    (uint)Marshal.ReadInt32(lParam, 2 * IntPtr.Size) is WmActivate or WmShowWindow or WmActivateApp or WmWindowPosChanging)
+                {
+                    try { Trace(Marshal.PtrToStructure<CwpStruct>(lParam)); }
+                    catch { /* a trace line is never worth a failed message */ }
+                }
+                var result = CallNextHookEx(hook, code, wParam, lParam);
+                if (Environment.TickCount64 > _until || _lines >= MaxLines) Dispose();
+                return result;
             }
-            var result = CallNextHookEx(hook, code, wParam, lParam);
-            if (Environment.TickCount64 > _until || _lines >= MaxLines) Dispose();
-            return result;
+            catch
+            {
+                return CallNextHookEx(hook, code, wParam, lParam);
+            }
         }
 
         private void Trace(CwpStruct message)

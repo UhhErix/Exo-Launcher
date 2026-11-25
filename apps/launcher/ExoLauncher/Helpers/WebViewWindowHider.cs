@@ -23,16 +23,20 @@ internal static class WebViewWindowHider
         {
             EnumWindows((window, _) =>
             {
-                GetWindowThreadProcessId(window, out var pid);
-                if (pid != browserProcessId) return true;
-                var name = new StringBuilder(64);
-                if (GetClassNameW(window, name, name.Capacity) == 0) return true;
-                if (!name.ToString().StartsWith("Chrome_WidgetWin_", StringComparison.Ordinal)) return true;
-                var style = GetWindowLongPtrW(window, GwlExStyle).ToInt64();
-                if ((style & WsExToolWindow) != 0 && (style & WsExAppWindow) == 0) return true;
-                SetWindowLongPtrW(window, GwlExStyle, new IntPtr((style | WsExToolWindow) & ~WsExAppWindow));
-                SetWindowPos(window, IntPtr.Zero, 0, 0, 0, 0,
-                    SwpNoSize | SwpNoMove | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+                try
+                {
+                    GetWindowThreadProcessId(window, out var pid);
+                    if (pid != browserProcessId) return true;
+                    var name = new StringBuilder(64);
+                    if (GetClassNameW(window, name, name.Capacity) == 0) return true;
+                    if (!name.ToString().StartsWith("Chrome_WidgetWin_", StringComparison.Ordinal)) return true;
+                    var style = GetWindowLongPtrW(window, GwlExStyle).ToInt64();
+                    if ((style & WsExToolWindow) != 0 && (style & WsExAppWindow) == 0) return true;
+                    SetWindowLongPtrW(window, GwlExStyle, new IntPtr((style | WsExToolWindow) & ~WsExAppWindow));
+                    SetWindowPos(window, IntPtr.Zero, 0, 0, 0, 0,
+                        SwpNoSize | SwpNoMove | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+                }
+                catch { }
                 return true;
             }, IntPtr.Zero);
         }

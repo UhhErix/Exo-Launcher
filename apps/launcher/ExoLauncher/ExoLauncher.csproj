@@ -211,8 +211,8 @@
     <Content Include="..\voice\out\exo_apm.dll" Condition="Exists('..\voice\out\exo_apm.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- DeepFilterNet noise suppression (Exo's build of its C interface, voice\build.ps1): ships in the app, so a call has it from the first join. -->
     <Content Include="..\voice\out\exo-deepfilter.dll" Condition="Exists('..\voice\out\exo-deepfilter.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\native-ui\target\release\exo_voice_ml.dll" Condition="Exists('..\native-ui\target\release\exo_voice_ml.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\native-ui\target\release\exo_apo.dll" Condition="Exists('..\native-ui\target\release\exo_apo.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\native-ui\target\release-cdylib\exo_voice_ml.dll" Condition="Exists('..\native-ui\target\release-cdylib\exo_voice_ml.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\native-ui\target\release-cdylib\exo_apo.dll" Condition="Exists('..\native-ui\target\release-cdylib\exo_apo.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\native-ui\target\release\exo-apo-helper.exe" Condition="Exists('..\native-ui\target\release\exo-apo-helper.exe')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\voice\out\LICENSE-*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\voice\licenses\LICENSE-*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

@@ -23,6 +23,14 @@ public static class Program
     {
         StartupTiming.Begin();
         SetErrorMode(ErrorModeNoDialogs);
+        CrashBreadcrumb.InstallNativeFilter();
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            CrashBreadcrumb.Record("host-domain-unhandled", e.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            CrashBreadcrumb.Record("host-unobserved-task", e.Exception.GetBaseException());
+            e.SetObserved();
+        };
         if (!args.Contains("--uninstall-cleanup", StringComparer.OrdinalIgnoreCase) && !WindowsRequirement.Supports(Environment.OSVersion.Version.Build))
         {
             WindowsRequirement.Refuse();
@@ -122,7 +130,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            PendingReports.Record(ex);
+            CrashBreadcrumb.Record("host-main-fatal", ex);
             try { AppLog.Crash("Fatal headless host startup exception", ex); } catch { }
             throw;
         }
