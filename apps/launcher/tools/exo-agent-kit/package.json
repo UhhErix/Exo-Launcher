@@ -15,7 +15,7 @@
     "install:kit": "node scripts/install.mjs"
   },
   "devDependencies": {
-    "@types/node": "26.6.6",
+    "@types/node": "26.6.7",
     "esbuild": "0.28.2",
     "typescript": "7.0.2"
   }
