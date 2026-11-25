@@ -174,6 +174,7 @@ public sealed class FpsCounterTests
         var window = Frames(144, 5, out var last);
         Assert.Null(window.Read(last).Low);
         window.Read(last);
+        GC.Collect(0, GCCollectionMode.Forced, blocking: true, compacting: false);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < 100; i++) window.Read(last);
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
@@ -299,6 +300,7 @@ public sealed class FpsCounterTests
     {
         var slots = Slots(10, 11, 12);
         Feed(slots, 12, PresentKind.Api, 10);
+        GC.Collect(0, GCCollectionMode.Forced, blocking: true, compacting: false);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < 5000; i++)
         {
