@@ -243,13 +243,9 @@ internal static partial class Drives
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             };
             foreach (var arg in (string[])["/query", "/tn", DefragTask, "/xml", "ONE"]) info.ArgumentList.Add(arg);
-            using var process = Process.Start(info);
-            if (process is null) return null;
-            using var bytes = new MemoryStream();
-            var copy = process.StandardOutput.BaseStream.CopyToAsync(bytes);
-            _ = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(5000) || !copy.Wait(1000) || process.ExitCode != 0) return null;
-            return TaskXmlOff(bytes.ToArray());
+            var result = ProcessOutput.RunCaptureBytes(info, TimeSpan.FromSeconds(5));
+            if (!result.Completed || result.ExitCode != 0) return null;
+            return TaskXmlOff(result.Stdout);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException) { return null; }
     }
