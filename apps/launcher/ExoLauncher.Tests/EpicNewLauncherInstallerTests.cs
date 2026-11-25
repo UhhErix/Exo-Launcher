@@ -67,11 +67,17 @@ public sealed class EpicNewLauncherInstallerTests
     {
         var setup = Path.Combine(Path.GetTempPath(), "exo-epic-cancel-" + Guid.NewGuid().ToString("N") + ".exe");
         File.WriteAllBytes(setup, [0x4D, 0x5A]);
+        try
+        {
+            var message = EpicNewLauncherInstaller.Open(setup, () => true, _ => throw new System.ComponentModel.Win32Exception(1223));
 
-        var message = EpicNewLauncherInstaller.Open(setup, () => true, _ => throw new System.ComponentModel.Win32Exception(1223));
-
-        Assert.Equal("The installer was cancelled.", message);
-        Assert.False(File.Exists(setup));
+            Assert.Equal("The installer was cancelled.", message);
+            Assert.False(File.Exists(setup));
+        }
+        finally
+        {
+            try { ExoLauncher.Helpers.DeletionGate.DeleteFile(setup); } catch { }
+        }
     }
 
     [Fact]
@@ -79,11 +85,17 @@ public sealed class EpicNewLauncherInstallerTests
     {
         var setup = Path.Combine(Path.GetTempPath(), "exo-epic-nostart-" + Guid.NewGuid().ToString("N") + ".exe");
         File.WriteAllBytes(setup, [0x4D, 0x5A]);
+        try
+        {
+            var message = EpicNewLauncherInstaller.Open(setup, () => true, _ => throw new System.ComponentModel.Win32Exception(193));
 
-        var message = EpicNewLauncherInstaller.Open(setup, () => true, _ => throw new System.ComponentModel.Win32Exception(193));
-
-        Assert.Equal("Epic's installer couldn't open. Try again.", message);
-        Assert.False(File.Exists(setup));
+            Assert.Equal("Epic's installer couldn't open. Try again.", message);
+            Assert.False(File.Exists(setup));
+        }
+        finally
+        {
+            try { ExoLauncher.Helpers.DeletionGate.DeleteFile(setup); } catch { }
+        }
     }
 
     [Fact]
