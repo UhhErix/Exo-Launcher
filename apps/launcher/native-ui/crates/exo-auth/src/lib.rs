@@ -8,10 +8,14 @@ pub mod wam;
 pub mod webauthn;
 
 pub use config::{
-    AuthError, OAuthClientConfig, OAuthProvider, ProviderAuthStatus, is_valid_official_client_id,
+    AuthError, FIXED_LOOPBACK_PORTS, LoopbackRedirectMode, OAuthClientConfig, OAuthProvider,
+    ProviderAuthStatus, is_valid_official_client_id,
 };
-pub use device_code::{DeviceCodeChallenge, DevicePollOutcome, JellyfinQuickConnect};
-pub use pkce::{LoopbackPkceServer, OAuthTokenSet, PkceAuthSession};
+pub use device_code::{
+    DeviceCodeChallenge, DevicePollOutcome, JellyfinQuickConnect, build_device_poll_body,
+    build_device_start_body,
+};
+pub use pkce::{LoopbackPkceServer, OAuthTokenSet, PkceAuthSession, bind_loopback_listener};
 pub use qr::{
     DiscordQrEvent, DiscordQrProbe, SteamCredentialsStart, SteamPollResult, SteamQrStart,
     SteamRsaKeyInfo,
@@ -23,12 +27,13 @@ pub use webauthn::{AssertionProof, RegistrationProof, WebAuthnProbeResult};
 mod tests {
     use super::*;
     use std::io::{Read, Write};
-    use std::net::TcpStream;
+    use std::net::{TcpListener, TcpStream};
     use std::time::Duration;
 
     #[test]
     fn unconfigured_providers_are_marked_unavailable_with_clear_notes() {
         let cfg = OAuthClientConfig::empty();
+        assert_eq!(OAuthProvider::ALL.len(), 8);
         for &provider in OAuthProvider::ALL {
             let st = cfg.status(provider);
             assert!(!st.available, "{} should be unavailable", provider.id());
@@ -39,6 +44,143 @@ mod tests {
                 Err(AuthError::Unavailable { .. })
             ));
         }
+    }
+
+    #[test]
+    fn provider_flows_endpoints_and_redirect_modes_match_official_specs() {
+        assert_eq!(OAuthProvider::Discord.id(), "discord");
+        assert_eq!(
+            OAuthProvider::Discord.env_var(),
+            "EXO_OAUTH_DISCORD_CLIENT_ID"
+        );
+        assert_eq!(OAuthProvider::Discord.flow(), "pkce-system-browser");
+        assert_eq!(OAuthProvider::Discord.default_scopes(), "identify");
+        assert_eq!(
+            OAuthProvider::Discord.authorization_endpoint(),
+            Some("https://discord.com/oauth2/authorize")
+        );
+        assert_eq!(
+            OAuthProvider::Discord.token_endpoint(),
+            "https://discord.com/api/oauth2/token"
+        );
+        assert_eq!(
+            OAuthProvider::Discord.loopback_redirect_mode(),
+            Some(LoopbackRedirectMode::FixedPorts {
+                host: "127.0.0.1",
+                ports: FIXED_LOOPBACK_PORTS,
+            })
+        );
+        assert!(!OAuthProvider::Discord.requires_token_exchange_proxy());
+
+        assert_eq!(OAuthProvider::Twitch.flow(), "device-code");
+        assert_eq!(OAuthProvider::Twitch.authorization_endpoint(), None);
+        assert_eq!(
+            OAuthProvider::Twitch.device_authorization_endpoint(),
+            Some("https://id.twitch.tv/oauth2/device")
+        );
+        assert_eq!(OAuthProvider::Twitch.loopback_redirect_mode(), None);
+        assert!(!OAuthProvider::Twitch.requires_token_exchange_proxy());
+
+        assert_eq!(OAuthProvider::Epic.flow(), "pkce-system-browser");
+        assert_eq!(
+            OAuthProvider::Epic.authorization_endpoint(),
+            Some("https://www.epicgames.com/id/authorize")
+        );
+        assert_eq!(
+            OAuthProvider::Epic.token_endpoint(),
+            "https://api.epicgames.dev/epic/oauth/v2/token"
+        );
+        assert_eq!(OAuthProvider::Epic.device_authorization_endpoint(), None);
+        assert!(OAuthProvider::Epic.requires_token_exchange_proxy());
+
+        assert_eq!(
+            OAuthProvider::Spotify.loopback_redirect_mode(),
+            Some(LoopbackRedirectMode::DynamicPort { host: "127.0.0.1" })
+        );
+        assert_eq!(
+            OAuthProvider::Spotify.registered_redirect_uris(),
+            vec!["http://127.0.0.1/callback".to_string()]
+        );
+        assert!(!OAuthProvider::Spotify.requires_token_exchange_proxy());
+
+        assert_eq!(
+            OAuthProvider::Microsoft.loopback_redirect_mode(),
+            Some(LoopbackRedirectMode::DynamicPort { host: "localhost" })
+        );
+        assert!(!OAuthProvider::Microsoft.requires_token_exchange_proxy());
+
+        assert!(OAuthProvider::Google.requires_token_exchange_proxy());
+        assert!(OAuthProvider::BattleNet.requires_token_exchange_proxy());
+        assert!(OAuthProvider::Riot.requires_token_exchange_proxy());
+    }
+
+    #[test]
+    fn twitch_device_code_uses_plural_scopes_parameter_on_start_and_poll() {
+        let start = build_device_start_body(
+            OAuthProvider::Twitch,
+            "twitch_official_12345",
+            "user:read:email",
+        );
+        assert!(start.contains("client_id=twitch_official_12345"));
+        assert!(start.contains("scopes=user%3Aread%3Aemail"));
+        assert!(!start.contains("&scope="));
+
+        let poll = build_device_poll_body(
+            OAuthProvider::Twitch,
+            "twitch_official_12345",
+            "dev_code_999",
+            "user:read:email",
+        );
+        assert!(poll.contains("client_id=twitch_official_12345"));
+        assert!(poll.contains("scopes=user%3Aread%3Aemail"));
+        assert!(poll.contains("device_code=dev_code_999"));
+        assert!(poll.contains("grant_type=urn:ietf:params:oauth:grant-type:device_code"));
+
+        let ms_start = build_device_start_body(
+            OAuthProvider::Microsoft,
+            "ms_official_12345",
+            "XboxLive.signin offline_access",
+        );
+        assert!(ms_start.contains("&scope="));
+        assert!(!ms_start.contains("&scopes="));
+    }
+
+    #[test]
+    fn layered_config_precedence_is_baked_then_json_then_runtime_env() {
+        let cfg = OAuthClientConfig::from_layers(
+            &[
+                (OAuthProvider::Spotify, "baked_spotify_1111"),
+                (OAuthProvider::Discord, "baked_discord_1111"),
+                (OAuthProvider::Twitch, "baked_twitch_1111"),
+            ],
+            Some(r#"{"providers":{"discord":"json_discord_2222","twitch":"json_twitch_2222"}}"#),
+            &[(OAuthProvider::Twitch, "env_twitch_3333")],
+        )
+        .expect("layered config should parse");
+
+        assert_eq!(
+            cfg.client_id(OAuthProvider::Spotify),
+            Some("baked_spotify_1111")
+        );
+        assert_eq!(
+            cfg.client_id(OAuthProvider::Discord),
+            Some("json_discord_2222")
+        );
+        assert_eq!(
+            cfg.client_id(OAuthProvider::Twitch),
+            Some("env_twitch_3333")
+        );
+        assert_eq!(cfg.client_id(OAuthProvider::Epic), None);
+
+        let proxy_cfg = OAuthClientConfig::from_layers(
+            &[(OAuthProvider::Epic, "epic_official_1234")],
+            None,
+            &[],
+        )
+        .expect("epic config");
+        let st = proxy_cfg.status(OAuthProvider::Epic);
+        assert!(st.available);
+        assert!(st.note.contains("cloud token proxy"));
     }
 
     #[test]
@@ -72,12 +214,16 @@ mod tests {
     #[test]
     fn json_config_parses_both_wrapped_and_flat_formats() {
         let wrapped = OAuthClientConfig::from_json_str(
-            r#"{"providers":{"spotify":"sp_live_12345678","microsoft":"ms_live_87654321"}}"#,
+            r#"{"providers":{"spotify":"sp_live_12345678","discord":"dc_live_87654321","microsoft":"ms_live_87654321"}}"#,
         )
         .expect("wrapped json should parse");
         assert_eq!(
             wrapped.client_id(OAuthProvider::Spotify),
             Some("sp_live_12345678")
+        );
+        assert_eq!(
+            wrapped.client_id(OAuthProvider::Discord),
+            Some("dc_live_87654321")
         );
         assert_eq!(
             wrapped.client_id(OAuthProvider::Microsoft),
@@ -91,6 +237,48 @@ mod tests {
             flat.client_id(OAuthProvider::Twitch),
             Some("tw_live_abcdefgh")
         );
+    }
+
+    #[test]
+    fn fixed_loopback_port_falls_back_when_earlier_ports_are_busy() {
+        let busy1 = TcpListener::bind("127.0.0.1:0").expect("bind busy1");
+        let p1 = busy1.local_addr().expect("p1").port();
+        let busy2 = TcpListener::bind("127.0.0.1:0").expect("bind busy2");
+        let p2 = busy2.local_addr().expect("p2").port();
+        let probe = TcpListener::bind("127.0.0.1:0").expect("bind probe");
+        let p3 = probe.local_addr().expect("p3").port();
+        drop(probe);
+
+        let ports: &'static [u16] = Box::leak(Box::new([p1, p2, p3]));
+        let server = LoopbackPkceServer::from_parts_with_mode(
+            OAuthProvider::Discord,
+            LoopbackRedirectMode::FixedPorts {
+                host: "127.0.0.1",
+                ports,
+            },
+            "discord_official_12345".to_string(),
+            "https://discord.com/oauth2/authorize",
+            "identify",
+            "state-fixed-fallback".to_string(),
+            "verifier-1234567890".to_string(),
+            "challenge-abcdefghij".to_string(),
+        )
+        .expect("should fall back to third free port");
+
+        assert_eq!(server.session.port(), p3);
+        assert_eq!(
+            server.session.redirect_uri,
+            format!("http://127.0.0.1:{p3}/callback")
+        );
+
+        let busy_all = bind_loopback_listener(LoopbackRedirectMode::FixedPorts {
+            host: "127.0.0.1",
+            ports,
+        });
+        assert!(matches!(busy_all, Err(AuthError::Os(_))));
+        drop(server);
+        drop(busy1);
+        drop(busy2);
     }
 
     #[test]
@@ -197,7 +385,7 @@ mod tests {
             Err(AuthError::Unavailable { .. })
         ));
         assert!(matches!(
-            device_code::start_device_code(&empty, OAuthProvider::Epic, None),
+            device_code::start_device_code(&empty, OAuthProvider::Twitch, None),
             Err(AuthError::Unavailable { .. })
         ));
         assert!(matches!(
