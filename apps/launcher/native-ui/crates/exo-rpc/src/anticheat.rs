@@ -77,6 +77,27 @@ impl AntiCheatClass {
             Self::CompetitivePvpOnline | Self::Unknown => false,
         }
     }
+
+    pub const fn as_wire_str(self) -> &'static str {
+        match self {
+            Self::CompetitivePvpOnline => "competitivePvpOnline",
+            Self::OnlineNonCompetitivePve => "onlineNonCompetitivePve",
+            Self::OfflineAntiCheat => "offlineAntiCheat",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    pub const fn allows_offline_dll_mod(self) -> bool {
+        matches!(self.effective(), Self::OfflineAntiCheat)
+    }
+
+    pub const fn allows_opt_in_dll_mod(self) -> bool {
+        matches!(self.effective(), Self::OnlineNonCompetitivePve)
+    }
+
+    pub const fn forbids_dll_mod(self) -> bool {
+        matches!(self.effective(), Self::CompetitivePvpOnline)
+    }
 }
 
 pub const ANTI_CHEAT_EXACT_NAMES: &[&str] = &[
@@ -290,6 +311,29 @@ mod tests {
         assert!(!AntiCheatClass::Unknown.allows_exo_flow());
         assert!(AntiCheatClass::OnlineNonCompetitivePve.allows_exo_flow());
         assert!(AntiCheatClass::OfflineAntiCheat.allows_exo_flow());
+
+        assert_eq!(
+            AntiCheatClass::CompetitivePvpOnline.as_wire_str(),
+            "competitivePvpOnline"
+        );
+        assert_eq!(
+            AntiCheatClass::OnlineNonCompetitivePve.as_wire_str(),
+            "onlineNonCompetitivePve"
+        );
+        assert_eq!(
+            AntiCheatClass::OfflineAntiCheat.as_wire_str(),
+            "offlineAntiCheat"
+        );
+        assert_eq!(AntiCheatClass::Unknown.as_wire_str(), "unknown");
+
+        assert!(AntiCheatClass::OfflineAntiCheat.allows_offline_dll_mod());
+        assert!(!AntiCheatClass::OnlineNonCompetitivePve.allows_offline_dll_mod());
+        assert!(AntiCheatClass::OnlineNonCompetitivePve.allows_opt_in_dll_mod());
+        assert!(!AntiCheatClass::OfflineAntiCheat.allows_opt_in_dll_mod());
+        assert!(AntiCheatClass::CompetitivePvpOnline.forbids_dll_mod());
+        assert!(AntiCheatClass::Unknown.forbids_dll_mod());
+        assert!(!AntiCheatClass::Unknown.allows_offline_dll_mod());
+        assert!(!AntiCheatClass::Unknown.allows_opt_in_dll_mod());
     }
 
     #[test]

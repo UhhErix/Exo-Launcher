@@ -1,0 +1,172 @@
+{
+  "processTermination": [
+    { "name": "vgc.exe", "isAntiCheat": true },
+    { "name": "VGK", "isAntiCheat": true },
+    { "name": "EasyAntiCheat_EOS.exe", "isAntiCheat": true },
+    { "name": "BEService_x64.exe", "isAntiCheat": true },
+    { "name": "EAAntiCheat.GameServiceLauncher.exe", "isAntiCheat": true },
+    { "name": "FortniteClient-Win64-Shipping_BE.exe", "isAntiCheat": true },
+    { "name": "Apex_EAC_EOS.exe", "isAntiCheat": true },
+    { "name": "SGuard64.exe", "isAntiCheat": true },
+    { "name": "GameMon64.des", "isAntiCheat": true },
+    { "name": "sekiro.exe", "isAntiCheat": false },
+    { "name": "notepad.exe", "isAntiCheat": false },
+    { "name": "", "isAntiCheat": false }
+  ],
+  "processTrees": [
+    {
+      "root": { "pid": 10, "name": "vgc.exe" },
+      "descendants": [
+        { "pid": 11, "name": "helper.exe" },
+        { "pid": 12, "name": "worker.exe" }
+      ],
+      "expectedKill": [],
+      "expectedRefused": [10, 11, 12]
+    },
+    {
+      "root": { "pid": 50, "name": "game.exe" },
+      "descendants": [
+        { "pid": 51, "name": "overlay.exe" },
+        { "pid": 52, "name": "BEService.exe" },
+        { "pid": 53, "name": "crashpad.exe" }
+      ],
+      "expectedKill": [51, 53, 50],
+      "expectedRefused": [52]
+    }
+  ],
+  "networkHosts": [
+    { "host": "updates.getexo.app", "listed": true },
+    { "host": "accounts.getexo.app", "listed": true },
+    { "host": "reports.getexo.app", "listed": true },
+    { "host": "shared.akamai.steamstatic.com", "listed": true },
+    { "host": "steamstatic.com", "listed": true },
+    { "host": "pd.na.a.pvp.net", "listed": true },
+    { "host": "gateway.discord.gg", "listed": true },
+    { "host": "exo-relay.exo-erix.workers.dev", "listed": true },
+    { "host": "evilsteamstatic.com", "listed": false },
+    { "host": "updates.getexo.app.attacker.test", "listed": false },
+    { "host": "example.invalid", "listed": false }
+  ],
+  "playerData": [
+    { "path": "settings.json", "matched": true, "ofThisMachine": false },
+    { "path": "riot-ledger/0123456789abcdef0123.jsonl", "matched": true, "ofThisMachine": false },
+    { "path": "riot-ledger/unassigned.jsonl", "matched": true, "ofThisMachine": false },
+    { "path": "riot-ledger/INVALID_HEX.jsonl", "matched": false, "ofThisMachine": false },
+    { "path": "covers/custom-cover-steam-730.png", "matched": true, "ofThisMachine": false },
+    { "path": "covers/custom-cover-steam-730.exe", "matched": false, "ofThisMachine": false },
+    { "path": "graphics-features/state.json", "matched": true, "ofThisMachine": true },
+    { "path": "keep.json", "matched": true, "ofThisMachine": true },
+    { "path": "startup-removed/my-task.xml", "matched": true, "ofThisMachine": false },
+    { "path": "startup-removed/user/app.lnk", "matched": true, "ofThisMachine": false },
+    { "path": "settings.json.tmp", "matched": false, "ofThisMachine": false },
+    { "path": "../settings.json", "matched": false, "ofThisMachine": false },
+    { "path": "account-session.bin", "matched": false, "ofThisMachine": false },
+    { "path": "steam-account.bin", "matched": false, "ofThisMachine": false }
+  ],
+  "uiPrefs": [
+    { "key": "discord", "syncs": true },
+    { "key": "discordPerformance", "syncs": true },
+    { "key": "driverBranch", "syncs": false },
+    { "key": "wearing", "syncs": false },
+    { "key": "tourSeen", "syncs": true },
+    { "key": "setupProgress", "syncs": false },
+    { "key": "unknownKey", "syncs": false }
+  ],
+  "deletionGate": [
+    { "path": "C:\\Users\\Test\\Documents\\Exo\\Backups\\daily.json", "clean": false, "owners": [], "allowBrowser": false, "allowed": false },
+    { "path": "C:\\Users\\Test\\Documents\\Exo", "clean": false, "owners": [], "allowBrowser": false, "allowed": false },
+    { "path": "C:\\Users\\Test\\.ssh\\id_ed25519", "clean": true, "owners": [], "allowBrowser": false, "allowed": false },
+    { "path": "C:\\Games\\SaveGames\\save01.sav", "clean": true, "owners": [], "allowBrowser": false, "allowed": false },
+    { "path": "C:\\App\\Profile\\Cookies", "clean": true, "owners": [], "allowBrowser": false, "allowed": false },
+    { "path": "C:\\App\\Profile\\Cookies", "clean": true, "owners": [], "allowBrowser": true, "allowed": true },
+    { "path": "C:\\Users\\Test\\AppData\\Local\\NVIDIA\\DXCache", "clean": true, "owners": [], "allowBrowser": false, "allowed": false },
+    { "path": "D:\\SteamLibrary\\steamapps\\shadercache\\730", "clean": true, "owners": [], "allowBrowser": false, "allowed": false },
+    { "path": "C:\\Users\\Test\\AppData\\Local\\ExoLauncher\\settings.json", "clean": true, "owners": [], "allowBrowser": false, "allowed": false },
+    { "path": "C:\\Users\\Test\\AppData\\Local\\ExoLauncher\\app.previous.1", "clean": true, "owners": [], "allowBrowser": false, "allowed": true },
+    { "path": "C:\\Temp\\cache", "clean": true, "owners": ["steam"], "allowBrowser": false, "allowed": false },
+    { "path": "C:\\Temp\\cache", "clean": true, "owners": ["epic"], "allowBrowser": false, "allowed": true }
+  ],
+  "antiCheat": [
+    {
+      "id": "riot:valorant",
+      "title": "VALORANT",
+      "store": "riot",
+      "installFound": true,
+      "disk": null,
+      "steam": "notSteam",
+      "expectedKind": "found",
+      "expectedClass": "competitivePvpOnline",
+      "expectedWireClass": "competitivePvpOnline",
+      "expectedDllPolicy": "disallowed",
+      "allowsExoFlow": false,
+      "allowsSettingsFile": false,
+      "allowsFrameGenMod": false
+    },
+    {
+      "id": "steam:3513350",
+      "title": "Wuthering Waves",
+      "store": "steam",
+      "installFound": true,
+      "disk": "Anti-Cheat Expert",
+      "steam": "none",
+      "expectedKind": "found",
+      "expectedClass": "onlineNonCompetitivePve",
+      "expectedWireClass": "onlineNonCompetitivePve",
+      "expectedDllPolicy": "optInWithBanRiskConfirmation",
+      "allowsExoFlow": true,
+      "allowsSettingsFile": true,
+      "allowsFrameGenMod": false
+    },
+    {
+      "id": "steam:1245620",
+      "title": "ELDEN RING",
+      "store": "steam",
+      "installFound": true,
+      "disk": "Easy Anti-Cheat",
+      "steam": "none",
+      "expectedKind": "found",
+      "expectedClass": "offlineAntiCheat",
+      "expectedWireClass": "offlineAntiCheat",
+      "expectedDllPolicy": "allowedWithOfflineNote",
+      "allowsExoFlow": true,
+      "allowsSettingsFile": true,
+      "allowsFrameGenMod": false
+    },
+    {
+      "id": "steam:814380",
+      "title": "Sekiro: Shadows Die Twice",
+      "store": "steam",
+      "installFound": true,
+      "disk": null,
+      "steam": "none",
+      "expectedKind": "none",
+      "expectedClass": "noAntiCheat",
+      "expectedWireClass": "offlineAntiCheat",
+      "expectedDllPolicy": "allowed",
+      "allowsExoFlow": true,
+      "allowsSettingsFile": true,
+      "allowsFrameGenMod": true
+    },
+    {
+      "id": "steam:999001",
+      "title": "Unreadable Title",
+      "store": "steam",
+      "installFound": true,
+      "disk": "unreadable",
+      "steam": "none",
+      "expectedKind": "unknown",
+      "expectedClass": "competitivePvpOnline",
+      "expectedWireClass": "unknown",
+      "expectedDllPolicy": "disallowed",
+      "allowsExoFlow": false,
+      "allowsSettingsFile": false,
+      "allowsFrameGenMod": false
+    }
+  ],
+  "refusedArguments": [
+    { "args": "-fullscreen -noeac", "refused": "-noeac" },
+    { "args": "--battleye=off", "refused": "--battleye=off" },
+    { "args": "--inject hook.dll", "refused": "hook.dll" },
+    { "args": "-dx12 -high -USEALLAVAILABLECORES", "refused": null }
+  ]
+}
