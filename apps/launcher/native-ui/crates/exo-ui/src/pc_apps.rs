@@ -2364,4 +2364,21 @@ mod tests {
         assert!(rt.state.pc.startup_bg_open);
         assert!(rt.find("startup-row-task:bg-1").is_some());
     }
+
+    #[test]
+    fn startup_icon_box_resolves_cached_app_icon_entry() {
+        let mut state = AppState::default();
+        state.install_waker(std::sync::Arc::new(|| {}));
+        let tiny_png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2dIAAAAASUVORK5CYII=";
+        state
+            .pc
+            .app_icons
+            .insert("startup:demo".to_string(), tiny_png.to_string());
+        let resolved = state.app_icon_image("startup:demo");
+        assert!(
+            resolved.is_some(),
+            "startup icon key present in pc.app_icons should decode to an Image"
+        );
+        let _el = super::startup_icon_box(&state, "Demo App", Some("startup:demo"));
+    }
 }

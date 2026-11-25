@@ -4099,7 +4099,7 @@ mod tests {
     use crate::state::{LibraryChip, LibrarySort, Room};
     use rune::{
         Cursor, Env, Mods, Runtime,
-        render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END, KIND_LIQUID_GLASS, KIND_SEGMENT},
+        render::{KIND_BACKDROP_BLUR, KIND_GLYPH, KIND_LAYER, KIND_LAYER_END, KIND_LIQUID_GLASS},
     };
 
     #[test]
@@ -4126,12 +4126,15 @@ mod tests {
             "expected 2..={} floating glass surfaces within EXO_MAX_BACKDROP_BLURS, got {glass_shapes}",
             exo_kit::EXO_MAX_BACKDROP_BLURS
         );
-        let strokes = rt
+        let glyphs = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_SEGMENT)
+            .filter(|i| i.params[1] == KIND_GLYPH)
             .count();
-        assert!(strokes >= 10, "expected vector icons, got {strokes}");
+        assert!(
+            glyphs >= 10,
+            "expected rasterized glyph/icon instances, got {glyphs}"
+        );
 
         let (tx, ty) = rt.find("tile-demo:cyberpunk").expect("Cyberpunk tile");
         rt.pointer_down(tx, ty);

@@ -4,9 +4,13 @@ use std::cell::Cell;
 
 pub const GOEIST_FONT: &[u8] =
     include_bytes!("../../../../ExoLauncher/Assets/Fonts/Goeist-Variable.ttf");
+pub const GOEIST_ITALIC_FONT: &[u8] =
+    include_bytes!("../../../../ExoLauncher/Assets/Fonts/Goeist-Italic-Variable.ttf");
+pub const GOEIST_MONO_FONT: &[u8] =
+    include_bytes!("../../../../ExoLauncher/Assets/Fonts/GoeistMono-Variable.ttf");
 
-pub const FONTS: &[&[u8]] = &[GOEIST_FONT];
-pub const FONT_FAMILIES: (&str, &str) = ("Goeist", "ui-monospace");
+pub const FONTS: &[&[u8]] = &[GOEIST_FONT, GOEIST_ITALIC_FONT, GOEIST_MONO_FONT];
+pub const FONT_FAMILIES: (&str, &str) = ("Goeist", "Goeist Mono");
 
 thread_local! {
     static TEXT_SCALE: Cell<f32> = const { Cell::new(1.0) };
@@ -197,7 +201,8 @@ pub fn type_section() -> TextStyle {
 }
 
 pub fn type_read() -> TextStyle {
-    TextStyle::new(scaled(15.0), 400.0)
+    let size = scaled(15.0);
+    TextStyle::new(size, 400.0).lh(size * 1.375)
 }
 
 pub fn type_title() -> TextStyle {
@@ -268,5 +273,44 @@ pub fn folder_color_label(color: &str) -> &'static str {
         "blue" => "Blue",
         "pink" => "Pink",
         _ => "Gray",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedded_goeist_fonts_resolve_regular_italic_weights_and_mono() {
+        let _guard = rune::text::with_fonts(FONTS, FONT_FAMILIES);
+        let (reg_adv, _, reg_mono) =
+            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0)).expect("Goeist regular");
+        assert!(!reg_mono);
+        let narrow = reg_adv[(b'i' - 32) as usize];
+        let wide = reg_adv[(b'W' - 32) as usize];
+        assert!(
+            (wide - narrow).abs() > 1.0,
+            "regular font should be proportional: i={narrow}, W={wide}"
+        );
+
+        let (italic_adv, _, italic_mono) =
+            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0).italic()).expect("Goeist Italic");
+        assert!(!italic_mono);
+        assert!(italic_adv[(b'a' - 32) as usize] > 0.0);
+
+        let (mono_adv, _, is_mono) =
+            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0).mono()).expect("Goeist Mono");
+        assert!(is_mono);
+        let mono_i = mono_adv[(b'i' - 32) as usize];
+        let mono_w = mono_adv[(b'W' - 32) as usize];
+        assert!(
+            (mono_i - mono_w).abs() < 0.05,
+            "mono font should be fixed-pitch: i={mono_i}, W={mono_w}"
+        );
+
+        let light = rune::text::primary_extents(TextStyle::new(14.0, 300.0)).expect("weight 300");
+        let bold = rune::text::primary_extents(TextStyle::new(14.0, 700.0)).expect("weight 700");
+        assert!(light.0 > 0.0 && bold.0 > 0.0);
+        assert!(type_read() == TextStyle::new(scaled(15.0), 400.0).lh(scaled(15.0) * 1.375));
     }
 }

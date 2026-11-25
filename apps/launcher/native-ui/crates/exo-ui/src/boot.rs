@@ -6,7 +6,7 @@ use exo_kit::{
     track_fill, type_body, type_small, type_title,
 };
 use exo_rpc::HostEvent;
-use rune::{El, col, el, row, text};
+use rune::{Color, El, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -591,6 +591,11 @@ pub fn boot_splash_if_needed(s: &AppState, blur: bool) -> Option<El> {
         } else {
             "Preparing library and game tools"
         };
+        let mark_transition = if s.settings.reduce_motion {
+            Transition::none()
+        } else {
+            Transition::blur_replace()
+        };
         return Some(
             col()
                 .key("boot-splash")
@@ -599,8 +604,17 @@ pub fn boot_splash_if_needed(s: &AppState, blur: bool) -> Option<El> {
                 .w_full()
                 .h_full()
                 .fill(BG)
+                .radial_gradient(
+                    [0.5, 0.5],
+                    260.0,
+                    [(0.0, FG.alpha(0.08)), (1.0, Color::TRANSPARENT)],
+                )
                 .center()
-                .child(exo_mark(128.0, FG)),
+                .child(
+                    el().key("boot-splash-mark")
+                        .transition(mark_transition)
+                        .child(exo_mark(128.0, FG)),
+                ),
         );
     }
     None
@@ -969,6 +983,8 @@ mod tests {
     #[test]
     fn boot_gate_shows_splash_while_connecting_and_error_card_on_failure() {
         let mut s = AppState::for_host_pipe();
+        assert!(boot_splash_if_needed(&s, true).is_some());
+        s.settings.reduce_motion = true;
         assert!(boot_splash_if_needed(&s, true).is_some());
         s.status = HostStatus::Error("pipe timeout".into());
         assert!(boot_splash_if_needed(&s, true).is_some());

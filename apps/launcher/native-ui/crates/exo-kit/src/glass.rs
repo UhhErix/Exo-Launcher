@@ -1,6 +1,4 @@
-use crate::tokens::{
-    glass_bar_tint, glass_panel_tint, glass_still_control_fill, glass_still_panel_fill,
-};
+use crate::tokens::{glass_still_control_fill, glass_still_panel_fill};
 use rune::{Color, Cx, El, GlassPolicy, GlassTier, LiquidGlass};
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -134,16 +132,12 @@ impl ExoGlass {
 
     pub fn to_liquid_glass(self, interactive: bool, a11y: GlassAccessibility) -> LiquidGlass {
         let base = match self {
-            Self::Bar | Self::Control => LiquidGlass::regular()
-                .tint(glass_bar_tint())
-                .still(glass_still_control_fill()),
+            Self::Bar | Self::Control => LiquidGlass::control(),
             Self::Menu | Self::Popover | Self::Panel | Self::Sheet | Self::Notice => {
-                LiquidGlass::regular()
-                    .tint(glass_panel_tint())
-                    .still(glass_still_panel_fill())
+                LiquidGlass::panel()
             }
-            Self::ClearMedia => LiquidGlass::clear().still(glass_still_control_fill()),
-            Self::Tinted(color) => LiquidGlass::regular().tint(color).still(color.alpha(0.84)),
+            Self::ClearMedia => LiquidGlass::immersive(),
+            Self::Tinted(color) => LiquidGlass::panel().tint(color).still(color.alpha(0.84)),
         };
         if interactive && a11y.allows_interactive_motion() {
             base.interactive()
