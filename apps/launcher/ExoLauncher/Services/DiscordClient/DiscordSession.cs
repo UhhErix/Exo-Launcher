@@ -63,6 +63,7 @@ internal sealed partial class DiscordSession
     /// <summary>Connects with the saved sign-in; does nothing when it already runs.</summary>
     internal static void Start()
     {
+        if (DiscordParityMock.IsEnabled) return;
         var started = false;
         lock (StartGate)
         {

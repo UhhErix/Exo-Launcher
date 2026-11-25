@@ -74,7 +74,10 @@ export async function startWebTestInstance({ folder, dataDir, fresh = true, host
   await writeFile(settingsPath, JSON.stringify({ ...kept, ...seededSettings }, null, 2))
 
   const exeArg = hostExe ? `-Exe '${q(hostExe)}'` : ''
-  const envArg = `-Env @{ 'EXO_UI' = 'web' }`
+  const envMap = discordReady && !seedFrom && !seedDir
+    ? "@{ 'EXO_UI' = 'web'; 'EXO_E2E_TEST_INSTANCE' = '1'; 'EXO_DISCORD_PARITY_MOCK' = '1' }"
+    : "@{ 'EXO_UI' = 'web' }"
+  const envArg = `-Env ${envMap}`
   const cmd = `& '${q(TEST_SCRIPT)}' -Folder '${q(safeFolder)}' -DataDir '${q(safeData)}' ${exeArg} ${envArg}`
   const out = await pwsh(cmd, 90000)
   const info = JSON.parse(out.split(/\r?\n/).pop())

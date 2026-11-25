@@ -18,8 +18,8 @@ use exo_rpc::{
     DiscordChannel, DiscordGoLiveStatsEvent, DiscordSoundItem, DiscordVoiceMember, GoLiveSource,
 };
 use rune::{
-    Color, Cursor, El, ScrollSpec, SpringPair, SurfaceFit, TextEdit, Transition, col, edit_access,
-    el, row, text, text_input,
+    Color, Cursor, El, LiquidGlass, ScrollSpec, SpringPair, SurfaceFit, TextEdit, Transition, col,
+    edit_access, el, row, text, text_input,
 };
 use serde_json::json;
 
@@ -131,9 +131,8 @@ fn bar_word_btn(
         }))
 }
 
-/// The call bar's width and the Share button's offset inside it, as React lays the bar out at 1920 px.
+/// The call bar's width, as React lays the bar out at 1920 px.
 const CALL_BAR_W: f32 = 696.0;
-const SHARE_OFFSET_IN_BAR: f32 = 340.0;
 
 /// A 1 px divider inside a 4 px slot, so the call bar's groups keep the React spacing.
 fn bar_divider() -> El {
@@ -661,13 +660,16 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         .role("menu")
         .w(900.0)
         .h(620.0)
-        .padding(20.0)
-        .gap(14.0)
+        .px(20.0)
+        .pt(16.0)
+        .pb(20.0)
+        .gap(16.0)
         .radius(22.0)
+        .continuous_corners()
         .transition(overlay_transition())
+        .liquid_glass(LiquidGlass::panel())
         .hit();
     let _ = blur;
-    let modal = apply_glass(modal, ExoGlass::Popover, false);
 
     let close = el()
         .key("dc-gl-close")
@@ -891,10 +893,6 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
                 .on_press(|s: &mut AppState| s.discord.voice_ui.golive_tab = GoLiveTab::Screens),
         )
         .child(el().grow(1.0))
-        .child(
-            glass_button("dc-gl-refresh", "Refresh", None)
-                .on_press(|s: &mut AppState| s.load_golive_sources()),
-        )
         .child(close);
 
     let game_src = s
@@ -1516,18 +1514,9 @@ pub fn voice_overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
                 .pin(Some(0.0), Some(52.0), Some(0.0), Some(78.0))
                 .hit()
                 .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::None)),
-            col()
-                .key("dc-golive-wrap")
-                .pin(Some(0.0), Some(52.0), Some(0.0), Some(76.0))
-                .justify_end()
-                .child(
-                    row().w_full().justify_center().child(
-                        row()
-                            .w(CALL_BAR_W)
-                            .child(el().w(SHARE_OFFSET_IN_BAR))
-                            .child(golive_modal(s, blur)),
-                    ),
-                ),
+            el().key("dc-golive-wrap")
+                .pin(Some(707.0), None, None, Some(76.0))
+                .child(golive_modal(s, blur)),
         ],
         VoicePanel::Soundboard => vec![
             el().key("dc-sb-dismiss")
@@ -1663,15 +1652,8 @@ pub fn call_dock(s: &AppState) -> Option<El> {
                     dock_action_btn(
                         "dc-dock-share",
                         "Share screen",
-                        is_golive || s.discord.voice_ui.panel == VoicePanel::GoLive,
-                        icon_screen_share(
-                            14.0,
-                            if is_golive || s.discord.voice_ui.panel == VoicePanel::GoLive {
-                                PRIMARY_FG
-                            } else {
-                                FG
-                            },
-                        ),
+                        is_golive,
+                        icon_screen_share(14.0, if is_golive { PRIMARY_FG } else { FG }),
                     )
                     .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::GoLive)),
                 )
@@ -1707,8 +1689,8 @@ pub fn voice_stage_view(
         && s.discord.voice.state != "off";
     let mut roster: Vec<DiscordVoiceMember> = ch.members.clone().unwrap_or_default();
     if in_this_voice
+        && roster.is_empty()
         && let Some(me) = s.discord.home.me.as_ref()
-        && !roster.iter().any(|m| m.id == me.id)
     {
         roster.insert(
             0,
@@ -2444,16 +2426,9 @@ pub fn voice_stage_view(
                     } else {
                         "Share your screen"
                     },
-                    is_golive || s.discord.voice_ui.panel == VoicePanel::GoLive,
+                    is_golive,
                     false,
-                    icon_screen_share(
-                        18.0,
-                        if is_golive || s.discord.voice_ui.panel == VoicePanel::GoLive {
-                            PRIMARY_FG
-                        } else {
-                            FG
-                        },
-                    ),
+                    icon_screen_share(18.0, if is_golive { PRIMARY_FG } else { FG }),
                     94.0,
                 )
                 .on_press(move |s: &mut AppState| {
@@ -2579,7 +2554,8 @@ pub fn voice_stage_view(
 
     let chat_pane = col()
         .key("dc-voice-chat-pane")
-        .w(420.0)
+        .grow(1.0)
+        .min_w(0.0)
         .h_full()
         .min_h(0.0)
         .radius(RADIUS_PANEL)
