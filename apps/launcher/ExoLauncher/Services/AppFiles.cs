@@ -88,13 +88,16 @@ internal static class AppFiles
 
         var compressed = new byte[ordered.Length][];
         var raw = new (long Size, string Sha)[ordered.Length];
-        Parallel.For(0, ordered.Length, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, i =>
-        {
-            var bytes = File.ReadAllBytes(ordered[i].FullPath);
-            raw[i] = (bytes.LongLength, Convert.ToHexStringLower(SHA256.HashData(bytes)));
-            using var compressor = new Compressor(level);
-            compressed[i] = compressor.Wrap(bytes).ToArray();
-        });
+        Parallel.For(0, ordered.Length, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+            () => new Compressor(level),
+            (i, _, compressor) =>
+            {
+                var bytes = File.ReadAllBytes(ordered[i].FullPath);
+                raw[i] = (bytes.LongLength, Convert.ToHexStringLower(SHA256.HashData(bytes)));
+                compressed[i] = compressor.Wrap(bytes).ToArray();
+                return compressor;
+            },
+            compressor => compressor.Dispose());
 
         Directory.CreateDirectory(outDirectory);
         var entries = new List<Entry>(ordered.Length);

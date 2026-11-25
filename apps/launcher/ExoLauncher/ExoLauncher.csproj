@@ -35,6 +35,13 @@
     <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
     <!-- No instrumented JIT tier: less JIT work at start and while idle. -->
     <TieredPGO>false</TieredPGO>
     <ApplicationIcon Condition="Exists('Assets\ExoLauncher.ico')">Assets\ExoLauncher.ico</ApplicationIcon>
@@ -163,6 +170,14 @@
   </Target>
   <Target Name="PublishOnnxRuntime" AfterTargets="Publish" Condition="'$(DesignTimeBuild)' != 'true'">
     <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(PublishDir)" />
+  </Target>
+  <Target Name="TrimUnusedPublishFiles" AfterTargets="Publish" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_UnusedLocaleMui Include="$(PublishDir)*\*.mui" Exclude="$(PublishDir)en-US\*.mui;$(PublishDir)en-us\*.mui" />
+      <_UnusedPublishFiles Include="$(PublishDir)Microsoft.DiaSymReader.Native.amd64.dll;$(PublishDir)mscordaccore*.dll;$(PublishDir)mscordbi.dll;$(PublishDir)createdump.exe;$(PublishDir)DWriteCore.dll;$(PublishDir)WinUIEdit.dll;$(PublishDir)Microsoft.UI.Xaml.winmd;$(PublishDir)Microsoft.UI.winmd;$(PublishDir)Microsoft.UI.Designer.dll;$(PublishDir)Microsoft.WindowsAppRuntime.Bootstrap.dll" />
+    </ItemGroup>
+    <Delete Files="@(_UnusedLocaleMui);@(_UnusedPublishFiles)" />
+    <RemoveDir Directories="@(_UnusedLocaleMui->'%(RootDir)%(Directory)')" />
   </Target>
 
   <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\capture\out\ExoCapture.exe')">
