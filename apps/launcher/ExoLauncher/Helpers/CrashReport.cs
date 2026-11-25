@@ -33,61 +33,52 @@ public static partial class CrashReport
     internal const string Endpoint = "https://reports.getexo.app/v1/report";
     internal const int MaxExcerpt = 8192;
     internal const int MaxScrubInput = MaxExcerpt * 8;
+    private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>What a report holds. Nothing else is ever put in one. <see cref="InstallId"/> rides along, so Delete my data removes it.</summary>
     public sealed record Payload(string App, string Version, string OsBuild, string ErrorType, string Excerpt, string? InstallId = null);
 
-    [GeneratedRegex(@"\b[a-z][a-z0-9+.-]{1,15}://[^\s""'<>]*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex Url();
+    private static readonly Regex UrlPattern = new(@"\b[a-z][a-z0-9+.-]{1,15}://[^\s""'<>]*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
     // Windows drive, %USERPROFILE% or <user> followed by a path; a UNC share; a Unix home folder; a drive written with a slash.
     // A path runs to the end of its quote, bracket or line, spaces included ("Elden Ring"): stopping at a space would leave
     // the rest of the folder name in the text. <user> and <host> (already replaced) are part of it, so < and > are not stops.
-    [GeneratedRegex(@"(?:%[A-Za-z_]+%\\|<user>\\|\b[A-Za-z]:\\|\b[A-Za-z]:/)[^\r\n""'|()\[\]]*", RegexOptions.CultureInvariant)]
-    private static partial Regex WindowsPath();
+    private static readonly Regex WindowsPathPattern = new(@"(?:%[A-Za-z_]+%\\|<user>\\|\b[A-Za-z]:\\|\b[A-Za-z]:/)[^\r\n""'|()\[\]]*", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    [GeneratedRegex(@"\\\\[^\s\\""'<>|]+(?:\\[^\r\n""'|()\[\]]*)?", RegexOptions.CultureInvariant)]
-    private static partial Regex SharePath();
+    private static readonly Regex SharePathPattern = new(@"\\\\[^\s\\""'<>|]+(?:\\[^\r\n""'|()\[\]]*)?", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    [GeneratedRegex(@"(?<![A-Za-z0-9])/(?:home|Users|root)/[^\r\n""'|()\[\]]*", RegexOptions.CultureInvariant)]
-    private static partial Regex UnixHome();
+    private static readonly Regex UnixHomePattern = new(@"/(?:home|Users|root)/[^\r\n""'|()\[\]]*", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    private static readonly Regex HostNamePattern = new(@"\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|gg|app|dev|local|lan|gl|tv|de|co|uk|us|xyz|ru|jp|me|edu|gov)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly Regex HostNamePattern = new(@"\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|gg|app|dev|local|lan|gl|tv|de|co|uk|us|xyz|ru|jp|me|edu|gov)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    [GeneratedRegex(@"\b\d{1,3}(?:\.\d{1,3}){3}\b", RegexOptions.CultureInvariant)]
-    private static partial Regex IpAddress();
+    private static readonly Regex IpAddressPattern = new(@"\b\d{1,3}(?:\.\d{1,3}){3}\b", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    private static readonly Regex EmailPattern = new(@"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly Regex EmailPattern = new(@"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    [GeneratedRegex(@"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b", RegexOptions.CultureInvariant)]
-    private static partial Regex GuidId();
+    private static readonly Regex GuidIdPattern = new(@"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    [GeneratedRegex(@"[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]", RegexOptions.CultureInvariant)]
-    private static partial Regex ControlChar();
+    private static readonly Regex ControlCharPattern = new(@"[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    [GeneratedRegex(@"\d{9,}", RegexOptions.CultureInvariant)]
-    private static partial Regex LongNumber();
+    private static readonly Regex LongNumberPattern = new(@"\d{9,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    [GeneratedRegex(@"\b[A-Za-z][A-Za-z0-9_]{0,70}(?:Exception|Error)\b", RegexOptions.CultureInvariant)]
-    private static partial Regex ErrorName();
+    private static readonly Regex ErrorNamePattern = new(@"\b[A-Za-z][A-Za-z0-9_]{0,70}(?:Exception|Error)\b", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    [GeneratedRegex(@"^\d{1,4}(?:\.\d{1,4}){2}", RegexOptions.CultureInvariant)]
-    private static partial Regex VersionHead();
+    private static readonly Regex VersionHeadPattern = new(@"^\d{1,4}(?:\.\d{1,4}){2}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
-    private static readonly Regex EmailSweepPattern = new(@"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly Regex EmailSweepPattern = new(@"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
+
+    private static readonly Regex WindowsPathSweepPattern = new(@"[A-Za-z]:\\|\b[A-Za-z]:/", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
+    private static readonly Regex SharePathSweepPattern = new(@"\\\\[^\s\\]+\\", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
+    private static readonly Regex UnixHomeSweepPattern = new(@"(^|[^A-Za-z0-9])/(home|Users)/", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
+    private static readonly Regex UrlSweepPattern = new(@"[a-z][a-z0-9+.-]{1,15}://", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
 
     /// <summary>What the service also refuses (cloud/reports/src/validate.js › PERSONAL). A line matching any is removed whole.</summary>
     private static readonly Regex[] Personal =
     [
-        WindowsPathSweep(), SharePathSweep(), UnixHomeSweep(), UrlSweep(), EmailSweepPattern,
-        new(@"\d{15,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking),
-        new(@"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{16,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking),
+        WindowsPathSweepPattern, SharePathSweepPattern, UnixHomeSweepPattern, UrlSweepPattern, EmailSweepPattern,
+        new(@"\d{15,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout),
+        new(@"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{16,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout),
     ];
-
-    [GeneratedRegex(@"[A-Za-z]:\\|\b[A-Za-z]:/", RegexOptions.CultureInvariant)] private static partial Regex WindowsPathSweep();
-    [GeneratedRegex(@"\\\\[^\s\\]+\\", RegexOptions.CultureInvariant)] private static partial Regex SharePathSweep();
-    [GeneratedRegex(@"(^|[^A-Za-z0-9])/(home|Users)/", RegexOptions.CultureInvariant)] private static partial Regex UnixHomeSweep();
-    [GeneratedRegex(@"[a-z][a-z0-9+.-]{1,15}://", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex UrlSweep();
 
     /// <summary>
     /// The report for an error, as the service takes it. <paramref name="report"/> is <see cref="AppLog.ReportFor"/>'s
@@ -135,13 +126,15 @@ public static partial class CrashReport
     }
 
     internal static Payload Build(string error, string report, string version, string windows, string userName, string profile, string machineName, string? kind = null) =>
-        Build(error, report, version, windows, userName, profile, machineName, kind, Scrub);
+        Build(error, report, version, windows, userName, profile, machineName, kind, ScrubCore);
 
     internal static Payload Build(string error, string report, string version, string windows, string userName, string profile, string machineName, string? kind, Func<string, string, string, string, string> scrubber)
     {
         var raw = FitExcerpt(report, MaxExcerpt * 4);
-        var type = ClassifyErrorType(error, raw, kind);
-        var head = VersionHead().Match(version);
+        var boundedError = error.Length > 2000 ? error[..2000] : error;
+        var type = ClassifyErrorType(boundedError, raw, kind);
+        var boundedVersion = version.Length > 64 ? version[..64] : version;
+        var head = VersionHeadPattern.Match(boundedVersion);
         var ver = head.Success ? head.Value : "0.0.0";
         var osBuild = OsBuild(windows);
         string excerpt;
@@ -162,12 +155,19 @@ public static partial class CrashReport
     private static string ClassifyErrorType(string error, string raw, string? kind)
     {
         if (kind is { Length: > 0 }) return kind;
-        if (ErrorName().Match(error) is { Success: true } fromError) return fromError.Value;
-        foreach (var line in raw.Split('\n'))
+        try
         {
-            if (line.Contains("] WARN ", StringComparison.Ordinal) || line.Contains("] INFO ", StringComparison.Ordinal) || line.Contains("] DEBUG ", StringComparison.Ordinal))
-                continue;
-            if (ErrorName().Match(line) is { Success: true } fromLine) return fromLine.Value;
+            if (ErrorNamePattern.Match(error) is { Success: true } fromError) return fromError.Value;
+            foreach (var line in raw.Split('\n'))
+            {
+                if (line.Contains("] WARN ", StringComparison.Ordinal) || line.Contains("] INFO ", StringComparison.Ordinal) || line.Contains("] DEBUG ", StringComparison.Ordinal))
+                    continue;
+                if (ErrorNamePattern.Match(line) is { Success: true } fromLine) return fromLine.Value;
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return "AppError";
         }
         return "AppError";
     }
@@ -352,25 +352,38 @@ public static partial class CrashReport
     /// <summary>The personal parts out of a report's text: paths, URLs, hosts and machine names, addresses, emails, ids.</summary>
     internal static string Scrub(string text, string userName, string profile, string machineName)
     {
+        try
+        {
+            return ScrubCore(text, userName, profile, machineName);
+        }
+        catch (Exception ex) when (ex is RegexMatchTimeoutException or ArgumentException)
+        {
+            return "<redacted: scrub fallback>";
+        }
+    }
+
+    private static string ScrubCore(string text, string userName, string profile, string machineName)
+    {
         if (text.Length > MaxScrubInput) text = FitExcerpt(text, MaxScrubInput);
         // Control characters but tab and newline are refused by the service: take them out first, so a report never fails on one.
-        text = ControlChar().Replace(text.Replace("\r", ""), "");
+        text = ControlCharPattern.Replace(text.Replace("\r", ""), "");
         text = AppLog.Personal(AppLog.Redact(text), userName, profile);
         text = ReportNames.Redact(text);
-        text = Url().Replace(text, "<url>");
-        text = SharePath().Replace(text, "<path>");
-        text = WindowsPath().Replace(text, "<path>");
-        text = UnixHome().Replace(text, "<path>");
+        text = UrlPattern.Replace(text, "<url>");
+        text = SharePathPattern.Replace(text, "<path>");
+        text = WindowsPathPattern.Replace(text, "<path>");
+        text = UnixHomePattern.Replace(text, match =>
+            match.Index > 0 && char.IsAsciiLetterOrDigit(text[match.Index - 1]) ? match.Value : "<path>");
         text = EmailPattern.Replace(text, "<email>");
-        text = GuidId().Replace(text, "<id>");
-        text = IpAddress().Replace(text, "<address>");
+        text = GuidIdPattern.Replace(text, "<id>");
+        text = IpAddressPattern.Replace(text, "<address>");
         text = HostNamePattern.Replace(text, match =>
             ReportNames.IsInStackFrame(text, match.Index, match.Length) || ReportNames.IsDotNetNamespaceToken(text, match.Index, match.Length)
                 ? match.Value
                 : "<host>");
         if (machineName.Length >= 3)
             text = AppLog.ReplaceWholeToken(text, machineName, "<host>", dashIsWordChar: true);
-        return LongNumber().Replace(text, "<id>");
+        return LongNumberPattern.Replace(text, "<id>");
     }
 
     /// <summary>"10.0.26300.0" as the service takes it: the first four parts, digits only.</summary>
