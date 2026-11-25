@@ -1,4 +1,4 @@
-use crate::config::{AuthError, OAuthClientConfig, OAuthProvider};
+use crate::config::{AuthError, LoopbackRedirectMode, OAuthClientConfig, OAuthProvider};
 use crate::crypto::constant_time_eq;
 #[cfg(windows)]
 use crate::crypto::{base64url_encode, csprng_bytes, pkce_pair};
@@ -43,6 +43,42 @@ pub struct LoopbackPkceServer {
     listener: TcpListener,
 }
 
+pub fn bind_loopback_listener(
+    mode: LoopbackRedirectMode,
+) -> Result<(TcpListener, String, u16), AuthError> {
+    match mode {
+        LoopbackRedirectMode::DynamicPort { host } => {
+            let listener = TcpListener::bind("127.0.0.1:0")
+                .map_err(|e| AuthError::Os(format!("loopback bind failed: {e}")))?;
+            let port = listener
+                .local_addr()
+                .map_err(|e| AuthError::Os(format!("loopback local_addr failed: {e}")))?
+                .port();
+            Ok((listener, host.to_string(), port))
+        }
+        LoopbackRedirectMode::FixedPorts { host, ports } => {
+            let mut last_err = None;
+            for &port in ports {
+                match TcpListener::bind(("127.0.0.1", port)) {
+                    Ok(listener) => return Ok((listener, host.to_string(), port)),
+                    Err(e) => last_err = Some(e),
+                }
+            }
+            let tried = ports
+                .iter()
+                .map(u16::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            let detail = last_err
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "no ports configured".to_string());
+            Err(AuthError::Os(format!(
+                "all fixed loopback ports ({tried}) are unavailable: {detail}"
+            )))
+        }
+    }
+}
+
 impl LoopbackPkceServer {
     #[cfg(windows)]
     pub fn prepare(
@@ -57,37 +93,25 @@ impl LoopbackPkceServer {
                 provider.display_name()
             ))
         })?;
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .map_err(|e| AuthError::Os(format!("loopback bind failed: {e}")))?;
-        let port = listener
-            .local_addr()
-            .map_err(|e| AuthError::Os(format!("loopback local_addr failed: {e}")))?
-            .port();
+        let mode = provider.loopback_redirect_mode().ok_or_else(|| {
+            AuthError::Protocol(format!(
+                "{} does not use loopback redirect URIs",
+                provider.display_name()
+            ))
+        })?;
         let (code_verifier, code_challenge) = pkce_pair().map_err(AuthError::Os)?;
         let state = base64url_encode(&csprng_bytes(24).map_err(AuthError::Os)?);
-        let redirect_uri = format!("http://127.0.0.1:{port}/callback");
         let scope_str = scopes.unwrap_or_else(|| provider.default_scopes());
-        let authorize_url = build_authorize_url(
+        Self::from_parts_with_mode(
+            provider,
+            mode,
+            client_id,
             auth_endpoint,
-            &client_id,
-            &redirect_uri,
             scope_str,
-            &state,
-            &code_challenge,
-        );
-        Ok(Self {
-            session: PkceAuthSession {
-                provider,
-                client_id,
-                redirect_uri,
-                authorize_url,
-                state,
-                code_verifier,
-                code_challenge,
-                listener_port: port,
-            },
-            listener,
-        })
+            state,
+            code_verifier,
+            code_challenge,
+        )
     }
 
     pub fn from_parts(
@@ -99,13 +123,34 @@ impl LoopbackPkceServer {
         code_verifier: String,
         code_challenge: String,
     ) -> Result<Self, AuthError> {
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .map_err(|e| AuthError::Os(format!("loopback bind failed: {e}")))?;
-        let port = listener
-            .local_addr()
-            .map_err(|e| AuthError::Os(format!("loopback local_addr failed: {e}")))?
-            .port();
-        let redirect_uri = format!("http://127.0.0.1:{port}/callback");
+        let mode = provider
+            .loopback_redirect_mode()
+            .unwrap_or(LoopbackRedirectMode::DynamicPort { host: "127.0.0.1" });
+        Self::from_parts_with_mode(
+            provider,
+            mode,
+            client_id,
+            auth_endpoint,
+            scopes,
+            state,
+            code_verifier,
+            code_challenge,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_parts_with_mode(
+        provider: OAuthProvider,
+        mode: LoopbackRedirectMode,
+        client_id: String,
+        auth_endpoint: &str,
+        scopes: &str,
+        state: String,
+        code_verifier: String,
+        code_challenge: String,
+    ) -> Result<Self, AuthError> {
+        let (listener, host, port) = bind_loopback_listener(mode)?;
+        let redirect_uri = format!("http://{host}:{port}/callback");
         let authorize_url = build_authorize_url(
             auth_endpoint,
             &client_id,
