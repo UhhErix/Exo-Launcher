@@ -7,11 +7,12 @@ use crate::pc_state::{
 use crate::pc_storage::{exo_ai_storage_view, format_gb_short};
 use crate::state::{AppState, HostStatus, title_hue};
 use exo_kit::{
-    BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, bad, fg_faint, fg_muted, float_line, good, hover_fill, icon_app_window,
-    icon_check, icon_cpu, icon_hard_drive, icon_monitor, icon_zap, pressed_fill, primary_button,
-    progress_bar, scaled, status_badge, subtle_fill, surface_card, type_body, type_control,
-    type_page, type_section, type_small, type_title, warn,
+    BG, BadgeTone, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, bad, fg_faint, fg_muted, float_line, good,
+    hover_fill, icon_app_window, icon_check, icon_chevron_right, icon_cpu, icon_hard_drive,
+    icon_monitor, icon_zap, pressed_fill, primary_button, progress_bar, scaled, status_badge,
+    subtle_fill, surface_card, track_fill, type_body, type_control, type_page, type_section,
+    type_small, type_title, warn,
 };
 use exo_rpc::{DriverEntry, RuntimeItem, RuntimesProgress, TunePart};
 use rune::{Cursor, El, ScrollSpec, SurfaceFit, TextStyle, col, el, oklch, row, text};
@@ -455,7 +456,7 @@ fn auto_tune_hardware_row(
         );
     }
 
-    let mut row_wrap = col().w_full().min_h(68.0).py(14.0).gap(6.0).child(
+    let mut row_wrap = col().w_full().py(10.0).gap(6.0).child(
         row()
             .w_full()
             .min_h(36.0)
@@ -468,11 +469,11 @@ fn auto_tune_hardware_row(
                     .center_y()
                     .min_w(0.0)
                     .grow(1.0)
-                    .child(if is_cpu {
+                    .child(el().size(16.0, 16.0).center().child(if is_cpu {
                         icon_cpu(15.0, fg_muted())
                     } else {
                         icon_monitor(15.0, fg_muted())
-                    })
+                    }))
                     .child(
                         col()
                             .gap(2.0)
@@ -496,7 +497,15 @@ fn auto_tune_hardware_row(
             col()
                 .w_full()
                 .gap(4.0)
-                .child(progress_bar(420.0, 0.5))
+                .child(
+                    row()
+                        .w_full()
+                        .h(4.0)
+                        .radius(2.0)
+                        .fill(track_fill())
+                        .child(el().grow(0.5).h_full().radius(2.0).fill(FG))
+                        .child(el().grow(0.5).h_full()),
+                )
                 .child(text(lbl).font(type_small()).color(fg_muted())),
         );
     } else if part.state == "tuned" {
@@ -806,9 +815,9 @@ fn updates_card_view(s: &AppState) -> El {
     let mut card = col()
         .key("exo-ai-updates-card")
         .w_full()
-        .pt(18.0)
+        .pt(16.0)
         .px(24.0)
-        .pb(20.0)
+        .pb(16.0)
         .gap(4.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
@@ -817,8 +826,7 @@ fn updates_card_view(s: &AppState) -> El {
         .child(
             row()
                 .w_full()
-                .min_h(36.0)
-                .pb(6.0)
+                .min_h(32.0)
                 .justify_between()
                 .center_y()
                 .child(text("Updates").font(type_title()).color(FG))
@@ -1407,14 +1415,24 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
 
     let header_action = if is_complete {
         row()
-            .gap(10.0)
+            .gap(8.0)
             .center_y()
             .child(
                 row()
-                    .gap(5.0)
+                    .key("ai-complete-badge")
+                    .h(36.0)
+                    .px(14.0)
+                    .gap(7.0)
                     .center_y()
+                    .radius(RADIUS_PILL)
+                    .fill(good().alpha(0.10))
+                    .border(1.0, good().alpha(0.28))
                     .child(icon_check(14.0, good()))
-                    .child(text("Auto Tune complete").font(type_small()).color(good())),
+                    .child(
+                        text("Auto Tune complete")
+                            .font(type_section())
+                            .color(good()),
+                    ),
             )
             .child(
                 el().key("ai-run-again")
@@ -1425,7 +1443,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     .hit()
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
-                    .h(32.0)
+                    .h(36.0)
                     .px(14.0)
                     .center()
                     .radius(RADIUS_PILL)
@@ -1444,14 +1462,15 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             "Run Auto Tune"
         };
         primary_button("ai-run-auto-tune", lbl, Some(icon_zap(14.0, PRIMARY_FG)))
-            .h(44.0)
-            .px(22.0)
+            .h(36.0)
+            .px(18.0)
             .on_press(|s: &mut AppState| s.run_auto_tune_pipeline())
     };
 
     let header = row()
+        .key("exo-ai-head")
         .w_full()
-        .h(44.0)
+        .min_h(36.0)
         .justify_between()
         .center_y()
         .child(
@@ -1461,6 +1480,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .child(text("Exo AI").font(type_page()).color(FG))
                 .child(
                     row()
+                        .key("exo-ai-live-pill")
                         .h(26.0)
                         .px(11.0)
                         .gap(7.0)
@@ -1478,7 +1498,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         )
         .child(
             row()
-                .gap(10.0)
+                .gap(8.0)
                 .center_y()
                 .child(
                     row()
@@ -1490,10 +1510,10 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .hit()
                         .press_on_down()
                         .press_scale(PRESS_SCALE)
-                        .h(32.0)
-                        .pl(10.0)
-                        .pr(12.0)
-                        .gap(6.0)
+                        .h(36.0)
+                        .pl(12.0)
+                        .pr(14.0)
+                        .gap(7.0)
                         .center_y()
                         .radius(RADIUS_PILL)
                         .fill(subtle_fill())
@@ -1558,9 +1578,9 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
     let mut auto_tune_card = col()
         .key("exo-ai-auto-tune-card")
         .w_full()
-        .pt(18.0)
+        .pt(16.0)
         .px(24.0)
-        .pb(8.0)
+        .pb(6.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(BG)
@@ -1614,8 +1634,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             row()
                 .key(format!("auto-tune-stage-{}", stage.id.key()))
                 .w_full()
-                .min_h(55.0)
-                .py(9.0)
+                .min_h(46.0)
+                .py(8.0)
                 .gap(10.0)
                 .center_y()
                 .child(marker)
@@ -1641,38 +1661,29 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
 
     auto_tune_card = auto_tune_card.child(stages_col);
 
-    if let Some(ref tune) = s.pc.auto_tune {
+    if let Some(ref tune) = s.pc.auto_tune
+        && !tune.parts.is_empty()
+    {
         let mut hw_wrap = col()
             .key("exo-ai-tune-hw-wrap")
             .w_full()
             .pt(4.0)
             .child(el().w_full().h(1.0).fill(float_line()));
-        if tune.parts.is_empty() {
-            hw_wrap = hw_wrap.child(
-                el().w_full().py(10.0).child(
-                    text("No supported desktop GPU or Ryzen desktop CPU detected on this PC.")
-                        .font(type_small())
-                        .color(fg_muted())
-                        .wrap(),
-                ),
-            );
-        } else {
-            for (idx, part) in tune.parts.iter().enumerate() {
-                if idx > 0 {
-                    hw_wrap = hw_wrap.child(el().w_full().h(1.0).fill(float_line()));
-                }
-                let name = if part.id == "ryzen" {
-                    cpu_name.to_string()
-                } else {
-                    gpu_name.to_string()
-                };
-                hw_wrap = hw_wrap.child(auto_tune_hardware_row(
-                    part,
-                    name,
-                    s.pc.tune_errors.get(&part.id),
-                    s.pc.armed_confirm.as_deref(),
-                ));
+        for (idx, part) in tune.parts.iter().enumerate() {
+            if idx > 0 {
+                hw_wrap = hw_wrap.child(el().w_full().h(1.0).fill(float_line()));
             }
+            let name = if part.id == "ryzen" {
+                cpu_name.to_string()
+            } else {
+                gpu_name.to_string()
+            };
+            hw_wrap = hw_wrap.child(auto_tune_hardware_row(
+                part,
+                name,
+                s.pc.tune_errors.get(&part.id),
+                s.pc.armed_confirm.as_deref(),
+            ));
         }
         auto_tune_card = auto_tune_card.child(hw_wrap);
     }
@@ -1685,12 +1696,12 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             .child(
                 row()
                     .w_full()
-                    .pt(14.0)
-                    .pr(28.0)
-                    .pb(16.0)
+                    .pt(12.0)
+                    .px(8.0)
+                    .pb(12.0)
                     .gap(10.0)
                     .items_start()
-                    .child(el().pt(1.0).child(icon))
+                    .child(el().size(16.0, 16.0).center().child(icon))
                     .child(
                         col()
                             .grow(1.0)
@@ -1722,8 +1733,10 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             .focusable(true)
             .hit()
             .press_on_down()
+            .press_scale(PRESS_SCALE)
             .hover(hover_fill())
             .press(pressed_fill())
+            .motion(SPRING_QUICK)
             .radius(RADIUS_SMALL)
             .grow(1.0)
             .min_w(0.0)
@@ -1744,12 +1757,12 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             .child(
                 row()
                     .w_full()
-                    .pt(14.0)
-                    .pr(24.0)
-                    .pb(16.0)
-                    .gap(10.0)
+                    .pt(12.0)
+                    .px(8.0)
+                    .pb(12.0)
+                    .gap(8.0)
                     .items_start()
-                    .child(el().pt(1.0).child(icon))
+                    .child(el().size(16.0, 16.0).center().child(icon))
                     .child(
                         col()
                             .grow(1.0)
@@ -1761,16 +1774,16 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                                     .font(type_small())
                                     .color(if is_warn { warn() } else { fg_muted() })
                                     .wrap()
-                            }))
-                            .child(
-                                el().w(44.0)
-                                    .h(1.0)
-                                    .fill(if active { FG } else { fg_faint() }),
-                            ),
-                    ),
+                            })),
+                    )
+                    .child(el().size(14.0, 16.0).center().child(icon_chevron_right(
+                        13.0,
+                        if active { FG } else { fg_faint() },
+                    ))),
             )
     };
 
+    let drive_used = drive_pct.clamp(0.0, 1.0);
     let drive_cell = col()
         .grow(1.0)
         .min_w(0.0)
@@ -1778,12 +1791,16 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(
             row()
                 .w_full()
-                .pt(14.0)
-                .pr(28.0)
-                .pb(16.0)
+                .pt(12.0)
+                .px(8.0)
+                .pb(12.0)
                 .gap(10.0)
                 .items_start()
-                .child(el().pt(1.0).child(icon_hard_drive(16.0, fg_muted())))
+                .child(
+                    el().size(16.0, 16.0)
+                        .center()
+                        .child(icon_hard_drive(16.0, fg_muted())),
+                )
                 .child(
                     col()
                         .grow(1.0)
@@ -1792,11 +1809,21 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .child(text(drive_title).font(type_control()).color(FG).truncate())
                         .child(
                             text(drive_sub)
-                                .font(type_body())
+                                .font(type_small())
                                 .color(fg_muted())
                                 .truncate(),
                         )
-                        .child(el().pt(5.0).pb(2.0).child(progress_bar(168.0, drive_pct)))
+                        .child(
+                            el().w_full().pt(4.0).pb(2.0).child(
+                                row()
+                                    .w_full()
+                                    .h(3.0)
+                                    .radius(2.0)
+                                    .fill(track_fill())
+                                    .child(el().grow(drive_used).h_full().radius(2.0).fill(FG))
+                                    .child(el().grow(1.0 - drive_used).h_full()),
+                            ),
+                        )
                         .children(drive_note.map(|(n, is_bad)| {
                             text(n)
                                 .font(type_small())
@@ -1823,19 +1850,24 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
     let mut hw_card = col()
         .key("exo-ai-hw-card")
         .w_full()
-        .grow(1.0)
-        .pt(20.0)
+        .pt(16.0)
         .px(24.0)
-        .pb(14.0)
+        .pb(10.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(BG)
         .border(1.0, float_line())
-        .child(text(pc_name.to_string()).font(type_page()).color(FG))
+        .child(
+            text(pc_name.to_string())
+                .key("exo-ai-hw-title")
+                .font(type_title())
+                .color(FG),
+        )
         .child(
             row()
                 .w_full()
-                .mt(12.0)
+                .mt(10.0)
+                .gap(8.0)
                 .child(spec_cell(
                     icon_cpu(16.0, fg_muted()),
                     cpu_name.to_string(),
@@ -1866,6 +1898,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(
             row()
                 .w_full()
+                .gap(8.0)
                 .items_start()
                 .child(spec_action_cell(
                     "pc-cell-board",
@@ -2178,12 +2211,12 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
 
     let mut shader_rows = col().w_full().pt(16.0).gap(20.0);
     for chunk in shader_list.chunks(4) {
-        let mut r = row().w_full().gap(16.0).items_start();
+        let mut r = row().w_full().gap(12.0).items_start();
         for (id, title, est, game_opt, is_queued, is_prepare) in chunk {
             let hue = title_hue(title);
             let mut art = el()
                 .w_full()
-                .h(298.0)
+                .h(228.0)
                 .radius(12.0)
                 .continuous_corners()
                 .clip_rounded(12.0);
@@ -2206,6 +2239,14 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     .cursor(Cursor::Pointer)
                     .focusable(true)
                     .hit()
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .hover(hover_fill())
+                    .press(pressed_fill())
+                    .motion(SPRING_QUICK)
+                    .px(4.0)
+                    .py(4.0)
+                    .radius(RADIUS_CARD)
                     .grow(1.0)
                     .min_w(0.0)
                     .gap(6.0)
@@ -2329,10 +2370,9 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
     let mut shaders_card = col()
         .key("exo-ai-shaders-card")
         .w_full()
-        .grow(1.0)
-        .pt(18.0)
+        .pt(16.0)
         .px(24.0)
-        .pb(18.0)
+        .pb(16.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(BG)
@@ -2340,7 +2380,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(
             row()
                 .w_full()
-                .min_h(42.0)
+                .min_h(32.0)
                 .pb(10.0)
                 .justify_between()
                 .center_y()
@@ -2351,7 +2391,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .color(FG),
                 )
                 .child(shader_actions),
-        );
+        )
+        .child(el().w_full().h(1.0).fill(float_line()));
 
     if let Some(ref off_msg) = s.pc.shaders_cache_off {
         shaders_card = shaders_card.child(
@@ -2427,7 +2468,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             ),
         );
     } else {
-        shaders_card = shaders_card.child(shader_rows);
+        shaders_card = shaders_card.child(el().w_full().pt(12.0).child(shader_rows));
     }
 
     let mut right_col = col()
@@ -2524,34 +2565,48 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .key("room-exo-ai")
         .w_full()
         .h_full()
-        .pt(64.0)
-        .px(10.0)
-        .pb(20.0)
-        .gap(14.0)
+        .pt(TITLEBAR_HEIGHT)
         .fill(BG)
-        .child(header)
         .child(
             col()
                 .key("exo-ai-scroll")
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
+                .pt(12.0)
+                .px(GAP)
+                .pb(20.0)
                 .gap(12.0)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
+                .child(header)
                 .child(
                     row()
                         .key("exo-ai-grid")
                         .w_full()
-                        .min_h(938.0)
-                        .items_stretch()
-                        .gap(10.0)
+                        .items_start()
+                        .gap(GAP)
                         .child(left_col)
                         .child(right_col),
                 )
-                .child(crate::power_guard::card_view(s))
-                .child(crate::hw_sensors::card_view(s)),
+                .child(
+                    row()
+                        .key("exo-ai-telemetry-row")
+                        .w_full()
+                        .items_stretch()
+                        .gap(GAP)
+                        .child(
+                            el().grow(1.12)
+                                .min_w(0.0)
+                                .child(crate::power_guard::card_view(s)),
+                        )
+                        .child(
+                            el().grow(1.0)
+                                .min_w(0.0)
+                                .child(crate::hw_sensors::card_view(s)),
+                        ),
+                ),
         )
 }
 
@@ -2621,9 +2676,13 @@ mod tests {
             "Hardware card should sit below Auto Tune in the left column"
         );
         assert!(
-            hw_rect[3] >= 200.0,
-            "Hardware card should fill remaining left-column height, got h={}",
+            hw_rect[3] >= 120.0 && hw_rect[3] <= 320.0,
+            "Hardware card should stay compact without dead space, got h={}",
             hw_rect[3]
+        );
+        assert!(
+            rt.presented("exo-ai-telemetry-row").is_some(),
+            "Power guard and hardware sensors should render in side-by-side telemetry row"
         );
     }
 

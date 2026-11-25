@@ -4,7 +4,7 @@ use std::thread;
 use exo_gpu::{GpuControlReadonlyOverview, read_gpu_control_overview};
 use exo_kit::{
     BG, BadgeTone, FG, RADIUS_PANEL, bad, fg_muted, float_line, status_badge, type_control,
-    type_section, type_small, warn,
+    type_small, type_title, warn,
 };
 use exo_sensors::adaptive::{HardwareAudit, PollMode, run_full_hardware_audit};
 use exo_sensors::sentinel::SentinelSeverity;
@@ -132,7 +132,7 @@ pub(crate) fn card_view(s: &AppState) -> El {
                 .child(
                     text("Hardware sentinel")
                         .key("exo-ai-sentinel-title")
-                        .font(type_section())
+                        .font(type_title())
                         .color(FG),
                 )
                 .child(status_badge(badge_word, badge_tone))
@@ -273,9 +273,10 @@ pub(crate) fn card_view(s: &AppState) -> El {
     col()
         .key("exo-ai-sentinel-card")
         .w_full()
-        .pt(14.0)
+        .h_full()
+        .pt(16.0)
         .px(24.0)
-        .pb(14.0)
+        .pb(16.0)
         .gap(10.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
@@ -286,7 +287,7 @@ pub(crate) fn card_view(s: &AppState) -> El {
             row()
                 .w_full()
                 .items_start()
-                .gap(20.0)
+                .gap(16.0)
                 .child(left)
                 .child(right),
         )

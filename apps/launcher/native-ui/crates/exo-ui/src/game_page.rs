@@ -722,7 +722,7 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
 
     let stage = el()
         .w_full()
-        .min_h(460.0)
+        .min_h(420.0)
         .clip_rounded(0.0)
         .fill(BG)
         .child(hero_bg)
@@ -731,12 +731,12 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .child(
             col()
                 .w_full()
-                .min_h(460.0)
+                .min_h(420.0)
                 .pt(56.0)
                 .px(GAME_EDGE)
-                .pb(24.0)
+                .pb(20.0)
                 .justify_between()
-                .gap(20.0)
+                .gap(16.0)
                 .child(top_row)
                 .child(hero_bar),
         );
@@ -744,8 +744,8 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
     let mut page = col()
         .key(format!("game-page-{}", base_game.id))
         .w_full()
-        .gap(14.0)
-        .pb(24.0)
+        .gap(12.0)
+        .pb(20.0)
         .fill(BG)
         .child(stage);
 
@@ -753,13 +753,13 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         let left_col = col()
             .grow(1.15)
             .min_w(0.0)
-            .gap(16.0)
+            .gap(14.0)
             .child(performance_card(s, &game))
             .child(graphics_features_card(s, &game));
         let lower_cards = row()
             .w_full()
             .px(GAME_EDGE)
-            .gap(16.0)
+            .gap(14.0)
             .items_start()
             .child(left_col)
             .child(properties_card(s, &game));
@@ -861,7 +861,7 @@ mod tests {
             (gfx_rect[0] - perf_rect[0]).abs() <= 1.0 && (gfx_rect[2] - perf_rect[2]).abs() <= 1.0,
             "graphics features card must sit in left column under perf card: perf={perf_rect:?} gfx={gfx_rect:?}"
         );
-        let expected_gfx_y = perf_rect[1] + perf_rect[3] + 16.0;
+        let expected_gfx_y = perf_rect[1] + perf_rect[3] + 14.0;
         assert!(
             (gfx_rect[1] - expected_gfx_y).abs() <= 1.0,
             "graphics features card gap mismatch: gfx_y={} expected={expected_gfx_y}",
