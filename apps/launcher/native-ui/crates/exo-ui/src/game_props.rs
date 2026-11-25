@@ -5,16 +5,17 @@ use crate::game_actions::{
 };
 use crate::state::{AppState, HostStatus, InputMode, OpenDropdown};
 use exo_kit::{
-    BG, BadgeTone, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
+    BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
     SPRING_MOVE, SPRING_QUICK, SelectDismissCb, SelectMenuSpec, SelectOption, SelectTrigger,
-    TRANSPARENT, amoled_card, apply_glass, bad, fg_faint, fg_muted, glass_rim_bottom,
-    glass_rim_top, glass_still_control_fill, good, hairline, hover_fill, icon_folder, icon_refresh,
-    icon_rotate_ccw, icon_trash, icon_upload, icon_wrench, pressed_fill, progress_bar, scaled,
-    select_menu_layers, select_trigger, status_badge, switch_pill, track_fill, type_body,
-    type_control, type_small, type_title,
+    TRANSPARENT, bad, fg_faint, fg_muted, glass_rim_bottom, glass_rim_top,
+    glass_still_control_fill, good, hairline, hex, hover_fill, icon_refresh, icon_rotate_ccw,
+    icon_upload, pressed_fill, progress_bar, scaled, select_menu_layers, select_trigger,
+    status_badge, switch_pill, track_fill, type_body, type_control, type_small, type_title,
 };
 use exo_rpc::{Game, GameProperties};
-use rune::{Align, Cursor, El, TextStyle, Tx, col, edit_access, el, row, text, text_input};
+use rune::{
+    Align, Cursor, El, LiquidGlass, TextStyle, Tx, col, edit_access, el, row, text, text_input,
+};
 use std::rc::Rc;
 
 fn switch_pill_owned(key: String, label: String, on: bool) -> El {
@@ -58,24 +59,24 @@ fn props_row(
             .center_y()
             .child(text(title.to_string()).font(type_control()).color(FG))
     };
-    let mut left = col().grow(1.0).min_w(0.0).gap(3.0).child(title_row);
+    let mut left = col().grow(1.0).min_w(0.0).gap(5.0).child(title_row);
     if let Some(d) = detail.filter(|s| !s.is_empty()) {
         left = left.child(
             text(d.to_string())
                 .font(type_small())
-                .color(fg_muted())
+                .color(hex(0xdcdcdc, 1.0))
                 .truncate(),
         );
     }
     let mut box_col = col().w_full().child(
         row()
             .w_full()
-            .min_h(38.0)
+            .min_h(44.0)
             .gap(16.0)
             .justify_between()
             .center_y()
             .child(left)
-            .child(row().gap(8.0).center_y().child(right)),
+            .child(row().pt(2.0).gap(8.0).center_y().child(right)),
     );
     if let Some(n) = note
         && !n.text.is_empty()
@@ -114,11 +115,7 @@ fn props_btn(
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(if danger_armed {
-            bad()
-        } else {
-            glass_still_control_fill()
-        })
+        .fill(if danger_armed { bad() } else { FG.alpha(0.03) })
         .hit()
         .disabled(disabled)
         .focusable(!disabled)
@@ -163,6 +160,69 @@ fn props_btn(
                 PRIMARY_FG
             } else {
                 FG
+            }),
+    )
+}
+
+fn props_danger_btn(
+    key: &str,
+    label: &str,
+    disabled: bool,
+    danger_armed: bool,
+    gamepad_focus: bool,
+    on_press: impl Fn(&mut AppState, &mut Tx) + 'static,
+) -> El {
+    let mut btn = row()
+        .key(key.to_string())
+        .role("button")
+        .label(label.to_string())
+        .h(32.0)
+        .px(12.0)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(if danger_armed { bad() } else { FG.alpha(0.03) })
+        .hit()
+        .disabled(disabled)
+        .focusable(!disabled)
+        .cursor(if disabled {
+            Cursor::NotAllowed
+        } else {
+            Cursor::Pointer
+        })
+        .hold_landing_width()
+        .motion(SPRING_BASE);
+    if !danger_armed {
+        btn = btn.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+    }
+    if !disabled {
+        btn = btn
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .hover(if danger_armed {
+                bad().alpha(0.85)
+            } else {
+                hover_fill()
+            })
+            .press(if danger_armed {
+                bad().alpha(0.75)
+            } else {
+                pressed_fill()
+            })
+            .on_press_tx(on_press);
+        if gamepad_focus {
+            btn = btn.focus_ring(2.0, 3.0, FG);
+        }
+    }
+    btn.child(
+        text(label.to_string())
+            .font(type_control())
+            .color(if disabled {
+                fg_faint()
+            } else if danger_armed {
+                PRIMARY_FG
+            } else {
+                hex(0xff7979, 1.0)
             }),
     )
 }
@@ -262,39 +322,37 @@ fn general_section(s: &AppState, game: &Game, props: &GameProperties) -> Vec<El>
     if props.launch_options.is_some() {
         let gid_save = game.id.clone();
         let initial = props.launch_options.clone().unwrap_or_default();
-        let launch_input = apply_glass(
-            row()
-                .w(220.0)
-                .h(32.0)
-                .px(12.0)
-                .center_y()
-                .radius(RADIUS_PILL)
-                .cursor(Cursor::Text),
-            ExoGlass::Control,
-            false,
-        )
-        .child(
-            text_input(&s.props_launch_opts, type_body())
-                .key("props-launch-input")
-                .label("Launch options")
-                .w_full()
-                .single_line()
-                .color(FG)
-                .placeholder("", fg_muted())
-                .on_edit(edit_access(|st: &mut AppState| &mut st.props_launch_opts))
-                .on_submit(move |st: &mut AppState, _| {
-                    let val = st.props_launch_opts.text.clone();
-                    if val.trim() != initial.trim() {
-                        st.set_game_property_ex(
-                            &gid_save,
-                            "launchOptions",
-                            &val,
-                            None,
-                            "launchOptions",
-                        );
-                    }
-                }),
-        );
+        let launch_input = row()
+            .w(220.0)
+            .h(32.0)
+            .px(12.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(FG.alpha(0.03))
+            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+            .cursor(Cursor::Text)
+            .child(
+                text_input(&s.props_launch_opts, type_body())
+                    .key("props-launch-input")
+                    .label("Launch options")
+                    .w_full()
+                    .single_line()
+                    .color(FG)
+                    .placeholder("", fg_muted())
+                    .on_edit(edit_access(|st: &mut AppState| &mut st.props_launch_opts))
+                    .on_submit(move |st: &mut AppState, _| {
+                        let val = st.props_launch_opts.text.clone();
+                        if val.trim() != initial.trim() {
+                            st.set_game_property_ex(
+                                &gid_save,
+                                "launchOptions",
+                                &val,
+                                None,
+                                "launchOptions",
+                            );
+                        }
+                    }),
+            );
         let mut right = row().gap(8.0).center_y();
         if busy == Some("launchOptions") {
             right = right.child(text("Saving…").font(type_small()).color(fg_muted()));
@@ -327,6 +385,7 @@ fn general_section(s: &AppState, game: &Game, props: &GameProperties) -> Vec<El>
             SelectTrigger::new("gp-language-select", "Language", label)
                 .open(s.open_dropdown == Some(OpenDropdown::GameLanguage))
                 .disabled(locked || busy.is_some())
+                .flat(true)
                 .gamepad_focus(gamepad_focus),
             |st: &mut AppState, _| st.toggle_dropdown(OpenDropdown::GameLanguage),
         );
@@ -694,19 +753,9 @@ fn files_section(s: &AppState, game: &Game, props: &GameProperties) -> Vec<El> {
     };
     let gid_uninst = game.id.clone();
     let uninst_disabled = host_locked || game.can_stop || busy == Some("uninstall");
-    let uninstall_btn = props_btn(
+    let uninstall_btn = props_danger_btn(
         "gp-uninstall",
         &uninst_label,
-        Some(icon_trash(
-            13.0,
-            if uninst_disabled {
-                fg_faint()
-            } else if uninst_armed {
-                PRIMARY_FG
-            } else {
-                FG
-            },
-        )),
         uninst_disabled,
         uninst_armed,
         gamepad_focus,
@@ -721,14 +770,14 @@ fn files_section(s: &AppState, game: &Game, props: &GameProperties) -> Vec<El> {
     let mut size_right = row().gap(8.0).center_y().child(
         text(size_text.clone().unwrap_or_else(|| "Unknown".into()))
             .font(type_small())
-            .color(fg_muted()),
+            .color(hex(0xdcdcdc, 1.0)),
     );
     if props.can_browse {
         let gid_folder = game.id.clone();
         size_right = size_right.child(props_btn(
             "gp-props-browse",
             "Open folder",
-            Some(icon_folder(13.0, FG)),
+            None,
             false,
             false,
             gamepad_focus,
@@ -772,16 +821,7 @@ fn files_section(s: &AppState, game: &Game, props: &GameProperties) -> Vec<El> {
             props_btn(
                 "gp-repair",
                 &label,
-                Some(icon_wrench(
-                    13.0,
-                    if locked || busy.is_some() {
-                        fg_faint()
-                    } else if armed {
-                        PRIMARY_FG
-                    } else {
-                        FG
-                    },
-                )),
+                None,
                 locked || busy.is_some(),
                 armed,
                 gamepad_focus,
@@ -1175,16 +1215,24 @@ pub fn properties_card(s: &AppState, game: &Game) -> El {
         .pb(15.0)
         .justify_between()
         .center_y()
-        .child(text("Properties").font(type_title()).color(FG));
+        .child(
+            text("Properties")
+                .font(type_title().letter_spacing(-0.015))
+                .color(FG),
+        );
     if props.is_some_and(|p| p.running) {
         head = head.child(status_badge("Playing".to_string(), BadgeTone::Good));
     }
 
-    let mut card = amoled_card(RADIUS_PANEL)
+    let mut card = col()
         .key("gp-props-card")
         .grow(1.0)
         .min_w(340.0)
-        .h_full()
+        .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .liquid_glass(LiquidGlass::panel())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(head);
 
     let Some(props) = props else {
@@ -1250,7 +1298,7 @@ pub fn properties_card(s: &AppState, game: &Game) -> El {
                 let base = row().py(6.0).px(12.0).center().child(
                     text(label.clone())
                         .font(TextStyle::new(scaled(12.0), 600.0))
-                        .color(fg_muted()),
+                        .color(hex(0xdcdcdc, 1.0)),
                 );
                 let mut btn = el()
                     .key(key)
@@ -1262,11 +1310,7 @@ pub fn properties_card(s: &AppState, game: &Game) -> El {
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
                     .radius(RADIUS_PILL)
-                    .fill(if active {
-                        TRANSPARENT
-                    } else {
-                        glass_still_control_fill()
-                    })
+                    .fill(if active { TRANSPARENT } else { FG.alpha(0.03) })
                     .hover(if active { TRANSPARENT } else { hover_fill() })
                     .press(if active { TRANSPARENT } else { pressed_fill() })
                     .motion(SPRING_QUICK)

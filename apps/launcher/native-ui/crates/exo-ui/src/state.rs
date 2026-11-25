@@ -1193,6 +1193,9 @@ impl AppState {
             && !self.games.is_empty()
         {
             if let Some(sel) = self.open_game().or_else(|| self.selected_game()) {
+                if let Some(img) = self.cover_image(sel, scale) {
+                    images.push(img);
+                }
                 if let Some(img) = self.hero_image(sel, scale) {
                     images.push(img);
                 }

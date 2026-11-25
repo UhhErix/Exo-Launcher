@@ -746,9 +746,8 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
-        { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
-        { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-tile-hit' },
+        { type: 'click', selector: '.exo-home-more-btn, button[aria-label^="Details for"]', optional: true },
+        { type: 'waitFor', selector: '#exo-props-tab-general, .exo-game-props-tab', timeoutMs: 8000 },
         { type: 'wait', ms: 800 },
       ],
       openSelector: '.exo-game-page, .exo-primary-action',
@@ -768,9 +767,8 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
-        { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
-        { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-tile-hit' },
+        { type: 'click', selector: '.exo-home-more-btn, button[aria-label^="Details for"]', optional: true },
+        { type: 'waitFor', selector: '#exo-props-tab-general, .exo-game-props-tab', timeoutMs: 8000 },
         { type: 'wait', ms: 700 },
         { type: 'hover', selector: '.exo-primary-action' },
         { type: 'wait', ms: 250 },
@@ -824,7 +822,7 @@ export const STATES = [
     },
     native: {
       scene: 'game-props-anticheat',
-      expect: { openGame: true, gamePropsTab: 2 },
+      expect: { openGame: true, gamePropsTab: 0 },
     },
   },
   {
@@ -846,7 +844,7 @@ export const STATES = [
     },
     native: {
       scene: 'game-props-dlss',
-      expect: { openGame: true, gamePropsTab: 3 },
+      expect: { openGame: true, gamePropsTab: 1 },
     },
   },
   {
@@ -859,12 +857,10 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
-        { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
-        { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-tile-hit' },
-        { type: 'wait', ms: 700 },
-        { type: 'clickText', selector: '[role="tab"]', text: /betas/i, optional: true },
-        { type: 'wait', ms: 400 },
+        { type: 'click', selector: '.exo-home-more-btn, button[aria-label^="Details for"]', optional: true },
+        { type: 'waitFor', selector: '#exo-props-tab-general, .exo-game-props-tab', timeoutMs: 6000 },
+        { type: 'clickText', selector: '[role="tab"], button.exo-game-props-tab', text: /betas/i, optional: true },
+        { type: 'wait', ms: 450 },
       ],
       openSelector: '.exo-game-page, .exo-game-props',
     },
@@ -883,18 +879,16 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
-        { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
-        { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-tile-hit' },
-        { type: 'wait', ms: 700 },
-        { type: 'clickText', selector: '[role="tab"]', text: /dlc|content/i, optional: true },
-        { type: 'wait', ms: 400 },
+        { type: 'click', selector: '.exo-home-more-btn, button[aria-label^="Details for"]', optional: true },
+        { type: 'waitFor', selector: '#exo-props-tab-general, .exo-game-props-tab', timeoutMs: 6000 },
+        { type: 'clickText', selector: '[role="tab"], button.exo-game-props-tab', text: /dlc|content/i, optional: true },
+        { type: 'wait', ms: 450 },
       ],
       openSelector: '.exo-game-page, .exo-game-props',
     },
     native: {
       scene: 'game-props-dlc',
-      expect: { openGame: true, gamePropsTab: 3 },
+      expect: { openGame: true, gamePropsTab: 0 },
     },
   },
   {
@@ -907,18 +901,16 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
-        { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
-        { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-tile-hit' },
-        { type: 'wait', ms: 700 },
-        { type: 'clickText', selector: '[role="tab"]', text: /artwork/i, optional: true },
-        { type: 'wait', ms: 400 },
+        { type: 'click', selector: '.exo-home-more-btn, button[aria-label^="Details for"]', optional: true },
+        { type: 'waitFor', selector: '#exo-props-tab-general, .exo-game-props-tab', timeoutMs: 6000 },
+        { type: 'clickText', selector: '[role="tab"], button.exo-game-props-tab', text: /artwork/i, optional: true },
+        { type: 'wait', ms: 450 },
       ],
       openSelector: '.exo-game-page, .exo-game-props',
     },
     native: {
       scene: 'game-props-artwork',
-      expect: { openGame: true, gamePropsTab: 4 },
+      expect: { openGame: true, gamePropsTab: 3 },
     },
   },
   {
