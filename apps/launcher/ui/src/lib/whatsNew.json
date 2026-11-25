@@ -1,5 +1,15 @@
 [
   {
+    "version": "3.31.3",
+    "items": [
+      {
+        "icon": "AppUpdate",
+        "title": "Updates install right away in-game",
+        "detail": "Pressing Update now or Install update applies the update immediately even when a game is running instead of waiting until your game closes."
+      }
+    ]
+  },
+  {
     "version": "3.31.2",
     "items": [
       {

@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.31.3 — November 25, 2026
+- **Install updates immediately when triggered in-game.** Pressing Update now or Install update applies the update right away even while a game is running instead of holding it for after your game closes. _Checked in code only._
+
 ## 3.31.2 — November 25, 2026
 - **Finalmouse Starlight X 1.2.8 / 1.2.9 firmware RT support.** Shows Smart Rapid Trigger as Always on for Starlight X firmware 1.2.8 and newer (including 1.2.9) to match XPanel while keeping Release point and Ultraclick editable, and lets older firmware update rapid trigger sensitivity without overwriting actuation. _Checked in code only._
 - **Clean Exo Capture and helper restore during updates.** Stops Exo helper processes cleanly before swapping the app folder and refreshes the installer payload cleanly so Exo Capture (`Snip`, `Record`, `Save replay`) is restored properly when updating. _Checked in code only._

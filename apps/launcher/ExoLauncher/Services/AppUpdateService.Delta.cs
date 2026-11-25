@@ -172,7 +172,6 @@ public sealed partial class AppUpdateService
         var offered = check.RemoteVersion;
         var setup = InstalledSetup();
         if (DeltaRefusal(AppFolder, InstallFolder, setup, DeltaFailedVersion, offered) is { } refused) return Refuse(refused);
-        if (GameRunning()) return Refuse("a game is running, and a kept installer is how an update waits for one");
 
         string? staging = null, setupFolder = null;
         var started = false;
@@ -223,8 +222,8 @@ public sealed partial class AppUpdateService
             await VerifyStagedAsync(plan.Manifest, staging, setupFolder, Target, ct).ConfigureAwait(false);
             Move(UpdateFlow.Step.Verified);
 
-            if (GameRunning() || Move(UpdateFlow.Step.Apply) != UpdateFlow.State.Applying)
-                return Refuse("a game started during the download");
+            if (Move(UpdateFlow.Step.Apply) != UpdateFlow.State.Applying)
+                return Refuse("the update could not start");
             progress?.Report(("Installing…", null));
             if (!StartDeltaApply(new DeltaApply(InstallFolder, staging, setupFolder, plan.Manifest.Version, _updatesDirectory, Environment.ProcessId)))
                 throw new InvalidOperationException("Windows did not start the update's swap.");
