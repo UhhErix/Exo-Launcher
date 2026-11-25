@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using ExoLauncher.Helpers;
 using ExoLauncher.Services.Account;
 
 namespace ExoLauncher.Tests;
@@ -15,13 +16,22 @@ namespace ExoLauncher.Tests;
 ///   account, or is retried forever, or a real outage is waited on as if it were busy.
 /// </summary>
 [Collection("AccountSessionStore")]
-public sealed class AccountSessionEndTests
+public sealed class AccountSessionEndTests : IDisposable
 {
-    private static string FreshDir()
+    private readonly List<string> _tempDirs = [];
+
+    private string FreshDir()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "exo-account-end", Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(Path.GetTempPath(), "exo-account-end-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        _tempDirs.Add(dir);
         return dir;
+    }
+
+    public void Dispose()
+    {
+        foreach (var dir in _tempDirs)
+            try { DeletionGate.DeleteDirectory(dir, recursive: true); } catch { }
     }
 
     private static AccountSession Session(string token) => new(token, "16cf69" + "c10577" + "24d840" + "48297a" + "367130" + "71", "person@example.com", "dev-1");

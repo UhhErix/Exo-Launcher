@@ -88,9 +88,14 @@ try {
             }
         }
     } finally {
-        if ($hostProc -and -not $hostProc.HasExited) { Stop-Process -Id $hostProc.Id -Force -ErrorAction SilentlyContinue }
-        if (-not $DataDir -and (Test-Path -LiteralPath $dataPath)) { Remove-Item -LiteralPath $dataPath -Recurse -Force -ErrorAction SilentlyContinue }
+        if ($hostProc -and -not $hostProc.HasExited) {
+            Stop-Process -Id $hostProc.Id -Force -ErrorAction SilentlyContinue
+            try { [void]$hostProc.WaitForExit(3000) } catch {}
+        }
     }
 } finally {
     Pop-Location
+    if (-not $DataDir -and (Test-Path -LiteralPath $dataPath)) {
+        Remove-Item -LiteralPath $dataPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }

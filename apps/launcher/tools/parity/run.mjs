@@ -97,6 +97,15 @@ async function main() {
   const folder = opts.dataDir ? resolve(dataDir, '..') : tempRoot
   await mkdir(dataDir, { recursive: true })
 
+  const cleanupTemp = async () => {
+    if (!opts.keepData && !opts.dataDir && existsSync(tempRoot)) {
+      await rm(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 400 }).catch(() => {})
+    }
+  }
+  const onSignal = () => { void cleanupTemp().finally(() => process.exit(130)) }
+  process.once('SIGINT', onSignal)
+  process.once('SIGTERM', onSignal)
+
   let reactResults = {}
   let nativeResults = {}
   try {
@@ -156,9 +165,9 @@ async function main() {
     console.log(`Report:  ${join(outDir, 'report.md')}`)
     console.log(`Gallery: ${join(outDir, 'index.html')}`)
   } finally {
-    if (!opts.keepData && !opts.dataDir && existsSync(tempRoot)) {
-      await rm(tempRoot, { recursive: true, force: true }).catch(() => {})
-    }
+    process.off('SIGINT', onSignal)
+    process.off('SIGTERM', onSignal)
+    await cleanupTemp()
   }
 }
 

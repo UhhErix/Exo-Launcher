@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using ExoLauncher.Helpers;
 using ExoLauncher.Services.Account;
 
 namespace ExoLauncher.Tests;
@@ -15,17 +16,25 @@ namespace ExoLauncher.Tests;
 /// - a Settings action that hears signed-out keeps the dead session, or one that hears another refusal throws the live one away.
 /// </summary>
 [Collection("AccountSessionStore")]
-public sealed class AccountCodeAndSessionRaceTests
+public sealed class AccountCodeAndSessionRaceTests : IDisposable
 {
     private const string Account = "16cf69c1057724d84048297a36713071";
     private const string Device = "0123456789abcdef0123456789abcdef";
+    private readonly List<string> _tempDirs = [];
 
-    private static string FreshDir()
+    private string FreshDir()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "exo-account-code", Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(Path.GetTempPath(), "exo-account-code-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        _tempDirs.Add(dir);
         File.WriteAllText(Path.Combine(dir, AccountDevice.FileName), Device);
         return dir;
+    }
+
+    public void Dispose()
+    {
+        foreach (var dir in _tempDirs)
+            try { DeletionGate.DeleteDirectory(dir, recursive: true); } catch { }
     }
 
     private sealed class Answer(HttpStatusCode status, string body) : HttpMessageHandler

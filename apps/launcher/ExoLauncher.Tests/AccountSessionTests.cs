@@ -10,13 +10,22 @@ namespace ExoLauncher.Tests;
 /// - the device id changing on restart, so every start shows as a new PC;
 /// - a token, a recovery code or an email reaching app.log through the scrubber.
 /// </summary>
-public sealed class AccountSessionTests
+public sealed class AccountSessionTests : IDisposable
 {
-    private static string FreshDir()
+    private readonly List<string> _tempDirs = [];
+
+    private string FreshDir()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "exo-account-tests", Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(Path.GetTempPath(), "exo-account-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        _tempDirs.Add(dir);
         return dir;
+    }
+
+    public void Dispose()
+    {
+        foreach (var dir in _tempDirs)
+            try { DeletionGate.DeleteDirectory(dir, recursive: true); } catch { }
     }
 
     private static readonly AccountSession Session = new(

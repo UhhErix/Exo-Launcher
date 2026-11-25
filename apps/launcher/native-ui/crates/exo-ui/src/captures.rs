@@ -7,13 +7,13 @@ use crate::state::{AppState, HostStatus, InputMode};
 use exo_kit::{
     BG, BadgeTone, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, danger_button, exo_glass, fg_faint,
-    fg_muted, filter_pill, glass_control_fill, glass_panel_fill, glass_panel_opt, glass_rim, good,
-    hairline, hover_fill, icon_back, icon_camera, icon_check, icon_close, icon_film, icon_folder,
-    icon_gallery, icon_notes, icon_pause, icon_play, icon_plus, icon_record_dot, icon_replay,
-    icon_scissors, icon_settings, icon_star, icon_trash, icon_volume, icon_volume_off,
-    popover_transition_for, pressed_fill, primary_button, progress_bar, scaled, scrim_fill,
-    slider_track, status_badge, type_body, type_control, type_page, type_section, type_small,
-    type_title, warn,
+    fg_muted, filter_pill, glass_control_fill, glass_panel_fill, glass_rim, good, hairline,
+    hover_fill, icon_back, icon_camera, icon_check, icon_close, icon_external, icon_film,
+    icon_folder, icon_gallery, icon_more_horiz, icon_notes, icon_pause, icon_play, icon_plus,
+    icon_record_dot, icon_replay, icon_scissors, icon_settings, icon_sparkles, icon_star,
+    icon_trash, icon_volume, icon_volume_off, popover_transition_for, pressed_fill, primary_button,
+    progress_bar, scaled, scrim_fill, slider_track, status_badge, type_body, type_control,
+    type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{
     ActionResult, CaptureEditReply, CaptureItem, CaptureItemReply, CaptureListReply,
@@ -25,8 +25,9 @@ use exo_rpc::{
 };
 use rune::color::oklch;
 use rune::{
-    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, Phase, ScrollSpec, Side, Spring,
-    SurfaceFit, TextEdit, TextStyle, Tx, col, edit_access, el, lightbox, row, text, text_input,
+    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, LiquidGlass, Phase, ScrollSpec, Side,
+    Spring, SurfaceFit, TextEdit, TextStyle, Tx, col, edit_access, el, lightbox, row, text,
+    text_input,
 };
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -1187,18 +1188,26 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
         "top-capture-btn"
     };
 
-    let mut menu = glass_panel_opt("capture-popover-menu", 240.0, blur)
+    let _ = blur;
+    let mut menu = col()
+        .key("capture-popover-menu")
+        .w(240.0)
+        .radius(RADIUS_CARD)
+        .continuous_corners()
+        .clip_rounded(RADIUS_CARD)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .transition(popover_transition_for(Side::Bottom, Align::End))
         .role("menu")
         .label("Capture")
         .focus_group()
         .modal(true, |s: &mut AppState| s.capture_menu_open = false)
+        .modal_live(["top-bar"])
         .focus_return(anchor_key)
-        .anchored_fit(anchor_key, Side::Bottom, Align::End, 16.0)
+        .anchored_fit(anchor_key, Side::Bottom, Align::End, 8.0)
         .padding(8.0)
-        .gap(2.0)
-        .radius(RADIUS_CARD)
-        .clip_rounded(RADIUS_CARD);
+        .gap(2.0);
 
     if present {
         let replay_row = popover_row(
@@ -1402,47 +1411,24 @@ fn clip_card(item: &CaptureItem, s: &AppState, scale: f32, badge: Option<String>
                 .center()
                 .children(is_selected.then(|| icon_check(12.0, PRIMARY_FG))),
         );
-    } else {
+    } else if item.favourite {
         let id_fav = item.id.clone();
-        let id_del = item.id.clone();
-        let fav = item.favourite;
         overlay = overlay.child(
-            row()
-                .pin(Some(6.0), None, None, Some(6.0))
-                .gap(4.0)
-                .child(
-                    el().key(format!("cap-card-del-{}", item.id))
-                        .role("button")
-                        .cursor(Cursor::Pointer)
-                        .hit()
-                        .size(24.0, 24.0)
-                        .radius(RADIUS_PILL)
-                        .fill(BG.alpha(0.68))
-                        .hover(bad().alpha(0.35))
-                        .center()
-                        .on_press(move |s: &mut AppState| {
-                            s.capture_bulk_delete(vec![id_del.clone()])
-                        })
-                        .child(icon_trash(12.0, FG)),
-                )
-                .child(
-                    el().key(format!("cap-card-fav-{}", item.id))
-                        .role("button")
-                        .cursor(Cursor::Pointer)
-                        .hit()
-                        .size(24.0, 24.0)
-                        .radius(RADIUS_PILL)
-                        .fill(BG.alpha(0.68))
-                        .hover(hover_fill())
-                        .center()
-                        .on_press(move |s: &mut AppState| {
-                            s.capture_viewer_action(
-                                &id_fav,
-                                if fav { "unfavourite" } else { "favourite" },
-                            );
-                        })
-                        .child(icon_star(12.0, if fav { warn() } else { FG.alpha(0.8) })),
-                ),
+            row().pin(Some(6.0), None, None, Some(6.0)).gap(4.0).child(
+                el().key(format!("cap-card-fav-{}", item.id))
+                    .role("button")
+                    .cursor(Cursor::Pointer)
+                    .hit()
+                    .size(24.0, 24.0)
+                    .radius(RADIUS_PILL)
+                    .fill(BG.alpha(0.68))
+                    .hover(hover_fill())
+                    .center()
+                    .on_press(move |s: &mut AppState| {
+                        s.capture_viewer_action(&id_fav, "unfavourite");
+                    })
+                    .child(icon_star(12.0, warn())),
+            ),
         );
     }
     if let Some(dur) = item.duration_ms {
@@ -2030,7 +2016,7 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                     "cap-trim-go"
                 },
                 "Edit",
-                None,
+                Some(icon_scissors(14.0, PRIMARY_FG)),
             )
             .on_press(move |s: &mut AppState| {
                 if is_img {
@@ -2043,38 +2029,106 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
             }),
         )
         .child(
-            device_btn("cap-viewer-share", "Share", busy).on_press(|s: &mut AppState| {
+            device_icon_btn(
+                "cap-viewer-share",
+                "Share",
+                Some(icon_external(14.0, FG)),
+                busy,
+            )
+            .on_press(|s: &mut AppState| {
                 s.media.captures_ui.viewer_share_open = !s.media.captures_ui.viewer_share_open;
                 s.media.captures_ui.viewer_more_open = false;
             }),
         )
         .child(
-            device_icon_btn(
-                "cap-viewer-fav",
-                if is_fav { "Favorited" } else { "Favorite" },
-                Some(icon_star(14.0, if is_fav { warn() } else { FG })),
-                false,
-            )
-            .on_press(move |s: &mut AppState| {
-                s.capture_viewer_action(&id_fav, if is_fav { "unfavourite" } else { "favourite" });
-            }),
+            el().key("cap-viewer-fav")
+                .role("button")
+                .label(if is_fav {
+                    "Remove from favorites"
+                } else {
+                    "Favorite"
+                })
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .size(32.0, 32.0)
+                .radius(RADIUS_PILL)
+                .fill(glass_control_fill())
+                .border(1.0, glass_rim())
+                .hover(hover_fill())
+                .center()
+                .on_press(move |s: &mut AppState| {
+                    s.capture_viewer_action(
+                        &id_fav,
+                        if is_fav { "unfavourite" } else { "favourite" },
+                    );
+                })
+                .child(icon_star(14.0, if is_fav { warn() } else { FG })),
         )
         .child(
-            filter_pill("cap-viewer-info", "Info", ui.viewer_info_open).on_press(
-                |s: &mut AppState| {
+            el().key("cap-viewer-info")
+                .role("button")
+                .label("Info")
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .size(32.0, 32.0)
+                .radius(RADIUS_PILL)
+                .fill(if ui.viewer_info_open {
+                    hover_fill()
+                } else {
+                    glass_control_fill()
+                })
+                .border(1.0, glass_rim())
+                .hover(hover_fill())
+                .center()
+                .on_press(|s: &mut AppState| {
                     s.media.captures_ui.viewer_info_open = !s.media.captures_ui.viewer_info_open;
-                },
-            ),
+                })
+                .child(icon_sparkles(14.0, FG)),
         )
         .child(
-            danger_button("cap-viewer-del", "Delete", Some(icon_trash(14.0, bad())))
-                .on_press(move |s: &mut AppState| s.capture_viewer_action(&id_del, "delete")),
+            el().key("cap-viewer-del")
+                .role("button")
+                .label("Delete")
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .size(32.0, 32.0)
+                .radius(RADIUS_PILL)
+                .fill(glass_control_fill())
+                .border(1.0, glass_rim())
+                .hover(hover_fill())
+                .center()
+                .on_press(move |s: &mut AppState| s.capture_viewer_action(&id_del, "delete"))
+                .child(icon_trash(14.0, bad())),
         )
         .child(
-            device_btn("cap-viewer-more", "⋯", busy).on_press(|s: &mut AppState| {
-                s.media.captures_ui.viewer_more_open = !s.media.captures_ui.viewer_more_open;
-                s.media.captures_ui.viewer_share_open = false;
-            }),
+            el().key("cap-viewer-more")
+                .role("button")
+                .label("More")
+                .cursor(if busy {
+                    Cursor::NotAllowed
+                } else {
+                    Cursor::Pointer
+                })
+                .focusable(!busy)
+                .hit()
+                .press_on_down()
+                .size(32.0, 32.0)
+                .radius(RADIUS_PILL)
+                .fill(glass_control_fill())
+                .border(1.0, glass_rim())
+                .hover(hover_fill())
+                .center()
+                .on_press(|s: &mut AppState| {
+                    s.media.captures_ui.viewer_more_open = !s.media.captures_ui.viewer_more_open;
+                    s.media.captures_ui.viewer_share_open = false;
+                })
+                .child(icon_more_horiz(16.0, FG)),
         );
 
     let hue = clip_hue(&item.game);
@@ -2145,19 +2199,16 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                     .child(icon_film(36.0, FG.alpha(0.7))),
             )
         }
-    } else if let Some(img) = s.capture_thumb_image(&item.url, scale) {
+    } else if let Some(img) = s.capture_full_image(&item.url, scale) {
         let cur_url = item.url.clone();
-        el().grow(1.0).h_full().padding(16.0).child(
+        el().grow(1.0).h_full().px(12.0).pb(12.0).child(
             el().key("cap-viewer-img-zoom")
                 .role("button")
-                .cursor(Cursor::Pointer)
+                .cursor(Cursor::Default)
                 .hit()
                 .w_full()
                 .h_full()
-                .radius(RADIUS_PANEL)
-                .clip_rounded(RADIUS_PANEL)
                 .fill(BG)
-                .border(1.0, glass_rim())
                 .pixels_fit(img.pixels(), SurfaceFit::Fit)
                 .on_press(move |s: &mut AppState| {
                     let urls: Vec<String> = s
@@ -3086,8 +3137,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .press_on_down()
                 .size(32.0, 32.0)
                 .radius(RADIUS_PILL)
-                .fill(glass_control_fill())
-                .border(1.0, glass_rim())
+                .liquid_glass(LiquidGlass::control())
                 .hover(hover_fill())
                 .center()
                 .on_press(|s: &mut AppState| s.close_captures())
@@ -3360,12 +3410,12 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         .w_full()
                         .gap(8.0)
                         .child(text(day).font(type_section()).color(fg_muted()));
-                    for chunk in list.chunks(4) {
+                    for chunk in list.chunks(5) {
                         let mut r = row().w_full().gap(6.0);
                         for it in chunk {
                             r = r.child(clip_card(it, s, scale, None));
                         }
-                        for _ in chunk.len()..4 {
+                        for _ in chunk.len()..5 {
                             r = r.child(el().grow(1.0).min_w(0.0));
                         }
                         day_col = day_col.child(r);
@@ -3417,10 +3467,13 @@ pub fn view(s: &AppState, scale: f32) -> El {
     };
 
     el().key("captures-sheet-backdrop")
-        .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.62))
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .pt(76.0)
+        .pr(24.0)
+        .pb(24.0)
+        .pl(24.0)
+        .fill(scrim_fill())
         .center()
-        .padding(24.0)
         .child(
             el().key("captures-sheet")
                 .w_full()
@@ -3428,8 +3481,10 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .h_full()
                 .max_h(900.0)
                 .radius(RADIUS_SHEET)
+                .continuous_corners()
                 .clip_rounded(RADIUS_SHEET)
-                .liquid_glass(exo_glass(ExoGlass::Sheet, false))
+                .border(1.0, hairline())
+                .liquid_glass(LiquidGlass::panel())
                 .child(sheet_inner),
         )
         .children(lb_overlay)
