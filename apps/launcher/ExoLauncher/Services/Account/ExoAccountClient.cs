@@ -22,18 +22,40 @@ internal sealed record AccountSignIn(string Token, string AccountId, string? Rec
 /// </summary>
 internal sealed class ExoAccountClient : IDisposable
 {
+    internal const string TestHostRefusedError = "test-host-refused";
     internal static readonly Uri Service = new("https://accounts.getexo.app/");
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(20);
     /// <summary>How long busy answers are waited out in all before the busy answer stands (<see cref="BusyWait"/>).</summary>
     internal static readonly TimeSpan BusyBudget = TimeSpan.FromSeconds(5);
     private readonly HttpClient http;
     private readonly Func<TimeSpan, CancellationToken, Task> wait;
+    private readonly bool refusedRealService;
 
-    internal ExoAccountClient(HttpMessageHandler? handler = null, Uri? service = null, Func<TimeSpan, CancellationToken, Task>? wait = null)
+    internal ExoAccountClient(HttpMessageHandler? handler = null, Uri? service = null, Func<TimeSpan, CancellationToken, Task>? wait = null, string? dataDir = null)
     {
+        var target = service ?? Service;
+        refusedRealService = RefusesRealService(dataDir ?? PathHelper.AppDataDir, target, handler is not null, HostMode.IsDisposable, HostMode.TestRun);
         http = ExoHttp.Create(Timeout, handler ?? NewHandler());
-        http.BaseAddress = service ?? Service;
+        http.BaseAddress = target;
         this.wait = wait ?? Task.Delay;
+    }
+
+    internal static bool IsRealService(Uri? uri) =>
+        uri is not null && string.Equals(uri.Host, Service.Host, StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsTempDataDir(string? dataDir)
+    {
+        if (string.IsNullOrWhiteSpace(dataDir)) return false;
+        if (PathHelper.IsUnderRoot(dataDir, Path.GetTempPath())) return true;
+        var localTemp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp");
+        return PathHelper.IsUnderRoot(dataDir, localTemp);
+    }
+
+    internal static bool RefusesRealService(string? dataDir, Uri? service, bool hasCustomHandler, bool isDisposable, bool isTestRun)
+    {
+        if (hasCustomHandler) return false;
+        if (!IsRealService(service ?? Service)) return false;
+        return isDisposable || isTestRun || IsTempDataDir(dataDir);
     }
 
     /// <summary>
@@ -77,6 +99,11 @@ internal sealed class ExoAccountClient : IDisposable
 
     private async Task<AccountReply> SendOnceAsync(HttpMethod method, string path, string? token, JsonObject? body, CancellationToken ct)
     {
+        if (refusedRealService)
+        {
+            AppLog.Warn("Exo account: refused request to real account service from a test or temp data directory.");
+            return new AccountReply(0, null, TestHostRefusedError, null);
+        }
         using var request = new HttpRequestMessage(method, path);
         if (token is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         if (body is not null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
@@ -103,10 +130,10 @@ internal sealed class ExoAccountClient : IDisposable
     }
 
     internal Task<AccountReply> CreateAccountAsync(string email, string password, string device) =>
-        SendAsync(HttpMethod.Post, "v1/account", null, Body(("email", email), ("password", password), ("device", device)), throttled: true);
+        SendAsync(HttpMethod.Post, "v1/account", null, Body(("email", email), ("password", password), ("device", device), ("app", "launcher")), throttled: true);
 
     internal Task<AccountReply> SignInAsync(string email, string password, string device, string? deviceToken = null) =>
-        SendAsync(HttpMethod.Post, "v1/session", null, WithDeviceToken(Body(("email", email), ("password", password), ("device", device)), deviceToken), throttled: true);
+        SendAsync(HttpMethod.Post, "v1/session", null, WithDeviceToken(Body(("email", email), ("password", password), ("device", device), ("app", "launcher")), deviceToken), throttled: true);
 
     internal Task<AccountReply> GetAccountAsync(string token) => SendAsync(HttpMethod.Get, "v1/account", token, null);
 
@@ -138,7 +165,7 @@ internal sealed class ExoAccountClient : IDisposable
         SendAsync(HttpMethod.Post, "v1/recovery", token, WithDeviceToken(Body(("password", password)), deviceToken), throttled: true);
 
     internal Task<AccountReply> ResetAsync(string email, string code, string password, string device, string? deviceToken = null) =>
-        SendAsync(HttpMethod.Post, "v1/recovery/reset", null, WithDeviceToken(Body(("email", email), ("code", code), ("password", password), ("device", device)), deviceToken), throttled: true);
+        SendAsync(HttpMethod.Post, "v1/recovery/reset", null, WithDeviceToken(Body(("email", email), ("code", code), ("password", password), ("device", device), ("app", "launcher")), deviceToken), throttled: true);
 
     internal Task<AccountReply> ListSessionsAsync(string token) => SendAsync(HttpMethod.Get, "v1/sessions", token, null);
 
