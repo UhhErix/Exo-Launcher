@@ -607,6 +607,36 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
     ) {
         state.media.capture_status = Some(st);
     }
+    if matches!(
+        scene,
+        None | Some("library")
+            | Some("palette")
+            | Some("activate-key")
+            | Some("downloads")
+            | Some("tour")
+    ) && let Some(ref cache_dir) = state.remote_cache_dir
+    {
+        let urls: Vec<String> = state
+            .home_deck_games()
+            .into_iter()
+            .take(12)
+            .filter(|g| state.art_base.resolve_local_portrait(g).is_none())
+            .filter_map(|g| g.cover_url.as_deref().map(str::to_string))
+            .filter(|u| u.starts_with("https://"))
+            .collect();
+        if !urls.is_empty() {
+            let chunks = urls.chunks((urls.len() / 6).max(1));
+            std::thread::scope(|scope| {
+                for chunk in chunks {
+                    scope.spawn(move || {
+                        for url in chunk {
+                            let _ = exo_rpc::remote_art::fetch_cached_image(url, cache_dir);
+                        }
+                    });
+                }
+            });
+        }
+    }
     if scene.is_some_and(|s| s.starts_with("setup")) {
         settle_setup_host(&client, &mut state);
     }
@@ -896,7 +926,12 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
             }
         }
-        Some(sc) if sc == "settings" || sc.starts_with("settings-") || sc == "palette" => {
+        Some(sc)
+            if sc == "settings"
+                || sc.starts_with("settings-")
+                || sc == "palette"
+                || sc == "whats-new" =>
+        {
             if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
                 exo_rpc::METHOD_SETTINGS_GET,
                 &serde_json::json!({}),
@@ -987,12 +1022,15 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.pc.fps_counter_state = Some(fps);
             }
-            if let Ok(upd) = client.call_blocking::<_, exo_rpc::UpdateCheckReply>(
+            if let Ok(val) = client.call_blocking::<_, serde_json::Value>(
                 exo_rpc::METHOD_APP_CHECK_UPDATE,
                 &serde_json::json!({}),
                 Duration::from_secs(5),
             ) {
-                state.pc.update_check = Some(upd);
+                state.apply_update_check_json(&val, false);
+                if let Ok(upd) = serde_json::from_value::<exo_rpc::UpdateCheckReply>(val) {
+                    state.pc.update_check = Some(upd);
+                }
             }
             if state.wp4.riot_draft.text.is_empty()
                 && let Some(ref id) = state.settings.riot_id
@@ -3303,6 +3341,15 @@ fn run_parity_probe(
     let mut menu_items: Vec<String> = Vec::new();
     for el in &elements {
         if el.exiting {
+            continue;
+        }
+        if el.rect[2] < 1.0
+            || el.rect[3] < 1.0
+            || el.rect[1] + el.rect[3] <= 0.0
+            || el.rect[1] >= viewport.1
+            || el.rect[0] + el.rect[2] <= 0.0
+            || el.rect[0] >= viewport.0
+        {
             continue;
         }
         let in_semantic_menu = semantic_menu_prefixes

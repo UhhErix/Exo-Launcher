@@ -16,7 +16,10 @@ use exo_kit::{
     scaled, scrim_fill, store_logo_or_fallback, subtle_fill, type_body, type_control, type_page,
     type_small, type_title,
 };
-use rune::{Align, Color, Cursor, El, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row, text};
+use rune::{
+    Align, Color, Cursor, El, LiquidGlass, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row,
+    text,
+};
 use serde_json::json;
 use std::collections::VecDeque;
 
@@ -2571,10 +2574,18 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
         .child(skip_btn)
         .child(actions);
 
-    let mut card = glass_panel_opt("exo-tour-card", scaled(408.0), blur)
+    let _ = blur;
+    let mut card = col()
+        .key("exo-tour-card")
+        .w(scaled(408.0))
         .role("dialog")
         .label(spec.title)
         .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .padding(20.0)
         .gap(14.0)
         .transition(modal_card_transition())

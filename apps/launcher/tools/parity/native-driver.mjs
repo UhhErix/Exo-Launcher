@@ -220,7 +220,10 @@ export async function runNativePass({
       if (scene && scene !== 'library') baseArgs.push('--scene', scene)
       if (scriptEvents) baseArgs.push('--script', scriptPath)
 
-      const snapRun = await runExe(resolvedUi, [...baseArgs, '--snap', pngPath, '--tree', treePath], 45000)
+      const snapArgs = scriptEvents
+        ? [...baseArgs, '--snap', pngPath, '--tree', treePath]
+        : [...baseArgs, '--frames', '18', '--fps', '60', '--snap', pngPath, '--tree', treePath]
+      const snapRun = await runExe(resolvedUi, snapArgs, 45000)
       const probeRun = await runExe(
         resolvedProbe,
         [...baseArgs, '--parity-probe', probePath, '--probe-points', pointsPath],
