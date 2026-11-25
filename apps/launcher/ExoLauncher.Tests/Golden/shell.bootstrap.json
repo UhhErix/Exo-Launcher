@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "id": "<REQUEST_ID>",
+  "ok": true,
+  "result": {
+    "ok": true,
+    "artBase": {
+      "covers": "https://covers.exo-launcher.local/<TOKEN>/",
+      "coversDir": "<PATH>",
+      "devicesDir": "<PATH>",
+      "notesDir": "<PATH>",
+      "capturesDir": "<PATH>",
+      "captureThumbsDir": "<PATH>"
+    },
+    "settings": {
+      "appVersion": "3.29.0",
+      "whatsNewSeen": "3.29.0",
+      "reduceMotion": false,
+      "startMaximized": true,
+      "useClassicWebUi": false,
+      "startWithWindows": false,
+      "framelessPinTop": false,
+      "framelessPinSide": false,
+      "textColour": "white",
+      "textSize": "default",
+      "background": "void",
+      "musicService": "spotify",
+      "uiPrefs": {
+        "exo.musicWebService": "spotify"
+      },
+      "sortMode": "recent",
+      "defaultInstallRoot": "<PATH>",
+      "preferredGameSources": {
+        "portal 2": "steam"
+      },
+      "recent": [
+        "steam:620"
+      ],
+      "onboardingComplete": true,
+      "showLibraryTools": true,
+      "achievementBanners": true,
+      "achievementVolume": 75,
+      "fpsCounter": false,
+      "fpsCounterPosition": "right",
+      "fpsCounterItems": [
+        "fps",
+        "frametime"
+      ],
+      "fpsCounterHideOverBuiltIn": true,
+      "hdrForGames": true,
+      "frameGenEverywhere": false,
+      "frameGenEverywhereCard": true,
+      "graphicsFeaturesBestSettings": false,
+      "hdrSdrGamma": true,
+      "discordNoiseSuppression": true,
+      "discordQuietWhilePlaying": true,
+      "pauseDownloadsWhilePlaying": true,
+      "autoUpdateGames": true,
+      "autoUpdateChipset": true,
+      "autoUpdateUpscalers": true,
+      "upscalerAntiCheatEverywhere": false,
+      "keepAwakeDownloads": true,
+      "storeClientsQuiet": true,
+      "chipset": "amd",
+      "libraryFolders": [
+        {
+          "id": "folder-coop",
+          "name": "Co-op",
+          "color": "blue",
+          "sort": "folder",
+          "games": [
+            "steam:620"
+          ]
+        }
+      ],
+      "hiddenGames": []
+    },
+    "library": {
+      "games": [
+        {
+          "id": "steam:620",
+          "title": "Portal 2",
+          "store": "steam",
+          "stores": [
+            "steam"
+          ],
+          "selectedVariantId": "steam:620",
+          "variants": [],
+          "installed": true,
+          "owned": true,
+          "entitlementState": "unknown",
+          "updateAvailable": false,
+          "canInstall": false,
+          "primaryAction": "play",
+          "artRevision": 0,
+          "playtimeMinutes": 245,
+          "sizeBytes": 12884901888,
+          "sizeApproximate": false,
+          "status": "Ready",
+          "deps": [],
+          "launchNote": "",
+          "familyShared": false,
+          "launchTarget": "620",
+          "isAddPortable": false,
+          "isRunning": false,
+          "canStop": false,
+          "tags": [],
+          "antiCheatClass": "unknown"
+        },
+        {
+          "id": "gog:1308320804",
+          "title": "Hollow Knight",
+          "store": "gog",
+          "stores": [
+            "gog"
+          ],
+          "selectedVariantId": "gog:1308320804",
+          "variants": [],
+          "installed": false,
+          "owned": true,
+          "entitlementState": "unknown",
+          "updateAvailable": false,
+          "canInstall": false,
+          "primaryAction": "install",
+          "artRevision": 0,
+          "playtimeMinutes": 0,
+          "sizeApproximate": false,
+          "status": "Not installed",
+          "deps": [],
+          "launchNote": "",
+          "familyShared": false,
+          "launchTarget": "1308320804",
+          "isAddPortable": false,
+          "isRunning": false,
+          "canStop": false,
+          "tags": [],
+          "antiCheatClass": "unknown"
+        }
+      ],
+      "count": 2,
+      "stores": [
+        {
+          "store": "steam",
+          "displayName": "Steam",
+          "agentPresent": true,
+          "clientPresent": true,
+          "backendPresent": true,
+          "signedIn": true,
+          "cachePresent": true,
+          "detail": "Ready",
+          "checkCode": "ok",
+          "checkedAtUtc": "<TIMESTAMP>"
+        },
+        {
+          "store": "gog",
+          "displayName": "GOG",
+          "agentPresent": true,
+          "clientPresent": false,
+          "backendPresent": true,
+          "signedIn": true,
+          "cachePresent": true,
+          "detail": "Ready",
+          "checkCode": "ok",
+          "checkedAtUtc": "<TIMESTAMP>"
+        }
+      ],
+      "progress": {
+        "gameId": "",
+        "phase": "idle",
+        "status": "",
+        "canCancel": false,
+        "isActive": false
+      },
+      "queuedGameIds": [],
+      "pausedDownloads": [],
+      "sortMode": "recent",
+      "recent": [
+        "steam:620"
+      ]
+    },
+    "musicPlayback": {
+      "ok": true,
+      "playback": {
+        "provider": "spotify",
+        "source": "session",
+        "status": "playing",
+        "title": "Still Alive",
+        "artist": "Jonathan Coulton",
+        "album": "Portal Soundtrack",
+        "positionMs": 42000,
+        "durationMs": 176000,
+        "canPlay": true,
+        "canPause": true,
+        "canPrev": true,
+        "canNext": true,
+        "canSeek": true
+      }
+    },
+    "discordStatus": {
+      "state": "ready",
+      "signedIn": true
+    },
+    "binaryMediaPipe": "<PIPE_NAME>"
+  }
+}

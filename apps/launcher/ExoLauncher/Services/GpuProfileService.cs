@@ -344,4 +344,31 @@ internal static class GpuProfileService
         try { DeletionGate.DeleteFile(BackupPath); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Warn("GPU profile backup not removed: " + ex.GetType().Name); }
     }
+
+    internal static uint? ReadGameFrameCap(Models.GameEntry game, string exe)
+    {
+        if (!NvidiaProfiles.GameProfilesUsable || string.IsNullOrWhiteSpace(exe)) return null;
+        var state = NvidiaProfiles.ForGameLive(GameProgramFor(game, exe), [GpuProfile.FrameRateLimit]);
+        return state.Ok ? state.After.GetValueOrDefault(GpuProfile.FrameRateLimit) : null;
+    }
+
+    internal static (bool Ok, string? Message, uint? Before, string? Profile) SetGameFrameCap(Models.GameEntry game, string exe, uint? fps)
+    {
+        if (!NvidiaProfiles.GameProfilesUsable) return (false, "NVIDIA driver DRS is not available on this PC.", null, null);
+        if (string.IsNullOrWhiteSpace(exe)) return (false, "No game executable path found for NVIDIA DRS profile.", null, null);
+        var state = NvidiaProfiles.ForGameLive(
+            GameProgramFor(game, exe),
+            [GpuProfile.FrameRateLimit],
+            new Dictionary<uint, uint?> { [GpuProfile.FrameRateLimit] = fps });
+        if (!state.Ok) return (false, state.Message ?? "NVIDIA driver refused the per-game frame cap.", null, null);
+        if (state.Skipped is { Count: > 0 } && state.Skipped.Contains(GpuProfile.FrameRateLimit))
+            return (false, "This NVIDIA driver does not support per-game Frame Rate Limiter (0x10835002).", null, state.Profile);
+        return (true, null, state.Before.GetValueOrDefault(GpuProfile.FrameRateLimit), state.Profile);
+    }
+
+    private static NvidiaProfiles.GameProgram GameProgramFor(Models.GameEntry game, string exe) =>
+        new(exe, game.Title, "", (name, _) =>
+            name.Contains(game.Title, StringComparison.OrdinalIgnoreCase)
+            || StoreService.TitleKey(name) == StoreService.TitleKey(game.Title)
+            || name.StartsWith("Exo:", StringComparison.OrdinalIgnoreCase));
 }

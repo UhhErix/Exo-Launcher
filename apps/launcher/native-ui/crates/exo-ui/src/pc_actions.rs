@@ -2,20 +2,20 @@ use crate::pc_state::PcTab;
 use crate::state::{AppState, HostStatus};
 use exo_rpc::{
     ActionResult, AppsIconsReply, AppsListReply, AudioReadReply, AutopilotState, DevicesImageReply,
-    DevicesListReply, DrivesReply, EqStateReply, ExoAccountState, ExoAiState, HdrState,
+    DevicesListReply, DrivesReply, EqStateReply, ExoAiState, HdrState, KeyboardBackupResult,
     KeyboardBackupsReply, KeyboardReadReply, LauncherSettings, METHOD_APP_CHECK_UPDATE,
-    METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS, METHOD_APP_REPAIR_CACHE, METHOD_APPS_ICONS,
-    METHOD_APPS_LIST, METHOD_APPS_UNINSTALL, METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE,
-    METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE, METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST,
-    METHOD_EQ, METHOD_EXO_ACCOUNT_STATE, METHOD_EXO_ACCOUNT_SYNC, METHOD_EXO_AI_SET,
-    METHOD_EXO_AI_STATE, METHOD_HDR_STATE, METHOD_JUNK_CLEAN, METHOD_KEYBOARD_BACKUP,
-    METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ,
-    METHOD_KEYBOARD_SETTINGS, METHOD_PLAYTIME_RIOT_REFRESH, METHOD_SETTINGS_SET,
-    METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL, METHOD_SHADERS_ESTIMATES,
-    METHOD_SHADERS_PREPARE_GAMES, METHOD_SHADERS_PREPARE_START, METHOD_STARTUP_LIST,
-    METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_TUNING,
-    ShaderEstimate, ShaderSnapGame, ShadersAddonStatus, ShadersEstimatesReply,
-    ShadersPrepareGamesReply, StartupListReply, SystemAbout, SystemTuningState, UpdateCheckReply,
+    METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS, METHOD_APPS_ICONS, METHOD_APPS_LIST,
+    METHOD_AUDIO_READ, METHOD_AUTOPILOT_STATE, METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST,
+    METHOD_EQ, METHOD_EXO_AI_STATE, METHOD_HDR_STATE, METHOD_HID_SEND_REPORT,
+    METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_OPEN_APP,
+    METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ, METHOD_KEYBOARD_RESTORE,
+    METHOD_KEYBOARD_SETTINGS, METHOD_MOUSE_PANEL_BOUNDS, METHOD_MOUSE_PANEL_CLOSE,
+    METHOD_MOUSE_PANEL_OPEN, METHOD_SETTINGS_SET, METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL,
+    METHOD_SHADERS_ESTIMATES, METHOD_SHADERS_PREPARE_GAMES, METHOD_SHADERS_PREPARE_START,
+    METHOD_STARTUP_LIST, METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES,
+    METHOD_SYSTEM_TUNING, ShaderEstimate, ShaderSnapGame, ShadersAddonStatus,
+    ShadersEstimatesReply, ShadersPrepareGamesReply, StartupListReply, SystemAbout,
+    SystemTuningState, UpdateCheckReply,
 };
 use serde_json::{Map, Value, json};
 
@@ -26,12 +26,6 @@ impl AppState {
         }
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let h1 = handle.clone();
-            rpc.call::<_, ExoAccountState>(METHOD_EXO_ACCOUNT_STATE, &json!({}), move |res| {
-                if let Ok(acct) = res {
-                    h1.update(move |s, _| s.pc.account = acct);
-                }
-            });
             let h2 = handle.clone();
             rpc.call::<_, HdrState>(METHOD_HDR_STATE, &json!({}), move |res| {
                 if let Ok(hdr) = res {
@@ -44,9 +38,48 @@ impl AppState {
                     h3.update(move |s, _| s.pc.system_about = Some(about));
                 }
             });
+            let h4 = handle.clone();
+            rpc.call::<_, Value>(METHOD_SHADERS_ADDON, &json!({}), move |res| {
+                if let Ok(v) = res {
+                    let present = v.get("present").and_then(|x| x.as_bool()).unwrap_or(false);
+                    let status = ShadersAddonStatus {
+                        ok: v.get("ok").and_then(|x| x.as_bool()).unwrap_or(true),
+                        present,
+                        state: v.get("state").and_then(|x| x.as_str()).map(str::to_string),
+                        message: v
+                            .get("message")
+                            .and_then(|x| x.as_str())
+                            .map(str::to_string),
+                        snapshot: None,
+                    };
+                    h4.update(move |s, _| {
+                        s.pc.shaders = Some(status);
+                        if let Some(snap_val) = v.get("snapshot") {
+                            s.apply_shaders_snapshot_value(snap_val);
+                        }
+                    });
+                }
+            });
+            let h5 = handle.clone();
+            rpc.call::<_, Value>(
+                METHOD_SHADERS_CALL,
+                &json!({ "method": "snapshot", "params": {} }),
+                move |snap_res| {
+                    if let Ok(sv) = snap_res
+                        && let Some(res_val) = sv.get("result")
+                    {
+                        let res_clone = res_val.clone();
+                        h5.update(move |s, _| {
+                            s.apply_shaders_snapshot_value(&res_clone);
+                        });
+                    }
+                },
+            );
             if self.pc.update_check.is_none() && !self.pc.checking_update {
                 self.check_app_update();
             }
+            self.load_fps_counter_state();
+            self.load_web_preferences();
         }
     }
 
@@ -55,6 +88,7 @@ impl AppState {
             "reduceMotion" => self.settings.reduce_motion = value,
             "startWithWindows" => self.settings.start_with_windows = value,
             "startMaximized" => self.settings.start_maximized = value,
+            "useClassicWebUi" => self.settings.use_classic_web_ui = value,
             "showLibraryTools" => self.settings.show_library_tools = value,
             "pauseDownloadsWhilePlaying" => self.settings.pause_downloads_while_playing = value,
             "keepAwakeDownloads" => self.settings.keep_awake_downloads = value,
@@ -63,6 +97,7 @@ impl AppState {
             "achievementBanners" => self.settings.achievement_banners = value,
             "fpsCounter" => self.settings.fps_counter = value,
             "hdrForGames" => self.settings.hdr_for_games = value,
+            "frameGenEverywhere" => self.settings.frame_gen_everywhere = value,
             "autoUpdateUpscalers" => self.settings.auto_update_upscalers = value,
             "autoUpdateChipset" => self.settings.auto_update_chipset = value,
             _ => {}
@@ -71,6 +106,21 @@ impl AppState {
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let mut map = Map::new();
             map.insert(key.to_string(), Value::Bool(value));
+            rpc.call::<_, LauncherSettings>(METHOD_SETTINGS_SET, &Value::Object(map), move |res| {
+                if let Ok(set) = res {
+                    handle.update(move |s, _| s.settings = set);
+                }
+            });
+        }
+    }
+
+    pub fn relaunch_for_ui_switch(&mut self, use_classic: bool) {
+        self.settings.use_classic_web_ui = use_classic;
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let mut map = Map::new();
+            map.insert("useClassicWebUi".to_string(), Value::Bool(use_classic));
+            map.insert("relaunchForUiSwitch".to_string(), Value::Bool(true));
             rpc.call::<_, LauncherSettings>(METHOD_SETTINGS_SET, &Value::Object(map), move |res| {
                 if let Ok(set) = res {
                     handle.update(move |s, _| s.settings = set);
@@ -132,49 +182,6 @@ impl AppState {
         }
     }
 
-    pub fn repair_app_cache(&mut self) {
-        self.notice = Some("Repairing cover cache…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_APP_REPAIR_CACHE, &json!({}), move |res| {
-                handle.update(move |s, _| match res {
-                    Ok(r) => s.notice = r.message.or_else(|| Some("Cache repaired.".into())),
-                    Err(e) => s.notice = Some(format!("Repair failed: {e}")),
-                });
-            });
-        }
-    }
-
-    pub fn sync_exo_account(&mut self) {
-        self.notice = Some("Syncing Exo account…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call_raw(METHOD_EXO_ACCOUNT_SYNC, &json!({}), move |res| {
-                handle.update(move |s, _| {
-                    s.notice = Some(match res {
-                        Ok(_) => "Account synced.".into(),
-                        Err(e) => format!("Sync failed: {e}"),
-                    });
-                });
-            });
-        }
-    }
-
-    pub fn refresh_riot_playtime(&mut self) {
-        self.notice = Some("Refreshing Riot playtime…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call_raw(METHOD_PLAYTIME_RIOT_REFRESH, &json!({}), move |res| {
-                handle.update(move |s, _| {
-                    s.notice = Some(match res {
-                        Ok(_) => "Riot playtime refreshed.".into(),
-                        Err(e) => format!("Riot refresh failed: {e}"),
-                    });
-                });
-            });
-        }
-    }
-
     pub fn switch_pc_tab(&mut self, tab: PcTab) {
         self.pc.pc_tab = tab;
         self.pc.armed_uninstall = None;
@@ -229,7 +236,6 @@ impl AppState {
                         .get("snapshot")
                         .map(parse_shader_snap_games)
                         .unwrap_or_default();
-                    let has_games = !snap_games.is_empty();
                     let status = ShadersAddonStatus {
                         ok: v.get("ok").and_then(|x| x.as_bool()).unwrap_or(true),
                         present,
@@ -246,8 +252,16 @@ impl AppState {
                             s.pc.shader_snap_games = snap_games;
                         }
                         s.pc.shaders = Some(status);
+                        if let Some(snap_val) = v.get("snapshot") {
+                            s.apply_shaders_snapshot_value(snap_val);
+                        }
                     });
-                    if present && !has_games {
+                    if present {
+                        rpc_sh.call_raw(
+                            METHOD_SHADERS_CALL,
+                            &json!({ "method": "ui.visible", "params": { "visible": true } }),
+                            |_| {},
+                        );
                         rpc_sh.call::<_, Value>(
                             METHOD_SHADERS_CALL,
                             &json!({ "method": "snapshot", "params": {} }),
@@ -255,12 +269,10 @@ impl AppState {
                                 if let Ok(sv) = snap_res
                                     && let Some(res_val) = sv.get("result")
                                 {
-                                    let games = parse_shader_snap_games(res_val);
-                                    if !games.is_empty() {
-                                        h5_snap.update(move |s, _| {
-                                            s.pc.shader_snap_games = games;
-                                        });
-                                    }
+                                    let res_clone = res_val.clone();
+                                    h5_snap.update(move |s, _| {
+                                        s.apply_shaders_snapshot_value(&res_clone);
+                                    });
                                 }
                             },
                         );
@@ -295,33 +307,10 @@ impl AppState {
                     h7.update(move |s, _| s.pc.system_about = Some(about));
                 }
             });
-            let h8 = handle.clone();
-            rpc.call::<_, Value>("gpu.profile", &json!({}), move |res| {
-                if let Ok(v) = res {
-                    let (gpu_name, screen) = parse_gpu_profile_fields(&v);
-                    h8.update(move |s, _| {
-                        if gpu_name.is_some() {
-                            s.pc.gpu_short_name = gpu_name;
-                        }
-                        if screen.is_some() {
-                            s.pc.screen_label = screen;
-                        }
-                    });
-                }
-            });
-            let h9 = handle.clone();
-            rpc.call::<_, Value>("compress.list", &json!({}), move |res| {
-                if let Ok(v) = res {
-                    let (potential, saved) = parse_compress_totals(&v);
-                    h9.update(move |s, _| {
-                        s.pc.compress_potential_bytes = potential;
-                        s.pc.compress_saved_bytes = saved;
-                    });
-                }
-            });
             if self.pc.drives.is_none() {
                 self.load_pc_drives();
             }
+            self.load_pc_exo_ai_full();
         }
     }
 
@@ -350,25 +339,6 @@ impl AppState {
                     },
                 );
             }
-        }
-    }
-
-    pub fn run_exo_ai_now(&mut self) {
-        self.notice = Some("Running Exo AI optimization pass…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ExoAiState>(METHOD_EXO_AI_SET, &json!({ "runNow": true }), move |res| {
-                handle.update(move |s, _| match res {
-                    Ok(ai) => {
-                        s.notice = Some(format!(
-                            "Exo AI ready: {} optimizations active.",
-                            ai.auto_applied.len()
-                        ));
-                        s.pc.exo_ai = Some(ai);
-                    }
-                    Err(e) => s.notice = Some(format!("Exo AI failed: {e}")),
-                });
-            });
         }
     }
 
@@ -405,7 +375,35 @@ impl AppState {
     pub fn load_pc_apps(&mut self) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.pc.apps_loading = true;
+            self.pc.apps_loading = self.pc.apps_list.is_none();
+            if let Some(ref existing) = self.pc.apps_list {
+                let mut by_size: Vec<&exo_rpc::InstalledAppItem> = existing
+                    .programs
+                    .iter()
+                    .filter(|p| !self.pc.app_icons.contains_key(&p.id))
+                    .collect();
+                by_size.sort_by_key(|a| std::cmp::Reverse(a.bytes.unwrap_or(0)));
+                let missing_ids: Vec<String> = by_size.into_iter().map(|p| p.id.clone()).collect();
+                for chunk in missing_ids.chunks(100) {
+                    let chunk_vec: Vec<String> = chunk.to_vec();
+                    let h_c = handle.clone();
+                    rpc.call::<_, AppsIconsReply>(
+                        METHOD_APPS_ICONS,
+                        &json!({ "ids": chunk_vec }),
+                        move |ic_res| {
+                            if let Ok(reply) = ic_res {
+                                h_c.update(move |s, _| {
+                                    for (k, v) in reply.icons {
+                                        if let Some(data_url) = v {
+                                            s.pc.app_icons.insert(k, data_url);
+                                        }
+                                    }
+                                });
+                            }
+                        },
+                    );
+                }
+            }
             let h1 = handle.clone();
             let rpc_icons = rpc.clone();
             rpc.call::<_, AppsListReply>(METHOD_APPS_LIST, &json!({}), move |res| {
@@ -448,6 +446,7 @@ impl AppState {
                     h2.update(move |s, _| s.pc.startup_list = Some(list));
                 }
             });
+            self.load_pc_apps_extras(false);
         }
     }
 
@@ -487,19 +486,7 @@ impl AppState {
     }
 
     pub fn uninstall_app(&mut self, id: &str) {
-        self.pc.armed_uninstall = None;
-        self.notice = Some("Starting application uninstaller…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_APPS_UNINSTALL, &json!({ "id": id }), move |res| {
-                handle.update(move |s, _| {
-                    if let Ok(r) = res {
-                        s.notice = r.message;
-                    }
-                    s.load_pc_apps();
-                });
-            });
-        }
+        self.remove_single_app(id);
     }
 
     pub fn remove_startup_item(&mut self, id: &str) {
@@ -544,45 +531,41 @@ impl AppState {
         }
     }
 
-    pub fn clean_system_junk(&mut self) {
-        self.notice = Some("Cleaning temporary files and caches…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_JUNK_CLEAN, &json!({}), move |res| {
-                handle.update(move |s, _| {
-                    s.notice = match res {
-                        Ok(r) => r
-                            .message
-                            .or_else(|| Some("Temporary files cleaned.".into())),
-                        Err(e) => Some(format!("Cleanup failed: {e}")),
-                    };
-                    s.load_pc_drives();
-                });
-            });
-        }
-    }
-
     pub fn load_pc_devices(&mut self) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.pc.devices_loading = true;
             let h1 = handle.clone();
-            let rpc_audio = rpc.clone();
+            let rpc_follow = rpc.clone();
             rpc.call::<_, DevicesListReply>(METHOD_DEVICES_LIST, &json!({}), move |res| {
                 if let Ok(list) = res {
                     let out_id = list
                         .devices
                         .iter()
-                        .find(|d| d.kind == "audio" && d.role.as_deref() != Some("mic"))
+                        .find(|d| d.kind == "audio" && d.role.as_deref() == Some("output"))
+                        .or_else(|| {
+                            list.devices
+                                .iter()
+                                .find(|d| d.kind == "audio" && d.role.as_deref() != Some("input"))
+                        })
                         .map(|d| d.id.clone());
                     let mic_id = list
                         .devices
                         .iter()
-                        .find(|d| d.kind == "audio" && d.role.as_deref() == Some("mic"))
+                        .find(|d| d.kind == "audio" && d.role.as_deref() == Some("input"))
+                        .map(|d| d.id.clone());
+                    let kb_id = list
+                        .devices
+                        .iter()
+                        .find(|d| d.kind == "keyboard" && d.lab)
+                        .or_else(|| list.devices.iter().find(|d| d.kind == "keyboard"))
                         .map(|d| d.id.clone());
                     let h_aud = h1.clone();
+                    let h_kb = h1.clone();
+                    let h_bak = h1.clone();
                     let out_clone = out_id.clone();
                     let mic_clone = mic_id.clone();
+                    let kb_clone = kb_id.clone();
                     let photo_reqs: Vec<(String, serde_json::Value)> = list
                         .devices
                         .iter()
@@ -600,12 +583,15 @@ impl AppState {
                             )
                         })
                         .collect();
-                    let rpc_img = rpc_audio.clone();
+                    let rpc_img = rpc_follow.clone();
+                    let rpc_kb = rpc_follow.clone();
+                    let rpc_bak = rpc_follow.clone();
                     let h_img_base = h1.clone();
                     h1.update(move |s, _| {
                         s.pc.devices_loading = false;
                         s.pc.audio_output_id = out_id;
                         s.pc.audio_mic_id = mic_id;
+                        s.pc.keyboard_id = kb_id;
                         s.pc.devices = Some(list);
                     });
                     for (dev_id, payload) in photo_reqs {
@@ -624,7 +610,7 @@ impl AppState {
                             },
                         );
                     }
-                    rpc_audio.call::<_, AudioReadReply>(
+                    rpc_follow.call::<_, AudioReadReply>(
                         METHOD_AUDIO_READ,
                         &json!({ "output": out_clone, "mic": mic_clone }),
                         move |aud_res| {
@@ -633,129 +619,209 @@ impl AppState {
                             }
                         },
                     );
+                    let kb_payload = match kb_clone {
+                        Some(ref id) => json!({ "id": id }),
+                        None => json!({}),
+                    };
+                    rpc_kb.call::<_, KeyboardReadReply>(
+                        METHOD_KEYBOARD_READ,
+                        &kb_payload,
+                        move |kb_res| {
+                            h_kb.update(move |s, _| {
+                                s.apply_keyboard_read_reply(kb_res.map_err(|e| e.to_string()));
+                            });
+                        },
+                    );
+                    rpc_bak.call::<_, KeyboardBackupsReply>(
+                        METHOD_KEYBOARD_BACKUPS,
+                        &kb_payload,
+                        move |bak_res| {
+                            if let Ok(b) = bak_res {
+                                h_bak.update(move |s, _| s.pc.keyboard_backups = b.backups);
+                            }
+                        },
+                    );
                 } else {
                     h1.update(|s, _| s.pc.devices_loading = false);
-                }
-            });
-            let h2 = handle.clone();
-            rpc.call::<_, KeyboardReadReply>(METHOD_KEYBOARD_READ, &json!({}), move |res| {
-                if let Ok(kb) = res
-                    && kb.ok
-                {
-                    h2.update(move |s, _| s.pc.keyboard = Some(kb));
-                }
-            });
-            let h3 = handle.clone();
-            rpc.call::<_, KeyboardBackupsReply>(METHOD_KEYBOARD_BACKUPS, &json!({}), move |res| {
-                if let Ok(b) = res {
-                    h3.update(move |s, _| s.pc.keyboard_backups = b.backups);
                 }
             });
             let h4 = handle.clone();
             let rpc_eq_img = rpc.clone();
             rpc.call::<_, EqStateReply>(METHOD_EQ, &json!({ "action": "state" }), move |res| {
-                if let Ok(eq) = res
-                    && let Some(hp) = eq.headphone
-                {
-                    let look = if hp.form == "over-ear" {
-                        "headphones"
-                    } else {
-                        "iem"
-                    };
-                    let img_payload = json!({
-                        "kind": "audio",
-                        "model": look,
-                        "name": hp.name,
-                    });
+                if let Ok(eq) = res {
+                    let hp = eq.headphone.clone();
                     let h4_img = h4.clone();
-                    h4.update(move |s, _| s.pc.eq_headphone = Some(hp));
-                    rpc_eq_img.call::<_, DevicesImageReply>(
-                        METHOD_DEVICES_IMAGE,
-                        &img_payload,
-                        move |img_res| {
-                            if let Ok(reply) = img_res
-                                && let Some(url) = reply.url
-                            {
-                                h4_img.update(move |s, _| {
-                                    if let Some(out_id) = s.pc.audio_output_id.clone() {
-                                        s.pc.device_images.insert(out_id, url.clone());
-                                    }
-                                    s.pc.device_images.insert("audio:worn".into(), url);
-                                });
-                            }
-                        },
-                    );
+                    h4.update(move |s, _| s.apply_eq_state(eq));
+                    if let Some(hp) = hp {
+                        let look = if hp.form == "over-ear" {
+                            "headphones"
+                        } else {
+                            "iem"
+                        };
+                        let img_payload = json!({
+                            "kind": "audio",
+                            "model": look,
+                            "name": hp.name,
+                        });
+                        rpc_eq_img.call::<_, DevicesImageReply>(
+                            METHOD_DEVICES_IMAGE,
+                            &img_payload,
+                            move |img_res| {
+                                if let Ok(reply) = img_res
+                                    && let Some(url) = reply.url
+                                {
+                                    h4_img.update(move |s, _| {
+                                        if let Some(out_id) = s.pc.audio_output_id.clone() {
+                                            s.pc.device_images.insert(out_id, url.clone());
+                                        }
+                                        s.pc.device_images.insert("audio:worn".into(), url);
+                                    });
+                                }
+                            },
+                        );
+                    }
                 }
             });
         }
     }
 
-    pub fn set_audio_volume(&mut self, is_output: bool, volume: i32) {
-        let vol = volume.clamp(0, 100);
-        if let Some(ref mut aud) = self.pc.audio {
-            if is_output {
-                if let Some(ref mut o) = aud.output {
-                    o.volume = Some(vol);
-                }
-            } else if let Some(ref mut m) = aud.mic {
-                m.volume = Some(vol);
-            }
+    pub fn keyboard_device_id(&self) -> Option<String> {
+        if let Some(sel) = self.pc.selected_device_id.as_deref()
+            && let Some(devs) = self.pc.devices.as_ref()
+            && devs
+                .devices
+                .iter()
+                .any(|d| d.id == sel && d.kind == "keyboard")
+        {
+            return Some(sel.to_string());
         }
-        let target_id = if is_output {
-            self.pc.audio_output_id.clone()
-        } else {
-            self.pc.audio_mic_id.clone()
-        };
-        #[cfg(windows)]
-        if let (Some(rpc), Some(id)) = (self.rpc.clone(), target_id) {
-            rpc.call_raw(
-                METHOD_AUDIO_SET_VOLUME,
-                &json!({ "id": id, "volume": vol }),
-                |_| {},
-            );
+        if let Some(ref id) = self.pc.keyboard_id {
+            return Some(id.clone());
+        }
+        self.pc.devices.as_ref().and_then(|list| {
+            list.devices
+                .iter()
+                .find(|d| d.lab)
+                .or_else(|| list.devices.iter().find(|d| d.kind == "keyboard"))
+                .map(|d| d.id.clone())
+        })
+    }
+
+    pub fn apply_keyboard_read_reply(&mut self, res: Result<KeyboardReadReply, String>) {
+        match res {
+            Ok(kb) if kb.ok => {
+                self.pc.keyboard_error = None;
+                self.pc.keyboard = Some(kb);
+            }
+            Ok(kb) => {
+                self.pc.keyboard_error = kb
+                    .message
+                    .clone()
+                    .or_else(|| Some("Could not read Wooting keyboard.".into()));
+                self.pc.keyboard = Some(kb);
+            }
+            Err(err) => {
+                self.pc.keyboard_error = Some(format!("Could not read Wooting keyboard: {err}"));
+            }
         }
     }
 
-    pub fn set_audio_mute(&mut self, is_output: bool, muted: bool) {
-        if let Some(ref mut aud) = self.pc.audio {
-            if is_output {
-                if let Some(ref mut o) = aud.output {
-                    o.muted = muted;
-                }
-            } else if let Some(ref mut m) = aud.mic {
-                m.muted = muted;
+    pub fn apply_keyboard_write_reply(
+        &mut self,
+        prev: Option<KeyboardReadReply>,
+        res: Result<KeyboardReadReply, String>,
+        fallback_err: &str,
+    ) {
+        match res {
+            Ok(kb) if kb.ok => {
+                self.pc.keyboard_error = None;
+                self.pc.keyboard = Some(kb);
+            }
+            Ok(kb) => {
+                let msg = kb
+                    .message
+                    .clone()
+                    .unwrap_or_else(|| fallback_err.to_string());
+                self.pc.keyboard = prev;
+                self.pc.keyboard_error = Some(msg);
+            }
+            Err(err) => {
+                self.pc.keyboard = prev;
+                self.pc.keyboard_error = Some(format!("{fallback_err}: {err}"));
             }
         }
-        let target_id = if is_output {
-            self.pc.audio_output_id.clone()
+    }
+
+    pub fn toggle_keyboard_key(&mut self, key_id: String) {
+        if self.pc.keyboard_selected_key.as_deref() == Some(key_id.as_str()) {
+            self.pc.keyboard_selected_key = None;
         } else {
-            self.pc.audio_mic_id.clone()
+            self.pc.keyboard_selected_key = Some(key_id);
+        }
+    }
+
+    pub fn reload_keyboard(&mut self) {
+        self.pc.keyboard_error = None;
+        let kb_id = self.keyboard_device_id();
+        let payload = match kb_id {
+            Some(ref id) => json!({ "id": id }),
+            None => json!({}),
         };
         #[cfg(windows)]
-        if let (Some(rpc), Some(id)) = (self.rpc.clone(), target_id) {
-            rpc.call_raw(
-                METHOD_AUDIO_SET_MUTE,
-                &json!({ "id": id, "muted": muted }),
-                |_| {},
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let h1 = handle.clone();
+            let payload_bak = payload.clone();
+            rpc.call::<_, KeyboardReadReply>(METHOD_KEYBOARD_READ, &payload, move |res| {
+                h1.update(move |s, _| {
+                    s.apply_keyboard_read_reply(res.map_err(|e| e.to_string()));
+                });
+            });
+            rpc.call::<_, KeyboardBackupsReply>(
+                METHOD_KEYBOARD_BACKUPS,
+                &payload_bak,
+                move |res| {
+                    if let Ok(b) = res {
+                        handle.update(move |s, _| s.pc.keyboard_backups = b.backups);
+                    }
+                },
             );
         }
     }
 
     pub fn switch_keyboard_profile(&mut self, slot: i32) {
+        if let Some(ref kb) = self.pc.keyboard
+            && !kb.can_write
+        {
+            self.pc.keyboard_error = kb
+                .message
+                .clone()
+                .or_else(|| Some("Keyboard is read-only right now.".into()));
+            return;
+        }
+        let prev = self.pc.keyboard.clone();
+        self.pc.keyboard_error = None;
         if let Some(ref mut kb) = self.pc.keyboard {
             kb.active_profile = slot;
         }
+        let kb_id = self.keyboard_device_id();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let mut map = Map::new();
+            if let Some(id) = kb_id {
+                map.insert("id".into(), json!(id));
+            }
+            map.insert("slot".into(), json!(slot));
             rpc.call::<_, KeyboardReadReply>(
                 METHOD_KEYBOARD_PROFILE,
-                &json!({ "slot": slot }),
+                &Value::Object(map),
                 move |res| {
-                    if let Ok(kb) = res
-                        && kb.ok
-                    {
-                        handle.update(move |s, _| s.pc.keyboard = Some(kb));
-                    }
+                    handle.update(move |s, _| {
+                        s.apply_keyboard_write_reply(
+                            prev,
+                            res.map_err(|e| e.to_string()),
+                            "Failed to switch keyboard profile",
+                        );
+                    });
                 },
             );
         }
@@ -767,63 +833,387 @@ impl AppState {
         rapid_trigger: Option<bool>,
         rapid_trigger_mm: Option<f64>,
         tachyon: Option<bool>,
+        rgb_brightness: Option<i32>,
     ) {
+        if let Some(ref kb) = self.pc.keyboard
+            && !kb.can_write
+        {
+            self.pc.keyboard_error = kb
+                .message
+                .clone()
+                .or_else(|| Some("Keyboard is read-only right now.".into()));
+            return;
+        }
+        let (min_act, max_act, has_rt, has_rgb) = self
+            .pc
+            .keyboard
+            .as_ref()
+            .map(|kb| {
+                (
+                    kb.min_actuation_mm.unwrap_or(0.1),
+                    kb.max_actuation_mm.unwrap_or(4.0),
+                    kb.has_rapid_trigger,
+                    kb.has_rgb,
+                )
+            })
+            .unwrap_or((0.1, 4.0, true, true));
+
+        let clamped_act = actuation_mm.map(|a| ((a.clamp(min_act, max_act)) * 10.0).round() / 10.0);
+        let eff_rt = if has_rt { rapid_trigger } else { None };
+        let clamped_rt_mm = if has_rt {
+            rapid_trigger_mm.map(|v| ((v.clamp(0.10, 2.35)) * 20.0).round() / 20.0)
+        } else {
+            None
+        };
+        let clamped_rgb = if has_rgb {
+            rgb_brightness.map(|b| b.clamp(0, 100))
+        } else {
+            None
+        };
+
+        let prev = self.pc.keyboard.clone();
+        self.pc.keyboard_error = None;
         if let Some(ref mut kb) = self.pc.keyboard {
-            if let Some(a) = actuation_mm {
-                kb.actuation_mm = Some((a * 10.0).round() / 10.0);
+            if let Some(a) = clamped_act {
+                kb.actuation_mm = Some(a);
             }
-            if let Some(rt) = rapid_trigger {
-                kb.rapid_trigger = rt;
+            if let Some(rt) = eff_rt {
+                kb.rapid_trigger = Some(rt);
             }
-            if let Some(rtm) = rapid_trigger_mm {
+            if let Some(rtm) = clamped_rt_mm {
                 kb.rapid_trigger_mm = Some(rtm);
             }
             if let Some(t) = tachyon {
-                kb.tachyon = t;
+                kb.tachyon = Some(t);
+            }
+            if let Some(rgb) = clamped_rgb {
+                kb.rgb_brightness = Some(rgb);
             }
         }
+        let kb_id = self.keyboard_device_id();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let mut map = Map::new();
-            if let Some(a) = actuation_mm {
-                map.insert("actuationMm".into(), json!((a * 10.0).round() / 10.0));
+            if let Some(id) = kb_id {
+                map.insert("id".into(), json!(id));
             }
-            if let Some(rt) = rapid_trigger {
+            if let Some(a) = clamped_act {
+                map.insert("actuationMm".into(), json!(a));
+            }
+            if let Some(rt) = eff_rt {
                 map.insert("rapidTrigger".into(), json!(rt));
             }
-            if let Some(rtm) = rapid_trigger_mm {
+            if let Some(rtm) = clamped_rt_mm {
                 map.insert("rapidTriggerMm".into(), json!(rtm));
             }
             if let Some(t) = tachyon {
                 map.insert("tachyon".into(), json!(t));
             }
+            if let Some(rgb) = clamped_rgb {
+                map.insert("rgbBrightness".into(), json!(rgb));
+            }
             rpc.call::<_, KeyboardReadReply>(
                 METHOD_KEYBOARD_SETTINGS,
                 &Value::Object(map),
                 move |res| {
-                    if let Ok(kb) = res
-                        && kb.ok
-                    {
-                        handle.update(move |s, _| s.pc.keyboard = Some(kb));
-                    }
+                    handle.update(move |s, _| {
+                        s.apply_keyboard_write_reply(
+                            prev,
+                            res.map_err(|e| e.to_string()),
+                            "Failed to save keyboard settings",
+                        );
+                    });
                 },
             );
         }
     }
 
     pub fn backup_keyboard_profiles(&mut self) {
+        self.pc.keyboard_error = None;
         self.notice = Some("Backing up Wooting profiles…".into());
+        let kb_id = self.keyboard_device_id();
+        let payload = match kb_id {
+            Some(ref id) => json!({ "id": id }),
+            None => json!({}),
+        };
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, KeyboardBackupsReply>(METHOD_KEYBOARD_BACKUP, &json!({}), move |res| {
+            rpc.call::<_, KeyboardBackupResult>(METHOD_KEYBOARD_BACKUP, &payload, move |res| {
                 handle.update(move |s, _| match res {
                     Ok(b) if b.ok => {
                         s.pc.keyboard_backups = b.backups;
+                        s.pc.keyboard_error = None;
                         s.notice = Some("Keyboard profiles backed up.".into());
                     }
-                    _ => s.notice = Some("Keyboard backup failed.".into()),
+                    Ok(b) => {
+                        let msg = b
+                            .message
+                            .unwrap_or_else(|| "Keyboard backup failed.".into());
+                        s.pc.keyboard_error = Some(msg.clone());
+                        s.notice = Some(msg);
+                    }
+                    Err(e) => {
+                        let msg = format!("Keyboard backup failed: {e}");
+                        s.pc.keyboard_error = Some(msg.clone());
+                        s.notice = Some(msg);
+                    }
                 });
             });
+        }
+    }
+
+    pub fn restore_keyboard_backup(&mut self, file_name: String) {
+        if let Some(ref kb) = self.pc.keyboard
+            && !kb.can_write
+        {
+            self.pc.keyboard_error = kb
+                .message
+                .clone()
+                .or_else(|| Some("Keyboard is read-only right now.".into()));
+            return;
+        }
+        self.pc.keyboard_error = None;
+        self.notice = Some("Restoring Wooting backup…".into());
+        let kb_id = self.keyboard_device_id();
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let mut map = Map::new();
+            if let Some(id) = kb_id {
+                map.insert("id".into(), json!(id));
+            }
+            map.insert("fileName".into(), json!(file_name));
+            rpc.call::<_, KeyboardReadReply>(
+                METHOD_KEYBOARD_RESTORE,
+                &Value::Object(map),
+                move |res| {
+                    handle.update(move |s, _| match res {
+                        Ok(kb) if kb.ok => {
+                            s.pc.keyboard = Some(kb);
+                            s.pc.keyboard_error = None;
+                            s.notice = Some("Keyboard backup restored.".into());
+                        }
+                        Ok(kb) => {
+                            let msg = kb
+                                .message
+                                .unwrap_or_else(|| "Keyboard restore failed.".into());
+                            s.pc.keyboard_error = Some(msg.clone());
+                            s.notice = Some(msg);
+                        }
+                        Err(e) => {
+                            let msg = format!("Keyboard restore failed: {e}");
+                            s.pc.keyboard_error = Some(msg.clone());
+                            s.notice = Some(msg);
+                        }
+                    });
+                },
+            );
+        }
+    }
+
+    pub fn open_keyboard_app(&mut self) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(rpc) = self.rpc.clone() {
+            rpc.call_raw(METHOD_KEYBOARD_OPEN_APP, &json!({}), |_| {});
+        }
+    }
+
+    pub fn set_owner_hwnd(&mut self, hwnd: u64) {
+        if hwnd == 0 || self.pc.owner_hwnd == hwnd {
+            return;
+        }
+        self.pc.owner_hwnd = hwnd;
+        if self.pc.mouse_panel_open
+            && let Some(rect) = self.pc.mouse_panel_rect
+        {
+            let visible = self.mouse_panel_should_be_visible();
+            self.pc.mouse_panel_visible = visible;
+            self.send_mouse_panel_open(rect, visible);
+        }
+    }
+
+    pub fn mouse_panel_should_be_visible(&self) -> bool {
+        self.pc.mouse_panel_open
+            && self.room == crate::state::Room::Devices
+            && self.pc.mouse_panel_window_visible
+            && !self.palette_open
+            && !self.key_modal_open
+            && self.setup.beat.is_none()
+            && !self.capture_menu_open
+            && !self.media.captures_open
+            && !self.props_open
+            && !self.library_more_open
+    }
+
+    pub fn retry_mouse_panel(&mut self) {
+        if !self.pc.mouse_panel_open {
+            return;
+        }
+        self.pc.mouse_panel_loading = self.status != HostStatus::Standalone;
+        self.pc.mouse_panel_error = None;
+        if let Some(rect) = self.pc.mouse_panel_rect {
+            let visible = self.mouse_panel_should_be_visible();
+            self.pc.mouse_panel_visible = visible;
+            self.send_mouse_panel_open(rect, visible);
+        }
+    }
+
+    pub fn update_mouse_panel_layout(&mut self, rect: [f32; 4]) {
+        if !self.pc.mouse_panel_open || rect[2] < 2.0 || rect[3] < 2.0 {
+            return;
+        }
+        let visible = self.mouse_panel_should_be_visible();
+        let first_layout = self.pc.mouse_panel_rect.is_none();
+        let changed =
+            self.pc.mouse_panel_rect != Some(rect) || self.pc.mouse_panel_visible != visible;
+        if !first_layout && !changed {
+            return;
+        }
+        self.pc.mouse_panel_rect = Some(rect);
+        self.pc.mouse_panel_visible = visible;
+        if first_layout {
+            self.send_mouse_panel_open(rect, visible);
+        } else {
+            self.send_mouse_panel_bounds(rect, visible);
+        }
+    }
+
+    pub fn sync_mouse_panel_visibility(&mut self) {
+        if !self.pc.mouse_panel_open {
+            return;
+        }
+        let visible = self.mouse_panel_should_be_visible();
+        if visible == self.pc.mouse_panel_visible {
+            return;
+        }
+        self.pc.mouse_panel_visible = visible;
+        if let Some(rect) = self.pc.mouse_panel_rect {
+            self.send_mouse_panel_bounds(rect, visible);
+        }
+    }
+
+    pub fn set_mouse_panel_window_visible(&mut self, visible: bool) {
+        self.pc.mouse_panel_window_visible = visible;
+        self.sync_mouse_panel_visibility();
+    }
+
+    pub fn close_mouse_panel(&mut self) {
+        let was_open = self.pc.mouse_panel_open;
+        self.pc.mouse_panel_open = false;
+        self.pc.mouse_panel_loading = false;
+        self.pc.mouse_panel_error = None;
+        self.pc.mouse_panel_rect = None;
+        self.pc.mouse_panel_visible = false;
+        self.pc.selected_device_id = None;
+        if !was_open {
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(rpc) = self.rpc.clone() {
+            rpc.call::<_, ActionResult>(METHOD_MOUSE_PANEL_CLOSE, &json!({}), |_| {});
+        }
+    }
+
+    fn send_mouse_panel_open(&mut self, rect: [f32; 4], visible: bool) {
+        if self.status == HostStatus::Standalone {
+            self.pc.mouse_panel_loading = false;
+            return;
+        }
+        let owner_hwnd = self.pc.owner_hwnd;
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let params = json!({
+                "ownerHwnd": owner_hwnd,
+                "x": rect[0] as f64,
+                "y": rect[1] as f64,
+                "width": rect[2] as f64,
+                "height": rect[3] as f64,
+                "visible": visible,
+            });
+            let rpc_probe = rpc.clone();
+            rpc.call::<_, ActionResult>(METHOD_MOUSE_PANEL_OPEN, &params, move |res| match res {
+                Ok(r) if r.ok => {
+                    handle.update(move |s, _| {
+                        if s.pc.mouse_panel_open {
+                            s.pc.mouse_panel_loading = false;
+                            s.pc.mouse_panel_error = None;
+                        }
+                    });
+                }
+                Ok(r) => {
+                    let msg = r
+                        .message
+                        .unwrap_or_else(|| "Exo Mouse could not open.".into());
+                    if msg.contains("not attached") {
+                        let fallback = msg.clone();
+                        rpc_probe.call::<_, ActionResult>(
+                            METHOD_HID_SEND_REPORT,
+                            &json!({ "device": "probe", "reportId": 0, "data": "" }),
+                            move |probe| {
+                                let detail = match probe {
+                                    Ok(r) if !r.ok => r
+                                        .message
+                                        .filter(|m| m.contains("test instance"))
+                                        .unwrap_or(fallback),
+                                    Err(e) => {
+                                        let s = e.to_string();
+                                        if s.contains("test instance") {
+                                            s.rsplit_once(": ")
+                                                .map(|(_, tail)| tail.to_string())
+                                                .unwrap_or(s)
+                                        } else {
+                                            fallback
+                                        }
+                                    }
+                                    _ => fallback,
+                                };
+                                handle.update(move |s, _| {
+                                    if s.pc.mouse_panel_open {
+                                        s.pc.mouse_panel_loading = false;
+                                        s.pc.mouse_panel_error = Some(detail);
+                                    }
+                                });
+                            },
+                        );
+                    } else {
+                        handle.update(move |s, _| {
+                            if s.pc.mouse_panel_open {
+                                s.pc.mouse_panel_loading = false;
+                                s.pc.mouse_panel_error = Some(msg);
+                            }
+                        });
+                    }
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    handle.update(move |s, _| {
+                        if s.pc.mouse_panel_open {
+                            s.pc.mouse_panel_loading = false;
+                            s.pc.mouse_panel_error = Some(msg);
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    fn send_mouse_panel_bounds(&mut self, rect: [f32; 4], visible: bool) {
+        if self.status == HostStatus::Standalone || self.pc.owner_hwnd == 0 {
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(rpc) = self.rpc.clone() {
+            let params = json!({
+                "ownerHwnd": self.pc.owner_hwnd,
+                "x": rect[0] as f64,
+                "y": rect[1] as f64,
+                "width": rect[2] as f64,
+                "height": rect[3] as f64,
+                "visible": visible,
+            });
+            rpc.call::<_, ActionResult>(METHOD_MOUSE_PANEL_BOUNDS, &params, |_| {});
         }
     }
 }

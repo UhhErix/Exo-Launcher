@@ -222,7 +222,8 @@ public sealed class NamedPipeHostTransportTests
     {
         var ct = TestContext.Current.CancellationToken;
         var pipeName = $"exo-test-pipe-{Guid.NewGuid():N}";
-        using var transport = new NamedPipeHostTransport(pipeName);
+        const int testLimit = 64 * 1024;
+        using var transport = new NamedPipeHostTransport(pipeName, testLimit);
 
         var reset = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         transport.SessionReset += () => reset.TrySetResult();
@@ -231,7 +232,7 @@ public sealed class NamedPipeHostTransportTests
         using (var client1 = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous))
         {
             await client1.ConnectAsync(5000, ct);
-            var oversize = new byte[NamedPipeHostTransport.MaxMessageBytes + 128];
+            var oversize = new byte[testLimit + 128];
             Array.Fill(oversize, (byte)'a');
             oversize[^1] = (byte)'\n';
             try { await client1.WriteAsync(oversize, ct); } catch (IOException) { }
@@ -248,6 +249,27 @@ public sealed class NamedPipeHostTransportTests
 
         var msg2 = await received.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
         Assert.Equal("""{"id":"2","method":"ping"}""", msg2);
+    }
+
+    [Fact]
+    public async Task LargeFrameAboveFourMegabytesSucceeds()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pipeName = $"exo-test-pipe-{Guid.NewGuid():N}";
+        using var transport = new NamedPipeHostTransport(pipeName);
+
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        transport.MessageReceived += msg => received.TrySetResult(msg);
+        transport.Start();
+
+        using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await client.ConnectAsync(5000, ct);
+        var largePayload = "{\"id\":\"big\",\"method\":\"capture.saveImage\",\"data\":\"" + new string('x', 5 * 1024 * 1024) + "\"}";
+        using var writer = new StreamWriter(client, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+        await writer.WriteLineAsync(largePayload.AsMemory(), ct);
+
+        var got = await received.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        Assert.Equal(largePayload.Length, got.Length);
     }
 
     [Fact]
@@ -384,23 +406,97 @@ public sealed class NamedPipeHostTransportTests
         Assert.NotNull(envMode);
         Assert.True(envMode!.SpawnUi);
 
-        var defaultWithBundled = RuneHostSession.TryParse([], _ => null, path => path.EndsWith("exo-ui.exe", StringComparison.OrdinalIgnoreCase));
+        var defaultWithBundled = RuneHostSession.TryParse([], _ => null, path => path.EndsWith("exo-ui.exe", StringComparison.OrdinalIgnoreCase), readClassicPref: () => false);
         Assert.NotNull(defaultWithBundled);
         Assert.True(defaultWithBundled!.SpawnUi);
 
-        var defaultWithoutBundled = RuneHostSession.TryParse([], _ => null, _ => false);
+        var defaultWithoutBundled = RuneHostSession.TryParse([], _ => null, _ => false, readClassicPref: () => false);
         Assert.Null(defaultWithoutBundled);
 
-        var webRollbackFlag = RuneHostSession.TryParse(["--ui=web"], _ => null, _ => true);
+        var webRollbackFlag = RuneHostSession.TryParse(["--ui=web"], _ => null, _ => true, readClassicPref: () => false);
         Assert.Null(webRollbackFlag);
 
-        var webRollbackEnv = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "web" : null, _ => true);
+        var webRollbackEnv = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "web" : null, _ => true, readClassicPref: () => false);
         Assert.Null(webRollbackEnv);
 
-        var smokeBypass = RuneHostSession.TryParse(["--smoke-test"], _ => null, _ => true);
+        var smokeBypass = RuneHostSession.TryParse(["--smoke-test"], _ => null, _ => true, readClassicPref: () => false);
         Assert.Null(smokeBypass);
 
-        Assert.Throws<ArgumentException>(() => RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null, _ => false));
+        var classicPref = RuneHostSession.TryParse([], _ => null, _ => true, readClassicPref: () => true);
+        Assert.Null(classicPref);
+
+        var cliNativeOverridesPref = RuneHostSession.TryParse(["--ui=native"], _ => null, _ => true, readClassicPref: () => true);
+        Assert.NotNull(cliNativeOverridesPref);
+        Assert.True(cliNativeOverridesPref!.SpawnUi);
+
+        var envNativeOverridesPref = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "native" : null, _ => true, readClassicPref: () => true);
+        Assert.NotNull(envNativeOverridesPref);
+        Assert.True(envNativeOverridesPref!.SpawnUi);
+
+        var warnings = new List<string>();
+        Assert.Null(RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null, _ => false, warnings.Add));
+        Assert.Single(warnings);
+
+        var fakeExe = Path.Combine(Path.GetTempPath(), "exo-app-dir", "exo-ui.exe");
+        var psi = RuneHostSession.BuildUiStartInfo(fakeExe, "exo-dev-123");
+        Assert.Equal(PathHelper.AppDataDir, psi.WorkingDirectory);
+        Assert.NotEqual(Path.GetDirectoryName(fakeExe), psi.WorkingDirectory);
+        Assert.Equal(["--pipe", "exo-dev-123"], psi.ArgumentList);
+    }
+
+    [Fact]
+    public void RuneHostSessionTryParseNeverThrowsOnInvalidOrForeignInputs()
+    {
+        string[]?[] badPipeCases =
+        [
+            ["--host-pipe", "../escape"],
+            ["--host-pipe", @"\\.\pipe\exo-dev"],
+            ["--host-pipe", ""],
+            ["--host-pipe", "   "],
+            ["--host-pipe", "bad pipe name"],
+            ["--host-pipe", "--ui=rune"],
+            ["--host-pipe", new string('a', 121)],
+            ["--host-pipe"],
+            ["--host-pipe="],
+            ["--host-pipe=../escape"],
+            ["--host-pipe=bad=value"],
+        ];
+
+        foreach (var args in badPipeCases)
+        {
+            var warnings = new List<string>();
+            var parsed = RuneHostSession.TryParse(args, _ => "rune", _ => true, warnings.Add);
+            Assert.Null(parsed);
+            Assert.NotEmpty(warnings);
+        }
+
+        Assert.Null(RuneHostSession.TryParse(null, _ => null, _ => false));
+        Assert.Null(RuneHostSession.TryParse([null!, "", "--unknown", "exolauncher://library", "-Embedding"], _ => null, _ => false));
+        Assert.Null(RuneHostSession.TryParse(["--ui"], _ => null, _ => false));
+        Assert.Null(RuneHostSession.TryParse(["--rune-ui-path"], _ => null, _ => false));
+        Assert.Null(RuneHostSession.TryParse([], key => key == "EXO_UI" ? "unexpected-value" : null, _ => false));
+
+        var envWarnings = new List<string>();
+        Assert.Null(RuneHostSession.TryParse([], _ => throw new InvalidOperationException("env failure"), _ => false, envWarnings.Add));
+        Assert.NotEmpty(envWarnings);
+
+        var fsWarnings = new List<string>();
+        Assert.Null(RuneHostSession.TryParse([], key => key == "EXO_RUNE_UI_PATH" ? "C:\\bad|path\\exo-ui.exe" : null, _ => throw new ArgumentException("invalid path"), fsWarnings.Add));
+        Assert.NotEmpty(fsWarnings);
+
+        var overrideEq = RuneHostSession.TryParse(["--ui=rune", "--rune-ui-path=C:\\exo\\exo-ui.exe"], _ => null, _ => false);
+        Assert.NotNull(overrideEq);
+        Assert.True(overrideEq!.SpawnUi);
+        Assert.Equal(@"C:\exo\exo-ui.exe", overrideEq.UiExecutableOverride);
+    }
+
+    [Fact]
+    public void ReliableQueueIsBoundedAgainstStalledClient()
+    {
+        using var transport = new NamedPipeHostTransport($"exo-test-bound-{Guid.NewGuid():N}");
+        var payload = System.Text.Encoding.UTF8.GetBytes("{\"event\":\"ping\"}");
+        for (var i = 0; i < NamedPipeHostTransport.ReliableQueueCapacity + 64; i++)
+            transport.PostJsonUtf8(payload);
     }
 
     [Fact]

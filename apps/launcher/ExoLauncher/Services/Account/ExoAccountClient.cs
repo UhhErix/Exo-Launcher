@@ -175,6 +175,32 @@ internal sealed class ExoAccountClient : IDisposable
     internal Task<AccountReply> DeleteAccountAsync(string token, string password, string? deviceToken = null) =>
         SendAsync(HttpMethod.Delete, "v1/account", token, WithDeviceToken(Body(("password", password)), deviceToken), throttled: true);
 
+    internal Task<AccountReply> ListPasskeysAsync(string token) =>
+        SendAsync(HttpMethod.Get, "v1/passkeys", token, null);
+
+    internal Task<AccountReply> PasskeyRegisterStartAsync(string token, string? password = null, string? deviceToken = null)
+    {
+        var body = string.IsNullOrEmpty(password) ? new JsonObject() : Body(("password", password));
+        return SendAsync(HttpMethod.Post, "v1/passkeys/register/start", token, WithDeviceToken(body, deviceToken), throttled: true);
+    }
+
+    internal Task<AccountReply> PasskeyRegisterFinishAsync(string token, string challenge, string clientDataJson, string attestationObject, string label) =>
+        SendAsync(HttpMethod.Post, "v1/passkeys/register/finish", token,
+            Body(("challenge", challenge), ("clientDataJSON", clientDataJson), ("attestationObject", attestationObject), ("label", label)), throttled: true);
+
+    internal Task<AccountReply> DeletePasskeyAsync(string token, string credentialId) =>
+        SendAsync(HttpMethod.Delete, "v1/passkeys/" + Uri.EscapeDataString(credentialId), token, null);
+
+    internal Task<AccountReply> PasskeySignInStartAsync() =>
+        SendAsync(HttpMethod.Post, "v1/passkeys/signin/start", null, new JsonObject(), throttled: true);
+
+    internal Task<AccountReply> PasskeySignInFinishAsync(
+        string challenge, string device, string credentialId, string clientDataJson, string authenticatorData, string signature) =>
+        SendAsync(HttpMethod.Post, "v1/passkeys/signin/finish", null,
+            Body(("challenge", challenge), ("device", device), ("credentialId", credentialId),
+                ("clientDataJSON", clientDataJson), ("authenticatorData", authenticatorData), ("signature", signature)),
+            throttled: true);
+
     /// <summary>The account id, this PC's token and its device token from an answer that carries them (201 create, 200 sign-in or reset).</summary>
     internal static AccountSignIn? ReadSignIn(AccountReply reply)
     {

@@ -169,6 +169,7 @@ internal static partial class DriveSpace
             if (File.Exists(database + "-wal")) File.Copy(database + "-wal", target + "-wal");
             using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = target, Pooling = false }.ToString());
             connection.Open();
+            ExoSqlite.ApplyReadOnlyPragmas(connection);
             using var command = connection.CreateCommand();
             command.CommandText = "SELECT exe_path FROM app_id LIMIT 1";
             return command.ExecuteScalar() as string is { Length: > 3 } exe ? exe : null;

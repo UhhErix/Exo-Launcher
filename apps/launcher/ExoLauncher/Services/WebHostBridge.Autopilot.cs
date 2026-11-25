@@ -18,6 +18,22 @@ public sealed partial class WebHostBridge
         catch (Exception ex) when (ex is not OutOfMemoryException) { return "The processor's layout couldn't be read"; }
     });
 
+    private static readonly Lazy<string?> CpuSetsText = new(() =>
+    {
+        try { return AutopilotCpuSets.DescribePlan(AutopilotCpuSets.ReadSystemCpuSets(), Autopilot.CpuClass, Autopilot.Layout); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+    });
+
+    private static bool GlobalTimerEnabled()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(SystemTuning.KernelSessionKey);
+            return key?.GetValue(SystemTuning.GlobalTimerValue) is int v && v == 1;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return false; }
+    }
+
     private static object AutopilotState()
     {
         var settings = Autopilot.Settings;
@@ -25,6 +41,9 @@ public sealed partial class WebHostBridge
         var game = Autopilot.Engine.Game;
         var integrityItem = SystemTuning.Shared.ReadMemoryIntegrityOnly();
         var integrityBlocked = integrityItem is { On: true, Restart: false } ? SystemTuning.Shared.IntegrityBlocked() : null;
+        var standbyPurge = StandbyPurger.Status();
+        var win11_24H2 = Environment.OSVersion.Version.Build >= SystemTuning.Win11_24H2Build;
+        var dlPause = GameSessionDownloadPause.Shared.Current();
         return new
         {
             on = settings.On,
@@ -36,7 +55,11 @@ public sealed partial class WebHostBridge
             gameMode = new { off = Autopilot.GameMode.Held is not null, keptOn = settings.On ? keptOn : null },
             mouseAccel = new { off = Autopilot.MouseAccel.IsOff(), managed = Autopilot.MouseAccel.Held is not null },
             memoryIntegrity = DescribeMemoryIntegrity(integrityItem, integrityBlocked),
+            standbyPurge = new { available = standbyPurge.Available, reason = standbyPurge.Reason },
             cpu = CcdText.Value,
+            cpuSets = CpuSetsText.Value,
+            timerGlobal = new { enabled = GlobalTimerEnabled(), neededForWin11 = win11_24H2 },
+            downloadsPaused = new { active = dlPause.Active, jobs = dlPause.PausedBitsJobs, services = dlPause.PausedServices },
             now = game is null ? null : new { game, did = Autopilot.Engine.Did(game) },
             live = AutopilotLive(),
             reports = AutopilotReports.Load(AutopilotReports.DefaultPath).Take(10).Select(AutopilotReportDto).ToList(),
@@ -78,50 +101,54 @@ public sealed partial class WebHostBridge
     /// <summary>Updates per-app demote/suspend lists while keeping Autopilot always active with Exo's best settings.</summary>
     private object AutopilotSet(JsonElement p, bool hasParams)
     {
+        bool? ReadBool(string name) => hasParams && p.TryGetProperty(name, out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? v.GetBoolean()
+            : null;
         List<string>? Names(string name) => hasParams && p.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array
             ? [.. v.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => AutopilotSafety.Bare(item.GetString())).Where(item => item.Length is > 0 and <= 128)]
             : null;
+        var on = ReadBool("on");
+        var gamePriority = ReadString(p, hasParams, "gamePriority");
+        var keepGameMode = ReadBool("keepGameMode");
+        var coreParking = ReadBool("coreParking");
         var demote = Names("alwaysDemote");
         var suspend = Names("suspend");
         _services.Settings.UpdateProfile(s =>
         {
-            var next = Autopilot.LiveSettings(s.Autopilot);
-            if (demote is not null) next.AlwaysDemote = demote;
-            // An app on the safety list is never paused, whatever the page sent.
-            if (suspend is not null) next.Suspend = [.. suspend.Where(name => AutopilotSafety.WhyLeftAlone(name) is null)];
-            s.Autopilot = next.Copy();
+            s.Autopilot = Autopilot.ApplyPatch(s.Autopilot, on, gamePriority, keepGameMode, coreParking, demote, suspend);
         });
+        if (!Autopilot.Settings.On) Autopilot.Engine.Follow(null);
         Autopilot.HandGameMode();
         Autopilot.HandMouseAccel();
         ArmRunStatePoll(RunStateDebounce);
-        AppLog.Info("Autopilot: app rules updated.");
+        AppLog.Info("Autopilot: settings updated.");
         return new { ok = true, message = (string?)null, state = AutopilotState() };
     }
 
-    private static object? AutopilotLive()
+    private static AutopilotLiveDto? AutopilotLive()
     {
         if (AutopilotWatch.Shared.Live is not { } live) return null;
         var s = live.Last;
-        return new
+        return new AutopilotLiveDto
         {
-            game = live.Game,
-            title = live.Title,
-            seconds = Math.Round(live.Frames.Seconds),
-            fps = Math.Round(live.Frames.AverageFps, 1),
-            low1 = Math.Round(live.Frames.Low1Fps, 1),
-            low01 = Math.Round(live.Frames.Low01Fps, 1),
-            stutters = live.Stutters,
-            cpu = s?.CpuPercent,
-            gpu = s?.GpuPercent,
-            gpuTemp = s?.GpuTemperature,
-            vramGb = Gb(s?.VramUsed),
-            vramTotalGb = Gb(s?.VramTotal),
-            ramGb = Gb(s?.RamUsed),
-            ramTotalGb = Gb(s?.RamTotal),
-            standbyGb = Gb(s?.Standby),
-            freeGb = Gb(s?.Free),
-            dpc = s?.DpcPercent is { } dpc ? Math.Round(dpc, 1) : (double?)null,
-            clock = s?.CpuPerformance is { } perf ? Math.Round(perf) : (double?)null,
+            Game = live.Game,
+            Title = live.Title,
+            Seconds = Math.Round(live.Frames.Seconds),
+            Fps = Math.Round(live.Frames.AverageFps, 1),
+            Low1 = Math.Round(live.Frames.Low1Fps, 1),
+            Low01 = Math.Round(live.Frames.Low01Fps, 1),
+            Stutters = live.Stutters,
+            Cpu = s?.CpuPercent,
+            Gpu = s?.GpuPercent,
+            GpuTemp = s?.GpuTemperature,
+            VramGb = Gb(s?.VramUsed),
+            VramTotalGb = Gb(s?.VramTotal),
+            RamGb = Gb(s?.RamUsed),
+            RamTotalGb = Gb(s?.RamTotal),
+            StandbyGb = Gb(s?.Standby),
+            FreeGb = Gb(s?.Free),
+            Dpc = s?.DpcPercent is { } dpc ? Math.Round(dpc, 1) : null,
+            Clock = s?.CpuPerformance is { } perf ? Math.Round(perf) : null,
         };
     }
 

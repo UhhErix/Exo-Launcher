@@ -8,6 +8,7 @@ import path from 'node:path'
 import js from '@eslint/js'
 import reactHooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
+import oxlint from 'eslint-plugin-oxlint'
 import tseslint from 'typescript-eslint'
 import { APP_ROOT, RATCHET_PATH, isAllowedComment } from '../tools/check-comments.mjs'
 
@@ -115,6 +116,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['src/**/*.{ts,tsx}'],
+    linterOptions: { reportUnusedDisableDirectives: 'off' },
     languageOptions: {
       ecmaVersion: 2023,
       globals: { ...globals.browser, ...globals.es2023 },
@@ -154,5 +156,6 @@ export default tseslint.config(
   // The two components that own what the control rules keep everywhere else.
   { files: ['src/components/Switch.tsx'], rules: { 'no-restricted-syntax': ['error', ...DESIGN_RULES, ...BUTTON_RULES, BIGINT_RULE] } },
   { files: ['src/components/ui/Button.tsx'], rules: { 'no-restricted-syntax': ['error', ...DESIGN_RULES, ...SWITCH_RULES, BIGINT_RULE] } },
+  ...oxlint.buildFromOxlintConfigFile(path.resolve(import.meta.dirname, '.oxlintrc.json')),
 )
 

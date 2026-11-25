@@ -5,7 +5,7 @@ internal static unsafe partial class AmdAdlx
     /// <summary>The setting keys the Radeon profile reads and writes.</summary>
     internal static class Keys
     {
-        internal const string AntiLag = "antiLag", Chill = "chill", Boost = "boost", Rsr = "rsr", EnhancedSync = "enhancedSync";
+        internal const string AntiLag = "antiLag", Chill = "chill", ChillMin = "chillMin", ChillMax = "chillMax", Boost = "boost", Rsr = "rsr", EnhancedSync = "enhancedSync";
         internal const string Frtc = "frtc", FrtcFps = "frtcFps", Fsr = "fsr", Afmf = "afmf", FreeSync = "freeSync:";
         internal const string Sharpening = "ris", VSync = "vsync";
     }
@@ -24,6 +24,8 @@ internal static unsafe partial class AmdAdlx
     [
         new(Keys.AntiLag, 0, GetAntiLag, true, 4, 5),                 // IADLX3DAntiLag: IsEnabled 4, SetEnabled 5
         new(Keys.Chill, 0, GetChill, true, 4, 8),                     // IADLX3DChill: SetEnabled 8
+        new(Keys.ChillMin, 0, GetChill, true, 6, 9, true),
+        new(Keys.ChillMax, 0, GetChill, true, 7, 10, true),
         new(Keys.Boost, 0, GetBoost, true, 4, 7),                     // IADLX3DBoost: SetEnabled 7
         new(Keys.Sharpening, 0, GetImageSharpening, true, 4, 7),      // IADLX3DImageSharpening: IsEnabled 4, SetEnabled 7
         new(Keys.EnhancedSync, 0, 7, true, 4, 5),                     // IADLX3DEnhancedSync
@@ -118,6 +120,8 @@ internal static unsafe partial class AmdAdlx
     {
         Keys.AntiLag => "Anti-Lag",
         Keys.Chill => "Radeon Chill",
+        Keys.ChillMin => "Radeon Chill min fps",
+        Keys.ChillMax => "Radeon Chill max fps",
         Keys.Boost => "Radeon Boost",
         Keys.Sharpening => "Radeon Image Sharpening",
         Keys.EnhancedSync => "Enhanced Sync",

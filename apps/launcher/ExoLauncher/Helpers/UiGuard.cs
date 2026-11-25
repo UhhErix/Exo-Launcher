@@ -11,24 +11,25 @@ namespace ExoLauncher.Helpers;
 internal static class UiGuard
 {
     /// <summary>Where a throw is recorded first. The app keeps <see cref="PendingReports.Record"/>; tests swap it.</summary>
-    internal static Action<Exception> Record { get; set; } = PendingReports.Record;
+    internal static Action<Exception> Record { get; set; } = ex => CrashBreadcrumb.Record("ui-callback", ex);
 
     internal static void Run(Action action)
     {
         try { action(); }
-        catch (Exception ex) { Record(ex); throw; }
+        catch (Exception ex) { SafeRecord(ex); }
     }
 
     internal static T Run<T>(Func<T> function)
     {
         try { return function(); }
-        catch (Exception ex) { Record(ex); throw; }
+        catch (Exception ex) { SafeRecord(ex); return default!; }
     }
 
-    internal static async Task RunAsync(Func<Task> function)
+    internal static async Task RunAsync(Func<Task> function, string? context = null)
     {
         try { await function(); }
-        catch (Exception ex) { Record(ex); throw; }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { SafeRecord(ex, context); }
     }
 
     /// <summary>Posts <paramref name="action"/> to this queue through <see cref="Run"/>. Same result as TryEnqueue.</summary>
@@ -54,8 +55,18 @@ internal static class UiGuard
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            AppLog.Warn((context ?? "UI async work") + " failed: " + ex.GetType().Name + ": " + ex.Message);
-            try { Record(ex); } catch { }
+            SafeRecord(ex, context);
         }
+    }
+
+    private static void SafeRecord(Exception ex, string? context = null)
+    {
+        try
+        {
+            if (context is not null)
+                AppLog.Warn(context + " failed: " + ex.GetType().Name + ": " + ex.Message);
+            Record(ex);
+        }
+        catch { }
     }
 }

@@ -23,13 +23,16 @@ internal sealed record AutopilotReport(string Game, string Title, DateTime Start
 /// is none); the sampler left open after the game (it closes on <see cref="End"/> and when the game goes behind); a report
 /// lost because the file is held (it is held in memory and saved at the next end).
 /// </summary>
-internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotReport, bool> save, Func<DateTime> now, Func<bool>? purgeStandby = null)
+internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotReport, bool> save, Func<DateTime> now, Func<bool>? purgeStandby = null, Func<bool>? isEnabled = null)
 {
     /// <summary>A session needs this much of frames in front to get a report.</summary>
     internal const double ReportSeconds = 60;
-    internal static readonly TimeSpan StandbyPurgeCooldown = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan StandbyPurgeCooldown = TimeSpan.FromSeconds(60);
 
-    internal static AutopilotWatch Shared { get; } = new(AutopilotSampler.Open, report => AutopilotReports.Add(AutopilotReports.DefaultPath, report, DateTime.UtcNow), () => DateTime.UtcNow, StandbyPurger.TryPurge);
+    internal static AutopilotWatch Shared { get; } = new(AutopilotSampler.Open, report => AutopilotReports.Add(AutopilotReports.DefaultPath, report, DateTime.UtcNow), () => DateTime.UtcNow, StandbyPurger.TryPurge, () => Autopilot.Settings.On)
+    {
+        OnSecond = FrameCapService.Shared.RecordSecond,
+    };
 
     /// <summary>A report was kept; the bridge tells the page.</summary>
     internal static event Action<AutopilotReport>? Reported;
@@ -38,6 +41,8 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
 
     /// <summary>What Autopilot did for the game this session (set by <see cref="Autopilot"/>); nothing when it is off.</summary>
     internal Func<string, IReadOnlyList<string>> Did { get; set; } = _ => [];
+
+    internal Action<string?, bool, IReadOnlyList<double>, SystemSecond?>? OnSecond { get; set; }
 
     private readonly Lock _gate = new();
     private StutterAnalyzer? _analyzer;
@@ -60,6 +65,7 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
     internal void Second(string? game, string? title, bool inFront, IReadOnlyList<double> framesMs, IReadOnlyCollection<int> tree)
     {
         var notify = false;
+        SystemSecond? recordedSystem = null;
         lock (_gate)
         {
             var hadLive = _analyzer is not null && _game is not null;
@@ -88,9 +94,10 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
                     SystemSecond? system = null;
                     try { system = (_sampler ??= open())?.Read(tree); }
                     catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("Autopilot: a read failed: " + ex.GetType().Name); }
+                    recordedSystem = system;
                     _analyzer.Add(framesMs, system);
                     notify = true;
-                    if (purgeStandby is not null && system is { Free: { } free, Standby: { } standby }
+                    if (purgeStandby is not null && (isEnabled is null || isEnabled()) && system is { Free: { } free, Standby: { } standby }
                         && free < StutterAnalyzer.IslcBytes && standby >= StutterAnalyzer.IslcBytes)
                     {
                         var utc = now();
@@ -104,6 +111,8 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
                 }
             }
         }
+        try { OnSecond?.Invoke(game, inFront, framesMs, recordedSystem); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("Autopilot: OnSecond listener failed: " + ex.GetType().Name); }
         if (notify) NotifyLiveChanged();
     }
 
@@ -133,6 +142,7 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
     {
         _sampler?.Dispose();
         _sampler = null;
+        _lastStandbyPurge = null;
         if (_pending is { } waiting && Keep(waiting)) _pending = null;
         if (_analyzer is not { } analyzer || _game is not { } game)
         {

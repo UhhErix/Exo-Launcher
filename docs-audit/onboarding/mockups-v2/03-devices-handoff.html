@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exo Setup — Devices Hand-off</title>
+  <link rel="stylesheet" href="../../assets/exo-v2-base.css" />
+  <style>
+    .handoff-main {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    .handoff-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      padding: clamp(18px, 2.2vh, 28px) clamp(22px, 2.4vw, 36px) clamp(14px, 1.6vh, 20px);
+      border-bottom: 1px solid var(--exo-float-line);
+    }
+
+    .handoff-head h1 {
+      margin: 0;
+      font-size: clamp(28px, 2.4vw, 42px);
+      font-weight: 650;
+      line-height: 1.08;
+    }
+
+    .handoff-sub {
+      margin-top: 6px;
+      font-size: calc(14px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    /* 4 panoramic edge-to-edge hardware bays filling the entire window */
+    .hw-bays {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      height: 100%;
+      min-height: 0;
+    }
+
+    .hw-bay {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr auto auto;
+      padding: clamp(18px, 2vh, 26px) clamp(18px, 1.8vw, 26px);
+      border-right: 1px solid var(--exo-float-line);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .hw-bay:last-child { border-right: 0; }
+
+    .hw-bay-top {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .hw-bay-class {
+      font-size: calc(12px * var(--exo-scale));
+      color: var(--color-faint);
+      font-weight: 500;
+    }
+
+    .hw-bay-stage {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 0;
+      padding: clamp(12px, 1.8vh, 24px) clamp(6px, 0.8vw, 14px);
+    }
+
+    .hw-bay-stage img.hw-render {
+      position: relative;
+      z-index: 2;
+      max-width: 96%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+    }
+
+    .hw-bay-id {
+      position: relative;
+      z-index: 2;
+      padding-top: 12px;
+      border-top: 1px solid var(--exo-float-line);
+    }
+
+    .hw-bay-name {
+      font-size: clamp(18px, 1.4vw, 24px);
+      font-weight: 650;
+      line-height: 1.2;
+    }
+
+    .hw-bay-meta {
+      margin-top: 4px;
+      font-size: calc(12.5px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    .hw-bay-plan {
+      position: relative;
+      z-index: 2;
+      margin-top: clamp(12px, 1.4vh, 18px);
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding-top: 12px;
+      border-top: 1px solid var(--exo-float-line);
+    }
+
+    .plan-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: calc(12px * var(--exo-scale));
+    }
+
+    .plan-item span.k { color: var(--color-muted); }
+    .plan-item span.v { color: var(--color-fg); font-weight: 500; text-align: right; }
+    .plan-item span.v.good { color: var(--color-good); }
+    .plan-item span.v.warn { color: var(--color-warn); }
+  </style>
+</head>
+<body>
+  <div class="setup-shell-a">
+    <div id="topbar"></div>
+
+    <main class="handoff-main">
+      <header class="handoff-head">
+        <div>
+          <h1>4 devices found on this PC</h1>
+          <div class="handoff-sub">
+            Exo walks through each device automatically — backing up your keyboard first, checking calibration, and confirming before any install.
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge good tabular"><span class="dot good"></span>USB &amp; audio probed</span>
+          <span class="badge tabular">~35 seconds total</span>
+        </div>
+      </header>
+
+      <section class="hw-bays">
+        <!-- 1. DualSense Edge -->
+        <article class="hw-bay">
+          <div class="hw-bay-top">
+            <span class="hw-bay-class">Controller · Step 1 of 4</span>
+            <span class="badge good">CPU USB</span>
+          </div>
+          <div class="hw-bay-stage">
+            <img class="hw-wash" src="../../assets/devices/dualsense-edge-black.png" alt="" />
+            <img class="hw-render" src="../../assets/devices/dualsense-edge-black.png" alt="Sony DualSense Edge" />
+          </div>
+          <div class="hw-bay-id">
+            <div class="hw-bay-name">DualSense Edge</div>
+            <div class="hw-bay-meta tabular">Midnight Black · Wired USB · fw 2.17</div>
+          </div>
+          <div class="hw-bay-plan tabular">
+            <div class="plan-item"><span class="k">Stick calibration</span><span class="v good">Holds across reconnects</span></div>
+            <div class="plan-item"><span class="k">Trigger stops</span><span class="v">L2 1/3 · R2 1/3</span></div>
+            <div class="plan-item"><span class="k">Setup action</span><span class="v">Auto-verify + defaults</span></div>
+          </div>
+        </article>
+
+        <!-- 2. Wooting 60HE v2 -->
+        <article class="hw-bay">
+          <div class="hw-bay-top">
+            <span class="hw-bay-class">Keyboard · Step 2 of 4</span>
+            <span class="badge warn">Chipset USB</span>
+          </div>
+          <div class="hw-bay-stage">
+            <img class="hw-wash" src="../../assets/devices/wooting-60he-v2-split.png" alt="" />
+            <img class="hw-render" src="../../assets/devices/wooting-60he-v2-split.png" alt="Wooting 60HE v2 Split Spacebar" />
+          </div>
+          <div class="hw-bay-id">
+            <div class="hw-bay-name">Wooting 60HE v2</div>
+            <div class="hw-bay-meta tabular">ANSI · Split spacebar · 8000 Hz · fw 2.15.0-beta.0</div>
+          </div>
+          <div class="hw-bay-plan tabular">
+            <div class="plan-item"><span class="k">Safety backup</span><span class="v good">Auto-saved before write</span></div>
+            <div class="plan-item"><span class="k">USB port advisory</span><span class="v warn">Free CPU port available</span></div>
+            <div class="plan-item"><span class="k">Setup action</span><span class="v">0.4 / 0.15 mm or keep Wootility</span></div>
+          </div>
+        </article>
+
+        <!-- 3. Finalmouse Starlight X -->
+        <article class="hw-bay">
+          <div class="hw-bay-top">
+            <span class="hw-bay-class">Mouse · Step 3 of 4</span>
+            <span class="badge good">CPU USB</span>
+          </div>
+          <div class="hw-bay-stage">
+            <img class="hw-wash" src="../../assets/devices/starlight-x.png" alt="" />
+            <img class="hw-render" style="max-height:86%" src="../../assets/devices/starlight-x.png" alt="Finalmouse Starlight X" />
+          </div>
+          <div class="hw-bay-id">
+            <div class="hw-bay-name">Finalmouse Starlight X</div>
+            <div class="hw-bay-meta tabular">Wireless dongle · 84% battery · Exo Mouse</div>
+          </div>
+          <div class="hw-bay-plan tabular">
+            <div class="plan-item"><span class="k">Polling &amp; DPI</span><span class="v">4000 Hz · 800 / 1600 DPI</span></div>
+            <div class="plan-item"><span class="k">Process isolation</span><span class="v">AGPL Exo Mouse IPC</span></div>
+            <div class="plan-item"><span class="k">Setup action</span><span class="v">Read + confirm profile</span></div>
+          </div>
+        </article>
+
+        <!-- 4. ZiiGaat Lush + fifine Mic -->
+        <article class="hw-bay">
+          <div class="hw-bay-top">
+            <span class="hw-bay-class">Audio &amp; Mic · Step 4 of 4</span>
+            <span class="badge good">APO 1.4.2.0</span>
+          </div>
+          <div class="hw-bay-stage">
+            <img class="hw-wash" src="../../assets/devices/ziigaat-lush.png" alt="" />
+            <img class="hw-render" style="max-height:84%" src="../../assets/devices/ziigaat-lush.png" alt="ZiiGaat Lush" />
+          </div>
+          <div class="hw-bay-id">
+            <div class="hw-bay-name">ZiiGaat Lush + fifine Mic</div>
+            <div class="hw-bay-meta tabular">3.5 mm output · 48 kHz / 32-bit · USB mic</div>
+          </div>
+          <div class="hw-bay-plan tabular">
+            <div class="plan-item"><span class="k">Exo EQ v2 target</span><span class="v good">AutoEq · JM-1 (-3.9 dB)</span></div>
+            <div class="plan-item"><span class="k">Microphone DSP</span><span class="v">Exo Voice (no APO clash)</span></div>
+            <div class="plan-item"><span class="k">Setup action</span><span class="v">Confirm curve + per-game EQ</span></div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <footer class="setup-footer">
+      <div class="setup-footer-note">
+        <span id="ico-shield" style="color:var(--color-good)"></span>
+        <span>Every device step can be skipped individually. Equalizer APO or firmware installers always ask first.</span>
+      </div>
+      <div class="setup-footer-actions">
+        <button class="exo-btn is-ghost">Back</button>
+        <button class="exo-btn">Skip devices for now</button>
+        <button class="exo-btn is-primary">
+          <span>Start automatic device setup</span>
+          <span id="ico-arrow"></span>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="../../assets/exo-v2-data.js"></script>
+  <script>
+    document.getElementById("topbar").outerHTML = renderTopStageTrack(2);
+    document.getElementById("ico-shield").innerHTML = EXO_ICONS.shield;
+    document.getElementById("ico-arrow").innerHTML = EXO_ICONS.arrowRight;
+  </script>
+</body>
+</html>

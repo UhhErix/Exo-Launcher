@@ -5,8 +5,10 @@ import { transferForGame } from '../lib/library'
 import { useJustFinished } from '../lib/useJustFinished'
 import { installProgressLabel, transferPercent } from '../lib/utils'
 import { CoverArt, HeroWash } from './CoverArt'
-import { FrameGenModRow, FrameGenRow } from './game/FrameGenRow'
+import { FrameCapRow } from './game/FrameCapRow'
+import { FrameGenRow } from './game/FrameGenRow'
 import { GamePropertiesPanel } from './game/GameProperties'
+import { GraphicsFeaturesBlock } from './game/GraphicsFeaturesBlock'
 import { GameHeader, GameShared, GameStats, GameStore } from './game/GameSections'
 import { HdrRow } from './game/HdrRow'
 import { ArtworkStrip, GameActions } from './game/ManageStrip'
@@ -89,10 +91,10 @@ function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames
             <ShaderPrecompile key={'shaders' + details.selectionKey} gameId={selected.id} onOpenShaders={() => onOpenSystem('shaders')} />
           </>
         )}
-        <FrameGenModRow key={'framegenmod' + details.selectionKey} gameId={selected.id} />
+        <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
+        <FrameCapRow key={'framecap' + details.selectionKey} gameId={selected.id} />
         <HdrRow key={'hdr' + details.selectionKey} gameId={selected.id} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
         <OptimizeLine key={'optimize' + details.selectionKey} gameId={selected.id} />
-        <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
       </div>
     </section>
   )
@@ -231,7 +233,10 @@ export function GamePage({
         </div>
         {installedActions && (
           <div className="exo-game-workspace">
-            <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+            <div className="exo-game-workspace-col">
+              <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+              <GraphicsFeaturesBlock key={'gfx' + details.selectionKey} gameId={selected.id} gameTitle={selected.title} />
+            </div>
             <GamePropertiesPanel
               key={details.selectionKey}
               game={selected}

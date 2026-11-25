@@ -314,6 +314,24 @@ public sealed class LibraryFolder
     public List<string> Games { get; set; } = [];
 }
 
+public sealed class GameFrameCapPref
+{
+    public string Tier { get; set; } = "off";
+    public int? CapFps { get; set; }
+    public string? Backend { get; set; }
+    public string? PriorValue { get; set; }
+    public string? PriorBackend { get; set; }
+
+    public GameFrameCapPref Copy() => new()
+    {
+        Tier = Tier,
+        CapFps = CapFps,
+        Backend = Backend,
+        PriorValue = PriorValue,
+        PriorBackend = PriorBackend,
+    };
+}
+
 public sealed class AppSettings
 {
     /// <summary>Always on. Not in Settings.</summary>
@@ -328,6 +346,7 @@ public sealed class AppSettings
     public bool ReduceMotion { get; set; }
     /// <summary>When true, Exo's window always opens maximized. When false, it opens as it was when it closed.</summary>
     public bool StartMaximized { get; set; }
+    public bool UseClassicWebUi { get; set; }
     /// <summary>Always on. Chrome hides until an edge hover; pin insets the page.</summary>
     public bool FramelessMode { get; set; } = true;
     public bool FramelessPinTop { get; set; }
@@ -413,12 +432,17 @@ public sealed class AppSettings
     public bool DiscordNoiseSuppression { get; set; } = true;
     /// <summary>Which noise suppression runs when it is on: "exo" (Exo Voice, the default: the tuned Exo AI chain), "standard" (Google's WebRTC alone: <see cref="ExoLauncher.Services.DiscordClient.Voice.WebRtcNoise"/>), or an earlier build's "ai" or "krisp" (all Exo Voice now).</summary>
     public string DiscordNoiseSuppressionKind { get; set; } = "exo";
+    public string DiscordVoiceTier { get; set; } = "auto";
+    public bool DiscordVoiceIsolation { get; set; }
+    public bool DiscordLoopbackEchoCancellation { get; set; }
     /// <summary>The same on everyone else's voice in a call, each their own (<see cref="ExoLauncher.Services.DiscordClient.Voice.InboundCleaner"/>); off by default.</summary>
     public bool DiscordOthersNoiseSuppression { get; set; }
     /// <summary>Only My Voice: voices that aren't the user's learned one are held back in calls (<see cref="ExoLauncher.Services.DiscordClient.Voice.MyVoice"/>); off by default.</summary>
     public bool DiscordOnlyMyVoice { get; set; }
     /// <summary>Each person's voice in a call brought toward one speaking level, for you (<see cref="ExoLauncher.Services.DiscordClient.Voice.VoiceLeveling"/>); on by default.</summary>
     public bool DiscordEvenVoices { get; set; } = true;
+    public int DiscordVoiceTargetLufs { get; set; } = -20;
+    public bool DiscordMicAutoGain { get; set; }
     /// <summary>Game focus: no Discord notifications while a game runs (the unread badge still counts).</summary>
     public bool DiscordQuietWhilePlaying { get; set; } = true;
     /// <summary>Exo's Discord calls: the microphone and speakers chosen (Windows endpoint ids; none is Windows' default) and their volume, 0-200 like Discord's.</summary>
@@ -468,6 +492,7 @@ public sealed class AppSettings
     public bool DiscordGoLiveHevc { get; set; } = true;
     /// <summary>Per game: "on" or "off" overrides what PCGamingWiki says; no entry is Auto.</summary>
     public Dictionary<string, string> HdrGameModes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<string> HdrCursorFixGames { get; set; } = [];
     /// <summary>System > Display > Use NVIDIA color settings, by screen device path (format in <see cref="ExoLauncher.Helpers.NvidiaColor"/>). No entry: other apps control color.</summary>
     public Dictionary<string, string> NvidiaColor { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>
@@ -552,6 +577,8 @@ public sealed class AppSettings
     /// it refuses Riot games and Riot Vanguard.
     /// </summary>
     public Dictionary<string, string> UpscalerAntiCheatConsent { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> GraphicsModAntiCheatConsent { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool GraphicsFeaturesBestSettings { get; set; }
     /// <summary>The Library's folders, in their order on the grid (<see cref="LibraryFolder"/>).</summary>
     public List<LibraryFolder> LibraryFolders { get; set; } = [];
     /// <summary>Games hidden from the Library (card ids): out of its grid, Continue and folders; Library's Hidden view lists them.</summary>
@@ -583,6 +610,8 @@ public sealed class AppSettings
     public Dictionary<string, string> SteamOverlayPrior { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Per-game opt-in for NVIDIA driver Smooth Motion (<c>0xB0D384C0</c>) on RTX 40/50 when not using native DLSS-G.</summary>
     public Dictionary<string, bool> SmoothMotion { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> FrameGenRoute { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, GameFrameCapPref> FrameCap { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>
     /// Devices > controller > Sound in Windows: controllers' own speakers and microphones as Windows audio devices.
     /// Off by default: Exo turns them off whenever a controller connects, so Windows never switches your sound to one.
@@ -648,9 +677,16 @@ public sealed class AutopilotSettings
 
     internal AutopilotSettings Copy() => new()
     {
-        On = On, GamePriority = GamePriority is "high" or "normal" ? GamePriority : "above", KeepGameMode = KeepGameMode, CoreParking = CoreParking,
+        On = On, GamePriority = NormalizePriority(GamePriority), KeepGameMode = KeepGameMode, CoreParking = CoreParking,
         AlwaysDemote = [.. (AlwaysDemote ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(200)],
         Suspend = [.. (Suspend ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(50)],
+    };
+
+    internal static string NormalizePriority(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "high" => "high",
+        "normal" => "normal",
+        _ => "above",
     };
 }
 

@@ -109,25 +109,164 @@ export type DlssRunResult = {
 export type FrameGenMod = {
   ok: boolean
   state: 'hidden' | 'native' | 'off' | 'on' | 'broken' | 'mod' | 'note'
-  /** dlss: DLSSG SM86 runs NVIDIA's own frame generation; fsr: OptiScaler runs FSR's. */
-  path?: 'dlss' | 'fsr' | null
-  /** The mod and release in the game: "DLSSG SM86 0.4.1". */
+  path?: 'dlss' | 'mfg' | 'fsr' | 'optifg' | null
+  package?: string | null
   version?: string | null
-  /** The last session, when the mod's log shows it. */
   session?: 'ran' | null
-  /** The other mod in the game; when broken by replaced, the one over Exo's loader, if Exo knows it. */
   mod?: string | null
-  /** The game's anti-cheat: a mod never goes into it, and the line says so. */
   antiCheat?: string | null
-  /** Why Exo took it out, or went back to the release before, by itself; or why it can't go in. */
+  riskWarning?: string | null
+  riskAccepted?: boolean
   note?: string | null
-  /**
-   * Why it is broken. replaced: another mod's file is where Exo's loader was (Exo leaves it and keeps the game off);
-   * changed: another of Exo's files has other bytes (Exo leaves it); removed: Exo's files went (they go back once);
-   * gone: the game no longer ships DLSS Frame Generation. With hidden: unread (Exo couldn't read the game: no install,
-   * a Store app, a folder it can't open), card (no mod adds to this card; the line hides).
-   */
   reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
+  canToggle?: boolean
+  message?: string | null
+}
+
+export type FrameGenRoute = {
+  id: string
+  tier: 'native' | 'mod' | 'driver' | 'external' | 'unavailable'
+  kind: string
+  label: string
+  status: string
+  summary: string
+  gpuSupported: boolean
+  gpuNote: string
+  antiCheatVerdict: string
+  antiCheatNote: string
+  autoEnable: boolean
+  latencyNote: string
+  selectable: boolean
+  active: boolean
+  reason?: string | null
+  howToEnable?: string | null
+  choiceValue?: string | null
+  choices?: string[] | null
+  requiresRiskConfirm?: boolean
+  riskWarning?: string | null
+  antiCheat?: string | null
+}
+
+export type GameFrameGen = {
+  ok: boolean
+  message?: string | null
+  bestRouteId: string
+  selectedRouteId: string
+  state: 'native' | 'on' | 'off' | 'broken' | 'mod' | 'driver' | 'external' | 'unavailable' | 'unread'
+  word: string
+  good: boolean
+  bad: boolean
+  reason?: string | null
+  howToEnable?: string | null
+  routes: FrameGenRoute[]
+  legacyMod?: FrameGenMod | null
+}
+
+export type FrameCapTier = {
+  id: string
+  label: string
+  capFps: number | null
+  outputFps: number | null
+  predictedVarianceMs2: number
+  predictedStdDevMs: number
+  predictedDipsPerMinute: number
+  measured: boolean
+  summary: string
+}
+
+export type FrameCapBackend = {
+  id: string
+  vendor: string
+  label: string
+  available: boolean
+  perGameNative: boolean
+  latencyNote: string
+  antiCheatNote: string
+  reason?: string | null
+}
+
+export type FrameCapSuggestion = {
+  tier: string
+  capFps: number | null
+  reason: string
+}
+
+export type FrameCapStutterBreakdown = {
+  cause: string
+  label: string
+  spikes: number
+  sharePercent: number
+  detail: string
+  hint: string
+}
+
+export type FrameCapStutter = {
+  totalSpikes: number
+  topCause: string
+  topCauseLabel: string
+  summary: string
+  perProcessVramAvailable: boolean
+  breakdown: FrameCapStutterBreakdown[]
+}
+
+export type CapLabArmMetrics = {
+  capFps: number
+  frames: number
+  averageFps: number
+  low1Fps: number
+  low01Fps: number
+  averageMs: number
+  frameTimeVarianceMs2: number
+  frameTimeStdDevMs: number
+}
+
+export type CapLabStatus = {
+  gameId: string
+  status: 'idle' | 'running' | 'completed' | 'cancelled' | 'error'
+  capAFps: number
+  capBFps: number
+  currentArm: string | null
+  elapsedSeconds: number
+  totalSeconds: number
+  verdict: string | null
+  winner: string | null
+  deltaPercent: number
+  noiseThresholdPercent: number
+  reason: string | null
+  armA: CapLabArmMetrics | null
+  armB: CapLabArmMetrics | null
+}
+
+export type GameFrameCap = {
+  ok: boolean
+  message?: string | null
+  gameId: string
+  refreshHz: number
+  vrr: boolean
+  inVrrRange: boolean
+  vrrFloorHz: number
+  fgMultiplier: number
+  fgRouteLabel?: string | null
+  vendor: string
+  adapter?: string | null
+  isHybrid: boolean
+  backend: string
+  backendLabel: string
+  backendAvailable: boolean
+  backendNote?: string | null
+  backends: FrameCapBackend[]
+  selectedTier: string
+  activeCapFps: number | null
+  targetOutputFps: number | null
+  tiers: FrameCapTier[]
+  refreshLockedCaps: number[]
+  uncappedOption?: FrameCapTier | null
+  suggestion: FrameCapSuggestion
+  stutter: FrameCapStutter
+  ab: CapLabStatus
+  word: string
+  good: boolean
+  bad: boolean
 }
 
 /**
@@ -328,7 +467,22 @@ export type EqHeadphone = { id: string; name: string; source: string; form: 'in-
 export type EqState = {
   ok: boolean
   message?: string | null
-  apo: { installed: boolean; installing: boolean; version: string | null; onOutput: boolean; restart: boolean; effectsOff: boolean; outputs: number; installerVersion: string }
+  apo: {
+    installed: boolean
+    installing: boolean
+    version: string | null
+    onOutput: boolean
+    restart: boolean
+    effectsOff: boolean
+    outputs: number
+    installerVersion: string
+    nativeAvailable?: boolean
+    systemEqEnabled?: boolean
+    drmDisclosureAccepted?: boolean
+    needsReenable?: boolean
+    reenableReason?: string | null
+    protectedAudioDgDisabled?: boolean
+  }
   on: boolean
   comparing: boolean
   output: { name: string | null } | null
@@ -344,13 +498,13 @@ export type EqState = {
   guess: EqHeadphone | null
   lucidPlays: boolean
 }
-export type EqAction = 'state' | 'install' | 'devices' | 'sound-settings' | 'headphone' | 'sound' | 'custom' | 'compare' | 'on' | 'game' | 'night' | 'lucid-off'
+export type EqAction = 'state' | 'install' | 'devices' | 'sound-settings' | 'headphone' | 'sound' | 'custom' | 'compare' | 'on' | 'game' | 'night' | 'lucid-off' | 'enable-system-eq' | 'reenable-system-eq' | 'disable-system-eq'
 
 /** What the microphone's chain ran on the sound just now (see VoiceStages in the host). */
 export type VoiceStages = {
   profile: 'exo' | 'custom'
   suppression: 'standard' | 'on' | 'light' | 'mic' | 'windows' | 'loading' | 'missing' | 'off'; suppressionLimitDb: number
-  focus: boolean; gain: 'windows' | 'exo' | 'off'
+  focus: boolean; gain: 'windows' | 'exo' | 'agc2' | 'off'
   /** Echo cancellation as a call on the chosen speakers runs it: on, not run on headphones or a headset, or off. */
   echo: 'on' | 'head' | 'off'
   tuned: boolean
@@ -455,13 +609,103 @@ export type ShaderStatus = {
 }
 
 /** The main screen's HDR: can it, how bright it really gets (EDID), calibrated, and a plain verdict. */
+export type HdrPeakHealth = {
+  status: 'ok' | 'mismatch' | 'reported' | 'unknown'
+  edidNits?: number | null
+  dxgiNits?: number | null
+  gapPercent?: number | null
+  warning?: string | null
+}
+
+export type HdrCalibration = {
+  devicePath: string
+  edidPeakNits: number
+  measuredPeakNits: number
+  globalBrightness: number
+  sdrWhiteNits: number
+  enabled: boolean
+  calibratedAtUtc: string
+}
+
+export type HdrLaptopCheckItem = {
+  id: string
+  label: string
+  status: 'active' | 'off' | 'unknown'
+  warn: boolean
+  detail: string
+}
+
+export type HdrLaptopChecks = {
+  isLaptop: boolean
+  pluggedIn?: boolean | null
+  hdrOn: boolean
+  items: HdrLaptopCheckItem[]
+}
+
+export type HdrDisplayInfo = {
+  name?: string | null
+  gdiName: string
+  devicePath: string
+  main: boolean
+  supported: boolean
+  on: boolean
+  internal: boolean
+  connector: string
+  colorMode?: 'sdr' | 'acm' | 'hdr' | null
+  edidPeakNits?: number | null
+  dxgiPeakNits?: number | null
+  sdrWhiteNits?: number | null
+  peakHealth?: HdrPeakHealth | null
+}
+
+export type HdrCalibrateResult = {
+  ok: boolean
+  status: string
+  message: string
+  manualSteps?: string[] | null
+  entry?: HdrCalibration | null
+}
+
+export type HdrCalibrationProgress = {
+  devicePath: string
+  step: number
+  total: number
+  slider: number
+  measuredNits: number | null
+  targetNits: number
+}
+
+export type HdrWarningEvent = {
+  devicePath: string
+  kind: string
+  message: string
+}
+
+export type HdrAutoHdr = {
+  global: boolean | null
+  game: boolean | null
+  effective: 'on' | 'off' | 'default'
+}
+
 export type HdrState = {
   supported: boolean
   on?: boolean
   name?: string | null
+  devicePath?: string | null
   peakNits?: number | null
+  edidPeakNits?: number | null
+  dxgiPeakNits?: number | null
+  sdrWhiteNits?: number | null
+  internal?: boolean
+  colorMode?: 'sdr' | 'acm' | 'hdr' | null
+  autoHdrGlobal?: boolean | null
   calibrated?: boolean
   verdict?: 'great' | 'good' | 'weak' | 'unknown'
+  peakHealth?: HdrPeakHealth | null
+  calibration?: HdrCalibration | null
+  laptopChecks?: HdrLaptopChecks | null
+  brightnessWarning?: string | null
+  displays?: HdrDisplayInfo[]
 }
 
 /** What PCGamingWiki says about a game's HDR, and its Auto/Always/Never choice. */
@@ -570,7 +814,45 @@ export type DisplayChange = {
 }
 
 /** A game's best settings for this PC (game.settings), by group: on when every value it sets is in place, exo when Exo set some. */
-export type GameSettingsGroup = { id: string; label: string; on: boolean; exo: boolean }
+export type GameSettingsChange = { key: string; current: string; target: string; applied: boolean; kept: boolean }
+export type GameSettingsGroup = { id: string; label: string; on: boolean; exo: boolean; changes?: GameSettingsChange[] | null }
+export type MinecraftInstanceState = {
+  id: string
+  name: string
+  launcher: string
+  gameVersion: string | null
+  loader: string
+  isFabric: boolean
+  jvmApplied: boolean
+  canInstallMods: boolean
+  modsInstalled: string[]
+}
+export type GameSettingsMinecraft = {
+  heapGb: number
+  instances: MinecraftInstanceState[]
+}
+export type GraphicsFeatureId = 'upscalers' | 'reflex' | 'rayTracing' | 'pathTracing' | 'hiddenSettings'
+export type GraphicsFeatureStatus = 'on' | 'off' | 'inGame'
+export type GraphicsFeatureRow = {
+  id: GraphicsFeatureId
+  name: string
+  state: GraphicsFeatureStatus
+  route: string
+  routeKind: 'config' | 'driver' | 'dll' | 'inGame' | 'info'
+  canToggle: boolean
+  needsAntiCheatConfirm: boolean
+  antiCheatWarning?: string | null
+  closestOption?: string | null
+  details?: string | null
+}
+export type GameGraphicsFeaturesState = {
+  ok: boolean
+  message?: string | null
+  engine?: string | null
+  running?: boolean
+  antiCheat?: string | null
+  features?: GraphicsFeatureRow[]
+}
 export type GameSettingsState = {
   ok: boolean
   message?: string | null
@@ -594,6 +876,8 @@ export type GameSettingsState = {
   windowMode?: 'borderless' | 'fullscreen' | null
   /** Opt-in NVIDIA driver Smooth Motion on RTX 40/50 for supported profiles (such as Wuthering Waves); null elsewhere. */
   smoothMotion?: boolean | null
+  advice?: string[] | null
+  minecraft?: GameSettingsMinecraft | null
 }
 
 /**
@@ -613,6 +897,10 @@ export type HdrGame = {
   /** Where Exo's verdict came from, in plain words for the game's row. */
   reason?: string
   mode?: 'auto' | 'on' | 'off'
+  cursorFix?: boolean
+  cursorFixEligible?: boolean
+  sdrWhiteNits?: number | null
+  autoHdr?: HdrAutoHdr | null
 }
 
 /** One choice row for GraphicsControl: the choice held now and the choices offered. */
@@ -673,6 +961,132 @@ export type GpuFeatureState = 'on' | 'off' | 'unavailable'
 export type GpuFeature = { key: string; label: string; state: GpuFeatureState }
 
 export type IntelLowLatency = 'on' | 'boost' | 'off'
+
+export type GpuTuningRange = {
+  min: number
+  max: number
+  step: number
+  default: number
+  supported: boolean
+}
+
+export type GpuVfPoint = {
+  index: number
+  voltageMv: number
+  baseClockMhz: number
+  offsetMhz: number
+}
+
+export type GpuFanPoint = {
+  tempC: number
+  speedPercent: number
+}
+
+export type GpuFanChannelCurve = {
+  fanIndex: number
+  manual: boolean
+  points: GpuFanPoint[]
+}
+
+export type GpuTuningCapabilities = {
+  vendor: 'nvidia' | 'amd' | 'intel' | 'unknown'
+  generation: string
+  deviceId: string
+  deviceName: string
+  backend: 'nvapi' | 'nvml' | 'adlx' | 'igcl' | 'none'
+  fallbackReason?: string | null
+  isLaptop: boolean
+  lockedByMaker: boolean
+  lockReason?: string | null
+  requiresWaiver: boolean
+  waiverAccepted: boolean
+  waiverText?: string | null
+  persistsInDriver: boolean
+  needsResidentForFanCurve: boolean
+  persistenceNote?: string | null
+  supportsCurveEditor: boolean
+  supportsUndervoltSearch: boolean
+  coreClockOffsetMhz: GpuTuningRange
+  coreMinClockMhz: GpuTuningRange
+  coreMaxClockMhz: GpuTuningRange
+  voltageMv: GpuTuningRange
+  voltageOffsetMv: GpuTuningRange
+  memoryClockOffsetMhz: GpuTuningRange
+  memoryMaxClockMhz: GpuTuningRange
+  powerLimitPercent: GpuTuningRange
+  powerLimitWatts: GpuTuningRange
+  tempLimitC: GpuTuningRange
+  clockLockMhz: GpuTuningRange
+  memoryTimingLevels: string[]
+  vfCurvePoints: GpuVfPoint[]
+  fanCount: number
+  supportsHardwareFanCurve: boolean
+  supportsSoftwareFanCurve: boolean
+  supportsZeroRpm: boolean
+  fanMaxPoints: number
+  fanSpeedPercent: GpuTuningRange
+  fanTempC: GpuTuningRange
+}
+
+export type GpuManualProfile = {
+  mode: 'auto' | 'manual'
+  coreClockOffsetMhz?: number | null
+  coreMinClockMhz?: number | null
+  coreMaxClockMhz?: number | null
+  voltageMv?: number | null
+  voltageOffsetMv?: number | null
+  memoryClockOffsetMhz?: number | null
+  memoryMaxClockMhz?: number | null
+  memoryTimingLevel?: string | null
+  powerLimitPercent?: number | null
+  powerLimitWatts?: number | null
+  tempLimitC?: number | null
+  clockLockMhz?: number | null
+  vfCurve?: GpuVfPoint[] | null
+  zeroRpm?: boolean | null
+  fanCurve?: GpuFanPoint[] | null
+  fanChannels?: GpuFanChannelCurve[] | null
+}
+
+export type GpuStabilityProgress = {
+  running: boolean
+  kind: string
+  phase: string
+  elapsedSec: number
+  totalSec: number
+  passes: number
+  tempC?: number | null
+  clockMhz?: number | null
+  checksumOk: boolean
+  currentStep?: string | null
+  passed?: boolean | null
+  rolledBack: boolean
+  failureReason?: string | null
+  summary?: string | null
+}
+
+export type GpuManualTuningState = {
+  ok: boolean
+  message?: string | null
+  mode: 'auto' | 'manual'
+  pausedAfterCrash: boolean
+  pauseReason?: string | null
+  canReapply: boolean
+  queuedPending: boolean
+  queuedReason?: string | null
+  statusLine: string
+  live: {
+    tempC?: number | null
+    clockMhz?: number | null
+    fanPercent?: number | null
+    watts?: number | null
+  }
+  capabilities: GpuTuningCapabilities
+  factoryDefaults: GpuManualProfile
+  current: GpuManualProfile
+  saved: GpuManualProfile
+  test: GpuStabilityProgress
+}
 /** XeSS frame generation for one game: the game's own choice, or the driver's 2x, 3x or 4x override. */
 export type IntelFrameGen = 'game' | '2x' | '3x' | '4x'
 
@@ -693,7 +1107,7 @@ export type GpuGame = {
 
 /** System > This PC: one row per setup problem (none when all is well); power switches to Exo's plan for cpu, with Undo; chipset Exo updates (busy while it installs, applied while it waits for a restart, url only after a failed install). */
 export type PcHealthItem = {
-  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'pcie' | 'gpucable' | 'network' | NetworkItemKey | 'netlink'
+  key: 'ram' | 'ramchannel' | 'cpumicrocode' | 'ryzenbranch' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'pcie' | 'gpucable' | 'network' | NetworkItemKey | 'netlink'
   label: string
   detail: string
   url?: string | null
@@ -718,7 +1132,7 @@ export type NetCheck = { before: NetSample | null; after: NetSample; said: strin
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
-export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'vrrLfc' | 'privacy' | 'tasks' | 'winFeatures' | 'osOverhead' | 'kernelLatency' | 'usbPower' | 'aiTelemetry' | 'storageFs' | 'gamingUx' | 'amdGpuPower' | 'hags' | 'mpoOff' | 'hibernateOff' | 'backgroundApps' | 'svcHostSplit' | 'gpuPstate' | 'cpuMitigations' | 'bootLatency' | 'memCompression' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'networkThrottling' | 'pagingExecutive' | 'trimEnabled' | 'vrrLfc' | 'privacy' | 'tasks' | 'winFeatures' | 'osOverhead' | 'kernelLatency' | 'usbPower' | 'aiTelemetry' | 'storageFs' | 'edgeBackground' | 'gameIndexing' | 'gamingUx' | 'amdGpuPower' | 'hags' | 'mpoOff' | 'hibernateOff' | 'backgroundApps' | 'svcHostSplit' | 'gpuPstate' | 'cpuMitigations' | 'bootLatency' | 'memCompression' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
 /**
  * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
  * restart, a change (either way) waits on a restart; needsRestart, whether changing it requires a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
@@ -728,7 +1142,12 @@ export type TuningItem = { key: TuningKey; label: string; detail: string; on: bo
 export type LatencySample = { at: string; dpcUs: number; dpcDriver: string | null; isrUs: number; isrDriver: string | null }
 /** The last check, the one before it (null for the first), and what it says. */
 export type LatencyCheck = { before: LatencySample | null; after: LatencySample; said: string }
-export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; latency?: LatencyCheck | null; items: TuningItem[] }
+export type TuningMigration = { pending: boolean; keys: string[]; summary: string; reverted: string[]; restart: boolean }
+export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; latency?: LatencyCheck | null; migration?: TuningMigration | null; items: TuningItem[] }
+export type QosGame = { gameId: string; title: string; exeName: string; enabled: boolean }
+export type QosState = { ok: boolean; message?: string | null; nlaBypassed: boolean; note: string; games: QosGame[] }
+export type OverlayAdvisorItem = { id: string; name: string; status: 'on' | 'off' | 'unknown'; enabled: boolean; cost: string; detail: string; canToggle: boolean; canUndo: boolean; manualSteps?: string | null }
+export type OverlayAdvisorState = { ok: boolean; message?: string | null; items: OverlayAdvisorItem[] }
 
 /**
  * PC › Drives (Drives.cs): one physical drive. link: the PCIe generation and lanes negotiated against the drive's own
@@ -771,8 +1190,8 @@ export type DriveInfo = {
 }
 
 /** A drive setting Exo fixes with Windows' permission: write caching on, write-cache flushing back on, Windows' weekly optimize able to run. */
-export type DriveFix = { key: 'cache' | 'flush' | 'optimize'; label: string; detail: string; applied: boolean; restart: boolean }
-export type DriveAction = 'cache' | 'flush' | 'optimize' | 'all'
+export type DriveFix = { key: 'cache' | 'flush' | 'optimize' | 'trim'; label: string; detail: string; applied: boolean; restart: boolean }
+export type DriveAction = 'cache' | 'flush' | 'optimize' | 'trim' | 'all'
 /** A game's last session whose drive came near its warning point or slowed itself (DriveHeat.cs): its peak °C and how long it slowed. */
 export type DriveHeat = { peak: number; warn?: number | null; slowedSeconds: number }
 export type DrivesState = { ok: boolean; message?: string | null; fixes: DriveFix[]; drives: DriveInfo[] }
@@ -912,11 +1331,52 @@ export type AutopilotState = {
   gameMode: { off: boolean; keptOn?: string | null }
   mouseAccel?: { off: boolean; managed: boolean }
   memoryIntegrity?: { status: AutopilotMemoryIntegrityStatus; reason: string; canUndo: boolean; needsRestart: boolean }
+  standbyPurge?: { available: boolean; reason?: string | null }
   cpu: string
+  cpuSets?: string | null
+  timerGlobal?: { enabled: boolean; neededForWin11: boolean }
+  downloadsPaused?: { active: boolean; jobs: number; services: string[] }
   now?: { game: string; did: string[] } | null
   live: AutopilotLive | null; reports: AutopilotReport[]
 }
 export type AutopilotChange = Partial<Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGameMode' | 'coreParking' | 'alwaysDemote' | 'suspend'>>
+
+export type GpuAdapterUsage = {
+  luid: string
+  name: string
+  vendorId: number
+  dedicatedBytes: number
+  sharedBytes: number
+  software: boolean
+}
+
+export type GpuEngineSlice = { type: string; percent: number }
+
+export type GpuProcessUsage = {
+  pid: number
+  name: string
+  adapterLuid: string
+  adapterName: string
+  totalPercent: number
+  engines: GpuEngineSlice[]
+  localBytes: number
+  nonLocalBytes: number
+  protectedReason?: string | null
+}
+
+export type GpuUsageAnswer = {
+  summary: string
+  topGpu: GpuProcessUsage | null
+  topVram: GpuProcessUsage | null
+  hogs: GpuProcessUsage[]
+}
+
+export type GpuProcessesState = {
+  ok: boolean
+  adapters: GpuAdapterUsage[]
+  processes: GpuProcessUsage[]
+  answer: GpuUsageAnswer
+}
 
 export type ExoAiFanPreset = 'auto' | 'quiet' | 'balanced' | 'performance'
 
@@ -945,6 +1405,7 @@ export type ExoAiState = {
     fanCount: number
     note: string | null
   }
+  gpuAnswer?: GpuUsageAnswer | null
 }
 
 export type ExoAiChange = {
@@ -1007,6 +1468,56 @@ export type MouseCore = {
   before?: MouseTest | null
   after?: MouseTest | null
   test?: { verdict: 'fix' | 'fine' | 'cannot' | 'retry'; detail: string; offer?: number | null; result: MouseTest } | null
+}
+
+export type MouseDiagBucket = { id: string; label: string; rangeMs: string; count: number; percent: number; kind: 'ok' | 'warn' | 'bad' }
+export type MouseDiagJitter = {
+  pollingRateHz: number; nominalMs: number; totalReports: number; checkedGaps: number
+  medianMs: number; spreadMs: number; p95Ms: number; p99Ms: number; p999Ms: number; longestMs: number
+  lateCount: number; droppedCount: number; bunchedCount: number; stabilityScore: number
+  onScreenRefresh: boolean; mouseCpu: number | null; cause: 'steady' | 'pc_busy' | 'usb_uneven' | 'both' | 'insufficient'; causeDetail: string
+  histogram: MouseDiagBucket[]
+}
+export type MouseDiagUsbDevice = {
+  name: string; kind: string | null; portNumber: number; speedCode: number; speedLabel: string
+  bIntervalUs: number | null; pollingHz: number | null; highRate: boolean; highRateReason: string | null
+  sharesHubWithHighRate: boolean; sharedWith: string[]; isMouse: boolean
+}
+export type MouseDiagUsbHub = {
+  name: string; isRoot: boolean; portNumber: number | null; portCount: number; selectiveSuspendEnabled: boolean | null
+  devices: MouseDiagUsbDevice[]; hubs: MouseDiagUsbHub[]
+}
+export type MouseDiagUsbController = {
+  name: string; vendorName: string; pciLocation: string; placement: string; interruptMode: string
+  msiSupported: boolean; freeCpuPorts: number | null; rootHub: MouseDiagUsbHub
+}
+export type MouseDiagUsb = {
+  controllers: MouseDiagUsbController[]; advice: string[]; mouseOnCpu: boolean; mouseOnHub: boolean; mouseSharesHighRateHub: boolean
+}
+export type MouseDiagCore = {
+  core: number; isrCount: number; isrTotalUs: number; isrMaxUs: number; dpcCount: number; dpcTotalUs: number; dpcMaxUs: number; isMouseCore: boolean
+}
+export type MouseDiagDriver = {
+  driver: string; dpcCount: number; dpcTotalUs: number; dpcMaxUs: number; isrCount: number; isrTotalUs: number; isrMaxUs: number; topCore: number; cores: number[]
+}
+export type MouseDiagEtw = {
+  at: string; seconds: number; totalIsrs: number; totalDpcs: number; totalIsrUs: number; totalDpcUs: number
+  maxIsrUs: number; maxDpcUs: number; eventsLost: number; mouseControllerCore: number | null
+  cores: MouseDiagCore[]; topDrivers: MouseDiagDriver[]
+}
+export type MouseDiagSnapshot = {
+  pollingRateHz: number; stabilityScore: number; p99Ms: number; p999Ms: number; longestMs: number
+  lateCount: number; droppedCount: number; bunchedCount: number; mouseCpu: number | null
+}
+export type MouseDiagFixId = 'affinity' | 'msi' | 'usb_suspend'
+export type MouseDiagFixCard = {
+  id: MouseDiagFixId; title: string; summary: string; actionLabel: string; honestyNote: string
+  needsRestart: boolean; needsAdmin: boolean; status: 'available' | 'applied' | 'restart'; canApply: boolean; canUndo: boolean
+  detail: string | null; before: MouseDiagSnapshot | null; after: MouseDiagSnapshot | null; improved: boolean | null
+}
+export type MouseDiagState = {
+  ok: boolean; message?: string | null; running: boolean
+  jitter: MouseDiagJitter | null; usb: MouseDiagUsb; etw: MouseDiagEtw | null; etwProblem?: string | null; fixes: MouseDiagFixCard[]
 }
 
 /** One exact store entry represented by a grouped library card. */
@@ -1082,6 +1593,7 @@ export interface Game {
   canStop?: boolean
   /** Genres and modes from Steam's own record of the game (racing, co-op, ...); none for a game Steam doesn't know. */
   tags?: string[]
+  antiCheatClass?: 'competitivePvpOnline' | 'onlineNonCompetitivePve' | 'offlineAntiCheat' | 'unknown'
 }
 
 export interface InstallProgress {
@@ -1446,6 +1958,8 @@ export interface LauncherSettings {
   reduceMotion?: boolean
   /** The window always opens maximized; off, it opens as it was when it closed. */
   startMaximized?: boolean
+  useClassicWebUi?: boolean
+  relaunchForUiSwitch?: boolean
   /** Settings › General › Open Exo when Windows starts. */
   startWithWindows?: boolean
   textColour?: 'white' | 'grey' | string
@@ -1488,6 +2002,7 @@ export interface LauncherSettings {
   frameGenEverywhere?: boolean
   /** This PC's graphics card gains from it: a GeForce RTX 20 or 30, a Radeon RX 5000 or newer card, an Intel Arc card. */
   frameGenEverywhereCard?: boolean
+  graphicsFeaturesBestSettings?: boolean
   /** SDR content drawn with gamma 2.2 while a screen is in HDR (default on). */
   hdrSdrGamma?: boolean
   /** DeepFilterNet 3 on the microphone in Exo's own Discord calls (default on). */
@@ -1927,9 +2442,12 @@ export interface HostEventMap {
   /** Exo wrote a game's Optimize again after its update reset it (title: the game's name). */
   'game.optimizedAgain': { title: string }
   'game.optimizeHeld': { title: string }
+  'game.capLab': CapLabStatus
   /** Autopilot kept a session's report (shown in PC › Autopilot afterwards; nothing is said during play). */
   'autopilot.report': { game: string; title: string }
   'autopilot.live': AutopilotLive | null
+  'gpu.tuningChanged': { mode: string; statusLine: string; pausedAfterCrash: boolean; queuedPending: boolean; queuedReason?: string | null; backend: string }
+  'gpu.tuningTestProgress': GpuStabilityProgress
   /** The shader precompile moved on (at most four a second) or ended (ok set). */
   /** The Exo Shaders engine changed its list or a game's record: read shaders.status again. */
   'shaders.changed': Record<string, never>
@@ -2044,6 +2562,8 @@ export interface HostEventMap {
   'discord.tts': { name: string; text: string }
   /** An app's answer to an interaction the user started, by its nonce: created, done, failed, a form to fill, autocomplete choices. */
   'discord.interaction': InteractionEvent
+  'hdr.calibrationProgress': HdrCalibrationProgress
+  'hdr.warning': HdrWarningEvent
 }
 
 /** The reply to every HID call the Devices room relays for its mouse module. */
@@ -2444,6 +2964,11 @@ export const host = {
   exoAccountCodeConfirmed: () => rawCall<{ ok: boolean }>('exoAccount.codeConfirmed'),
   /** Whether Exo's account service answers again, and whether a game runs (for the sheet's return after Continue without an account). */
   exoAccountProbe: () => rawCall<{ reachable: boolean; gameRunning: boolean }>('exoAccount.probe'),
+  exoAccountPasskeyStatus: () => rawCall<{ supported: boolean; apiVersion: number; platformAvailable: boolean; passkeys: { id: string; label: string; created: number; lastUsed: number; flagged: boolean }[] }>('exoAccount.passkeyStatus'),
+  exoAccountPasskeyRegister: (label?: string, ownerHwnd?: number, password?: string) => rawCall<ExoAccountOutcome>('exoAccount.passkeyRegister', { label, ownerHwnd, password }),
+  exoAccountPasskeySignIn: (ownerHwnd?: number) => rawCall<ExoAccountOutcome>('exoAccount.passkeySignIn', { ownerHwnd }),
+  exoAccountPasskeyDelete: (id: string) => rawCall<ExoAccountOutcome>('exoAccount.passkeyDelete', { id }),
+  authNativeProviders: () => rawCall<{ providers: { provider: string; displayName: string; flow: string; available: boolean; note: string }[] }>('auth.nativeProviders'),
   /** The show-again state of the sheet, banner and top-bar button, as stored text (device-only). */
   storesAuth: (store: string) =>
     rawCall<{ ok: boolean; message?: string; requiresUserAction?: boolean; handoff?: boolean }>('stores.auth', { store }),
@@ -2801,6 +3326,16 @@ export const host = {
     rawCall<{ ok: boolean; message?: string }>('dlss.consent', { id, allow, ...(allow && antiCheat ? { antiCheat } : {}) }),
   /** The game's Frame generation line. */
   dlssFrameGen: (id: string) => rawCall<FrameGenMod>('dlss.frameGen', { id }, 60_000),
+  dlssFrameGenSet: (id: string, enabled: boolean, consent?: { acceptRisk?: boolean; antiCheat?: string | null }) =>
+    rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled, ...(consent?.acceptRisk ? { acceptRisk: true, ...(consent.antiCheat ? { antiCheat: consent.antiCheat } : {}) } : {}) }, 10 * 60_000),
+  gameFrameGen: (id: string, change?: { route?: string; xessOverride?: IntelFrameGen; acceptRisk?: boolean; antiCheat?: string | null }) =>
+    rawCall<GameFrameGen>('game.frameGen', { id, ...change }, 60_000),
+  gameFrameCap: (id: string, change?: { tier?: string; capFps?: number; backend?: string }) =>
+    rawCall<GameFrameCap>('game.frameCap', { id, ...change }, 30_000),
+  capLabRun: (id: string, capAFps?: number, capBFps?: number) =>
+    rawCall<{ ok: boolean; message?: string | null; ab: CapLabStatus }>('game.capLab.run', { id, ...(capAFps ? { capAFps } : {}), ...(capBFps ? { capBFps } : {}) }, 30_000),
+  capLabCancel: (id?: string) =>
+    rawCall<{ ok: boolean; message?: string | null; ab: CapLabStatus }>('game.capLab.cancel', id ? { id } : {}, 15_000),
   dlssNewer: () => rawCall<{ ok: boolean; items: { family: string; version: string }[] }>('dlss.newer', {}, 15_000),
   dlssDownloadNewer: () => rawCall<{ ok: boolean; message?: string | null }>('dlss.downloadNewer', {}, 10 * 60_000),
   shadersStatus: (id: string) => rawCall<ShaderStatus>('shaders.status', { id }),
@@ -2809,9 +3344,29 @@ export const host = {
   shadersPrepareCancel: (id: string) => rawCall<{ ok: boolean; message?: string | null }>('shaders.prepare.cancel', { id }),
   hdrState: () => rawCall<HdrState>('hdr.state', {}),
   /** A game's HDR support (asks PCGamingWiki the first time); with a mode, sets its Auto/Always/Never. */
-  hdrGame: (id: string, mode?: string) => rawCall<HdrGame>('hdr.game', { id, ...(mode ? { mode } : {}) }, 30_000),
-  gameSettings: (id: string, change?: { group?: string; all?: boolean; on?: boolean; mode?: string; smoothMotion?: boolean }) =>
+  hdrGame: (id: string, opts?: string | { mode?: string; cursorFix?: boolean }) =>
+    rawCall<HdrGame>('hdr.game', {
+      id,
+      ...(typeof opts === 'string' ? { mode: opts } : opts ?? {}),
+    }, 30_000),
+  hdrCalibrate: (params: { action: 'run' | 'undo' | 'toggle'; devicePath?: string; enabled?: boolean }) =>
+    rawCall<HdrCalibrateResult>('hdr.calibrate', params, 120_000),
+  gameSettings: (id: string, change?: {
+    group?: string
+    key?: string
+    all?: boolean
+    on?: boolean
+    mode?: string
+    smoothMotion?: boolean
+    jvm?: boolean
+    modsAction?: 'install' | 'undo'
+    instanceId?: string
+  }) =>
     rawCall<GameSettingsState>('game.settings', { id, ...change }, 30_000),
+  gameGraphicsFeatures: (id: string) =>
+    rawCall<GameGraphicsFeaturesState>('game.graphicsFeatures', { id }, 30_000),
+  gameGraphicsFeaturesSet: (id: string, feature: GraphicsFeatureId, on: boolean, acceptAntiCheatRisk = false) =>
+    rawCall<GameGraphicsFeaturesState>('game.graphicsFeatures.set', { id, feature, on, acceptAntiCheatRisk }, 30_000),
   /** What Keep holds, said as one word for the PC and one per game; a game with nothing to say is left out. */
   keepStatus: () => rawCall<KeepStatus>('keep.status', {}, 30_000),
   /** Every screen's refresh rate and output color; set starts a 15 s countdown that keep ends and revert (or the host, when it runs out) undoes. */
@@ -3121,8 +3676,19 @@ export const host = {
   gpuGame: (id: string, change?: { frameGen?: IntelFrameGen }) => rawCall<GpuGame>('gpu.game', { id, ...change }, 30_000),
   /** The card maker's own control panel opened as the user (NVIDIA Control Panel, AMD Software, Intel Graphics Software); message names one that isn't installed. */
   gpuControlPanel: () => rawCall<{ ok: boolean; message?: string | null }>('gpu.controlPanel', {}, 20_000),
+  gpuProcesses: (limit?: number) => rawCall<GpuProcessesState>('gpu.processes', limit ? { limit } : {}, 15_000),
+  gpuTuningState: () => rawCall<GpuManualTuningState>('gpu.tuning.state', {}, 25_000),
+  gpuTuningApply: (profile: GpuManualProfile & { reapply?: boolean }) =>
+    rawCall<GpuManualTuningState>('gpu.tuning.apply', profile, 25_000),
+  gpuTuningReset: () => rawCall<GpuManualTuningState>('gpu.tuning.reset', {}, 25_000),
+  gpuTuningWaiver: (accept: boolean, deviceId?: string) =>
+    rawCall<GpuManualTuningState>('gpu.tuning.waiver', { accept, ...(deviceId ? { deviceId } : {}) }, 25_000),
+  gpuTuningTest: (action: 'start' | 'stop', duration?: '60s' | '5m', profile?: GpuManualProfile) =>
+    rawCall<GpuManualTuningState>('gpu.tuning.test', { action, ...(duration ? { duration } : {}), ...(profile ? { profile } : {}) }, 25_000),
+  gpuTuningUndervolt: (action: 'start' | 'stop') =>
+    rawCall<GpuManualTuningState>('gpu.tuning.undervolt', { action }, 25_000),
   /** System > This PC: the checks; apply or undo Exo's power plan; gpusched opens Windows' Graphics settings; gamemode-on/off and gamebar-on (Exo keeps Game Bar off)/off (Exo puts it back) answer ok, and a sentence when Windows didn't take it. */
-  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
+  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'winupdate' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
   /** One item of Best settings › Network on (set now, back in Best settings) or off (put back as it was, left out of Best settings). */
   systemNetwork: (on: boolean, item: 'adapter' | 'dns' | 'tcp') => rawCall<PcHealth>('system.health', { action: on ? 'network-on' : 'network-off', item }, 240_000),
   /** PC › Overview: what this PC is (processor, memory, drives, board, BIOS, Windows, security, connection). */
@@ -3140,8 +3706,12 @@ export const host = {
   exoAiSet: (change: ExoAiChange) => rawCall<ExoAiState & { ok: boolean; message?: string | null }>('exoAi.set', change, 15_000),
   /** System > This PC > Interrupts: the devices; apply switches every one that can to MSI mode, undo puts all back, revert one. Waits on Windows' permission prompt. */
   /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item, latency runs the ten-second latency check. Waits on Windows' permission prompt (and a restore point). */
-  systemTuning: (action?: 'apply' | 'playbook' | 'on' | 'off' | 'latency', item?: TuningKey) =>
+  systemTuning: (action?: 'apply' | 'playbook' | 'migrate' | 'on' | 'off' | 'latency', item?: TuningKey) =>
     rawCall<Tuning>('system.tuning', action ? { action, ...(item ? { item } : {}) } : {}, 240_000),
+  systemQos: (action?: 'on' | 'off', gameId?: string) =>
+    rawCall<QosState>('system.qos', action ? { action, ...(gameId ? { gameId } : {}) } : {}, 120_000),
+  systemOverlays: (action?: 'off' | 'restore', id?: string) =>
+    rawCall<OverlayAdvisorState>('system.overlays', action ? { action, ...(id ? { id } : {}) } : {}, 30_000),
   systemInterrupts: (action?: 'apply' | 'undo' | 'revert' | 'reapply', device?: string) =>
     rawCall<Interrupts>('system.interrupts', action ? { action, ...(device ? { device } : {}) } : {}, 120_000),
   /**
@@ -3151,6 +3721,10 @@ export const host = {
    */
   systemMouseCore: (action?: 'measure' | 'drivers' | 'spread' | 'unspread' | 'apply' | 'undo') =>
     rawCall<MouseCore>('system.mouseCore', action ? { action } : {}, action ? 120_000 : 15_000),
+  mouseDiagStatus: () => rawCall<MouseDiagState>('mouse.diag.status', {}, 15_000),
+  mouseDiagMeasure: (p: { withEtw?: boolean } = {}) => rawCall<MouseDiagState>('mouse.diag.measure', p, 120_000),
+  mouseDiagCancel: () => rawCall<{ ok: boolean }>('mouse.diag.cancel', {}, 10_000),
+  mouseDiagFix: (p: { id: MouseDiagFixId; action: 'apply' | 'undo' }) => rawCall<MouseDiagState>('mouse.diag.fix', p, 120_000),
   /** The saved home page at once (refreshed behind it); refresh waits for a fresh one. */
   storeHome: (refresh = false) => rawCall<StoreHome>('store.home', refresh ? { refresh: true } : {}, 45_000),
   /**
@@ -3182,6 +3756,11 @@ export const host = {
   /** Exo Mouse's presets and per-mouse values (an opaque object it owns), kept in Exo's data folder like its profiles. */
   mousePresetsGet: () => rawCall<{ ok: boolean; message?: string; data?: unknown }>('mouse.presets.get'),
   mousePresetsSet: (p: Record<string, unknown>) => rawCall<{ ok: boolean; message?: string }>('mouse.presets.set', p),
+  mousePanelOpen: (p: { ownerHwnd?: number; x: number; y: number; width: number; height: number; visible?: boolean }) =>
+    rawCall<{ ok: boolean; message?: string }>('mouse.panel.open', p),
+  mousePanelBounds: (p: { ownerHwnd?: number; x: number; y: number; width: number; height: number; visible?: boolean }) =>
+    rawCall<{ ok: boolean }>('mouse.panel.bounds', p),
+  mousePanelClose: () => rawCall<{ ok: boolean }>('mouse.panel.close'),
   keysPreview: () =>
     rawCall<{ ok: boolean; looksLikeKey?: boolean; store?: string; key?: string }>('keys.preview'),
   keysActivate: (key: string, store?: string) =>

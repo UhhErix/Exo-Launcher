@@ -135,6 +135,13 @@ public sealed class FailureReportRulesTests
         Assert.Equal(200 + "ctx: ".Length, FailureReportRules.PageErrorReason("ctx", new string('x', 5000)).Length);
     }
 
+    [Fact]
+    public void UnknownRpcMethodAndUserFacingExceptionsAreNotReportedAsHostCallBugs()
+    {
+        Assert.False(FailureReportRules.IsHostCallBug(new UserFacingException("Unknown method: app.info")));
+        Assert.True(FailureReportRules.IsHostCallBug(new NullReferenceException("boom")));
+    }
+
     [Theory]
     [InlineData("Close your game first.", true)]
     [InlineData("Close your game first", true)]

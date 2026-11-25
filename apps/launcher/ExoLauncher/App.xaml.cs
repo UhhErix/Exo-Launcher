@@ -17,7 +17,7 @@ public partial class App : Application
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Helpers.KeepAwake.Shared.ReleaseAll();
         UnhandledException += (_, e) =>
         {
-            Helpers.PendingReports.Record(e.Exception);
+            Helpers.CrashBreadcrumb.Record("winui-unhandled", e.Exception);
             try
             {
                 Helpers.AppLog.Crash("Unhandled UI exception", e.Exception);
@@ -30,14 +30,14 @@ public partial class App : Application
         // A faulted task nobody awaited: logged with its type and stack instead of vanishing.
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
-            Helpers.PendingReports.Record(e.Exception.GetBaseException());
+            Helpers.CrashBreadcrumb.Record("unobserved-task", e.Exception.GetBaseException());
             try { Helpers.AppLog.Warn("Unobserved task exception: " + e.Exception.GetBaseException()); }
             catch { /* best-effort */ }
             e.SetObserved();
         };
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
-            Helpers.PendingReports.Record(e.ExceptionObject as Exception);
+            Helpers.CrashBreadcrumb.Record("domain-unhandled", e.ExceptionObject as Exception);
             try
             {
                 Helpers.AppLog.Crash("Unhandled domain exception", e.ExceptionObject as Exception);

@@ -671,12 +671,7 @@ export async function run(t) {
     const t0 = Date.now()
     await t.shell.click(() => [...document.querySelectorAll('.exo-nav-btn')].find(b => (b.getAttribute('aria-label') || b.textContent).trim().startsWith('Library')))
     const painted = new Set(before.filter(x => x.painted).map(x => x.id))
-    let now = []
-    while (Date.now() - t0 < 3000) {
-      now = await t.shell.eval(COVERS)
-      if (now.length && now.every(x => x.painted || !painted.has(x.id))) break
-      await sleep(50)
-    }
+    const now = (await t.shell.waitFor(coversReady, { timeoutMs: 3000, interval: 50, args: [THUMB, [...painted]] })) ?? (await t.shell.eval(COVERS))
     c.metric('back', Date.now() - t0, ' ms', 1500)
     await k.settle()
     const blank = now.filter(x => !x.painted && painted.has(x.id)).map(x => x.title ?? x.id)
@@ -714,13 +709,24 @@ const fullWidths = (files) => `(async () => {
   return out
 })()`
 
+const coversReady = (thumb, paintedIds) => {
+  const list = [...document.querySelectorAll('.exo-game-grid button[data-game-id]:not(.exo-folder-tile *)')].map(b => {
+    const pane = document.querySelector('main.exo-library-pane')?.getBoundingClientRect() ?? { top: 0, bottom: innerHeight }
+    const r = b.getBoundingClientRect()
+    if (!r.width || r.bottom < pane.top + 4 || r.top > pane.bottom - 4) return null
+    const img = b.querySelector('img.exo-cover-front:not([data-under])')
+    const src = img ? img.currentSrc || img.src : ''
+    const ir = (img ?? b).getBoundingClientRect()
+    return {
+      id: b.dataset.gameId, title: b.getAttribute('aria-label') || img?.alt || null,
+      painted: !!img && img.complete && img.naturalWidth > 0 && getComputedStyle(img).opacity === '1',
+      natural: img?.naturalWidth ?? 0, cssWidth: ir.width,
+      thumb: src.startsWith(thumb), file: src.startsWith(thumb) ? decodeURIComponent(new URL(src).pathname.slice(1)) : null,
+    }
+  }).filter(Boolean)
+  return list.length && list.every(x => x.painted || (paintedIds && !paintedIds.includes(x.id))) ? list : null
+}
+
 async function settledCovers(t, timeoutMs = 10000) {
-  const deadline = Date.now() + timeoutMs
-  let covers = []
-  while (Date.now() < deadline) {
-    covers = await t.shell.eval(COVERS)
-    if (covers.length && covers.every(x => x.painted)) break
-    await sleep(250)
-  }
-  return covers
+  return (await t.shell.waitFor(coversReady, { timeoutMs, interval: 250, args: [THUMB, null] })) ?? (await t.shell.eval(COVERS))
 }

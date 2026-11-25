@@ -3,7 +3,7 @@
 import { sleep } from '../cdp.mjs'
 import { classifyCaptureResult } from '../lib/capture.mjs'
 import { compare, cropFraction, readPng, shareNear } from '../lib/image.mjs'
-import { BAR_ROOMS, ROOMS } from '../lib/kit.mjs'
+import { BAR_ROOMS } from '../lib/kit.mjs'
 
 /** The screen under Exo's window against the page's own picture of the same moment. */
 export async function screenMatchesPage(t, c, label) {

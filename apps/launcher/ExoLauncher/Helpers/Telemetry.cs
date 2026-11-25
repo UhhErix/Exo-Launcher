@@ -36,8 +36,20 @@ internal static partial class Telemetry
     private static readonly List<string> Queue = [];
     private static long _queueBytes;
     private static int _dropped;
+    private static bool _queueDirty;
     private static DateTime _nextSend = DateTime.MinValue;
+    private static DateTime _nextPerfSample = DateTime.MinValue;
     private static TimeSpan _backoff = MinGap;
+    private static readonly Lazy<HttpClient> SharedHttp = new(() =>
+    {
+        var http = ExoHttp.Create(TimeSpan.FromSeconds(15), new System.Net.Http.SocketsHttpHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        });
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("ExoLauncher/" + AppServices.RunningVersion);
+        return http;
+    });
     // The session ID is made once, on first use; null until a random source gives one (see RandomFill).
     private static string? _sessionId;
 
@@ -120,6 +132,7 @@ internal static partial class Telemetry
                 if (Encoding.UTF8.GetByteCount(text) > MaxEventBytes) return;
                 Queue.Add(text);
                 _queueBytes += Encoding.UTF8.GetByteCount(text);
+                _queueDirty = true;
                 while (_queueBytes > MaxQueueBytes && Queue.Count > 0)
                 {
                     _queueBytes -= Encoding.UTF8.GetByteCount(Queue[0]);
@@ -217,6 +230,7 @@ internal static partial class Telemetry
         {
             ClearQueueLocked();
             _nextSend = DateTime.MinValue;
+            _nextPerfSample = DateTime.MinValue;
             _backoff = MinGap;
             _sessionId = null;
         }
@@ -227,6 +241,7 @@ internal static partial class Telemetry
         Queue.Clear();
         _queueBytes = 0;
         _dropped = 0;
+        _queueDirty = false;
         TryDelete(QueuePath);
     }
 
@@ -286,8 +301,9 @@ internal static partial class Telemetry
                 InstallId();
                 LoadQueueLocked();
                 _perfSampled = RandomNumberGenerator.GetInt32(10) == 0;
+                _nextPerfSample = DateTime.UtcNow + PerfEvery;
             }
-            _ticks = new Timer(_ => Tick(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+            _ticks = new Timer(_ => Tick(), null, MinGap, MinGap);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -315,12 +331,22 @@ internal static partial class Telemetry
     {
         try
         {
-            if (_perfSampled) SampleMemory();
+            if (_perfSampled && ShouldSamplePerf(DateTime.UtcNow)) SampleMemory();
             _ = FlushAsync(CancellationToken.None);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppLog.Debug("Telemetry tick: " + ex.GetType().Name);
+        }
+    }
+
+    internal static bool ShouldSamplePerf(DateTime now)
+    {
+        lock (Gate)
+        {
+            if (now < _nextPerfSample) return false;
+            _nextPerfSample = now + PerfEvery;
+            return true;
         }
     }
 
@@ -354,7 +380,6 @@ internal static partial class Telemetry
         try
         {
             lock (Gate) { if (DateTime.UtcNow < _nextSend) return; }
-            // One batch per flush interval: whatever is left waits for the next one.
             var (body, envelopes, _, count, taken) = TakeBatch();
             if (body is null) return;
             var outcome = await PostOrNoAnswerAsync(body, ct).ConfigureAwait(false);
@@ -389,6 +414,7 @@ internal static partial class Telemetry
             Queue.InsertRange(0, taken);
             _queueBytes += taken.Sum(text => (long)Encoding.UTF8.GetByteCount(text));
             _dropped += count;
+            _queueDirty = true;
             _nextSend = DateTime.UtcNow + _backoff;
             _backoff = _backoff + _backoff > MaxBackoff ? MaxBackoff : _backoff + _backoff;
             AppLog.Info($"Telemetry: {taken.Count} events kept for a later try ({outcome}).");
@@ -429,6 +455,7 @@ internal static partial class Telemetry
                 note = dropped.ToJsonString();
             }
             _dropped = 0;
+            _queueDirty = true;
             var taken = new List<string>();
             var size = 32 + (note is null ? 0 : Encoding.UTF8.GetByteCount(note) + 1);
             while (Queue.Count > 0)
@@ -450,10 +477,8 @@ internal static partial class Telemetry
     {
         try
         {
-            using var http = ExoHttp.Create(TimeSpan.FromSeconds(15));
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("ExoLauncher/" + AppServices.RunningVersion);
             using var content = new StringContent(body, Encoding.UTF8, "application/json");
-            using var response = await http.PostAsync(url, content, ct).ConfigureAwait(false);
+            using var response = await SharedHttp.Value.PostAsync(url, content, ct).ConfigureAwait(false);
             return (int)response.StatusCode;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -487,6 +512,8 @@ internal static partial class Telemetry
 
     private static void PersistQueueLocked()
     {
+        if (!_queueDirty) return;
+        _queueDirty = false;
         if (Queue.Count == 0) TryDelete(QueuePath);
         else WriteAtomic(QueuePath, string.Join('\n', Queue) + "\n");
     }

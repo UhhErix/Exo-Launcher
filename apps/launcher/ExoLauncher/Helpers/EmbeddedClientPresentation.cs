@@ -12,11 +12,15 @@ internal static class EmbeddedClientPresentation
     internal const string Script = """
         (() => {
           if (window.top !== window || location.protocol !== 'https:' ||
-            location.hostname !== 'music.youtube.com' && location.hostname !== 'music.apple.com') return;
+            location.hostname !== 'music.youtube.com' && location.hostname !== 'music.apple.com' && location.hostname !== 'open.spotify.com') return;
           const css = location.hostname === 'music.apple.com' ? `
             html[data-exo-background] body > :not(audio):not(video):not(script):not(style) { content-visibility:hidden!important; }
             html[data-exo-background] *, html[data-exo-background] *::before, html[data-exo-background] *::after {
               animation-play-state:paused!important; transition:none!important;
+            }
+          ` : location.hostname === 'open.spotify.com' ? `
+            html[data-exo-background] *, html[data-exo-background] *::before, html[data-exo-background] *::after {
+              animation-play-state:paused!important; transition:none!important; caret-color:transparent!important;
             }
           ` : `
             html[data-exo-background] *, html[data-exo-background] *::before, html[data-exo-background] *::after {

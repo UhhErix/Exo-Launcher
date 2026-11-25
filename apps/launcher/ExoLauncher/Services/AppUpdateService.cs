@@ -30,6 +30,8 @@ public sealed partial class AppUpdateService
     private static readonly TimeSpan ReleaseCacheAge = TimeSpan.FromMinutes(10);
     private sealed record CachedRelease(ParsedRelease Release, DateTimeOffset FetchedAt);
     private volatile CachedRelease? _cachedRelease;
+    private sealed record CachedLatest(string ETag, ParsedRelease Release);
+    private volatile CachedLatest? _latestEtag;
     private sealed record CachedNotes(string Tag, ExoWhatsNewRelease Notes);
     private volatile CachedNotes? _cachedNotes;
     // Startup builds this before the window: the folder's cleanup runs beside it, and an install waits for it.
@@ -83,10 +85,10 @@ public sealed partial class AppUpdateService
             AllowAutoRedirect = false,
             AutomaticDecompression = decompress ? DecompressionMethods.All : DecompressionMethods.None,
             PooledConnectionLifetime = TimeSpan.FromMinutes(15),
-            EnableMultipleHttp2Connections = false,
+            EnableMultipleHttp2Connections = true,
         };
         var c = ExoHttp.Create(TimeSpan.FromMinutes(30), handler);
-        c.DefaultRequestVersion = HttpVersion.Version11;
+        c.DefaultRequestVersion = HttpVersion.Version20;
         c.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
         c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("ExoLauncher", "1.0"));
         return c;
@@ -807,13 +809,24 @@ public sealed partial class AppUpdateService
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, new Uri(UpdateAddress, "latest"));
+            var cached = _latestEtag;
+            if (cached is not null) req.Headers.TryAddWithoutValidation("If-None-Match", cached.ETag);
             using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
-            if (resp.StatusCode != HttpStatusCode.OK) return null;
-            var release = ParseUpdateAddressReply(await ReadBoundedTextAsync(resp.Content, 16 * 1024, timeout.Token).ConfigureAwait(false));
-            if (release is null) return null;
-            // Up to date: the files aren't needed, so the address isn't asked for them.
+            ParsedRelease? release;
+            if (resp.StatusCode == HttpStatusCode.NotModified && cached is not null)
+            {
+                release = cached.Release;
+            }
+            else
+            {
+                if (resp.StatusCode != HttpStatusCode.OK) return null;
+                release = ParseUpdateAddressReply(await ReadBoundedTextAsync(resp.Content, 16 * 1024, timeout.Token).ConfigureAwait(false));
+                if (release is null) return null;
+                if (resp.Headers.ETag is { } etag) _latestEtag = new CachedLatest(etag.ToString(), release);
+            }
             if (VersionNumber.AtLeast(local, release.Tag)) return release;
             release = await CompleteDigestAsync(release, timeout.Token).ConfigureAwait(false);
+            if (_latestEtag is { } held && held.Release.Tag == release.Tag) _latestEtag = held with { Release = release };
             return HasVerifiedInstallerMetadata(release) ? release : null;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)

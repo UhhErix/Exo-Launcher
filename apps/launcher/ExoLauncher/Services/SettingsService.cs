@@ -8,12 +8,6 @@ namespace ExoLauncher.Services;
 
 public sealed class SettingsService
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private readonly object _stateGate = new();
     private readonly object _persistenceGate = new();
     private AppSettings _current = new();
@@ -180,7 +174,9 @@ public sealed class SettingsService
         loaded.PreferredGameSources = NormalizePreferredGameSources(loaded.PreferredGameSources);
         loaded.LastPlayed = CopyStrings(loaded.LastPlayed);
         loaded.UpscalerAntiCheatConsent = CopyStrings(loaded.UpscalerAntiCheatConsent);
+        loaded.GraphicsModAntiCheatConsent = CopyStrings(loaded.GraphicsModAntiCheatConsent);
         loaded.HdrGameModes = CopyStrings(loaded.HdrGameModes);
+        loaded.HdrCursorFixGames = NormalizeHiddenGames(loaded.HdrCursorFixGames);
         loaded.NvidiaColor = CopyStrings(loaded.NvidiaColor);
         loaded.SdrGammaBefore = CopyStrings(loaded.SdrGammaBefore);
         loaded.HdrGameScreens = CopyStrings(loaded.HdrGameScreens);
@@ -222,7 +218,7 @@ public sealed class SettingsService
     /// </summary>
     private static AppSettings? DeserializeSalvaging(string json, JsonElement root)
     {
-        try { return JsonSerializer.Deserialize<AppSettings>(json, JsonOpts); }
+        try { return JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings); }
         catch (JsonException first)
         {
             var kept = new System.Text.Json.Nodes.JsonObject();
@@ -230,12 +226,12 @@ public sealed class SettingsService
             foreach (var property in root.EnumerateObject())
             {
                 var single = new System.Text.Json.Nodes.JsonObject { [property.Name] = System.Text.Json.Nodes.JsonNode.Parse(property.Value.GetRawText()) };
-                try { JsonSerializer.Deserialize<AppSettings>(single.ToJsonString(), JsonOpts); kept[property.Name] = single[property.Name]!.DeepClone(); }
+                try { JsonSerializer.Deserialize(single.ToJsonString(), SettingsJsonContext.Default.AppSettings); kept[property.Name] = single[property.Name]!.DeepClone(); }
                 catch (JsonException) { dropped.Add(property.Name); }
             }
             if (dropped.Count == 0) throw;
             AppLog.Warn($"Settings: {dropped.Count} field(s) did not read and are back at their defaults ({string.Join(", ", dropped.Take(10))}); the rest are kept. {first.Message}");
-            return JsonSerializer.Deserialize<AppSettings>(kept.ToJsonString(), JsonOpts);
+            return JsonSerializer.Deserialize(kept.ToJsonString(), SettingsJsonContext.Default.AppSettings);
         }
     }
 
@@ -325,7 +321,7 @@ public sealed class SettingsService
     /// replacement succeeds. A failed write cannot change the meaning of a retry
     /// or roll back a different writer's successful change.
     /// </summary>
-    private bool TryCommitMutation(Action<AppSettings> mutate, out string? error)
+    private bool TryCommitMutation(Action<AppSettings> mutate, out string? error, bool fromSync = false)
     {
         error = null;
         lock (_persistenceGate)
@@ -335,6 +331,7 @@ public sealed class SettingsService
                 AppLog.Info("Settings: a change after the restore is not written; the restored settings.json stays.");
                 return true;
             }
+            AppSettings before;
             AppSettings candidate;
             lock (_stateGate)
             {
@@ -344,6 +341,7 @@ public sealed class SettingsService
                     AppLog.Warn(error);
                     return false;
                 }
+                before = Clone(_current);
                 candidate = Clone(_current);
             }
 
@@ -352,7 +350,7 @@ public sealed class SettingsService
             // A profile callback may retain its argument; never publish that
             // caller-owned object as mutable service state.
             var committed = Clone(candidate);
-            var json = JsonSerializer.Serialize(committed, JsonOpts);
+            var json = JsonSerializer.Serialize(committed, SettingsJsonContext.Default.AppSettings);
             if (string.Equals(json, _lastWrittenJson, StringComparison.Ordinal))
                 return true;
             try
@@ -367,11 +365,18 @@ public sealed class SettingsService
             }
 
             _lastWrittenJson = json;
-            AccountSyncHooks.SettingsSaved(committed);
             lock (_stateGate)
             {
                 _current = committed;
                 _revision++;
+            }
+            if (!fromSync)
+            {
+                var changedKeys = AccountSyncRules.ChangedKeys(
+                    AccountSyncMap.SettingsValue(before).ToJsonString(),
+                    AccountSyncMap.SettingsValue(committed).ToJsonString());
+                if (changedKeys.Count > 0)
+                    AccountSyncHooks.SettingsSaved(committed, changedKeys);
             }
             // The settings file is the commit point. A stale advisory marker
             // cannot override that explicit value on the next load.
@@ -380,9 +385,9 @@ public sealed class SettingsService
         return true;
     }
 
-    private void CommitMutation(Action<AppSettings> mutate)
+    private void CommitMutation(Action<AppSettings> mutate, bool fromSync = false)
     {
-        if (!TryCommitMutation(mutate, out var error))
+        if (!TryCommitMutation(mutate, out var error, fromSync))
             throw new InvalidOperationException(error ?? "Could not save settings.");
     }
 
@@ -518,7 +523,9 @@ public sealed class SettingsService
         bool? discordNoiseSuppression = null,
         bool? discordQuietWhilePlaying = null,
         string? whatsNewSeen = null,
-        bool? frameGenEverywhere = null)
+        bool? frameGenEverywhere = null,
+        bool? graphicsFeaturesBestSettings = null,
+        bool? useClassicWebUi = null)
     {
         if (whatsNewSeen is not null && (whatsNewSeen.Length is 0 or > 32 || !whatsNewSeen.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-')))
             throw new InvalidDataException("Invalid What's New version.");
@@ -534,6 +541,8 @@ public sealed class SettingsService
                 settings.ReduceMotion = reduceMotion.Value;
             if (startMaximized is not null)
                 settings.StartMaximized = startMaximized.Value;
+            if (useClassicWebUi is not null)
+                settings.UseClassicWebUi = useClassicWebUi.Value;
             if (textColour is not null)
                 settings.TextColour = NormalizeTextColour(textColour);
             if (textSize is not null)
@@ -550,6 +559,8 @@ public sealed class SettingsService
                 settings.HdrForGames = hdrForGames.Value;
             if (frameGenEverywhere is not null)
                 settings.FrameGenEverywhere = frameGenEverywhere.Value;
+            if (graphicsFeaturesBestSettings is not null)
+                settings.GraphicsFeaturesBestSettings = graphicsFeaturesBestSettings.Value;
             if (hdrSdrGamma is not null)
                 settings.HdrSdrGamma = hdrSdrGamma.Value;
             if (discordNoiseSuppression is not null)
@@ -649,6 +660,15 @@ public sealed class SettingsService
         });
     }
 
+    internal void ApplySynced(Action<AppSettings> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        CommitMutation(settings =>
+        {
+            apply(settings);
+        }, fromSync: true);
+    }
+
     /// <summary>The anti-cheat the user accepted the risk of for this game's upscaler files, or null.</summary>
     public string? UpscalerConsent(string gameId)
     {
@@ -671,11 +691,36 @@ public sealed class SettingsService
         });
     }
 
+    public string? GraphicsModConsent(string gameId)
+    {
+        lock (_stateGate)
+            return _current.GraphicsModAntiCheatConsent.TryGetValue(gameId, out var antiCheat) ? antiCheat : null;
+    }
+
+    public void SetGraphicsModConsent(string gameId, string? antiCheat)
+    {
+        if (string.IsNullOrWhiteSpace(gameId) || gameId.Length > 512 || gameId.Any(char.IsControl))
+            throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            if (antiCheat is null) settings.GraphicsModAntiCheatConsent.Remove(gameId);
+            else settings.GraphicsModAntiCheatConsent[gameId] = antiCheat;
+            if (settings.GraphicsModAntiCheatConsent.Count > 1_000)
+                throw new InvalidDataException("Too many graphics mod consents are saved.");
+        });
+    }
+
     /// <summary>"auto", "on" or "off" for HDR while this game runs.</summary>
     public string HdrGameMode(string gameId)
     {
         lock (_stateGate)
             return _current.HdrGameModes.TryGetValue(gameId, out var mode) ? mode : "auto";
+    }
+
+    public bool HdrCursorFix(string gameId)
+    {
+        lock (_stateGate)
+            return _current.HdrCursorFixGames.Contains(gameId, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>Library > folders: the whole list, as the Library has it now. Returns what was kept.</summary>
@@ -765,6 +810,42 @@ public sealed class SettingsService
         });
     }
 
+    public string? FrameGenRouteFor(string gameId)
+    {
+        lock (_stateGate)
+            return _current.FrameGenRoute.TryGetValue(gameId, out var route) ? route : null;
+    }
+
+    public void SetFrameGenRoute(string gameId, string? route)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var next = CopyStrings(settings.FrameGenRoute);
+            if (string.IsNullOrWhiteSpace(route)) next.Remove(gameId);
+            else next[gameId] = route.Trim();
+            settings.FrameGenRoute = next;
+        });
+    }
+
+    public GameFrameCapPref? FrameCapFor(string gameId)
+    {
+        lock (_stateGate)
+            return _current.FrameCap.TryGetValue(gameId, out var pref) ? pref.Copy() : null;
+    }
+
+    public void SetFrameCap(string gameId, GameFrameCapPref? pref)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var next = CopyFrameCaps(settings.FrameCap);
+            if (pref is null) next.Remove(gameId);
+            else next[gameId] = pref.Copy();
+            settings.FrameCap = next;
+        });
+    }
+
     /// <summary>Settings › General › Open Exo when Windows starts.</summary>
     public void SetStartWithWindows(bool on) => CommitMutation(settings => settings.StartWithWindows = on);
     /// <summary>Whether the player set this Steam game to Launch without anti-cheat (<see cref="AppSettings.SteamWithoutAntiCheat"/>).</summary>
@@ -819,6 +900,16 @@ public sealed class SettingsService
             else settings.HdrGameModes[gameId] = mode;
             if (settings.HdrGameModes.Count > 5_000)
                 throw new InvalidDataException("Too many HDR choices are saved.");
+        });
+    }
+
+    public void SetHdrCursorFix(string gameId, bool enabled)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var rest = settings.HdrCursorFixGames.Where(id => !string.Equals(id, gameId, StringComparison.OrdinalIgnoreCase));
+            settings.HdrCursorFixGames = NormalizeHiddenGames(enabled ? rest.Append(gameId) : rest);
         });
     }
 
@@ -992,6 +1083,7 @@ public sealed class SettingsService
         ReduceMotion = source.ReduceMotion,
         StartMaximized = source.StartMaximized,
         FramelessMode = source.FramelessMode,
+        UseClassicWebUi = source.UseClassicWebUi,
         FramelessPinTop = source.FramelessPinTop,
         FramelessPinSide = source.FramelessPinSide,
         TextColour = source.TextColour,
@@ -1010,6 +1102,8 @@ public sealed class SettingsService
         Recent = source.Recent.ToList(),
         LastPlayed = CopyStrings(source.LastPlayed),
         UpscalerAntiCheatConsent = CopyStrings(source.UpscalerAntiCheatConsent),
+        GraphicsModAntiCheatConsent = CopyStrings(source.GraphicsModAntiCheatConsent),
+        GraphicsFeaturesBestSettings = source.GraphicsFeaturesBestSettings,
         HdrGameModes = CopyStrings(source.HdrGameModes),
         NvidiaColor = CopyStrings(source.NvidiaColor),
         NvidiaGsync = source.NvidiaGsync,
@@ -1041,9 +1135,14 @@ public sealed class SettingsService
         HdrSdrGamma = source.HdrSdrGamma,
         DiscordNoiseSuppression = source.DiscordNoiseSuppression,
         DiscordNoiseSuppressionKind = source.DiscordNoiseSuppressionKind,
+        DiscordVoiceTier = source.DiscordVoiceTier,
+        DiscordVoiceIsolation = source.DiscordVoiceIsolation,
+        DiscordLoopbackEchoCancellation = source.DiscordLoopbackEchoCancellation,
         DiscordOthersNoiseSuppression = source.DiscordOthersNoiseSuppression,
         DiscordOnlyMyVoice = source.DiscordOnlyMyVoice,
         DiscordEvenVoices = source.DiscordEvenVoices,
+        DiscordVoiceTargetLufs = Math.Clamp(source.DiscordVoiceTargetLufs, (int)DiscordClient.Voice.VoiceLeveling.MinTargetLufs, (int)DiscordClient.Voice.VoiceLeveling.MaxTargetLufs),
+        DiscordMicAutoGain = source.DiscordMicAutoGain,
         DiscordQuietWhilePlaying = source.DiscordQuietWhilePlaying,
         DiscordInputDevice = source.DiscordInputDevice is { Length: > 0 and <= 512 } input ? input : null,
         DiscordOutputDevice = source.DiscordOutputDevice is { Length: > 0 and <= 512 } output ? output : null,
@@ -1100,6 +1199,8 @@ public sealed class SettingsService
         SteamOverlay = CopyStrings(source.SteamOverlay),
         SteamOverlayPrior = CopyStrings(source.SteamOverlayPrior),
         SmoothMotion = CopyBools(source.SmoothMotion),
+        FrameGenRoute = CopyStrings(source.FrameGenRoute),
+        FrameCap = CopyFrameCaps(source.FrameCap),
         ControllerSound = source.ControllerSound,
         SteamInput = CopyStrings(source.SteamInput),
         ThroughSteam = [.. (source.ThroughSteam ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase)],
@@ -1120,6 +1221,15 @@ public sealed class SettingsService
         if (source is null) return copy;
         foreach (var pair in source)
             if (pair.Key is not null && pair.Value is not null) copy[pair.Key] = pair.Value;
+        return copy;
+    }
+
+    private static Dictionary<string, GameFrameCapPref> CopyFrameCaps(IDictionary<string, GameFrameCapPref>? source)
+    {
+        var copy = new Dictionary<string, GameFrameCapPref>(StringComparer.OrdinalIgnoreCase);
+        if (source is null) return copy;
+        foreach (var pair in source)
+            if (pair.Key is not null && pair.Value is not null) copy[pair.Key] = pair.Value.Copy();
         return copy;
     }
 

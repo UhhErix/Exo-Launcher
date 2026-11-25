@@ -440,7 +440,7 @@ public sealed partial class MainWindow : Window
                     _embeddedRenderers = Array.Empty<EmbeddedRendererInfo>();
                     continue;
                 }
-                var environment = await WebViewEnvironmentFactory.GetAsync();
+                if (WebViewEnvironmentFactory.TryGetExisting() is not { } environment) continue;
                 if (_closingWindow) return;
                 var infos = await environment.GetProcessExtendedInfosAsync();
                 var service = App.Services.MusicEngine.ActiveService;
@@ -509,6 +509,7 @@ public sealed partial class MainWindow : Window
         if (_captureAddon is { } captureAddon) closing.Add(Task.Run(captureAddon.Dispose));
         try { Task.WaitAll(closing.ToArray(), HostCloseGrace + TimeSpan.FromSeconds(1)); } catch { }
         try { WebHost.Close(); } catch { }
+        ReleaseShellEnvironmentLease();
         AppLog.Info("Shutdown: shell webview closed.");
         // Steam left in Exo's offline mode for an outage or a family game: that reason ends with Exo. Written only while
         // Steam is closed; a running Steam is never closed or waited on for it (the next start settles the record).
@@ -675,43 +676,67 @@ public sealed partial class MainWindow : Window
             // attempt on, name the installed runtime folder explicitly.
             for (var attempt = 0; ; attempt++)
             {
+                WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? envLease = null;
                 CoreWebView2Environment? webViewEnvironment = null;
                 try
                 {
-                    webViewEnvironment = await WebViewEnvironmentFactory.GetAsync(explicitInstalledRuntime: attempt > 0);
-                    if (_closingWindow) return;
+                    envLease = await WebViewEnvironmentFactory.AcquireAsync(explicitInstalledRuntime: attempt > 0);
+                    webViewEnvironment = envLease.Environment;
+                    if (_closingWindow)
+                    {
+                        envLease.Dispose();
+                        return;
+                    }
                     await WebHost.EnsureCoreWebView2Async(webViewEnvironment);
-                    if (_closingWindow) return;
+                    if (_closingWindow)
+                    {
+                        try { WebHost.Close(); } catch { }
+                        envLease.Dispose();
+                        return;
+                    }
                     if (!_processWatchAttached)
                     {
                         _processWatchAttached = true;
-                        webViewEnvironment.ProcessInfosChanged += (_, _) => UiGuard.Run(() =>
+                        _processInfosChangedHandler = (_, _) => UiGuard.Run(() =>
                         {
                             if (!_closingWindow) _ = RefreshEmbeddedRendererMapAsync();
                         });
+                        webViewEnvironment.ProcessInfosChanged += _processInfosChangedHandler;
                         // Raised once every process of this browser is gone: a new one may then take the user data folder.
                         var gone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                        webViewEnvironment.BrowserProcessExited += (_, _) => UiGuard.Run(() => gone.TrySetResult());
+                        _browserProcessExitedHandler = (_, _) => UiGuard.Run(() => gone.TrySetResult());
+                        webViewEnvironment.BrowserProcessExited += _browserProcessExitedHandler;
                         _shellBrowserGone = gone.Task;
                     }
+                    var previousLease = _shellEnvironmentLease;
+                    _shellEnvironmentLease = envLease;
                     _shellEnvironment = webViewEnvironment;
+                    envLease = null;
+                    if (previousLease is not null && !ReferenceEquals(previousLease, _shellEnvironmentLease))
+                        previousLease.Dispose();
                     LogStartupMilestone("webview-core-ready");
                     break;
                 }
                 catch (Exception ex)
                 {
-                    if (_closingWindow) return;
+                    if (_closingWindow)
+                    {
+                        envLease?.Dispose();
+                        return;
+                    }
                     var fileNotFound = WebViewRuntimeLocator.IsFileNotFound(ex);
                     AppLog.Warn($"webview-init-failed attempt={attempt + 1} hr=0x{ex.HResult:X8}: {ex.Message}");
                     if (fileNotFound && attempt == 0)
                         AppLog.Info("webview-runtime-candidates: " + WebViewRuntimeLocator.DescribeCandidates());
                     if (!fileNotFound || attempt >= WebViewRuntimeLocator.RetryDelays.Length)
                     {
+                        envLease?.Dispose();
                         ShowWebFallback();
                         _ensureWebTask = null;
                         return;
                     }
                     WebViewEnvironmentFactory.Reset(webViewEnvironment);
+                    envLease?.Dispose();
                     await Task.Delay(WebViewRuntimeLocator.RetryDelays[attempt]);
                     if (_closingWindow) return;
                 }

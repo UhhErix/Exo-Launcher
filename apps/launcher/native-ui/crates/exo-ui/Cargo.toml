@@ -5,21 +5,50 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+exo-autopilot = { path = "../exo-autopilot" }
+exo-controller = { path = "../exo-controller" }
+exo-gpu = { path = "../exo-gpu" }
+exo-hid-devices = { path = "../exo-hid-devices" }
 exo-kit = { path = "../exo-kit" }
+exo-macros = { path = "../exo-macros" }
+exo-power-guard = { path = "../exo-power-guard" }
+exo-present = { path = "../exo-present" }
 exo-rpc = { path = "../exo-rpc" }
+exo-sensors = { path = "../exo-sensors" }
+exo-stores = { path = "../exo-stores" }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 rune.workspace = true
 rune-media.workspace = true
 serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+webview2-com = "0.39.1"
 windows = { version = "0.62", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Media_Protection",
     "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_DirectComposition",
+    "Win32_Graphics_Dxgi",
     "Win32_Media_MediaFoundation",
+    "Win32_Networking_WinHttp",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
     "Win32_System_Variant",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
 ] }
+windows-core = "0.62"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_LibraryLoader",
 ] }
+
+[dev-dependencies]
+rune = { workspace = true, features = ["embedded-fonts"] }

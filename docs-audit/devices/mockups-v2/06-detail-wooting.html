@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exo Devices — Wooting 60HE v2 Detail</title>
+  <link rel="stylesheet" href="../../assets/exo-v2-base.css" />
+  <style>
+    .det-shell {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    .det-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: clamp(8px, 1.1vh, 14px) clamp(18px, 2vw, 30px);
+      border-bottom: 1px solid var(--exo-float-line);
+    }
+
+    .det-toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .det-toolbar h1 {
+      margin: 0;
+      font-size: clamp(20px, 1.65vw, 28px);
+      font-weight: 650;
+      line-height: 1.1;
+    }
+
+    .det-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.85fr) clamp(360px, 27vw, 480px);
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Left ~72%: Hardware Photo + Live Telemetry Band + Enormous Interactive Split-Spacebar Matrix */
+    .det-left {
+      display: grid;
+      grid-template-rows: minmax(150px, 0.56fr) 1fr auto;
+      gap: clamp(12px, 1.5vh, 20px);
+      padding: clamp(16px, 1.8vh, 24px) clamp(20px, 2.2vw, 34px);
+      border-right: 1px solid var(--exo-float-line);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .det-hero-band {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.95fr) 1.05fr;
+      border-radius: var(--exo-panel-radius);
+      border: 1px solid var(--exo-float-line);
+      background: rgb(255 255 255 / 0.02);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .det-photo-box {
+      position: relative;
+      display: grid;
+      place-items: center;
+      padding: 12px 24px;
+      border-right: 1px solid var(--exo-float-line);
+      overflow: hidden;
+    }
+
+    .det-photo-box img.hw-render {
+      position: relative;
+      z-index: 2;
+      max-width: 92%;
+      max-height: 92%;
+    }
+
+    .det-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+    }
+
+    .det-stat {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: clamp(10px, 1.2vh, 16px) clamp(16px, 1.6vw, 24px);
+      border-bottom: 1px solid var(--exo-float-line);
+      border-right: 1px solid var(--exo-float-line);
+    }
+
+    .det-stat:nth-child(even) { border-right: 0; }
+    .det-stat:nth-child(n+3) { border-bottom: 0; }
+
+    .det-stat-k { font-size: calc(11.5px * var(--exo-scale)); color: var(--color-faint); }
+    .det-stat-v { font-size: clamp(18px, 1.5vw, 24px); font-weight: 650; margin-top: 3px; }
+    .det-stat-s { font-size: calc(11.5px * var(--exo-scale)); color: var(--color-muted); margin-top: 2px; }
+
+    .det-matrix-stage {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 0;
+    }
+
+    /* Live travel depth bar below the matrix */
+    .travel-bar-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 12px 18px;
+      border-radius: 14px;
+      background: var(--exo-surface-card);
+      border: 1px solid var(--exo-float-line);
+    }
+
+    .travel-meter {
+      flex: 1;
+      max-width: 520px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .travel-meter-act {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 10%;
+      background: var(--color-good);
+      border-radius: 999px;
+    }
+
+    /* Right ~28%: Full-Height Hairline Settings Rail */
+    .det-right {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(16px, 1.8vh, 24px) clamp(18px, 1.8vw, 26px);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .prof-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .prof-tab {
+      height: calc(30px * var(--exo-scale));
+      padding: 0 13px;
+      border: 1px solid var(--exo-float-line);
+      border-radius: 999px;
+      background: var(--exo-surface-card);
+      color: var(--color-muted);
+      font-family: var(--font-sans);
+      font-size: calc(12px * var(--exo-scale));
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .prof-tab.is-on {
+      background: var(--color-fg);
+      color: var(--color-primary-fg);
+      border-color: transparent;
+      font-weight: 600;
+    }
+
+    .set-sec {
+      padding: clamp(10px, 1.2vh, 14px) 0;
+      border-bottom: 1px solid var(--exo-float-line);
+    }
+
+    .set-sec:last-child { border-bottom: 0; }
+
+    .backup-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--exo-float-line);
+      font-size: calc(12.5px * var(--exo-scale));
+    }
+
+    .backup-row:last-child { border-bottom: 0; }
+  </style>
+</head>
+<body>
+  <div class="det-shell">
+    <div id="exobar"></div>
+
+    <div class="det-toolbar">
+      <div class="det-toolbar-left">
+        <button class="exo-btn is-sm"><span id="ico-back"></span><span>Devices</span></button>
+        <h1>Wooting 60HE v2</h1>
+        <span class="badge tabular">ANSI · Split spacebar</span>
+        <span class="badge good tabular">fw 2.15.0-beta.0</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="exo-btn is-sm"><span id="ico-save"></span><span>Create backup</span></button>
+        <button class="exo-btn is-sm"><span id="ico-ext"></span><span>Open Wootility</span></button>
+      </div>
+    </div>
+
+    <main class="det-workspace">
+      <section class="det-left">
+        <div class="det-hero-band tabular">
+          <div class="det-photo-box">
+            <img class="hw-wash" src="../../assets/devices/wooting-60he-v2-split.png" alt="" />
+            <img class="hw-render" src="../../assets/devices/wooting-60he-v2-split.png" alt="Wooting 60HE v2 Split Spacebar" />
+          </div>
+          <div class="det-stats-grid">
+            <div class="det-stat">
+              <div class="det-stat-k">Actuation point</div>
+              <div class="det-stat-v mono" id="det-act-stat">0.4 mm</div>
+              <div class="det-stat-s">Hall-effect · 0.1–4.0 mm</div>
+            </div>
+            <div class="det-stat">
+              <div class="det-stat-k">Rapid Trigger</div>
+              <div class="det-stat-v good mono" id="det-rt-stat">0.15 mm</div>
+              <div class="det-stat-s">Continuous reset enabled</div>
+            </div>
+            <div class="det-stat">
+              <div class="det-stat-k">Scan &amp; polling</div>
+              <div class="det-stat-v mono">8000 Hz</div>
+              <div class="det-stat-s">Tachyon mode active</div>
+            </div>
+            <div class="det-stat">
+              <div class="det-stat-k">USB topology</div>
+              <div class="det-stat-v" style="color:var(--color-warn)">Chipset port</div>
+              <div class="det-stat-s">Move to free CPU port for min jitter</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="det-matrix-stage wk-compact">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:calc(12px * var(--exo-scale));color:var(--color-muted)">
+            <span>Interactive ANSI · Split spacebar [2.75u Space | 1.25u Fn | 2.25u Space]</span>
+            <span class="tabular" id="det-key-status">Selected key: <strong>W</strong> · Actuation 0.4 mm · RT 0.15 mm</span>
+          </div>
+          <div id="det-matrix"></div>
+        </div>
+
+        <div class="travel-bar-card tabular">
+          <div style="font-size:calc(12.5px * var(--exo-scale))">
+            <strong id="det-travel-key">Key W</strong>
+            <span style="color:var(--color-muted);margin-left:8px">Trigger point at 0.4 mm of 4.0 mm full travel</span>
+          </div>
+          <div class="travel-meter">
+            <div class="travel-meter-act" id="travel-fill"></div>
+          </div>
+          <span class="mono" style="font-size:12px;color:var(--color-good)">2047 B HID write OK</span>
+        </div>
+      </section>
+
+      <aside class="det-right tabular">
+        <div>
+          <div class="set-sec" style="padding-top:0">
+            <div style="font-size:calc(13px * var(--exo-scale));font-weight:600">Onboard profile</div>
+            <div class="prof-tabs">
+              <button type="button" class="prof-tab is-on">General</button>
+              <button type="button" class="prof-tab">Competitive FPS</button>
+              <button type="button" class="prof-tab">Typing (2.0 mm)</button>
+            </div>
+          </div>
+
+          <div class="set-sec">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-weight:600">Actuation point</span>
+              <span class="mono" style="font-weight:650" id="det-act-lbl">0.4 mm</span>
+            </div>
+            <input type="range" class="exo-slider" id="det-act" min="1" max="40" value="4" style="--fill:8%" />
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-faint);margin-top:3px">
+              <span>0.1 mm</span><span>2.0 mm</span><span>4.0 mm</span>
+            </div>
+          </div>
+
+          <div class="set-sec">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-weight:600">Rapid Trigger sensitivity</span>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span class="mono" style="font-weight:650" id="det-rt-lbl">0.15 mm</span>
+                <button type="button" class="exo-switch is-on"></button>
+              </div>
+            </div>
+            <input type="range" class="exo-slider" id="det-rt" min="10" max="200" value="15" style="--fill:3%" />
+            <div style="font-size:11.5px;color:var(--color-muted);margin-top:4px">Re-actuates immediately on upward release</div>
+          </div>
+
+          <div class="set-sec">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-weight:600">Tachyon mode (8000 Hz)</div>
+                <div style="font-size:11.5px;color:var(--color-muted)">Sub-millisecond scan speed</div>
+              </div>
+              <button type="button" class="exo-switch is-on"></button>
+            </div>
+          </div>
+
+          <div class="set-sec">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-weight:600">Local safety backups</span>
+              <span style="font-size:11.5px;color:var(--color-faint)">2 saved</span>
+            </div>
+            <div class="backup-row">
+              <div>
+                <div style="font-weight:500">Pre-setup Wootility profile</div>
+                <div style="font-size:11.5px;color:var(--color-muted)">Today · 3.0 mm · General</div>
+              </div>
+              <button class="exo-btn is-sm"><span class="ico-rot"></span><span>Restore</span></button>
+            </div>
+            <div class="backup-row">
+              <div>
+                <div style="font-weight:500">Competitive FPS snapshot</div>
+                <div style="font-size:11.5px;color:var(--color-muted)">Nov 18 · 0.4 mm · RT 0.15 mm</div>
+              </div>
+              <button class="exo-btn is-sm"><span class="ico-rot"></span><span>Restore</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid var(--exo-float-line)">
+          <button class="exo-btn is-sm is-ghost" style="flex:1">Reset profile</button>
+          <button class="exo-btn is-sm is-primary" style="flex:1.4">Save to keyboard</button>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="../../assets/exo-v2-data.js"></script>
+  <script>
+    document.getElementById("exobar").outerHTML = renderExoBar("Devices");
+    document.getElementById("ico-back").innerHTML = EXO_ICONS.arrowLeft;
+    document.getElementById("ico-save").innerHTML = EXO_ICONS.save;
+    document.getElementById("ico-ext").innerHTML = EXO_ICONS.external;
+    document.querySelectorAll(".ico-rot").forEach(el => el.innerHTML = EXO_ICONS.rotate);
+
+    mountWootingMatrix(document.getElementById("det-matrix"), {
+      selected: "W",
+      actuation: "0.4",
+      rt: "0.15",
+      onSelect: (id, label) => {
+        const strong = document.createElement("strong");
+        strong.textContent = label;
+        document.getElementById("det-key-status").replaceChildren(
+          "Selected key: ",
+          strong,
+          ` (${id}) · Actuation ${document.getElementById("det-act-lbl").textContent} · RT ${document.getElementById("det-rt-lbl").textContent}`
+        );
+        document.getElementById("det-travel-key").textContent = `Key ${label}`;
+      }
+    });
+
+    const act = document.getElementById("det-act");
+    act.addEventListener("input", () => {
+      const mm = (act.value / 10).toFixed(1);
+      act.style.setProperty("--fill", ((act.value - 1) / 39 * 100) + "%");
+      document.getElementById("det-act-lbl").textContent = mm + " mm";
+      document.getElementById("det-act-stat").textContent = mm + " mm";
+      document.getElementById("travel-fill").style.width = (act.value / 40 * 100) + "%";
+      document.querySelectorAll(".wk-act").forEach(el => el.textContent = mm);
+    });
+
+    const rt = document.getElementById("det-rt");
+    rt.addEventListener("input", () => {
+      const mm = (rt.value / 100).toFixed(2);
+      rt.style.setProperty("--fill", ((rt.value - 10) / 190 * 100) + "%");
+      document.getElementById("det-rt-lbl").textContent = mm + " mm";
+      document.getElementById("det-rt-stat").textContent = mm + " mm";
+    });
+
+    document.querySelectorAll(".exo-switch").forEach(sw => sw.addEventListener("click", () => sw.classList.toggle("is-on")));
+    document.querySelectorAll(".prof-tab").forEach(tab => tab.addEventListener("click", () => {
+      document.querySelectorAll(".prof-tab").forEach(t => t.classList.remove("is-on"));
+      tab.classList.add("is-on");
+    }));
+  </script>
+</body>
+</html>

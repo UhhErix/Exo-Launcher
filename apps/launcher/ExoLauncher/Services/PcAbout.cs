@@ -151,6 +151,8 @@ internal static partial class PcAbout
     /// <summary>The Windows build and update revision as one string ("26300.9711", as Settings › About shows them); null when the revision can't be read.</summary>
     internal static string? BuildAndRevision() => Installed.Value is { Revision: not null } windows ? windows.FullBuild : null;
 
+    internal static (int Build, int? Ubr) OsBuildAndUbr() => (Installed.Value.Build, Installed.Value.Revision);
+
     private static ThisWindows ReadWindows()
     {
         string? product = null, version = null;

@@ -243,7 +243,7 @@ public static partial class CrashReport
             ["excerpt"] = payload.Excerpt,
         };
         if (payload.InstallId is { } install) json["installId"] = install;
-        return json.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        return json.ToJsonString();
     }
 
     /// <summary>
@@ -305,8 +305,7 @@ public static partial class CrashReport
             var status = await Poster(body, ct).ConfigureAwait(false);
             if (status == (int)HttpStatusCode.Accepted)
             {
-                // View what's sent shows this report as it was sent, one compact line.
-                Telemetry.RecordSent(System.Text.Json.Nodes.JsonNode.Parse(body)!.ToJsonString());
+                Telemetry.RecordSent(body);
                 AppLog.Info(pending ? "Pending crash report sent (202)." : "Crash report: stored (202).");
                 return SendOutcome.Accepted;
             }
@@ -337,11 +336,16 @@ public static partial class CrashReport
     /// <summary>Posts one report body and returns its status code. The default posts to <see cref="Endpoint"/>; a test replaces it.</summary>
     internal static Func<string, CancellationToken, Task<int>> Poster = PostBodyAsync;
 
+    private static readonly Lazy<HttpClient> SharedHttp = new(() => ExoHttp.Create(TimeSpan.FromSeconds(15), new SocketsHttpHandler
+    {
+        AutomaticDecompression = DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+    }));
+
     private static async Task<int> PostBodyAsync(string body, CancellationToken ct)
     {
         using var content = new StringContent(body, Encoding.UTF8, "application/json");
-        using var http = ExoHttp.Create(TimeSpan.FromSeconds(15));
-        using var response = await http.PostAsync(Endpoint, content, ct).ConfigureAwait(false);
+        using var response = await SharedHttp.Value.PostAsync(Endpoint, content, ct).ConfigureAwait(false);
         return (int)response.StatusCode;
     }
 

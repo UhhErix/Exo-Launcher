@@ -91,7 +91,10 @@ internal sealed partial class WebPageGuard
     /// A link to another app this page asked for (a navigation to it, or a window opened on it), from
     /// <paramref name="origin"/> (else the page's own address): asked in place where the page is seen, refused otherwise.
     /// </summary>
-    internal async void Offer(string link, string? origin = null)
+    internal void Offer(string link, string? origin = null) =>
+        _ = UiGuard.RunAsync(() => OfferAsync(link, origin), "WebPageGuard.Offer");
+
+    private async Task OfferAsync(string link, string? origin)
     {
         var scheme = SchemeOf(link);
         // Logged by its scheme only: the rest of a link can carry codes and tokens.

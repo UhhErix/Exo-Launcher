@@ -443,18 +443,34 @@ public sealed partial class WebHostBridge
         var settings = App.Services.Settings.Current;
         if (keybinds is not null) DiscordSession.Current?.KeybindsChanged();
         if (settings.DiscordUnreadBadge != badgeBefore) App.MainAppWindow?.RefreshTaskbarBadge();
-        if (VoiceProcessing.From(settings).NoiseSuppression || settings.DiscordOthersNoiseSuppression) _ = NoiseSuppressorDownload.EnsureAsync(CancellationToken.None);
+        if (VoiceProcessing.From(settings).NoiseSuppression || settings.DiscordOthersNoiseSuppression)
+        {
+            _ = NoiseSuppressorDownload.EnsureAsync(CancellationToken.None);
+            _ = VoiceModels.EnsureBaselineAsync(CancellationToken.None);
+            if (VoiceTierPolicy.NormalizeTier(settings.DiscordVoiceTier) != "cpu")
+                _ = VoiceModels.EnsureHighQualityAsync(CancellationToken.None);
+        }
+        if (settings.DiscordOnlyMyVoice && settings.DiscordVoiceIsolation)
+            _ = VoiceModels.EnsureVoxLockAsync(CancellationToken.None);
         var (captureMode, serviceDisabled) = CaptureServiceHealth.CurrentStatus();
         return new
         {
             inputProfile = VoiceProcessing.From(settings).Profile,
             noiseSuppression = settings.DiscordNoiseSuppression,
             noiseSuppressionKind = settings.DiscordNoiseSuppressionKind,
+            voiceTier = VoiceTierPolicy.NormalizeTier(settings.DiscordVoiceTier),
+            voiceIsolation = settings.DiscordVoiceIsolation,
+            loopbackEchoCancellation = settings.DiscordLoopbackEchoCancellation,
+            voiceModelReady = VoiceModels.BaselineReady(),
+            voiceHqModelReady = VoiceModels.HighQualityReady(),
+            voiceIsolationReady = VoiceModels.VoxLockReady(),
             othersNoiseSuppression = settings.DiscordOthersNoiseSuppression,
             onlyMyVoice = settings.DiscordOnlyMyVoice,
             myVoiceLearned = Voiceprint.Learned,
             myVoiceSeconds = Voiceprint.Learned ? Voiceprint.Seconds : 0,
             evenVoices = settings.DiscordEvenVoices,
+            voiceTargetLufs = settings.DiscordVoiceTargetLufs,
+            micAutoGain = settings.DiscordMicAutoGain,
             echoCancellation = settings.DiscordEchoCancellation,
             voiceFocus = settings.DiscordVoiceFocus,
             pushToTalk = settings.DiscordPushToTalk,
@@ -480,14 +496,19 @@ public sealed partial class WebHostBridge
         };
     }
 
-    private static void ApplyClientSettings(AppSettings s, JsonElement p, bool hasParams, string? profile, List<DiscordKeybind>? keybinds)
+    internal static void ApplyClientSettings(AppSettings s, JsonElement p, bool hasParams, string? profile, List<DiscordKeybind>? keybinds)
     {
         if (profile is not null) s.DiscordInputProfile = profile;
         if (ReadBool(p, hasParams, "noiseSuppression") is { } ns) s.DiscordNoiseSuppression = ns;
-        if (ReadString(p, hasParams, "noiseSuppressionKind") is { } kind && kind is "exo" or "krisp" or "ai" or "standard") s.DiscordNoiseSuppressionKind = kind == "krisp" ? "exo" : kind;
+        if (ReadString(p, hasParams, "noiseSuppressionKind") is { } kind && kind is "exo" or "exo-dfn3" or "krisp" or "ai" or "standard") s.DiscordNoiseSuppressionKind = kind == "krisp" ? "exo" : kind;
+        if (ReadString(p, hasParams, "voiceTier") is { } tier) s.DiscordVoiceTier = VoiceTierPolicy.NormalizeTier(tier);
+        if (ReadBool(p, hasParams, "voiceIsolation") is { } iso) s.DiscordVoiceIsolation = iso;
+        if (ReadBool(p, hasParams, "loopbackEchoCancellation") is { } loopback) s.DiscordLoopbackEchoCancellation = loopback;
         if (ReadBool(p, hasParams, "othersNoiseSuppression") is { } forOthers) s.DiscordOthersNoiseSuppression = forOthers;
         if (ReadBool(p, hasParams, "onlyMyVoice") is { } onlyMine) s.DiscordOnlyMyVoice = onlyMine;
         if (ReadBool(p, hasParams, "evenVoices") is { } even) s.DiscordEvenVoices = even;
+        if (ReadDouble(p, hasParams, "voiceTargetLufs") is { } targetLufs) s.DiscordVoiceTargetLufs = (int)Math.Clamp(Math.Round(targetLufs), (int)DiscordClient.Voice.VoiceLeveling.MinTargetLufs, (int)DiscordClient.Voice.VoiceLeveling.MaxTargetLufs);
+        if (ReadBool(p, hasParams, "micAutoGain") is { } micAgc) s.DiscordMicAutoGain = micAgc;
         if (ReadBool(p, hasParams, "echoCancellation") is { } ec) s.DiscordEchoCancellation = ec;
         if (ReadBool(p, hasParams, "voiceFocus") is { } vf) s.DiscordVoiceFocus = vf;
         if (ReadBool(p, hasParams, "pushToTalk") is { } ptt) s.DiscordPushToTalk = ptt;

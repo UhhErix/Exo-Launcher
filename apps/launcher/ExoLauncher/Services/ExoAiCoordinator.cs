@@ -9,7 +9,9 @@ internal sealed record ExoAiSnapshot(
     IReadOnlyList<string> AutoApplied,
     IReadOnlyList<string> NeedsAttention,
     ExoAiAutopilotSnapshot Gaming,
-    FanStatus Fans);
+    FanStatus Fans,
+    GpuUsageAnswer? GpuAnswer = null,
+    string? CapSuggestion = null);
 
 /// <summary>
 /// Unified real-time optimization coordinator ("Exo AI"):
@@ -35,8 +37,11 @@ internal sealed class ExoAiCoordinator : IDisposable
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("ExoAI: power plan check failed: " + ex.GetType().Name); }
 
-            if (Autopilot.HandGameMode() is null) applied.Add("Windows Game Mode managed by Autopilot");
-            if (Autopilot.HandMouseAccel() is null) applied.Add("Pointer acceleration off");
+            var apOn = Autopilot.Settings.On;
+            var gmErr = Autopilot.HandGameMode();
+            if (apOn && gmErr is null && Autopilot.GameMode.Held is not null) applied.Add("Windows Game Mode managed by Autopilot");
+            var maErr = Autopilot.HandMouseAccel();
+            if (apOn && maErr is null && Autopilot.MouseAccel.IsOff()) applied.Add("Pointer acceleration off");
             return applied;
         },
         () =>
@@ -54,6 +59,7 @@ internal sealed class ExoAiCoordinator : IDisposable
         },
         () => Autopilot.Engine.Snapshot(),
         () => DateTimeOffset.UtcNow,
+        () => GpuProcessMonitor.Shared.Sample(allowWarmup: true).Answer,
         async ct =>
         {
             var attention = new List<string>();
@@ -74,10 +80,12 @@ internal sealed class ExoAiCoordinator : IDisposable
     private readonly Func<CancellationToken, Task<IReadOnlyList<string>>>? _readAttentionAsync;
     private readonly Func<ExoAiAutopilotSnapshot> _autopilotSnapshot;
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<GpuUsageAnswer?> _readGpuAnswer;
     private readonly Lock _gate = new();
     private int _driftRunning;
 
     private Func<ExoAiSettings>? _getSettings;
+    private ExoAiSettings? _lastSettings;
     private Timer? _driftTimer;
     private Timer? _fanTimer;
     private DateTimeOffset? _lastCheckUtc;
@@ -94,6 +102,7 @@ internal sealed class ExoAiCoordinator : IDisposable
         Func<IReadOnlyList<string>> readAttention,
         Func<ExoAiAutopilotSnapshot> autopilotSnapshot,
         Func<DateTimeOffset> now,
+        Func<GpuUsageAnswer?>? readGpuAnswer = null,
         Func<CancellationToken, Task<IReadOnlyList<string>>>? readAttentionAsync = null)
     {
         Fans = fans;
@@ -103,6 +112,7 @@ internal sealed class ExoAiCoordinator : IDisposable
         _readAttentionAsync = readAttentionAsync;
         _autopilotSnapshot = autopilotSnapshot;
         _now = now;
+        _readGpuAnswer = readGpuAnswer ?? (() => null);
     }
 
     internal void Start(Func<AppSettings> settingsProvider)
@@ -112,6 +122,7 @@ internal sealed class ExoAiCoordinator : IDisposable
         {
             _getSettings = () => (settingsProvider().ExoAi ?? new()).Copy();
             initial = _getSettings();
+            _lastSettings = initial;
             if (_running) return;
             _running = true;
             _driftTimer = new Timer(_ => _ = RunDriftCheckAsync(), null, InitialDelay, DriftInterval);
@@ -123,34 +134,51 @@ internal sealed class ExoAiCoordinator : IDisposable
     {
         if (!_running) return;
         _ = Task.Run(() => Fans.ResetCache());
+        _ = Task.Run(() => GpuManualTuningService.Shared.EvaluateLifecycleTrigger("wake"));
     }
 
     internal void NotifySettings(ExoAiSettings settings)
     {
-        ApplyFanPreset(settings.FanPreset);
-        RunSafeCheck(force: true);
+        var copy = settings.Copy();
+        lock (_gate)
+        {
+            _lastSettings = copy;
+            if (!copy.AutoApplyBestSettings) _autoApplied = [];
+        }
+        ApplyFanPreset(copy.FanPreset);
+        if (copy.AutoApplyBestSettings && !_isGaming())
+            RunSafeCheck(applySafe: true);
     }
 
     internal ExoAiSnapshot RunNow()
     {
-        RunSafeCheck(force: true);
+        RunSafeCheck(applySafe: true);
         return Snapshot();
     }
 
     internal ExoAiSnapshot Snapshot()
     {
+        var current = ReadSettings();
         var gaming = _autopilotSnapshot();
         var fanStatus = Fans.ReadStatus();
+        GpuUsageAnswer? gpuAnswer = null;
+        try { gpuAnswer = _readGpuAnswer(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: GPU process read skipped: " + ex.GetType().Name); }
+        string? capSuggestion = null;
+        try { capSuggestion = FrameCapService.Shared.SuggestSentenceFor(gaming.GameId); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: cap suggestion skipped: " + ex.GetType().Name); }
         lock (_gate)
         {
             return new ExoAiSnapshot(
-                true,
-                true,
+                current.AutoApplyBestSettings,
+                current.BackgroundDriftCheck,
                 _lastCheckUtc?.ToString("O"),
                 [.. _autoApplied],
                 [.. _needsAttention],
                 gaming,
-                fanStatus);
+                fanStatus,
+                gpuAnswer,
+                capSuggestion);
         }
     }
 
@@ -172,16 +200,20 @@ internal sealed class ExoAiCoordinator : IDisposable
     internal void RunDriftCheck()
     {
         if (_isGaming()) return;
-        RunSafeCheck(force: false);
+        var current = ReadSettings();
+        if (!current.BackgroundDriftCheck) return;
+        RunSafeCheck(applySafe: current.AutoApplyBestSettings);
     }
 
     internal async Task RunDriftCheckAsync(CancellationToken ct = default)
     {
         if (_isGaming()) return;
+        var current = ReadSettings();
+        if (!current.BackgroundDriftCheck) return;
         if (Interlocked.Exchange(ref _driftRunning, 1) != 0) return;
         try
         {
-            await RunSafeCheckAsync(force: false, ct).ConfigureAwait(false);
+            await RunSafeCheckAsync(applySafe: current.AutoApplyBestSettings, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -189,13 +221,14 @@ internal sealed class ExoAiCoordinator : IDisposable
         }
     }
 
-    private async Task RunSafeCheckAsync(bool force, CancellationToken ct)
+    private async Task RunSafeCheckAsync(bool applySafe, CancellationToken ct)
     {
-        if (!force && _isGaming()) return;
-
         IReadOnlyList<string> applied = [];
-        try { applied = await Task.Run(_applySafe, ct).ConfigureAwait(false); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("ExoAI: safe optimization failed: " + ex.GetType().Name); }
+        if (applySafe)
+        {
+            try { applied = await Task.Run(_applySafe, ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("ExoAI: safe optimization failed: " + ex.GetType().Name); }
+        }
         IReadOnlyList<string> attention = [];
         try
         {
@@ -213,13 +246,26 @@ internal sealed class ExoAiCoordinator : IDisposable
         }
     }
 
-    private void RunSafeCheck(bool force)
+    private ExoAiSettings ReadSettings()
     {
-        if (!force && _isGaming()) return;
+        Func<ExoAiSettings>? getter;
+        ExoAiSettings? fallback;
+        lock (_gate)
+        {
+            getter = _getSettings;
+            fallback = _lastSettings;
+        }
+        return getter is not null ? getter() : (fallback ?? new ExoAiSettings()).Copy();
+    }
 
+    private void RunSafeCheck(bool applySafe)
+    {
         IReadOnlyList<string> applied = [];
-        try { applied = _applySafe(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("ExoAI: safe optimization failed: " + ex.GetType().Name); }
+        if (applySafe)
+        {
+            try { applied = _applySafe(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("ExoAI: safe optimization failed: " + ex.GetType().Name); }
+        }
         IReadOnlyList<string> attention = [];
         try { attention = _readAttention(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: attention scan failed: " + ex.GetType().Name); }
@@ -234,7 +280,7 @@ internal sealed class ExoAiCoordinator : IDisposable
 
     private void ApplyFanPreset(string preset)
     {
-        var status = Fans.SetPreset(preset);
+        var status = Fans.SetPreset(ExoAiSettings.NormalizePreset(preset));
         lock (_gate)
         {
             if (!status.Supported)

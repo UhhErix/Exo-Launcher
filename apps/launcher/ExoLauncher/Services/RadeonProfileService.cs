@@ -32,6 +32,7 @@ internal sealed class RadeonProfileService(IGpuDriver driver, string folder, Fun
         /// <summary>Only in a file from before 3.17.2: the games the player switched Fluid Motion Frames on for, dropped at start now that Exo decides.</summary>
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public List<string>? Afmf { get; set; }
+        public Dictionary<string, int> ChillCaps { get; set; } = [];
         /// <summary>What a launch switched, and the value it had before.</summary>
         public Dictionary<string, int> Restore { get; set; } = [];
     }
@@ -60,7 +61,19 @@ internal sealed class RadeonProfileService(IGpuDriver driver, string folder, Fun
     /// <summary>Follows game launches (<see cref="LaunchOrchestrator.GameLaunching"/>) and ends, and does <see cref="AtStart"/> off this thread.</summary>
     internal void Start(LaunchOrchestrator launcher, Func<GpuProfile.Screen> mainScreen)
     {
-        launcher.GameLaunching += game => GameLaunching(game.Title, gpu => FluidMotionFrames.Decide(gpu, FrameGenFacts.ForLaunch(game)));
+        launcher.GameLaunching += game =>
+        {
+            GameLaunching(game.Title, gpu =>
+            {
+                var chosen = App.Services.Settings.FrameGenRouteFor(game.Id);
+                if (string.Equals(chosen, FrameGenRouter.RouteDriverAfmf, StringComparison.OrdinalIgnoreCase))
+                    return new FluidMotionFrames.Decision(true, "selected by player");
+                if (string.Equals(chosen, "off", StringComparison.OrdinalIgnoreCase))
+                    return new FluidMotionFrames.Decision(false, "turned off by player");
+                return FluidMotionFrames.Decide(gpu, FrameGenFacts.ForLaunch(game));
+            });
+            ApplyLaunchChillCap(game.Id, game.Title);
+        };
         launcher.GameSessionCompleted += _ => GameEnded();
         _ = Task.Run(() =>
         {
@@ -221,6 +234,139 @@ internal sealed class RadeonProfileService(IGpuDriver driver, string folder, Fun
         }
     }
 
+    internal bool ChillCapSupported()
+    {
+        lock (_gate)
+        {
+            if (!isAmd()) return false;
+            return driver.Read() is { } state
+                && state.Values.ContainsKey(Keys.Chill)
+                && state.Values.ContainsKey(Keys.ChillMin)
+                && state.Values.ContainsKey(Keys.ChillMax);
+        }
+    }
+
+    internal int? ChillCap(string gameId)
+    {
+        lock (_gate)
+            return LoadGames().ChillCaps.TryGetValue(gameId, out var fps) && fps > 0 ? fps : null;
+    }
+
+    internal bool SetChillCap(string gameId, int? fps)
+    {
+        lock (_gate)
+        {
+            var games = LoadGames();
+            if (fps is > 0) games.ChillCaps[gameId] = fps.Value;
+            else games.ChillCaps.Remove(gameId);
+            return SaveGames(games);
+        }
+    }
+
+    internal string? ApplyChillCapNow(int? fps)
+    {
+        lock (_gate)
+        {
+            if (!isAmd()) return "AMD driver is not active on this PC.";
+            if (driver.Read() is not { } state) return "AMD's driver did not answer.";
+            if (!state.Values.ContainsKey(Keys.Chill) || !state.Values.ContainsKey(Keys.ChillMin) || !state.Values.ContainsKey(Keys.ChillMax))
+                return "AMD Radeon Chill is not supported by this GPU or driver.";
+            var games = LoadGames();
+            if (fps is > 0)
+            {
+                games.Restore.TryAdd(Keys.Chill, state.Values[Keys.Chill]);
+                games.Restore.TryAdd(Keys.ChillMin, state.Values[Keys.ChillMin]);
+                games.Restore.TryAdd(Keys.ChillMax, state.Values[Keys.ChillMax]);
+                if (!SaveGames(games)) return "Could not save Radeon Chill restore state.";
+                var writes = BuildChillWrites(state.Values[Keys.ChillMax], fps.Value);
+                var failed = driver.Write(writes);
+                if (failed is null)
+                    _restoreTick ??= new Timer(_ => GameEnded(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+                return failed;
+            }
+            var restoreWrites = BuildChillRestoreWrites(state, games.Restore);
+            if (restoreWrites.Count == 0) return null;
+            var err = driver.Write(restoreWrites);
+            if (err is null)
+            {
+                games.Restore.Remove(Keys.Chill);
+                games.Restore.Remove(Keys.ChillMin);
+                games.Restore.Remove(Keys.ChillMax);
+                SaveGames(games);
+            }
+            return err;
+        }
+    }
+
+    private void ApplyLaunchChillCap(string gameId, string title)
+    {
+        lock (_gate)
+        {
+            if (!isAmd()) return;
+            var games = LoadGames();
+            if (!games.ChillCaps.TryGetValue(gameId, out var cap) || cap <= 0) return;
+            if (driver.Read() is not { } state)
+            {
+                AppLog.Warn($"Radeon Chill cap for {title}: AMD's driver did not answer.");
+                return;
+            }
+            if (!state.Values.ContainsKey(Keys.Chill) || !state.Values.ContainsKey(Keys.ChillMin) || !state.Values.ContainsKey(Keys.ChillMax))
+            {
+                AppLog.Info($"Radeon Chill cap for {title}: Radeon Chill is not available on this driver.");
+                return;
+            }
+            games.Restore.TryAdd(Keys.Chill, state.Values[Keys.Chill]);
+            games.Restore.TryAdd(Keys.ChillMin, state.Values[Keys.ChillMin]);
+            games.Restore.TryAdd(Keys.ChillMax, state.Values[Keys.ChillMax]);
+            if (!SaveGames(games)) return;
+            var failed = driver.Write(BuildChillWrites(state.Values[Keys.ChillMax], cap));
+            AppLog.Info($"Radeon Chill cap for {title}: {cap} fps (Min=Max); {failed ?? "held"}.");
+            _restoreTick ??= new Timer(_ => GameEnded(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        }
+    }
+
+    internal static List<KeyValuePair<string, int>> BuildChillWrites(int currentMaxFps, int targetFps)
+    {
+        var writes = new List<KeyValuePair<string, int>>(3) { new(Keys.Chill, 1) };
+        if (targetFps > currentMaxFps)
+        {
+            writes.Add(new(Keys.ChillMax, targetFps));
+            writes.Add(new(Keys.ChillMin, targetFps));
+        }
+        else
+        {
+            writes.Add(new(Keys.ChillMin, targetFps));
+            writes.Add(new(Keys.ChillMax, targetFps));
+        }
+        return writes;
+    }
+
+    private static List<KeyValuePair<string, int>> BuildChillRestoreWrites(GpuDriverState state, Dictionary<string, int> restore)
+    {
+        var writes = new List<KeyValuePair<string, int>>();
+        var hasMin = restore.TryGetValue(Keys.ChillMin, out var minVal) && state.Values.ContainsKey(Keys.ChillMin);
+        var hasMax = restore.TryGetValue(Keys.ChillMax, out var maxVal) && state.Values.ContainsKey(Keys.ChillMax);
+        var currentMax = state.Values.GetValueOrDefault(Keys.ChillMax);
+        if (hasMin && hasMax)
+        {
+            if (minVal > currentMax)
+            {
+                writes.Add(new(Keys.ChillMax, maxVal));
+                writes.Add(new(Keys.ChillMin, minVal));
+            }
+            else
+            {
+                writes.Add(new(Keys.ChillMin, minVal));
+                writes.Add(new(Keys.ChillMax, maxVal));
+            }
+        }
+        else if (hasMin) writes.Add(new(Keys.ChillMin, minVal));
+        else if (hasMax) writes.Add(new(Keys.ChillMax, maxVal));
+        if (restore.TryGetValue(Keys.Chill, out var onVal) && state.Values.ContainsKey(Keys.Chill))
+            writes.Add(new(Keys.Chill, onVal));
+        return writes;
+    }
+
     /// <summary>Once no game runs: every setting a launch switched goes back to what it was.</summary>
     internal void GameEnded()
     {
@@ -234,9 +380,24 @@ internal sealed class RadeonProfileService(IGpuDriver driver, string folder, Fun
                 return;
             }
             if (!isAmd()) return;
-            var writes = games.Restore.Select(item => new KeyValuePair<string, int>(item.Key, item.Value)).ToList();
+            var state = driver.Read();
+            var writes = new List<KeyValuePair<string, int>>();
+            if (state is not null)
+                writes.AddRange(BuildChillRestoreWrites(state, games.Restore));
+            foreach (var item in games.Restore)
+            {
+                if (item.Key is Keys.Chill or Keys.ChillMin or Keys.ChillMax) continue;
+                writes.Add(new KeyValuePair<string, int>(item.Key, item.Value));
+            }
+            if (writes.Count == 0)
+            {
+                games.Restore.Clear();
+                SaveGames(games);
+                StopTick();
+                return;
+            }
             var failed = driver.Write(writes);
-            AppLog.Info($"Radeon launch settings put back: {string.Join(", ", writes.Select(write => $"{AmdAdlx.Label(write.Key)} {(write.Value != 0 ? "on" : "off")}"))}; {failed ?? "held"}.");
+            AppLog.Info($"Radeon launch settings put back: {string.Join(", ", writes.Select(write => $"{AmdAdlx.Label(write.Key)}={write.Value}"))}; {failed ?? "held"}.");
             if (failed is not null) return;
             games.Restore.Clear();
             SaveGames(games);

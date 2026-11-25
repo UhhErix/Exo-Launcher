@@ -10,7 +10,7 @@ export const SETTINGS_PAGES = [
     label: 'General',
     sections: [],
     keywords: [
-      'dark mode', 'amoled', 'pure black', 'text size', 'reduce motion', 'animation', 'startup', 'start with windows', 'startup behaviour', 'window',
+      'dark mode', 'amoled', 'pure black', 'text size', 'reduce motion', 'animation', 'startup', 'start with windows', 'startup behaviour', 'window', 'classic', 'interface', 'webview',
     ],
   },
   {

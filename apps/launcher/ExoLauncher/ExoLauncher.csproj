@@ -35,6 +35,13 @@
     <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
     <!-- No instrumented JIT tier: less JIT work at start and while idle. -->
     <TieredPGO>false</TieredPGO>
     <ApplicationIcon Condition="Exists('Assets\ExoLauncher.ico')">Assets\ExoLauncher.ico</ApplicationIcon>
@@ -50,6 +57,14 @@
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
     <InternalsVisibleTo Include="ExoLauncher.Tests" />
+    <AssemblyMetadata Include="EXO_OAUTH_SPOTIFY_CLIENT_ID" Value="$(EXO_OAUTH_SPOTIFY_CLIENT_ID)" Condition="'$(EXO_OAUTH_SPOTIFY_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_DISCORD_CLIENT_ID" Value="$(EXO_OAUTH_DISCORD_CLIENT_ID)" Condition="'$(EXO_OAUTH_DISCORD_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_GOOGLE_CLIENT_ID" Value="$(EXO_OAUTH_GOOGLE_CLIENT_ID)" Condition="'$(EXO_OAUTH_GOOGLE_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_TWITCH_CLIENT_ID" Value="$(EXO_OAUTH_TWITCH_CLIENT_ID)" Condition="'$(EXO_OAUTH_TWITCH_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_BATTLENET_CLIENT_ID" Value="$(EXO_OAUTH_BATTLENET_CLIENT_ID)" Condition="'$(EXO_OAUTH_BATTLENET_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_MICROSOFT_CLIENT_ID" Value="$(EXO_OAUTH_MICROSOFT_CLIENT_ID)" Condition="'$(EXO_OAUTH_MICROSOFT_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_RIOT_CLIENT_ID" Value="$(EXO_OAUTH_RIOT_CLIENT_ID)" Condition="'$(EXO_OAUTH_RIOT_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_EPIC_CLIENT_ID" Value="$(EXO_OAUTH_EPIC_CLIENT_ID)" Condition="'$(EXO_OAUTH_EPIC_CLIENT_ID)' != ''" />
   </ItemGroup>
 
 
@@ -64,18 +79,15 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.7.0" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.261102100">
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.261119100">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4370.26" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0" />
     <!-- File-level updates: each file of files.pack is a zstd frame (Services/AppFiles.cs). MIT. -->
     <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
-    <!-- Only My Voice: sherpa-onnx's C interface and ONNX Runtime (native, win-x64), for NVIDIA's TitaNet voiceprints. -->
-    <PackageReference Include="org.k2fsa.sherpa.onnx.runtime.win-x64" Version="2.0.2" />
-    <!-- Its ONNX Runtime 1.28.2 is swapped for 1.31.1's (same C interface): 1.28.3-1.31's fixes. -->
     <PackageDownload Include="Microsoft.ML.OnnxRuntime" Version="[1.31.1]" />
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
@@ -135,7 +147,7 @@
     <_SteamIpcPub>$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\bin\x64\$(Configuration)\native-publish\</_SteamIpcPub>
   </PropertyGroup>
   <ItemGroup>
-    <_SteamIpcInputs Include="$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.cs;$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.csproj;$(MSBuildThisFileDirectory)Adapters\SteamProgressCounters.cs;$(MSBuildThisFileDirectory)..\Directory.Build.props;$(MSBuildThisFileDirectory)..\global.json;$(MSBuildThisFileDirectory)..\VERSION;$(MSBuildThisFileFullPath)" />
+    <_SteamIpcInputs Include="$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.cs;$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.csproj;$(MSBuildThisFileDirectory)Adapters\SteamIpcStubResolver.cs;$(MSBuildThisFileDirectory)Adapters\SteamProgressCounters.cs;$(MSBuildThisFileDirectory)Adapters\SteamStateFlags.cs;$(MSBuildThisFileDirectory)..\Directory.Build.props;$(MSBuildThisFileDirectory)..\global.json;$(MSBuildThisFileDirectory)..\VERSION;$(MSBuildThisFileFullPath)" />
   </ItemGroup>
   <Target Name="PrepareSteamIpc" Inputs="@(_SteamIpcInputs)" Outputs="$(_SteamIpcPub)ExoLauncher.SteamIpc.exe" Condition="'$(DesignTimeBuild)' != 'true'">
     <!-- A fresh helper must be evaluated again after restore so its NativeAOT
@@ -159,10 +171,20 @@
   </PropertyGroup>
   <Target Name="BuildOnnxRuntime" AfterTargets="CopyFilesToOutputDirectory" Condition="'$(DesignTimeBuild)' != 'true'">
     <Error Condition="!Exists('$(_OnnxRuntime)')" Text="ONNX Runtime 1.31.1 is missing from the NuGet cache. Run: dotnet restore" />
-    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(OutDir)" />
+    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="PublishOnnxRuntime" AfterTargets="Publish" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(PublishDir)" />
+    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="TrimUnusedPublishFiles" AfterTargets="Publish" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_UnusedLocaleMui Include="$(PublishDir)*\*.mui" Exclude="$(PublishDir)en-US\*.mui;$(PublishDir)en-us\*.mui" />
+      <_UnusedPublishFiles Include="$(PublishDir)Microsoft.DiaSymReader.Native.amd64.dll;$(PublishDir)mscordaccore*.dll;$(PublishDir)mscordbi.dll;$(PublishDir)createdump.exe;$(PublishDir)DWriteCore.dll;$(PublishDir)WinUIEdit.dll;$(PublishDir)Microsoft.UI.Xaml.winmd;$(PublishDir)Microsoft.UI.winmd;$(PublishDir)Microsoft.UI.Designer.dll;$(PublishDir)Microsoft.WindowsAppRuntime.Bootstrap.dll" />
+      <_UnusedLegacyWebUi Include="$(PublishDir)wwwroot\**\*" Exclude="$(PublishDir)wwwroot\mouse\**\*;$(PublishDir)wwwroot\pay\**\*;$(PublishDir)wwwroot\changelog.gz" Condition="Exists('$(PublishDir)exo-ui.exe')" />
+    </ItemGroup>
+    <Delete Files="@(_UnusedLocaleMui);@(_UnusedPublishFiles);@(_UnusedLegacyWebUi)" />
+    <RemoveDir Directories="@(_UnusedLocaleMui->'%(RootDir)%(Directory)')" />
+    <RemoveDir Directories="$(PublishDir)wwwroot\assets;$(PublishDir)wwwroot\fonts;$(PublishDir)wwwroot\.vite;$(PublishDir)wwwroot\icons" Condition="Exists('$(PublishDir)exo-ui.exe')" />
   </Target>
 
   <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\capture\out\ExoCapture.exe')">
@@ -189,7 +211,11 @@
     <Content Include="..\voice\out\exo_apm.dll" Condition="Exists('..\voice\out\exo_apm.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- DeepFilterNet noise suppression (Exo's build of its C interface, voice\build.ps1): ships in the app, so a call has it from the first join. -->
     <Content Include="..\voice\out\exo-deepfilter.dll" Condition="Exists('..\voice\out\exo-deepfilter.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\native-ui\target\release-cdylib\exo_voice_ml.dll" Condition="Exists('..\native-ui\target\release-cdylib\exo_voice_ml.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\native-ui\target\release-cdylib\exo_apo.dll" Condition="Exists('..\native-ui\target\release-cdylib\exo_apo.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\native-ui\target\release\exo-apo-helper.exe" Condition="Exists('..\native-ui\target\release\exo-apo-helper.exe')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\voice\out\LICENSE-*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\voice\licenses\LICENSE-*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\native-ui\target\release\exo-ui.exe" Condition="Exists('..\native-ui\target\release\exo-ui.exe')" Link="exo-ui.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
 
     <Content Include="..\LICENSE" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

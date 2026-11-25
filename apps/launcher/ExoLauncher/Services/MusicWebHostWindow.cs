@@ -37,6 +37,7 @@ internal sealed class MusicWebHostWindow
     private nint _hwnd;
     private CoreWebView2Controller? _controller;
     private CoreWebView2? _core;
+    private IDisposable? _environmentLease;
     private bool _closed;
 
     internal nint Handle => _hwnd;
@@ -54,7 +55,7 @@ internal sealed class MusicWebHostWindow
         Instances[hwnd] = this;
     }
 
-    internal static MusicWebHostWindow CreateHidden()
+    internal static MusicWebHostWindow CreateHidden(int width = HiddenWidth, int height = HiddenHeight)
     {
         EnsureClassRegistered();
         var hwnd = CreateWindowExW(
@@ -64,8 +65,8 @@ internal sealed class MusicWebHostWindow
             WsPopup | WsClipChildren,
             0,
             0,
-            HiddenWidth,
-            HiddenHeight,
+            Math.Max(1, width),
+            Math.Max(1, height),
             0,
             0,
             GetModuleHandleW(null),
@@ -108,10 +109,11 @@ internal sealed class MusicWebHostWindow
         return new MusicWebHostWindow(hwnd);
     }
 
-    internal void AttachController(CoreWebView2Controller controller, bool visible)
+    internal void AttachController(CoreWebView2Controller controller, bool visible, IDisposable? environmentLease = null)
     {
         _controller = controller;
         _core = controller.CoreWebView2;
+        _environmentLease = environmentLease;
         try { controller.DefaultBackgroundColor = Color.FromArgb(255, 0, 0, 0); } catch { }
         SyncBounds();
         try { controller.IsVisible = visible; } catch { }
@@ -144,11 +146,12 @@ internal sealed class MusicWebHostWindow
         if (_closed) return;
         _closed = true;
         var controller = _controller;
+        var lease = Interlocked.Exchange(ref _environmentLease, null);
         _controller = null;
         _core = null;
         if (controller is not null)
         {
-            try { controller.Close(); } catch { }
+            WebViewEnvironmentLifetime.CloseAndRelease(controller);
         }
         var hwnd = _hwnd;
         if (hwnd != 0)
@@ -157,6 +160,7 @@ internal sealed class MusicWebHostWindow
             Instances.Remove(hwnd);
             try { DestroyWindow(hwnd); } catch { }
         }
+        try { lease?.Dispose(); } catch { }
         Closed?.Invoke();
     }
 
@@ -197,31 +201,37 @@ internal sealed class MusicWebHostWindow
 
     private static nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam)
     {
-        if (Instances.TryGetValue(hwnd, out var host))
+        try
         {
-            if (msg == WmSize)
+            if (Instances.TryGetValue(hwnd, out var host))
             {
-                host.SyncBounds();
-                try { host.MinimizedChanged?.Invoke(wParam == SizeMinimized); } catch { }
-            }
-            else if (msg == WmDestroy)
-            {
-                Instances.Remove(hwnd);
-                host._hwnd = 0;
-                if (!host._closed)
+                if (msg == WmSize)
                 {
-                    host._closed = true;
-                    var controller = host._controller;
-                    host._controller = null;
-                    host._core = null;
-                    if (controller is not null)
+                    host.SyncBounds();
+                    try { host.MinimizedChanged?.Invoke(wParam == SizeMinimized); } catch { }
+                }
+                else if (msg == WmDestroy)
+                {
+                    Instances.Remove(hwnd);
+                    host._hwnd = 0;
+                    if (!host._closed)
                     {
-                        try { controller.Close(); } catch { }
+                        host._closed = true;
+                        var controller = host._controller;
+                        var lease = Interlocked.Exchange(ref host._environmentLease, null);
+                        host._controller = null;
+                        host._core = null;
+                        if (controller is not null)
+                        {
+                            WebViewEnvironmentLifetime.CloseAndRelease(controller);
+                        }
+                        try { lease?.Dispose(); } catch { }
+                        try { host.Closed?.Invoke(); } catch { }
                     }
-                    try { host.Closed?.Invoke(); } catch { }
                 }
             }
         }
+        catch { }
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 

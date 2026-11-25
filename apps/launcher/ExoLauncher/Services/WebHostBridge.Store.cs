@@ -4,7 +4,7 @@ using ExoLauncher.Helpers;
 
 namespace ExoLauncher.Services;
 
-/// <summary>The Store room: store.home, store.calendar, store.search, store.game, store.gameOffers, store.gameReviews, store.wishlist, store.open; store.changed (what: home or wishlist) and store.sale.</summary>
+/// <summary>The Store room: store.home, store.search, store.game, store.gameOffers, store.gameReviews, store.wishlist, store.open; store.changed (what: home or wishlist) and store.sale.</summary>
 public sealed partial class WebHostBridge
 {
     /// <summary>
@@ -55,35 +55,6 @@ public sealed partial class WebHostBridge
             at = home.At.ToString("O", CultureInfo.InvariantCulture),
             hero = home.Hero.Select(MapTile),
             shelves = home.Shelves.Select(s => new { id = s.Id, title = s.Title, items = s.Items.Select(MapTile) }),
-        };
-    }
-
-    /// <summary>
-    /// The calendar for this PC: Steam's public lists placed by day, ordered by the wishlist and by the tags of the Steam
-    /// games played most. The library supplies hours here, in native code; the page gets only the result.
-    /// </summary>
-    private async Task<object> StoreCalendarAsync(CancellationToken ct)
-    {
-        var (played, _) = StoreTasteInputs();
-        StoreService.Calendar? calendar;
-        try { calendar = await Task.Run(() => _services.Store.CalendarAsync(played, ct), ct).ConfigureAwait(false); }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException)
-        {
-            if (!ct.IsCancellationRequested)
-                AppLog.Warn("Store: Steam did not answer. " + ex.Message);
-            calendar = null;
-        }
-        if (calendar is null) return new { ok = false, message = "The store could not be reached. Check your connection and try again." };
-        return new
-        {
-            ok = true,
-            at = calendar.At.ToString("O", CultureInfo.InvariantCulture),
-            interests = calendar.Interests,
-            days = calendar.Days.Select(d => new
-            {
-                date = d.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                entries = d.Entries.Select(e => new { tile = MapTile(e.Tile), wished = e.Wished, earlyAccess = e.EarlyAccess, why = e.Why }),
-            }),
         };
     }
 
@@ -149,26 +120,30 @@ public sealed partial class WebHostBridge
                 return new { ok = false, message = await _services.Store.SoldOnlyElsewhereAsync(appId, ct).ConfigureAwait(false)
                     ? "This game isn't sold in your region on Steam."
                     : "Steam does not list this game anymore." };
-            // A cached answer comes back on the UI thread; this PC's specs read the registry, Steam's library list and each drive.
-            var fit = StoreService.FitSpecs(g.Specs, await Task.Run(Helpers.SystemSpecs.Read, ct).ConfigureAwait(false));
-            return new
-            {
-                ok = true, appId = g.AppId, name = g.Name, description = g.Description, header = g.Header,
-                comingSoon = g.ComingSoon, released = g.Released, developers = g.Developers, publishers = g.Publishers, genres = g.Genres,
-                metacritic = g.Metacritic, reviewWord = g.ReviewWord, reviewPercent = g.ReviewPercent, reviewCount = g.ReviewCount, free = g.Free,
-                tags = g.Tags, drm = g.Drm, account = g.Account, controller = g.Controller, playStation = g.PlayStation, languages = g.Languages,
-                offers = g.Offers.Select(MapOffer),
-                media = g.Media.Select(m => new { thumb = m.Thumb, hls = m.Hls, av1 = m.Av1 }),
-                specs = fit.Rows.Select(s => new { label = s.Label, minimum = s.Minimum, recommended = s.Recommended, mine = s.Mine, meets = s.Meets }),
-                fit = fit.Verdict,
-                screenshots = g.Screenshots,
-                art = MapArt(g.Art),
-            };
+            return BuildStoreGameResponse(g, await Task.Run(Helpers.SystemSpecs.Read, ct).ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException)
         {
             return new { ok = false, message = "The store could not be reached." };
         }
+    }
+
+    internal static object BuildStoreGameResponse(StoreService.GameDetail g, StoreService.ThisPc pcSpecs)
+    {
+        var fit = StoreService.FitSpecs(g.Specs, pcSpecs);
+        return new
+        {
+            ok = true, appId = g.AppId, name = g.Name, description = g.Description, header = g.Header,
+            comingSoon = g.ComingSoon, released = g.Released, developers = g.Developers, publishers = g.Publishers, genres = g.Genres,
+            metacritic = g.Metacritic, reviewWord = g.ReviewWord, reviewPercent = g.ReviewPercent, reviewCount = g.ReviewCount, free = g.Free,
+            tags = g.Tags, drm = g.Drm, account = g.Account, controller = g.Controller, playStation = g.PlayStation, languages = g.Languages,
+            offers = g.Offers.Select(MapOffer),
+            media = g.Media.Select(m => new { thumb = m.Thumb, hls = m.Hls, av1 = m.Av1 }),
+            specs = fit.Rows.Select(s => new { label = s.Label, minimum = s.Minimum, recommended = s.Recommended, mine = s.Mine, meets = s.Meets }),
+            fit = fit.Verdict,
+            screenshots = g.Screenshots,
+            art = MapArt(g.Art),
+        };
     }
 
     /// <summary>The other official launchers for a game page, Epic first, and the lowest price ever (US only), from CheapShark.</summary>

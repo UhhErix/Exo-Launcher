@@ -1,0 +1,32 @@
+[package]
+name = "exo-upscale"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "exo_upscale"
+path = "src/lib.rs"
+
+[[bin]]
+name = "exo-upscale"
+path = "src/main.rs"
+
+[dependencies]
+blake3 = "1"
+exo-rpc = { path = "../exo-rpc" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Security_Cryptography",
+    "Win32_Security_WinTrust",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_LibraryLoader",
+] }
+windows-core = "0.62"

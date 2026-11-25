@@ -1,0 +1,298 @@
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  zizmor:
+    name: Security — zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      ZIZMOR_VERSION: v1.33.1
+      ZIZMOR_SHA256: 3e6a301c7a820a2501915f5a9de8c0486da82bdec7965f068477538a98743d43
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            .github
+          persist-credentials: false
+
+      - id: zizmor-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/tools/zizmor
+          key: ${{ runner.os }}-zizmor-${{ env.ZIZMOR_VERSION }}-${{ env.ZIZMOR_SHA256 }}
+
+      - name: Download and verify zizmor
+        if: steps.zizmor-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          curl -fsSL "https://github.com/zizmorcore/zizmor/releases/download/${ZIZMOR_VERSION}/zizmor-x86_64-unknown-linux-gnu.tar.gz" -o "$tmp/zizmor.tar.gz"
+          echo "${ZIZMOR_SHA256}  $tmp/zizmor.tar.gz" | sha256sum -c -
+          tar -xzf "$tmp/zizmor.tar.gz" -C "$tmp"
+          bin=$(find "$tmp" -type f -name zizmor | head -n 1)
+          mkdir -p ~/.local/tools/zizmor
+          install -m 0755 "$bin" ~/.local/tools/zizmor/zizmor
+
+      - name: Run zizmor on workflows
+        id: zizmor
+        shell: bash
+        run: |
+          set -euo pipefail
+          ~/.local/tools/zizmor/zizmor --version
+          set +e
+          ~/.local/tools/zizmor/zizmor --offline --format plain .github/workflows
+          plain_exit=$?
+          ~/.local/tools/zizmor/zizmor --offline --format sarif .github/workflows > zizmor.sarif
+          set -e
+          echo "exit_code=${plain_exit}" >> "$GITHUB_OUTPUT"
+          echo "zizmor_exit=${plain_exit}"
+
+      - name: Upload zizmor SARIF
+        if: hashFiles('zizmor.sarif') != ''
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor
+
+      - name: Enforce zero zizmor findings
+        shell: bash
+        env:
+          ZIZMOR_EXIT: ${{ steps.zizmor.outputs.exit_code }}
+        run: exit "${ZIZMOR_EXIT}"
+
+  osv-scanner:
+    name: Security — OSV-Scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      OSV_VERSION: v2.7.1
+      OSV_SHA256: fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher
+          persist-credentials: false
+
+      - id: osv-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/tools/osv-scanner
+          key: ${{ runner.os }}-osv-scanner-${{ env.OSV_VERSION }}-${{ env.OSV_SHA256 }}
+
+      - name: Download and verify OSV-Scanner
+        if: steps.osv-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          curl -fsSL "https://github.com/google/osv-scanner/releases/download/${OSV_VERSION}/osv-scanner_linux_amd64" -o "$tmp/osv-scanner"
+          echo "${OSV_SHA256}  $tmp/osv-scanner" | sha256sum -c -
+          mkdir -p ~/.local/tools/osv-scanner
+          install -m 0755 "$tmp/osv-scanner" ~/.local/tools/osv-scanner/osv-scanner
+
+      - name: Run OSV-Scanner on lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          ~/.local/tools/osv-scanner/osv-scanner --version
+          set +e
+          ~/.local/tools/osv-scanner/osv-scanner scan source -r apps/launcher
+          table_exit=$?
+          ~/.local/tools/osv-scanner/osv-scanner scan source -r apps/launcher --format sarif --output-file osv.sarif
+          set -e
+          echo "osv_exit=${table_exit}"
+
+      - name: Upload OSV-Scanner SARIF
+        if: hashFiles('osv.sarif') != ''
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: osv.sarif
+          category: osv-scanner
+
+  trivy-secrets:
+    name: Security — Trivy Secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      TRIVY_VERSION: v0.76.2
+      TRIVY_SHA256: bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          persist-credentials: false
+
+      - id: trivy-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/tools/trivy
+          key: ${{ runner.os }}-trivy-${{ env.TRIVY_VERSION }}-${{ env.TRIVY_SHA256 }}
+
+      - name: Download and verify Trivy
+        if: steps.trivy-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver_num="${TRIVY_VERSION#v}"
+          tmp=$(mktemp -d)
+          curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${ver_num}_Linux-64bit.tar.gz" -o "$tmp/trivy.tar.gz"
+          echo "${TRIVY_SHA256}  $tmp/trivy.tar.gz" | sha256sum -c -
+          tar -xzf "$tmp/trivy.tar.gz" -C "$tmp"
+          bin=$(find "$tmp" -type f -name trivy | head -n 1)
+          mkdir -p ~/.local/tools/trivy
+          install -m 0755 "$bin" ~/.local/tools/trivy/trivy
+
+      - name: Run Trivy secret scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          ~/.local/tools/trivy/trivy --version
+          ~/.local/tools/trivy/trivy fs --scanners secret --format table --exit-code 0 --skip-version-check .
+          ~/.local/tools/trivy/trivy fs --scanners secret --format sarif --output trivy-secrets.sarif --exit-code 0 --skip-version-check .
+
+      - name: Upload Trivy SARIF
+        if: hashFiles('trivy-secrets.sarif') != ''
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: trivy-secrets.sarif
+          category: trivy-secrets
+
+  semgrep:
+    name: Security — Semgrep (PR diff)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - id: semgrep-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/tools/semgrep-venv
+          key: ${{ runner.os }}-py312-semgrep-${{ hashFiles('.github/security/semgrep-requirements.txt') }}
+
+      - name: Install hash-verified Semgrep
+        if: steps.semgrep-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv ~/.local/tools/semgrep-venv
+          ~/.local/tools/semgrep-venv/bin/pip install --no-input --require-hashes -r .github/security/semgrep-requirements.txt
+
+      - name: Scan PR diff with Semgrep
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          SEMGREP_SEND_METRICS: 'off'
+        run: |
+          set -euo pipefail
+          ~/.local/tools/semgrep-venv/bin/semgrep --version
+          set +e
+          ~/.local/tools/semgrep-venv/bin/semgrep scan \
+            --config p/security-audit \
+            --config p/csharp \
+            --config p/typescript \
+            --config p/rust \
+            --exclude-rule rust.lang.security.unsafe-usage.unsafe-usage \
+            --baseline-commit "$BASE_SHA" \
+            --sarif-output semgrep.sarif \
+            --text \
+            --metrics=off
+          sg_exit=$?
+          set -e
+          echo "semgrep_exit=${sg_exit}"
+
+      - name: Upload Semgrep SARIF
+        if: hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep-pr-diff
+
+  cargo-deny:
+    name: Security — cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      CARGO_DENY_VERSION: 0.22.0
+      CARGO_DENY_SHA256: 98c56e6a408bfa5c3c60744b6015aaa6aa08f743fdeb88386d06fca035bb1786
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher/native-ui
+          persist-credentials: false
+
+      - id: cargo-deny-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/tools/cargo-deny
+          key: ${{ runner.os }}-cargo-deny-${{ env.CARGO_DENY_VERSION }}-${{ env.CARGO_DENY_SHA256 }}
+
+      - name: Download and verify cargo-deny
+        if: steps.cargo-deny-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          curl -fsSL "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o "$tmp/cargo-deny.tar.gz"
+          echo "${CARGO_DENY_SHA256}  $tmp/cargo-deny.tar.gz" | sha256sum -c -
+          tar -xzf "$tmp/cargo-deny.tar.gz" -C "$tmp"
+          bin=$(find "$tmp" -type f -name cargo-deny | head -n 1)
+          mkdir -p ~/.local/tools/cargo-deny
+          install -m 0755 "$bin" ~/.local/tools/cargo-deny/cargo-deny
+
+      - name: Check native-ui advisories, bans, and licenses
+        shell: bash
+        run: |
+          set -euo pipefail
+          ~/.local/tools/cargo-deny/cargo-deny --version
+          set +e
+          ~/.local/tools/cargo-deny/cargo-deny \
+            --config apps/launcher/native-ui/deny.toml \
+            --manifest-path apps/launcher/native-ui/Cargo.toml \
+            --all-features \
+            check \
+            advisories bans licenses
+          deny_exit=$?
+          set -e
+          echo "cargo_deny_exit=${deny_exit}"

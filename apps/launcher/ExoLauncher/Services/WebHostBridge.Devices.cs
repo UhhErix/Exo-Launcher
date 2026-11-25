@@ -144,17 +144,6 @@ public sealed partial class WebHostBridge
         }
     }
 
-    /// <summary>devices.usbMap: every USB controller and what hangs from it (<see cref="UsbPorts.Map"/>), read when asked.</summary>
-    private object DevicesUsbMap()
-    {
-        try { return new { ok = true, controllers = UsbPorts.ReadMap(Peripherals.List(() => _services.Launcher.AnyGameRunning || MainWindow.RunningLibraryGames().Count > 0)) }; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            Helpers.AppLog.Warn("Devices: USB map not read: " + ex.Message);
-            return new { ok = false, message = "Exo couldn't read your USB.", controllers = Array.Empty<UsbPorts.MapController>() };
-        }
-    }
-
     private static Peripherals.Peripheral Labbed(Peripherals.Peripheral card) =>
         card.Kind == "controller" ? card with { Lab = ControllerLab.FamilyOf(card) is not null }
         : card.Kind == "keyboard" ? card with { Lab = WootingKeyboard.IsSupported(card) }

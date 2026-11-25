@@ -57,4 +57,16 @@ public sealed class CaptureAddonRootTests : IDisposable
         Exe(Local, DateTime.UtcNow);
         Assert.Equal(Local, CaptureAddon.Newer(Local, Bundled));
     }
+
+    [Fact]
+    public void PrefersNativeRustCaptureExecutableWhenPresentAndNewer()
+    {
+        var legacyTime = new DateTime(2026, 10, 29, 9, 4, 24, DateTimeKind.Utc);
+        var nativeTime = new DateTime(2026, 11, 24, 15, 0, 0, DateTimeKind.Utc);
+        Exe(Bundled, legacyTime);
+        var nativePath = Path.Combine(Bundled, "exo-capture.exe");
+        File.WriteAllBytes(nativePath, [0x4D, 0x5A]);
+        File.SetLastWriteTimeUtc(nativePath, nativeTime);
+        Assert.Equal(nativePath, CaptureAddon.ResolveExe(Local, Bundled));
+    }
 }

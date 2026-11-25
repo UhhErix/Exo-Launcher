@@ -30,7 +30,7 @@ public sealed partial class WebHostBridge
 
     private static int _mouseCoreBusy;
 
-    private static async Task<object> SystemMouseCoreAsync(JsonElement p, bool hasParams, CancellationToken ct)
+    internal static async Task<object> SystemMouseCoreAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
         var action = ReadString(p, hasParams, "action");
         string? message = null;

@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub(crate) fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
     T: Default + Deserialize<'de>,
@@ -32,8 +32,32 @@ pub struct GameInclude {
 pub struct GameVariant {
     #[serde(default, deserialize_with = "null_as_default")]
     pub id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub store: String,
+    #[serde(default)]
+    pub installed: bool,
+    #[serde(default)]
+    pub owned: bool,
+    #[serde(default)]
+    pub entitlement_state: Option<String>,
+    #[serde(default)]
+    pub update_available: bool,
+    #[serde(default)]
+    pub can_install: bool,
+    #[serde(default)]
+    pub primary_action: Option<String>,
     #[serde(default)]
     pub launch_target: Option<String>,
+    #[serde(default)]
+    pub playtime_minutes: Option<u64>,
+    #[serde(default)]
+    pub last_played_utc: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub status: String,
+    #[serde(default)]
+    pub is_running: bool,
+    #[serde(default)]
+    pub can_stop: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -50,11 +74,19 @@ pub struct Game {
     #[serde(default)]
     pub owned: bool,
     #[serde(default)]
+    pub entitlement_state: Option<String>,
+    #[serde(default)]
     pub update_available: bool,
     #[serde(default)]
     pub can_install: bool,
     #[serde(default)]
     pub primary_action: Option<String>,
+    #[serde(default)]
+    pub canonical_title_key: Option<String>,
+    #[serde(default)]
+    pub selected_variant_id: Option<String>,
+    #[serde(default)]
+    pub buy_url: Option<String>,
     #[serde(default)]
     pub cover_url: Option<String>,
     #[serde(default)]
@@ -65,6 +97,8 @@ pub struct Game {
     pub launch_target: Option<String>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub includes: Vec<GameInclude>,
+    #[serde(default)]
+    pub anti_cheat_class: crate::anticheat::AntiCheatClass,
     #[serde(default, deserialize_with = "null_as_default")]
     pub variants: Vec<GameVariant>,
     #[serde(default)]
@@ -574,21 +608,21 @@ pub fn store_label(store: &str) -> &'static str {
 pub struct InstallProgress {
     #[serde(default)]
     pub game_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub phase: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub percent: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub bytes_downloaded: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub bytes_to_download: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub bytes_per_second: u64,
     #[serde(default)]
     pub status: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub can_cancel: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub is_active: bool,
 }
 
@@ -628,7 +662,300 @@ pub struct GameExtras {
     #[serde(default)]
     pub achievements_total: Option<u32>,
     #[serde(default)]
+    pub drive_heat: Option<crate::game_types::DriveHeat>,
+    #[serde(default)]
     pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameGenRoute {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub tier: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub gpu_supported: bool,
+    #[serde(default)]
+    pub gpu_note: String,
+    #[serde(default)]
+    pub anti_cheat_verdict: String,
+    #[serde(default)]
+    pub anti_cheat_note: String,
+    #[serde(default)]
+    pub auto_enable: bool,
+    #[serde(default)]
+    pub latency_note: String,
+    #[serde(default)]
+    pub selectable: bool,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub how_to_enable: Option<String>,
+    #[serde(default)]
+    pub choice_value: Option<String>,
+    #[serde(default)]
+    pub choices: Vec<String>,
+    #[serde(default)]
+    pub requires_risk_confirm: bool,
+    #[serde(default)]
+    pub risk_warning: Option<String>,
+    #[serde(default)]
+    pub anti_cheat: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameFrameGen {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub best_route_id: String,
+    #[serde(default)]
+    pub selected_route_id: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub word: String,
+    #[serde(default)]
+    pub good: bool,
+    #[serde(default)]
+    pub bad: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub how_to_enable: Option<String>,
+    #[serde(default)]
+    pub routes: Vec<FrameGenRoute>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapTier {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub cap_fps: Option<i32>,
+    #[serde(default)]
+    pub output_fps: Option<i32>,
+    #[serde(default)]
+    pub predicted_variance_ms2: f64,
+    #[serde(default)]
+    pub predicted_std_dev_ms: f64,
+    #[serde(default)]
+    pub predicted_dips_per_minute: f64,
+    #[serde(default)]
+    pub measured: bool,
+    #[serde(default)]
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapBackend {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub vendor: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub available: bool,
+    #[serde(default)]
+    pub per_game_native: bool,
+    #[serde(default)]
+    pub latency_note: String,
+    #[serde(default)]
+    pub anti_cheat_note: String,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapSuggestion {
+    #[serde(default)]
+    pub tier: String,
+    #[serde(default)]
+    pub cap_fps: Option<i32>,
+    #[serde(default)]
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapStutterBreakdown {
+    #[serde(default)]
+    pub cause: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub spikes: i32,
+    #[serde(default)]
+    pub share_percent: f64,
+    #[serde(default)]
+    pub detail: String,
+    #[serde(default)]
+    pub hint: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameCapStutter {
+    #[serde(default)]
+    pub total_spikes: i32,
+    #[serde(default)]
+    pub top_cause: String,
+    #[serde(default)]
+    pub top_cause_label: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub per_process_vram_available: bool,
+    #[serde(default)]
+    pub breakdown: Vec<FrameCapStutterBreakdown>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CapLabArmMetrics {
+    #[serde(default)]
+    pub cap_fps: i32,
+    #[serde(default)]
+    pub frames: i64,
+    #[serde(default)]
+    pub average_fps: f64,
+    #[serde(default)]
+    pub low1_fps: f64,
+    #[serde(default)]
+    pub low01_fps: f64,
+    #[serde(default)]
+    pub average_ms: f64,
+    #[serde(default)]
+    pub frame_time_variance_ms2: f64,
+    #[serde(default)]
+    pub frame_time_std_dev_ms: f64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CapLabStatus {
+    #[serde(default)]
+    pub game_id: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub cap_a_fps: i32,
+    #[serde(default)]
+    pub cap_b_fps: i32,
+    #[serde(default)]
+    pub current_arm: Option<String>,
+    #[serde(default)]
+    pub elapsed_seconds: i32,
+    #[serde(default)]
+    pub total_seconds: i32,
+    #[serde(default)]
+    pub verdict: Option<String>,
+    #[serde(default)]
+    pub winner: Option<String>,
+    #[serde(default)]
+    pub delta_percent: f64,
+    #[serde(default)]
+    pub noise_threshold_percent: f64,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub arm_a: Option<CapLabArmMetrics>,
+    #[serde(default)]
+    pub arm_b: Option<CapLabArmMetrics>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CapLabActionReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub ab: CapLabStatus,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameFrameCap {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub game_id: String,
+    #[serde(default)]
+    pub refresh_hz: f64,
+    #[serde(default)]
+    pub vrr: bool,
+    #[serde(default)]
+    pub in_vrr_range: bool,
+    #[serde(default)]
+    pub vrr_floor_hz: i32,
+    #[serde(default)]
+    pub fg_multiplier: i32,
+    #[serde(default)]
+    pub fg_route_label: Option<String>,
+    #[serde(default)]
+    pub vendor: String,
+    #[serde(default)]
+    pub adapter: Option<String>,
+    #[serde(default)]
+    pub is_hybrid: bool,
+    #[serde(default)]
+    pub backend: String,
+    #[serde(default)]
+    pub backend_label: String,
+    #[serde(default)]
+    pub backend_available: bool,
+    #[serde(default)]
+    pub backend_note: Option<String>,
+    #[serde(default)]
+    pub backends: Vec<FrameCapBackend>,
+    #[serde(default)]
+    pub selected_tier: String,
+    #[serde(default)]
+    pub active_cap_fps: Option<i32>,
+    #[serde(default)]
+    pub target_output_fps: Option<i32>,
+    #[serde(default)]
+    pub tiers: Vec<FrameCapTier>,
+    #[serde(default)]
+    pub refresh_locked_caps: Vec<i32>,
+    #[serde(default)]
+    pub uncapped_option: Option<FrameCapTier>,
+    #[serde(default)]
+    pub suggestion: FrameCapSuggestion,
+    #[serde(default)]
+    pub stutter: FrameCapStutter,
+    #[serde(default)]
+    pub ab: CapLabStatus,
+    #[serde(default)]
+    pub word: String,
+    #[serde(default)]
+    pub good: bool,
+    #[serde(default)]
+    pub bad: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -638,18 +965,54 @@ pub struct GameProperties {
     pub ok: bool,
     #[serde(default)]
     pub message: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub store: String,
     #[serde(default)]
     pub launch_options: Option<String>,
     #[serde(default)]
+    pub launch_options_note: Option<String>,
+    #[serde(default)]
+    pub size_bytes: Option<u64>,
+    #[serde(default)]
+    pub verify_label: Option<String>,
+    #[serde(default)]
+    pub can_browse: bool,
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default)]
     pub steam_overlay: Option<bool>,
+    #[serde(default)]
+    pub steam_overlay_note: Option<String>,
+    #[serde(default)]
+    pub through_steam: Option<bool>,
+    #[serde(default)]
+    pub store_properties: Option<String>,
     #[serde(default)]
     pub cloud_sync: Option<bool>,
     #[serde(default)]
     pub language: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub language_choices: Vec<crate::game_types::PropertyChoice>,
     #[serde(default)]
     pub beta: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub beta_choices: Vec<crate::game_types::PropertyChoice>,
+    #[serde(default)]
+    pub beta_code: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub content_label: String,
+    #[serde(default)]
+    pub content: Option<Vec<crate::game_types::GameContent>>,
     #[serde(default)]
     pub folder: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub folder_choices: Vec<crate::game_types::PropertyChoice>,
+    #[serde(default)]
+    pub moving: Option<crate::game_types::MovingProgress>,
+    #[serde(default)]
+    pub shader_cache_bytes: Option<u64>,
+    #[serde(default)]
+    pub anti_cheat_launch: Option<crate::game_types::AntiCheatLaunch>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -707,6 +1070,19 @@ impl StoreArt {
             .or(self.capsule.as_deref())
             .or(self.poster.as_deref())
     }
+
+    pub fn steam_url(app_id: &str, kind: &str) -> String {
+        let file = match kind {
+            "poster" => "library_600x900.jpg",
+            "hero" => "library_hero.jpg",
+            "logo" => "logo.png",
+            "capsule" => "capsule_616x353.jpg",
+            _ => "header.jpg",
+        };
+        format!(
+            "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{app_id}/{file}"
+        )
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -742,6 +1118,10 @@ pub struct StoreTile {
     pub when: Option<String>,
     #[serde(default)]
     pub wished: bool,
+    #[serde(default)]
+    pub added_at: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub similar_to: Vec<String>,
     #[serde(default)]
     pub art: Option<StoreArt>,
 }
@@ -795,6 +1175,8 @@ pub struct StoreHome {
     #[serde(default)]
     pub ok: bool,
     #[serde(default)]
+    pub at: Option<String>,
+    #[serde(default)]
     pub message: Option<String>,
     #[serde(default)]
     pub hero: Vec<StoreTile>,
@@ -811,6 +1193,56 @@ pub struct StoreSearchReply {
     pub message: Option<String>,
     #[serde(default)]
     pub items: Vec<StoreTile>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreWishlistReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub items: Vec<StoreTile>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreMedia {
+    #[serde(default)]
+    pub thumb: String,
+    #[serde(default)]
+    pub hls: Option<String>,
+    #[serde(default)]
+    pub av1: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreSpec {
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub minimum: Option<String>,
+    #[serde(default)]
+    pub recommended: Option<String>,
+    #[serde(default)]
+    pub mine: Option<String>,
+    #[serde(default)]
+    pub meets: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreRecentReviews {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub word: Option<String>,
+    #[serde(default)]
+    pub percent: Option<i32>,
+    #[serde(default)]
+    pub count: u64,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -845,6 +1277,8 @@ pub struct StoreGame {
     #[serde(default)]
     pub review_percent: Option<i32>,
     #[serde(default)]
+    pub review_count: u64,
+    #[serde(default)]
     pub price_text: Option<String>,
     #[serde(default)]
     pub was_text: Option<String>,
@@ -853,9 +1287,27 @@ pub struct StoreGame {
     #[serde(default)]
     pub free: bool,
     #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub drm: Option<String>,
+    #[serde(default)]
+    pub account: Option<String>,
+    #[serde(default)]
+    pub controller: Option<String>,
+    #[serde(default)]
+    pub play_station: bool,
+    #[serde(default)]
+    pub languages: Vec<String>,
+    #[serde(default)]
     pub url: Option<String>,
     #[serde(default)]
     pub offers: Vec<StoreOffer>,
+    #[serde(default)]
+    pub media: Vec<StoreMedia>,
+    #[serde(default)]
+    pub specs: Vec<StoreSpec>,
+    #[serde(default)]
+    pub screenshots: Vec<String>,
     #[serde(default)]
     pub art: Option<StoreArt>,
     #[serde(default)]
@@ -872,16 +1324,35 @@ pub struct StoreOffer {
     #[serde(rename = "final", default)]
     pub final_cents: Option<i64>,
     #[serde(default)]
+    pub initial: Option<i64>,
+    #[serde(default)]
     pub discount: i32,
     #[serde(default)]
     pub currency: Option<String>,
     #[serde(default)]
     pub price_text: Option<String>,
     #[serde(default)]
+    pub was_text: Option<String>,
+    #[serde(default)]
     pub url: String,
 }
 
 impl StoreOffer {
+    pub fn display_name(&self) -> String {
+        let trimmed = self.name.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+        match self.store.trim() {
+            "1" => "Steam".into(),
+            "7" => "GOG".into(),
+            "13" => "Ubisoft".into(),
+            "25" => "Epic".into(),
+            "" => "Official store".into(),
+            other => store_label(other).to_string(),
+        }
+    }
+
     pub fn display_price(&self) -> String {
         if let Some(txt) = self.price_text.as_deref().filter(|s| !s.is_empty()) {
             return txt.to_string();
@@ -890,6 +1361,17 @@ impl StoreOffer {
             return format_cents(cents, self.currency.as_deref());
         }
         String::new()
+    }
+
+    pub fn display_was(&self) -> Option<String> {
+        if self.discount <= 0 {
+            return None;
+        }
+        self.was_text.clone().filter(|s| !s.is_empty()).or_else(|| {
+            self.initial
+                .filter(|&v| v > 0)
+                .map(|v| format_cents(v, self.currency.as_deref()))
+        })
     }
 }
 
@@ -900,6 +1382,29 @@ pub struct StoreLowest {
     pub final_cents: i64,
     #[serde(default)]
     pub at: String,
+}
+
+impl StoreLowest {
+    pub fn formatted_date(&self) -> Option<String> {
+        let trimmed = self.at.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let date_part = trimmed.split('T').next().unwrap_or(trimmed);
+        let mut parts = date_part.split('-');
+        if let (Some(y), Some(m)) = (parts.next(), parts.next())
+            && y.len() == 4
+            && y.chars().all(|c| c.is_ascii_digit())
+            && let Ok(month) = m.parse::<usize>()
+            && (1..=12).contains(&month)
+        {
+            const MONTHS: [&str; 12] = [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+            ];
+            return Some(format!("{} {y}", MONTHS[month - 1]));
+        }
+        Some(trimmed.to_string())
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -913,15 +1418,143 @@ pub struct StoreOtherOffers {
     pub lowest: Option<StoreLowest>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryFolder {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub art: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub games: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderArtReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub art: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryRefreshAllReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub achievements: u64,
+    #[serde(default)]
+    pub covers: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreGift {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub store: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub title: String,
+    #[serde(default)]
+    pub image: Option<String>,
+    #[serde(default)]
+    pub sender: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreGifts {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub steam_signed_in: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub gifts: Vec<StoreGift>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RiotSavedAccount {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub key: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub name: String,
+    #[serde(default)]
+    pub current: bool,
+    #[serde(default)]
+    pub saved: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub last_in: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RiotAccounts {
+    #[serde(default)]
+    pub current: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub accounts: Vec<RiotSavedAccount>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreAccountsReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub riot: Option<RiotAccounts>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PickPathReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub cancelled: bool,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UninstallReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub queued: bool,
+    #[serde(default)]
+    pub handoff_only: bool,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LauncherSettings {
+    #[serde(default)]
+    pub app_version: Option<String>,
     #[serde(default)]
     pub reduce_motion: bool,
     #[serde(default)]
     pub start_with_windows: bool,
     #[serde(default)]
     pub start_maximized: bool,
+    #[serde(default)]
+    pub use_classic_web_ui: bool,
     #[serde(default)]
     pub show_library_tools: bool,
     #[serde(default)]
@@ -935,19 +1568,37 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub achievement_banners: bool,
     #[serde(default)]
+    pub achievement_volume: Option<i32>,
+    #[serde(default)]
     pub fps_counter: bool,
     #[serde(default)]
     pub fps_counter_position: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub fps_counter_items: Vec<String>,
     #[serde(default)]
     pub hdr_for_games: bool,
+    #[serde(default)]
+    pub frame_gen_everywhere: bool,
+    #[serde(default)]
+    pub frame_gen_everywhere_card: bool,
     #[serde(default)]
     pub auto_update_upscalers: bool,
     #[serde(default)]
     pub auto_update_chipset: bool,
     #[serde(default)]
+    pub upscaler_anti_cheat_everywhere: bool,
+    #[serde(default)]
+    pub default_install_root: Option<String>,
+    #[serde(default)]
+    pub download_hours_start: Option<i32>,
+    #[serde(default)]
+    pub download_hours_end: Option<i32>,
+    #[serde(default)]
     pub text_size: Option<String>,
     #[serde(default)]
     pub riot_id: Option<String>,
+    #[serde(default)]
+    pub riot_baseline: Option<crate::settings_types::RiotBaseline>,
     #[serde(default)]
     pub onboarding_complete: Option<bool>,
     #[serde(default)]
@@ -955,7 +1606,13 @@ pub struct LauncherSettings {
     #[serde(default, deserialize_with = "null_as_default")]
     pub hidden_games: Vec<String>,
     #[serde(default, deserialize_with = "null_as_default")]
+    pub library_folders: Vec<LibraryFolder>,
+    #[serde(default)]
+    pub sort_mode: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
     pub recent: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub preferred_game_sources: HashMap<String, String>,
 }
 
 use std::collections::HashMap;
@@ -1004,6 +1661,23 @@ impl ArtBase {
             return None;
         }
         let candidate = Path::new(root).join(&decoded);
+        if candidate.is_file() {
+            Some(candidate)
+        } else {
+            None
+        }
+    }
+
+    pub fn resolve_folder_art(&self, value: &str) -> Option<PathBuf> {
+        if let Some(p) = self.resolve_local_cover(value) {
+            return Some(p);
+        }
+        let root = self.covers_dir.as_deref()?;
+        let leaf = value.trim().split('?').next().unwrap_or("");
+        if !is_safe_leaf(leaf) {
+            return None;
+        }
+        let candidate = Path::new(root).join(leaf);
         if candidate.is_file() {
             Some(candidate)
         } else {
@@ -1083,8 +1757,7 @@ impl ArtBase {
         let root = self.captures_dir.as_deref()?;
         let rest = media_url.strip_prefix("https://captures.exo-launcher.local/")?;
         let without_query = rest.split('?').next().unwrap_or(rest);
-        let mut path = PathBuf::from(root);
-        let mut parts = 0usize;
+        let mut segments: Vec<String> = Vec::new();
         for seg in without_query.split('/') {
             if seg.is_empty() {
                 continue;
@@ -1093,13 +1766,26 @@ impl ArtBase {
             if !is_safe_leaf(&decoded) {
                 return None;
             }
-            path.push(decoded);
-            parts += 1;
+            segments.push(decoded);
         }
-        if parts == 0 || !path.is_file() {
+        if segments.is_empty() {
             return None;
         }
-        Some(path)
+        let direct = segments
+            .iter()
+            .fold(PathBuf::from(root), |acc, seg| acc.join(seg));
+        if direct.is_file() {
+            return Some(direct);
+        }
+        if segments.len() >= 2 {
+            let without_token = segments[1..]
+                .iter()
+                .fold(PathBuf::from(root), |acc, seg| acc.join(seg));
+            if without_token.is_file() {
+                return Some(without_token);
+            }
+        }
+        None
     }
 }
 
@@ -1162,17 +1848,39 @@ pub enum HostEvent {
     DiscordMessage(Box<crate::discord_types::DiscordMessageEvent>),
     DiscordReaction(crate::discord_types::DiscordReactionEvent),
     DiscordTyping(crate::discord_types::DiscordTypingEvent),
+    DiscordPollVote(crate::discord_chat_types::DiscordPollVoteEvent),
+    DiscordInteraction(Box<crate::discord_chat_types::DiscordInteractionEvent>),
+    DiscordColors { guild_id: String },
+    DiscordOpen(crate::discord_chat_types::DiscordOpenEvent),
+    DiscordDmLine(crate::discord_chat_types::DiscordDmLineEvent),
+    DiscordNotify(Box<crate::discord_chat_types::DiscordNotifyEvent>),
+    DiscordNotifyClear(crate::discord_chat_types::DiscordNotifyClearEvent),
+    FriendsBadge { count: u32 },
     DiscordVideo(crate::discord_types::DiscordVideoEvent),
     DiscordVideoFrame(crate::discord_types::DiscordVideoFrame),
     DiscordGoLive(crate::discord_types::DiscordGoLiveStateEvent),
     DiscordGoLiveStats(crate::discord_types::DiscordGoLiveStatsEvent),
     DiscordGoLiveViewers(Vec<String>),
+    DiscordCall(crate::discord_types::DiscordCallEvent),
+    DiscordCallSong(crate::discord_types::DiscordCallSong),
+    DiscordCamera { state: String },
+    DiscordKeybind { action: String },
+    DiscordMicLevel(crate::discord_types::DiscordMicLevel),
+    DiscordTts(crate::discord_types::DiscordTtsEvent),
+    DiscordUserSettings(Value),
+    DiscordVideoKeyframe { source: String },
     DevicesChanged,
+    ControllerState(crate::device_types::ControllerStateEvent),
+    HidChanged,
+    HidInput(crate::device_types::HidInputEvent),
     AppsChanged,
     MusicVolume(crate::events::MusicVolumeEvent),
+    MusicStatus(crate::media_types::MusicStatusEvent),
     CaptureState(crate::media_types::CaptureLiveState),
     CaptureSaved(Box<crate::events::CaptureSavedEvent>),
     CaptureReel(Box<crate::events::CaptureReelEvent>),
+    CaptureShrunk(Box<crate::events::CaptureShrunkEvent>),
+    NotesOpen(crate::events::NotesOpenEvent),
     InstallQueue(crate::events::InstallQueueEvent),
     GameRunState(crate::events::GameRunStateEvent),
     LaunchStatus(crate::events::LaunchStatusEvent),
@@ -1180,8 +1888,29 @@ pub enum HostEvent {
     ExoAccountChanged,
     AutopilotReport(crate::events::AutopilotReportEvent),
     AutopilotLive(Option<crate::pc_types::AutopilotLive>),
+    GameCapLab(Box<CapLabStatus>),
     ShadersChanged,
+    ShadersEvent(crate::settings_types::ShadersEventPayload),
+    AccountsProgress(crate::settings_types::AccountsProgressEvent),
+    BackupStopped(crate::settings_types::BackupStoppedEvent),
+    ComponentsFailed(crate::settings_types::ComponentsFailedEvent),
+    GiftsChanged(StoreGifts),
     StoreChanged(crate::events::StoreChangedEvent),
+    GameAchievements(crate::game_types::GameAchievementsEvent),
+    GameOptimizedAgain(crate::game_types::GameOptimizeEvent),
+    GameOptimizeHeld(crate::game_types::GameOptimizeEvent),
+    CompressProgress(crate::game_types::CompressProgressEvent),
+    StoreSale(crate::events::StoreSaleEvent),
+    GpuDriver(crate::pc_types::DriverProgress),
+    GpuDriverInstall(crate::events::GpuDriverInstallEvent),
+    GpuTuningChanged(crate::pc_types::GpuTuningChangedEvent),
+    GpuTuningTestProgress(Box<crate::pc_types::GpuStabilityProgress>),
+    HdrCalibrationProgress(crate::pc_types::HdrCalibrationProgress),
+    HdrWarning(crate::pc_types::HdrWarningEvent),
+    DriversStep(crate::pc_types::DriverStep),
+    BiosProgress { share: f64 },
+    RuntimesProgress(crate::pc_types::RuntimesProgress),
+    ShadersRebuild(crate::pc_types::ShaderRebuild),
     Raw { event: String, data: Value },
     Disconnected(String),
 }
@@ -1203,10 +1932,16 @@ mod cover_policy_tests {
                 GameVariant {
                     id: "epic:Sugar".into(),
                     launch_target: None,
+                    installed: true,
+                    owned: true,
+                    ..Default::default()
                 },
                 GameVariant {
                     id: "steam:252950".into(),
                     launch_target: None,
+                    installed: false,
+                    owned: true,
+                    ..Default::default()
                 },
             ],
             ..Default::default()
@@ -1292,5 +2027,32 @@ mod cover_policy_tests {
             "https://cdn1.epicgames.com/offer/sugar/portrait.jpg",
             false
         ));
+    }
+
+    #[test]
+    fn resolve_capture_file_strips_local_file_host_token_segment() {
+        let dir = std::env::temp_dir().join(format!("exo_rpc_capture_test_{}", std::process::id()));
+        let sub = dir.join("Desktop");
+        std::fs::create_dir_all(&sub).unwrap();
+        let file = sub.join("2026-11-24 12.15.09.png");
+        std::fs::write(&file, b"png").unwrap();
+
+        let base = ArtBase {
+            captures_dir: Some(dir.to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+        assert_eq!(
+            base.resolve_capture_file(
+                "https://captures.exo-launcher.local/abc123token/Desktop/2026-11-24%2012.15.09.png?v=1"
+            ),
+            Some(file.clone())
+        );
+        assert_eq!(
+            base.resolve_capture_file(
+                "https://captures.exo-launcher.local/Desktop/2026-11-24%2012.15.09.png"
+            ),
+            Some(file)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -21,15 +21,19 @@ internal static class ChromePreview
         Environment.GetEnvironmentVariable("EXO_CHROME_PREVIEW") == "1" &&
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable));
 
-    internal static async void Show()
+    internal static void Show() => _ = UiGuard.RunAsync(ShowAsync, "ChromePreview.Show");
+
+    private static async Task ShowAsync()
     {
+        CoreWebView2Environment? environment = null;
+        var opened = new List<(Window Window, WebView2 View)>();
         try
         {
             var display = DisplayArea.Primary;
             if (Environment.GetEnvironmentVariable("EXO_CHROME_PREVIEW_AT")?.Split(',') is [var x, var y] &&
                 int.TryParse(x, out var atX) && int.TryParse(y, out var atY))
                 display = DisplayArea.GetFromPoint(new PointInt32(atX, atY), DisplayAreaFallback.Primary);
-            var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null,
+            environment = await CoreWebView2Environment.CreateWithOptionsAsync(null,
                 Path.Combine(PathHelper.AppDataDir, "webview"), new CoreWebView2EnvironmentOptions());
             var open = 0;
             var windows = ServiceMarks.All.Keys.Select(service => (Service: service, Scale: 0.0))
@@ -40,6 +44,7 @@ internal static class ChromePreview
                 var view = new WebView2();
                 var window = new Window { Title = scale == 0 ? mark.Name : $"{mark.Name} at {scale * 100:0}%" };
                 ExoConnectedTheme.WindowContent(window, service, view);
+                opened.Add((window, view));
                 var (width, height) = (mark.Width, (double)mark.Height + ExoConnectedTheme.Band);
                 var factor = 1.0;
                 if (scale > 0)
@@ -54,7 +59,12 @@ internal static class ChromePreview
                     factor = scale / ExoConnectedTheme.Place(window, width, height, display);
                 }
                 open++;
-                window.Closed += (_, _) => { if (--open == 0) Application.Current.Exit(); };
+                window.Closed += (_, _) =>
+                {
+                    try { window.Content = null; } catch { }
+                    try { view.Close(); } catch { }
+                    if (--open == 0) Application.Current.Exit();
+                };
                 window.AppWindow.Show(activateWindow: false);
                 ExoConnectedTheme.Place(window, width * factor, height * factor, display);
                 await view.EnsureCoreWebView2Async(environment);
@@ -67,6 +77,17 @@ internal static class ChromePreview
         catch (Exception ex)
         {
             AppLog.Warn("Chrome preview: " + ex);
+        }
+        finally
+        {
+            foreach (var (window, view) in opened)
+            {
+                try { window.Content = null; } catch { }
+                try { view.Close(); } catch { }
+                try { window.Close(); } catch { }
+            }
+            opened.Clear();
+            _ = WebViewEnvironmentLifetime.Release(environment);
         }
         Application.Current.Exit();
     }

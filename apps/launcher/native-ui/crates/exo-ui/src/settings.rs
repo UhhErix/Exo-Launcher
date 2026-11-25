@@ -1,14 +1,121 @@
 use crate::pc_state::SettingsSection;
-use crate::state::AppState;
+use crate::settings_account::account_section;
+use crate::settings_privacy::{backup_section, privacy_section};
+use crate::settings_state::{
+    CHANGELOG_URL, DOWNLOAD_HOURS, OBS_OVERLAY_URL, PRIVACY_URL, SUPPORT_URL, download_hours_label,
+    search_settings,
+};
+use crate::settings_stores::{shaders_section, stores_section};
+use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT,
-    amoled_card, fg_muted, float_line, glass_button, glass_control_fill, glass_rim_bottom,
-    glass_rim_top, good, hairline, hover_fill, icon_chevron_down, icon_chevron_left, icon_download,
-    icon_folder, icon_info, icon_library, icon_music, icon_refresh, icon_search, icon_sliders,
-    icon_sparkles, icon_trophy, pressed_fill, primary_button, progress_bar, scaled, selected_fill,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, SelectTrigger, TRANSPARENT, bad, exo_glass, fg_muted, float_line,
+    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline, hover_fill,
+    icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_music, icon_search,
+    icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled, select_trigger, slider_track,
     switch_pill, type_body, type_control, type_page, type_section, type_small,
 };
-use rune::{El, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text, text_input};
+use rune::{
+    Cursor, El, LiquidGlass, Phase, ScrollSpec, TextStyle, Transition, col, edit_access, el, row,
+    text, text_input,
+};
+
+pub(crate) fn settings_card() -> El {
+    col()
+        .w_full()
+        .radius(RADIUS_CARD)
+        .continuous_corners()
+        .clip_rounded(RADIUS_CARD)
+        .liquid_glass(LiquidGlass::panel())
+}
+
+pub(crate) fn set_btn(key: impl Into<String>, label: impl Into<String>, icon: Option<El>) -> El {
+    let label = label.into();
+    let mut btn = row()
+        .key(key.into())
+        .role("button")
+        .label(label.clone())
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(32.0)
+        .px(14.0)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(glass_still_control_fill())
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .motion(SPRING_QUICK);
+    if let Some(ic) = icon {
+        btn = btn.child(ic);
+    }
+    btn.child(text(label).font(type_control()).color(FG))
+}
+
+pub(crate) fn set_primary_btn(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    icon: Option<El>,
+) -> El {
+    let label = label.into();
+    let mut btn = row()
+        .key(key.into())
+        .role("button")
+        .label(label.clone())
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(32.0)
+        .px(14.0)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(FG)
+        .hover(FG.alpha(0.92))
+        .press(FG.alpha(0.84))
+        .motion(SPRING_QUICK);
+    if let Some(ic) = icon {
+        btn = btn.child(ic);
+    }
+    btn.child(text(label).font(type_control()).color(PRIMARY_FG))
+}
+
+pub(crate) fn set_danger_btn(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    icon: Option<El>,
+) -> El {
+    let label = label.into();
+    let mut btn = row()
+        .key(key.into())
+        .role("button")
+        .label(label.clone())
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(32.0)
+        .px(14.0)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(glass_still_control_fill())
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .motion(SPRING_QUICK);
+    if let Some(ic) = icon {
+        btn = btn.child(ic);
+    }
+    btn.child(text(label).font(type_control()).color(bad()))
+}
 
 fn nav_label(sec: SettingsSection) -> &'static str {
     match sec {
@@ -41,7 +148,13 @@ fn text_size_label(raw: &str) -> &'static str {
     }
 }
 
-fn set_row(title: &str, subtitle: Option<&str>, control: El) -> El {
+fn set_row(
+    title: &str,
+    subtitle: Option<&str>,
+    error: Option<&str>,
+    highlight: bool,
+    control: El,
+) -> El {
     let mut left = col().grow(1.0).min_w(0.0).gap(3.0).child(
         text(title.to_string())
             .key(format!("set-label-{title}"))
@@ -51,15 +164,27 @@ fn set_row(title: &str, subtitle: Option<&str>, control: El) -> El {
     if let Some(sub) = subtitle {
         left = left.child(
             text(sub.to_string())
-                .font(TextStyle::new(scaled(13.0), 400.0))
+                .font(TextStyle::new(scaled(12.0), 400.0))
                 .color(fg_muted())
                 .wrap(),
         );
     }
-    el().w_full().py(12.0).px(18.0).child(
+    if let Some(err) = error {
+        left = left.child(
+            text(err.to_string())
+                .font(TextStyle::new(scaled(12.0), 400.0))
+                .color(bad())
+                .wrap(),
+        );
+    }
+    let mut wrap = el().w_full().py(12.0).px(18.0);
+    if highlight {
+        wrap = wrap.fill(FG.alpha(0.06));
+    }
+    wrap.child(
         row()
             .w_full()
-            .min_h(38.0)
+            .min_h(if subtitle.is_some() { 41.0 } else { 38.0 })
             .gap(16.0)
             .justify_between()
             .center_y()
@@ -68,34 +193,30 @@ fn set_row(title: &str, subtitle: Option<&str>, control: El) -> El {
     )
 }
 
-fn toggle_row(key: &'static str, title: &'static str, field: &'static str, value: bool) -> El {
+fn toggle_row(
+    key: &'static str,
+    title: &'static str,
+    subtitle: Option<&'static str>,
+    field: &'static str,
+    value: bool,
+    highlight: bool,
+) -> El {
     set_row(
         title,
+        subtitle,
         None,
+        highlight,
         switch_pill(key, title, value).on_press(move |s: &mut AppState| {
             s.set_bool_setting(field, !value);
         }),
     )
 }
 
-fn dropdown_pill(label: &str) -> El {
-    row()
-        .h(32.0)
-        .px(12.0)
-        .gap(6.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(text(label.to_string()).font(type_control()).color(FG))
-        .child(icon_chevron_down(12.0, fg_muted()))
-}
-
 fn section_head(title: &str) -> El {
     row()
         .w_full()
         .min_h(28.0)
-        .px(18.0)
+        .px(2.0)
         .center_y()
         .justify_between()
         .child(
@@ -106,228 +227,525 @@ fn section_head(title: &str) -> El {
         )
 }
 
+fn is_highlighted(s: &AppState, id: &str) -> bool {
+    s.wp4.highlight_row.is_some_and(|(rid, _)| rid == id)
+}
+
 fn section_general(s: &AppState) -> El {
     let set = &s.settings;
-    let main_card = amoled_card(RADIUS_CARD)
-        .w_full()
+    let gamepad_focus = s.input_mode == InputMode::Gamepad;
+    let main_card = settings_card()
         .child(set_row(
             "Text size",
             None,
-            dropdown_pill(text_size_label(
-                set.text_size.as_deref().unwrap_or("normal"),
-            )),
+            None,
+            is_highlighted(s, "general-text-size"),
+            select_trigger(
+                SelectTrigger::new(
+                    "set-text-size-select",
+                    "Text size",
+                    text_size_label(set.text_size.as_deref().unwrap_or("normal")),
+                )
+                .flat(true)
+                .open(s.open_dropdown == Some(OpenDropdown::TextSize))
+                .gamepad_focus(gamepad_focus),
+                |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::TextSize),
+            ),
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(toggle_row(
             "set-reduce-motion",
             "Reduce motion",
+            None,
             "reduceMotion",
             set.reduce_motion,
+            is_highlighted(s, "general-reduce-motion"),
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(toggle_row(
             "set-start-win",
             "Open Exo when Windows starts",
+            None,
             "startWithWindows",
             set.start_with_windows,
-        ));
-
-    let backup_card = amoled_card(RADIUS_CARD)
-        .w_full()
-        .child(set_row(
-            "Last backup",
-            None,
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(text("Today").font(type_small()).color(fg_muted()))
-                .child(
-                    glass_button("set-backup-now", "Back up now", None)
-                        .on_press(|s: &mut AppState| s.sync_exo_account()),
-                ),
+            is_highlighted(s, "general-startup"),
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
-        .child(set_row(
-            "Backup file",
-            None,
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(
-                    glass_button("set-backup-export", "Export", None)
-                        .on_press(|s: &mut AppState| s.open_app_logs()),
-                )
-                .child(
-                    glass_button("set-backup-import", "Import", None)
-                        .on_press(|s: &mut AppState| s.sync_exo_account()),
-                ),
+        .child(toggle_row(
+            "set-classic-ui",
+            "Use classic interface",
+            Some("Switch to the classic WebView2 interface on restart (or launch with --ui=web)"),
+            "useClassicWebUi",
+            set.use_classic_web_ui,
+            is_highlighted(s, "general-classic-ui"),
         ));
 
-    col().w_full().gap(24.0).child(main_card).child(
-        col()
-            .w_full()
-            .gap(8.0)
-            .child(section_head("Backups"))
-            .child(backup_card),
-    )
+    let main_card = if set.use_classic_web_ui {
+        main_card
+            .child(el().w_full().h(1.0).fill(hairline()))
+            .child(set_row(
+                "Restart to switch interface",
+                Some("Exo will reopen in the classic WebView2 interface"),
+                None,
+                false,
+                set_btn("set-classic-ui-relaunch", "Restart now", None)
+                    .on_press(|s: &mut AppState| s.relaunch_for_ui_switch(true)),
+            ))
+    } else {
+        main_card
+    };
+
+    col()
+        .w_full()
+        .gap(24.0)
+        .child(main_card)
+        .child(backup_section(s))
 }
 
 fn section_library(s: &AppState) -> El {
     let set = &s.settings;
-    let card = amoled_card(RADIUS_CARD)
+    let tools_card = settings_card().child(toggle_row(
+        "set-lib-tools",
+        "Show tools and soundtracks",
+        None,
+        "showLibraryTools",
+        set.show_library_tools,
+        is_highlighted(s, "library-tools"),
+    ));
+
+    let mut out = col()
         .w_full()
-        .child(toggle_row(
-            "set-lib-tools",
-            "Show tools and soundtracks",
-            "showLibraryTools",
-            set.show_library_tools,
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
-            "set-quiet-clients",
-            "Keep store clients quiet",
-            "storeClientsQuiet",
-            set.store_clients_quiet,
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(set_row(
-            "Riot playtime sync",
-            Some("Refresh Valorant and League of Legends hours"),
-            glass_button("set-riot-sync", "Sync hours", Some(icon_refresh(13.0, FG)))
-                .on_press(|s: &mut AppState| s.refresh_riot_playtime()),
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(set_row(
-            "Cover & metadata cache",
-            Some("Rebuild cached library covers if artwork looks stale"),
-            glass_button("set-repair-cache", "Repair cache", None)
-                .on_press(|s: &mut AppState| s.repair_app_cache()),
-        ));
-    col().w_full().gap(24.0).child(card)
+        .gap(24.0)
+        .child(stores_section(s))
+        .child(tools_card);
+
+    if let Some(shaders) = shaders_section(s) {
+        out = out.child(shaders);
+    }
+    out
 }
 
 fn section_downloads(s: &AppState) -> El {
     let set = &s.settings;
-    let card = amoled_card(RADIUS_CARD)
-        .w_full()
-        .child(toggle_row(
-            "set-pause-dl",
-            "Pause downloads while playing",
-            "pauseDownloadsWhilePlaying",
-            set.pause_downloads_while_playing,
+    let root = set
+        .default_install_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty());
+    let picking = s.wp4.picking_folder;
+
+    let mut folder_btns = row().gap(8.0).center_y();
+    if root.is_some() {
+        folder_btns = folder_btns.child(
+            set_btn("set-install-root-reset", "Reset", None)
+                .disabled(picking)
+                .on_press(|s: &mut AppState| s.wp4_reset_install_folder()),
+        );
+    }
+    folder_btns = folder_btns.child(
+        set_btn(
+            "set-install-root-change",
+            if picking { "Choosing…" } else { "Change" },
+            None,
+        )
+        .disabled(picking)
+        .on_press(|s: &mut AppState| s.wp4_pick_install_folder()),
+    );
+
+    let hours_label = download_hours_label(set.download_hours_start, set.download_hours_end);
+    let hours_open = s.wp4.download_hours_open;
+    let hours_trigger = select_trigger(
+        SelectTrigger::new("set-download-hours-select", "Download hours", hours_label)
+            .flat(true)
+            .open(hours_open),
+        |s: &mut AppState, _| s.wp4.download_hours_open = !s.wp4.download_hours_open,
+    );
+
+    let mut card = settings_card()
+        .child(set_row(
+            "Install folder",
+            Some(root.unwrap_or("Exo's Games folder")),
+            s.wp4.folder_error.as_deref(),
+            is_highlighted(s, "downloads-folder"),
+            folder_btns,
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
-            "set-awake-dl",
-            "Keep PC awake for downloads",
-            "keepAwakeDownloads",
-            set.keep_awake_downloads,
-        ))
+        .child(set_row(
+            "Download hours",
+            None,
+            None,
+            is_highlighted(s, "downloads-hours"),
+            hours_trigger,
+        ));
+
+    if hours_open {
+        let mut choices = row().w_full().px(18.0).pb(12.0).gap(8.0).flex_wrap();
+        for preset in DOWNLOAD_HOURS {
+            let active =
+                set.download_hours_start == preset.start && set.download_hours_end == preset.end;
+            let btn = if active {
+                set_primary_btn(format!("set-dl-hours-{}", preset.value), preset.label, None)
+            } else {
+                set_btn(format!("set-dl-hours-{}", preset.value), preset.label, None)
+            }
+            .on_press(move |s: &mut AppState| {
+                s.wp4_set_download_hours(preset.start, preset.end);
+            });
+            choices = choices.child(btn);
+        }
+        card = card.child(choices);
+    }
+
+    let upscaler_ac = set.upscaler_anti_cheat_everywhere;
+    card = card
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(toggle_row(
             "set-auto-upd",
-            "Auto-update games when idle",
+            "Update games automatically",
+            None,
             "autoUpdateGames",
             set.auto_update_games,
+            is_highlighted(s, "downloads-auto-update"),
+        ))
+        .child(el().w_full().h(1.0).fill(hairline()))
+        .child(set_row(
+            "Update DLSS, FSR and XeSS in anti-cheat games",
+            Some("May carry a ban risk. Never touches Riot games or Vanguard."),
+            None,
+            is_highlighted(s, "downloads-upscalers"),
+            switch_pill(
+                "set-upscalers-anticheat",
+                "Update DLSS, FSR and XeSS in anti-cheat games",
+                upscaler_ac,
+            )
+            .on_press(move |s: &mut AppState| s.wp4_set_upscaler_anticheat(!upscaler_ac)),
         ));
-    col().w_full().gap(24.0).child(card)
+
+    col().w_full().gap(24.0).child(
+        col()
+            .w_full()
+            .gap(8.0)
+            .child(section_head("Downloads"))
+            .child(card),
+    )
 }
 
 fn section_in_game(s: &AppState) -> El {
     let set = &s.settings;
-    let card = amoled_card(RADIUS_CARD)
-        .w_full()
+    let volume = set.achievement_volume.unwrap_or(60).clamp(0, 100);
+    let vol_label = if volume == 0 {
+        "Off".to_string()
+    } else {
+        format!("{volume}%")
+    };
+    let frac = volume as f32 / 100.0;
+    let slider = slider_track(
+        "set-ach-volume-slider",
+        "Pop-up sound",
+        160.0,
+        frac,
+        s.wp4.achievement_slider_dragging,
+        false,
+    )
+    .on_drag(|s: &mut AppState, d, _| {
+        let pct = ((d.x / d.w.max(1.0)).clamp(0.0, 1.0) * 20.0).round() as i32 * 5;
+        match d.phase {
+            Phase::Down | Phase::Move => {
+                s.wp4.achievement_slider_dragging = true;
+                s.wp4_set_achievement_volume(pct, false);
+            }
+            Phase::Up => {
+                s.wp4.achievement_slider_dragging = false;
+                if !d.cancelled() {
+                    s.wp4_set_achievement_volume(pct, true);
+                }
+            }
+        }
+    });
+
+    let copied = s
+        .wp4
+        .obs_copied_until
+        .is_some_and(|until| s.wp4_now_secs() < until);
+
+    let fps_on =
+        s.pc.fps_counter_state
+            .as_ref()
+            .map(|f| f.on)
+            .unwrap_or(set.fps_counter);
+    let fps_signout =
+        s.pc.fps_counter_state
+            .as_ref()
+            .is_some_and(|f| f.state == "signout");
+
+    let ach_card = settings_card()
         .child(toggle_row(
             "set-ach-banners",
             "Show achievement pop-ups",
+            None,
             "achievementBanners",
             set.achievement_banners,
+            is_highlighted(s, "ingame-achievements"),
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
-            "set-fps-counter",
-            "FPS counter",
-            "fpsCounter",
-            set.fps_counter,
+        .child(set_row(
+            "Pop-up sound",
+            None,
+            s.wp4.achievement_volume_error.as_deref(),
+            is_highlighted(s, "ingame-sound"),
+            row()
+                .gap(12.0)
+                .center_y()
+                .child(slider)
+                .child(text(vol_label).font(type_small()).color(fg_muted()).w(36.0)),
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
-            "set-hdr-games",
-            "Auto HDR for games",
-            "hdrForGames",
-            set.hdr_for_games,
+        .child(set_row(
+            "Test pop-up",
+            None,
+            s.wp4.achievement_preview_error.as_deref(),
+            is_highlighted(s, "ingame-test"),
+            set_btn("set-ach-preview", "Show", None)
+                .on_press(|s: &mut AppState| s.wp4_preview_achievement()),
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
-            "set-auto-upscalers",
-            "Auto-update DLSS, FSR & XeSS",
-            "autoUpdateUpscalers",
-            set.auto_update_upscalers,
+        .child(set_row(
+            "OBS overlay URL",
+            None,
+            None,
+            is_highlighted(s, "ingame-obs"),
+            set_btn("set-obs-copy", if copied { "Copied" } else { "Copy" }, None).on_press_tx(
+                |s: &mut AppState, tx| {
+                    tx.copy(OBS_OVERLAY_URL);
+                    s.wp4.obs_copied_until = Some(s.wp4_now_secs() + 2.0);
+                },
+            ),
         ));
-    col().w_full().gap(24.0).child(card)
+
+    let mut fps_card = settings_card().child(set_row(
+        "Show FPS counter",
+        fps_signout.then_some("Sign out to finish"),
+        None,
+        is_highlighted(s, "ingame-fps"),
+        switch_pill("set-fps-counter", "Show FPS counter", fps_on)
+            .on_press(move |s: &mut AppState| s.toggle_fps_counter(!fps_on)),
+    ));
+
+    if fps_on {
+        let cur_pos = set.fps_counter_position.as_deref().unwrap_or("right");
+        let pos_label = match cur_pos {
+            "left" => "Top left",
+            "middle" => "Top middle",
+            _ => "Top right",
+        };
+        let gamepad_focus = s.input_mode == InputMode::Gamepad;
+        fps_card = fps_card
+            .child(el().w_full().h(1.0).fill(hairline()))
+            .child(set_row(
+                "Position",
+                None,
+                None,
+                false,
+                select_trigger(
+                    SelectTrigger::new("set-fps-position", "Position", pos_label)
+                        .flat(true)
+                        .open(s.open_dropdown == Some(OpenDropdown::FpsPosition))
+                        .gamepad_focus(gamepad_focus),
+                    |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::FpsPosition),
+                ),
+            ));
+
+        const FPS_ITEMS: &[(&str, &str, &str)] = &[
+            ("set-fps-low", "low", "1% low"),
+            ("set-fps-frametime", "frametime", "Frame time"),
+            ("set-fps-gpu", "gpu", "GPU use"),
+            ("set-fps-gputemp", "gputemp", "GPU temperature"),
+            ("set-fps-cpu", "cpu", "CPU use"),
+            ("set-fps-vram", "vram", "VRAM"),
+            ("set-fps-ram", "ram", "RAM"),
+            ("set-fps-battery", "battery", "Lowest battery"),
+            ("set-fps-clock", "clock", "Time of day"),
+        ];
+        for &(key, id, label) in FPS_ITEMS {
+            let checked = set.fps_counter_items.iter().any(|x| x == id);
+            fps_card = fps_card
+                .child(el().w_full().h(1.0).fill(hairline()))
+                .child(set_row(
+                    label,
+                    None,
+                    None,
+                    false,
+                    switch_pill(key, label, checked)
+                        .on_press(move |s: &mut AppState| s.toggle_fps_counter_item(id)),
+                ));
+        }
+    }
+
+    col()
+        .w_full()
+        .gap(24.0)
+        .child(
+            col()
+                .w_full()
+                .gap(8.0)
+                .child(section_head("Achievements"))
+                .child(ach_card),
+        )
+        .child(
+            col()
+                .w_full()
+                .gap(8.0)
+                .child(section_head("FPS counter"))
+                .child(fps_card),
+        )
+}
+
+fn yt_notification_label(raw: &str) -> &'static str {
+    match raw {
+        "allow" => "Allow",
+        "block" => "Block",
+        _ => "Ask",
+    }
+}
+
+fn next_yt_notification(raw: &str) -> &'static str {
+    match raw {
+        "ask" => "allow",
+        "allow" => "block",
+        _ => "ask",
+    }
 }
 
 fn section_music(s: &AppState) -> El {
-    let current = s.media.music_service.label();
-    let card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+    let web_prefs = s.wp4.web_prefs.as_ref().or(s.pc.web_preferences.as_ref());
+    let pref_svc = web_prefs.and_then(|w| w.music_service.as_deref());
+    let current = match pref_svc {
+        Some("spotify") => "Spotify",
+        Some("apple") => "Apple Music",
+        Some("youtube") => "YouTube Music",
+        _ => s.media.music_service.label(),
+    };
+    let is_youtube = pref_svc == Some("youtube")
+        || (pref_svc.is_none()
+            && s.media.music_service == crate::media_state::MusicService::YouTube);
+    let gamepad_focus = s.input_mode == InputMode::Gamepad;
+    let mut card = settings_card().child(set_row(
         "Music service",
-        Some("Active source for the Music room and top-bar mini player"),
-        dropdown_pill(current),
+        None,
+        s.wp4.web_prefs_error.as_deref(),
+        is_highlighted(s, "music-service"),
+        select_trigger(
+            SelectTrigger::new("set-music-service-select", "Music service", current)
+                .flat(true)
+                .open(s.open_dropdown == Some(OpenDropdown::MusicService))
+                .gamepad_focus(gamepad_focus),
+            |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::MusicService),
+        ),
     ));
+    if is_youtube {
+        let notif = web_prefs
+            .map(|p| p.notifications.as_str())
+            .filter(|v| !v.is_empty())
+            .unwrap_or("ask");
+        let next = next_yt_notification(notif);
+        card = card
+            .child(el().w_full().h(1.0).fill(hairline()))
+            .child(set_row(
+                "YouTube Music notifications",
+                None,
+                None,
+                false,
+                set_btn("set-yt-notifications", yt_notification_label(notif), None)
+                    .disabled(s.wp4.web_prefs_saving)
+                    .on_press(move |s: &mut AppState| s.wp4_set_web_notifications(next)),
+            ));
+    }
     col().w_full().gap(24.0).child(card)
 }
 
+fn about_link(
+    key: &'static str,
+    label: &'static str,
+    on_press: impl Fn(&mut AppState) + 'static,
+) -> El {
+    el().key(key)
+        .role("button")
+        .label(label)
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .h(32.0)
+        .px(4.0)
+        .center_y()
+        .radius(6.0)
+        .hover(hover_fill())
+        .on_press(on_press)
+        .child(text(label).font(type_body()).color(fg_muted()))
+}
+
 fn section_about(s: &AppState) -> El {
-    let ver =
-        s.pc.system_about
-            .as_ref()
-            .and_then(|a| a.version.as_deref())
-            .or_else(|| {
-                s.pc.update_check
-                    .as_ref()
-                    .and_then(|u| u.current.as_deref())
-            })
-            .unwrap_or("3.29.0");
+    let ver = s
+        .settings
+        .app_version
+        .as_deref()
+        .or_else(|| {
+            s.pc.system_about
+                .as_ref()
+                .and_then(|a| a.version.as_deref())
+        })
+        .or_else(|| {
+            s.pc.update_check
+                .as_ref()
+                .and_then(|u| u.current.as_deref())
+        });
     let upd_avail =
         s.pc.update_check
             .as_ref()
             .is_some_and(|u| u.update_available);
+    let upd_title = match ver {
+        Some(v) if !v.is_empty() => format!("Exo Launcher {v}"),
+        _ => "Exo Launcher".to_string(),
+    };
+    let upd_status_note = s
+        .wp4
+        .update_note
+        .as_ref()
+        .filter(|n| !n.error)
+        .map(|n| n.text.clone());
+    let upd_err = s
+        .wp4
+        .update_note
+        .as_ref()
+        .filter(|n| n.error)
+        .map(|n| n.text.as_str());
 
-    let mut card = amoled_card(RADIUS_CARD)
-        .w_full()
-        .child(set_row(
-            "Exo Launcher",
-            Some(ver),
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(
-                    glass_button("set-check-upd", "Check for updates", None)
-                        .on_press(|s: &mut AppState| s.check_app_update()),
+    let mut card = settings_card().child(set_row(
+        &upd_title,
+        None,
+        upd_err,
+        is_highlighted(s, "about-updates"),
+        row()
+            .gap(10.0)
+            .center_y()
+            .children(upd_status_note.map(|note| text(note).font(type_body()).color(fg_muted())))
+            .children((!upd_avail).then(|| {
+                set_btn(
+                    "set-check-upd",
+                    if s.pc.checking_update {
+                        "Checking…"
+                    } else {
+                        "Check for updates"
+                    },
+                    None,
                 )
-                .children(upd_avail.then(|| {
-                    primary_button("set-install-upd", "Install update", None)
-                        .on_press(|s: &mut AppState| s.install_app_update())
-                })),
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(set_row(
-            "Guided tour",
-            Some("Walk through Library, Store, Discord, Music, Devices, and Exo AI"),
-            glass_button(
-                "set-replay-tour",
-                "Replay tour",
-                Some(icon_sparkles(13.0, FG)),
-            )
-            .on_press(|s: &mut AppState| s.start_tour()),
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(set_row(
-            "Diagnostic logs",
-            Some("Open the local Exo Launcher log folder"),
-            glass_button("set-open-logs", "Open logs", Some(icon_folder(13.0, FG)))
-                .on_press(|s: &mut AppState| s.open_app_logs()),
-        ));
+                .disabled(s.pc.checking_update)
+                .on_press(|s: &mut AppState| s.check_app_update())
+            }))
+            .children(upd_avail.then(|| {
+                set_primary_btn("set-install-upd", "Install update", None)
+                    .on_press(|s: &mut AppState| s.install_app_update())
+            })),
+    ));
 
     if let Some(ref prog) = s.pc.update_progress {
         let pct = (prog.percent.unwrap_or(0.0) / 100.0).clamp(0.0, 1.0) as f32;
@@ -342,11 +760,74 @@ fn section_about(s: &AppState) -> El {
         );
     }
 
-    col().w_full().gap(24.0).child(card)
+    let caches_busy = s.wp4.caches_busy;
+    card = card
+        .child(el().w_full().h(1.0).fill(hairline()))
+        .child(set_row(
+            "Clear caches",
+            s.wp4.caches_done.then_some("Caches cleared."),
+            s.wp4.caches_error.as_deref(),
+            is_highlighted(s, "about-caches"),
+            set_btn(
+                "set-clear-caches",
+                if caches_busy { "Clearing…" } else { "Clear" },
+                None,
+            )
+            .disabled(caches_busy)
+            .on_press(|s: &mut AppState| s.wp4_clear_caches()),
+        ))
+        .child(el().w_full().h(1.0).fill(hairline()))
+        .child(
+            row()
+                .w_full()
+                .px(14.0)
+                .py(12.0)
+                .gap(20.0)
+                .center_y()
+                .flex_wrap()
+                .child(about_link(
+                    "set-about-report",
+                    "Report a problem",
+                    |s: &mut AppState| s.wp4_open_report(),
+                ))
+                .child(about_link(
+                    "set-about-tour",
+                    "Take the tour",
+                    |s: &mut AppState| s.start_tour(),
+                ))
+                .child(about_link(
+                    "set-about-changelog",
+                    "Changelog",
+                    |s: &mut AppState| s.wp4_open_url(CHANGELOG_URL),
+                ))
+                .child(about_link(
+                    "set-about-privacy",
+                    "Privacy",
+                    |s: &mut AppState| s.wp4_open_url(PRIVACY_URL),
+                ))
+                .child(about_link(
+                    "set-about-support",
+                    "Support Exo",
+                    |s: &mut AppState| s.wp4_open_url(SUPPORT_URL),
+                )),
+        );
+
+    col()
+        .w_full()
+        .gap(24.0)
+        .child(card)
+        .child(account_section(s))
+        .child(privacy_section(s))
 }
 
 pub fn view(s: &AppState) -> El {
-    let q = s.pc.settings_query.text.trim().to_lowercase();
+    let q = s.pc.settings_query.text.trim().to_string();
+    let searching = !q.is_empty();
+    let hits = if searching {
+        search_settings(&q)
+    } else {
+        Vec::new()
+    };
 
     let back_btn = row()
         .key("settings-back")
@@ -354,6 +835,7 @@ pub fn view(s: &AppState) -> El {
         .label("Back")
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(34.0)
@@ -362,97 +844,158 @@ pub fn view(s: &AppState) -> El {
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
+        .liquid_glass(exo_glass(ExoGlass::Control, true))
         .hover(hover_fill())
         .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
         .on_press(|s: &mut AppState| s.toggle_settings())
         .child(icon_chevron_left(16.0, FG))
         .child(text("Back").font(type_body()).color(FG));
 
+    let mut search_bar = row()
+        .w_full()
+        .h(36.0)
+        .px(12.0)
+        .gap(8.0)
+        .center_y()
+        .hit()
+        .cursor(Cursor::Text)
+        .radius(RADIUS_PILL)
+        .fill(TRANSPARENT)
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .child(icon_search(15.0, fg_muted()))
+        .child(
+            text_input(&s.pc.settings_query, type_body())
+                .key("settings-search")
+                .label("Search settings")
+                .grow(1.0)
+                .single_line()
+                .color(FG)
+                .placeholder("Search settings", fg_muted())
+                .on_edit(edit_access(|s: &mut AppState| &mut s.pc.settings_query)),
+        );
+    if searching {
+        search_bar = search_bar.child(
+            el().key("settings-search-clear")
+                .role("button")
+                .label("Clear settings search")
+                .focusable(true)
+                .hit()
+                .cursor(Cursor::Pointer)
+                .size(22.0, 22.0)
+                .radius(11.0)
+                .center()
+                .hover(hover_fill())
+                .on_press(|s: &mut AppState| {
+                    s.pc.settings_query.text.clear();
+                    s.pc.settings_query.sync_invariants();
+                })
+                .child(icon_close(12.0, fg_muted())),
+        );
+    }
+
+    let nav_body = if searching {
+        if hits.is_empty() {
+            el().w_full().px(12.0).py(8.0).child(
+                text("No matching settings")
+                    .font(type_small())
+                    .color(fg_muted()),
+            )
+        } else {
+            col()
+                .key("settings-search-hits")
+                .role("listbox")
+                .label("Matching settings")
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .gap(2.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .children(hits.into_iter().map(|entry| {
+                    col()
+                        .key(format!("set-hit-{}", entry.id))
+                        .role("option")
+                        .label(entry.label)
+                        .focusable(true)
+                        .hit()
+                        .cursor(Cursor::Pointer)
+                        .w_full()
+                        .px(12.0)
+                        .py(8.0)
+                        .gap(2.0)
+                        .radius(RADIUS_SMALL)
+                        .hover(hover_fill())
+                        .press(pressed_fill())
+                        .on_press(move |s: &mut AppState| s.wp4_jump_to_setting(entry))
+                        .child(text(entry.label).font(type_body()).color(FG).wrap())
+                        .child(text(entry.page_label).font(type_small()).color(fg_muted()))
+                }))
+        }
+    } else {
+        col()
+            .w_full()
+            .gap(3.0)
+            .children(SettingsSection::ALL.into_iter().map(|sec| {
+                let active = s.pc.settings_section == sec;
+                let mut item = row()
+                    .key(sec.key())
+                    .role("tab")
+                    .label(nav_label(sec))
+                    .focusable(true)
+                    .hit()
+                    .cursor(Cursor::Pointer)
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .w_full()
+                    .min_h(36.0)
+                    .py(6.0)
+                    .px(12.0)
+                    .gap(10.0)
+                    .center_y()
+                    .radius(RADIUS_SMALL)
+                    .fill(if active { FG.alpha(0.15) } else { TRANSPARENT })
+                    .hover(hover_fill())
+                    .press(pressed_fill())
+                    .motion(SPRING_QUICK)
+                    .on_press(move |s: &mut AppState| {
+                        s.pc.settings_section = sec;
+                        s.pc.settings_query.text.clear();
+                        s.pc.settings_query.sync_invariants();
+                    })
+                    .child(nav_icon(sec, active))
+                    .child(
+                        text(nav_label(sec))
+                            .font(if active { type_section() } else { type_body() })
+                            .color(if active { FG } else { fg_muted() }),
+                    );
+                if active {
+                    item = item.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+                }
+                item
+            }))
+    };
+
     let sidebar = col()
         .key("settings-sidebar")
-        .w(scaled(232.0))
+        .w(scaled(280.0))
         .h_full()
         .py(24.0)
-        .pl(0.0)
-        .pr(20.0)
+        .px(16.0)
         .gap(14.0)
         .border_sides([0.0, 1.0, 0.0, 0.0], float_line())
         .child(row().child(back_btn))
         .child(
-            row().h(scaled(42.0)).px(12.0).center_y().child(
+            row().h(scaled(42.0)).px(8.0).center_y().child(
                 text("Settings")
                     .key("settings-sidebar-title")
-                    .font(type_page())
+                    .font(type_page().letter_spacing(-0.02))
                     .color(FG),
             ),
         )
-        .child(
-            row()
-                .w_full()
-                .h(36.0)
-                .px(12.0)
-                .gap(10.0)
-                .center_y()
-                .radius(RADIUS_PILL)
-                .fill(glass_control_fill())
-                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-                .child(icon_search(15.0, fg_muted()))
-                .child(
-                    text_input(&s.pc.settings_query, type_body())
-                        .key("settings-search")
-                        .label("Search settings")
-                        .grow(1.0)
-                        .single_line()
-                        .color(FG)
-                        .placeholder("Search settings", fg_muted())
-                        .on_edit(edit_access(|s: &mut AppState| &mut s.pc.settings_query)),
-                ),
-        )
-        .child(
-            col()
-                .w_full()
-                .gap(3.0)
-                .children(SettingsSection::ALL.into_iter().map(|sec| {
-                    let active = s.pc.settings_section == sec && q.is_empty();
-                    let mut item = row()
-                        .key(sec.key())
-                        .role("tab")
-                        .label(nav_label(sec))
-                        .focusable(true)
-                        .hit()
-                        .press_on_down()
-                        .press_scale(PRESS_SCALE)
-                        .w_full()
-                        .min_h(36.0)
-                        .py(6.0)
-                        .px(12.0)
-                        .gap(10.0)
-                        .center_y()
-                        .radius(RADIUS_SMALL)
-                        .fill(if active { selected_fill() } else { TRANSPARENT })
-                        .hover(hover_fill())
-                        .press(pressed_fill())
-                        .motion(SPRING_QUICK)
-                        .on_press(move |s: &mut AppState| {
-                            s.pc.settings_section = sec;
-                            s.pc.settings_query.text.clear();
-                            s.pc.settings_query.sync_invariants();
-                        })
-                        .child(nav_icon(sec, active))
-                        .child(
-                            text(nav_label(sec))
-                                .font(if active { type_section() } else { type_body() })
-                                .color(if active { FG } else { fg_muted() }),
-                        );
-                    if active {
-                        item = item.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
-                    }
-                    item
-                })),
-        );
+        .child(search_bar)
+        .child(nav_body);
 
     let title = nav_label(s.pc.settings_section);
     let body = match s.pc.settings_section {
@@ -468,28 +1011,29 @@ pub fn view(s: &AppState) -> El {
         .key("settings-scroll")
         .grow(1.0)
         .min_w(0.0)
-        .max_w(scaled(952.0))
         .h_full()
+        .items_center()
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
         .child(
             col()
                 .key(format!("settings-pane-{:?}", s.pc.settings_section))
-                .transition(Transition::opacity())
+                .transition(Transition::offset(0.0, 6.0).combined(Transition::opacity()))
                 .w_full()
+                .max_w(scaled(960.0))
                 .pt(24.0)
+                .px(36.0)
                 .pb(48.0)
                 .child(
                     row()
                         .key("settings-page-title")
                         .h(scaled(42.0))
-                        .px(18.0)
                         .center_y()
                         .child(
                             text(title)
                                 .key("settings-page-title-text")
-                                .font(type_page())
+                                .font(type_page().letter_spacing(-0.02))
                                 .color(FG),
                         ),
                 )
@@ -501,17 +1045,13 @@ pub fn view(s: &AppState) -> El {
         .w_full()
         .h_full()
         .pt(52.0)
-        .px(16.0)
         .fill(BG)
-        .items_center()
         .child(
             row()
                 .key("settings-shell")
                 .w_full()
-                .max_w(scaled(1220.0))
                 .h_full()
                 .items_start()
-                .gap(36.0)
                 .child(sidebar)
                 .child(right_col),
         )
@@ -519,6 +1059,7 @@ pub fn view(s: &AppState) -> El {
 
 #[cfg(test)]
 mod tests {
+    use crate::pc_state::SettingsSection;
     use crate::shell;
     use crate::state::{AppState, Room};
     use rune::motion_gate::Run;
@@ -551,16 +1092,29 @@ mod tests {
         let (shell_rect, _) = rt.presented("settings-shell").expect("settings-shell");
         let (sidebar_rect, _) = rt.presented("settings-sidebar").expect("settings-sidebar");
         let (scroll_rect, _) = rt.presented("settings-scroll").expect("settings-scroll");
+        let (pane_rect, _) = rt
+            .presented("settings-pane-General")
+            .expect("settings-pane-General");
 
         assert!(
-            (shell_rect[2] - 1220.0).abs() <= 1.0,
-            "expected centered 1220px settings shell, got {}",
+            (shell_rect[2] - 1920.0).abs() <= 1.0,
+            "expected full-width 1920px settings shell, got {}",
             shell_rect[2]
         );
-        let gutter = scroll_rect[0] - (sidebar_rect[0] + sidebar_rect[2]);
         assert!(
-            (gutter - 36.0).abs() <= 1.0,
-            "expected 36px sidebar-to-content gutter, got {gutter}"
+            sidebar_rect[0].abs() <= 1.0 && (sidebar_rect[2] - 280.0).abs() <= 1.0,
+            "expected left-docked 280px sidebar at x=0, got {:?}",
+            sidebar_rect
+        );
+        assert!(
+            (scroll_rect[0] - 280.0).abs() <= 1.0 && (scroll_rect[2] - 1640.0).abs() <= 1.0,
+            "expected right scroll pane at x=280 w=1640, got {:?}",
+            scroll_rect
+        );
+        assert!(
+            (pane_rect[0] - 620.0).abs() <= 1.0 && (pane_rect[2] - 960.0).abs() <= 1.0,
+            "expected centered 960px settings inner pane at x=620, got {:?}",
+            pane_rect
         );
 
         let (title_rect, _) = rt
@@ -577,15 +1131,18 @@ mod tests {
             .expect("set-label-Last backup");
 
         assert!(
-            (title_rect[0] - row1_rect[0]).abs() <= 1.0,
-            "page title x={} missed row label x={}",
-            title_rect[0],
-            row1_rect[0]
+            (title_rect[0] - 656.0).abs() <= 1.5,
+            "expected page title at x=656, got {}",
+            title_rect[0]
         );
         assert!(
-            (sec_rect[0] - row1_rect[0]).abs() <= 1.0,
-            "section head x={} missed row label x={}",
-            sec_rect[0],
+            (sec_rect[0] - 658.0).abs() <= 1.5,
+            "expected section head at x=658, got {}",
+            sec_rect[0]
+        );
+        assert!(
+            (row1_rect[0] - 674.0).abs() <= 1.5,
+            "expected row label at x=674 (656+18), got {}",
             row1_rect[0]
         );
         assert!(
@@ -617,5 +1174,232 @@ mod tests {
                 "motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
             );
         }
+    }
+
+    #[test]
+    fn settings_search_jumps_to_target_section_and_clears_query() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Settings);
+            s.pc.settings_query = rune::TextEdit::new("obs");
+        });
+        rt.frame(0.0);
+        assert!(rt.presented("set-hit-ingame-obs").is_some());
+        rt.update(|s, _| {
+            let hits = crate::settings_state::search_settings("obs");
+            s.wp4_jump_to_setting(hits[0]);
+        });
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.pc.settings_section, SettingsSection::Graphics);
+        assert!(rt.state.pc.settings_query.text.is_empty());
+        assert!(rt.presented("set-label-OBS overlay URL").is_some());
+    }
+
+    #[test]
+    fn wp4_overlays_steam_signin_account_sheet_clients_gate_and_events_render_cleanly() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Settings);
+            s.pc.settings_section = SettingsSection::About;
+            s.wp4_open_report();
+        });
+        rt.frame(0.0);
+        assert!(rt.presented("report-problem-modal").is_some());
+        rt.update(|s, _| {
+            assert!(s.dismiss_top_layer());
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(!rt.state.wp4.report_open);
+
+        rt.update(|s, _| {
+            s.pc.settings_section = SettingsSection::Account;
+            s.wp4.stores.push(exo_rpc::StoreStatus {
+                store: "steam".into(),
+                display_name: "Steam".into(),
+                agent_present: true,
+                client_present: Some(true),
+                signed_in: true,
+                ..Default::default()
+            });
+            s.wp4.steam_panel_open = true;
+            s.wp4.steam_step = Some(exo_rpc::SteamSignInStep {
+                state: "waiting".into(),
+                challenge_url: Some("https://s.team/q/1/1234567890123456".into()),
+                interval_seconds: Some(5),
+                ..Default::default()
+            });
+        });
+        rt.frame(2.0 / 60.0);
+        assert!(rt.presented("steam-library-panel").is_some());
+        rt.update(|s, _| {
+            s.wp4_steam_switch_mode(crate::settings_state::SteamSignInMode::Password);
+        });
+        rt.frame(3.0 / 60.0);
+        assert!(rt.presented("steam-pass-input").is_some());
+        assert!(rt.state.wp4.steam_pass.is_masked());
+
+        rt.update(|s, _| {
+            let events = s.events.clone();
+            assert!(events.dispatch(
+                s,
+                exo_rpc::HostEvent::BackupStopped(exo_rpc::BackupStoppedEvent {
+                    sentence: "Backups paused because disk is full.".into(),
+                    since: "2026-11-23".into(),
+                })
+            ));
+            assert!(events.dispatch(
+                s,
+                exo_rpc::HostEvent::GiftsChanged(exo_rpc::StoreGiftsReply {
+                    ok: true,
+                    steam_signed_in: true,
+                    ..Default::default()
+                })
+            ));
+            assert!(events.dispatch(
+                s,
+                exo_rpc::HostEvent::ShadersEvent(exo_rpc::ShadersEventPayload {
+                    name: "state".into(),
+                    data: serde_json::json!({ "recorder": { "auto": true } }),
+                })
+            ));
+        });
+        assert_eq!(
+            rt.state.wp4.backup_note.as_deref(),
+            Some("Backups paused because disk is full.")
+        );
+        assert_eq!(rt.state.wp4.gifts_steam_signed_in, Some(true));
+        assert!(rt.state.wp4.shaders_auto);
+
+        rt.update(|s, _| {
+            s.status = crate::state::HostStatus::Connected;
+            s.wp4.account_overview = Some(exo_rpc::ExoAccountOverview {
+                signed_in: false,
+                ..Default::default()
+            });
+        });
+        rt.frame(4.0 / 60.0);
+        assert!(rt.presented("exo-account-sheet").is_some());
+
+        rt.update(|s, _| {
+            s.wp4_continue_without_account();
+            s.settings.onboarding_complete = Some(true);
+            s.pc.clients = Some(exo_rpc::ClientsStatus {
+                ok: true,
+                needs_fix: true,
+                problem: None,
+                epic: exo_rpc::ClientsEpic {
+                    layout: "old".into(),
+                    ..Default::default()
+                },
+                steam: exo_rpc::ClientsSteam {
+                    channel: "stable".into(),
+                },
+            });
+        });
+        rt.frame(5.0 / 60.0);
+        assert!(rt.presented("clients-start-gate").is_some());
+    }
+
+    #[test]
+    fn setup_pc_defaults_count_is_nonzero_when_tuning_items_exist() {
+        let mut s = AppState::default();
+        s.setup.picks = None;
+        s.pc.tuning = Some(exo_rpc::SystemTuningState {
+            items: vec![
+                exo_rpc::TuningItem {
+                    key: "game_mode".into(),
+                    label: "Game Mode".into(),
+                    detail: "Windows Game Mode".into(),
+                    on: true,
+                    ..Default::default()
+                },
+                exo_rpc::TuningItem {
+                    key: "hags".into(),
+                    label: "HAGS".into(),
+                    detail: "GPU scheduling".into(),
+                    on: false,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        });
+        let picks = s.effective_setup_picks();
+        assert_eq!(picks, vec!["game_mode".to_string()]);
+    }
+
+    #[test]
+    fn settings_parity_room_landing_dropdown_cursors_and_slider_pointer() {
+        let mut s = AppState::default();
+        s.room = Room::Library;
+        s.toggle_settings();
+        assert_eq!(s.room, Room::Settings);
+        assert_eq!(s.pc.settings_section, SettingsSection::Account);
+
+        s.toggle_settings();
+        assert_eq!(s.room, Room::Library);
+        s.room = Room::Music;
+        s.toggle_settings();
+        assert_eq!(s.pc.settings_section, SettingsSection::Updates);
+
+        s.toggle_settings();
+        s.room = Room::Store;
+        s.toggle_settings();
+        assert_eq!(s.pc.settings_section, SettingsSection::General);
+
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Settings);
+            s.pc.settings_section = SettingsSection::General;
+            s.toggle_dropdown(crate::state::OpenDropdown::TextSize);
+        });
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let (bx, by) = rt.find("nav-library").expect("nav-library");
+        rt.pointer_move(bx, by);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer);
+
+        let (tx, ty) = rt
+            .find("set-text-size-select")
+            .expect("set-text-size-select");
+        rt.pointer_move(tx, ty);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer);
+
+        let (ox, oy) = rt.find("dd-text-size-opt-normal").expect("dropdown option");
+        rt.pointer_move(ox, oy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Default);
+
+        rt.update(|s, _| {
+            s.close_dropdown();
+            s.pc.settings_section = SettingsSection::Graphics;
+            s.settings.fps_counter = true;
+        });
+        rt.frame(1.0 / 60.0);
+        let (sx, sy) = rt
+            .find("set-ach-volume-slider")
+            .expect("achievement volume slider");
+        rt.pointer_move(sx, sy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer);
+        assert!(rt.presented("set-fps-position").is_some());
     }
 }

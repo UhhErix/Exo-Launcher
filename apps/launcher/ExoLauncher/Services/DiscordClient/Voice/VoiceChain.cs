@@ -31,7 +31,13 @@ internal sealed class VoiceChain : IDisposable
     private readonly LowCut _lowCut = new();
     private readonly KnockDetector _knock = new();
     private WebRtcNoise? _standard;
+    private WebRtcAgc2? _agc2;
+    private bool _agc2Failed;
     private NoiseSuppressor? _suppressor;
+    private NeuralNoiseSuppressor? _neural;
+    private Task<NeuralNoiseSuppressor?>? _neuralLoading;
+    private VoiceModelTier _neuralTier = VoiceModelTier.FallbackDfn3;
+    private int _neuralRetryIn;
     private readonly VoiceShape _shape = new();
     /// <summary>The level the leveler brings a voice to (dBFS, its frames' mean), and a kept tuning's gain toward.</summary>
     internal const float SpeakingDb = -22f;
@@ -186,6 +192,19 @@ internal sealed class VoiceChain : IDisposable
             }
             else suppression = "missing";
         }
+        else if (processing.NoiseSuppression && NeuralSuppressor(processing) is { } neural)
+        {
+            neural.Process(frame, limit);
+            heard = neural.InputDb;
+            speech = neural.SpeechDb;
+            suppression = neural.Tier switch
+            {
+                VoiceModelTier.VoxLockTse => "voxlock",
+                VoiceModelTier.DpdfNet48kHr => "exo-hq",
+                _ => neural.Load.Light ? "light" : "exo-v2",
+            };
+            DelaySamples = neural.DelaySamples;
+        }
         // Exo Voice and Custom's AI run Exo's own chain: DeepFilterNet plus Exo's stages.
         else if (processing.NoiseSuppression && Suppressor() is { } suppressor)
         {
@@ -198,7 +217,8 @@ internal sealed class VoiceChain : IDisposable
         // Exo's own isn't here, but Windows' cleans the stream (VoiceAudio turned it on): suppression runs, and the gate
         // isn't held shut as it is while Exo's loads.
         else if (processing.NoiseSuppression) suppression = VoiceAudio.WindowsSuppresses ? "windows" : _missing ? "missing" : "loading";
-        Stages = new VoiceStages(suppression, limit, processing.Focus, systemGain ? "windows" : exo ? "exo" : "off", tuning is not null);
+        var agc2 = processing.MicAutoGain && !processing.Focus ? Agc2() : null;
+        Stages = new VoiceStages(suppression, limit, processing.Focus, agc2 is not null ? "agc2" : systemGain ? "windows" : exo ? "exo" : "off", tuning is not null);
         var focus = processing.Focus && !Recording;
         var cleaned = Cleaned;
         var open = false;
@@ -246,8 +266,9 @@ internal sealed class VoiceChain : IDisposable
             // speaking level, stood down where Windows' own gain control already rides it (Voice Focus has its own).
             // None and a custom chain send the voice as the gate left it.
             _shape.Process(frame);
-            if (!systemGain) _leveler.Process(frame, open && !held);
+            if (agc2 is null && !systemGain) _leveler.Process(frame, open && !held);
         }
+        if (!focus && agc2 is not null) agc2.Process(frame);
         if (focus)
         {
             _focus ??= new VoiceFocus();
@@ -397,6 +418,70 @@ internal sealed class VoiceChain : IDisposable
 
     private uint _knocks;
 
+    private NeuralNoiseSuppressor? NeuralSuppressor(VoiceProcessing processing)
+    {
+        if (Offline || !ExoVoiceMl.EnsureLoaded()) return null;
+        var gameInForeground = GameRunningNow();
+        var want = VoiceTierPolicy.SelectTier(
+            processing.Suppressor,
+            processing.VoiceTier,
+            VoiceModels.BaselineReady(),
+            VoiceModels.HighQualityReady(),
+            VoiceModels.VoxLockReady(),
+            processing.OnlyMyVoice && processing.VoiceIsolation,
+            gameInForeground,
+            gpuHeadroomMs: gameInForeground ? 0.0 : 1.0,
+            cpuLogicalCores: Environment.ProcessorCount);
+        if (want == VoiceModelTier.FallbackDfn3)
+        {
+            if (_neural is not null)
+            {
+                _neural.Dispose();
+                _neural = null;
+                _neuralTier = VoiceModelTier.FallbackDfn3;
+            }
+            return null;
+        }
+        if (_neural is not null)
+        {
+            if (_neuralTier == want)
+            {
+                if (_neuralTier == VoiceModelTier.DpdfNet48kHr && _neural.MeasuredMsPer10Ms > 0 && !VoiceTierPolicy.MeetsCpuBudget(_neural.MeasuredMsPer10Ms) && VoiceModels.BaselineReady())
+                {
+                    _neural.Dispose();
+                    _neural = null;
+                    _neuralTier = VoiceModelTier.FallbackDfn3;
+                    _neuralRetryIn = 0;
+                    _neuralLoading = Task.Run(() => NeuralNoiseSuppressor.Create(VoiceModelTier.DpdfNetBaseline));
+                    return null;
+                }
+                return _neural;
+            }
+            _neural.Dispose();
+            _neural = null;
+            _neuralTier = VoiceModelTier.FallbackDfn3;
+        }
+        if (_neuralLoading is { IsCompleted: true } done)
+        {
+            _neuralLoading = null;
+            _neural = done.IsCompletedSuccessfully ? done.Result : null;
+            if (_neural is not null)
+                _neuralTier = _neural.Tier;
+            else
+                _neuralRetryIn = 100;
+            return _neural;
+        }
+        if (_neuralLoading is null && --_neuralRetryIn <= 0)
+            _neuralLoading = Task.Run(() => NeuralNoiseSuppressor.Create(want));
+        return null;
+    }
+
+    private static bool GameRunningNow()
+    {
+        try { return Adapters.SteamLoginUsers.IsGameRunning(); }
+        catch { return false; }
+    }
+
     // DeepFilterNet's model takes a moment to load (and its plugin a hash check the first time): never on the audio
     // thread. Until it is in, frames pass as they are; while the plugin isn't here (still downloading), it is looked
     // for again each second.
@@ -431,12 +516,26 @@ internal sealed class VoiceChain : IDisposable
     }
 
 
+    private WebRtcAgc2? Agc2()
+    {
+        if (_agc2 is not null || _agc2Failed) return _agc2;
+        _agc2 = WebRtcAgc2.Create();
+        if (_agc2 is null) _agc2Failed = true;
+        return _agc2;
+    }
+
     public void Dispose()
     {
         _standard?.Dispose();
         _standard = null;
+        _agc2?.Dispose();
+        _agc2 = null;
         _suppressor?.Dispose();
         _suppressor = null;
+        _neural?.Dispose();
+        _neural = null;
+        _neuralLoading?.ContinueWith(t => t.Result?.Dispose(), CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+        _neuralLoading = null;
         // One still loading is let go of when it is in.
         _loading?.ContinueWith(t => t.Result?.Dispose(), CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
         _loading = null;

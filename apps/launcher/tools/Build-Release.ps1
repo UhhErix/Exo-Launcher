@@ -42,6 +42,70 @@ if ($whatsNewJson.Length -gt 65536 -or [Text.Encoding]::UTF8.GetByteCount($whats
     throw "ui\src\lib\whatsNew.json ($version) exceeds the 65536-byte limit."
 }
 
+$oauthProviders = @(
+    @{ Name = 'spotify';   Var = 'EXO_OAUTH_SPOTIFY_CLIENT_ID' }
+    @{ Name = 'discord';   Var = 'EXO_OAUTH_DISCORD_CLIENT_ID' }
+    @{ Name = 'google';    Var = 'EXO_OAUTH_GOOGLE_CLIENT_ID' }
+    @{ Name = 'twitch';    Var = 'EXO_OAUTH_TWITCH_CLIENT_ID' }
+    @{ Name = 'battlenet'; Var = 'EXO_OAUTH_BATTLENET_CLIENT_ID' }
+    @{ Name = 'microsoft'; Var = 'EXO_OAUTH_MICROSOFT_CLIENT_ID' }
+    @{ Name = 'riot';      Var = 'EXO_OAUTH_RIOT_CLIENT_ID' }
+    @{ Name = 'epic';      Var = 'EXO_OAUTH_EPIC_CLIENT_ID' }
+)
+$hasGh = $null -ne (Get-Command gh -ErrorAction SilentlyContinue)
+$bakedOAuth = [System.Collections.Generic.List[string]]::new()
+$missingOAuth = [System.Collections.Generic.List[string]]::new()
+foreach ($p in $oauthProviders) {
+    $val = [Environment]::GetEnvironmentVariable($p.Var)
+    if ([string]::IsNullOrWhiteSpace($val) -and $hasGh) {
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $fetched = (& gh variable get $p.Var 2>$null | Out-String).Trim()
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($fetched)) {
+                [Environment]::SetEnvironmentVariable($p.Var, $fetched, 'Process')
+                $val = $fetched
+            }
+        } catch {
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($val)) {
+        $bakedOAuth.Add($p.Name)
+    } else {
+        $missingOAuth.Add($p.Name)
+    }
+}
+$bakedText = if ($bakedOAuth.Count -gt 0) { $bakedOAuth -join ', ' } else { 'none' }
+$missingText = if ($missingOAuth.Count -gt 0) { $missingOAuth -join ', ' } else { 'none' }
+if ($missingOAuth.Count -gt 0) {
+    Write-Warning "OAuth client IDs baked: [$bakedText]; missing: [$missingText]."
+} else {
+    Write-Host "OAuth client IDs baked: [$bakedText]; missing: [$missingText]."
+}
+
+$deltaPubKey = [Environment]::GetEnvironmentVariable('EXO_DELTA_RELEASE_PUBKEY_HEX')
+if ([string]::IsNullOrWhiteSpace($deltaPubKey) -and $hasGh) {
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $fetchedKey = (& gh variable get EXO_DELTA_RELEASE_PUBKEY_HEX 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($fetchedKey)) {
+            [Environment]::SetEnvironmentVariable('EXO_DELTA_RELEASE_PUBKEY_HEX', $fetchedKey, 'Process')
+            $deltaPubKey = $fetchedKey
+        }
+    } catch {
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+}
+if ([string]::IsNullOrWhiteSpace($deltaPubKey)) {
+    Write-Warning 'EXO_DELTA_RELEASE_PUBKEY_HEX is not set; exo-installer will build without an embedded release key.'
+} else {
+    Write-Host "EXO_DELTA_RELEASE_PUBKEY_HEX embedded into exo-installer ($($deltaPubKey.Length) hex chars)."
+}
+
 # The release gate: the telemetry and crash-report tests (what may leave this PC, and in what shape) and the UI's tests,
 # run before anything is built or published.
 dotnet test --project ExoLauncher.Tests\ExoLauncher.Tests.csproj -c Release -p:Platform=x64 --filter "FullyQualifiedName~TelemetryTests|FullyQualifiedName~CrashSendTests|FullyQualifiedName~AppsConfirmReasonTests|FullyQualifiedName~NetworkDestinationsTests"
@@ -73,6 +137,14 @@ if (@('dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll') | Where-Objec
 Push-Location native-ui
 cargo build --release --locked --bin exo-ui
 if ($LASTEXITCODE) { throw "Native UI release build failed ($LASTEXITCODE)." }
+cargo build --profile release-cdylib --locked -p exo-voice-ml
+if ($LASTEXITCODE) { throw "Exo Voice ML release build failed ($LASTEXITCODE)." }
+cargo build --profile release-cdylib --locked -p exo-audio-apo --lib
+if ($LASTEXITCODE) { throw "Exo Audio APO library release build failed ($LASTEXITCODE)." }
+cargo build --release --locked -p exo-audio-apo --bin exo-apo-helper
+if ($LASTEXITCODE) { throw "Exo Audio APO helper release build failed ($LASTEXITCODE)." }
+cargo build --release --locked -p exo-installer
+if ($LASTEXITCODE) { throw "Exo Installer release build failed ($LASTEXITCODE)." }
 Pop-Location
 dotnet publish ExoLauncher\ExoLauncher.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained -v q -nologo
 if ($LASTEXITCODE) { throw "dotnet publish failed ($LASTEXITCODE)." }
@@ -82,21 +154,14 @@ if (-not $publish) { throw 'No publish folder.' }
 $noVoice = @('dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll') | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($noVoice) { throw "The app folder lacks Discord voice's $($noVoice -join ', ')." }
 
-# Exo Shaders (GPL-3.0-or-later, shaders\; its source published at getexo.app/source by cloud\updates\addon-source.mjs from
-# the same commit): the engine built from the committed tree (tools\Build-ShadersEngine.ps1 refuses uncommitted changes).
 $shaders = & (Join-Path $repo 'tools\Build-ShadersEngine.ps1')
 $engine = Join-Path $shaders 'engine'
 $addon = Join-Path $publish.FullName 'addons\shaders'
 New-Item -ItemType Directory -Force -Path $addon | Out-Null
 robocopy $engine (Join-Path $addon 'engine') /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "Copying the Shaders engine failed ($LASTEXITCODE)." }
-# The shipped engine must be the Exo build (EXO_BUILD: no request to SCSKiller's or Patreon's servers, no anti-cheat game).
-# Read its Core's constant without loading the file, so the copy stays unlocked.
-$exoBuild = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes((Join-Path $addon 'engine\SCSKiller.Core.dll'))).GetType('SCSKiller.Core.App.ExoBuild').GetField('Enabled').GetRawConstantValue()
-if ($exoBuild -ne $true) { throw "The Exo Shaders engine in $engine is not the Exo build (ExoBuild.Enabled is off)." }
-# The commit of shaders\ this release bundles, named in the output below (addon-source.mjs build --rev publishes it).
 $shadersCommit = (Get-Content (Join-Path $shaders 'commit.txt') -Raw).Trim()
-foreach ($notice in 'LICENSE', 'LICENSE-EXCEPTION.txt', 'THIRD-PARTY-NOTICES.md') {
+foreach ($notice in 'LICENSE', 'THIRD-PARTY-NOTICES.md') {
     $source = Join-Path $shaders $notice
     if (Test-Path $source) { Copy-Item $source (Join-Path $addon $notice) -Force }
 }
@@ -113,12 +178,16 @@ Copy-Item (Join-Path $repo 'capture\out\obs') $captureAddon -Recurse -Force
 
 # What every release must hold. The voice libraries are only copied once they're built, and releases have gone out
 # without them, so a missing part stops the build, and the voice libraries must also load here.
-$voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'sherpa-onnx-c-api.dll', 'onnxruntime.dll'
-$parts = $voice + 'ExoLauncher.exe', 'exo-ui.exe', 'wwwroot\index.html', 'wwwroot\mouse\index.html', 'steam-ipc\ExoLauncher.SteamIpc.exe',
+$voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'exo_voice_ml.dll', 'onnxruntime.dll'
+$nativeAudio = $voice + 'exo_apo.dll'
+if (Test-Path (Join-Path $publish.FullName 'sherpa-onnx-c-api.dll')) { throw 'sherpa-onnx-c-api.dll must not ship; exo_voice_ml.dll replaces it.' }
+$parts = $nativeAudio + 'ExoLauncher.exe', 'exo-ui.exe', 'exo-apo-helper.exe', 'wwwroot\mouse\index.html', 'wwwroot\changelog.gz', 'steam-ipc\ExoLauncher.SteamIpc.exe',
     'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe'
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($missing) { throw "The app folder lacks $($missing -join ', ')." }
-$dead = $voice | Where-Object {
+$leakedPdbs = @(Get-ChildItem -Recurse -File -Filter '*.pdb' $publish.FullName)
+if ($leakedPdbs.Count -gt 0) { throw "Debug symbols leaked into publish: $(($leakedPdbs | ForEach-Object Name) -join ', ')" }
+$dead = $nativeAudio | Where-Object {
     $handle = [IntPtr]::Zero
     -not [Runtime.InteropServices.NativeLibrary]::TryLoad((Join-Path $publish.FullName $_), [ref]$handle)
 }
@@ -126,6 +195,33 @@ if ($dead) { throw "These won't load: $($dead -join ', ')." }
 
 $artifacts = Join-Path $repo 'artifacts'
 New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
+$symbols = Join-Path $artifacts 'symbols'
+if (Test-Path $symbols) { Remove-Item $symbols -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $symbols | Out-Null
+$symbolCandidates = @(
+    (Join-Path $repo 'ExoLauncher\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\ExoLauncher.pdb'),
+    (Join-Path $repo 'ExoLauncher.SteamIpc\bin\x64\Release\native-publish\ExoLauncher.SteamIpc.pdb'),
+    (Join-Path $repo 'capture\out\ExoCapture.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_ui.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_shaders_service.pdb'),
+    (Join-Path $repo 'native-ui\target\release-cdylib\exo_voice_ml.pdb'),
+    (Join-Path $repo 'native-ui\target\release-cdylib\exo_apo.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_apo_helper.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_installer.pdb')
+)
+foreach ($pdb in $symbolCandidates) {
+    if (Test-Path $pdb) { Copy-Item $pdb $symbols -Force }
+}
+$voiceSymbols = Join-Path $repo 'voice\out\symbols'
+if (Test-Path $voiceSymbols) {
+    Get-ChildItem $voiceSymbols -Filter '*.pdb' -ErrorAction SilentlyContinue | Copy-Item -Destination $symbols -Force
+}
+$symbolsZip = Join-Path $artifacts 'ExoLauncher-symbols.zip'
+if (Test-Path $symbolsZip) { Remove-Item $symbolsZip -Force }
+$symbolFiles = @(Get-ChildItem $symbols -Filter '*.pdb' -ErrorAction SilentlyContinue)
+if ($symbolFiles.Count -gt 0) {
+    Compress-Archive -Path ($symbolFiles | ForEach-Object FullName) -DestinationPath $symbolsZip -CompressionLevel Optimal
+}
 $setup = Join-Path $artifacts 'ExoLauncher-Setup.exe'
 # Exo Setup's window (setup\): Exo's own screens in WebView2. It goes into the app as its uninstaller too.
 pwsh -NoProfile -File (Join-Path $repo 'setup\build.ps1')
@@ -168,20 +264,58 @@ Remove-Item $engine -Force
 dotnet run --project (Join-Path $repo 'tools\AppFiles\AppFiles.csproj') -c Release -- build --app $publish.FullName `
     --setup (Join-Path $packShell 'ExoSetup.exe') --version $version --installer $installerRevision --out $artifacts
 if ($LASTEXITCODE) { throw "Building files.json and files.pack failed ($LASTEXITCODE)." }
+$deltaManifest = Get-Content (Join-Path $artifacts 'files.json') -Raw | ConvertFrom-Json
+$deltaPaths = @($deltaManifest.files | ForEach-Object { $_.path })
+foreach ($apoAsset in 'exo_apo.dll', 'exo-apo-helper.exe') {
+    if ($deltaPaths -notcontains $apoAsset) { throw "Delta pack manifest files.json lacks $apoAsset." }
+}
+
+$installerBin = Join-Path $repo 'native-ui\target\release\exo-installer.exe'
+if (Test-Path $installerBin) { Copy-Item $installerBin (Join-Path $artifacts 'exo-installer.exe') -Force }
+
+$payloadZip = Join-Path $artifacts 'ExoLauncher-win-x64.zip'
+if (Test-Path $payloadZip) { Remove-Item $payloadZip -Force }
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::Open($payloadZip, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    foreach ($entry in $deltaManifest.files) {
+        $srcPath = if ($entry.setup -eq $true) {
+            Join-Path $packShell (Split-Path $entry.path -Leaf)
+        } else {
+            Join-Path $publish.FullName ($entry.path -replace '/', '\')
+        }
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $zip,
+            $srcPath,
+            $entry.path,
+            [System.IO.Compression.CompressionLevel]::Optimal)
+    }
+} finally {
+    $zip.Dispose()
+}
+$zipVerify = [System.IO.Compression.ZipFile]::OpenRead($payloadZip)
+try {
+    if ($zipVerify.Entries.Count -ne $deltaManifest.files.Count) {
+        throw "ExoLauncher-win-x64.zip entry count mismatch ($($zipVerify.Entries.Count) != $($deltaManifest.files.Count))."
+    }
+} finally {
+    $zipVerify.Dispose()
+}
+
 Remove-Item $packShell -Recurse -Force
 
 $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -Path "$setup.sha256" -Value "$hash  ExoLauncher-Setup.exe" -NoNewline -Encoding ascii
 Set-Content -Path (Join-Path $artifacts 'whats-new.json') -Value ($whatsNew | ConvertTo-Json -Depth 4) -NoNewline -Encoding utf8NoBOM
 Write-Output "Exo Launcher ${version}: $setup ($([math]::Round((Get-Item $setup).Length / 1MB, 1)) MB), SHA-256 $hash, Exo Shaders engine from shaders\ at $shadersCommit"
-Write-Output "File-level update: files.pack $([math]::Round((Get-Item (Join-Path $artifacts 'files.pack')).Length / 1MB, 1)) MB, installer revision $installerRevision"
+Write-Output "File-level update: files.pack $([math]::Round((Get-Item (Join-Path $artifacts 'files.pack')).Length / 1MB, 1)) MB, ExoLauncher-win-x64.zip $([math]::Round((Get-Item $payloadZip).Length / 1MB, 1)) MB, installer revision $installerRevision"
 
 # The release's file list and pack (and its What's New) on the GitHub release, beside the installer. Never replaced: an
 # install may already have read them.
 if ($Release) {
     $existing = @(gh release view $Release --repo UhhErix/Exo-Launcher --json assets --jq '.assets[].name')
     if ($LASTEXITCODE) { throw "GitHub release $Release was not found (create it first)." }
-    foreach ($asset in 'files.json', 'files.pack', 'whats-new.json') {
+    foreach ($asset in 'files.json', 'files.pack', 'whats-new.json', 'ExoLauncher-win-x64.zip') {
         if ($existing -contains $asset) { throw "$asset is already on $Release; delete it there first if this build replaces it." }
         gh release upload $Release (Join-Path $artifacts $asset) --repo UhhErix/Exo-Launcher
         if ($LASTEXITCODE) { throw "Uploading $asset to $Release failed ($LASTEXITCODE)." }

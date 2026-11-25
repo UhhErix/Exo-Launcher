@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.0 — November 25, 2026
+- **All-new native desktop interface.** Exo Launcher now runs on a hardware-accelerated native desktop interface by default for faster startup, smoother scrolling, and lower idle memory across Library, Store, Game pages, Discord, Music, PC, Devices, Captures, and Settings, with your existing settings, games, and accounts carried over automatically. _Verified: on screen._
+- **One switch back to the classic interface.** Settings › General adds a "Use classic interface" toggle with one-click restart, and launching with `--ui=web` opens the classic interface at any time without losing your settings or library. _Verified: end-to-end._
+- **Upgraded Exo Voice and system-wide audio controls.** Introduces a faster native voice cleanup engine with automatic gaming tuning, voice isolation, echo cancellation, and optional system-wide equalizer support in Settings › Voice and Devices › Audio. _Checked in code only._
+- **Built-in frame generation and live performance overlay.** Adds frame generation controls for supported games alongside an in-game frame-time and sensor overlay, power protection, and automatic fan-curve safety limits in the PC room. _Checked in code only._
+- **Native game capture, mouse controls, and display calibration.** Rebuilds game recording and instant replay with faster GPU capture and per-app audio isolation, brings gaming mouse tuning directly into Devices › Mouse, and adds monitor calibration and brightness controls in PC › Display. _Checked in code only._
+- **Optional passkey sign-in and safer account connections.** Adds Windows Hello passkey sign-in for Exo accounts and opens supported sign-ins in your regular browser. _Checked in code only._
+- **Includes all 3.31.x fixes and stability improvements.** Carries forward every 3.30.x and 3.31.x fix—including smaller installs, faster startup, Reduce motion sync, smoother controls during heavy background work, crash protection, and safer helper timeouts and report scrubbing. _Verified: end-to-end._
+
 ## 3.31.1 — November 25, 2026
 - **Reduce motion stays where you set it.** Stops account sync from overwriting your local Reduce motion preference, resolves setting conflicts using timestamps instead of older values, and flushes manual sync right away. _Checked in code only._
 - **Smoother app during heavy background tasks.** Isolates slow hardware, optimization, and system work onto separate lanes so rooms and controls stay responsive, submits crash reports in the background, and stops counting expected status messages as app errors. _Checked in code only._

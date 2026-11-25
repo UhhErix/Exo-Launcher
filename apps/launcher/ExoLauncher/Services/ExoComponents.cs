@@ -54,6 +54,7 @@ internal static class ExoComponents
         GogAdapter.Component,
         AmazonAdapter.Component,
         SpeakerModel.Component,
+        VoiceModels.BaselineComponent,
     ];
 
     /// <summary>A component's fetch moved on (bytes done, whether unpacking), from whoever started it.</summary>

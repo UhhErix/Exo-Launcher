@@ -87,7 +87,6 @@ test('0007 adds devices with the hash of each device token, and starts empty: no
   assert.deepEqual(db.prepare('PRAGMA table_info(devices)').all().map(c => c.name), ['account', 'device', 'token_hash', 'prev_token_hash', 'first_seen', 'last_seen'])
   assert.equal(db.prepare('SELECT count(*) AS n FROM devices').get().n, 0)
 })
-
 test('0008 adds passkeys and webauthn_challenges without disturbing existing accounts or sessions', () => {
   const db = migrated([...BEFORE_0004, '0004_drop_legacy.sql', '0005_counters.sql', '0006_keyring_and_pending.sql', '0007_devices.sql'])
   db.exec("INSERT INTO accounts (id, email_mac, password_hash, recovery_mac, item_key, created) VALUES ('a', 'k1:x', 'h', 'k1:y', X'00', 1)")

@@ -181,11 +181,12 @@ public sealed partial class WebHostBridge
         return new { ok = false, message = reply.Error };
     }
 
-    private static async Task<object> DiscordTypingAsync(JsonElement p, bool hasParams, CancellationToken ct)
+    private static Task<object> DiscordTypingAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
-        if (Channel(p, hasParams) is not { } c || !c.Session.Cache.CanSend(c.Id)) return new { ok = false };
-        var reply = await c.Session.Rest.TypingAsync(c.Id, ct).ConfigureAwait(false);
-        return new { ok = reply.Error is null };
+        if (Channel(p, hasParams) is not { } c || !c.Session.Cache.CanSend(c.Id))
+            return Task.FromResult<object>(new { ok = false });
+        _ = Task.Run(() => c.Session.Rest.TypingAsync(c.Id, CancellationToken.None));
+        return Task.FromResult<object>(new { ok = true });
     }
 
     private static object DiscordEmojis(JsonElement p, bool hasParams) =>

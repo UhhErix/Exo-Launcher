@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "<REQUEST_ID>",
+  "ok": true,
+  "result": {
+    "state": "ready",
+    "signedIn": true
+  }
+}

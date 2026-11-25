@@ -12,12 +12,9 @@ const mockAutopilotChoices: Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGa
 }
 const mockAutopilot = (): AutopilotState => ({
   ...mockAutopilotChoices,
-  on: true,
-  gamePriority: 'above',
-  keepGameMode: false,
-  coreParking: true,
-  gameMode: { off: true, keptOn: null },
-  mouseAccel: { off: true, managed: true },
+  gameMode: { off: mockAutopilotChoices.on && !mockAutopilotChoices.keepGameMode, keptOn: mockAutopilotChoices.on && mockAutopilotChoices.keepGameMode ? 'you keep it on' : null },
+  mouseAccel: { off: mockAutopilotChoices.on, managed: mockAutopilotChoices.on },
+  standbyPurge: { available: false, reason: 'Unavailable without administrator permission (run Exo as administrator for live standby purges; Auto Tune still purges once when elevated).' },
   memoryIntegrity: {
     status: 'unlocked',
     reason: 'None of your installed games require Memory Integrity. Turning it off can add 5–10% FPS (lowers kernel driver protection; takes a restart).',
@@ -679,6 +676,7 @@ const mockSettings: LauncherSettings = {
   hdrForGames: false,
   frameGenEverywhere: false,
   frameGenEverywhereCard: true,
+  graphicsFeaturesBestSettings: false,
     hdrSdrGamma: true,
     discordNoiseSuppression: true,
     discordQuietWhilePlaying: true,
@@ -854,6 +852,152 @@ function mockNvidiaDetails(applied: boolean, latencyLabel: string, vrrEnabled: b
     { key: 'dlss', label: 'DLSS overrides', value: 'Latest · Preset K / F / A', state },
     { key: 'rebar', label: 'Resizable BAR', value: 'On', state: 'on' as const },
   ]
+}
+
+const MOCK_TUNING_UNSUPPORTED = { min: 0, max: 0, step: 1, default: 0, supported: false }
+const MOCK_TUNING_VF = [
+  { index: 0, voltageMv: 750, baseClockMhz: 1500, offsetMhz: 0 },
+  { index: 1, voltageMv: 825, baseClockMhz: 1710, offsetMhz: 0 },
+  { index: 2, voltageMv: 900, baseClockMhz: 1890, offsetMhz: 0 },
+  { index: 3, voltageMv: 975, baseClockMhz: 2025, offsetMhz: 0 },
+  { index: 4, voltageMv: 1050, baseClockMhz: 2100, offsetMhz: 0 },
+]
+const MOCK_TUNING_FAN = [
+  { tempC: 35, speedPercent: 30 },
+  { tempC: 50, speedPercent: 45 },
+  { tempC: 65, speedPercent: 65 },
+  { tempC: 78, speedPercent: 85 },
+  { tempC: 85, speedPercent: 100 },
+]
+const MOCK_TUNING_PRESETS = {
+  nvidia: {
+    vendor: 'nvidia', generation: 'Ampere', deviceId: 'nvidia:NVIDIA GeForce RTX 3070', deviceName: 'NVIDIA GeForce RTX 3070', backend: 'nvapi',
+    fallbackReason: null, isLaptop: false, lockedByMaker: false, lockReason: null, requiresWaiver: false, waiverText: null,
+    persistsInDriver: false, needsResidentForFanCurve: true,
+    persistenceNote: 'Clocks and limits re-apply at sign-in; software fan curves stay active while Exo is open.',
+    supportsCurveEditor: true, supportsUndervoltSearch: true,
+    coreClockOffsetMhz: { min: -500, max: 500, step: 15, default: 0, supported: true },
+    coreMinClockMhz: MOCK_TUNING_UNSUPPORTED, coreMaxClockMhz: MOCK_TUNING_UNSUPPORTED,
+    voltageMv: MOCK_TUNING_UNSUPPORTED, voltageOffsetMv: MOCK_TUNING_UNSUPPORTED,
+    memoryClockOffsetMhz: { min: -1000, max: 1500, step: 25, default: 0, supported: true },
+    memoryMaxClockMhz: MOCK_TUNING_UNSUPPORTED,
+    powerLimitPercent: { min: 50, max: 115, step: 1, default: 100, supported: true },
+    powerLimitWatts: MOCK_TUNING_UNSUPPORTED,
+    tempLimitC: { min: 65, max: 90, step: 1, default: 83, supported: true },
+    clockLockMhz: { min: 600, max: 2200, step: 15, default: 2100, supported: true },
+    memoryTimingLevels: [], vfCurvePoints: MOCK_TUNING_VF,
+    fanCount: 2, supportsHardwareFanCurve: false, supportsSoftwareFanCurve: true, supportsZeroRpm: false, fanMaxPoints: 5,
+    fanSpeedPercent: { min: 0, max: 100, step: 1, default: 50, supported: true },
+    fanTempC: { min: 30, max: 100, step: 1, default: 60, supported: true },
+  },
+  amd: {
+    vendor: 'amd', generation: 'RDNA4', deviceId: 'amd:AMD Radeon RX 9070 XT', deviceName: 'AMD Radeon RX 9070 XT', backend: 'adlx',
+    fallbackReason: null, isLaptop: false, lockedByMaker: false, lockReason: null, requiresWaiver: false, waiverText: null,
+    persistsInDriver: true, needsResidentForFanCurve: false,
+    persistenceNote: 'AMD Adrenalin persists manual tuning and hardware fan curves in the driver.',
+    supportsCurveEditor: true, supportsUndervoltSearch: true,
+    coreClockOffsetMhz: MOCK_TUNING_UNSUPPORTED,
+    coreMinClockMhz: { min: 500, max: 2900, step: 10, default: 500, supported: true },
+    coreMaxClockMhz: { min: 500, max: 3200, step: 10, default: 2800, supported: true },
+    voltageMv: MOCK_TUNING_UNSUPPORTED,
+    voltageOffsetMv: { min: -100, max: 50, step: 5, default: 0, supported: true },
+    memoryClockOffsetMhz: MOCK_TUNING_UNSUPPORTED,
+    memoryMaxClockMhz: { min: 1750, max: 2750, step: 10, default: 2500, supported: true },
+    powerLimitPercent: { min: -10, max: 15, step: 1, default: 0, supported: true },
+    powerLimitWatts: MOCK_TUNING_UNSUPPORTED, tempLimitC: MOCK_TUNING_UNSUPPORTED, clockLockMhz: MOCK_TUNING_UNSUPPORTED,
+    memoryTimingLevels: ['Default', 'Fast Timing'], vfCurvePoints: MOCK_TUNING_VF,
+    fanCount: 1, supportsHardwareFanCurve: true, supportsSoftwareFanCurve: false, supportsZeroRpm: true, fanMaxPoints: 5,
+    fanSpeedPercent: { min: 0, max: 100, step: 1, default: 50, supported: true },
+    fanTempC: { min: 30, max: 100, step: 1, default: 60, supported: true },
+  },
+  intel: {
+    vendor: 'intel', generation: 'Battlemage', deviceId: 'intel:Intel Arc B580', deviceName: 'Intel Arc B580', backend: 'igcl',
+    fallbackReason: null, isLaptop: false, lockedByMaker: false, lockReason: null, requiresWaiver: true,
+    waiverText: 'Overclocking or altering GPU clock frequency, voltage, power, or fan settings outside Intel factory specifications may reduce hardware lifetime, cause instability, and is not covered by Intel warranty. Continue only if you accept these risks for this GPU.',
+    persistsInDriver: false, needsResidentForFanCurve: false,
+    persistenceNote: 'Intel Arc hardware fan tables run in the driver; clocks and limits re-apply at sign-in.',
+    supportsCurveEditor: false, supportsUndervoltSearch: true,
+    coreClockOffsetMhz: { min: -200, max: 300, step: 5, default: 0, supported: true },
+    coreMinClockMhz: MOCK_TUNING_UNSUPPORTED, coreMaxClockMhz: MOCK_TUNING_UNSUPPORTED,
+    voltageMv: MOCK_TUNING_UNSUPPORTED,
+    voltageOffsetMv: { min: -100, max: 100, step: 5, default: 0, supported: true },
+    memoryClockOffsetMhz: MOCK_TUNING_UNSUPPORTED, memoryMaxClockMhz: MOCK_TUNING_UNSUPPORTED,
+    powerLimitPercent: MOCK_TUNING_UNSUPPORTED,
+    powerLimitWatts: { min: 100, max: 228, step: 5, default: 190, supported: true },
+    tempLimitC: { min: 65, max: 95, step: 1, default: 90, supported: true },
+    clockLockMhz: MOCK_TUNING_UNSUPPORTED, memoryTimingLevels: [], vfCurvePoints: [],
+    fanCount: 2, supportsHardwareFanCurve: true, supportsSoftwareFanCurve: false, supportsZeroRpm: false, fanMaxPoints: 5,
+    fanSpeedPercent: { min: 0, max: 100, step: 1, default: 50, supported: true },
+    fanTempC: { min: 30, max: 100, step: 1, default: 60, supported: true },
+  },
+} as const
+
+let mockGpuManualMode: 'auto' | 'manual' = 'auto'
+let mockGpuManualWaived = false
+let mockGpuManualSaved: Record<string, unknown> = { mode: 'auto', coreClockOffsetMhz: 0, memoryClockOffsetMhz: 0, powerLimitPercent: 100, tempLimitC: 83 }
+
+function mockGpuManualTuningState(message: string | null = null) {
+  const key = mockGpu === 'amd' ? 'amd' : mockGpu === 'intel' ? 'intel' : 'nvidia'
+  const base = MOCK_TUNING_PRESETS[key]
+  const caps = { ...base, waiverAccepted: !base.requiresWaiver || mockGpuManualWaived }
+  const defaults = { mode: 'auto', coreClockOffsetMhz: 0, memoryClockOffsetMhz: 0, powerLimitPercent: key === 'amd' ? 0 : 100, tempLimitC: 83, fanCurve: MOCK_TUNING_FAN, vfCurve: MOCK_TUNING_VF }
+  const current = mockGpuManualMode === 'manual' ? { ...defaults, ...mockGpuManualSaved, mode: 'manual' } : defaults
+  return {
+    ok: true,
+    message,
+    mode: mockGpuManualMode,
+    pausedAfterCrash: false,
+    pauseReason: null,
+    canReapply: false,
+    queuedPending: false,
+    queuedReason: null,
+    statusLine: mockGpuManualMode === 'manual' ? `Manual active · ${caps.backend.toUpperCase()}` : `Auto (stock) · ${caps.backend.toUpperCase()}`,
+    live: { tempC: 44, clockMhz: 1920, fanPercent: 38, watts: 48 },
+    capabilities: caps,
+    factoryDefaults: defaults,
+    current,
+    saved: current,
+    test: { running: false, kind: 'idle', phase: 'idle', elapsedSec: 0, totalSec: 0, passes: 0, tempC: null, clockMhz: null, checksumOk: true, currentStep: null, passed: null, rolledBack: false, failureReason: null, summary: null },
+  }
+}
+
+function mockGpuManualTuningApply(p?: Record<string, unknown>) {
+  mockGpuManualMode = p?.mode === 'auto' ? 'auto' : 'manual'
+  if (p) mockGpuManualSaved = { ...mockGpuManualSaved, ...p, mode: mockGpuManualMode }
+  return mockGpuManualTuningState()
+}
+
+function mockGpuManualTuningReset() {
+  mockGpuManualMode = 'auto'
+  mockGpuManualSaved = { mode: 'auto', coreClockOffsetMhz: 0, memoryClockOffsetMhz: 0, powerLimitPercent: 100, tempLimitC: 83 }
+  return mockGpuManualTuningState()
+}
+
+function mockGpuManualTuningWaiver(p?: Record<string, unknown>) {
+  if (p?.accept === true) mockGpuManualWaived = true
+  return mockGpuManualTuningState()
+}
+
+function mockGpuManualTuningTest(p?: Record<string, unknown>) {
+  const stop = p?.action === 'stop'
+  const base = mockGpuManualTuningState()
+  return {
+    ...base,
+    test: stop
+      ? base.test
+      : { ...base.test, phase: 'passed', passed: true, passes: 120, elapsedSec: 60, totalSec: 60, summary: 'Passed 120 compute passes (60 s) with zero artifacts.' },
+  }
+}
+
+function mockGpuManualTuningUndervolt(p?: Record<string, unknown>) {
+  const stop = p?.action === 'stop'
+  const base = mockGpuManualTuningState()
+  return {
+    ...base,
+    test: stop
+      ? base.test
+      : { ...base.test, kind: 'undervolt', phase: 'passed', passed: true, passes: 4, elapsedSec: 4, totalSec: 5, summary: 'Stopped at step 5, backed off 2 steps to +45 MHz undervolt.' },
+  }
 }
 
 function mockGpuProfile(p?: Record<string, unknown>) {
@@ -1082,6 +1226,8 @@ function mockGameSettings(params?: Record<string, unknown>) {
   return {
     ok: true, supported: true, title: 'Call of Duty: Modern Warfare 4', found: true, groups: [], windowMode: 'borderless' as const,
     standing: mockOptimized ? 'applied' as const : 'off' as const,
+    advice: [],
+    minecraft: null,
   }
 }
 
@@ -1107,7 +1253,7 @@ function mockSettingsSet(params?: Record<string, unknown>) {
 
 // Discord settings > Voice & Video and the rest, kept for the session so the pages can be clicked through.
 let mockDiscordClient: Record<string, unknown> = {
-  inputProfile: 'exo', noiseSuppression: true, noiseSuppressionKind: 'ai', othersNoiseSuppression: false, onlyMyVoice: false, myVoiceLearned: false, myVoiceSeconds: 0, evenVoices: true, echoCancellation: true, voiceFocus: true, pushToTalk: false, pttDelay: 20,
+  inputProfile: 'exo', noiseSuppression: true, noiseSuppressionKind: 'ai', othersNoiseSuppression: false, onlyMyVoice: false, myVoiceLearned: false, myVoiceSeconds: 0, evenVoices: true, voiceTargetLufs: -20, micAutoGain: false, echoCancellation: true, voiceFocus: true, pushToTalk: false, pttDelay: 20,
   autoSensitivity: true, sensitivity: -60, attenuation: 0, attenuateSelf: false, attenuateOthers: true, keybinds: [], desktopNotifications: true,
   unreadBadge: true, taskbarFlash: true, disabledSounds: [], disableAllSounds: false, selectedChannelSound: false, soundVolume: 60,
   goLiveHeight: 1080, goLiveFps: 30, goLiveHevc: false, captureMode: 'wgc', serviceDisabled: false,
@@ -1277,6 +1423,98 @@ let mockMouseStage: 'none' | 'restart' | 'set' = typeof location !== 'undefined'
 let mockMouseTested = false
 
 let mockMouseRecorded = false
+let mockDiagMeasured = false
+let mockDiagEtw = false
+const mockDiagApplied = new Set<string>()
+
+function mockMouseDiagState() {
+  const usb = {
+    controllers: [
+      {
+        name: 'AMD USB 3.10 eXtensible Host Controller',
+        vendorName: 'AMD',
+        pciLocation: 'PCI bus 11, dev 0, fn 3',
+        placement: 'cpu',
+        interruptMode: 'msi',
+        msiSupported: true,
+        freeCpuPorts: 2,
+        rootHub: { name: 'USB Root Hub (USB 3.0)', isRoot: true, portNumber: null, portCount: 4, selectiveSuspendEnabled: false, devices: [], hubs: [] },
+      },
+      {
+        name: 'AMD B550 Chipset USB 3.10 Host Controller',
+        vendorName: 'AMD',
+        pciLocation: 'PCI bus 2, dev 0, fn 0',
+        placement: 'chipset',
+        interruptMode: 'line',
+        msiSupported: true,
+        freeCpuPorts: 2,
+        rootHub: {
+          name: 'USB Root Hub (USB 3.0)',
+          isRoot: true,
+          portNumber: null,
+          portCount: 6,
+          selectiveSuspendEnabled: true,
+          devices: [],
+          hubs: [
+            {
+              name: 'Generic SuperSpeed USB Hub',
+              isRoot: false,
+              portNumber: 2,
+              portCount: 4,
+              selectiveSuspendEnabled: true,
+              devices: [
+                { name: 'Finalmouse Starlight X', kind: 'mouse', portNumber: 1, speedCode: 2, speedLabel: 'High (480 Mbps)', bIntervalUs: 125, pollingHz: 8000, highRate: true, highRateReason: '8 kHz mouse', sharesHubWithHighRate: true, sharedWith: ['Logitech Brio Webcam'], isMouse: true },
+                { name: 'Logitech Brio Webcam', kind: null, portNumber: 2, speedCode: 3, speedLabel: 'SuperSpeed (5 Gbps)', bIntervalUs: null, pollingHz: null, highRate: true, highRateReason: 'Webcam / video', sharesHubWithHighRate: true, sharedWith: ['Finalmouse Starlight X'], isMouse: false },
+              ],
+              hubs: [],
+            },
+          ],
+        },
+      },
+    ],
+    advice: ['Move your 8 kHz mouse to a port on the CPU\'s USB controller, not the hub with Logitech Brio Webcam.'],
+    mouseOnCpu: false,
+    mouseOnHub: true,
+    mouseSharesHighRateHub: true,
+  }
+  const jitter = !mockDiagMeasured ? null : {
+    pollingRateHz: 8000, nominalMs: 0.125, totalReports: 79410, checkedGaps: 78100,
+    medianMs: 0.125, spreadMs: 0.018, p95Ms: 0.155, p99Ms: 0.245, p999Ms: 0.62, longestMs: 1.48,
+    lateCount: 94, droppedCount: 18, bunchedCount: 142, stabilityScore: 79,
+    onScreenRefresh: false, mouseCpu: 0, cause: 'both',
+    causeDetail: 'Both uneven USB delivery and high PC DPC/ISR load (nvlddmkm.sys, up to 640 µs) showed up during the test.',
+    histogram: [
+      { id: 'bunched', label: 'Bunched', rangeMs: '< 0.06 ms', count: 142, percent: 0.2, kind: 'warn' },
+      { id: 'early', label: 'Early', rangeMs: '0.06–0.11 ms', count: 1120, percent: 1.4, kind: 'ok' },
+      { id: 'nominal', label: 'On time', rangeMs: '0.11–0.14 ms', count: 75210, percent: 96.3, kind: 'ok' },
+      { id: 'slight', label: 'Slight jitter', rangeMs: '0.14–0.19 ms', count: 1534, percent: 2.0, kind: 'warn' },
+      { id: 'late', label: 'Late', rangeMs: '0.19–0.25 ms', count: 62, percent: 0.1, kind: 'bad' },
+      { id: 'very_late', label: 'Very late', rangeMs: '0.25–0.50 ms', count: 24, percent: 0.0, kind: 'bad' },
+      { id: 'dropout', label: 'Dropout', rangeMs: '>= 0.50 ms', count: 8, percent: 0.0, kind: 'bad' },
+    ],
+  }
+  const etw = !mockDiagEtw ? null : {
+    at: new Date().toISOString(), seconds: 10, totalIsrs: 86420, totalDpcs: 41200,
+    totalIsrUs: 194200, totalDpcUs: 682400, maxIsrUs: 142, maxDpcUs: 640, eventsLost: 0, mouseControllerCore: 0,
+    cores: [
+      { core: 0, isrCount: 79200, isrTotalUs: 168000, isrMaxUs: 142, dpcCount: 24100, dpcTotalUs: 418000, dpcMaxUs: 640, isMouseCore: true },
+      { core: 2, isrCount: 3100, isrTotalUs: 9200, isrMaxUs: 38, dpcCount: 8400, dpcTotalUs: 142000, dpcMaxUs: 210, isMouseCore: false },
+      { core: 4, isrCount: 2400, isrTotalUs: 8600, isrMaxUs: 29, dpcCount: 5100, dpcTotalUs: 74000, dpcMaxUs: 120, isMouseCore: false },
+      { core: 6, isrCount: 1720, isrTotalUs: 8400, isrMaxUs: 21, dpcCount: 3600, dpcTotalUs: 48400, dpcMaxUs: 85, isMouseCore: false },
+    ],
+    topDrivers: [
+      { driver: 'nvlddmkm.sys', dpcCount: 9120, dpcTotalUs: 298400, dpcMaxUs: 640, isrCount: 1840, isrTotalUs: 21000, isrMaxUs: 95, topCore: 0, cores: [0, 2] },
+      { driver: 'usbxhci.sys', dpcCount: 14200, dpcTotalUs: 192100, dpcMaxUs: 165, isrCount: 78100, isrTotalUs: 152400, isrMaxUs: 142, topCore: 0, cores: [0] },
+      { driver: 'ndis.sys', dpcCount: 4100, dpcTotalUs: 84300, dpcMaxUs: 210, isrCount: 1200, isrTotalUs: 8400, isrMaxUs: 41, topCore: 2, cores: [2, 0] },
+    ],
+  }
+  const fixes = !mockDiagMeasured ? [] : [
+    { id: 'affinity', title: 'xHCI interrupt affinity', summary: 'Move your mouse\'s USB controller off CPU 0 to quiet non-zero CPU 6.', actionLabel: 'Pin to CPU 6', honestyNote: 'Measure again after — there may be no change.', needsRestart: true, needsAdmin: true, status: mockDiagApplied.has('affinity') ? 'restart' : 'available', canApply: !mockDiagApplied.has('affinity'), canUndo: mockDiagApplied.has('affinity'), detail: mockDiagApplied.has('affinity') ? 'Pinned to CPU 6. Restart Windows, then measure again.' : 'Writes DevicePolicy and AssignmentSetOverride via admin helper. Restart required.', before: null, after: null, improved: null },
+    { id: 'msi', title: 'USB controller MSI mode', summary: 'AMD B550 Chipset USB 3.10 Host Controller supports MSI but is currently using line-based interrupts.', actionLabel: 'Enable MSI mode', honestyNote: 'Measure again after — there may be no change.', needsRestart: true, needsAdmin: true, status: mockDiagApplied.has('msi') ? 'restart' : 'available', canApply: !mockDiagApplied.has('msi'), canUndo: mockDiagApplied.has('msi'), detail: mockDiagApplied.has('msi') ? 'MSI mode enabled. Restart Windows, then measure again.' : 'Sets MSISupported = 1 on the mouse\'s xHCI controller via admin helper. Restart required.', before: null, after: null, improved: null },
+    { id: 'usb_suspend', title: 'USB selective suspend off', summary: 'Disable USB selective suspend on your mouse\'s hub to prevent idle wake-up hitches while gaming.', actionLabel: 'Disable on mouse hub', honestyNote: 'Measure again after — there may be no change.', needsRestart: false, needsAdmin: true, status: mockDiagApplied.has('usb_suspend') ? 'applied' : 'available', canApply: !mockDiagApplied.has('usb_suspend'), canUndo: mockDiagApplied.has('usb_suspend'), detail: mockDiagApplied.has('usb_suspend') ? 'Selective suspend disabled on your mouse\'s USB hub. Measure again to compare.' : 'Turns off hub selective suspend via admin helper and AC USB suspend while gaming.', before: null, after: null, improved: null },
+  ]
+  return { ok: true, message: null, running: false, jitter, usb, etw, etwProblem: null, fixes }
+}
 let mockAfmf3 = false
 async function mockMouseCore(params?: Record<string, unknown>) {
   if (params?.action === 'measure') {
@@ -1328,6 +1566,51 @@ const mockExoAiPref: {
   lastCheckUtc: null,
 }
 
+const mockGpuProcesses = () => {
+  const topGpu = {
+    pid: 4120,
+    name: 'chrome',
+    adapterLuid: '0x00000000_0x00010A4F',
+    adapterName: 'NVIDIA GeForce RTX 3070',
+    totalPercent: 14.2,
+    engines: [{ type: '3D', percent: 14.2 }, { type: 'Video Decode', percent: 3.1 }],
+    localBytes: 640 * 1024 * 1024,
+    nonLocalBytes: 42 * 1024 * 1024,
+    protectedReason: null as string | null,
+  }
+  const dwm = {
+    pid: 1024,
+    name: 'dwm',
+    adapterLuid: '0x00000000_0x00010A4F',
+    adapterName: 'NVIDIA GeForce RTX 3070',
+    totalPercent: 2.1,
+    engines: [{ type: '3D', percent: 2.1 }],
+    localBytes: 280 * 1024 * 1024,
+    nonLocalBytes: 18 * 1024 * 1024,
+    protectedReason: 'part of Windows',
+  }
+  return {
+    ok: true,
+    adapters: [
+      {
+        luid: '0x00000000_0x00010A4F',
+        name: 'NVIDIA GeForce RTX 3070',
+        vendorId: 0x10DE,
+        dedicatedBytes: 8 * 1024 ** 3,
+        sharedBytes: 8 * 1024 ** 3,
+        software: false,
+      },
+    ],
+    processes: [topGpu, dwm],
+    answer: {
+      summary: 'chrome is using 14% GPU (3D) and 640 MB VRAM.',
+      topGpu,
+      topVram: topGpu,
+      hogs: [topGpu],
+    },
+  }
+}
+
 const mockExoAi = () => ({
   autoApplyBestSettings: mockExoAiPref.autoApplyBestSettings,
   backgroundDriftCheck: mockExoAiPref.backgroundDriftCheck,
@@ -1355,6 +1638,7 @@ const mockExoAi = () => ({
     fanCount: 2,
     note: null as string | null,
   },
+  gpuAnswer: mockGpuProcesses().answer,
 })
 
 const MOCK_HANDLERS: Record<string, MockHandler> = {
@@ -1879,11 +2163,29 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   // OptiScaler (Control). ?riot=partial: another mod replaced Exo's loader.
   'dlss.frameGen': (p) => {
     const id = String(p?.id)
-    if (mockRiotPartial) return { ok: true, state: 'broken', path: 'dlss', version: 'DLSSG SM86 0.4.1', reason: 'replaced', mod: 'UE4SS' }
+    if (mockRiotPartial) return { ok: true, state: 'broken', path: 'dlss', package: 'DLSSG SM86', version: 'DLSSG SM86 0.4.2', reason: 'replaced', mod: 'UE4SS' }
     if (mockGpu || !/cyberpunk|control|rivals/.test(id)) return { ok: true, state: 'hidden' }
-    if (id.includes('rivals')) return { ok: true, state: 'note', path: 'dlss', antiCheat: 'NetEase anti-cheat', note: 'Not in games with anti-cheat' }
-    return id.includes('control') ? { ok: true, state: 'on', path: 'fsr', version: 'OptiScaler v0.9.4' } : { ok: true, state: 'on', path: 'dlss', version: 'DLSSG SM86 0.4.1', session: 'ran' }
+    if (id.includes('rivals')) return { ok: true, state: 'note', antiCheat: 'NetEase anti-cheat', note: 'Mods would get you banned', canToggle: false }
+    return id.includes('control')
+      ? { ok: true, state: 'on', path: 'fsr', package: 'OptiScaler', version: 'OptiScaler v0.9.5', canToggle: true }
+      : { ok: true, state: 'on', path: 'dlss', package: 'DLSSG SM86', version: 'DLSSG SM86 0.4.2', session: 'ran', canToggle: true }
   },
+  'dlss.frameGenSet': (p) => {
+    const enabled = Boolean(p?.enabled)
+    return {
+      ok: true,
+      state: enabled ? 'on' : 'off',
+      path: 'dlss',
+      package: 'DLSSG SM86',
+      version: enabled ? 'DLSSG SM86 0.4.2' : null,
+      canToggle: true,
+      message: enabled ? 'Turn on DLSS Frame Generation in the game' : 'Off.',
+    }
+  },
+  'game.frameGen': (p) => mockGameFrameGen(p),
+  'game.frameCap': (p) => mockGameFrameCap(p),
+  'game.capLab.run': (p) => mockCapLabRun(p),
+  'game.capLab.cancel': (p) => mockCapLabCancel(p),
   'shaders.status': mockShadersStatus,
   'shaders.prepare.games': () => ({ ok: true, games: MOCK_GAMES.filter(game => game.installed).slice(0, 2).map((game, at) => ({ id: game.id, title: at ? game.title : 'A Very Long Unreal Game Name: The Definitive Remastered Edition', state: mockPrepareRunning && !at ? 'running' : 'ready', message: null })) }),
   'shaders.prepare.start': () => { mockPrepareRunning = true; emitHostEvent('shaders.changed', {}); return { ok: true, message: null } },
@@ -2115,6 +2417,12 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'eq.headphones': () => ({ ok: true, headphones: MOCK_EQ_HEADPHONES }),
   'system.tune': (p) => mockTune(p),
   'gpu.profile': (p) => mockGpuProfile(p),
+  'gpu.tuning.state': () => mockGpuManualTuningState(),
+  'gpu.tuning.apply': (p) => mockGpuManualTuningApply(p),
+  'gpu.tuning.reset': () => mockGpuManualTuningReset(),
+  'gpu.tuning.waiver': (p) => mockGpuManualTuningWaiver(p),
+  'gpu.tuning.test': (p) => mockGpuManualTuningTest(p),
+  'gpu.tuning.undervolt': (p) => mockGpuManualTuningUndervolt(p),
   'system.about': () => ({
     name: 'Erix-PC', processor: mockIntelCpu ? 'Intel Core i7-14700K' : 'AMD Ryzen 5 5600X', cores: mockIntelCpu ? 20 : 6, threads: mockIntelCpu ? 28 : 12,
     graphics: 'NVIDIA GeForce RTX 3070', videoMemoryGb: 8, directX: '12 Ultimate', resizableBar: true,
@@ -2145,6 +2453,25 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'system.tuning': (p) => mockTuning(p),
+  'system.qos': (p) => {
+    const games = [
+      { gameId: 'steam:730', title: 'Counter-Strike 2', exeName: 'cs2.exe', enabled: p?.action === 'on' && p?.gameId === 'steam:730' },
+    ]
+    return {
+      ok: true,
+      message: null,
+      nlaBypassed: games.some(g => g.enabled),
+      note: 'Tags outgoing game traffic with DSCP 46 (EF). Only routers with SQM/DSCP QoS (OpenWrt CAKE, ASUS/Ubiquiti) or Wi-Fi WMM honor it; ISPs strip DSCP on the internet.',
+      games,
+    }
+  },
+  'system.overlays': () => ({
+    ok: true,
+    message: null,
+    items: [
+      { id: 'gamebar', name: 'Xbox Game Bar & Game DVR', status: 'off', enabled: false, cost: '2-5% GPU and encoder overhead when background recording is on', detail: 'Xbox Game Bar background recording (Game DVR) is off.', canToggle: true, canUndo: false, manualSteps: null },
+    ],
+  }),
   'system.interrupts': (p) => {
     const applied = p?.action === 'apply'
     return {
@@ -2157,6 +2484,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'exoAi.state': () => mockExoAi(),
+  'gpu.processes': () => mockGpuProcesses(),
   'exoAi.set': (p) => {
     const patch = (p ?? {}) as { autoApplyBestSettings?: boolean; backgroundDriftCheck?: boolean; fanPreset?: string; runNow?: boolean }
     if (typeof patch.autoApplyBestSettings === 'boolean') mockExoAiPref.autoApplyBestSettings = patch.autoApplyBestSettings
@@ -2170,11 +2498,32 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'autopilot.state': mockAutopilot,
   'autopilot.set': (p) => {
     const partial = p as Partial<typeof mockAutopilotChoices>
+    if (typeof partial.on === 'boolean') mockAutopilotChoices.on = partial.on
+    if (partial.gamePriority === 'above' || partial.gamePriority === 'high' || partial.gamePriority === 'normal') {
+      mockAutopilotChoices.gamePriority = partial.gamePriority
+    }
+    if (typeof partial.keepGameMode === 'boolean') mockAutopilotChoices.keepGameMode = partial.keepGameMode
+    if (typeof partial.coreParking === 'boolean') mockAutopilotChoices.coreParking = partial.coreParking
     if (Array.isArray(partial.alwaysDemote)) mockAutopilotChoices.alwaysDemote = partial.alwaysDemote
     if (Array.isArray(partial.suspend)) mockAutopilotChoices.suspend = partial.suspend
     return { ok: true, message: null, state: mockAutopilot() }
   },
   'system.mouseCore': mockMouseCore,
+  'mouse.diag.status': () => mockMouseDiagState(),
+  'mouse.diag.measure': async (p) => {
+    await new Promise(resolve => setTimeout(resolve, 1200))
+    mockDiagMeasured = true
+    if (p?.withEtw) mockDiagEtw = true
+    return mockMouseDiagState()
+  },
+  'mouse.diag.cancel': () => ({ ok: true }),
+  'mouse.diag.fix': (p) => {
+    const id = String(p?.id ?? '')
+    const action = String(p?.action ?? '')
+    if (action === 'apply') mockDiagApplied.add(id)
+    if (action === 'undo') mockDiagApplied.delete(id)
+    return mockMouseDiagState()
+  },
   'system.drives': mockDrives,
   'system.drivers': () => ({ ok: true, busy: null, running: false, restart: false, items: [
     { id: 'windows:740c4b6c-bcfa-4f97-ae49-7bcc6933e696', kind: 'windows', name: 'Voice Clarity', maker: 'Microsoft Corporation', version: '10.0.26100.1', date: '2006-06-20', latest: '1.0.4.7057', latestDate: '2026-06-16', how: 'install', page: null, source: 'Windows Update', app: false, skipped: null, advised: null },
@@ -2212,9 +2561,62 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'startup.remove': () => mockStartup(null),
   'startup.restore': () => mockStartup(null),
   'startup.clean': () => ({ ...mockStartup(null), cleaned: 4 }),
-  'hdr.state': () => mockNoHdr ? { supported: false } : ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
-  'hdr.game': (p) => ({ ok: true, hdr: 'true', mode: typeof p?.mode === 'string' ? p.mode : 'auto' }),
+  'hdr.state': () => mockNoHdr ? { supported: false, internal: false, displays: [] } : ({
+    supported: true, on: false, name: 'Mock OLED', devicePath: 'DISPLAY#MOCK#1', peakNits: 1000, edidPeakNits: 1000, dxgiPeakNits: 1000, sdrWhiteNits: 120, internal: false, colorMode: 'sdr', autoHdrGlobal: null, calibrated: false, verdict: 'great',
+    peakHealth: { status: 'ok', edidNits: 1000, dxgiNits: 1000, gapPercent: 0, warning: null },
+    calibration: null,
+    laptopChecks: { isLaptop: false, pluggedIn: true, hdrOn: false, items: [] },
+    brightnessWarning: null,
+    displays: [{ name: 'Mock OLED', gdiName: '\\\\.\\DISPLAY1', devicePath: 'DISPLAY#MOCK#1', main: true, supported: true, on: false, internal: false, connector: 'dp', colorMode: 'sdr', edidPeakNits: 1000, dxgiPeakNits: 1000, sdrWhiteNits: 120, peakHealth: { status: 'ok', edidNits: 1000, dxgiNits: 1000, gapPercent: 0, warning: null } }],
+  }),
+  'hdr.game': (p) => ({
+    ok: true,
+    hdr: 'true',
+    mode: typeof p?.mode === 'string' ? p.mode : 'auto',
+    cursorFix: typeof p?.cursorFix === 'boolean' ? p.cursorFix : false,
+    cursorFixEligible: true,
+    sdrWhiteNits: 120,
+    autoHdr: { global: null, game: null, effective: 'default' },
+  }),
+  'hdr.calibrate': (p) => ({
+    ok: true,
+    status: p?.action === 'undo' ? 'undone' : 'ok',
+    message: p?.action === 'undo' ? 'Neutral-pair calibration removed and display restored.' : 'Neutral pair found.',
+  }),
   'game.settings': mockGameSettings,
+  'game.graphicsFeatures': (p) => {
+    const id = typeof p?.id === 'string' ? p.id : 'mock:game'
+    return {
+      ok: true,
+      engine: 'Unreal Engine 5',
+      running: false,
+      antiCheat: id.includes('valorant') ? 'Riot Vanguard' : null,
+      features: [
+        { id: 'upscalers', name: 'Upscalers', state: 'inGame', route: 'DLSS / FSR / XeSS · NVIDIA DRS DLSS 4/4.5 override', routeKind: 'driver', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'reflex', name: 'Reflex & low latency', state: 'on', route: 'NVIDIA Reflex (config + driver Low Latency Ultra)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'rayTracing', name: 'Ray tracing', state: 'off', route: 'UE5 Lumen Hardware RT (Engine.ini)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'pathTracing', name: 'Path tracing', state: 'off', route: 'UE5 Path Tracer (Engine.ini)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'hiddenSettings', name: 'Hidden settings', state: 'off', route: 'FPS uncap + above-Ultra LOD/AF (UE config)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+      ],
+    }
+  },
+  'game.graphicsFeatures.set': (p) => {
+    const feature = typeof p?.feature === 'string' ? p.feature : 'rayTracing'
+    const on = p?.on === true
+    return {
+      ok: true,
+      engine: 'Unreal Engine 5',
+      running: false,
+      antiCheat: null,
+      features: [
+        { id: 'upscalers', name: 'Upscalers', state: feature === 'upscalers' ? (on ? 'on' : 'off') : 'inGame', route: 'DLSS / FSR / XeSS · NVIDIA DRS DLSS 4/4.5 override', routeKind: 'driver', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'reflex', name: 'Reflex & low latency', state: feature === 'reflex' ? (on ? 'on' : 'off') : 'on', route: 'NVIDIA Reflex (config + driver Low Latency Ultra)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'rayTracing', name: 'Ray tracing', state: feature === 'rayTracing' ? (on ? 'on' : 'off') : 'off', route: 'UE5 Lumen Hardware RT (Engine.ini)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'pathTracing', name: 'Path tracing', state: feature === 'pathTracing' ? (on ? 'on' : 'off') : 'off', route: 'UE5 Path Tracer (Engine.ini)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+        { id: 'hiddenSettings', name: 'Hidden settings', state: feature === 'hiddenSettings' ? (on ? 'on' : 'off') : 'off', route: 'FPS uncap + above-Ultra LOD/AF (UE config)', routeKind: 'config', canToggle: true, needsAntiCheatConfirm: false },
+      ],
+    }
+  },
   // As on the RX 9070 XT of ?gpu=amd.
   'gpu.afmf3': (p) => {
     const offer = mockGpu === 'amd'
@@ -2279,6 +2681,296 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'keys.preview': () => ({ ok: true, looksLikeKey: false, store: 'unknown', key: '' }),
   'keys.activate': () => ({ ok: true, message: 'Mock key.' }),
   'keep.status': () => ({ pc: 'none', games: {} }),
+}
+
+function mockUnavailableFrameGen(reason: string, howToEnable: string, antiCheatVerdict: string, antiCheatNote: string) {
+  return {
+    ok: true,
+    bestRouteId: 'unavailable',
+    selectedRouteId: 'unavailable',
+    state: 'unavailable',
+    word: reason,
+    good: false,
+    bad: false,
+    reason,
+    howToEnable,
+    routes: [{
+      id: 'unavailable',
+      tier: 'unavailable',
+      kind: 'unavailable',
+      label: 'Not available',
+      status: antiCheatVerdict === 'blocked' ? 'blocked' : 'unavailable',
+      summary: reason,
+      gpuSupported: false,
+      gpuNote: mockGpu ?? 'RTX 3070',
+      antiCheatVerdict,
+      antiCheatNote,
+      autoEnable: false,
+      latencyNote: 'Frame generation is off.',
+      selectable: false,
+      active: false,
+      reason,
+      howToEnable,
+    }],
+  }
+}
+
+function mockWuWaFrameGen(routeParam: unknown) {
+  const isIntel = mockGpu === 'intel'
+  const isAmd = mockGpu === 'amd'
+  const nativeId = isIntel ? 'native_xess' : 'native_fsr'
+  const nativeSummary = isIntel ? 'Built into the game · XeSS' : 'Built into the game · FSR 3'
+  const routes: Record<string, unknown>[] = [{
+    id: nativeId,
+    tier: 'native',
+    kind: nativeId,
+    label: isIntel ? 'Built into the game (XeSS)' : 'Built into the game (FSR 3)',
+    status: 'active',
+    summary: nativeSummary,
+    gpuSupported: true,
+    gpuNote: 'Supported under DirectX 12.',
+    antiCheatVerdict: 'safe',
+    antiCheatNote: 'Safe: built into the game with no files placed or hooked.',
+    autoEnable: false,
+    latencyNote: 'Lowest latency: uses game motion vectors. Requires DirectX 12 in Wuthering Waves.',
+    selectable: true,
+    active: true,
+  }]
+  if (isAmd) {
+    routes.push({
+      id: 'driver_afmf',
+      tier: 'driver',
+      kind: 'driver_afmf',
+      label: 'AMD Fluid Motion Frames',
+      status: 'available',
+      summary: 'Fluid Motion Frames · Off',
+      gpuSupported: true,
+      gpuNote: 'Radeon RX 6000+ supports AFMF 2/2.1.',
+      antiCheatVerdict: 'safe',
+      antiCheatNote: 'Safe: AMD Adrenalin driver feature.',
+      autoEnable: false,
+      latencyNote: 'Adds ~5–13 ms driver latency.',
+      selectable: true,
+      active: false,
+    })
+  }
+  if (isIntel) {
+    routes.push({
+      id: 'driver_xess_override',
+      tier: 'driver',
+      kind: 'driver_xess_override',
+      label: 'Intel XeSS-FG override',
+      status: mockFrameGen !== 'game' ? 'active' : 'available',
+      summary: mockFrameGen !== 'game' ? `Intel XeSS override · ${mockFrameGen}` : 'Intel XeSS override · Game’s choice',
+      gpuSupported: true,
+      gpuNote: 'Arc supports XeSS 2x/3x/4x override.',
+      antiCheatVerdict: 'safe',
+      antiCheatNote: 'Safe: Intel Graphics driver override.',
+      autoEnable: false,
+      latencyNote: 'Uses in-game XeSS-FG + XeLL motion vectors.',
+      selectable: true,
+      active: mockFrameGen !== 'game',
+      choiceValue: mockFrameGen,
+      choices: ['game', '2x', '3x', '4x'],
+    })
+  }
+  const chosen = routes.find(r => r.id === routeParam) ?? routes[0]
+  return {
+    ok: true,
+    bestRouteId: String(routes[0].id),
+    selectedRouteId: String(chosen.id),
+    state: 'native',
+    word: String(chosen.summary),
+    good: Boolean(chosen.active) && chosen.tier !== 'native',
+    bad: false,
+    routes,
+  }
+}
+
+function mockGameFrameGen(p?: Record<string, unknown>) {
+  const id = String(p?.id ?? '')
+  if (mockGpu === 'intel' && typeof p?.xessOverride === 'string') mockFrameGen = p.xessOverride
+  if (/valorant|league/.test(id)) {
+    return mockUnavailableFrameGen('Mods would get you banned', 'Riot Vanguard blocks DLL mods; use in-game graphics settings only.', 'blocked', 'Riot Vanguard blocks DLL mods.')
+  }
+  if (id.includes('wuthering')) return mockWuWaFrameGen(p?.route)
+  if (mockGpu === 'amd') {
+    const afmfOn = !/rivals|fortnite|cyberpunk/.test(id)
+    const route = id.includes('cyberpunk')
+      ? { id: 'native_fsr', tier: 'native', kind: 'native_fsr', label: 'Built into the game (FSR 3)', status: 'active', summary: 'Built into the game · FSR 3', gpuSupported: true, gpuNote: 'Radeon RX 9070 XT supports FSR 3 FG.', antiCheatVerdict: 'safe', antiCheatNote: 'Safe: built into the game.', autoEnable: false, latencyNote: 'Lowest latency.', selectable: true, active: true }
+      : { id: 'driver_afmf', tier: 'driver', kind: 'driver_afmf', label: 'AMD Fluid Motion Frames', status: afmfOn ? 'active' : 'available', summary: afmfOn ? 'Fluid Motion Frames · On' : 'Fluid Motion Frames · Off', gpuSupported: true, gpuNote: 'Radeon RX 9070 XT supports AFMF 2/2.1.', antiCheatVerdict: 'safe', antiCheatNote: 'Safe: AMD Adrenalin driver feature.', autoEnable: afmfOn, latencyNote: 'Adds ~5–13 ms driver latency.', selectable: true, active: afmfOn }
+    return { ok: true, bestRouteId: route.id, selectedRouteId: route.id, state: route.tier === 'native' ? 'native' : 'driver', word: route.summary, good: route.tier === 'driver' && route.active, bad: false, routes: [route] }
+  }
+  if (id.includes('control') || id.includes('cyberpunk')) {
+    const route = { id: 'mod_optiscaler', tier: 'mod', kind: 'mod_optiscaler', label: 'OptiScaler v0.9.4', status: 'active', summary: 'OptiScaler v0.9.4', gpuSupported: true, gpuNote: 'RTX 3070 supports OptiScaler.', antiCheatVerdict: 'safe', antiCheatNote: 'Safe: clean game with no anti-cheat.', autoEnable: true, latencyNote: 'Low latency.', selectable: true, active: true }
+    return { ok: true, bestRouteId: route.id, selectedRouteId: route.id, state: 'on', word: route.summary, good: true, bad: false, routes: [route] }
+  }
+  if (id.includes('rivals')) {
+    return mockUnavailableFrameGen(
+      'Mods would get you banned',
+      'NetEase anti-cheat blocks DLL mods; only built-in or driver frame generation can run safely here.',
+      'blocked',
+      'NetEase anti-cheat blocks placed files.',
+    )
+  }
+  return mockUnavailableFrameGen(
+    'Not built into this game',
+    'No built-in, mod, or driver frame generation route applies to this game.',
+    'safe',
+    'No anti-cheat block.',
+  )
+}
+
+const mockFrameCaps: Record<string, { tier: string; capFps: number | null; backend: string }> = {}
+const mockCapLabState: Record<string, Record<string, unknown>> = {}
+
+const MOCK_CAP_VENDORS: Record<string, { backend: string; label: string; adapter: string }> = {
+  amd: { backend: 'amd_chill', label: 'AMD Radeon Chill', adapter: 'Radeon RX 9070 XT' },
+  intel: { backend: 'intel_igcl', label: 'Intel IGCL (per-app)', adapter: 'Intel Arc B580' },
+  nvidia: { backend: 'nvidia_drs', label: 'NVIDIA Driver (DRS)', adapter: 'NVIDIA GeForce RTX 3070' },
+}
+
+const MOCK_TIER_DEFAULTS: Record<string, number> = { smooth: 102, balanced: 120, max: 138 }
+
+function applyMockFrameCapUpdate(id: string, defaultBackend: string, p?: Record<string, unknown>) {
+  if (!p) return
+  const hasChange = typeof p.tier === 'string' || typeof p.capFps === 'number' || typeof p.backend === 'string'
+  if (!hasChange) return
+  const tier = typeof p.tier === 'string' ? p.tier : 'custom'
+  if (tier === 'off') {
+    delete mockFrameCaps[id]
+    return
+  }
+  if (tier === 'uncapped') {
+    mockFrameCaps[id] = { tier: 'uncapped', capFps: null, backend: defaultBackend }
+    return
+  }
+  const capFps = typeof p.capFps === 'number' ? p.capFps : (MOCK_TIER_DEFAULTS[tier] ?? 138)
+  const chosenBackend = typeof p.backend === 'string' ? p.backend : defaultBackend
+  mockFrameCaps[id] = { tier, capFps, backend: chosenBackend }
+}
+
+function defaultMockCapLab(id: string) {
+  return {
+    gameId: id,
+    status: 'idle',
+    capAFps: 0,
+    capBFps: 0,
+    currentArm: null,
+    elapsedSeconds: 0,
+    totalSeconds: 20,
+    verdict: null,
+    winner: null,
+    deltaPercent: 0,
+    noiseThresholdPercent: 3,
+    reason: null,
+    armA: null,
+    armB: null,
+  }
+}
+
+function mockGameFrameCap(p?: Record<string, unknown>) {
+  const id = String(p?.id ?? '')
+  const vendor = mockGpu ?? 'nvidia'
+  const info = MOCK_CAP_VENDORS[vendor] ?? MOCK_CAP_VENDORS.nvidia
+  applyMockFrameCapUpdate(id, info.backend, p)
+  const saved = mockFrameCaps[id]
+  const selectedTier = saved?.tier ?? 'off'
+  const activeCapFps = saved?.capFps ?? null
+  return {
+    ok: true,
+    message: null,
+    gameId: id,
+    refreshHz: 144,
+    vrr: true,
+    inVrrRange: true,
+    vrrFloorHz: 48,
+    fgMultiplier: 1,
+    fgRouteLabel: null,
+    vendor,
+    adapter: info.adapter,
+    isHybrid: false,
+    backend: saved?.backend ?? info.backend,
+    backendLabel: info.label,
+    backendAvailable: true,
+    backendNote: info.label,
+    backends: [
+      {
+        id: info.backend,
+        vendor,
+        label: info.label,
+        available: true,
+        perGameNative: vendor !== 'amd',
+        latencyNote: 'Low latency driver frame cap.',
+        antiCheatNote: 'External driver profile; safe on every anti-cheat class.',
+        reason: null,
+      },
+    ],
+    selectedTier,
+    activeCapFps,
+    targetOutputFps: activeCapFps,
+    tiers: [
+      { id: 'smooth', label: 'Smooth', capFps: 102, outputFps: 102, predictedVarianceMs2: 0.25, predictedStdDevMs: 0.5, predictedDipsPerMinute: 0.2, measured: false, summary: '1% low target · 102 fps · ~±0.5 ms est.' },
+      { id: 'balanced', label: 'Balanced', capFps: 120, outputFps: 120, predictedVarianceMs2: 0.9, predictedStdDevMs: 0.95, predictedDipsPerMinute: 2.5, measured: false, summary: '5% low target · 120 fps · ~±1.0 ms est.' },
+      { id: 'max', label: 'Max (VRR)', capFps: 138, outputFps: 138, predictedVarianceMs2: 2.25, predictedStdDevMs: 1.5, predictedDipsPerMinute: 10, measured: false, summary: 'VRR ceiling · 138 fps · ~±1.5 ms est.' },
+    ],
+    refreshLockedCaps: [],
+    uncappedOption: null,
+    suggestion: { tier: 'max', capFps: 138, reason: 'VRR is active at 144 Hz; 138 fps keeps frames below the V-Sync ceiling.' },
+    stutter: { totalSpikes: 0, topCause: 'none', topCauseLabel: 'None', summary: 'No gameplay frame trace recorded yet.', perProcessVramAvailable: false, breakdown: [] },
+    ab: mockCapLabState[id] ?? defaultMockCapLab(id),
+    word: activeCapFps ? `${activeCapFps} fps · ${info.label}` : 'Off · 138 fps VRR cap available',
+    good: activeCapFps !== null,
+    bad: false,
+  }
+}
+
+function mockCapLabRun(p?: Record<string, unknown>) {
+  const id = String(p?.id ?? '')
+  const capAFps = typeof p?.capAFps === 'number' ? p.capAFps : 138
+  const capBFps = typeof p?.capBFps === 'number' ? p.capBFps : 120
+  const ab = {
+    gameId: id,
+    status: 'completed',
+    capAFps,
+    capBFps,
+    currentArm: null,
+    elapsedSeconds: 20,
+    totalSeconds: 20,
+    verdict: 'B is smoother by 12.4%',
+    winner: 'b',
+    deltaPercent: 12.4,
+    noiseThresholdPercent: 3,
+    reason: null,
+    armA: { capFps: capAFps, frames: 1200, averageFps: 134.2, low1Fps: 98.1, low01Fps: 76.4, averageMs: 7.45, frameTimeVarianceMs2: 3.1, frameTimeStdDevMs: 1.76 },
+    armB: { capFps: capBFps, frames: 1180, averageFps: 119.5, low1Fps: 114.2, low01Fps: 103.8, averageMs: 8.37, frameTimeVarianceMs2: 0.72, frameTimeStdDevMs: 0.85 },
+  }
+  mockCapLabState[id] = ab
+  emitHostEvent('game.capLab', ab as never)
+  return { ok: true, message: null, ab }
+}
+
+function mockCapLabCancel(p?: Record<string, unknown>) {
+  const id = String(p?.id ?? '')
+  const ab = {
+    gameId: id,
+    status: 'cancelled',
+    capAFps: 0,
+    capBFps: 0,
+    currentArm: null,
+    elapsedSeconds: 0,
+    totalSeconds: 20,
+    verdict: null,
+    winner: null,
+    deltaPercent: 0,
+    noiseThresholdPercent: 3,
+    reason: 'Cancelled by user.',
+    armA: null,
+    armB: null,
+  }
+  mockCapLabState[id] = ab
+  emitHostEvent('game.capLab', ab as never)
+  return { ok: true, message: null, ab }
 }
 
 // ?hold=store.,discord.chat holds every call whose method starts so, for looking at a wait.

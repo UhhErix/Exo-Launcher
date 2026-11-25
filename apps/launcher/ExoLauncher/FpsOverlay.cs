@@ -376,7 +376,11 @@ internal sealed unsafe class FpsOverlay : IDisposable
         try
         {
             InitializeWindowAndGlass();
-            _frontChanged ??= (_, _, _, _, _, _, _) => _current?.Tick();
+            _frontChanged ??= (_, _, _, _, _, _, _) =>
+            {
+                try { _current?.Tick(); }
+                catch { }
+            };
             _hook = SetWinEventHook(EventSystemForeground, EventSystemForeground, IntPtr.Zero, _frontChanged, 0, 0, ForegroundOutOfContext);
             _ready.Set();
             Tick();
@@ -444,23 +448,30 @@ internal sealed unsafe class FpsOverlay : IDisposable
 
     private static IntPtr OnMessage(IntPtr hwnd, uint message, IntPtr w, IntPtr l)
     {
-        switch (message)
+        try
         {
-            case 0x0084: return new IntPtr(-1); // WM_NCHITTEST: HTTRANSPARENT
-            case 0x0021: return new IntPtr(3); // WM_MOUSEACTIVATE: MA_NOACTIVATE
-            case WmThemeChanged:
-                if (_current is { } overlay && overlay._usingGlass == IsHighContrast())
-                {
-                    overlay.InitializeWindowAndGlass();
-                    overlay.Tick();
-                }
-                return IntPtr.Zero;
-            case 0x0010: DestroyWindow(hwnd); return IntPtr.Zero; // WM_CLOSE
-            case 0x0002:
-                if (_current?._hwnd == hwnd) PostQuitMessage(0);
-                return IntPtr.Zero; // WM_DESTROY
-            case 0x0113: case RefreshMessage: _current?.Tick(); return IntPtr.Zero; // WM_TIMER
-            default: return DefWindowProcW(hwnd, message, w, l);
+            switch (message)
+            {
+                case 0x0084: return new IntPtr(-1); // WM_NCHITTEST: HTTRANSPARENT
+                case 0x0021: return new IntPtr(3); // WM_MOUSEACTIVATE: MA_NOACTIVATE
+                case WmThemeChanged:
+                    if (_current is { } overlay && overlay._usingGlass == IsHighContrast())
+                    {
+                        overlay.InitializeWindowAndGlass();
+                        overlay.Tick();
+                    }
+                    return IntPtr.Zero;
+                case 0x0010: DestroyWindow(hwnd); return IntPtr.Zero; // WM_CLOSE
+                case 0x0002:
+                    if (_current?._hwnd == hwnd) PostQuitMessage(0);
+                    return IntPtr.Zero; // WM_DESTROY
+                case 0x0113: case RefreshMessage: _current?.Tick(); return IntPtr.Zero; // WM_TIMER
+                default: return DefWindowProcW(hwnd, message, w, l);
+            }
+        }
+        catch
+        {
+            return DefWindowProcW(hwnd, message, w, l);
         }
     }
 

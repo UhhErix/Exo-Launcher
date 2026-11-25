@@ -1,0 +1,146 @@
+[
+  {
+    "id": "startup",
+    "label": "App startup (Library initial load)",
+    "group": "startup",
+    "settleMs": 1200,
+    "web": { "kind": "startup" },
+    "native": { "kind": "startup" }
+  },
+  {
+    "id": "room-store",
+    "label": "Open Store room",
+    "group": "rooms",
+    "settleMs": 1500,
+    "web": { "kind": "nav", "room": "Store" },
+    "native": { "kind": "uia-invoke", "name": "Store", "controlType": "TabItem" }
+  },
+  {
+    "id": "room-discord",
+    "label": "Open Discord room",
+    "group": "rooms",
+    "settleMs": 1500,
+    "web": { "kind": "nav", "room": "Discord" },
+    "native": { "kind": "uia-invoke", "name": "Discord", "controlType": "TabItem" }
+  },
+  {
+    "id": "discord-dm",
+    "label": "Open Discord DM conversation",
+    "group": "discord",
+    "settleMs": 1200,
+    "web": { "kind": "discord-dm" },
+    "native": { "kind": "discord-dm" }
+  },
+  {
+    "id": "room-music",
+    "label": "Open Music room",
+    "group": "rooms",
+    "settleMs": 1500,
+    "web": { "kind": "nav", "room": "Music" },
+    "native": { "kind": "uia-invoke", "name": "Music", "controlType": "TabItem" }
+  },
+  {
+    "id": "room-devices",
+    "label": "Open Devices room",
+    "group": "rooms",
+    "settleMs": 1500,
+    "web": { "kind": "nav", "room": "Devices" },
+    "native": { "kind": "uia-invoke", "name": "Devices", "controlType": "TabItem" }
+  },
+  {
+    "id": "room-pc",
+    "label": "Open Exo AI / PC room",
+    "group": "rooms",
+    "settleMs": 1800,
+    "web": { "kind": "nav", "room": "Exo AI" },
+    "native": { "kind": "uia-invoke", "name": "Exo AI", "controlType": "TabItem" }
+  },
+  {
+    "id": "room-pc-apps",
+    "label": "Open Apps room",
+    "group": "rooms",
+    "settleMs": 1500,
+    "web": { "kind": "nav", "room": "Apps" },
+    "native": { "kind": "uia-invoke", "name": "Apps", "controlType": "TabItem" }
+  },
+  {
+    "id": "room-library",
+    "label": "Return to Library room",
+    "group": "rooms",
+    "settleMs": 1200,
+    "web": { "kind": "nav", "room": "Library" },
+    "native": { "kind": "uia-invoke", "name": "Library", "controlType": "TabItem" }
+  },
+  {
+    "id": "game-page",
+    "label": "Open a game page from Library",
+    "group": "library",
+    "settleMs": 1500,
+    "web": { "kind": "game-page" },
+    "native": { "kind": "game-page" }
+  },
+  {
+    "id": "downloads",
+    "label": "Open Downloads sheet",
+    "group": "library",
+    "settleMs": 1200,
+    "web": { "kind": "downloads" },
+    "native": { "kind": "downloads" }
+  },
+  {
+    "id": "palette",
+    "label": "Open Command Palette (Ctrl+K)",
+    "group": "shell",
+    "settleMs": 1000,
+    "web": { "kind": "palette" },
+    "native": { "kind": "palette" }
+  },
+  {
+    "id": "settings-general",
+    "label": "Open Settings > General",
+    "group": "settings",
+    "settleMs": 1200,
+    "web": { "kind": "settings", "section": "General" },
+    "native": { "kind": "settings", "section": "General" }
+  },
+  {
+    "id": "settings-library",
+    "label": "Open Settings > Library",
+    "group": "settings",
+    "settleMs": 1200,
+    "web": { "kind": "settings", "section": "Library" },
+    "native": { "kind": "settings", "section": "Library" }
+  },
+  {
+    "id": "settings-downloads",
+    "label": "Open Settings > Downloads",
+    "group": "settings",
+    "settleMs": 1200,
+    "web": { "kind": "settings", "section": "Downloads" },
+    "native": { "kind": "settings", "section": "Downloads" }
+  },
+  {
+    "id": "settings-ingame",
+    "label": "Open Settings > In game",
+    "group": "settings",
+    "settleMs": 1200,
+    "web": { "kind": "settings", "section": "In game" },
+    "native": { "kind": "settings", "section": "In game" }
+  },
+  {
+    "id": "settings-music",
+    "label": "Open Settings > Music",
+    "group": "settings",
+    "settleMs": 1200,
+    "web": { "kind": "settings", "section": "Music" },
+    "native": { "kind": "settings", "section": "Music" }
+  },
+  {
+    "id": "settings-about",
+    "label": "Open Settings > About",
+    "group": "settings",
+    "settleMs": 1200,
+    "web": { "kind": "settings", "section": "About" },
+    "native": { "kind": "settings", "section": "About" }
+  }
+]

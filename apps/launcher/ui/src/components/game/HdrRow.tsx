@@ -3,6 +3,7 @@ import { host, type HdrGame } from '../../lib/host'
 import { report } from '../../lib/report'
 import { useHdrState } from '../../lib/hdr'
 import { Choice } from '../settings/Choice'
+import { Switch } from '../Switch'
 import { ActionButton } from '../ui/ConfirmButton'
 import { GameReading, type LineWord } from './GameLine'
 import { sheetMemory } from './useGameDetails'
@@ -14,6 +15,33 @@ const MODES = [
 ] as const
 
 const hdrRead = sheetMemory<HdrGame>()
+
+function buildHdrWord(game: HdrGame, hdrForGames: boolean, mode: string, error: string | null): LineWord | null {
+  if (error) return { text: error, bad: true }
+  const autoHdrTag = game.autoHdr && game.autoHdr.effective !== 'default'
+    ? `Windows Auto HDR: ${game.autoHdr.effective}`
+    : ''
+  const why = [game.reason ?? '', autoHdrTag].filter(Boolean).join(' · ')
+  if (!hdrForGames && mode !== 'off') return { text: why || 'Off' }
+  return why ? { text: why } : null
+}
+
+function CursorFixRow({ game, busy, onToggle }: {
+  game: HdrGame
+  busy: boolean
+  onToggle: (next: boolean) => void
+}) {
+  const word: LineWord = {
+    text: game.cursorFix
+      ? 'Raises SDR white to 220 nits while playing and restores on exit'
+      : `SDR white is ${Math.round(game.sdrWhiteNits ?? 0)} nits (dim hardware cursor in HDR)`,
+  }
+  return (
+    <GameReading name="Match HDR cursor brightness" word={word}>
+      <Switch checked={game.cursorFix === true} disabled={busy} label="Match HDR cursor brightness" onChange={onToggle} />
+    </GameReading>
+  )
+}
 
 /**
  * Game sheet > HDR, one line like Upscalers and Shaders: its Auto, Always or Never choice for System > HDR > HDR for HDR games at the right edge. While that is off nothing
@@ -44,36 +72,39 @@ export function HdrRow({ gameId, hdrForGames, onHdrForGames }: {
     return () => { live = false }
   }, [gameId, screen?.supported])
 
-  if (!screen || (screen.supported && !game)) return null
-  if (!screen.supported) return null
-  if (!game?.ok) return <GameReading name="HDR" word={{ text: 'Could not check', bad: true }} />
-  const mode = game.mode ?? 'auto'
-  const pick = (next: string) => {
+  if (!screen || !screen.supported || !game) return null
+  if (!game.ok) return <GameReading name="HDR" word={{ text: 'Could not check', bad: true }} />
+
+  const updateGame = (patch: { mode?: string; cursorFix?: boolean }, context: string) => {
     setBusy(true)
     setError(null)
-    host.hdrGame(gameId, next)
+    host.hdrGame(gameId, patch)
       .then(answer => {
         if (!answer.ok) { setError('Could not save. Try again.'); return }
         hdrRead.set(gameId, answer)
         setGame(answer)
       })
-      .catch(e => { report(e, 'HdrRow.set'); setError('Could not save. Try again.') })
+      .catch(e => { report(e, context); setError('Could not save. Try again.') })
       .finally(() => setBusy(false))
   }
+
+  const mode = game.mode ?? 'auto'
   const off = !hdrForGames && mode !== 'off'
-  const why = game.reason ?? ''
-  const word: LineWord | null = error
-    ? { text: error, bad: true }
-    : off ? { text: why || 'Off' }
-    : why ? { text: why } : null
+  const word = buildHdrWord(game, hdrForGames, mode, error)
+  const showCursorFix = !screen.internal && game.cursorFixEligible === true
   return (
-    <GameReading name="HDR" word={word}>
-      {off ? (
-        <ActionButton className="exo-set-btn is-compact" why="none" context="HdrRow.hdrForGames" fallback="Could not save. Try again."
-          onPress={() => { setError(null); return onHdrForGames() }} onFailed={failure => setError(failure.text)}>Turn on</ActionButton>
-      ) : (
-        <Choice label="HDR while playing" value={mode} choices={MODES} disabled={busy} onChange={pick} />
-      )}
-    </GameReading>
+    <>
+      <GameReading name="HDR" word={word}>
+        {off ? (
+          <ActionButton className="exo-set-btn is-compact" why="none" context="HdrRow.hdrForGames" fallback="Could not save. Try again."
+            onPress={() => { setError(null); return onHdrForGames() }} onFailed={failure => setError(failure.text)}>Turn on</ActionButton>
+        ) : (
+          <Choice label="HDR while playing" value={mode} choices={MODES} disabled={busy} onChange={next => updateGame({ mode: next }, 'HdrRow.set')} />
+        )}
+      </GameReading>
+      {showCursorFix ? (
+        <CursorFixRow game={game} busy={busy} onToggle={next => updateGame({ cursorFix: next }, 'HdrRow.cursorFix')} />
+      ) : null}
+    </>
   )
 }

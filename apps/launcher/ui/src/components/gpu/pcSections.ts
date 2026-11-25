@@ -16,7 +16,7 @@ const RUNTIMES = [
 export const PC_SECTIONS: readonly { id: PcLink; label: string; keywords: readonly string[] }[] = [
   { id: 'overview', label: 'This PC', keywords: ['this pc', 'about', 'specs', 'processor', 'cpu', 'cores', 'graphics card', 'gpu', 'video memory', 'vram', 'memory', 'ram', 'windows version', 'windows update', 'build', 'best settings'] },
   { id: 'drivers', label: 'Updates', keywords: ['updates', 'update', 'check for updates', 'windows update', 'windows version', 'drivers', 'driver', 'update drivers', 'update all', 'driver update', 'graphics driver', 'chipset', 'chipset driver', 'bios', 'firmware', 'ssd firmware', 'ethernet driver', 'wi-fi driver', 'audio driver', 'bluetooth driver', 'usb driver', 'windows update drivers', 'driver easy', ...RUNTIMES] },
-  { id: 'graphics', label: 'Graphics', keywords: ['nvidia', 'radeon', 'intel', 'driver profile', 'g-sync', 'upscalers', 'dlss', 'fsr', 'xess'] },
+  { id: 'graphics', label: 'Graphics', keywords: ['nvidia', 'radeon', 'intel', 'driver profile', 'g-sync', 'upscalers', 'dlss', 'fsr', 'xess', 'manual tuning', 'undervolt', 'overclock', 'fan curve', 'v/f curve', 'power limit'] },
   { id: 'shaders', label: 'Shaders', keywords: ['shaders', 'compile', 'shader cache'] },
   { id: 'control', label: 'Control Panel', keywords: ['control panel', 'nvidia control panel', 'nvcp', 'manage 3d settings', '3d settings', 'nvidia settings', 'amd software', 'adrenalin', 'radeon settings', 'intel graphics', 'arc control', 'graphics command center'] },
   { id: 'display', label: 'Display', keywords: ['screen', 'monitor', 'refresh rate', 'hz', 'hdr', 'color', 'scaling', 'rtx video', 'super resolution', 'adjust desktop color settings', 'change resolution', 'digital vibrance'] },

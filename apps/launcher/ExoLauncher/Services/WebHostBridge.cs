@@ -26,6 +26,7 @@ public sealed partial class WebHostBridge
     private readonly CancellationTokenSource _bridgeLifetime = new();
     private readonly BridgeRequestRegistry _rpcRequests = new();
     private readonly EarlyCancelTracker _earlyCancels = new();
+    private readonly RpcTrace _trace = RpcTrace.Default;
     private readonly RpcWorkScheduler _rpcWork;
     private bool _detached;
     private int _backgroundMonitorsStarted;
@@ -82,6 +83,7 @@ public sealed partial class WebHostBridge
         _services.Shaders.Changed += OnShadersChanged;
         _shadersHostEvent = PostShadersEvent;
         _services.ShadersHost.Event += _shadersHostEvent;
+        _services.HdrHost.WarningRaised += OnHdrWarning;
         _services.ShaderPrepare.Changed += OnShadersChanged;
         ShaderRebuildWatch.Changed += OnShadersRebuildChanged;
         _services.Store.Changed += OnStoreChanged;
@@ -99,6 +101,7 @@ public sealed partial class WebHostBridge
         GameSettings.AppliedAgain += OnOptimizedAgain;
         AutopilotWatch.Reported += OnAutopilotReported;
         AutopilotWatch.Shared.LiveChanged += OnAutopilotLiveChanged;
+        FrameCapService.Shared.CapLabChanged += OnCapLabChanged;
         InitGpuAndDisplayCaches();
         GameSettings.WindowModeHeld += OnOptimizeHeld;
         Account.AccountSessionStore.Changed += OnAccountChanged;
@@ -117,6 +120,8 @@ public sealed partial class WebHostBridge
         _services.Launcher.LaunchNotice += OnLaunchNotice;
         _services.Dependencies.DeferredProgress += PostRuntimeProgress;
         _services.Dependencies.DeferredCompleted += PostRuntimeDone;
+        GpuManualTuningService.Shared.StateChanged += PostGpuTuningChanged;
+        GpuManualTuningService.Shared.TestProgressChanged += PostGpuTuningTestProgress;
     }
 
     /// <summary>
@@ -291,16 +296,21 @@ public sealed partial class WebHostBridge
         _services.GogAuth.AttachDispatcher(_queue);
         _services.EpicAuth.AttachDispatcher(_queue);
         _services.MusicEngine.Attach(_queue, PostEvent);
+        _services.MousePanel.Attach(_queue, this);
         _services.HeadlessMusic.Attach(PostEvent, () => _services.MusicEngine.IsActive || App.MainAppWindow is not null);
         _services.HeadlessCapture.Attach(PostCaptureEvent);
         if (Interlocked.Exchange(ref _transport, transport) is { } previous)
         {
             previous.MessageReceived -= OnMessage;
             previous.SessionReset -= OnTransportReset;
+            if (previous is NamedPipeHostTransport prevPipe)
+                prevPipe.WireRequestReceived -= OnWireRequest;
             try { previous.Detach(); } catch { }
         }
         transport.MessageReceived += OnMessage;
         transport.SessionReset += OnTransportReset;
+        if (transport is NamedPipeHostTransport nextPipe)
+            nextPipe.WireRequestReceived += OnWireRequest;
     }
 
     private void OnTransportReset() => UiGuard.Run(() =>
@@ -312,12 +322,14 @@ public sealed partial class WebHostBridge
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         // A reloaded session never turns off the controller's live view it asked for (60 events a second, up to 10 minutes).
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
+        _services.MousePanel.Close();
     });
 
     public void Detach()
     {
         if (_detached) return;
         Volatile.Write(ref _detached, true);
+        _services.MousePanel.Close();
         _services.HeadlessMusic.Detach();
         _services.HeadlessCapture.Detach();
         try { _bridgeLifetime.Cancel(); } catch { }
@@ -327,6 +339,8 @@ public sealed partial class WebHostBridge
         {
             transport.MessageReceived -= OnMessage;
             transport.SessionReset -= OnTransportReset;
+            if (transport is NamedPipeHostTransport pipeTransport)
+                pipeTransport.WireRequestReceived -= OnWireRequest;
             try { transport.Detach(); } catch { }
         }
         SteamPendingSettings.Detach(this);
@@ -343,6 +357,7 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameRunStateChanged -= OnGameRunStateChanged;
         _services.Shaders.Changed -= OnShadersChanged;
         if (_shadersHostEvent is { } shadersEvt) _services.ShadersHost.Event -= shadersEvt;
+        _services.HdrHost.WarningRaised -= OnHdrWarning;
         _shadersHostEvent = null;
         UnwireCompress();
         _services.ShaderPrepare.Changed -= OnShadersChanged;
@@ -361,6 +376,7 @@ public sealed partial class WebHostBridge
         GameSettings.AppliedAgain -= OnOptimizedAgain;
         AutopilotWatch.Reported -= OnAutopilotReported;
         AutopilotWatch.Shared.LiveChanged -= OnAutopilotLiveChanged;
+        FrameCapService.Shared.CapLabChanged -= OnCapLabChanged;
         DetachGpuAndDisplayCaches();
         GameSettings.WindowModeHeld -= OnOptimizeHeld;
         Account.AccountSessionStore.Changed -= OnAccountChanged;
@@ -382,6 +398,7 @@ public sealed partial class WebHostBridge
             DiscordClient.DiscordSession.VideoFrame -= PostVideoFrame;
         }
         StopGiftsTimer();
+        _gifts.Close();
         DetachAppsCache();
         UnwatchDevices();
         UnwatchEq();
@@ -401,6 +418,8 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameLaunchFailed -= OnGameSessionEndedScan;
         _services.Dependencies.DeferredProgress -= PostRuntimeProgress;
         _services.Dependencies.DeferredCompleted -= PostRuntimeDone;
+        GpuManualTuningService.Shared.StateChanged -= PostGpuTuningChanged;
+        GpuManualTuningService.Shared.TestProgressChanged -= PostGpuTuningTestProgress;
         FpsCounter.Stop();
     }
 
@@ -537,20 +556,38 @@ public sealed partial class WebHostBridge
                         // before it raises LibraryUpdated. Publish that snapshot;
                         // do not regroup the entire library a second time here.
                         var games = _services.Library.PeekCachedLibrary();
-                        var json = ExoBridgeProtocol.SerializeEvent("library.updated", new
+                        if (_transport is NamedPipeHostTransport { IsBinaryWireActive: true } wirePipe)
                         {
-                            games = games.Select(game => MapGame(game)).ToList(),
-                            count = games.Count,
-                        });
-                        // Cover warms, size measurements and derived refreshes
-                        // often settle on the rows the page already has. The
-                        // page re-parses and re-merges every row it is sent, so
-                        // an unchanged library is not sent again.
-                        var hash = System.Security.Cryptography.SHA256.HashData(System.Runtime.InteropServices.MemoryMarshal.AsBytes(json.AsSpan()));
-                        if (Volatile.Read(ref _libraryPushedHash) is not { } pushed || !pushed.AsSpan().SequenceEqual(hash))
+                            var dto = new LibraryResponseDto
+                            {
+                                Games = games.Select(game => (object)MapGame(game)).ToList(),
+                                Count = games.Count,
+                            };
+                            var frame = ExoWireCodec.EncodeEventFrame("library.updated", dto, wirePipe.UseSchemaIds, wirePipe.UseBinaryHotCodecs);
+                            var hash = System.Security.Cryptography.SHA256.HashData(frame.Buffer.AsSpan(0, frame.Length));
+                            if (Volatile.Read(ref _libraryPushedHash) is not { } pushed || !pushed.AsSpan().SequenceEqual(hash))
+                            {
+                                Volatile.Write(ref _libraryPushedHash, hash);
+                                wirePipe.PostWireFrame(frame, reliable: true);
+                            }
+                            else
+                            {
+                                frame.Release();
+                            }
+                        }
+                        else
                         {
-                            Volatile.Write(ref _libraryPushedHash, hash);
-                            PostSerialized(json);
+                            var json = ExoBridgeProtocol.SerializeEvent("library.updated", new
+                            {
+                                games = games.Select(game => MapGame(game)).ToList(),
+                                count = games.Count,
+                            });
+                            var hash = System.Security.Cryptography.SHA256.HashData(System.Runtime.InteropServices.MemoryMarshal.AsBytes(json.AsSpan()));
+                            if (Volatile.Read(ref _libraryPushedHash) is not { } pushed || !pushed.AsSpan().SequenceEqual(hash))
+                            {
+                                Volatile.Write(ref _libraryPushedHash, hash);
+                                PostSerialized(json);
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -575,34 +612,116 @@ public sealed partial class WebHostBridge
         _ = HandleAsync(InboundForTransport(_transport, raw));
     });
 
-    private async Task HandleAsync(string raw)
+    private void OnWireRequest(ExoWireInboundRequest wireReq) => UiGuard.Run(() =>
     {
-        string? id = null;
-        string? method = null;
-        string? perfKey = null;
-        BridgeRequestRegistry.Lease? scope = null;
+        if (_detached)
+        {
+            wireReq.Dispose();
+            return;
+        }
+        _ = HandleWireRequestAsync(wireReq);
+    });
+
+    private async Task HandleWireRequestAsync(ExoWireInboundRequest wireReq)
+    {
         var started = Stopwatch.GetTimestamp();
         try
         {
-            if (!ExoBridgeProtocol.TryParseRequest(raw, out var request))
+            var id = wireReq.ReqId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var method = wireReq.MethodName;
+            if (wireReq.Encoding == ExoWireEncoding.BinaryTyped && wireReq.MethodId == ExoWireSchema.MethodRpcCancel)
             {
-                // Well formed but too large: answer, so the page does not wait for a reply that never comes.
-                if (request.Id.Length > 0 && !_detached)
-                {
-                    AppLog.Warn($"RPC {request.Method}: request of {raw.Length} characters is over the limit.");
-                    PostResponse(request.Id, ok: false, error: "That is too large for Exo to take.");
-                }
+                var target = wireReq.BinaryCancelTargetId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                _earlyCancels.Record(target);
+                if (_rpcRequests.Cancel(target)) _earlyCancels.Consume(target);
                 return;
             }
-            id = request.Id;
-            method = request.Method;
-            var paramsEl = request.Params;
-            var hasParams = request.HasParams;
+
+            if (wireReq.Encoding == ExoWireEncoding.JsonUtf8)
+            {
+                if (wireReq.PayloadLength > ExoBridgeProtocol.MaxCharactersFor(method))
+                {
+                    if (!_detached)
+                    {
+                        AppLog.Warn($"RPC {method}: wire request of {wireReq.PayloadLength} bytes is over the limit.");
+                        PostResponseCore(id, wireReq.ReqId, wireReq.MethodId, isWire: true, ok: false, error: "That is too large for Exo to take.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                    }
+                    return;
+                }
+                using var doc = JsonDocument.Parse(wireReq.JsonPayloadMemory);
+                await DispatchParsedAsync(id, wireReq.ReqId, wireReq.MethodId, isWire: true, method, doc.RootElement.Clone(), hasParams: true, binaryIdParam: null, binaryFlags: 0, started).ConfigureAwait(false);
+                return;
+            }
+
+            await DispatchParsedAsync(
+                id,
+                wireReq.ReqId,
+                wireReq.MethodId,
+                isWire: true,
+                method,
+                default,
+                hasParams: false,
+                binaryIdParam: wireReq.BinaryIdParam,
+                binaryFlags: wireReq.BinaryFlags,
+                started).ConfigureAwait(false);
+        }
+        catch (JsonException)
+        {
+            if (!_detached)
+            {
+                var id = wireReq.ReqId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                PostResponseCore(id, wireReq.ReqId, wireReq.MethodId, isWire: true, ok: false, error: "Invalid request payload.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            }
+        }
+        finally
+        {
+            wireReq.Dispose();
+        }
+    }
+
+    private async Task HandleAsync(string raw)
+    {
+        var started = Stopwatch.GetTimestamp();
+        if (!ExoBridgeProtocol.TryParseRequest(raw, out var request))
+        {
+            if (request.Id.Length > 0 && !_detached)
+            {
+                AppLog.Warn($"RPC {request.Method}: request of {raw.Length} characters is over the limit.");
+                PostResponse(request.Id, ok: false, error: "That is too large for Exo to take.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            }
+            return;
+        }
+        await DispatchParsedAsync(request.Id, 0, 0, isWire: false, request.Method, request.Params, request.HasParams, binaryIdParam: null, binaryFlags: 0, started).ConfigureAwait(false);
+    }
+
+    private async Task DispatchParsedAsync(
+        string id,
+        ulong wireReqId,
+        ushort wireMethodId,
+        bool isWire,
+        string method,
+        JsonElement paramsEl,
+        bool hasParams,
+        string? binaryIdParam,
+        byte binaryFlags,
+        long started)
+    {
+        string? perfKey = null;
+        BridgeRequestRegistry.Lease? scope = null;
+        try
+        {
             perfKey = hasParams ? PerfKey(paramsEl) : null;
             if (_detached) return;
+            if (_trace.IsEnabled)
+                _trace.RecordRequest(RpcTrace.ClientKind(_transport), id, method, paramsEl, hasParams);
+            if (_trace.IsEnabled && method == "debug.mark")
+            {
+                PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: new { ok = true }, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                return;
+            }
             if (method == "rpc.cancel")
             {
-                var target = ReadString(paramsEl, hasParams, "requestId");
+                var target = ReadString(paramsEl, hasParams, "requestId") ?? ReadString(paramsEl, hasParams, "id");
                 if (target is { Length: > 0 and <= 128 })
                 {
                     _earlyCancels.Record(target);
@@ -610,12 +729,37 @@ public sealed partial class WebHostBridge
                 }
                 return;
             }
-            // Any Discord request means the page wants Discord's events (calls, video), not only Home or sign-in.
             if (method.StartsWith("discord.", StringComparison.Ordinal)) DiscordEvents();
             scope = _rpcRequests.Begin(id, method, _bridgeLifetime.Token);
             if (_earlyCancels.Consume(id)) throw new OperationCanceledException();
             var requestToken = scope?.Token ?? _bridgeLifetime.Token;
             requestToken.ThrowIfCancellationRequested();
+
+            if (isWire && binaryIdParam is not null && method is "game.get" or "game.extras")
+            {
+                var fast = method == "game.get"
+                    ? await GameGetByIdAsync(binaryIdParam).ConfigureAwait(true)
+                    : await GameExtrasByIdAsync(binaryIdParam).ConfigureAwait(true);
+                if (!_detached && scope?.Token.IsCancellationRequested != true)
+                    PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: fast, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                return;
+            }
+            if (isWire && binaryFlags != 0 && method is "library.get" or "library.refresh")
+            {
+                var force = method == "library.refresh" || (binaryFlags & 1) != 0;
+                var full = (binaryFlags & 2) != 0;
+                var fast = await _rpcWork.RunAsync(method, token => LibraryGetAsync(default, hasParams: false, force: force, full: full).WaitAsync(token), requestToken).ConfigureAwait(false);
+                if (!_detached && scope?.Token.IsCancellationRequested != true)
+                    PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: fast, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                return;
+            }
+
+            if (DiscordClient.DiscordParityMock.TryHandle(method, paramsEl, hasParams, out var mockResult))
+            {
+                if (!_detached && scope?.Token.IsCancellationRequested != true)
+                    PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: mockResult, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                return;
+            }
 
             object? result = method switch
             {
@@ -672,6 +816,11 @@ public sealed partial class WebHostBridge
                 "exoAccount.reset" => await ExoAccountResetAsync(paramsEl, hasParams).ConfigureAwait(true),
             "exoAccount.probe" => await ExoAccountProbeAsync().ConfigureAwait(true),
             "exoAccount.codeConfirmed" => ExoAccountCodeConfirmed(),
+            "exoAccount.passkeyStatus" => await ExoAccountPasskeyStatusAsync().ConfigureAwait(true),
+            "exoAccount.passkeyRegister" => await ExoAccountPasskeyRegisterAsync(paramsEl, hasParams).ConfigureAwait(true),
+            "exoAccount.passkeySignIn" => await ExoAccountPasskeySignInAsync(paramsEl, hasParams).ConfigureAwait(true),
+            "exoAccount.passkeyDelete" => await ExoAccountPasskeyDeleteAsync(paramsEl, hasParams).ConfigureAwait(true),
+            "auth.nativeProviders" => AuthNativeProviders(),
                 "stores.outages" => StoresOutages(),
                 "stores.playOffline" => await StoresPlayOfflineAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "steam.setOffline" => await SteamSetOfflineAsync(paramsEl, hasParams).ConfigureAwait(true),
@@ -771,7 +920,7 @@ public sealed partial class WebHostBridge
                 "capture.send" => await CaptureSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "capture.saveImage" => App.MainAppWindow is { } imageWindow
                     ? await Task.Run(() => imageWindow.CaptureSaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(false) : new { ok = false },
-                "friends.badge" => App.MainAppWindow?.FriendsBadge() ?? new { count = 0 },
+                "friends.badge" => App.MainAppWindow?.FriendsBadge() ?? new { count = DiscordClient.DiscordSession.CurrentBadge },
                 "deps.list" => await _rpcWork.RunAsync(method, DepsList, requestToken, coalesceKey: method).ConfigureAwait(false),
                 "runtimes.list" => await _rpcWork.RunAsync(method, RuntimesListAsync, requestToken, coalesceKey: method).ConfigureAwait(false),
                 "runtimes.install" => await RuntimesInstallAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
@@ -875,6 +1024,11 @@ public sealed partial class WebHostBridge
                 "dlss.restore" => await DlssRestoreAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "dlss.consent" => await DlssConsentAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "dlss.frameGen" => await DlssFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "dlss.frameGenSet" => await DlssFrameGenSetAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.frameGen" => await GameFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.frameCap" => await GameFrameCapAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.capLab.run" => await GameCapLabRunAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.capLab.cancel" => GameCapLabCancel(paramsEl, hasParams),
                 // Windows' administrator prompt blocks the thread that asks until it is answered.
                 "shaders.status" => await _rpcWork.RunAsync(method, token => ShadersStatusAsync(paramsEl, hasParams, token), requestToken).ConfigureAwait(false),
                 "shaders.prepare.games" => await _rpcWork.RunAsync(method, ShaderPrepareGamesAsync, requestToken, coalesceKey: method).ConfigureAwait(false),
@@ -884,7 +1038,10 @@ public sealed partial class WebHostBridge
             "shaders.rebuild" => ShadersRebuildStatus(),
                 "hdr.state" => await _rpcWork.RunAsync(method, HdrState, requestToken, coalesceKey: method).ConfigureAwait(false),
                 "hdr.game" => await HdrGameAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "hdr.calibrate" => await HdrCalibrateAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "game.settings" => await GameSettingsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.graphicsFeatures" => await GameGraphicsFeaturesAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
+                "game.graphicsFeatures.set" => await GameGraphicsFeaturesSetAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "keep.status" => await Task.Run(() => KeepStatusForPage(paramsEl, hasParams)).ConfigureAwait(false),
                 "gpu.display" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, token => GpuDisplayAsync(paramsEl, hasParams, token), requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "discord.status" => DiscordStatus(paramsEl, hasParams),
@@ -972,6 +1129,13 @@ public sealed partial class WebHostBridge
                 "gpu.afmf3" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, token => GpuAfmf3Async(paramsEl, hasParams, token), requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "gpu.game" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, token => GpuGameAsync(paramsEl, hasParams, token), requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "gpu.controlPanel" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, GpuControlPanel.Open, requestToken), TimeSpan.FromSeconds(15), requestToken).ConfigureAwait(true),
+                "gpu.processes" => await _rpcWork.RunAsync(method, () => GpuProcesses(paramsEl, hasParams), requestToken).ConfigureAwait(false),
+                "gpu.tuning.state" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, GpuTuningStateAsync, requestToken, coalesceKey: method), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.apply" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, token => GpuTuningApplyAsync(paramsEl, hasParams, token), requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.reset" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, GpuTuningResetAsync, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.waiver" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, token => GpuTuningWaiverAsync(paramsEl, hasParams, token), requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.test" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, token => GpuTuningTestAsync(paramsEl, hasParams, token), requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.undervolt" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, token => GpuTuningUndervoltAsync(paramsEl, hasParams, token), requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "system.health" => await GpuDeadlineAsync(_rpcWork.RunAsync(method, token => SystemHealthAsync(paramsEl, hasParams, token), requestToken, coalesceKey: ReadOnlyCoalesceKey(method, paramsEl, hasParams)), SystemHealthDeadline(paramsEl, hasParams), requestToken).ConfigureAwait(false),
                 "system.about" => await _rpcWork.RunAsync(method, SystemAboutAsync, requestToken, coalesceKey: method).ConfigureAwait(false),
                 "system.tune" => await _rpcWork.RunAsync(method, () => AutoTuneService.Act(ReadString(paramsEl, hasParams, "action"), ReadString(paramsEl, hasParams, "part"), ReadString(paramsEl, hasParams, "mode")), requestToken, coalesceKey: ReadOnlyCoalesceKey(method, paramsEl, hasParams)).ConfigureAwait(false),
@@ -981,11 +1145,16 @@ public sealed partial class WebHostBridge
                 "exoAi.set" => await _rpcWork.RunAsync(method, () => ExoAiSet(paramsEl, hasParams), requestToken).ConfigureAwait(false),
                 "system.interrupts" => await _rpcWork.RunAsync(method, token => SystemInterruptsAsync(paramsEl, hasParams, token), requestToken, coalesceKey: ReadOnlyCoalesceKey(method, paramsEl, hasParams)).ConfigureAwait(false),
                 "system.tuning" => await _rpcWork.RunAsync(method, token => SystemTuningAsync(paramsEl, hasParams, token), requestToken, coalesceKey: ReadOnlyCoalesceKey(method, paramsEl, hasParams)).ConfigureAwait(false),
+                "system.qos" => await _rpcWork.RunAsync(method, token => SystemQosAsync(paramsEl, hasParams, token), requestToken, coalesceKey: ReadOnlyCoalesceKey(method, paramsEl, hasParams)).ConfigureAwait(false),
+                "system.overlays" => await _rpcWork.RunAsync(method, token => SystemOverlaysAsync(paramsEl, hasParams, token), requestToken, coalesceKey: ReadOnlyCoalesceKey(method, paramsEl, hasParams)).ConfigureAwait(false),
                 "system.mouseCore" => await _rpcWork.RunAsync(method, token => SystemMouseCoreAsync(paramsEl, hasParams, token), requestToken, coalesceKey: ReadOnlyCoalesceKey(method, paramsEl, hasParams)).ConfigureAwait(false),
+                "mouse.diag.status" => await _rpcWork.RunAsync(method, MouseDiagStatusAsync, requestToken, coalesceKey: method).ConfigureAwait(false),
+                "mouse.diag.measure" => await _rpcWork.RunAsync(method, token => MouseDiagMeasureAsync(paramsEl, hasParams, token), requestToken).ConfigureAwait(false),
+                "mouse.diag.cancel" => MouseDiagCancel(),
+                "mouse.diag.fix" => await _rpcWork.RunAsync(method, token => MouseDiagFixAsync(paramsEl, hasParams, token), requestToken).ConfigureAwait(false),
                 "system.drives" => await _rpcWork.RunAsync(method, token => SystemDrivesAsync(paramsEl, hasParams, token), requestToken, coalesceKey: ReadOnlyCoalesceKey(method, paramsEl, hasParams, ReadBool(paramsEl, hasParams, "space") == true ? "space" : "base")).ConfigureAwait(false),
                 "system.drivers" => await _rpcWork.RunAsync(method, token => SystemDriversAsync(paramsEl, hasParams, token), requestToken, coalesceKey: ReadBool(paramsEl, hasParams, "fresh") == true ? null : ReadOnlyCoalesceKey(method, paramsEl, hasParams)).WaitAsync(TimeSpan.FromMinutes(4), requestToken).ConfigureAwait(false),
                 "store.home" => await StoreHomeAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
-                "store.calendar" => await StoreCalendarAsync(requestToken).ConfigureAwait(false),
                 "store.search" => await StoreSearchAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "store.game" => await StoreGameAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "store.gameOffers" => await StoreGameOffersAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
@@ -995,7 +1164,6 @@ public sealed partial class WebHostBridge
                 // Listing opens every device to read its reports: off the UI thread, like the calls below.
                 "hid.list" => await _rpcWork.RunAsync(method, () => HidList(paramsEl, hasParams), requestToken).ConfigureAwait(false),
                 "devices.list" => await _rpcWork.RunAsync(method, DevicesList, requestToken, coalesceKey: method).ConfigureAwait(false),
-                "devices.usbMap" => await _rpcWork.RunAsync(method, DevicesUsbMap, requestToken, coalesceKey: method).ConfigureAwait(false),
                 "keyboard.read" => await _rpcWork.RunAsync(method, () => KeyboardRead(paramsEl, hasParams), requestToken).ConfigureAwait(false),
                 "keyboard.profile" => await _rpcWork.RunAsync(method, () => KeyboardProfile(paramsEl, hasParams), requestToken).ConfigureAwait(false),
                 "keyboard.settings" => await _rpcWork.RunAsync(method, () => KeyboardSettings(paramsEl, hasParams), requestToken).ConfigureAwait(false),
@@ -1012,32 +1180,31 @@ public sealed partial class WebHostBridge
                 "mouse.profiles.set" => await Task.Run(() => MouseFileSet("profiles.json", "profiles", paramsEl, hasParams)).ConfigureAwait(false),
                 "mouse.presets.get" => await Task.Run(() => MouseFileGet("presets.json", "presets")).ConfigureAwait(false),
                 "mouse.presets.set" => await Task.Run(() => MouseFileSet("presets.json", "presets", paramsEl, hasParams)).ConfigureAwait(false),
+                "mouse.panel.open" => await MousePanelOpenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
+                "mouse.panel.bounds" => await MousePanelBoundsAsync(paramsEl, hasParams).ConfigureAwait(false),
+                "mouse.panel.close" => await MousePanelCloseAsync().ConfigureAwait(false),
                 "hid.open" or "hid.close" or "hid.sendReport" or "hid.sendFeatureReport" or "hid.receiveFeatureReport" or "hid.receiveInputReport"
                     => await _rpcWork.RunAsync(method, token => HidCallAsync(method, paramsEl, hasParams, token), requestToken).ConfigureAwait(false),
                 _ => throw new UserFacingException($"Unknown method: {method}")
             };
 
             if (!_detached && scope?.Token.IsCancellationRequested != true)
-                PostResponse(id!, ok: true, result: result);
+                PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: true, result: result, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         catch (OperationCanceledException)
         {
-            if (!_detached && id is not null) PostResponse(id, ok: false, error: "The request was canceled or timed out.");
+            if (!_detached && id is not null) PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: false, error: "The request was canceled or timed out.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         catch (BridgeRequestRegistry.DuplicateRequestException)
         {
-            // Not answered under that id: it belongs to the request still running, whose own answer is coming.
             AppLog.Warn($"RPC {method}: a request reused the id of one still running; dropped.");
         }
         catch (Exception ex)
         {
             AppLog.Warn($"RPC {method} {id}: {ex.Message}");
-            // A failure nobody planned for is reported on its own, so nobody has to copy a log (the daily limits apply).
             if (FailureReportRules.IsHostCallBug(ex)) CrashReport.Submit("HostCallFailed", FailureReportRules.HostCallReason(method ?? "unknown", ex), "rpc");
-            // Handlers throw InvalidOperation/InvalidData with a line meant for the user; file and
-            // Windows errors carry paths, which stay in native code (AGENTS.md).
             if (!_detached && id is not null)
-                PostResponse(id, ok: false, error: UserMessage(ex, "Exo could not finish that. The details are in the log."));
+                PostResponseCore(id, wireReqId, wireMethodId, isWire, ok: false, error: UserMessage(ex, "Exo could not finish that. The details are in the log."), elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         finally
         {
@@ -1081,38 +1248,57 @@ public sealed partial class WebHostBridge
             Telemetry.Track("library.loaded", ("ms", (long)(libraryMs + projectionMs)), ("games", Telemetry.GameCountBucket(games.Count)),
                 ("stores", games.Select(game => game.Store).Distinct().Count()));
         }
-        return new
-        {
-            games = mapped,
-            count = games.Count,
-            stores = MapStoreMatrix(
-                _services.Library.PeekStoreMatrix() ?? Array.Empty<LibraryService.StoreBackendStatus>()),
-            progress = MapProgress(_services.Launcher.CurrentProgress),
-            queuedGameIds = _services.Launcher.QueuedGameIds,
-            pausedDownloads = _services.Launcher.PausedDownloads,
-            sortMode = settings.SortMode,
-            recent = settings.Recent,
-        };
+        return BuildLibraryResponse(
+            mapped,
+            games.Count,
+            _services.Library.PeekStoreMatrix() ?? Array.Empty<LibraryService.StoreBackendStatus>(),
+            _services.Launcher.CurrentProgress,
+            _services.Launcher.QueuedGameIds,
+            _services.Launcher.PausedDownloads,
+            settings.SortMode,
+            settings.Recent);
     }
 
-    private async Task<object> GameGetAsync(JsonElement p, bool hasParams)
-    {
-        var gameId = ReadString(p, hasParams, "id");
-        if (string.IsNullOrWhiteSpace(gameId))
-            return new { ok = false, message = "Missing game id." };
+    internal static object BuildLibraryResponse(
+        IReadOnlyList<object> mappedGames,
+        int count,
+        IReadOnlyList<LibraryService.StoreBackendStatus> storeMatrix,
+        InstallProgress progress,
+        IReadOnlyList<string> queuedGameIds,
+        IReadOnlyList<PausedDownload> pausedDownloads,
+        string sortMode,
+        IReadOnlyList<string> recent) =>
+        new LibraryResponseDto
+        {
+            Games = mappedGames,
+            Count = count,
+            Stores = MapStoreMatrix(storeMatrix),
+            Progress = MapProgress(progress),
+            QueuedGameIds = queuedGameIds,
+            PausedDownloads = pausedDownloads,
+            SortMode = sortMode,
+            Recent = recent,
+        };
 
-        var game = _services.Library.Find(gameId!);
+    private Task<object> GameGetAsync(JsonElement p, bool hasParams) =>
+        GameGetByIdAsync(ReadString(p, hasParams, "id"));
+
+    private async Task<object> GameGetByIdAsync(string? gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return new GameGetReplyDto { Ok = false, Message = "Missing game id." };
+
+        var game = _services.Library.Find(gameId);
         if (game is null)
         {
             await _services.Library.GetLibraryAsync().ConfigureAwait(true);
-            game = _services.Library.Find(gameId!);
+            game = _services.Library.Find(gameId);
         }
         if (game is null)
-            return new { ok = false, message = "Game not found." };
+            return new GameGetReplyDto { Ok = false, Message = "Game not found." };
 
-        // Finding a game started outside Exo reads every process on the PC: off the UI thread.
         var mapped = await Task.Run(() => MapGame(game, discoverExternalRunningGame: true)).ConfigureAwait(true);
-        return new { ok = true, game = mapped };
+        return new GameGetReplyDto { Ok = true, Game = mapped };
     }
 
     private const int UiLogMaxChars = 4000;
@@ -1135,11 +1321,6 @@ public sealed partial class WebHostBridge
         switch (level)
         {
             case "error":
-                if (FailureReportRules.IsExpectedUserNotice(message))
-                {
-                    AppLog.Info(line);
-                    break;
-                }
                 AppLog.Error(line);
                 // A page error is reported on its own (an uncaught error, a rejected promise, a failure a room caught and
                 // showed): nobody has to copy a log. The scrubber and the daily limits apply as to every report.
@@ -1172,9 +1353,7 @@ public sealed partial class WebHostBridge
         {
             var built = AppLog.ReportFor(error.Length > 2000 ? error[..2000] : error, area, AppLog.RecentLines(), DateTime.UtcNow,
                 _services.AppVersion, Environment.OSVersion.Version.ToString(), Environment.UserName, profile);
-            CrashReport.Payload? payload = FailureReportRules.IsExpectedUserNotice(error)
-                ? null
-                : CrashReport.Build(error, built, _services.AppVersion, Environment.OSVersion.Version.ToString(), Environment.UserName, profile, Environment.MachineName);
+            CrashReport.Payload? payload = CrashReport.Build(error, built, _services.AppVersion, Environment.OSVersion.Version.ToString(), Environment.UserName, profile, Environment.MachineName);
             return (built, payload);
         }).ConfigureAwait(true);
         if (report is not null) _ = CrashReport.SendAsync(report);
@@ -1806,28 +1985,30 @@ public sealed partial class WebHostBridge
         };
     }
 
-    private async Task<object> GameExtrasAsync(JsonElement p, bool hasParams)
+    private Task<object> GameExtrasAsync(JsonElement p, bool hasParams) =>
+        GameExtrasByIdAsync(ReadString(p, hasParams, "id"));
+
+    private async Task<object> GameExtrasByIdAsync(string? gameId)
     {
-        var gameId = ReadString(p, hasParams, "id");
         if (string.IsNullOrWhiteSpace(gameId))
-            return new { ok = false, message = "Missing game id." };
-        var game = _services.Library.Find(gameId!);
+            return new GameExtrasDto { Ok = false, Message = "Missing game id." };
+        var game = _services.Library.Find(gameId);
         if (game is null)
-            return new { ok = false, message = "Game not found." };
+            return new GameExtrasDto { Ok = false, Message = "Game not found." };
         if (_bannerAsked.Add(game.Id)) _ = WarmBannerAsync(game.Id);
 
-        // Cached counts only; a played game with none (or old ones) is read in
-        // the background and pushed as game.achievements.
         var achievements = await Task.Run(() => _services.Achievements.GetSummary(game.Id)).ConfigureAwait(true);
         if (game.PlaytimeMinutes > 0 || game.LastPlayedUtc is not null)
             _services.Achievements.RefreshInBackgroundIfStale(game, achievements);
         var hasAchievements = achievements is { Total: > 0 };
-        return new
+        return new GameExtrasDto
         {
-            ok = true,
-            achievementsUnlocked = hasAchievements ? achievements!.Unlocked : (int?)null,
-            achievementsTotal = hasAchievements ? achievements!.Total : (int?)null,
-            driveHeat = DriveHeat.Last(game.Id) is { } heat ? new { peak = heat.PeakC, warn = heat.WarnC, slowedSeconds = heat.SlowedSeconds } : null,
+            Ok = true,
+            AchievementsUnlocked = hasAchievements ? achievements!.Unlocked : null,
+            AchievementsTotal = hasAchievements ? achievements!.Total : null,
+            DriveHeat = DriveHeat.Last(game.Id) is { } heat
+                ? new DriveHeatDto { Peak = heat.PeakC, Warn = heat.WarnC, SlowedSeconds = heat.SlowedSeconds }
+                : null,
         };
     }
 
@@ -2404,19 +2585,35 @@ public sealed partial class WebHostBridge
     private object BuildSettings()
     {
         var s = _services.Settings.Current;
-        // Locked product defaults (SettingsService.EnforceProductDefaults) and
-        // dead fields are not exposed: closeStoreClientsAfterLaunch,
-        // autoInstallRedistributables, minimizeWhilePlaying, antiCheatSafeMode,
-        // framelessMode, theme, copyPortableIntoLibrary, allowResize,
-        // checkForUpdates, libraryShowInstalled, libraryShowOwned.
         var musicService = WebClientPreferences.EffectiveMusicService(WebClientPreferences.Read().MusicService);
         var riotId = RiotIdStore.TryRead();
-        return new
+        return BuildSettingsResponse(
+            s,
+            _services.AppVersion,
+            musicService,
+            riotId,
+            RiotBaselineFor(riotId),
+            DlssSwapService.FrameGenEverywhereCard(SystemSpecs.FastFrameGenGpu) is not null,
+            ChipsetUpdate.ThisPc is { } update && update.Installed() is not null ? update.Vendor : null,
+            _folderArt.ResolveUrl);
+    }
+
+    internal static object BuildSettingsResponse(
+        AppSettings s,
+        string appVersion,
+        string musicService,
+        string? riotId,
+        object? riotBaseline,
+        bool frameGenEverywhereCard,
+        string? chipset,
+        Func<string?, string?> resolveFolderArt) =>
+        new
         {
-            appVersion = _services.AppVersion,
+            appVersion,
             whatsNewSeen = s.WhatsNewSeen,
             reduceMotion = s.ReduceMotion,
             startMaximized = s.StartMaximized,
+            useClassicWebUi = s.UseClassicWebUi,
             startWithWindows = s.StartWithWindows,
             framelessPinTop = s.FramelessPinTop,
             framelessPinSide = s.FramelessPinSide,
@@ -2431,7 +2628,7 @@ public sealed partial class WebHostBridge
             recent = s.Recent,
             onboardingComplete = s.OnboardingComplete,
             riotId,
-            riotBaseline = RiotBaselineFor(riotId),
+            riotBaseline,
             showLibraryTools = s.ShowLibraryTools,
             achievementBanners = s.AchievementBanners,
             achievementVolume = s.AchievementVolume,
@@ -2441,7 +2638,8 @@ public sealed partial class WebHostBridge
             fpsCounterHideOverBuiltIn = s.FpsCounterHideOverBuiltIn,
             hdrForGames = s.HdrForGames,
             frameGenEverywhere = s.FrameGenEverywhere,
-            frameGenEverywhereCard = DlssSwapService.FrameGenEverywhereCard(SystemSpecs.FastFrameGenGpu) is not null,
+            frameGenEverywhereCard,
+            graphicsFeaturesBestSettings = s.GraphicsFeaturesBestSettings,
             hdrSdrGamma = s.HdrSdrGamma,
             discordNoiseSuppression = s.DiscordNoiseSuppression,
             discordQuietWhilePlaying = s.DiscordQuietWhilePlaying,
@@ -2454,12 +2652,10 @@ public sealed partial class WebHostBridge
             upscalerAntiCheatEverywhere = s.UpscalerAntiCheatEverywhere,
             keepAwakeDownloads = s.KeepAwakeDownloads,
             storeClientsQuiet = s.StoreClientsQuiet,
-            chipset = ChipsetUpdate.ThisPc is { } update && update.Installed() is not null ? update.Vendor : null,
-            libraryFolders = s.LibraryFolders.Select(folder => new { id = folder.Id, name = folder.Name, color = folder.Color, sort = folder.Sort, art = _folderArt.ResolveUrl(folder.Art), games = folder.Games }),
+            chipset,
+            libraryFolders = s.LibraryFolders.Select(folder => new { id = folder.Id, name = folder.Name, color = folder.Color, sort = folder.Sort, art = resolveFolderArt(folder.Art), games = folder.Games }),
             hiddenGames = s.HiddenGames,
-
         };
-    }
 
     private object SetSettings(JsonElement p, bool hasParams)
     {
@@ -2473,6 +2669,8 @@ public sealed partial class WebHostBridge
         bool? onboard = null;
         bool? reduceMotion = null;
         bool? startMaximized = null;
+        bool? useClassicWebUi = null;
+        var relaunchForUiSwitch = false;
         bool? framelessPinTop = null, framelessPinSide = null;
         bool? showLibraryTools = null;
         string? textColour = null, textSize = null;
@@ -2507,6 +2705,12 @@ public sealed partial class WebHostBridge
         if (p.TryGetProperty("startMaximized", out var startMaximizedEl) &&
             (startMaximizedEl.ValueKind is JsonValueKind.True or JsonValueKind.False))
             startMaximized = startMaximizedEl.GetBoolean();
+        if (p.TryGetProperty("useClassicWebUi", out var useClassicEl) &&
+            (useClassicEl.ValueKind is JsonValueKind.True or JsonValueKind.False))
+            useClassicWebUi = useClassicEl.GetBoolean();
+        if (p.TryGetProperty("relaunchForUiSwitch", out var relaunchEl) &&
+            relaunchEl.ValueKind == JsonValueKind.True)
+            relaunchForUiSwitch = true;
         if (p.TryGetProperty("framelessPinTop", out var fpt) &&
             (fpt.ValueKind is JsonValueKind.True or JsonValueKind.False))
             framelessPinTop = fpt.GetBoolean();
@@ -2524,6 +2728,10 @@ public sealed partial class WebHostBridge
         if (p.TryGetProperty("frameGenEverywhere", out var fge) &&
             (fge.ValueKind is JsonValueKind.True or JsonValueKind.False))
             frameGenEverywhere = fge.GetBoolean();
+        bool? graphicsFeaturesBestSettings = null;
+        if (p.TryGetProperty("graphicsFeaturesBestSettings", out var gfbs) &&
+            (gfbs.ValueKind is JsonValueKind.True or JsonValueKind.False))
+            graphicsFeaturesBestSettings = gfbs.GetBoolean();
         bool? discordNoiseSuppression = null;
         if (p.TryGetProperty("discordNoiseSuppression", out var dns) &&
             (dns.ValueKind is JsonValueKind.True or JsonValueKind.False))
@@ -2562,9 +2770,14 @@ public sealed partial class WebHostBridge
             discordNoiseSuppression: discordNoiseSuppression,
             discordQuietWhilePlaying: discordQuietWhilePlaying,
             whatsNewSeen: whatsNewSeen,
-            frameGenEverywhere: frameGenEverywhere);
+            frameGenEverywhere: frameGenEverywhere,
+            graphicsFeaturesBestSettings: graphicsFeaturesBestSettings,
+            useClassicWebUi: useClassicWebUi);
         if (hdrForGames is not null || hdrSdrGamma is not null) _services.HdrHost.SyncSoon();
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
+        if (textSize is not null || reduceMotion is not null) _services.MousePanel.NotifySettingsChanged();
+        if (graphicsFeaturesBestSettings == true)
+            _ = Task.Run(() => GameGraphicsFeatures.ApplyBestSettingsSafe(_services.Library.PeekCachedLibrary(), GameSettings.ThisPc()));
         if (showLibraryTools is { } tools && tools != previousShowLibraryTools)
             RefreshLibraryAfterToolsToggle();
         ApplyDownloadSettings(p);
@@ -2631,7 +2844,49 @@ public sealed partial class WebHostBridge
             if (!string.IsNullOrWhiteSpace(riotId.GetString()))
                 _ = Task.Run(() => PlaytimeService.TryAutoSeedRiotHoursAsync(() => _services.Library.RefreshDerivedStateAsync(CancellationToken.None)));
         }
+        if (relaunchForUiSwitch)
+            ScheduleUiSwitchRelaunch();
         return BuildSettings();
+    }
+
+    private void ScheduleUiSwitchRelaunch()
+    {
+        var exe = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe)) return;
+        var pid = Environment.ProcessId;
+        var shutdown = RequestHostShutdown;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(120).ConfigureAwait(false);
+            try
+            {
+                var psi = new ProcessStartInfo(exe)
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = PathHelper.AppDataDir,
+                };
+                psi.Environment.Remove("EXO_UI");
+                psi.ArgumentList.Add("--wait-pid");
+                psi.ArgumentList.Add(pid.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("UI switch relaunch failed: " + ex.Message);
+                return;
+            }
+            if (shutdown is not null)
+            {
+                shutdown();
+            }
+            else
+            {
+                _queue.Enqueue(() =>
+                {
+                    try { Microsoft.UI.Xaml.Application.Current.Exit(); } catch { }
+                });
+            }
+        });
     }
 
     /// <summary>
@@ -3223,7 +3478,7 @@ public sealed partial class WebHostBridge
         return target.IndexOfAny(['\\', '/', ':']) >= 0 ? null : target;
     }
 
-    private object MapGame(GameEntry g, bool discoverExternalRunningGame = false) =>
+    private GamePageDto MapGame(GameEntry g, bool discoverExternalRunningGame = false) =>
         GameForPage(g, _services.Launcher.GetGameRunState(g, discoverExternalRunningGame),
             variant => _services.Launcher.GetGameRunState(variant.ToGameEntry(g), discoverExternalRunningGame));
 
@@ -3284,92 +3539,82 @@ public sealed partial class WebHostBridge
         string.IsNullOrEmpty(text) || PathInText.IsMatch(text) ? "" : text;
 
     /// <summary>What the page may know about one game: ids, flags and words, never a file path (AGENTS.md).</summary>
-    internal static object GameForPage(GameEntry g, GameRunState runState, Func<GameVariant, GameRunState> variantRunState)
+    internal static GamePageDto GameForPage(GameEntry g, GameRunState runState, Func<GameVariant, GameRunState> variantRunState)
     {
-        return new
+        return new GamePageDto
         {
-        id = g.Id,
-        title = g.Title,
-        store = g.Store.ToString().ToLowerInvariant(),
-        // `store` remains the deterministic selected source. `stores` and
-        // `variants` let a card show alternate active sources without exposing
-        // account identity or replacing any exact action ids.
-        stores = (g.Variants.Count == 0 ? new[] { g.Store } : g.Variants.Select(v => v.Store))
-            .Distinct()
-            .Select(store => store.ToString().ToLowerInvariant())
-            .ToArray(),
-        canonicalTitleKey = g.CanonicalTitleKey,
-        selectedVariantId = g.SelectedVariantId ?? g.Id,
-        variants = g.Variants.Select(variant =>
-        {
-            // game.get is the deliberate, selected-card reconciliation point.
-            // Scan every exact source on that card there, otherwise a running
-            // alternate-store copy stays invisible until the user happens to
-            // switch sources and triggers another round trip. library.get keeps
-            // this false so the grid never enumerates every installed process.
-            var variantRun = variantRunState(variant);
-            return new
+            Id = g.Id,
+            Title = g.Title,
+            Store = g.Store.ToString().ToLowerInvariant(),
+            Stores = (g.Variants.Count == 0 ? new[] { g.Store } : g.Variants.Select(v => v.Store))
+                .Distinct()
+                .Select(store => store.ToString().ToLowerInvariant())
+                .ToArray(),
+            CanonicalTitleKey = g.CanonicalTitleKey,
+            SelectedVariantId = g.SelectedVariantId ?? g.Id,
+            Variants = g.Variants.Select(variant =>
             {
-                id = variant.Id,
-                store = variant.Store.ToString().ToLowerInvariant(),
-                installed = variant.Installed,
-                owned = variant.Owned,
-                entitlementState = variant.EntitlementState,
-                updateAvailable = variant.UpdateAvailable,
-                canInstall = variant.CanInstall,
-                primaryAction = variant.PrimaryAction,
-                // Paths stay in native code (AGENTS.md): a store id goes to the page, a program's path does not.
-                path = (string?)null,
-                launchTarget = PageTarget(variant.LaunchTarget),
-                playtimeMinutes = variant.PlaytimeMinutes ?? 0,
-                lastPlayedUtc = variant.LastPlayedUtc?.ToString("O"),
-                status = PageText(variant.Status),
-                isRunning = variantRun.IsRunning,
-                canStop = variantRun.CanStop,
-            };
-        }).ToArray(),
-        installed = g.Installed,
-        owned = g.Owned,
-        entitlementState = g.EntitlementState,
-        updateAvailable = g.UpdateAvailable,
-        canInstall = g.CanInstall,
-        primaryAction = g.PrimaryAction,
-        path = (string?)null,
-        coverUrl = g.CoverUrl,
-        coverSource = g.CoverSource,
-        artRevision = g.ArtRevision,
-        playtimeMinutes = g.PlaytimeMinutes ?? 0,
-        sizeBytes = g.SizeBytes ?? InstalledSizeCache.Peek(g.Path)?.Bytes,
-        sizeApproximate = g.SizeBytes is null && InstalledSizeCache.Peek(g.Path) is { Complete: false, Bytes: not null },
-        status = PageText(g.Status),
-        deps = g.Deps.Select(PageText).ToArray(),
-        launchNote = PageText(g.LaunchNote),
-        familyShared = g.FamilyShared,
-        // A family member's Steam name, for the game page's "Shared by"; never an id.
-        sharedBy = g.FamilyShared && PageText(g.SharedBy) is { Length: > 0 } lender ? lender : null,
-        launchTarget = PageTarget(g.LaunchTarget),
-        includes = g.Includes?.Select(game => new { appId = game.AppId, title = game.Title }),
-        lastPlayedUtc = g.LastPlayedUtc?.ToString("O"),
-        isAddPortable = string.Equals(g.Id, "local:add", StringComparison.OrdinalIgnoreCase),
-        isRunning = runState.IsRunning,
-        canStop = runState.CanStop,
-        buyUrl = Storefront.BuyUrl(g),
-        // The Library's search and Filter menu (racing, co-op ...): Steam's own record, already in memory.
-        tags = SteamAppTags.For(g),
+                var variantRun = variantRunState(variant);
+                return new GameVariantDto
+                {
+                    Id = variant.Id,
+                    Store = variant.Store.ToString().ToLowerInvariant(),
+                    Installed = variant.Installed,
+                    Owned = variant.Owned,
+                    EntitlementState = variant.EntitlementState,
+                    UpdateAvailable = variant.UpdateAvailable,
+                    CanInstall = variant.CanInstall,
+                    PrimaryAction = variant.PrimaryAction,
+                    Path = null,
+                    LaunchTarget = PageTarget(variant.LaunchTarget),
+                    PlaytimeMinutes = variant.PlaytimeMinutes ?? 0,
+                    LastPlayedUtc = variant.LastPlayedUtc?.ToString("O"),
+                    Status = PageText(variant.Status),
+                    IsRunning = variantRun.IsRunning,
+                    CanStop = variantRun.CanStop,
+                };
+            }).ToArray(),
+            Installed = g.Installed,
+            Owned = g.Owned,
+            EntitlementState = g.EntitlementState,
+            UpdateAvailable = g.UpdateAvailable,
+            CanInstall = g.CanInstall,
+            PrimaryAction = g.PrimaryAction,
+            Path = null,
+            CoverUrl = g.CoverUrl,
+            CoverSource = g.CoverSource,
+            ArtRevision = g.ArtRevision,
+            PlaytimeMinutes = g.PlaytimeMinutes ?? 0,
+            SizeBytes = g.SizeBytes ?? InstalledSizeCache.Peek(g.Path)?.Bytes,
+            SizeApproximate = g.SizeBytes is null && InstalledSizeCache.Peek(g.Path) is { Complete: false, Bytes: not null },
+            Status = PageText(g.Status),
+            Deps = g.Deps.Select(PageText).ToArray(),
+            LaunchNote = PageText(g.LaunchNote),
+            FamilyShared = g.FamilyShared,
+            SharedBy = g.FamilyShared && PageText(g.SharedBy) is { Length: > 0 } lender ? lender : null,
+            LaunchTarget = PageTarget(g.LaunchTarget),
+            Includes = g.Includes?.Select(game => new GameIncludeDto { AppId = game.AppId, Title = game.Title }).ToArray(),
+            LastPlayedUtc = g.LastPlayedUtc?.ToString("O"),
+            IsAddPortable = string.Equals(g.Id, "local:add", StringComparison.OrdinalIgnoreCase),
+            IsRunning = runState.IsRunning,
+            CanStop = runState.CanStop,
+            BuyUrl = Storefront.BuyUrl(g),
+            Tags = SteamAppTags.For(g),
+            AntiCheatClass = AntiCheatClass.WireClass(g, AntiCheatCheck.PeekCached(g)),
         };
     }
 
-    private static object MapProgress(InstallProgress p) => new
+    private static InstallProgressDto MapProgress(InstallProgress p) => new()
     {
-        gameId = p.GameId,
-        phase = p.Phase.ToString().ToLowerInvariant(),
-        percent = p.Percent,
-        bytesDownloaded = p.BytesDownloaded,
-        bytesToDownload = p.BytesToDownload,
-        bytesPerSecond = p.BytesPerSecond,
-        status = p.Status,
-        canCancel = p.CanCancel,
-        isActive = p.IsActive,
+        GameId = p.GameId,
+        Phase = p.Phase.ToString().ToLowerInvariant(),
+        Percent = p.Percent,
+        BytesDownloaded = p.BytesDownloaded,
+        BytesToDownload = p.BytesToDownload,
+        BytesPerSecond = p.BytesPerSecond,
+        Status = p.Status,
+        CanCancel = p.CanCancel,
+        IsActive = p.IsActive,
     };
 
     /// <summary>The params that only name a page or a kind of call, never what it is about.</summary>
@@ -3444,18 +3689,53 @@ public sealed partial class WebHostBridge
             officialUrl = d.OfficialUrl,
         }).ToArray();
 
-    private object BuildArtBase() =>
-        _transport is NamedPipeHostTransport
+    internal static object BuildArtBaseResponse(
+        bool isNamedPipe,
+        string covers,
+        string coversDir,
+        string devicesDir,
+        string notesDir,
+        string capturesDir,
+        string captureThumbsDir) =>
+        isNamedPipe
             ? new
             {
-                covers = LocalFileHost.Url(CoverArtService.VirtualHost, ""),
-                coversDir = CoverArtService.CacheRoot,
-                devicesDir = DeviceImages.CacheRoot,
-                notesDir = NoteStore.Shared.PhotosFolder,
-                capturesDir = _services.HeadlessCapture.CaptureFolder,
-                captureThumbsDir = HeadlessCaptureService.ThumbsDir,
+                covers,
+                coversDir,
+                devicesDir,
+                notesDir,
+                capturesDir,
+                captureThumbsDir,
             }
-            : (object)new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") };
+            : (object)new { covers };
+
+    private object BuildArtBase() =>
+        BuildArtBaseResponse(
+            _transport is NamedPipeHostTransport,
+            LocalFileHost.Url(CoverArtService.VirtualHost, ""),
+            CoverArtService.CacheRoot,
+            DeviceImages.CacheRoot,
+            NoteStore.Shared.PhotosFolder,
+            _services.HeadlessCapture.CaptureFolder,
+            HeadlessCaptureService.ThumbsDir);
+
+    internal static object BuildShellBootstrapResponse(
+        object artBase,
+        object settings,
+        object library,
+        object musicPlayback,
+        object discordStatus,
+        string? binaryMediaPipe) =>
+        new ShellBootstrapDto
+        {
+            Ok = true,
+            ArtBase = artBase,
+            Settings = settings,
+            Library = library,
+            MusicPlayback = musicPlayback,
+            DiscordStatus = discordStatus,
+            BinaryMediaPipe = binaryMediaPipe,
+        };
 
     private async Task<object> ShellBootstrapAsync(CancellationToken ct)
     {
@@ -3470,25 +3750,33 @@ public sealed partial class WebHostBridge
         UpdateStartupHealth.UiReady(_services.AppVersion);
         var artBase = BuildArtBase();
         await Task.WhenAll(libraryTask, settingsTask, musicTask, discordTask).WaitAsync(ct).ConfigureAwait(false);
-        return new
-        {
-            ok = true,
+        return BuildShellBootstrapResponse(
             artBase,
-            settings = await settingsTask.ConfigureAwait(false),
-            library = await libraryTask.ConfigureAwait(false),
-            musicPlayback = await musicTask.ConfigureAwait(false),
-            discordStatus = await discordTask.ConfigureAwait(false),
-            binaryMediaPipe = (_transport as NamedPipeHostTransport)?.MediaPipeName,
-        };
+            await settingsTask.ConfigureAwait(false),
+            await libraryTask.ConfigureAwait(false),
+            await musicTask.ConfigureAwait(false),
+            await discordTask.ConfigureAwait(false),
+            (_transport as NamedPipeHostTransport)?.MediaPipeName);
     }
 
-    private void PostResponse(string id, bool ok, object? result = null, string? error = null)
+    private void PostResponse(string id, bool ok, object? result = null, string? error = null, double elapsedMs = 0) =>
+        PostResponseCore(id, 0, 0, isWire: false, ok, result, error, elapsedMs);
+
+    private void PostResponseCore(string id, ulong wireReqId, ushort wireMethodId, bool isWire, bool ok, object? result = null, string? error = null, double elapsedMs = 0)
     {
         var transport = _transport;
         if (transport is null || _detached) return;
+        if (_trace.IsEnabled)
+            _trace.RecordReply(RpcTrace.ClientKind(transport), id, ok, elapsedMs);
         if (transport is NamedPipeHostTransport pipeTransport)
         {
-            try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeResponseUtf8(id, ok, result, error)); }
+            try
+            {
+                if (isWire && pipeTransport.IsBinaryWireActive)
+                    pipeTransport.PostWireResponse(wireReqId, wireMethodId, ok, result, error);
+                else
+                    pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeResponseUtf8(id, ok, result, error));
+            }
             catch { }
             return;
         }
@@ -3502,6 +3790,8 @@ public sealed partial class WebHostBridge
     /// <summary>capture.state and capture.saved: from Exo Capture, through MainWindow.Capture.</summary>
     internal void PostCaptureEvent(string name, object? data) => PostEvent(name, data);
 
+    internal void PostFriendsBadge(int count) => PostEvent("friends.badge", new { count });
+
     /// <summary>components.failed: one of Exo's parts (<see cref="ExoComponents"/>) failed to fetch twice in a row.</summary>
     private void OnComponentFailed(string feature) => PostEvent("components.failed", new { feature });
 
@@ -3509,9 +3799,17 @@ public sealed partial class WebHostBridge
     {
         var transport = _transport;
         if (transport is null || _detached) return;
+        if (_trace.IsEnabled)
+            _trace.RecordEvent(RpcTrace.ClientKind(transport), name, data);
         if (transport is NamedPipeHostTransport pipeTransport)
         {
-            try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeEventUtf8(name, data)); }
+            try
+            {
+                if (pipeTransport.IsBinaryWireActive)
+                    pipeTransport.PostWireEvent(name, data);
+                else
+                    pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeEventUtf8(name, data));
+            }
             catch { }
             return;
         }

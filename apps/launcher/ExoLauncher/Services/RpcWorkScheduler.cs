@@ -53,6 +53,7 @@ internal sealed class RpcWorkScheduler
             || method.StartsWith("keyboard.", StringComparison.Ordinal)
             || method.StartsWith("audio.", StringComparison.Ordinal)
             || method.StartsWith("controller.", StringComparison.Ordinal)
+            || method.StartsWith("mouse.diag.", StringComparison.Ordinal)
             || method is "eq" or "eq.headphones" or "steamInput.state")
             return RpcLane.Devices;
         if (method.StartsWith("system.", StringComparison.Ordinal)

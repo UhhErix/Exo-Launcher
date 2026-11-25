@@ -19,6 +19,7 @@ function digest(paths, base) {
   return hash.digest('hex')
 }
 const inputs = [
+  resolve(root, '../CHANGELOG.md'),
   ...['src', 'public', 'scripts'].flatMap(name => files(resolve(root, name))),
   ...readdirSync(root).filter(name => /^(package.*\.json|tsconfig.*\.json|vite.*\.ts|index\.html)$/.test(name)).map(name => resolve(root, name)),
   // Exo Mouse builds into wwwroot/mouse with the UI.

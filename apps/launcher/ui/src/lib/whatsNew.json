@@ -1,5 +1,50 @@
 [
   {
+    "version": "4.0.0",
+    "items": [
+      {
+        "icon": "Library",
+        "title": "All-new native desktop interface",
+        "detail": "Faster startup, smoother scrolling, and lower memory use across Library, Store, Discord, Music, and PC, keeping all your existing settings, games, and accounts."
+      },
+      {
+        "icon": "Settings",
+        "title": "Classic interface one switch away",
+        "detail": "Prefer the previous layout? Turn on Use classic interface in Settings › General to switch back whenever you like."
+      },
+      {
+        "icon": "Mic",
+        "title": "Faster, clearer Exo Voice",
+        "detail": "Upgrades voice cleanup with automatic gaming tuning, optional voice isolation, and echo cancellation in Discord calls."
+      },
+      {
+        "icon": "FrameGen",
+        "title": "Built-in frame generation and live overlay",
+        "detail": "Turn on frame generation for supported games and watch frame pacing, GPU power, and temperatures in a light in-game overlay."
+      },
+      {
+        "icon": "Performance",
+        "title": "Smarter PC power, cooling, and display tools",
+        "detail": "Adds power protection, safe fan-curve limits, monitor calibration, and network latency checks in the PC room."
+      },
+      {
+        "icon": "Record",
+        "title": "Faster game capture and instant replay",
+        "detail": "Records gameplay and instant replays straight from your GPU with per-app audio isolation and faster clip saving."
+      },
+      {
+        "icon": "Mouse",
+        "title": "Direct mouse tuning in Devices",
+        "detail": "Tune DPI, polling rate, click modes, and per-game profiles right inside Devices › Mouse with built-in write protection."
+      },
+      {
+        "icon": "Encrypted",
+        "title": "Passkeys and safer sign-in",
+        "detail": "Sign in to your Exo account with Windows Hello passkeys and connect supported services through your regular browser."
+      }
+    ]
+  },
+  {
     "version": "3.31.1",
     "items": [
       {

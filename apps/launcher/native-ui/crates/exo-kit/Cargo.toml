@@ -6,3 +6,5 @@ license.workspace = true
 
 [dependencies]
 rune.workspace = true
+rune-kit.workspace = true
+rune-ui.workspace = true

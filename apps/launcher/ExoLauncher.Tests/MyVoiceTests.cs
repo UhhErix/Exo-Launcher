@@ -144,6 +144,85 @@ public sealed class MyVoiceTests
         finally { SpeakerModel.ModelPath = before; }
     }
 
+    [Fact]
+    public void SessionThreadsUsesTwoOnMultiCoreAndClampsOnSingleCore()
+    {
+        Assert.Equal(1, SpeakerModel.SessionThreads(0));
+        Assert.Equal(1, SpeakerModel.SessionThreads(1));
+        Assert.Equal(2, SpeakerModel.SessionThreads(2));
+        Assert.Equal(2, SpeakerModel.SessionThreads(6));
+        Assert.Equal(2, SpeakerModel.SessionThreads(12));
+    }
+
+    [Fact]
+    public unsafe void TwoThreadsProducesIdenticalEmbeddingToOneThread()
+    {
+        var dir = Environment.GetEnvironmentVariable("EXO_SPEAKER_TEST_DIR");
+        var modelPath = dir is null ? "" : Path.Combine(dir, "titanet_small.onnx");
+        Assert.SkipWhen(string.IsNullOrEmpty(dir) || !File.Exists(modelPath), "EXO_SPEAKER_TEST_DIR isn't set");
+        Assert.True(System.Runtime.InteropServices.NativeLibrary.TryLoad(Path.Combine(AppContext.BaseDirectory, "onnxruntime.dll"), out _));
+        Assert.True(System.Runtime.InteropServices.NativeLibrary.TryLoad(Path.Combine(AppContext.BaseDirectory, "sherpa-onnx-c-api.dll"), out var lib));
+        var create = (delegate* unmanaged[Cdecl]<byte*, nint>)System.Runtime.InteropServices.NativeLibrary.GetExport(lib, "SherpaOnnxCreateSpeakerEmbeddingExtractor");
+        var destroy = (delegate* unmanaged[Cdecl]<nint, void>)System.Runtime.InteropServices.NativeLibrary.GetExport(lib, "SherpaOnnxDestroySpeakerEmbeddingExtractor");
+        var dim = (delegate* unmanaged[Cdecl]<nint, int>)System.Runtime.InteropServices.NativeLibrary.GetExport(lib, "SherpaOnnxSpeakerEmbeddingExtractorDim");
+        var createStream = (delegate* unmanaged[Cdecl]<nint, nint>)System.Runtime.InteropServices.NativeLibrary.GetExport(lib, "SherpaOnnxSpeakerEmbeddingExtractorCreateStream");
+        var destroyStream = (delegate* unmanaged[Cdecl]<nint, void>)System.Runtime.InteropServices.NativeLibrary.GetExport(lib, "SherpaOnnxDestroyOnlineStream");
+        var accept = (delegate* unmanaged[Cdecl]<nint, int, float*, int, void>)System.Runtime.InteropServices.NativeLibrary.GetExport(lib, "SherpaOnnxOnlineStreamAcceptWaveform");
+        var finish = (delegate* unmanaged[Cdecl]<nint, void>)System.Runtime.InteropServices.NativeLibrary.GetExport(lib, "SherpaOnnxOnlineStreamInputFinished");
+        var compute = (delegate* unmanaged[Cdecl]<nint, nint, float*>)System.Runtime.InteropServices.NativeLibrary.GetExport(lib, "SherpaOnnxSpeakerEmbeddingExtractorComputeEmbedding");
+        var destroyEmbedding = (delegate* unmanaged[Cdecl]<nint, void>)System.Runtime.InteropServices.NativeLibrary.GetExport(lib, "SherpaOnnxSpeakerEmbeddingExtractorDestroyEmbedding");
+
+        var wavPath = Path.Combine(dir!, "david-enroll.wav");
+        var samples = File.Exists(wavPath) ? Voiced(Wav(wavPath)) : Enumerable.Range(0, 24000).Select(i => 0.25f * MathF.Sin(2f * MathF.PI * 180f * i / 16000f)).ToArray();
+
+        float[] RunWithThreads(int threads)
+        {
+            var modelBytes = System.Text.Encoding.UTF8.GetBytes(modelPath + "\0");
+            var config = stackalloc byte[24];
+            nint extractor;
+            fixed (byte* path = modelBytes)
+            fixed (byte* cpu = "cpu"u8)
+            {
+                *(byte**)config = path;
+                *(int*)(config + 8) = threads;
+                *(int*)(config + 12) = 0;
+                *(byte**)(config + 16) = cpu;
+                extractor = create(config);
+            }
+            Assert.NotEqual(0, extractor);
+            try
+            {
+                var stream = createStream(extractor);
+                Assert.NotEqual(0, stream);
+                try
+                {
+                    fixed (float* ptr = samples) accept(stream, 16000, ptr, samples.Length);
+                    finish(stream);
+                    var emb = compute(extractor, stream);
+                    Assert.True(emb is not null);
+                    try
+                    {
+                        var vec = new ReadOnlySpan<float>(emb, dim(extractor)).ToArray();
+                        var len = MathF.Sqrt(vec.Sum(v => v * v));
+                        for (var i = 0; i < vec.Length; i++) vec[i] /= len;
+                        return vec;
+                    }
+                    finally { destroyEmbedding((nint)emb); }
+                }
+                finally { destroyStream(stream); }
+            }
+            finally { destroy(extractor); }
+        }
+
+        var one = RunWithThreads(1);
+        var two = RunWithThreads(2);
+        Assert.Equal(one.Length, two.Length);
+        var dot = VoiceprintLearning.Dot(one, two);
+        Assert.True(dot >= 0.9999f, $"embedding cosine drifted: {dot:0.000000}");
+        var maxDiff = one.Zip(two, (a, b) => MathF.Abs(a - b)).Max();
+        Assert.True(maxDiff < 1e-4f, $"embedding max diff drifted: {maxDiff:E3}");
+    }
+
     private static float[] Wav(string path)
     {
         var bytes = File.ReadAllBytes(path);

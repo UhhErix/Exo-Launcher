@@ -20,30 +20,32 @@ public sealed class AppServices
     public GogOwnedLibraryService GogOwnedLibrary { get; } = new();
     /// <summary>The game sheet's Shaders line, read from the Exo Shaders engine.</summary>
     internal ScsKillerStatus Shaders { get; } = new();
-    internal ShadersHostService ShadersHost => _shadersHost ??= new ShadersHostService(this);
-    private ShadersHostService? _shadersHost;
-    internal HdrHostService HdrHost => _hdrHost ??= new HdrHostService(this, _lifetime.Token);
-    private HdrHostService? _hdrHost;
-    internal HeadlessCaptureService HeadlessCapture => _headlessCapture ??= new HeadlessCaptureService(this);
-    private HeadlessCaptureService? _headlessCapture;
-    internal HeadlessMusicService HeadlessMusic => _headlessMusic ??= new HeadlessMusicService();
-    private HeadlessMusicService? _headlessMusic;
-    internal MusicEngineService MusicEngine => _musicEngine ??= new MusicEngineService();
-    private MusicEngineService? _musicEngine;
+    internal ShadersHostService ShadersHost => _shadersHost.Value;
+    private readonly Lazy<ShadersHostService> _shadersHost;
+    internal HdrHostService HdrHost => _hdrHost.Value;
+    private readonly Lazy<HdrHostService> _hdrHost;
+    internal HeadlessCaptureService HeadlessCapture => _headlessCapture.Value;
+    private readonly Lazy<HeadlessCaptureService> _headlessCapture;
+    internal HeadlessMusicService HeadlessMusic => _headlessMusic.Value;
+    private readonly Lazy<HeadlessMusicService> _headlessMusic;
+    internal MusicEngineService MusicEngine => _musicEngine.Value;
+    private readonly Lazy<MusicEngineService> _musicEngine;
+    internal MousePanelService MousePanel => _mousePanel.Value;
+    private readonly Lazy<MousePanelService> _mousePanel;
 
     /// <summary>The Shaders page's Prepare, for Unreal games.</summary>
-    internal ShaderPrepare ShaderPrepare => _shaderPrepare ??= new ShaderPrepare(() => Launcher);
-    private ShaderPrepare? _shaderPrepare;
+    internal ShaderPrepare ShaderPrepare => _shaderPrepare.Value;
+    private readonly Lazy<ShaderPrepare> _shaderPrepare;
     /// <summary>The Store room: deals, prices, free games and the wishlist.</summary>
     internal StoreService Store => _store.Value;
     /// <summary>Settings > Downloads applied: holds while playing and outside the download hours, idle auto-updates.</summary>
-    internal DownloadPolicy Downloads => _downloads ??= new DownloadPolicy(this);
-    private DownloadPolicy? _downloads;
+    internal DownloadPolicy Downloads => _downloads.Value;
+    private readonly Lazy<DownloadPolicy> _downloads;
     /// <summary>Temporary files, crash reports, the thumbnail cache and Exo's old backups, cleaned while the PC is idle.</summary>
     private JunkAutoClean? _junk;
     /// <summary>Compress games: Windows' own file compression for a game's install, by a press or while the PC is idle.</summary>
-    internal GameCompressor Compressor => _compressor ??= new GameCompressor(this);
-    private GameCompressor? _compressor;
+    internal GameCompressor Compressor => _compressor.Value;
+    private readonly Lazy<GameCompressor> _compressor;
     private readonly Lazy<StoreService> _store = new(() => new StoreService(RunningVersion));
     /// <summary>HID devices for the Devices room's mouse module.</summary>
     internal Hid.HidService Hid => _hid.Value;
@@ -60,6 +62,15 @@ public sealed class AppServices
     public GameArtworkService Artwork => _artwork.Value;
     public AppServices()
     {
+        _shadersHost = new Lazy<ShadersHostService>(() => new ShadersHostService(this));
+        _hdrHost = new Lazy<HdrHostService>(() => new HdrHostService(this, _lifetime.Token));
+        _headlessCapture = new Lazy<HeadlessCaptureService>(() => new HeadlessCaptureService(this));
+        _headlessMusic = new Lazy<HeadlessMusicService>(() => new HeadlessMusicService());
+        _musicEngine = new Lazy<MusicEngineService>(() => new MusicEngineService());
+        _mousePanel = new Lazy<MousePanelService>(() => new MousePanelService(this));
+        _shaderPrepare = new Lazy<ShaderPrepare>(() => new ShaderPrepare(() => Launcher));
+        _downloads = new Lazy<DownloadPolicy>(() => new DownloadPolicy(this));
+        _compressor = new Lazy<GameCompressor>(() => new GameCompressor(this));
         _adapters = new Lazy<IReadOnlyList<IStoreAdapter>>(BuildAdapters);
         _library = new Lazy<LibraryService>(BuildLibrary);
         _artwork = new Lazy<GameArtworkService>(() => new GameArtworkService(Library, Settings));
@@ -75,6 +86,7 @@ public sealed class AppServices
         // An update kept for after a game is ready again when the game ends (UpdateFlow).
         LeanSignal.Changed += Updater.GameChanged;
         LeanSignal.Changed += Dependencies.OnGameStateChanged;
+        LeanSignal.Changed += GpuManualTuningService.Shared.OnGameStateChanged;
 
         // Adapters, Library, and Launcher are created on first access so the
         // shell can paint before any official-client probing runs.
@@ -237,11 +249,13 @@ public sealed class AppServices
             // Autopilot after the keeper: what a crash left goes back, and Game Mode follows Autopilot's switch.
             Autopilot.Start();
             WindowsGameBar.KeepOff();
+            _ = SystemTuning.Shared.MigrateLegacyPowerThrottlingAsync(allowPrompt: false);
         });
         RadeonProfileService.Shared.Start(Launcher, () => GpuProfileService.MainScreen("amd"));
         IntelProfileService.Shared.Start(Launcher);
         // Properties › Anti-cheat: a Steam game the player starts from Steam's entry without its anti-cheat.
         AntiCheatCheck.ChoseWithoutAntiCheat = game => Settings.SteamWithoutAntiCheat(game.Id);
+        DlssSwapService.FrameGenConsentLookup = id => Settings.GraphicsModConsent(id);
         // Its shader recorder goes in only for a session Exo starts, through Exo Shaders' engine (DlssSwapService.SessionMods.cs).
         DlssSwapService.RecorderSwitch = (id, on, ct) => ShadersHost.RecorderSetAsync(id, on, ct);
         // Frame generation Exo put into a game: checked as each game starts and ends, and kept on the mod's newest release.
@@ -332,6 +346,8 @@ public sealed class AppServices
     {
         try { _lifetime.Cancel(); } catch { }
         LeanSignal.Changed -= Dependencies.OnGameStateChanged;
+        LeanSignal.Changed -= GpuManualTuningService.Shared.OnGameStateChanged;
+        GpuManualTuningService.Shared.Dispose();
         Updater.Exiting();
         PlaytimeService.FlushActiveSessions();
         // Compare held as Exo closes: the EQ comes back, as it would when let go.
@@ -347,13 +363,14 @@ public sealed class AppServices
         Shaders.Dispose();
         if (_store.IsValueCreated) _store.Value.Dispose();
         if (_hid.IsValueCreated) _hid.Value.Dispose();
-        _hdrHost?.Stop();
-        _shadersHost?.Dispose();
-        _headlessCapture?.Dispose();
-        _musicEngine?.Close();
-        _downloads?.Dispose();
+        if (_hdrHost.IsValueCreated) _hdrHost.Value.Stop();
+        if (_shadersHost.IsValueCreated) _shadersHost.Value.Dispose();
+        if (_headlessCapture.IsValueCreated) _headlessCapture.Value.Dispose();
+        if (_musicEngine.IsValueCreated) _musicEngine.Value.Close();
+        if (_mousePanel.IsValueCreated) _mousePanel.Value.Close();
+        if (_downloads.IsValueCreated) _downloads.Value.Dispose();
         _junk?.Dispose();
-        _compressor?.Dispose();
+        if (_compressor.IsValueCreated) _compressor.Value.Dispose();
         Achievements.Dispose();
         HiddenStores.Dispose();
         GogAuth.Dispose();

@@ -119,7 +119,13 @@ export type DiscordAccountAction = 'me' | 'name' | 'profile' | 'avatar' | 'banne
 export type DiscordClientSettings = {
   inputProfile: 'exo' | 'custom'
   noiseSuppression: boolean
-  noiseSuppressionKind?: 'exo' | 'ai' | 'standard'
+  noiseSuppressionKind?: 'exo' | 'exo-dfn3' | 'ai' | 'standard'
+  voiceTier?: 'auto' | 'cpu' | 'hq'
+  voiceIsolation?: boolean
+  loopbackEchoCancellation?: boolean
+  voiceModelReady?: boolean
+  voiceHqModelReady?: boolean
+  voiceIsolationReady?: boolean
   /** The same on everyone else's voice in a call, each their own; off by default. */
   othersNoiseSuppression: boolean
   /** Only My Voice: voices that aren't the learned one are held back in calls (needs myVoiceLearned). */
@@ -130,6 +136,8 @@ export type DiscordClientSettings = {
   myVoiceSeconds?: number
   /** Each person's voice in a call brought toward one speaking level, for you; on by default. */
   evenVoices: boolean
+  voiceTargetLufs: number
+  micAutoGain: boolean
   /** Exo's echo cancellation, which runs only on speakers that aren't on your head. */
   echoCancellation: boolean
   /** Exo's own gate, leveler and limiter after noise suppression (Custom; Voice Isolation always has it). */

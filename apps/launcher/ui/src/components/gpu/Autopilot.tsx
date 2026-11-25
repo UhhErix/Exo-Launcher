@@ -62,11 +62,28 @@ async function change(next: AutopilotChange, onState: (state: AutopilotState) =>
 
 /** Active always-on protections in concise plain English, plus CPU topology and Windows Game Mode / mouse precision status. */
 function activeSummary(state: AutopilotState): string {
+  if (!state.on) {
+    return ['Paused. Your games and background apps are left untouched.', state.cpu || null].filter(Boolean).join(' ')
+  }
+  const priorityPart = state.gamePriority === 'normal'
+    ? 'Leaves game priority normal'
+    : state.gamePriority === 'high'
+      ? 'Gives your game high priority while it runs'
+      : 'Gives your game priority while it runs'
+  const corePart = state.coreParking
+    ? ', throttles background hogs, pauses background downloads, and keeps cores awake.'
+    : ', throttles background hogs, and pauses background downloads.'
   const parts = [
-    'Gives your game priority while it runs, throttles background hogs, and keeps cores awake.',
+    priorityPart + corePart,
     state.gameMode.off ? 'Windows Game Mode off.' : state.gameMode.keptOn ? `Windows Game Mode stays on (${state.gameMode.keptOn}).` : null,
     state.mouseAccel?.off ? 'Mouse acceleration off (1:1).' : null,
     state.cpu || null,
+    state.cpuSets || null,
+    state.timerGlobal?.neededForWin11
+      ? (state.timerGlobal.enabled
+        ? 'GlobalTimerResolutionRequests is on for Windows 11 24H2+.'
+        : 'Enable Global timer resolution in System settings so 0.507 ms game timers apply on Windows 11 24H2+.')
+      : null,
   ]
   return parts.filter(Boolean).join(' ')
 }
@@ -77,9 +94,19 @@ export function AutopilotControls({ state, onState }: { state: AutopilotState | 
   return (
     <div className="exo-pc-menu-rows">
       <Row label="Autopilot" detail={activeSummary(state)}>
-        <State on>Active</State>
+        <State on={state.on}>{state.on ? 'Active' : 'Off'}</State>
       </Row>
       {state.now?.did.length ? <Row label="Doing now" detail={state.now.did.join(' · ')} /> : null}
+      {state.standbyPurge ? (
+        <Row
+          label="Standby memory purge"
+          detail={state.standbyPurge.available
+            ? 'Clears cached standby memory during play if free memory drops under 1 GB.'
+            : state.standbyPurge.reason ?? 'Unavailable without administrator permission.'}
+        >
+          <State on={state.standbyPurge.available}>{state.standbyPurge.available ? 'Ready' : 'Unavailable'}</State>
+        </Row>
+      ) : null}
       {state.memoryIntegrity ? <MemoryIntegrityRow integrity={state.memoryIntegrity} onState={onState} /> : null}
       <NameList label="Always held back while playing" names={state.alwaysDemote} onChange={alwaysDemote => change({ alwaysDemote }, onState)} />
       <NameList label="Paused while playing" names={state.suspend} onChange={suspend => change({ suspend }, onState)} />

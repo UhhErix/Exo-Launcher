@@ -1,0 +1,93 @@
+{
+  "resolution": "2560x1440",
+  "gpu": {
+    "adapter_name": "NVIDIA GeForce RTX 3070",
+    "vendor_id": 4318,
+    "dedicated_vram_mb": 8017.0,
+    "native_fp16": true,
+    "shader_model_6_4_dp4a": true
+  },
+  "baseline_vram_mb": 14.61,
+  "allocated_vram_delta_mb": 128.87,
+  "nvof_probe": {
+    "dll_loaded": true,
+    "api_version_5_0_ok": true,
+    "d3d12_instance_created": true,
+    "status_code": 0,
+    "note": "NVOF 5.0 D3D12 hardware optical flow instance created on NVIDIA GPU"
+  },
+  "compute_dp4a_1000f": {
+    "frames": 1000,
+    "avg_pyramid_ms": 0.072,
+    "avg_flow_ms": 0.689,
+    "avg_smooth_ms": 0.048,
+    "avg_hud_mask_ms": 0.194,
+    "avg_synth_ms": 0.388,
+    "avg_total_gpu_ms": 1.391,
+    "p50_total_gpu_ms": 1.307,
+    "p95_total_gpu_ms": 1.745,
+    "p99_total_gpu_ms": 1.854,
+    "vram_mb": 148.17,
+    "working_set_mb": 138.16,
+    "private_bytes_mb": 310.72,
+    "cpu_pct": 0.41
+  },
+  "compute_fp16_1000f": {
+    "frames": 1000,
+    "avg_pyramid_ms": 0.072,
+    "avg_flow_ms": 1.845,
+    "avg_smooth_ms": 0.042,
+    "avg_hud_mask_ms": 0.17,
+    "avg_synth_ms": 0.377,
+    "avg_total_gpu_ms": 2.507,
+    "p50_total_gpu_ms": 2.406,
+    "p95_total_gpu_ms": 2.912,
+    "p99_total_gpu_ms": 3.043,
+    "vram_mb": 148.17,
+    "working_set_mb": 138.17,
+    "private_bytes_mb": 310.72,
+    "cpu_pct": 0.31
+  },
+  "quality_hud_mask_off": {
+    "full_frame_psnr_db": 29.16,
+    "static_hud_psnr_db": 15.64,
+    "crosshair_psnr_db": 10.41,
+    "minimap_psnr_db": 16.4,
+    "health_bar_psnr_db": 14.11,
+    "full_frame_ssim": 0.899
+  },
+  "quality_hud_mask_on": {
+    "full_frame_psnr_db": 31.83,
+    "static_hud_psnr_db": 51.47,
+    "crosshair_psnr_db": 29.83,
+    "minimap_psnr_db": 99.0,
+    "health_bar_psnr_db": 99.0,
+    "full_frame_ssim": 0.935
+  },
+  "quality_dp4a_vs_fp16_hud_on": {
+    "full_frame_psnr_db": 31.95,
+    "static_hud_psnr_db": 51.47,
+    "crosshair_psnr_db": 29.83,
+    "minimap_psnr_db": 99.0,
+    "health_bar_psnr_db": 99.0,
+    "full_frame_ssim": 0.936
+  },
+  "pacing_dcomp_1000f": {
+    "frames_presented": 1000,
+    "target_hz": 120,
+    "p99_interval_jitter_ms": 26.676,
+    "avg_present_ms": 7.275,
+    "added_latency_ms_at_60fps": 25.33,
+    "added_latency_base_frames": 1.52,
+    "device_lost_count": 0,
+    "wgc_capture_probe_ok": false,
+    "wgc_capture_ms": null,
+    "wgc_note": "WGC probe note: CreateForWindow: Could not capture the given window. (0x80070057)"
+  },
+  "artifacts": [
+    "ground_truth.png",
+    "hud_mask_off.png",
+    "hud_mask_on.png",
+    "bench.json"
+  ]
+}

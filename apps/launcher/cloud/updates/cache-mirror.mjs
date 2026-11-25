@@ -231,7 +231,7 @@ function gitShow(launcher, rev, path) {
  */
 /** Repos whose releases Exo may not redistribute, with the reason. Their pins stay in the Launcher until it drops them. */
 export const EXCLUDED_REPOS = new Map([
-  ['sdli1995/dlssg_for_sm86', 'no licence file at its release; Exo may not redistribute it (owner decision, 2026-11-09)'],
+  ['sdli1995/dlssg_for_sm86', 'C++ source is MIT (0.4.2 LICENSE.md) but release bundles proprietary NVIDIA runtime and derived kernels (THIRD_PARTY_NOTICES.txt); downloaded directly from GitHub upstream, never redistributed by Exo'],
 ])
 
 export function planObjects({ vendor, tools: allTools, zips = [] }) {

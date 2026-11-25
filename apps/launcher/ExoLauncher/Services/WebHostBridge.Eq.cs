@@ -146,6 +146,18 @@ public sealed partial class WebHostBridge
             case "lucid-off":
                 message = ExoEq.LucidOff();
                 break;
+            case "enable-system-eq":
+                message = await ExoNativeApo.EnableSystemEqAsync(
+                    guid,
+                    drmDisclosureAccepted: ReadBool(p, hasParams, "drmDisclosureAccepted") == true,
+                    signedMode: ReadBool(p, hasParams, "signed") == true).ConfigureAwait(false);
+                break;
+            case "reenable-system-eq":
+                message = await ExoNativeApo.ReenableSystemEqAsync(guid).ConfigureAwait(false);
+                break;
+            case "disable-system-eq":
+                message = await ExoNativeApo.DisableSystemEqAsync().ConfigureAwait(false);
+                break;
         }
         return EqState(guid, message);
     }
@@ -155,6 +167,7 @@ public sealed partial class WebHostBridge
         var store = ExoEq.Current;
         var folder = EqualizerApo.InstallFolder();
         var output = guid is null ? null : EqualizerApo.Read(guid);
+        var nativeApo = ExoNativeApo.InspectHealth(guid);
         var own = guid is not null && store.Outputs.TryGetValue(guid, out var saved) ? saved : null;
         var chain = guid is null ? null : ExoEq.ChainFor(guid);
         var library = _services.Library.PeekCachedLibrary();
@@ -166,14 +179,20 @@ public sealed partial class WebHostBridge
             message = message ?? ExoEq.Problem,
             apo = new
             {
-                installed = folder is not null,
+                installed = folder is not null || nativeApo.SystemEqEnabled,
                 installing = Volatile.Read(ref _apoInstalling) == 1,
                 version = EqualizerApo.Version(),
-                onOutput = output?.Apo == true,
+                onOutput = output?.Apo == true || (nativeApo.SystemEqEnabled && nativeApo.EndpointRegistered && !nativeApo.NeedsReenable),
                 restart = output?.Restart == true,
                 effectsOff = output?.EffectsOff == true,
-                outputs = folder is null ? 0 : EqualizerApo.OutputsWithApo(),
+                outputs = folder is null ? (nativeApo.SystemEqEnabled ? 1 : 0) : EqualizerApo.OutputsWithApo(),
                 installerVersion = EqualizerApo.Installer.Version,
+                nativeAvailable = nativeApo.NativeAvailable,
+                systemEqEnabled = nativeApo.SystemEqEnabled,
+                drmDisclosureAccepted = nativeApo.DrmDisclosureAccepted,
+                needsReenable = nativeApo.NeedsReenable,
+                reenableReason = nativeApo.ReenableReason,
+                protectedAudioDgDisabled = nativeApo.ProtectedAudioDgDisabled,
             },
             on = true,
             comparing = ExoEq.Comparing,

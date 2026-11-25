@@ -20,11 +20,16 @@ internal enum Knob
 }
 
 /// <summary>What Autopilot needs of Windows, behind one seam so every decision and every put-back is tested with fakes.</summary>
+internal readonly record struct GpuProcessLoad(double TotalPercent, long LocalBytes, long NonLocalBytes);
+
 internal interface IAutopilotSystem
 {
+    private static readonly IReadOnlyDictionary<int, GpuProcessLoad> EmptyGpu = new Dictionary<int, GpuProcessLoad>();
+
     IReadOnlyList<ProcessRow> Processes();
     /// <summary>The process now in front (the foreground window's), or 0.</summary>
     int Front();
+    IReadOnlyDictionary<int, GpuProcessLoad> GpuProcesses() => EmptyGpu;
     /// <summary>The knob's value, or null when the process is gone, is another one by now (its start time), or won't say.</summary>
     int? Read(Knob knob, int pid, long created);
     /// <summary>Writes the knob; false when the process is gone, is another one by now, or Windows refused.</summary>
@@ -39,6 +44,9 @@ internal interface IAutopilotSystem
     void BeginHighResTimer() { }
     /// <summary>Releases 1 ms system timer resolution (winmm timeEndPeriod).</summary>
     void EndHighResTimer() { }
+    IReadOnlyList<CpuSetInfo> CpuSets() => [];
+    uint[]? ReadCpuSets(int pid, long created) => null;
+    bool WriteCpuSets(int pid, long created, uint[]? ids) => false;
 }
 
 /// <summary>
@@ -160,12 +168,16 @@ internal sealed record AutopilotGame(string Id, string Title, IReadOnlyCollectio
 internal static class AutopilotRules
 {
     internal const int Idle = 0x40, BelowNormal = 0x4000, Normal = 0x20, AboveNormal = 0x8000, High = 0x80, Realtime = 0x100;
-    internal const int EcoDefault = 0, EcoOn = 3;
+    internal const int EcoDefault = 0, EcoOff = 1, EcoOn = 3;
     internal const int IoLow = 1, IoNormal = 2;
     internal const int MemoryLow = 2, MemoryNormal = 5;
 
     /// <summary>A background app using this many cores on average between two looks is held back while the game is in front.</summary>
     internal const double HogCores = 0.25;
+
+    internal const double HogGpuPercent = 10.0;
+    internal const double HogGpuWithVramPercent = 3.0;
+    internal const long HogVramBytes = 256L << 20;
 
     /// <summary>At most this many processes are held back in one session.</summary>
     internal const int MaxDemoted = 48;
@@ -196,6 +208,12 @@ internal static class AutopilotRules
 
     /// <summary>Whether a background process is held back now: named by the player or learned for this game, or using <see cref="HogCores"/> or more.</summary>
     internal static bool Hog(string bare, double cores, IReadOnlySet<string> named) => named.Contains(bare) || cores >= HogCores;
+
+    internal static bool GpuHog(double gpuPercent, long localVramBytes) =>
+        gpuPercent >= HogGpuPercent || (gpuPercent >= HogGpuWithVramPercent && localVramBytes >= HogVramBytes);
+
+    internal static bool Hog(string bare, double cores, double gpuPercent, long localVramBytes, IReadOnlySet<string> named) =>
+        Hog(bare, cores, named) || GpuHog(gpuPercent, localVramBytes);
 }
 
 /// <summary>
@@ -244,7 +262,7 @@ internal sealed record CcdLayout(int Caches, ulong VCacheMask, long VCacheBytes)
 internal sealed record ExoAiAutopilotSnapshot(bool IsGaming, string? GameId, string? GameTitle, int DemotedCount, bool TimerResActive, bool AltTabbed);
 
 internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal journal, Func<AutopilotSettings> settings,
-    Func<PowerProfiles.CpuClass> cpuClass, Func<Action, IDisposable> startTimer, Action<string>? logLine = null, int? self = null)
+    Func<PowerProfiles.CpuClass> cpuClass, Func<Action, IDisposable> startTimer, Action<string>? logLine = null, int? self = null, Func<CcdLayout?>? ccdLayout = null)
 {
     internal const int LookEveryMs = 2000;
     internal const int AltTabReleaseTicks = 2;
@@ -261,6 +279,8 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
     private readonly HashSet<(int, long)> _demoted = [];
     private readonly HashSet<string> _demotedNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _pausedNames = new(StringComparer.OrdinalIgnoreCase);
+    private uint[] _bgCpuSets = [];
+    private bool _cpuSetsUsed;
     private string? _gameSaid, _parkingSaid;
     private bool _timerActive;
     private int _altTabTicks;
@@ -292,7 +312,9 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         var lines = new List<string>();
         if (_gameSaid is not null) lines.Add(_gameSaid);
         if (_demotedNames.Count > 0)
-            lines.Add($"Held back {Names(_demotedNames)} (efficiency mode, lower priority, low disk and memory priority)");
+            lines.Add(_cpuSetsUsed
+                ? $"Held back {Names(_demotedNames)} (efficiency mode, lower priority, background CPU sets, low disk and memory priority)"
+                : $"Held back {Names(_demotedNames)} (efficiency mode, lower priority, low disk and memory priority)");
         if (_pausedNames.Count > 0) lines.Add($"Paused {Names(_pausedNames)}, as you chose, and started them again after");
         if (_parkingSaid is not null) lines.Add(_parkingSaid);
         return lines;
@@ -386,6 +408,8 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         _demoted.Clear();
         _demotedNames.Clear();
         _pausedNames.Clear();
+        _cpuSetsUsed = false;
+        _bgCpuSets = AutopilotCpuSets.BackgroundSetIds(system.CpuSets(), cpuClass(), ccdLayout?.Invoke());
         (_gameSaid, _parkingSaid) = (null, null);
         _cpu = [];
         _cpuAt = 0;
@@ -421,6 +445,11 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
     {
         var game = _game!;
         var options = settings();
+        if (!options.On)
+        {
+            EndLocked();
+            return;
+        }
         var rows = system.Processes();
         var now = Environment.TickCount64;
         var seconds = _cpuAt == 0 ? 0 : (now - _cpuAt) / 1000.0;
@@ -455,17 +484,24 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         AcquireTimerLocked();
 
         // The game: its own processes, as they start or when focus returns from alt-tab.
-        if (AutopilotRules.GamePriority(options.GamePriority, game.MayTouchGame) is { } wanted)
+        if (game.MayTouchGame)
         {
+            var wanted = AutopilotRules.GamePriority(options.GamePriority, true);
             var set = 0;
             foreach (var row in rows.Where(row => tree.Contains(row.Pid) && row.Session == _session && !ProcessTermination.IsAntiCheat(row.Name)))
-                if (Change(Knob.Priority, row, current => current is AutopilotRules.Normal or AutopilotRules.AboveNormal && current != wanted ? wanted : null)) set++;
-            if (set > 0)
-                _gameSaid = $"Gave {game.Title} {(wanted == AutopilotRules.High ? "high" : "above normal")} priority";
+            {
+                if (wanted is { } priority
+                    && Change(Knob.Priority, row, current => current is AutopilotRules.Normal or AutopilotRules.AboveNormal && current != priority ? priority : null))
+                    set++;
+                Change(Knob.Eco, row, current => current == AutopilotRules.EcoDefault ? AutopilotRules.EcoOff : null);
+            }
+            if (set > 0 && wanted is { } appliedPriority)
+                _gameSaid = $"Gave {game.Title} {(appliedPriority == AutopilotRules.High ? "high" : "above normal")} priority";
         }
-        else _gameSaid ??= game.MayTouchGame ? null : $"Left {game.Title} itself alone: it runs with anti-cheat, so Exo doesn't open it";
+        else _gameSaid ??= $"Left {game.Title} itself alone: it runs with anti-cheat, so Exo doesn't open it";
 
         // Background apps: named, learned or hogging, while the game is in front.
+        var gpu = system.GpuProcesses();
         var named = new HashSet<string>(options.AlwaysDemote.Concat(game.Learned).Select(AutopilotSafety.Bare), StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {
@@ -473,7 +509,8 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
             if (_demoted.Contains((row.Pid, row.CreateTime)) || AutopilotRules.LeftAlone(row, _session, tree, _self, front) is not null) continue;
             var cores = seconds > 0 && before.TryGetValue((row.Pid, row.CreateTime), out var was) ? (row.CpuTime - was) / (seconds * 1e7) : 0;
             var bare = AutopilotSafety.Bare(row.Name);
-            if (!AutopilotRules.Hog(bare, cores, named)) continue;
+            gpu.TryGetValue(row.Pid, out var gpuUse);
+            if (!AutopilotRules.Hog(bare, cores, gpuUse.TotalPercent, gpuUse.LocalBytes, named)) continue;
             _demoted.Add((row.Pid, row.CreateTime));
             if (Demote(row)) _demotedNames.Add(bare);
         }
@@ -486,7 +523,23 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         any |= Change(Knob.Priority, row, AutopilotRules.Lower);
         any |= Change(Knob.Io, row, current => current == AutopilotRules.IoNormal ? AutopilotRules.IoLow : null);
         any |= Change(Knob.Memory, row, current => current == AutopilotRules.MemoryNormal ? AutopilotRules.MemoryLow : null);
+        if (_bgCpuSets.Length > 0 && ApplyCpuSets(row))
+        {
+            _cpuSetsUsed = true;
+            any = true;
+        }
         return any;
+    }
+
+    private bool ApplyCpuSets(ProcessRow row)
+    {
+        var current = system.ReadCpuSets(row.Pid, row.CreateTime);
+        if (current is null || current.Length != 0) return false;
+        var entry = new JournalEntry("CpuSets", row.Pid, row.CreateTime, AutopilotSafety.Bare(row.Name), 0, _bgCpuSets.Length);
+        if (!journal.Add(entry)) return false;
+        if (system.WriteCpuSets(row.Pid, row.CreateTime, _bgCpuSets)) return true;
+        journal.Remove(entry);
+        return false;
     }
 
     /// <summary>The apps the player chose to pause while playing (never one on the safety list), once at the game's start.</summary>
@@ -557,7 +610,13 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
     {
         try
         {
-            if (entry.Kind == "Power")
+            if (entry.Kind == "CpuSets")
+            {
+                var current = system.ReadCpuSets(entry.Pid, entry.Created);
+                if (current is { Length: > 0 } && current.Length == entry.Wrote)
+                    system.WriteCpuSets(entry.Pid, entry.Created, null);
+            }
+            else if (entry.Kind == "Power")
             {
                 if (Guid.TryParse(entry.Scheme, out var scheme) && Guid.TryParse(entry.Subgroup, out var subgroup) && Guid.TryParse(entry.Setting, out var setting)
                     && system.PowerRead(scheme, subgroup, setting) == (uint)entry.Wrote

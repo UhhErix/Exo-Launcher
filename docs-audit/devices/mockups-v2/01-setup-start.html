@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exo Devices — Automatic Setup Start</title>
+  <link rel="stylesheet" href="../../assets/exo-v2-base.css" />
+  <style>
+    .dev-start-shell {
+      display: grid;
+      grid-template-rows: auto auto auto 1fr auto;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    .ds-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      padding: clamp(14px, 1.8vh, 22px) clamp(20px, 2.2vw, 32px) clamp(12px, 1.5vh, 18px);
+      border-bottom: 1px solid var(--exo-float-line);
+    }
+
+    .ds-head h1 {
+      margin: 0;
+      font-size: clamp(28px, 2.5vw, 44px);
+      font-weight: 650;
+      line-height: 1.06;
+    }
+
+    .ds-head p {
+      margin: 6px 0 0;
+      font-size: calc(14px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    .ds-bays {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      min-height: 0;
+      height: 100%;
+    }
+
+    .ds-bay {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr auto auto;
+      padding: clamp(16px, 1.8vh, 24px) clamp(16px, 1.6vw, 24px);
+      border-right: 1px solid var(--exo-float-line);
+      min-height: 0;
+      overflow: hidden;
+      transition: background-color var(--dur-base) var(--ease-out);
+    }
+
+    .ds-bay:last-child { border-right: 0; }
+    .ds-bay.is-scanning { background: rgb(255 255 255 / 0.03); }
+
+    .ds-bay-art {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 0;
+      padding: clamp(10px, 1.6vh, 22px) 8px;
+    }
+
+    .ds-bay-art img.hw-render {
+      position: relative;
+      z-index: 2;
+      max-width: 96%;
+      max-height: 100%;
+    }
+
+    .ds-bay-title {
+      position: relative;
+      z-index: 2;
+      padding-top: 12px;
+      border-top: 1px solid var(--exo-float-line);
+    }
+
+    .ds-bay-name {
+      font-size: clamp(18px, 1.45vw, 24px);
+      font-weight: 650;
+      line-height: 1.15;
+    }
+
+    .ds-bay-sub {
+      margin-top: 4px;
+      font-size: calc(12px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    .ds-checks {
+      position: relative;
+      z-index: 2;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--exo-float-line);
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      font-size: calc(12px * var(--exo-scale));
+    }
+
+    .ds-check {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .ds-check .k { color: var(--color-muted); }
+    .ds-check .v { font-weight: 500; text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="dev-start-shell">
+    <div id="topbar"></div>
+    <div id="dev-stepper"></div>
+
+    <header class="ds-head">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span class="badge good"><span class="dot good"></span>4 peripherals detected</span>
+          <span class="badge tabular">USB topology &amp; audio probed</span>
+        </div>
+        <h1>Set up your devices</h1>
+        <p>Exo checks firmware, saves a keyboard safety backup, verifies calibration, and configures Exo EQ v2 — then lands in a calm overview.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="exo-btn is-sm" id="btn-preview">Preview sequence</button>
+        <button class="exo-btn is-sm is-ghost" onclick="document.body.classList.toggle('reduce-motion')">Reduce motion</button>
+      </div>
+    </header>
+
+    <main class="ds-bays" id="ds-bays">
+      <article class="ds-bay" data-idx="0">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="tabular" style="font-size:calc(12px * var(--exo-scale));color:var(--color-faint)">01 · Controller</span>
+          <span class="badge good">CPU USB</span>
+        </div>
+        <div class="ds-bay-art">
+          <img class="hw-wash" src="../../assets/devices/dualsense-edge-black.png" alt="" />
+          <img class="hw-render" src="../../assets/devices/dualsense-edge-black.png" alt="DualSense Edge" />
+        </div>
+        <div class="ds-bay-title">
+          <div class="ds-bay-name">DualSense Edge</div>
+          <div class="ds-bay-sub tabular">Midnight Black · VID 054C / PID 0DF2</div>
+        </div>
+        <div class="ds-checks tabular">
+          <div class="ds-check"><span class="k">Firmware</span><span class="v" style="color:var(--color-good)">2.17 · Current</span></div>
+          <div class="ds-check"><span class="k">Stick calibration</span><span class="v" style="color:var(--color-good)">Holds across reconnects</span></div>
+          <div class="ds-check"><span class="k">Edge slots</span><span class="v">Slot 1: Default Profile</span></div>
+        </div>
+      </article>
+
+      <article class="ds-bay" data-idx="1">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="tabular" style="font-size:calc(12px * var(--exo-scale));color:var(--color-faint)">02 · Keyboard</span>
+          <span class="badge warn">Chipset USB</span>
+        </div>
+        <div class="ds-bay-art">
+          <img class="hw-wash" src="../../assets/devices/wooting-60he-v2-split.png" alt="" />
+          <img class="hw-render" src="../../assets/devices/wooting-60he-v2-split.png" alt="Wooting 60HE v2" />
+        </div>
+        <div class="ds-bay-title">
+          <div class="ds-bay-name">Wooting 60HE v2</div>
+          <div class="ds-bay-sub tabular">ANSI · Split spacebar · 8000 Hz</div>
+        </div>
+        <div class="ds-checks tabular">
+          <div class="ds-check"><span class="k">Firmware</span><span class="v" style="color:var(--color-good)">2.15.0-beta.0 · Tachyon on</span></div>
+          <div class="ds-check"><span class="k">USB port</span><span class="v" style="color:var(--color-warn)">Free CPU port available</span></div>
+          <div class="ds-check"><span class="k">Safety</span><span class="v">Auto-backup before write</span></div>
+        </div>
+      </article>
+
+      <article class="ds-bay" data-idx="2">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="tabular" style="font-size:calc(12px * var(--exo-scale));color:var(--color-faint)">03 · Mouse</span>
+          <span class="badge good">CPU USB</span>
+        </div>
+        <div class="ds-bay-art">
+          <img class="hw-wash" src="../../assets/devices/starlight-x.png" alt="" />
+          <img class="hw-render" style="max-height:86%" src="../../assets/devices/starlight-x.png" alt="Starlight X" />
+        </div>
+        <div class="ds-bay-title">
+          <div class="ds-bay-name">Finalmouse Starlight X</div>
+          <div class="ds-bay-sub tabular">Wireless dongle · Exo Mouse IPC</div>
+        </div>
+        <div class="ds-checks tabular">
+          <div class="ds-check"><span class="k">Battery</span><span class="v" style="color:var(--color-good)">84% · Wireless</span></div>
+          <div class="ds-check"><span class="k">Polling &amp; DPI</span><span class="v">4000 Hz · 800 / 1600 DPI</span></div>
+          <div class="ds-check"><span class="k">AGPL boundary</span><span class="v">Isolated Exo Mouse IPC</span></div>
+        </div>
+      </article>
+
+      <article class="ds-bay" data-idx="3">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="tabular" style="font-size:calc(12px * var(--exo-scale));color:var(--color-faint)">04 · Audio &amp; Mic</span>
+          <span class="badge good">APO 1.4.2.0</span>
+        </div>
+        <div class="ds-bay-art">
+          <img class="hw-wash" src="../../assets/devices/ziigaat-lush.png" alt="" />
+          <img class="hw-render" style="max-height:84%" src="../../assets/devices/ziigaat-lush.png" alt="ZiiGaat Lush" />
+        </div>
+        <div class="ds-bay-title">
+          <div class="ds-bay-name">ZiiGaat Lush + fifine Mic</div>
+          <div class="ds-bay-sub tabular">3.5 mm output · USB mic · 48 kHz</div>
+        </div>
+        <div class="ds-checks tabular">
+          <div class="ds-check"><span class="k">Exo EQ v2</span><span class="v" style="color:var(--color-good)">AutoEq · JM-1 (-3.9 dB)</span></div>
+          <div class="ds-check"><span class="k">Game switching</span><span class="v">Focus-aware · Gunshot Guard</span></div>
+          <div class="ds-check"><span class="k">fifine Microphone</span><span class="v">Exo Voice (DeepFilterNet)</span></div>
+        </div>
+      </article>
+    </main>
+
+    <footer class="setup-footer">
+      <div class="setup-footer-note">
+        <span id="ico-shield" style="color:var(--color-good)"></span>
+        <span>Zero silent writes. Any driver, APO install, or firmware updater asks for your confirmation first.</span>
+      </div>
+      <div class="setup-footer-actions">
+        <button class="exo-btn">Skip to overview</button>
+        <button class="exo-btn is-primary">
+          <span>Start automatic setup</span>
+          <span id="ico-arrow"></span>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="../../assets/exo-v2-data.js"></script>
+  <script>
+    document.getElementById("topbar").outerHTML = renderTopStageTrack(2);
+    document.getElementById("dev-stepper").outerHTML = renderDeviceStepper(-1);
+    document.getElementById("ico-shield").innerHTML = EXO_ICONS.shield;
+    document.getElementById("ico-arrow").innerHTML = EXO_ICONS.arrowRight;
+
+    let idx = -1;
+    document.getElementById("btn-preview").addEventListener("click", () => {
+      const bays = document.querySelectorAll(".ds-bay");
+      idx = (idx + 1) % bays.length;
+      bays.forEach((b, i) => b.classList.toggle("is-scanning", i === idx));
+    });
+  </script>
+</body>
+</html>

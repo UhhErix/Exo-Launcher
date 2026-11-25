@@ -69,6 +69,25 @@ const EXO: Record<string, (p: Record<string, unknown>) => Promise<unknown>> = {
   // The module's CPU core panel: where the mouse's core stands, or one of the host's actions. Only the action
   // crosses; the host keeps the device, the CPU it offers and the backup, and asks Windows itself before it changes anything.
   'exo.mouseCore': async p => host.systemMouseCore(coreAction(p.action)),
+  'exo.mouseDiag.status': async () => host.mouseDiagStatus(),
+  'exo.mouseDiag.measure': async p => host.mouseDiagMeasure({ withEtw: Boolean(p.withEtw) }),
+  'exo.mouseDiag.cancel': async () => host.mouseDiagCancel(),
+  'exo.mouseDiag.fix': async p => host.mouseDiagFix({ id: diagFixId(p.id), action: diagFixAction(p.action) }),
+}
+
+const DIAG_FIX_IDS = ['affinity', 'msi', 'usb_suspend'] as const
+const DIAG_FIX_ACTIONS = ['apply', 'undo'] as const
+
+function diagFixId(id: unknown): (typeof DIAG_FIX_IDS)[number] {
+  const known = DIAG_FIX_IDS.find(x => x === id)
+  if (!known) throw new Error('Exo Mouse asked for an unknown diagnostic fix.')
+  return known
+}
+
+function diagFixAction(action: unknown): (typeof DIAG_FIX_ACTIONS)[number] {
+  const known = DIAG_FIX_ACTIONS.find(x => x === action)
+  if (!known) throw new Error('Exo Mouse asked for an unknown diagnostic fix action.')
+  return known
 }
 
 const CORE_ACTIONS = ['measure', 'drivers', 'spread', 'unspread', 'apply', 'undo'] as const

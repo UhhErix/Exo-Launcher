@@ -25,12 +25,14 @@ import { AutoTuneCinema } from './AutoTuneCinema'
 import { bestSteps } from './BestSetup'
 import { useCompressList } from './CompressGames'
 import { DriversSection } from './DriversSection'
+import { GpuProcessesSection } from './GpuProcessesSection'
 import { useExoAi } from './ExoAiPanel'
 import { useAppsSummary } from './PcApps'
 import { ThisPc, type PcPartMenu } from './PcOverview'
 import { PcPartMenus, StorageChip } from './PcPartMenus'
 import { SectionSlot } from './SectionHead'
 import { StorageRoom } from './StorageRoom'
+import { SetupRows } from './ThisPcTab'
 import type { PcLink } from './pcSections'
 import { usePcState, type PcState } from './usePcState'
 import {
@@ -85,10 +87,10 @@ function StageMarker({ status, label }: { status: AutoTuneStageState['status']; 
   return <span className="exo-at-stage-marker"><span className="exo-at-stage-dot" /></span>
 }
 
-function LiveHeaderStatus({ exoAi, tune }: { exoAi: ExoAiState | null; tune: AutoTune | null }) {
+function LiveHeaderStatus({ exoAi, tune, autopilotOn }: { exoAi: ExoAiState | null; tune: AutoTune | null; autopilotOn: boolean }) {
   const gaming = exoAi?.gaming.active ?? false
   const testing = tune?.parts.some(part => part.state === 'testing') ?? false
-  let text = 'Autopilot active'
+  let text = autopilotOn ? 'Autopilot active' : 'Autopilot paused'
   if (gaming) text = exoAi?.gaming.gameTitle ? `Boosting ${exoAi.gaming.gameTitle}` : 'Boosting game'
   else if (testing) text = 'Calibrating hardware'
 
@@ -120,7 +122,7 @@ function RightSection({
   title,
   children,
 }: {
-  id: 'drivers' | 'shaders'
+  id: 'drivers' | 'gpu-usage' | 'shaders'
   title: string
   children: ReactNode
 }) {
@@ -264,6 +266,56 @@ function useExoAiJump({
   }, [active, jump, vendor, room, onStorage, onMenu])
 }
 
+function OverviewHealthRows({
+  active,
+  health,
+  onHealth,
+}: {
+  active: boolean
+  health: PcHealth | null
+  onHealth: (next: PcHealth) => void
+}) {
+  const show = health?.items.some(
+    item => !item.applied && !item.current && item.key !== 'power' && item.key !== 'chipset' && !item.key.startsWith('net'),
+  )
+  if (!show) return null
+  return (
+    <div className="exo-ai-health-rows">
+      <SetupRows place="needs" active={active} health={health} onHealth={onHealth} />
+    </div>
+  )
+}
+
+function AutoTuneAction({
+  isComplete,
+  running,
+  onRun,
+}: {
+  isComplete: boolean
+  running: boolean
+  onRun: () => void
+}) {
+  if (isComplete) {
+    return (
+      <div className="exo-ai-complete-group">
+        <span className="exo-ai-complete">
+          <Check size={15} />
+          Auto Tune complete
+        </span>
+        <button type="button" className="exo-set-btn" disabled={running} onClick={onRun}>
+          Run again
+        </button>
+      </div>
+    )
+  }
+  return (
+    <button type="button" className="exo-at-run" disabled={running} onClick={onRun}>
+      {running ? <Spinner label="Optimizing PC" /> : <Bolt size={15} />}
+      {running ? 'Optimizing PC' : 'Run Auto Tune'}
+    </button>
+  )
+}
+
 export function ExoAiRoom({
   active,
   jump = null,
@@ -354,36 +406,15 @@ export function ExoAiRoom({
         <header className="exo-ai-head">
           <div className="exo-ai-title-row">
             <h1 className="exo-ai-title">Exo AI</h1>
-            <LiveHeaderStatus exoAi={exoAi.state} tune={state.tune} />
+            <LiveHeaderStatus exoAi={exoAi.state} tune={state.tune} autopilotOn={autopilot.state?.on ?? true} />
           </div>
           <div className="exo-ai-head-actions">
             <StorageChip drives={state.drives} list={compressList} onOpen={openStorage} />
-            {isComplete ? (
-              <div className="exo-ai-complete-group">
-                <span className="exo-ai-complete">
-                  <Check size={15} />
-                  Auto Tune complete
-                </span>
-                <button
-                  type="button"
-                  className="exo-set-btn"
-                  disabled={pipeline.running}
-                  onClick={() => void pipeline.startPipeline()}
-                >
-                  Run again
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="exo-at-run"
-                disabled={pipeline.running}
-                onClick={() => void pipeline.startPipeline()}
-              >
-                {pipeline.running ? <Spinner label="Optimizing PC" /> : <Bolt size={15} />}
-                {pipeline.running ? 'Optimizing PC' : 'Run Auto Tune'}
-              </button>
-            )}
+            <AutoTuneAction
+              isComplete={isComplete}
+              running={pipeline.running}
+              onRun={() => void pipeline.startPipeline()}
+            />
           </div>
         </header>
 
@@ -426,6 +457,7 @@ export function ExoAiRoom({
 
             <section className="exo-system-panel exo-ai-specs" data-pc-part="overview" aria-label="This PC">
               <ThisPc state={state} chips={null} onMenu={setMenu} />
+              <OverviewHealthRows active={active} health={state.health} onHealth={setHealth} />
             </section>
           </div>
 
@@ -441,6 +473,9 @@ export function ExoAiRoom({
                 runtimes={apps?.runtimes ?? null}
                 runtimesDeferred={apps?.runtimesDeferred ?? false}
               />
+            </RightSection>
+            <RightSection id="gpu-usage" title="GPU activity">
+              <GpuProcessesSection active={active} />
             </RightSection>
             <RightSection id="shaders" title="Shaders">
               <ShadersBoard active={active} games={games} />

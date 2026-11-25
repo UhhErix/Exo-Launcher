@@ -249,4 +249,27 @@ public sealed class AppFilesTests : IDisposable
         File.WriteAllText(cache, "{ broken");
         Assert.Equal(Sha("AAAA"), (await AppFileHashes.HashAsync(app, cache, (_, _) => true, ct))["a.dll"].Sha256);
     }
+
+    [Fact]
+    public async Task UnpackReconstructsExactAppTreeAndRejectsTamperedPack()
+    {
+        var src = Folder("src", ("ExoLauncher.exe", "bin-exe"), ("payload-manifest.json", "{}"), ("sub/data.bin", "hello-world"));
+        var packDir = Path.Combine(_root, "pack");
+        var outDir = Path.Combine(_root, "unpacked");
+        var ct = TestContext.Current.CancellationToken;
+        var built = AppFiles.Build(AppFiles.Folder(src), "3.30.3", Revision, packDir, level: 3);
+
+        var manifestPath = Path.Combine(packDir, AppFiles.ManifestName);
+        var packPath = Path.Combine(packDir, AppFiles.PackName);
+        var unpacked = await AppFiles.UnpackAsync(manifestPath, packPath, outDir, ct);
+        Assert.Equal(built.Files.Count, unpacked.Files.Count);
+        Assert.Equal("bin-exe", File.ReadAllText(Path.Combine(outDir, "ExoLauncher.exe")));
+        Assert.Equal("hello-world", File.ReadAllText(Path.Combine(outDir, "sub", "data.bin")));
+
+        var tamperedPack = File.ReadAllBytes(packPath);
+        tamperedPack[^1] ^= 0xff;
+        var badPackPath = Path.Combine(packDir, "bad.pack");
+        File.WriteAllBytes(badPackPath, tamperedPack);
+        await Assert.ThrowsAsync<InvalidDataException>(() => AppFiles.UnpackAsync(manifestPath, badPackPath, Path.Combine(_root, "bad-out"), ct));
+    }
 }

@@ -162,4 +162,24 @@ public sealed class AccountSyncWiringTests : IDisposable
         Assert.Contains("settings/app", saved.Dirty);
         Assert.True(saved.SignedOut);
     }
+
+    [Fact]
+    public async Task IdleSyncDoesNotRewriteSyncStoreFile()
+    {
+        var dir = FreshDir();
+        var session = new AccountSession("token-value", "acc-1", "person@example.com");
+        AccountSyncStore.Save(dir, new SyncState { AccountId = "acc-1", Cursor = 5 });
+        var file = Path.Combine(dir, AccountSyncStore.FileName);
+        var sentinel = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(file, sentinel);
+
+        var host = new AccountSyncHost(dir,
+            new ExoAccountClient(new Answer(HttpStatusCode.OK, "{\"items\":[],\"cursor\":5,\"more\":false}")),
+            () => session, _ => { });
+
+        await host.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(sentinel, File.GetLastWriteTimeUtc(file));
+        Assert.NotNull(host.Status(session).LastSyncAt);
+    }
 }

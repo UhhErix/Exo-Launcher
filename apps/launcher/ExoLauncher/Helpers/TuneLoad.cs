@@ -380,7 +380,11 @@ internal static unsafe class TuneEvents
     [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvStdcall)])]
     private static uint Delivered(int action, nint context, nint record)
     {
-        if (action == 1) Interlocked.Increment(ref _count);
+        try
+        {
+            if (action == 1) Interlocked.Increment(ref _count);
+        }
+        catch { }
         return 0;
     }
 

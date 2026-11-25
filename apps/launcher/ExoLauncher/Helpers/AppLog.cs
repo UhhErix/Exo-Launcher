@@ -66,6 +66,18 @@ public static partial class AppLog
         catch { /* Last-chance diagnostics must not throw. */ }
     }
 
+    internal static void WriteCrashBreadcrumb(string line)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(line)) return;
+            var clean = Redact(line.Replace('\r', ' ').Replace('\n', ' '));
+            if (clean.Length > 1024) clean = clean[..1024];
+            WriteLine(LogPath.Value, $"[{DateTime.UtcNow:O}] CRASH {clean}{Environment.NewLine}");
+        }
+        catch { }
+    }
+
     public static void Debug(string message)
     {
 #if DEBUG

@@ -5,29 +5,40 @@ on:
     - cron: '0 10 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 concurrency:
   group: native-ui-rune-bump
   cancel-in-progress: false
 
+env:
+  FORK_REPO: UhhErix/rune
+  FORK_URL: https://github.com/UhhErix/rune
+  FORK_BRANCH: exo
+  BUMP_BRANCH: chore/native-ui-rune-bump
+  CARGO_TOML: apps/launcher/native-ui/Cargo.toml
+
 jobs:
-  bump-rune:
-    name: Bump Rune fork
-    runs-on: windows-latest
-    timeout-minutes: 45
-    env:
-      FORK_REPO: UhhErix/rune
-      FORK_URL: https://github.com/UhhErix/rune
-      FORK_BRANCH: exo
-      BUMP_BRANCH: chore/native-ui-rune-bump
-      CARGO_TOML: apps/launcher/native-ui/Cargo.toml
+  check:
+    name: Check Rune fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      old_rev: ${{ steps.check.outputs.old_rev }}
+      new_rev: ${{ steps.check.outputs.new_rev }}
+      short_rev: ${{ steps.check.outputs.short_rev }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher/native-ui
+          persist-credentials: false
 
       - name: Check fork exo head
         id: check
@@ -63,7 +74,8 @@ jobs:
           if ($env:GITHUB_EVENT_NAME -eq 'schedule') {
             $openPr = (gh pr list --head $env:BUMP_BRANCH --base main --state open --json number --jq '.[0].number' 2>$null)
             if ($LASTEXITCODE -eq 0 -and $openPr -and $openPr.Trim()) {
-              $branchToml = git show "origin/$($env:BUMP_BRANCH):$($env:CARGO_TOML)" 2>$null
+              git fetch --depth=1 --filter=blob:none origin $env:BUMP_BRANCH 2>$null
+              $branchToml = git show "FETCH_HEAD:$($env:CARGO_TOML)" 2>$null
               if ($LASTEXITCODE -eq 0 -and ($branchToml -join "`n") -match $pattern -and $Matches[1] -eq $newRev) {
                 Write-Host "Open PR #$($openPr.Trim()) already targets $newRev"
                 "changed=false" >> $env:GITHUB_OUTPUT
@@ -75,24 +87,53 @@ jobs:
           Write-Host "Rune fork exo moved: $oldRev -> $newRev"
           "changed=true" >> $env:GITHUB_OUTPUT
 
+  bump-rune:
+    name: Bump Rune fork
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher/native-ui
+            apps/launcher/ui/contracts
+            apps/launcher/ExoLauncher/Assets/Fonts
+          persist-credentials: false
+
+      - name: Compute Rust toolchain key
+        id: rust-key
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $info = (rustc -Vv) -join "`n"
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($info)
+          $hash = ([System.Security.Cryptography.SHA256]::HashData($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
+          "toolchain=$($hash.Substring(0, 16))" >> $env:GITHUB_OUTPUT
+
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: steps.check.outputs.changed == 'true'
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            apps/launcher/native-ui/target/
-          key: ${{ runner.os }}-rune-${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            apps/launcher/native-ui/target
+          key: ${{ runner.os }}-rune-${{ steps.rust-key.outputs.toolchain }}-${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-rune-
+            ${{ runner.os }}-rune-${{ steps.rust-key.outputs.toolchain }}-
 
       - name: Rewrite Cargo.toml and update Cargo.lock
-        if: steps.check.outputs.changed == 'true'
         shell: pwsh
         env:
-          NEW_REV: ${{ steps.check.outputs.new_rev }}
+          NEW_REV: ${{ needs.check.outputs.new_rev }}
         run: |
           $ErrorActionPreference = 'Stop'
           $tomlPath = (Resolve-Path $env:CARGO_TOML).Path
@@ -126,18 +167,34 @@ jobs:
           }
 
       - name: Cargo test
-        if: steps.check.outputs.changed == 'true'
         working-directory: apps/launcher/native-ui
         run: cargo test --workspace --locked
 
+      - name: Prune stale target artifacts before cache save
+        if: always()
+        working-directory: apps/launcher/native-ui
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'SilentlyContinue'
+          $target = 'target'
+          if (Test-Path $target) {
+            foreach ($dir in @('debug/incremental', 'release/incremental', 'doc', 'package', 'tmp')) {
+              $p = Join-Path $target $dir
+              if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+            }
+            $cutoff = (Get-Date).AddDays(-7)
+            Get-ChildItem -Path $target -Recurse -File | Where-Object {
+              $_.Extension -in @('.pdb') -or ($_.LastWriteTime -lt $cutoff -and $_.DirectoryName -match '(\\deps|\\build|\\.fingerprint)' -and $_.DirectoryName -notmatch '\\build\\.+\\out(\\|$)')
+            } | Remove-Item -Force
+          }
+
       - name: Open or update bump PR
-        if: steps.check.outputs.changed == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          OLD_REV: ${{ steps.check.outputs.old_rev }}
-          NEW_REV: ${{ steps.check.outputs.new_rev }}
-          SHORT_REV: ${{ steps.check.outputs.short_rev }}
+          OLD_REV: ${{ needs.check.outputs.old_rev }}
+          NEW_REV: ${{ needs.check.outputs.new_rev }}
+          SHORT_REV: ${{ needs.check.outputs.short_rev }}
         run: |
           $ErrorActionPreference = 'Stop'
           $title = "native-ui: bump Rune fork to $($env:SHORT_REV)"
@@ -192,6 +249,7 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          gh auth setup-git
           git checkout -B $env:BUMP_BRANCH
           git add apps/launcher/native-ui/Cargo.toml apps/launcher/native-ui/Cargo.lock
           git commit -m $title

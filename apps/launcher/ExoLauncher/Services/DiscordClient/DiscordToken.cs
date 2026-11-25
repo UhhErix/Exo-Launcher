@@ -14,26 +14,51 @@ internal static class DiscordToken
 {
     private const string FileName = "discord-client.bin";
     private static readonly Lock Gate = new();
+    private static bool? _hasToken;
+    private static string? _hasTokenPath;
 
     private static string StorePath => Path.Combine(PathHelper.AppDataDir, FileName);
+
+    internal static bool HasToken()
+    {
+        lock (Gate)
+        {
+            var path = StorePath;
+            if (_hasToken is { } cached && string.Equals(_hasTokenPath, path, StringComparison.OrdinalIgnoreCase))
+                return cached;
+            var has = ReadUnlocked(path) is not null;
+            _hasToken = has;
+            _hasTokenPath = path;
+            return has;
+        }
+    }
 
     internal static string? Read()
     {
         lock (Gate)
         {
-            try
-            {
-                if (!File.Exists(StorePath)) return null;
-                var bytes = ExoDpapi.Unprotect(File.ReadAllBytes(StorePath));
-                var token = Encoding.UTF8.GetString(bytes);
-                CryptographicOperations.ZeroMemory(bytes);
-                return token.Length is > 20 and < 200 ? token : null;
-            }
-            catch (Exception ex)
-            {
-                AppLog.Warn("Discord sign-in could not be read: " + ex.GetType().Name);
-                return null;
-            }
+            var path = StorePath;
+            var token = ReadUnlocked(path);
+            _hasToken = token is not null;
+            _hasTokenPath = path;
+            return token;
+        }
+    }
+
+    private static string? ReadUnlocked(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            var bytes = ExoDpapi.Unprotect(File.ReadAllBytes(path));
+            var token = Encoding.UTF8.GetString(bytes);
+            CryptographicOperations.ZeroMemory(bytes);
+            return token.Length is > 20 and < 200 ? token : null;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("Discord sign-in could not be read: " + ex.GetType().Name);
+            return null;
         }
     }
 
@@ -51,6 +76,8 @@ internal static class DiscordToken
                 try { SecretFileAcl.RestrictToCurrentUser(tmp); }
                 catch (Exception aclEx) { AppLog.Debug("Discord sign-in ACL: " + aclEx.GetType().Name); }
                 File.Move(tmp, StorePath, overwrite: true);
+                _hasToken = token.Length is > 20 and < 200;
+                _hasTokenPath = StorePath;
                 return true;
             }
             catch (Exception ex)
@@ -66,8 +93,19 @@ internal static class DiscordToken
     {
         lock (Gate)
         {
+            _hasToken = false;
+            _hasTokenPath = StorePath;
             try { DeletionGate.DeleteFile(StorePath); }
             catch (Exception ex) { AppLog.Warn("Discord sign-in could not be removed: " + ex.GetType().Name); }
+        }
+    }
+
+    internal static void ResetCache()
+    {
+        lock (Gate)
+        {
+            _hasToken = null;
+            _hasTokenPath = null;
         }
     }
 }

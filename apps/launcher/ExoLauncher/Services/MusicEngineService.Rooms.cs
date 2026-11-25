@@ -72,10 +72,116 @@ internal sealed partial class MusicEngineService
         return new { ok = false, state = "error", message = MusicWebPolicy.Label(service) + " is taking too long to load. Open it again." };
     }
 
+    internal readonly record struct MusicStartStatus(
+        bool Ok,
+        string State,
+        string? Message,
+        bool YouTubeNeedsPremium,
+        bool SignedIn);
+
+    internal static MusicStartStatus? ClassifyMusicStatus(string service, JsonElement? status, string? signInFailure)
+    {
+        if (status is not { ValueKind: JsonValueKind.Object } answer ||
+            !answer.TryGetProperty("ready", out var ready) || ready.ValueKind != JsonValueKind.True)
+            return null;
+        var label = MusicWebPolicy.Label(service);
+        var signedIn = answer.TryGetProperty("signedIn", out var flag) && flag.ValueKind == JsonValueKind.True;
+        var unsubscribed = signedIn && answer.TryGetProperty("subscribed", out var subscribed) && subscribed.ValueKind == JsonValueKind.False;
+        var youTubeNeedsPremium = service == "youtube" && unsubscribed;
+        if (service == "spotify" && answer.TryGetProperty("drm", out var drm) && drm.ValueKind == JsonValueKind.False)
+            return new MusicStartStatus(false, "error", "Spotify can't play protected audio in Exo yet. Open it again in a minute.", youTubeNeedsPremium, signedIn);
+        if (unsubscribed)
+        {
+            var message = service switch
+            {
+                "youtube" => "This account has no YouTube Music Premium. Sign in with one that does.",
+                "spotify" => "Exo plays Spotify with a Premium account.",
+                _ => label + " needs a subscription. Sign in with an Apple ID that has one.",
+            };
+            return new MusicStartStatus(true, "notPremium", message, youTubeNeedsPremium, signedIn);
+        }
+        if (signedIn)
+            return new MusicStartStatus(true, "running", null, youTubeNeedsPremium, true);
+        if (service == "youtube")
+            return new MusicStartStatus(true, "signedOut", signInFailure ?? "Sign in with a YouTube Music Premium account.", youTubeNeedsPremium, false);
+        return new MusicStartStatus(true, "signedOut", signInFailure, youTubeNeedsPremium, false);
+    }
+
+    internal static async Task<MusicStartStatus?> WaitAndPublishReadyAsync(
+        string service,
+        Func<Task<JsonElement?>> probeStatus,
+        Func<bool> gone,
+        Func<bool> alreadyBooted,
+        Action<MusicStartStatus> onBooted,
+        Action<string, string, string?> publish,
+        TimeSpan limit,
+        TimeSpan step,
+        CancellationToken cancellation)
+    {
+        var started = Environment.TickCount64;
+        try
+        {
+            for (;;)
+            {
+                if (gone() || alreadyBooted()) return null;
+                var status = await probeStatus();
+                if (gone() || alreadyBooted()) return null;
+                if (ClassifyMusicStatus(service, status, null) is { } resolved)
+                {
+                    onBooted(resolved);
+                    publish(service, resolved.State, resolved.Message);
+                    return resolved;
+                }
+                if (Environment.TickCount64 - started >= limit.TotalMilliseconds) return null;
+                await Task.Delay(step, cancellation);
+            }
+        }
+        catch (OperationCanceledException) { return null; }
+    }
+
+    private async Task PublishMusicReadyWhenBootedAsync(MusicWebHostWindow host, string service)
+    {
+        try
+        {
+            await WaitAndPublishReadyAsync(
+                service,
+                () => WebMusicStatusCallAsync(service, attempts: 1, timeout: TimeSpan.FromSeconds(6)),
+                () => _musicWebClosed || _musicWebFailed || !ReferenceEquals(_musicHost, host) || _musicWebService != service,
+                () => _musicWebBooted,
+                resolved =>
+                {
+                    _musicWebBooted = true;
+                    _musicWebLoadingSince = default;
+                    _musicWebStalls = 0;
+                    ApplyMusicMemoryTarget();
+                    _youTubeNeedsPremium = resolved.YouTubeNeedsPremium;
+                    if (resolved.SignedIn)
+                    {
+                        _musicSignInFailure = null;
+                        if (MusicSignInRequested())
+                        {
+                            AppLog.Info("Music sign-in: " + MusicWebPolicy.Label(service) + " is signed in.");
+                            _musicSignInUntil = default;
+                        }
+                    }
+                    else if (resolved.State == "notPremium")
+                    {
+                        _musicSignInFailure = null;
+                    }
+                },
+                PublishMusicStatus,
+                MusicWebBootLimit,
+                TimeSpan.FromMilliseconds(250),
+                _lifetimeCts.Token);
+        }
+        catch (Exception) when (_musicWebClosed || !ReferenceEquals(_musicHost, host)) { }
+        catch { }
+    }
+
     private async Task<object> WebMusicStartCoreAsync(string service)
     {
         var label = MusicWebPolicy.Label(service);
-        if (WebClientPreferences.Read().MusicService is { } selected && selected != service)
+        if (!MusicEngineDiet.ServiceMatchesSelection(WebClientPreferences.Read().MusicService, service))
             return new { ok = false, state = "error", message = "Choose " + label + " in Settings." };
         if (_musicWebService != service) SelectServiceCore(service);
         if (_musicWebCause is { } last)
@@ -91,35 +197,19 @@ internal sealed partial class MusicEngineService
         }
         if (!_musicWebReady) return MusicWebLoading(service);
         var status = await WebMusicStatusCallAsync(service, attempts: 2);
-        if (status is not { ValueKind: JsonValueKind.Object } answer ||
-            !answer.TryGetProperty("ready", out var ready) || ready.ValueKind != JsonValueKind.True)
+        if (ClassifyMusicStatus(service, status, null) is not { } result)
             return MusicWebLoading(service);
+        var firstBoot = !_musicWebBooted;
+        _musicWebBooted = true;
         _musicWebLoadingSince = default;
         _musicWebStalls = 0;
-        var signedIn = answer.TryGetProperty("signedIn", out var flag) && flag.ValueKind == JsonValueKind.True;
-        var unsubscribed = signedIn && answer.TryGetProperty("subscribed", out var subscribed) && subscribed.ValueKind == JsonValueKind.False;
-        _youTubeNeedsPremium = service == "youtube" && unsubscribed;
-        if (service == "spotify" && answer.TryGetProperty("drm", out var drm) && drm.ValueKind == JsonValueKind.False)
-        {
+        ApplyMusicMemoryTarget();
+        _youTubeNeedsPremium = result.YouTubeNeedsPremium;
+        if (!result.Ok && service == "spotify")
             AppLog.Warn("Spotify: this WebView2 has no Widevine module yet.");
-            return new { ok = false, state = "error", message = "Spotify can't play protected audio in Exo yet. Open it again in a minute." };
-        }
-        if (unsubscribed)
-        {
+        if (result.State == "notPremium")
             _musicSignInFailure = null;
-            return new
-            {
-                ok = true,
-                state = "notPremium",
-                message = service switch
-                {
-                    "youtube" => "This account has no YouTube Music Premium. Sign in with one that does.",
-                    "spotify" => "Exo plays Spotify with a Premium account.",
-                    _ => label + " needs a subscription. Sign in with an Apple ID that has one.",
-                },
-            };
-        }
-        if (signedIn)
+        if (result.SignedIn)
         {
             _musicSignInFailure = null;
             if (MusicSignInRequested())
@@ -127,13 +217,14 @@ internal sealed partial class MusicEngineService
                 AppLog.Info("Music sign-in: " + label + " is signed in.");
                 _musicSignInUntil = default;
             }
-            return new { ok = true, state = "running" };
         }
-        var interrupted = TakeMusicSignInFailure(service);
-        if (service == "youtube")
-            return new { ok = true, state = "signedOut", message = interrupted ?? "Sign in with a YouTube Music Premium account." };
-        if (interrupted is null) return new { ok = true, state = "signedOut" };
-        return new { ok = true, state = "signedOut", message = interrupted };
+        if (result.State == "signedOut" && TakeMusicSignInFailure(service) is { } interrupted)
+            result = ClassifyMusicStatus(service, status, interrupted) ?? result;
+        if (firstBoot)
+            PublishMusicStatus(service, result.State, result.Message);
+        return result.Message is null
+            ? new { ok = result.Ok, state = result.State }
+            : new { ok = result.Ok, state = result.State, message = result.Message };
     }
 
     private Task<JsonElement?> WebMusicStatusCallAsync(string service, int attempts, TimeSpan? timeout = null) => service switch
@@ -147,7 +238,7 @@ internal sealed partial class MusicEngineService
     {
         if (_musicWebReady && _musicWebBooted && MusicCore is not null && _musicWebService == service) return true;
         if (_musicWebClosed) return false;
-        if (WebClientPreferences.Read().MusicService is { } selected && selected != service) return false;
+        if (!MusicEngineDiet.ServiceMatchesSelection(WebClientPreferences.Read().MusicService, service)) return false;
         if (_musicWebService != service) SelectServiceCore(service);
         if (_musicWebFailed) ResetMusicWebView();
         bool Gone() => _musicWebService != service || _musicWebClosed || _musicWebFailed;
@@ -164,7 +255,11 @@ internal sealed partial class MusicEngineService
             var status = await WebMusicStatusCallAsync(service, attempts: 1, timeout: TimeSpan.FromSeconds(6));
             return status is { ValueKind: JsonValueKind.Object } answer && answer.TryGetProperty("ready", out var ready) && ready.ValueKind == JsonValueKind.True;
         }, Gone, MusicWebBootLimit, _lifetimeCts.Token);
-        if (booted) _musicWebBooted = true;
+        if (booted)
+        {
+            _musicWebBooted = true;
+            ApplyMusicMemoryTarget();
+        }
         return !Gone();
     }
 
@@ -276,23 +371,30 @@ internal sealed partial class MusicEngineService
             if (ReferenceEquals(_musicSignInWindow, window)) _musicSignInWindow = null;
             _musicPopouts.Remove(window);
             NotifyStateChanged();
+            ApplyMusicMemoryTarget();
             try { if (window.Core is { } c) WebExtensions.Detach(c); } catch { }
         };
         ForegroundWatcher.Asked(label + "'s sign-in window");
         window.Show(activate: true);
+        WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? lease = null;
         try
         {
-            var environment = await WebViewEnvironmentFactory.GetAsync();
+            lease = await WebViewEnvironmentFactory.AcquireAsync();
+            var environment = lease.Environment;
             var controller = await environment.CreateCoreWebView2ControllerAsync(
                 CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)window.Handle),
                 WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
             if (closed || _musicWebService != service || generation != _musicWebGeneration)
             {
                 try { controller.Close(); } catch { }
+                lease.Dispose();
+                lease = null;
                 window.Close();
                 return new { ok = false, message = label + " could not start sign-in. Try again." };
             }
-            window.AttachController(controller, visible: true);
+            var ownedLease = lease;
+            lease = null;
+            window.AttachController(controller, visible: true, environmentLease: ownedLease);
             var core = window.Core!;
             _musicPopouts[window] = core;
             var finished = false;
@@ -316,6 +418,7 @@ internal sealed partial class MusicEngineService
         {
             AppLog.Warn(label + " sign-in window could not open: " + error.GetType().Name);
             try { window.Close(); } catch { }
+            try { lease?.Dispose(); } catch { }
             return new { ok = false, message = label + " could not start sign-in. Try again." };
         }
     }

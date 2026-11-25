@@ -1,0 +1,21 @@
+[package]
+name = "exo-delta"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "exo_delta"
+path = "src/lib.rs"
+
+[[bin]]
+name = "exo-delta"
+path = "src/main.rs"
+
+[dependencies]
+blake3 = "1"
+ed25519-dalek = { version = "2", default-features = false, features = ["fast", "std"] }
+rayon = "1"
+serde = { workspace = true }
+zstd = "0.13"
+zstd-safe = "7"

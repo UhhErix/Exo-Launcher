@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { compareEvent, declFields, dispatchArms, eventEmitters, isStub, realHandler, typeFields } from './host-contract-lib.mjs'
+import { syncWireSchema } from './generate-exo-wire.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const read = file => fs.readFileSync(path.join(root, file), 'utf8').replaceAll('\r\n', '\n')
@@ -111,4 +112,5 @@ const manifest = JSON.stringify({ version, methods: sorted(calls), events: sorte
 const manifestFile = path.join(root, 'ui/contracts/host-v1.json')
 if (process.argv.includes('--write')) { fs.mkdirSync(path.dirname(manifestFile), { recursive: true }); fs.writeFileSync(manifestFile, manifest) }
 else if (fs.readFileSync(manifestFile, 'utf8').replaceAll('\r\n', '\n') !== manifest) throw Error('Host/UI contract changed. Review consumers and regenerate the versioned manifest with npm run contracts:write.')
+syncWireSchema({ write: process.argv.includes('--write'), manifestText: manifest })
 console.log(`Host protocol v${version}: ${calls.size} UI methods are dispatcher arms with handlers, ${events.size} typed events have native emitters (${comparedEvents} with their fields compared); generated update schema is current.`)

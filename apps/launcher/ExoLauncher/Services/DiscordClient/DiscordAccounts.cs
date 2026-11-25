@@ -15,14 +15,31 @@ internal static class DiscordAccounts
     private const string FileName = "discord-accounts.bin";
     internal const int Most = 5;
     private static readonly Lock Gate = new();
+    private static List<Summary>? _summaries;
+    private static string? _summariesPath;
 
     internal sealed record Account(string Id, string Name, string? Avatar, string Token);
+    internal sealed record Summary(string Id, string Name, string? Avatar);
 
     private static string StorePath => Path.Combine(PathHelper.AppDataDir, FileName);
 
     internal static List<Account> List()
     {
         lock (Gate) return Load();
+    }
+
+    internal static List<Summary> ListSummaries()
+    {
+        lock (Gate)
+        {
+            var path = StorePath;
+            if (_summaries is not null && string.Equals(_summariesPath, path, StringComparison.OrdinalIgnoreCase))
+                return [.. _summaries];
+            var loaded = Load();
+            _summaries = [.. loaded.Select(a => new Summary(a.Id, a.Name, a.Avatar))];
+            _summariesPath = path;
+            return [.. _summaries];
+        }
     }
 
     /// <summary>The account Exo signed into now goes first; the oldest beyond five goes.</summary>
@@ -61,6 +78,15 @@ internal static class DiscordAccounts
         }
     }
 
+    internal static void ResetCache()
+    {
+        lock (Gate)
+        {
+            _summaries = null;
+            _summariesPath = null;
+        }
+    }
+
     private static List<Account> Load()
     {
         try
@@ -88,6 +114,8 @@ internal static class DiscordAccounts
             try { SecretFileAcl.RestrictToCurrentUser(tmp); }
             catch (Exception aclEx) { AppLog.Debug("Discord accounts ACL: " + aclEx.GetType().Name); }
             File.Move(tmp, StorePath, overwrite: true);
+            _summaries = [.. accounts.Select(a => new Summary(a.Id, a.Name, a.Avatar))];
+            _summariesPath = StorePath;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException)
         {

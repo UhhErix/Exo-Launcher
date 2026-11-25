@@ -8,9 +8,9 @@ import { ActionButton } from '../ui/ConfirmButton'
 import { Row } from '../settings/parts'
 import { Spinner } from '../ui/Spinner'
 
-type HealthAction = 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo'
+type HealthAction = 'chipset' | 'gpusched' | 'winupdate' | 'gpupref' | 'gpupref-undo'
 const ROW: Record<HealthAction, PcHealthItem['key']> = {
-  chipset: 'chipset', gpusched: 'gpusched', gpupref: 'gpupref', 'gpupref-undo': 'gpupref',
+  chipset: 'chipset', gpusched: 'gpusched', winupdate: 'ryzenbranch', gpupref: 'gpupref', 'gpupref-undo': 'gpupref',
 }
 
 /** Best settings sets the network and has its items (NetworkGroup.tsx); the adapter is a part of This PC. */
@@ -114,6 +114,11 @@ function Action({ item, press }: { item: PcHealthItem; press: (action: HealthAct
       ? item.canUndo ? button('gpupref-undo', 'Undo') : null
       : button('gpupref', 'Use the fast card', true)
   }
+  if (item.key === 'cpumicrocode' && item.url) {
+    const url = item.url
+    return <button type="button" className="exo-set-btn" onClick={() => void host.openUrl(url)}>BIOS page</button>
+  }
+  if (item.key === 'ryzenbranch') return button('winupdate', 'Windows Update')
   if (item.key === 'gpusched') return button(item.key, 'Open Settings')
   return null
 }

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -52,7 +53,9 @@ internal sealed partial class DiscordSession
 
     internal static DiscordSession? Current => _current;
 
-    internal static object Status() => new { state = _state, message = _message, signedIn = DiscordToken.Read() is not null };
+    internal static object BuildStatusResponse(string state, string? message, bool signedIn) => new { state, message, signedIn };
+
+    internal static object Status() => BuildStatusResponse(_state, _message, DiscordToken.HasToken());
 
     private static bool NoiseSuppressionWanted =>
         Voice.VoiceProcessing.Current.NoiseSuppression || App.Services.Settings.Shared.DiscordOthersNoiseSuppression;
@@ -60,34 +63,21 @@ internal sealed partial class DiscordSession
     /// <summary>Connects with the saved sign-in; does nothing when it already runs.</summary>
     internal static void Start()
     {
+        if (DiscordParityMock.IsEnabled) return;
+        var started = false;
         lock (StartGate)
         {
             if (_current is not null) return;
             if (DiscordToken.Read() is not { } token) { SetState("signedOut"); return; }
             var session = new DiscordSession(token);
             _current = session;
-            // Exo Voice is ready when Discord is: noise suppression fetched, its model loaded and kept warm while Discord is
-            // connected (NoiseSuppressor.KeepOne), and Only My Voice's voice model loaded, so a call's first words are
-            // cleaned and judged at once, with a game running too.
-            if (NoiseSuppressionWanted)
-            {
-                Voice.NoiseSuppressor.KeepOne = true;
-                _ = Task.Run(async () =>
-                {
-                    await Voice.NoiseSuppressorDownload.EnsureAsync(CancellationToken.None).ConfigureAwait(false);
-                    if (Voice.NoiseSuppressorDownload.Ready()) Voice.NoiseSuppressor.Create()?.Dispose();
-                    Voice.SpeakerModel.Warm();
-                });
-            }
+            _state = "connecting";
+            _message = null;
+            started = true;
+            if (NoiseSuppressionWanted) Voice.NoiseSuppressor.KeepOne = true;
             _ = Task.Run(() => session.RunAsync()).ContinueWith(run => session.Ended(run.Exception), TaskScheduler.Default);
-            // NVIDIA's noise removal is gone from Exo: its runtime, fetched by earlier versions, goes too (800 MB and more).
-            _ = Task.Run(() =>
-            {
-                var nvafx = Path.Combine(PathHelper.AppDataDir, "voice", "nvafx");
-                try { if (Directory.Exists(nvafx)) DeletionGate.DeleteDirectory(nvafx, true); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug("Discord voice: NVIDIA's old runtime stays for now: " + ex.Message); }
-            });
         }
+        if (started) Event?.Invoke("discord.state", new { state = "connecting", message = (string?)null });
     }
 
     // The session's loop is over. A stop or a fatal answer already said why; anything else that ended it is logged and
@@ -143,7 +133,8 @@ internal sealed partial class DiscordSession
             // Its REST client (an HTTP/2 connection kept warm and pinged) goes with it, on sign-out and account switch.
             session.Rest.Dispose();
         }
-        SetState(DiscordToken.Read() is null ? "signedOut" : "off");
+        SetState(DiscordToken.HasToken() ? "off" : "signedOut");
+        Volatile.Write(ref _lastBadge, 0);
         BadgeChanged?.Invoke(0);
     }
 
@@ -183,7 +174,7 @@ internal sealed partial class DiscordSession
     internal static object Accounts()
     {
         var current = _current?.Cache.Me?.Id;
-        return DiscordAccounts.List().Select(a => new { id = a.Id, name = a.Name, avatar = a.Avatar, current = a.Id == current }).ToList();
+        return DiscordAccounts.ListSummaries().Select(a => new { id = a.Id, name = a.Name, avatar = a.Avatar, current = a.Id == current }).ToList();
     }
 
     /// <summary>Connects as another account signed in on this PC, as Discord's Switch accounts does; null when it did.</summary>
@@ -324,7 +315,7 @@ internal sealed partial class DiscordSession
     private async Task LoopAsync()
     {
         var backoff = GatewayBackoff.Start;
-        SetState("connecting");
+        if (_state != "connecting") SetState("connecting");
         await DiscordRest.LoadBuildAsync(_stop.Token).ConfigureAwait(false);
         while (!_stop.IsCancellationRequested)
         {
@@ -363,16 +354,21 @@ internal sealed partial class DiscordSession
         ws.Options.SetRequestHeader("User-Agent", DiscordRest.UserAgent);
         _ws = ws;
         using var connection = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+        using var inflater = new GatewayZlibInflater();
         var ready = false;
+        var sw = Stopwatch.StartNew();
+        var connectMs = 0.0;
         var networkFailure = false;
         try
         {
-            await ws.ConnectAsync(new Uri((_resumeUrl ?? GatewayUrl) + "/?encoding=json&v=9"), connection.Token).ConfigureAwait(false);
+            await ws.ConnectAsync(new Uri((_resumeUrl ?? GatewayUrl) + "/?encoding=json&v=9&compress=zlib-stream"), connection.Token).ConfigureAwait(false);
+            connectMs = sw.Elapsed.TotalMilliseconds;
             while (ws.State == WebSocketState.Open)
             {
-                using var doc = await ReceiveAsync(ws, 256 << 20, connection.Token).ConfigureAwait(false);
-                if (doc is null) break;
-                var root = doc.RootElement;
+                var (doc, wireBytes, jsonBytes) = await ReceiveFrameAsync(ws, 256 << 20, inflater, connection.Token).ConfigureAwait(false);
+                using var owned = doc;
+                if (owned is null) break;
+                var root = owned.RootElement;
                 var op = root.GetProperty("op").GetInt32();
                 switch (op)
                 {
@@ -406,7 +402,13 @@ internal sealed partial class DiscordSession
                         // One event Exo can't read (a shape Discord changed) is logged and skipped, never the end of the session.
                         try
                         {
+                            var loadStart = type == "READY" ? sw.Elapsed.TotalMilliseconds : 0.0;
                             Dispatch(type, data);
+                            if (type == "READY")
+                            {
+                                var nowMs = sw.Elapsed.TotalMilliseconds;
+                                AppLog.Info($"PERF discord gateway ready connectMs={connectMs:F1} readyMs={nowMs:F1} loadReadyMs={nowMs - loadStart:F1} wireBytes={wireBytes} jsonBytes={jsonBytes}");
+                            }
                             if (Cache.TakeLinkPeersChanged()) SyncLinksSoon();
                         }
                         catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
@@ -473,9 +475,7 @@ internal sealed partial class DiscordSession
             Event?.Invoke("discord.changed", new { guildId = (string?)null });
             PublishBadge();
             Resubscribe();
-            _ = Task.Run(LoadRemindersAsync);
-            _ = Task.Run(KeepPrivacyAsync);
-            _ = Task.Run(ResumeStatusExpiryAsync);
+            _ = Task.Run(RunPostReadyMaintenanceAsync);
             OnGatewayReady(freshSession: true);
             UpdateKeyTick();
             return;
@@ -570,10 +570,18 @@ internal sealed partial class DiscordSession
     /// <summary>The conversation the room shows right now (null: none, or the room is hidden), so it doesn't notify.</summary>
     internal static string? Viewing { get; set; }
 
-    /// <summary>Discord's unread badge for the Discord tab and the taskbar button.</summary>
+    private static int _lastBadge;
+
+    internal static int CurrentBadge => Volatile.Read(ref _lastBadge);
+
     internal static event Action<int>? BadgeChanged;
 
-    internal void PublishBadge() => BadgeChanged?.Invoke(Cache.Badge());
+    internal void PublishBadge()
+    {
+        var count = Cache.Badge();
+        Volatile.Write(ref _lastBadge, count);
+        BadgeChanged?.Invoke(count);
+    }
 
     // Channels read here that Discord hasn't been told of yet.
     private readonly HashSet<string> _outgoingAcks = [];
@@ -693,14 +701,42 @@ internal sealed partial class DiscordSession
         }, next.Token, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
     }
 
+    private int _voiceWarmed;
+
     /// <summary>On connect: a status chosen for a while that ran out while Exo was closed ends now; one still running ends on time.</summary>
-    private async Task ResumeStatusExpiryAsync()
+    private async Task RunPostReadyMaintenanceAsync()
     {
         try
         {
+            await Task.Delay(1500, _stop.Token).ConfigureAwait(false);
+            if (Interlocked.Exchange(ref _voiceWarmed, 1) == 0)
+            {
+                _ = Task.Run(async () =>
+                {
+                    // Exo Voice is ready when Discord is: noise suppression fetched, its model loaded and kept warm while Discord is
+                    // connected (NoiseSuppressor.KeepOne), and Only My Voice's voice model loaded, so a call's first words are
+                    // cleaned and judged at once, with a game running too.
+                    if (NoiseSuppressionWanted)
+                    {
+                        await Voice.NoiseSuppressorDownload.EnsureAsync(CancellationToken.None).ConfigureAwait(false);
+                        if (Voice.NoiseSuppressorDownload.Ready()) Voice.NoiseSuppressor.Create()?.Dispose();
+                        Voice.SpeakerModel.Warm();
+                    }
+                    // NVIDIA's noise removal is gone from Exo: its runtime, fetched by earlier versions, goes too (800 MB and more).
+                    var nvafx = Path.Combine(PathHelper.AppDataDir, "voice", "nvafx");
+                    try { if (Directory.Exists(nvafx)) DeletionGate.DeleteDirectory(nvafx, true); }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug("Discord voice: NVIDIA's old runtime stays for now: " + ex.Message); }
+                });
+            }
+            var reminders = LoadRemindersAsync();
             var (values, _) = await UserSettingsAsync(null, _stop.Token).ConfigureAwait(false);
-            if (values?["statusExpiresAtMs"] is not JsonValue at || !at.TryGetValue(out long until) || Cache.MyStatus == "online") return;
-            ExpireStatusAt(until);
+            if (values is not null)
+            {
+                if (values["statusExpiresAtMs"] is JsonValue at && at.TryGetValue(out long until) && Cache.MyStatus != "online")
+                    ExpireStatusAt(until);
+                await KeepPrivacyAsync(values).ConfigureAwait(false);
+            }
+            await reminders.ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
     }
@@ -846,12 +882,17 @@ internal sealed partial class DiscordSession
     /// outgrows it) and parsed from there, the document taking a pooled copy of its own: a stream per message, grown and
     /// copied as it went (READY's on the large object heap) and read again to parse, was garbage at once.
     /// </summary>
-    internal static async Task<JsonDocument?> ReceiveAsync(ClientWebSocket ws, int maxBytes, CancellationToken ct)
+    internal static async Task<JsonDocument?> ReceiveAsync(ClientWebSocket ws, int maxBytes, CancellationToken ct) =>
+        (await ReceiveFrameAsync(ws, maxBytes, null, ct).ConfigureAwait(false)).Doc;
+
+    internal static async Task<(JsonDocument? Doc, int WireBytes, int JsonBytes)> ReceiveFrameAsync(
+        ClientWebSocket ws, int maxBytes, GatewayZlibInflater? inflater, CancellationToken ct)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
         try
         {
             var count = 0;
+            var binary = false;
             while (true)
             {
                 if (count == buffer.Length)
@@ -862,12 +903,25 @@ internal sealed partial class DiscordSession
                     buffer = bigger;
                 }
                 var result = await ws.ReceiveAsync(buffer.AsMemory(count), ct).ConfigureAwait(false);
-                if (result.MessageType == WebSocketMessageType.Close) return null;
+                if (result.MessageType == WebSocketMessageType.Close) return (null, 0, 0);
+                if (result.MessageType == WebSocketMessageType.Binary) binary = true;
                 count += result.Count;
                 if (count > maxBytes) throw new IOException("Gateway message too large.");
-                if (result.EndOfMessage) break;
+                if (binary)
+                {
+                    if (result.EndOfMessage && GatewayZlibInflater.HasFlushSuffix(buffer.AsSpan(0, count))) break;
+                }
+                else if (result.EndOfMessage)
+                {
+                    break;
+                }
             }
-            return Parse(buffer.AsSpan(0, count));
+            if (binary && inflater is not null)
+            {
+                var doc = inflater.ParseCompressed(buffer, count, maxBytes, out var jsonBytes);
+                return (doc, count, jsonBytes);
+            }
+            return (Parse(buffer.AsSpan(0, count)), count, count);
         }
         finally { ArrayPool<byte>.Shared.Return(buffer); }
 

@@ -27,11 +27,30 @@ public static class Program
     /// <summary>The arguments this launch runs with (its own, or what a launch during an update kept for it).</summary>
     internal static string[] LaunchArgs { get; private set; } = [];
 
+    private static void WaitForParentExit(string[] args)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (!args[i].Equals("--wait-pid", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!int.TryParse(args[i + 1], out var pid) || pid <= 0 || pid == Environment.ProcessId) return;
+            try
+            {
+                using var parent = System.Diagnostics.Process.GetProcessById(pid);
+                parent.WaitForExit(5000);
+            }
+            catch { }
+            return;
+        }
+    }
+
     [STAThread]
     public static void Main(string[] args)
     {
         StartupTiming.Begin();
         SetErrorMode(ErrorModeNoDialogs);
+        Helpers.CrashBreadcrumb.InstallNativeFilter();
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            Helpers.CrashBreadcrumb.Record("domain-unhandled", e.ExceptionObject as Exception);
         // Windows 11 only. Uninstall cleanup still runs on an older Windows, so an old copy can be removed.
         if (!args.Contains("--uninstall-cleanup", StringComparer.OrdinalIgnoreCase) && !WindowsRequirement.Supports(Environment.OSVersion.Version.Build))
         {
@@ -64,9 +83,19 @@ public static class Program
                 Environment.ExitCode = Helpers.LatencyTrace.Run(args);
                 return;
             }
+            if (args.Contains(Helpers.MouseDiagTrace.Flag, StringComparer.OrdinalIgnoreCase))
+            {
+                Environment.ExitCode = Helpers.MouseDiagTrace.Run(args);
+                return;
+            }
             if (args.Contains(Services.WindowsFeatures.Flag, StringComparer.OrdinalIgnoreCase))
             {
                 Environment.ExitCode = Services.WindowsFeatures.Run(args);
+                return;
+            }
+            if (args.Contains(Services.StandbyPurger.Flag, StringComparer.OrdinalIgnoreCase))
+            {
+                Environment.ExitCode = Services.StandbyPurger.RunElevatedCli();
                 return;
             }
             // Exo's setup, once Exo is installed: Exo's parts fetched and verified, with progress for its window (no window here).
@@ -97,7 +126,8 @@ public static class Program
             // Inside the app folder it would hold it open after Exo exits, and the next
             // update could not swap the folder; Exo's data folder is never replaced.
             try { Environment.CurrentDirectory = Helpers.PathHelper.AppDataDir; } catch { }
-            if (Services.RuneHostSession.TryParse(args) is { SpawnUi: false } headlessRune)
+            WaitForParentExit(args);
+            if (Services.RuneHostSession.TryParse(args, onWarning: AppLog.Warn) is { SpawnUi: false } headlessRune)
             {
                 ComWrappersSupport.InitializeComWrappers();
                 Environment.ExitCode = Services.RuneHostSession.Run(headlessRune);
@@ -142,7 +172,7 @@ public static class Program
             if (Services.NoteTextFiles.NoteArgument(args) is { } note) Services.WebHostBridge.QueueNoteFromWindows(note);
             // An exolauncher:// link Exo started with: that place, once the page asks.
             if (Services.ExoLinks.Find(args) is { } place) Services.WebHostBridge.QueueOpen(place);
-            if (Services.RuneHostSession.TryParse(args) is { } runeOptions)
+            if (Services.RuneHostSession.TryParse(args, onWarning: AppLog.Warn) is { } runeOptions)
             {
                 mainInstance.Activated += (_, _) => UiGuard.Run(Services.RuneHostSession.RequestActivate);
                 Environment.ExitCode = Services.RuneHostSession.Run(runeOptions);
@@ -175,7 +205,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            Helpers.PendingReports.Record(ex);
+            Helpers.CrashBreadcrumb.Record("main-fatal", ex);
             try
             {
                 AppLog.Crash("Fatal startup exception", ex);

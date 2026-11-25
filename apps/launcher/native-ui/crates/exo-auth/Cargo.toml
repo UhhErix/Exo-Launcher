@@ -1,0 +1,26 @@
+[package]
+name = "exo-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-future = "0.3"
+windows = { version = "0.62", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Security_Authentication_Web",
+    "Security_Authentication_Web_Core",
+    "Security_Credentials",
+    "Win32_Foundation",
+    "Win32_Networking_WinHttp",
+    "Win32_Networking_WindowsWebServices",
+    "Win32_Security_Cryptography",
+    "Win32_System_WinRT",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }

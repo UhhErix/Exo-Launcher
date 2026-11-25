@@ -1,6 +1,6 @@
 use rune::color::srgb_decode;
 use rune::{Color, Spring, TextStyle};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::cell::Cell;
 
 pub const GOEIST_FONT: &[u8] =
     include_bytes!("../../../../ExoLauncher/Assets/Fonts/Goeist-Variable.ttf");
@@ -8,15 +8,17 @@ pub const GOEIST_FONT: &[u8] =
 pub const FONTS: &[&[u8]] = &[GOEIST_FONT];
 pub const FONT_FAMILIES: (&str, &str) = ("Goeist", "ui-monospace");
 
-static TEXT_SCALE_BITS: AtomicU32 = AtomicU32::new(1.0_f32.to_bits());
+thread_local! {
+    static TEXT_SCALE: Cell<f32> = const { Cell::new(1.0) };
+}
 
 pub fn set_text_scale(scale: f32) {
     let clamped = scale.clamp(0.75, 1.5);
-    TEXT_SCALE_BITS.store(clamped.to_bits(), Ordering::Relaxed);
+    TEXT_SCALE.with(|cell| cell.set(clamped));
 }
 
 pub fn text_scale() -> f32 {
-    f32::from_bits(TEXT_SCALE_BITS.load(Ordering::Relaxed))
+    TEXT_SCALE.with(Cell::get)
 }
 
 pub fn scaled(px: f32) -> f32 {
@@ -67,39 +69,47 @@ pub fn bad() -> Color {
 }
 
 pub fn glass_control_fill() -> Color {
-    BG.alpha(0.52)
+    BG.alpha(0.54)
+}
+
+pub fn glass_bar_tint() -> Color {
+    BG.alpha(0.36)
+}
+
+pub fn glass_panel_tint() -> Color {
+    BG.alpha(0.54)
 }
 
 pub fn glass_panel_fill() -> Color {
     BG.alpha(0.76)
 }
 
+pub fn glass_plate_fill() -> Color {
+    BG.alpha(0.72)
+}
+
 pub fn glass_still_control_fill() -> Color {
-    BG.alpha(0.78)
+    BG.alpha(0.80)
 }
 
 pub fn glass_still_panel_fill() -> Color {
-    BG.alpha(0.90)
+    BG.alpha(0.92)
 }
 
-pub fn glass_outer_edge() -> Color {
-    BG.alpha(0.68)
-}
-
-pub fn glass_specular_sheen() -> [(f32, Color); 2] {
-    [(0.0, Color::WHITE.alpha(0.09)), (0.32, TRANSPARENT)]
+pub fn glass_panel_shadow_color() -> Color {
+    BG.alpha(0.50)
 }
 
 pub fn glass_rim_top() -> Color {
-    Color::WHITE.alpha(0.28)
+    Color::WHITE.alpha(0.17)
 }
 
 pub fn glass_rim_bottom() -> Color {
-    Color::WHITE.alpha(0.06)
+    Color::WHITE.alpha(0.03)
 }
 
 pub fn glass_rim() -> Color {
-    Color::WHITE.alpha(0.09)
+    Color::WHITE.alpha(0.07)
 }
 
 pub fn card_border() -> Color {
@@ -138,6 +148,10 @@ pub fn surface_card() -> Color {
     Color::WHITE.alpha(0.035)
 }
 
+pub fn art_surface_fill() -> Color {
+    Color::WHITE.alpha(0.05)
+}
+
 pub fn subtle_fill() -> Color {
     Color::WHITE.alpha(0.06)
 }
@@ -150,8 +164,10 @@ pub const RADIUS_PILL: f32 = 999.0;
 pub const GAP: f32 = 10.0;
 pub const TITLEBAR_HEIGHT: f32 = 52.0;
 
-pub const GLASS_CONTROL_SIGMA: f32 = 14.0;
-pub const GLASS_PANEL_SIGMA: f32 = 24.0;
+pub const GLASS_CONTROL_SIGMA: f32 = 10.0;
+pub const GLASS_PANEL_SIGMA: f32 = 16.0;
+pub const GLASS_CONTAINER_SPACING: f32 = 10.0;
+pub const EXO_MAX_BACKDROP_BLURS: usize = 16;
 pub const PRESS_SCALE: f32 = 0.97;
 
 pub const SPRING_PRESS: Spring = Spring::new(0.09, 0.0);
@@ -194,4 +210,63 @@ pub fn type_page() -> TextStyle {
 
 pub fn type_first_run() -> TextStyle {
     TextStyle::new(scaled(32.0), 700.0).letter_spacing(-0.025)
+}
+
+pub const FOLDER_COLOR_IDS: [&str; 8] = [
+    "gray", "red", "orange", "yellow", "green", "teal", "blue", "pink",
+];
+
+pub fn normalize_folder_color(color: Option<&str>) -> &'static str {
+    match color {
+        Some("red") => "red",
+        Some("orange") => "orange",
+        Some("yellow") => "yellow",
+        Some("green") => "green",
+        Some("teal") => "teal",
+        Some("blue") => "blue",
+        Some("pink") => "pink",
+        _ => "gray",
+    }
+}
+
+pub fn folder_color_rgb(color: &str) -> (u8, u8, u8) {
+    match color {
+        "red" => (255, 69, 58),
+        "orange" => (255, 159, 10),
+        "yellow" => (255, 214, 10),
+        "green" => (48, 209, 88),
+        "teal" => (64, 200, 224),
+        "blue" => (10, 132, 255),
+        "pink" => (255, 55, 95),
+        _ => (142, 142, 147),
+    }
+}
+
+pub fn folder_color_swatch(color: &str, alpha: f32) -> Color {
+    let (r, g, b) = folder_color_rgb(color);
+    srgb(r, g, b, alpha)
+}
+
+pub fn folder_color_mix_black(color: &str, pct: f32) -> Color {
+    let (r, g, b) = folder_color_rgb(color);
+    let k = pct.clamp(0.0, 1.0);
+    srgb(
+        (r as f32 * k).round() as u8,
+        (g as f32 * k).round() as u8,
+        (b as f32 * k).round() as u8,
+        1.0,
+    )
+}
+
+pub fn folder_color_label(color: &str) -> &'static str {
+    match color {
+        "red" => "Red",
+        "orange" => "Orange",
+        "yellow" => "Yellow",
+        "green" => "Green",
+        "teal" => "Teal",
+        "blue" => "Blue",
+        "pink" => "Pink",
+        _ => "Gray",
+    }
 }

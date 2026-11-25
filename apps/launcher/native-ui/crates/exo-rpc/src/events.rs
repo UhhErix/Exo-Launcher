@@ -50,6 +50,23 @@ pub struct CaptureReelEvent {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+pub struct CaptureShrunkEvent {
+    pub id: String,
+    pub item: Option<CaptureItem>,
+    pub before: u64,
+    pub after: u64,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesOpenEvent {
+    pub id: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct PausedDownloadItem {
     pub game_id: String,
     pub title: String,
@@ -105,4 +122,26 @@ pub struct AutopilotReportEvent {
 #[serde(rename_all = "camelCase", default)]
 pub struct StoreChangedEvent {
     pub what: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StoreSaleEvent {
+    pub app_id: String,
+    pub name: String,
+    #[serde(rename = "final")]
+    pub final_cents: Option<i64>,
+    pub discount: i32,
+    pub currency: Option<String>,
+    pub price: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GpuDriverInstallEvent {
+    pub phase: String,
+    pub version: Option<String>,
+    pub message: Option<String>,
+    pub restored: Vec<String>,
+    pub not_restored: Vec<String>,
 }

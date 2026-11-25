@@ -70,6 +70,8 @@ public sealed class SettingsRoundTripTests : IDisposable
                 }
                 else if (property.GetValue(settings) is ExoAiSettings exoAi)
                     (exoAi.AutoApplyBestSettings, exoAi.BackgroundDriftCheck, exoAi.FanPreset) = (false, false, "balanced");
+                else if (property.GetValue(settings) is Dictionary<string, GameFrameCapPref> capMap)
+                    capMap["steam:1091500"] = new GameFrameCapPref { Tier = "max", CapFps = 138, Backend = "nvidia_drs", PriorValue = "0", PriorBackend = "nvidia_drs" };
                 else Assert.Fail(property.Name + " has a type this test does not set; add it here.");
             }
         });
@@ -105,6 +107,8 @@ public sealed class SettingsRoundTripTests : IDisposable
                     && kept.AlwaysDemote.SequenceEqual(autopilot.AlwaysDemote) && kept.Suspend.SequenceEqual(autopilot.Suspend) && kept.Suspend.SequenceEqual(["Updater"]), property.Name + " was not kept");
             else if (want is ExoAiSettings)
                 Assert.True(got is ExoAiSettings { AutoApplyBestSettings: false, BackgroundDriftCheck: false, FanPreset: "balanced" }, property.Name + " was not kept");
+            else if (want is Dictionary<string, GameFrameCapPref>)
+                Assert.True(got is Dictionary<string, GameFrameCapPref> kept && kept.TryGetValue("steam:1091500", out var cap) && cap is { Tier: "max", CapFps: 138, Backend: "nvidia_drs" }, property.Name + " was not kept");
             else if (want is List<LibraryFolder>)
                 Assert.True(got is List<LibraryFolder> { Count: 1 } kept && kept[0] is { Id: "f1", Name: "Shooters" } && kept[0].Games.SequenceEqual(["steam:1"]), property.Name + " was not kept");
             else Assert.True(Equals(want, got), $"{property.Name} was not kept: {want} became {got}");

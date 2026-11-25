@@ -152,6 +152,10 @@ public sealed class ExoAiTests
         coordinator.RunDriftCheck();
         Assert.Equal(1, applyCalls);
         var snap = coordinator.Snapshot();
+        Assert.True(snap.AutoApplyBestSettings);
+        Assert.True(snap.BackgroundDriftCheck);
+        Assert.Equal("balanced", snap.Fans.Preset);
+        Assert.Equal(50, snap.Fans.TargetPercent);
         Assert.Equal(["Exo power plan active"], snap.AutoApplied);
         Assert.Equal(["Memory speed"], snap.NeedsAttention);
         Assert.NotNull(snap.LastCheckUtc);
@@ -162,17 +166,77 @@ public sealed class ExoAiTests
         coordinator.RunDriftCheck();
         Assert.Equal(1, applyCalls);
 
-        // Even if legacy settings had AutoApplyBestSettings off, safe optimization stays automated at runtime.
         gaming = false;
         settings.ExoAi.AutoApplyBestSettings = false;
+        coordinator.NotifySettings(settings.ExoAi);
+        Assert.Equal(1, applyCalls);
+        var disabledApplySnap = coordinator.Snapshot();
+        Assert.False(disabledApplySnap.AutoApplyBestSettings);
+        Assert.True(disabledApplySnap.BackgroundDriftCheck);
+        Assert.Empty(disabledApplySnap.AutoApplied);
+
+        coordinator.RunDriftCheck();
+        Assert.Equal(1, applyCalls);
+
+        settings.ExoAi.BackgroundDriftCheck = false;
+        var disabledBothSnap = coordinator.Snapshot();
+        Assert.False(disabledBothSnap.AutoApplyBestSettings);
+        Assert.False(disabledBothSnap.BackgroundDriftCheck);
+
         timestamp = timestamp.AddMinutes(5);
         var after = coordinator.RunNow();
         Assert.Equal(2, applyCalls);
+        Assert.False(after.AutoApplyBestSettings);
+        Assert.False(after.BackgroundDriftCheck);
         Assert.Equal(["Exo power plan active"], after.AutoApplied);
         Assert.Equal(["Memory speed"], after.NeedsAttention);
 
         coordinator.Shutdown();
         Assert.True(fanBackend.Disposed);
+    }
+
+    [Fact]
+    public void CoordinatorAppliesUserFanPresetAndRespectsDriftCheckSetting()
+    {
+        var applyCalls = 0;
+        var attentionCalls = 0;
+        var fanBackend = new FakeFanBackend { TempC = 55 };
+        var settings = new AppSettings
+        {
+            ExoAi = new ExoAiSettings { AutoApplyBestSettings = true, BackgroundDriftCheck = false, FanPreset = "performance" },
+        };
+        var timestamp = new DateTimeOffset(2026, 11, 20, 18, 0, 0, TimeSpan.Zero);
+
+        using var coordinator = new ExoAiCoordinator(
+            new ExoAiFans(() => fanBackend),
+            () => false,
+            () => { applyCalls++; return ["Exo power plan active"]; },
+            () => { attentionCalls++; return ["Memory speed"]; },
+            () => new ExoAiAutopilotSnapshot(false, null, null, 0, false, false),
+            () => timestamp);
+
+        coordinator.Start(() => settings);
+        var initialSnap = coordinator.Snapshot();
+        Assert.Equal("performance", initialSnap.Fans.Preset);
+        Assert.Equal(ExoAiFans.EvaluateCurve("performance", 55), initialSnap.Fans.TargetPercent);
+        Assert.True(initialSnap.AutoApplyBestSettings);
+        Assert.False(initialSnap.BackgroundDriftCheck);
+
+        coordinator.RunDriftCheck();
+        Assert.Equal(0, applyCalls);
+        Assert.Equal(0, attentionCalls);
+
+        settings.ExoAi.FanPreset = "quiet";
+        coordinator.NotifySettings(settings.ExoAi);
+        var quietSnap = coordinator.Snapshot();
+        Assert.Equal("quiet", quietSnap.Fans.Preset);
+        Assert.Equal(ExoAiFans.EvaluateCurve("quiet", 55), quietSnap.Fans.TargetPercent);
+
+        settings.ExoAi.FanPreset = "auto";
+        coordinator.NotifySettings(settings.ExoAi);
+        var autoSnap = coordinator.Snapshot();
+        Assert.Equal("auto", autoSnap.Fans.Preset);
+        Assert.Equal(ExoAiFans.EvaluateCurve("auto", 55), autoSnap.Fans.TargetPercent);
     }
 
     [Fact]

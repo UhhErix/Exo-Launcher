@@ -181,7 +181,11 @@ internal static class PcIdle
         {
             _onDisplay = (_, type, setting) =>
             {
-                if (type == 0x8013 /* PBT_POWERSETTINGCHANGE */ && setting != 0) _displayOff = Marshal.ReadInt32(setting, 20) == 0;
+                try
+                {
+                    if (type == 0x8013 /* PBT_POWERSETTINGCHANGE */ && setting != 0) _displayOff = Marshal.ReadInt32(setting, 20) == 0;
+                }
+                catch { }
                 return 0;
             };
             var recipient = new DeviceNotifySubscribeParameters { Callback = Marshal.GetFunctionPointerForDelegate(_onDisplay) };

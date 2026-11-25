@@ -34,6 +34,8 @@ internal sealed partial class MusicEngineService
     private bool _musicWebReady;
     private bool _appleAdapterInstalled;
     private bool _musicWebFailed;
+    private int _musicWebFailures;
+    private DateTimeOffset _musicWebRetryAfter = DateTimeOffset.MinValue;
     private (string Service, string Message)? _musicWebCause;
     private int _musicWebGeneration;
     private MediaSessionService? _mediaSessions;
@@ -55,7 +57,10 @@ internal sealed partial class MusicEngineService
     private CancellationTokenSource? _musicIdleCancellation;
     private bool _musicWebIdle;
     private bool _musicSuspendFailureLogged;
-    private static readonly TimeSpan MusicReleaseDelay = TimeSpan.FromMinutes(15);
+    private bool _musicProcessesTrimmed;
+    private long _musicTrimGeneration;
+    private static readonly TimeSpan MusicSuspendDelay = MusicEngineDiet.SuspendDelay;
+    private static readonly TimeSpan MusicReleaseDelay = MusicEngineDiet.ReleaseDelay;
 
     private CoreWebView2? MusicCore => _musicHost?.Core;
     private MediaSessionService MediaSessions => _mediaSessions ??= CreateMediaSessions();
@@ -124,12 +129,12 @@ internal sealed partial class MusicEngineService
             return work();
         }
         var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!dispatcher.TryEnqueue(async () => await UiGuard.RunAsync(async () =>
+        if (!dispatcher.EnqueueAsync(async () =>
         {
             EnsureSyncContext(dispatcher);
             try { tcs.TrySetResult(await work()); }
             catch (Exception ex) { tcs.TrySetException(ex); }
-        })))
+        }, "Music engine UI work"))
         {
             tcs.TrySetException(new InvalidOperationException("Music engine dispatcher is shutting down."));
         }
@@ -340,6 +345,7 @@ internal sealed partial class MusicEngineService
                 ReevaluateOtherMusicTimer();
                 if (snapshot.Provider != _musicWebService) return;
                 if (snapshot.Status == "playing") ApplyPendingMusicVolume();
+                else ApplyMusicMemoryTarget();
                 if (_sharingOtherMusic && snapshot.Status != "playing") return;
                 DiscordClient.DiscordSession.Current?.SetCallSong(DiscordClient.DiscordSession.CallSongOf(snapshot.Provider,
                     snapshot.Status, snapshot.Title, snapshot.Artist, snapshot.PositionMs, snapshot.DurationMs, snapshot.TrackId), snapshot.CapturedAt);
@@ -349,9 +355,20 @@ internal sealed partial class MusicEngineService
         return sessions;
     }
 
+    internal static TimeSpan InitRetryBackoff(int consecutiveFailures) => consecutiveFailures switch
+    {
+        <= 0 => TimeSpan.Zero,
+        1 => TimeSpan.FromSeconds(2),
+        2 => TimeSpan.FromSeconds(5),
+        3 => TimeSpan.FromSeconds(15),
+        _ => TimeSpan.FromSeconds(60),
+    };
+
     private void SelectServiceCore(string service)
     {
         if (!MusicWebPolicy.IsService(service) || _musicWebService == service) return;
+        _musicWebFailures = 0;
+        _musicWebRetryAfter = DateTimeOffset.MinValue;
         ResetMusicWebView();
         _musicWebService = service;
         MediaSessions.SetProvider(service);
@@ -360,13 +377,18 @@ internal sealed partial class MusicEngineService
 
     private void OpenMusicWeb(string service)
     {
-        if (_musicWebClosed || WebClientPreferences.Read().MusicService is { } selected && selected != service) return;
+        if (_musicWebClosed || !MusicEngineDiet.ServiceMatchesSelection(WebClientPreferences.Read().MusicService, service)) return;
         if (_musicWebService != service) SelectServiceCore(service);
-        if (_musicWebFailed) ResetMusicWebView();
+        if (_musicWebFailed)
+        {
+            if (DateTimeOffset.UtcNow < _musicWebRetryAfter) return;
+            ResetMusicWebView();
+        }
         if (service == "spotify") _ = SpotifyApp.CloseRunningAsync(_lifetimeCts.Token);
         if (_musicHost is null)
         {
-            _musicHost = MusicWebHostWindow.CreateHidden();
+            var (width, height) = MusicEngineDiet.HiddenWindowSize(service);
+            _musicHost = MusicWebHostWindow.CreateHidden(width, height);
         }
         var host = _musicHost;
         NotifyStateChanged();
@@ -385,6 +407,8 @@ internal sealed partial class MusicEngineService
             AppLog.Warn("Music web player initialization failed: " + ex.GetType().Name + ": " + ex.Message);
             ResetMusicWebView();
             _musicWebFailed = true;
+            _musicWebFailures++;
+            _musicWebRetryAfter = DateTimeOffset.UtcNow + InitRetryBackoff(_musicWebFailures);
             if (!reported)
                 PublishMusicStatus(service, "error", MusicWebPolicy.Label(service) + " could not load. Choose Retry to reconnect.");
         }
@@ -413,9 +437,12 @@ internal sealed partial class MusicEngineService
         var change = level is not null || muted is not null;
         if (level is { } yours && muted is null) _musicVolumeYours = (_musicWebService, yours);
         if (change && MusicWebPolicy.IsService(_musicWebService)) WakeMusicWeb();
+        var target = muted == true ? 0 : level;
+        if (target is null && MusicCore is { } core && (MusicWebSuspended(core) || _musicWebIdle) &&
+            _musicAppLevelLast is { } cached && cached.Service == _musicWebService)
+            return new { ok = true, level = cached.Level, muted = cached.Level <= 0, source = "app" };
         if (MusicAppLevel() is { } app)
         {
-            var target = muted == true ? 0 : level;
             var appLevel = target is { } wanted ? await app.WriteAsync(wanted) : await app.ReadAsync();
             if (appLevel is { } value && ReferenceEquals(app, _musicAppVolume))
             {
@@ -471,7 +498,7 @@ internal sealed partial class MusicEngineService
             _musicWebService!,
             MusicWebEvaluate(core),
             paused: () => MusicWebSuspended(core),
-            idle: () => HostHiddenOrMinimized() && !Volatile.Read(ref _musicWebAudio));
+            idle: () => (_musicWebIdle || HostHiddenOrMinimized() || _isHostWindowHidden is null) && !Volatile.Read(ref _musicWebAudio));
         _musicAppVolume = link;
         link.Changed += changed => PostUiAsync(async () =>
         {
@@ -509,9 +536,23 @@ internal sealed partial class MusicEngineService
     private Func<double, double, CancellationToken, Task<bool>> MusicWebPress(CoreWebView2 core) => async (x, y, cancellation) =>
     {
         if (!ReferenceEquals(MusicCore, core) || MusicPress.ClickCommands(x, y) is not { } commands) return false;
-        foreach (var (method, json) in commands)
-            await core.CallDevToolsProtocolMethodAsync(method, json).AsTask().WaitAsync(TimeSpan.FromSeconds(3), cancellation);
-        return true;
+        var host = _musicHost;
+        var restoredHidden = false;
+        if (host?.Controller is { IsVisible: false })
+        {
+            host.SetControllerVisible(true);
+            restoredHidden = true;
+        }
+        try
+        {
+            foreach (var (method, json) in commands)
+                await core.CallDevToolsProtocolMethodAsync(method, json).AsTask().WaitAsync(TimeSpan.FromSeconds(3), cancellation);
+            return true;
+        }
+        finally
+        {
+            if (restoredHidden && host is not null && ReferenceEquals(_musicHost, host)) host.SetControllerVisible(false);
+        }
     };
 
     private static bool MusicWebSuspended(CoreWebView2 core)
@@ -612,6 +653,7 @@ internal sealed partial class MusicEngineService
             host.SetControllerVisible(true);
             if (core.IsSuspended) core.Resume();
             SetWebViewMemoryTarget(core, CoreWebView2MemoryUsageTargetLevel.Normal);
+            if (_musicProcessesTrimmed) TrimMusicProcesses(core, low: false, trim: false);
             _musicNowPlaying?.Wake();
             _musicAppVolume?.Wake();
             ApplyMusicMemoryTarget();
@@ -621,6 +663,8 @@ internal sealed partial class MusicEngineService
 
     private void ReloadMusic()
     {
+        _musicWebFailures = 0;
+        _musicWebRetryAfter = DateTimeOffset.MinValue;
         if (_musicWebFailed) { ResetMusicWebView(); return; }
         if (MusicCore is not { } core) return;
         _musicWebReady = false;
@@ -636,6 +680,8 @@ internal sealed partial class MusicEngineService
         _musicIdleCancellation?.Cancel();
         _musicIdleCancellation = null;
         _musicWebIdle = false;
+        _musicProcessesTrimmed = false;
+        Interlocked.Increment(ref _musicTrimGeneration);
         _musicWebGeneration++;
         foreach (var popup in _musicPopouts.Keys.ToArray())
             try { popup.Close(); } catch { }
@@ -700,11 +746,22 @@ internal sealed partial class MusicEngineService
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(60), cancellation.Token);
-            if (cancellation.IsCancellationRequested || !ReferenceEquals(host, _musicHost) ||
-                _musicPopouts.Count > 0 || MusicSignInRequested() ||
-                host.Core is not { } core || core.IsDocumentPlayingAudio ||
-                MediaSessions.Current is { Status: "playing" } now && now.Provider == _musicWebService) return;
+            await Task.Delay(MusicSuspendDelay, cancellation.Token);
+            while (!cancellation.IsCancellationRequested)
+            {
+                var hasHost = ReferenceEquals(host, _musicHost) && host.Core is not null;
+                if (!hasHost) return;
+                var candidate = host.Core!;
+                var sessionPlaying = MediaSessions.Current is { Status: "playing" } now && now.Provider == _musicWebService;
+                var hasPopouts = _musicPopouts.Count > 0;
+                var signInActive = MusicSignInRequested();
+                if (MusicEngineDiet.CanSuspend(hasHost, candidate.IsDocumentPlayingAudio, sessionPlaying, hasPopouts, signInActive))
+                    break;
+                if (!MusicEngineDiet.ShouldDeferIdleRetry(hasHost, candidate.IsDocumentPlayingAudio, sessionPlaying, hasPopouts, signInActive))
+                    return;
+                await Task.Delay(MusicEngineDiet.DeferredRetryDelay, cancellation.Token);
+            }
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(host, _musicHost) || host.Core is not { } core) return;
             host.SetControllerVisible(false);
             var suspended = false;
             if (!core.IsSuspended && ReferenceEquals(host, _musicHost))
@@ -717,13 +774,13 @@ internal sealed partial class MusicEngineService
                     await NextLowPriorityTurnAsync();
                     try { suspended = await core.TrySuspendAsync(); failure = null; }
                     catch (Exception error) { failure = $"{error.GetType().Name} 0x{error.HResult:X8}"; }
-                    if (!suspended && !core.IsSuspended) await Task.Delay(120);
+                    if (!suspended && !core.IsSuspended) await Task.Delay(120, cancellation.Token);
                 }
                 if (failure is not null) LogMusicSuspendFailure(failure);
                 else if (!suspended && !core.IsSuspended) LogMusicSuspendFailure("declined");
             }
             var stillIdle = !cancellation.IsCancellationRequested && ReferenceEquals(host, _musicHost) && !core.IsDocumentPlayingAudio;
-            if (!suspended || !stillIdle)
+            if (!stillIdle)
             {
                 host.SetControllerVisible(true);
                 if (core.IsSuspended) core.Resume();
@@ -731,10 +788,17 @@ internal sealed partial class MusicEngineService
             _musicWebIdle = stillIdle && !core.IsSuspended;
             SetWebViewMemoryTarget(core, core.IsSuspended || _musicWebIdle ? CoreWebView2MemoryUsageTargetLevel.Low : CoreWebView2MemoryUsageTargetLevel.Normal);
             if (!stillIdle) return;
+            if (App.MainAppWindow is null) TrimMusicProcesses(core, low: true, trim: true);
             await Task.Delay(MusicReleaseDelay, cancellation.Token);
-            if (!ReferenceEquals(host, _musicHost) || !(core.IsSuspended || _musicWebIdle) || core.IsDocumentPlayingAudio ||
-                _musicPopouts.Count > 0 || _musicSignInWindow is not null ||
-                MediaSessions.Current is { Status: "playing" } playing && playing.Provider == _musicWebService) return;
+            var releaseSessionPlaying = MediaSessions.Current is { Status: "playing" } playing && playing.Provider == _musicWebService;
+            if (!MusicEngineDiet.CanRelease(
+                    ReferenceEquals(host, _musicHost),
+                    core.IsSuspended || _musicWebIdle,
+                    core.IsDocumentPlayingAudio,
+                    releaseSessionPlaying,
+                    _musicPopouts.Count > 0,
+                    _musicSignInWindow is not null))
+                return;
             AppLog.Info(MusicWebPolicy.Label(_musicWebService ?? "") + " web player released after " + MusicReleaseDelay.TotalMinutes + " idle minutes.");
             ResetMusicWebView();
         }
@@ -744,6 +808,39 @@ internal sealed partial class MusicEngineService
             if (ReferenceEquals(_musicIdleCancellation, cancellation)) _musicIdleCancellation = null;
             cancellation.Dispose();
         }
+    }
+
+    private void TrimMusicProcesses(CoreWebView2 core, bool low, bool trim)
+    {
+        var browserPid = 0;
+        var extraPids = new List<int>();
+        try
+        {
+            browserPid = (int)core.BrowserProcessId;
+            foreach (var info in core.Environment.GetProcessInfos())
+                if (info.ProcessId > 0) extraPids.Add(info.ProcessId);
+        }
+        catch { }
+        if (browserPid <= 0 && extraPids.Count == 0) return;
+        _musicProcessesTrimmed = low;
+        var generation = Interlocked.Increment(ref _musicTrimGeneration);
+        _ = Task.Run(() =>
+        {
+            var self = Environment.ProcessId;
+            var pids = new HashSet<int>(extraPids);
+            if (browserPid > 0)
+            {
+                foreach (var pid in BackgroundTrim.TreePids(browserPid))
+                    pids.Add(pid);
+            }
+            foreach (var pid in pids)
+            {
+                if (Volatile.Read(ref _musicTrimGeneration) != generation) return;
+                if (pid <= 0 || pid == self) continue;
+                if (ManagedProcessResources.Identify(pid) is { } identity)
+                    BackgroundTrim.ApplyManaged(identity, low, trim);
+            }
+        });
     }
 
     private Task NextLowPriorityTurnAsync()
@@ -781,23 +878,43 @@ internal sealed partial class MusicEngineService
     private async Task InitializeMusicWebAsync(MusicWebHostWindow host, string service)
     {
         var initTimer = Stopwatch.StartNew();
-        var environment = await WebViewEnvironmentFactory.GetAsync();
-        var envMs = initTimer.ElapsedMilliseconds;
-        if (_musicWebClosed || !ReferenceEquals(_musicHost, host)) return;
-        var controller = await environment.CreateCoreWebView2ControllerAsync(
-            CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)host.Handle),
-            WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
-        var coreMs = initTimer.ElapsedMilliseconds;
-        if (_musicWebClosed || !ReferenceEquals(_musicHost, host))
+        WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? lease = null;
+        CoreWebView2Environment environment;
+        long envMs;
+        long coreMs;
+        try
         {
-            try { controller.Close(); } catch { }
-            return;
+            lease = await WebViewEnvironmentFactory.AcquireAsync();
+            environment = lease.Environment;
+            envMs = initTimer.ElapsedMilliseconds;
+            if (_musicWebClosed || !ReferenceEquals(_musicHost, host))
+            {
+                lease.Dispose();
+                return;
+            }
+            var controller = await environment.CreateCoreWebView2ControllerAsync(
+                CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)host.Handle),
+                WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
+            coreMs = initTimer.ElapsedMilliseconds;
+            if (_musicWebClosed || !ReferenceEquals(_musicHost, host))
+            {
+                try { controller.Close(); } catch { }
+                lease.Dispose();
+                return;
+            }
+            var ownedLease = lease;
+            lease = null;
+            host.AttachController(controller, visible: true, environmentLease: ownedLease);
         }
-        host.AttachController(controller, visible: true);
+        catch
+        {
+            lease?.Dispose();
+            throw;
+        }
         var core = host.Core!;
         WebViewEnvironmentFactory.LogEmbeddedProfileOnce(core);
         WebViewWindowHider.Hide(core.BrowserProcessId);
-        _ = WebExtensions.AttachAsync(core, MusicWebPolicy.Label(service), host.Handle);
+        _ = WebExtensions.AttachAsync(core, MusicWebPolicy.Label(service), host.Handle, service);
         await ResetProfilePermissionsAsync(core.Profile);
         var permissionsMs = initTimer.ElapsedMilliseconds;
         if (_musicWebClosed || !ReferenceEquals(_musicHost, host)) return;
@@ -819,10 +936,11 @@ internal sealed partial class MusicEngineService
                 _musicIdleCancellation?.Cancel();
                 _musicIdleCancellation = null;
                 _musicWebIdle = false;
+                if (_musicProcessesTrimmed) TrimMusicProcesses(core, low: false, trim: false);
             }
             ApplyMusicMemoryTarget();
         });
-        core.NavigationCompleted += (_, e) => UiGuard.Run(() =>
+        core.NavigationCompleted += (sender, e) => UiGuard.Run(() =>
         {
             if (!ReferenceEquals(_musicHost, host) || _musicWebClosed) return;
             if (!e.IsSuccess)
@@ -840,19 +958,21 @@ internal sealed partial class MusicEngineService
                 return;
             }
             _musicWebReady = true;
+            _musicWebFailures = 0;
+            _musicWebRetryAfter = DateTimeOffset.MinValue;
             _appleAdapterInstalled = service == "apple";
             _musicWebBooted = false;
             _musicWebFailed = false;
             SetEmbeddedActivity(core, false, force: true);
             if (_musicNowPlaying?.Service != service)
-                SetMusicNowPlaying(MusicNowPlaying.ForWebPage(service, MusicWebEvaluate(core), () => MusicWebSuspended(core),
+                SetMusicNowPlaying(MusicNowPlaying.ForWebPage(service, MusicWebEvaluate(core), () => MusicWebSuspended(core) || _musicWebIdle,
                     control: MusicWebEvaluate(core, click: true), press: MusicWebPress(core), preinstalled: true));
             else
                 _musicNowPlaying.MarkInstalled();
             loaded.TrySetResult();
-            host.SetControllerVisible(true);
             NotifyStateChanged();
-            PublishMusicStatus(service, "running");
+            _ = PublishMusicReadyWhenBootedAsync(host, service);
+            ApplyMusicMemoryTarget();
             NotifyRenderersChanged();
         });
         core.ProcessFailed += (_, e) => UiGuard.Run(() =>
@@ -911,6 +1031,7 @@ internal sealed partial class MusicEngineService
         if (!string.Equals(cleaned, userAgent, StringComparison.Ordinal))
             core.Settings.UserAgent = cleaned;
         var guard = WebPageGuard.Attach(core, MusicWebPolicy.Label(service));
+        if (!popup) AttachMusicResourceDiet(core, environment, service);
         core.NavigationStarting += (_, e) => UiGuard.Run(() =>
         {
             if (MusicWebPolicy.IsServiceDocument(service, e.Uri) || (popup && (e.Uri == "about:blank" || MusicWebPolicy.IsSignInHop(service, e.Uri))) || WebPageGuard.IsAppLink(e.Uri))
@@ -936,7 +1057,7 @@ internal sealed partial class MusicEngineService
             }
             if (e.IsUserInitiated && MusicWebPolicy.IsHttps(e.Uri)) OpenMusicExternal(e.Uri);
         });
-        core.NewWindowRequested += async (sender, e) => await UiGuard.RunAsync(async () =>
+        core.NewWindowRequested += (sender, e) => _ = UiGuard.RunAsync(async () =>
         {
             _ = sender;
             e.Handled = true;
@@ -958,6 +1079,7 @@ internal sealed partial class MusicEngineService
             var deferral = e.GetDeferral();
             var popupTimer = Stopwatch.StartNew();
             MusicWebHostWindow? child = null;
+            WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? popupLease = null;
             var popupDismissed = false;
             try
             {
@@ -975,6 +1097,7 @@ internal sealed partial class MusicEngineService
                         _ = FinishAppleSignInAsync();
                     }
                     NotifyStateChanged();
+                    ApplyMusicMemoryTarget();
                     try { if (window.Core is { } c) WebExtensions.Detach(c); } catch { }
                 };
                 if (e.IsUserInitiated || MusicSignInRequested())
@@ -986,24 +1109,30 @@ internal sealed partial class MusicEngineService
                 {
                     window.Show(activate: false);
                 }
-                var controller = await environment.CreateCoreWebView2ControllerAsync(
+                popupLease = WebViewEnvironmentFactory.TryAcquire(environment) ?? await WebViewEnvironmentFactory.AcquireAsync();
+                var popupEnv = popupLease.Environment;
+                var controller = await popupEnv.CreateCoreWebView2ControllerAsync(
                     CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)window.Handle),
-                    WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
+                    WebViewEnvironmentFactory.EmbeddedControllerOptions(popupEnv));
                 var ensureMs = popupTimer.ElapsedMilliseconds;
                 if (popupDismissed || _musicWebClosed || _musicWebService != service || generation != _musicWebGeneration)
                 {
                     try { controller.Close(); } catch { }
+                    popupLease.Dispose();
+                    popupLease = null;
                     window.Close();
                     return;
                 }
-                window.AttachController(controller, visible: true);
+                var ownedPopupLease = popupLease;
+                popupLease = null;
+                window.AttachController(controller, visible: true, environmentLease: ownedPopupLease);
                 var popupCore = window.Core!;
                 _musicPopouts[window] = popupCore;
-                _ = WebExtensions.AttachAsync(popupCore, MusicWebPolicy.Label(service), window.Handle);
+                _ = WebExtensions.AttachAsync(popupCore, MusicWebPolicy.Label(service), window.Handle, service);
                 if (popupDismissed || _musicWebClosed || _musicWebService != service || generation != _musicWebGeneration) { window.Close(); return; }
                 await SetMusicMotionPreferenceAsync(popupCore);
                 if (popupDismissed || _musicWebClosed || _musicWebService != service || generation != _musicWebGeneration) { window.Close(); return; }
-                ConfigureMusicCore(popupCore, environment, window, service, popup: true);
+                ConfigureMusicCore(popupCore, popupEnv, window, service, popup: true);
                 await popupCore.AddScriptToExecuteOnDocumentCreatedAsync(EmbeddedClientPresentation.Script);
                 void UpdatePopupActivity(bool force = false)
                 {
@@ -1033,12 +1162,26 @@ internal sealed partial class MusicEngineService
             {
                 var dismissed = popupDismissed;
                 try { child?.Close(); } catch { }
+                try { popupLease?.Dispose(); } catch { }
                 if (!dismissed && generation == _musicWebGeneration)
                     PublishMusicStatus(service, "error", "The player's window could not open. Try opening it in your browser.");
             }
             finally { try { deferral.Complete(); } catch { } }
         });
         return guard;
+    }
+
+    private void AttachMusicResourceDiet(CoreWebView2 core, CoreWebView2Environment environment, string service)
+    {
+        foreach (var (pattern, context) in MusicEngineDiet.FilterPatternsForService(service))
+            core.AddWebResourceRequestedFilter(pattern, context);
+        core.WebResourceRequested += (_, e) => UiGuard.Run(() =>
+        {
+            if (_musicWebClosed || !MusicEngineDiet.ShouldBlockResource(service, e.Request.Uri, e.ResourceContext, popup: false))
+                return;
+            try { e.Response = environment.CreateWebResourceResponse(null, 403, "Blocked", ""); }
+            catch { }
+        });
     }
 
     private void OnMusicPermissionRequested(CoreWebView2PermissionRequestedEventArgs e, string service)

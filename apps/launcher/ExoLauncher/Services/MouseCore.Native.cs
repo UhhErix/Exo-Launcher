@@ -201,10 +201,15 @@ internal sealed partial class MouseCore
                 SetTimer(window, 1, (uint)_backstop.TotalMilliseconds, 0);
                 _ready.Set();
                 var buffer = new byte[64];
+                var batch = new byte[16 * 1024];
                 while (GetMessage(out var msg, 0, 0, 0) > 0)
                 {
                     var at = Stopwatch.GetTimestamp();
-                    if (msg.Message == WmInput) Read(msg.LParam, at, buffer);
+                    if (msg.Message == WmInput)
+                    {
+                        Read(msg.LParam, at, buffer);
+                        DrainBuffer(at, batch);
+                    }
                     else if (msg.Message == WmTimer && msg.Window == window) break;
                     // DefWindowProc frees the input (DispatchMessage reaches it through the window's own procedure).
                     DispatchMessage(ref msg);
@@ -238,6 +243,22 @@ internal sealed partial class MouseCore
             if (device == 0 || (BitConverter.ToUInt16(buffer, 24) & 1 /* MOUSE_MOVE_ABSOLUTE */) != 0) return;
             if (!Reports.TryGetValue(device, out var list)) Reports[device] = list = new List<Report>(16_384);
             list.Add(new Report(at, BitConverter.ToInt32(buffer, 36), BitConverter.ToInt32(buffer, 40)));
+        }
+
+        private void DrainBuffer(long at, byte[] batch)
+        {
+            while (true)
+            {
+                var size = (uint)batch.Length;
+                var count = GetRawInputBuffer(batch, ref size, 24);
+                if (count is 0 or uint.MaxValue) break;
+                var stamp = Stopwatch.GetTimestamp();
+                MouseDiagnostics.ParseRawInputBuffer(batch.AsSpan(0, (int)Math.Min(size, (uint)batch.Length)), count, stamp >= at ? stamp : at, (device, dx, dy, ts) =>
+                {
+                    if (!Reports.TryGetValue(device, out var list)) Reports[device] = list = new List<Report>(16_384);
+                    list.Add(new Report(ts, dx, dy));
+                });
+            }
         }
 
         /// <summary>This process's mouse registration before Exo's, if it had one.</summary>
@@ -283,6 +304,9 @@ internal sealed partial class MouseCore
 
     [DllImport("user32.dll")]
     private static extern uint GetRawInputData(nint input, uint command, [Out] byte[] data, ref uint size, uint headerSize);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetRawInputBuffer([Out] byte[]? data, ref uint size, uint headerSize);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetRawInputDeviceInfoW")]
     private static extern uint GetRawInputDeviceInfo(nint device, uint command, [Out] char[]? data, ref uint size);
