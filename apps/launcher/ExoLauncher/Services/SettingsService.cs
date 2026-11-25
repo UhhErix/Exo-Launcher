@@ -521,7 +521,8 @@ public sealed class SettingsService
         bool? discordQuietWhilePlaying = null,
         string? whatsNewSeen = null,
         bool? frameGenEverywhere = null,
-        bool? graphicsFeaturesBestSettings = null)
+        bool? graphicsFeaturesBestSettings = null,
+        bool? useClassicWebUi = null)
     {
         if (whatsNewSeen is not null && (whatsNewSeen.Length is 0 or > 32 || !whatsNewSeen.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-')))
             throw new InvalidDataException("Invalid What's New version.");
@@ -537,6 +538,8 @@ public sealed class SettingsService
                 settings.ReduceMotion = reduceMotion.Value;
             if (startMaximized is not null)
                 settings.StartMaximized = startMaximized.Value;
+            if (useClassicWebUi is not null)
+                settings.UseClassicWebUi = useClassicWebUi.Value;
             if (textColour is not null)
                 settings.TextColour = NormalizeTextColour(textColour);
             if (textSize is not null)
@@ -1068,6 +1071,7 @@ public sealed class SettingsService
         ReduceMotion = source.ReduceMotion,
         StartMaximized = source.StartMaximized,
         FramelessMode = source.FramelessMode,
+        UseClassicWebUi = source.UseClassicWebUi,
         FramelessPinTop = source.FramelessPinTop,
         FramelessPinSide = source.FramelessPinSide,
         TextColour = source.TextColour,

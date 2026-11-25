@@ -1,5 +1,50 @@
 [
   {
+    "version": "4.0.0",
+    "items": [
+      {
+        "icon": "Library",
+        "title": "All-new native desktop interface",
+        "detail": "Faster startup, smoother scrolling, and lower memory use across your entire library, store, Discord, music, and PC rooms—keeping all your 3.30 settings, games, and accounts."
+      },
+      {
+        "icon": "Settings",
+        "title": "Classic interface one switch away",
+        "detail": "Prefer the previous layout? Turn on Use classic interface in Settings › General or launch with --ui=web to switch back and forth whenever you like."
+      },
+      {
+        "icon": "Mic",
+        "title": "Faster, clearer Exo Voice",
+        "detail": "Upgrades voice noise cleanup with automatic gaming tuning, optional voice isolation, and loopback echo cancellation in Discord calls."
+      },
+      {
+        "icon": "FrameGen",
+        "title": "Built-in frame generation and live HUD",
+        "detail": "Turn on frame generation for supported games and track frame pacing, GPU power, and temperatures with a low-overhead overlay."
+      },
+      {
+        "icon": "Performance",
+        "title": "Smarter PC power, thermal, and latency tools",
+        "detail": "Adds cross-vendor power guard, safe fan-curve protection, monitor calibration, and network latency diagnostics in the PC room."
+      },
+      {
+        "icon": "Record",
+        "title": "Low-overhead GPU capture and replay",
+        "detail": "Captures gameplay and instant replays directly from your GPU with per-app audio isolation and faster clip saving."
+      },
+      {
+        "icon": "Mouse",
+        "title": "Direct mouse tuning in Devices",
+        "detail": "Configure DPI, polling rate, click modes, and per-game profiles directly inside Devices › Mouse with built-in write protection."
+      },
+      {
+        "icon": "Encrypted",
+        "title": "Passkeys and safer sign-in",
+        "detail": "Sign in to your Exo account with Windows Hello passkeys and connect supported services through your system browser."
+      }
+    ]
+  },
+  {
     "version": "3.30.3",
     "items": [
       {

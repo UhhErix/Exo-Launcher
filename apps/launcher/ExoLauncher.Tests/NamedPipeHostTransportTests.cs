@@ -419,8 +419,19 @@ public sealed class NamedPipeHostTransportTests
         var webRollbackEnv = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "web" : null, _ => true);
         Assert.Null(webRollbackEnv);
 
-        var smokeBypass = RuneHostSession.TryParse(["--smoke-test"], _ => null, _ => true);
+        var smokeBypass = RuneHostSession.TryParse(["--smoke-test"], _ => null, _ => true, () => false);
         Assert.Null(smokeBypass);
+
+        var classicPref = RuneHostSession.TryParse([], _ => null, _ => true, () => true);
+        Assert.Null(classicPref);
+
+        var cliNativeOverridesPref = RuneHostSession.TryParse(["--ui=native"], _ => null, _ => true, () => true);
+        Assert.NotNull(cliNativeOverridesPref);
+        Assert.True(cliNativeOverridesPref!.SpawnUi);
+
+        var envNativeOverridesPref = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "native" : null, _ => true, () => true);
+        Assert.NotNull(envNativeOverridesPref);
+        Assert.True(envNativeOverridesPref!.SpawnUi);
 
         Assert.Throws<ArgumentException>(() => RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null, _ => false));
 

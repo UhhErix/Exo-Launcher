@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.0 — November 24, 2026
+- **All-new native desktop interface.** Exo Launcher now runs on a hardware-accelerated native desktop interface by default for faster startup, smoother 120 Hz scrolling, and lower idle memory use across Library, Store, Game Pages, Discord, Music, PC, Devices, Captures, and Settings, with all settings, library data, and accounts carried forward automatically from 3.30.3. _Verified: on screen._
+- **One-switch fallback to the classic interface.** Settings › General adds a "Use classic interface" toggle with one-click restart, and launching with `--ui=web` opens the classic web interface at any time without losing your settings or library. _Verified: end-to-end._
+- **Upgraded Exo Voice and system-wide audio controls.** Introduces a faster native voice cleanup engine with automatic gaming profile tuning, voice isolation, loopback echo cancellation, and optional system-wide equalizer support in Settings › Voice and Devices › Audio. _Checked in code only._
+- **Native frame generation, frame pacing, and live performance HUD.** Adds built-in frame generation controls for supported games alongside a hardware-accelerated in-game frame-time and sensor HUD, cross-vendor power guard, and automatic fan-curve safety limits in the PC room. _Checked in code only._
+- **Native game capture, mouse controls, and display calibration.** Rebuilds game recording and replay capture with low-overhead GPU capture and audio isolation, brings gaming mouse tuning directly into Devices › Mouse, and adds monitor calibration and brightness controls in PC › Display. _Checked in code only._
+- **Optional passkey sign-in and safer account connections.** Adds Windows Hello passkey sign-in for Exo accounts and switches connected services to standard browser sign-in flows. _Checked in code only._
+- **Includes all 3.30.x fixes.** Carries forward every 3.29.1–3.30.3 reliability fix for mouse profiles, Snip captures, all-in-one game runtimes (VC++ 14.52 and .NET), Discord voice leveling, and Auto Tune. _Verified: end-to-end._
+
 ## 3.30.3 — November 24, 2026
 - **Exo Mouse no longer loops or overwrites your settings.** Matches saved pre-3.30.2 Finalmouse Starlight X click-mode profiles against 6-byte firmware 1.2.8 read-backs, removes the 60-second connect-time retry loop so settings write only when you change them or switch to a different profile, adds 2-second debounce/hysteresis and browser/launcher exclusions for game profile auto-switching, and guards HID writes per device with rate limiting and diagnostics. _Verified: on screen._
 - **Cleaner Auto Tune finish.** Drops the verbose what-changed list after Auto Tune completes, showing only warnings or errors when a stage fails. _Checked in code only._

@@ -17,6 +17,7 @@
       "whatsNewSeen": "3.29.0",
       "reduceMotion": false,
       "startMaximized": true,
+      "useClassicWebUi": false,
       "startWithWindows": false,
       "framelessPinTop": false,
       "framelessPinSide": false,

@@ -27,6 +27,22 @@ public static class Program
     /// <summary>The arguments this launch runs with (its own, or what a launch during an update kept for it).</summary>
     internal static string[] LaunchArgs { get; private set; } = [];
 
+    private static void WaitForParentExit(string[] args)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (!args[i].Equals("--wait-pid", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!int.TryParse(args[i + 1], out var pid) || pid <= 0 || pid == Environment.ProcessId) return;
+            try
+            {
+                using var parent = System.Diagnostics.Process.GetProcessById(pid);
+                parent.WaitForExit(5000);
+            }
+            catch { }
+            return;
+        }
+    }
+
     [STAThread]
     public static void Main(string[] args)
     {
@@ -107,6 +123,7 @@ public static class Program
             // Inside the app folder it would hold it open after Exo exits, and the next
             // update could not swap the folder; Exo's data folder is never replaced.
             try { Environment.CurrentDirectory = Helpers.PathHelper.AppDataDir; } catch { }
+            WaitForParentExit(args);
             if (Services.RuneHostSession.TryParse(args) is { SpawnUi: false } headlessRune)
             {
                 ComWrappersSupport.InitializeComWrappers();

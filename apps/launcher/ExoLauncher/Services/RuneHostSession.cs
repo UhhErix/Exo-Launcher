@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using ExoLauncher.Helpers;
 using Microsoft.UI.Dispatching;
@@ -49,13 +50,32 @@ internal sealed partial class RuneHostSession
         return psi;
     }
 
+    internal static bool ReadUseClassicWebUiPreference()
+    {
+        try
+        {
+            var path = PathHelper.SettingsPath;
+            if (!File.Exists(path)) return false;
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("useClassicWebUi", out var prop)
+                && prop.ValueKind == JsonValueKind.True;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     internal static Options? TryParse(
         string[] args,
         Func<string, string?>? readEnv = null,
-        Func<string, bool>? fileExists = null)
+        Func<string, bool>? fileExists = null,
+        Func<bool>? readClassicPref = null)
     {
         readEnv ??= Environment.GetEnvironmentVariable;
         fileExists ??= File.Exists;
+        readClassicPref ??= ReadUseClassicWebUiPreference;
         string? explicitPipe = null;
         string? uiMode = null;
         string? uiExe = null;
@@ -113,6 +133,8 @@ internal sealed partial class RuneHostSession
             || string.Equals(uiMode, "native", StringComparison.OrdinalIgnoreCase);
         if (!explicitRune)
         {
+            if (readClassicPref())
+                return null;
             var bundledUi = Path.Combine(AppContext.BaseDirectory, "exo-ui.exe");
             var hasOverride = !string.IsNullOrWhiteSpace(uiExe) && fileExists(uiExe);
             if (!hasOverride && !fileExists(bundledUi))
