@@ -16,9 +16,11 @@ use windows::Win32::Graphics::Direct3D12::{
     D3D12_DEPTH_STENCIL_DESC, D3D12_GRAPHICS_PIPELINE_STATE_DESC,
     D3D12_INDEX_BUFFER_STRIP_CUT_VALUE, D3D12_INPUT_CLASSIFICATION, D3D12_INPUT_ELEMENT_DESC,
     D3D12_INPUT_LAYOUT_DESC, D3D12_PRIMITIVE_TOPOLOGY_TYPE, D3D12_RASTERIZER_DESC,
-    D3D12_ROOT_SIGNATURE_DESC, D3D12_ROOT_SIGNATURE_FLAG_NONE, D3D12_SHADER_BYTECODE,
-    D3D12CreateDevice, D3D12SerializeRootSignature, ID3D12Device1, ID3D12PipelineLibrary,
-    ID3D12PipelineState, ID3D12RootSignature,
+    D3D12_ROOT_DESCRIPTOR, D3D12_ROOT_PARAMETER, D3D12_ROOT_PARAMETER_0,
+    D3D12_ROOT_PARAMETER_TYPE_UAV, D3D12_ROOT_SIGNATURE_DESC, D3D12_ROOT_SIGNATURE_FLAG_NONE,
+    D3D12_SHADER_BYTECODE, D3D12_SHADER_VISIBILITY_ALL, D3D12CreateDevice,
+    D3D12SerializeRootSignature, ID3D12Device1, ID3D12PipelineLibrary, ID3D12PipelineState,
+    ID3D12RootSignature,
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::{
@@ -49,7 +51,6 @@ pub struct PsoCompileSummary {
 
 pub struct Dx12WarmContext {
     device: ID3D12Device1,
-    root_sig: ID3D12RootSignature,
 }
 
 unsafe impl Send for Dx12WarmContext {}
@@ -81,10 +82,25 @@ impl Dx12WarmContext {
             D3D12CreateDevice(&adapter, D3D_FEATURE_LEVEL_12_0, &mut device)
                 .map_err(|e| format!("D3D12CreateDevice failed: {e}"))?;
             let device = device.ok_or_else(|| "D3D12CreateDevice returned null".to_string())?;
+            Ok(Self { device })
+        }
+    }
 
+    pub fn benchmark_root_signature_blob() -> Result<Vec<u8>, String> {
+        unsafe {
+            let param = D3D12_ROOT_PARAMETER {
+                ParameterType: D3D12_ROOT_PARAMETER_TYPE_UAV,
+                Anonymous: D3D12_ROOT_PARAMETER_0 {
+                    Descriptor: D3D12_ROOT_DESCRIPTOR {
+                        ShaderRegister: 0,
+                        RegisterSpace: 0,
+                    },
+                },
+                ShaderVisibility: D3D12_SHADER_VISIBILITY_ALL,
+            };
             let rs_desc = D3D12_ROOT_SIGNATURE_DESC {
-                NumParameters: 0,
-                pParameters: std::ptr::null(),
+                NumParameters: 1,
+                pParameters: &param,
                 NumStaticSamplers: 0,
                 pStaticSamplers: std::ptr::null(),
                 Flags: D3D12_ROOT_SIGNATURE_FLAG_NONE,
@@ -103,10 +119,7 @@ impl Dx12WarmContext {
                 sig_blob.GetBufferPointer() as *const u8,
                 sig_blob.GetBufferSize(),
             );
-            let root_sig: ID3D12RootSignature = device
-                .CreateRootSignature(0, slice)
-                .map_err(|e| format!("CreateRootSignature failed: {e}"))?;
-            Ok(Self { device, root_sig })
+            Ok(slice.to_vec())
         }
     }
 
@@ -156,192 +169,6 @@ impl Dx12WarmContext {
             }
         }
         Ok((blobs, start.elapsed().as_secs_f64() * 1000.0))
-    }
-
-    pub fn warm_compute_psos(
-        &self,
-        bytecode: &[Vec<u8>],
-        threads: usize,
-        cancel: &Arc<AtomicBool>,
-        below_normal: bool,
-    ) -> Result<PsoCompileSummary, String> {
-        let count = bytecode.len();
-        let worker_count = threads.max(1).min(count.max(1));
-        if cancel.load(Ordering::Acquire) {
-            return Ok(PsoCompileSummary {
-                requested: count,
-                compiled: 0,
-                failed: 0,
-                paused: true,
-                device_removed: false,
-                threads_used: 0,
-                hlsl_compile_ms: 0.0,
-                pso_create_ms: 0.0,
-                pipelines_per_sec: 0.0,
-                library_serialized_bytes: 0,
-                warm_load_ms: 0.0,
-                warm_pipelines_per_sec: 0.0,
-                pause_latency_ms: Some(0.0),
-            });
-        }
-        let next = AtomicUsize::new(0);
-        let compiled = AtomicUsize::new(0);
-        let failed = AtomicUsize::new(0);
-        let device_removed = AtomicBool::new(false);
-        let paused = AtomicBool::new(false);
-        let psos: Vec<std::sync::Mutex<Option<ID3D12PipelineState>>> =
-            (0..count).map(|_| std::sync::Mutex::new(None)).collect();
-
-        let pso_start = Instant::now();
-        std::thread::scope(|s| {
-            for _ in 0..worker_count {
-                s.spawn(|| {
-                    if below_normal {
-                        unsafe {
-                            let _ =
-                                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
-                        }
-                    }
-                    loop {
-                        if cancel.load(Ordering::Acquire) {
-                            paused.store(true, Ordering::Release);
-                            break;
-                        }
-                        let i = next.fetch_add(1, Ordering::Relaxed);
-                        if i >= count {
-                            break;
-                        }
-                        let code = &bytecode[i];
-                        let desc = D3D12_COMPUTE_PIPELINE_STATE_DESC {
-                            pRootSignature: unsafe { std::mem::transmute_copy(&self.root_sig) },
-                            CS: D3D12_SHADER_BYTECODE {
-                                pShaderBytecode: code.as_ptr() as *const _,
-                                BytecodeLength: code.len(),
-                            },
-                            NodeMask: 0,
-                            CachedPSO: Default::default(),
-                            Flags: Default::default(),
-                        };
-                        let res: windows::core::Result<ID3D12PipelineState> =
-                            unsafe { self.device.CreateComputePipelineState(&desc) };
-                        match res {
-                            Ok(pso) => {
-                                compiled.fetch_add(1, Ordering::Relaxed);
-                                *psos[i].lock().unwrap() = Some(pso);
-                            }
-                            Err(e) => {
-                                failed.fetch_add(1, Ordering::Relaxed);
-                                if e.code() == DXGI_ERROR_DEVICE_REMOVED {
-                                    device_removed.store(true, Ordering::Release);
-                                    cancel.store(true, Ordering::Release);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-        });
-        let pso_create_ms = pso_start.elapsed().as_secs_f64() * 1000.0;
-        let compiled_n = compiled.load(Ordering::Relaxed);
-        let failed_n = failed.load(Ordering::Relaxed);
-        let dev_rem = device_removed.load(Ordering::Acquire);
-        let was_paused = paused.load(Ordering::Acquire);
-
-        let mut library_serialized_bytes = 0usize;
-        let mut warm_load_ms = 0.0f64;
-        if compiled_n > 0
-            && !dev_rem
-            && !was_paused
-            && let Ok((bytes, load_ms)) = self.measure_pipeline_library(&psos, bytecode)
-        {
-            library_serialized_bytes = bytes;
-            warm_load_ms = load_ms;
-        }
-
-        let pipelines_per_sec = if pso_create_ms > 0.0 {
-            (compiled_n as f64) / (pso_create_ms / 1000.0)
-        } else {
-            0.0
-        };
-        let warm_pipelines_per_sec = if warm_load_ms > 0.0 {
-            (compiled_n as f64) / (warm_load_ms / 1000.0)
-        } else {
-            0.0
-        };
-
-        Ok(PsoCompileSummary {
-            requested: count,
-            compiled: compiled_n,
-            failed: failed_n,
-            paused: was_paused,
-            device_removed: dev_rem,
-            threads_used: worker_count,
-            hlsl_compile_ms: 0.0,
-            pso_create_ms,
-            pipelines_per_sec,
-            library_serialized_bytes,
-            warm_load_ms,
-            warm_pipelines_per_sec,
-            pause_latency_ms: None,
-        })
-    }
-
-    fn measure_pipeline_library(
-        &self,
-        psos: &[std::sync::Mutex<Option<ID3D12PipelineState>>],
-        bytecode: &[Vec<u8>],
-    ) -> Result<(usize, f64), String> {
-        unsafe {
-            let lib: ID3D12PipelineLibrary = self
-                .device
-                .CreatePipelineLibrary(&[])
-                .map_err(|e| format!("CreatePipelineLibrary(empty) failed: {e}"))?;
-            let mut names: Vec<Vec<u16>> = Vec::with_capacity(psos.len());
-            for (i, slot) in psos.iter().enumerate() {
-                let guard = slot.lock().unwrap();
-                if let Some(pso) = guard.as_ref() {
-                    let mut wide: Vec<u16> = format!("pso_{i}").encode_utf16().collect();
-                    wide.push(0);
-                    lib.StorePipeline(PCWSTR(wide.as_ptr()), pso)
-                        .map_err(|e| format!("StorePipeline failed: {e}"))?;
-                    names.push(wide);
-                } else {
-                    names.push(Vec::new());
-                }
-            }
-            let size = lib.GetSerializedSize();
-            let mut serialized = vec![0u8; size];
-            lib.Serialize(&mut serialized)
-                .map_err(|e| format!("Serialize pipeline library failed: {e}"))?;
-
-            let warm_lib: ID3D12PipelineLibrary = self
-                .device
-                .CreatePipelineLibrary(&serialized)
-                .map_err(|e| format!("CreatePipelineLibrary(warm) failed: {e}"))?;
-
-            let warm_start = Instant::now();
-            for (i, code) in bytecode.iter().enumerate() {
-                if names[i].is_empty() {
-                    continue;
-                }
-                let desc = D3D12_COMPUTE_PIPELINE_STATE_DESC {
-                    pRootSignature: std::mem::transmute_copy(&self.root_sig),
-                    CS: D3D12_SHADER_BYTECODE {
-                        pShaderBytecode: code.as_ptr() as *const _,
-                        BytecodeLength: code.len(),
-                    },
-                    NodeMask: 0,
-                    CachedPSO: Default::default(),
-                    Flags: Default::default(),
-                };
-                let loaded: windows::core::Result<ID3D12PipelineState> =
-                    warm_lib.LoadComputePipeline(PCWSTR(names[i].as_ptr()), &desc);
-                let _ = loaded.map_err(|e| format!("LoadComputePipeline failed: {e}"))?;
-            }
-            let warm_ms = warm_start.elapsed().as_secs_f64() * 1000.0;
-            Ok((size, warm_ms))
-        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -621,7 +448,8 @@ fn compile_single_cs(index: usize) -> Result<Vec<u8>, String> {
     let mul = (index as f32 * 0.0137) + 1.001;
     let shift = (index % 7) + 1;
     let src = format!(
-        "groupshared float gs[64];\n\
+        "RWByteAddressBuffer outBuf : register(u0);\n\
+         groupshared float gs[64];\n\
          [numthreads(64, 1, 1)]\n\
          void main(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {{\n\
              float acc = (float)(tid.x + {index}) * {mul:.6}f;\n\
@@ -631,7 +459,8 @@ fn compile_single_cs(index: usize) -> Result<Vec<u8>, String> {
              }}\n\
              gs[gi] = acc;\n\
              GroupMemoryBarrierWithGroupSync();\n\
-             gs[(gi + {shift}) & 63] = gs[gi] * 0.5f + acc;\n\
+             float v = gs[(gi + {shift}) & 63] * 0.5f + acc;\n\
+             outBuf.Store(tid.x * 4, asuint(v));\n\
          }}\n"
     );
     unsafe {
@@ -682,34 +511,71 @@ pub fn recommended_worker_threads() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pso_store::{compute_pso_key, read_pipeline_library_if_compatible};
+
+    fn make_recorded_compute_corpus(count: usize) -> Vec<RecordedPsoRecord> {
+        let root_sig = Dx12WarmContext::benchmark_root_signature_blob().expect("root sig");
+        let (blobs, _) = Dx12WarmContext::compile_hlsl_corpus(count, 4).expect("HLSL compile");
+        blobs
+            .into_iter()
+            .map(|cs| RecordedPsoRecord {
+                key_hex: compute_pso_key(&root_sig, &cs, 0),
+                kind: RecordedPsoKind::Compute,
+                root_sig_blob: root_sig.clone(),
+                vs: Vec::new(),
+                ps: Vec::new(),
+                ds: Vec::new(),
+                hs: Vec::new(),
+                gs: Vec::new(),
+                cs,
+                graphics_state: None,
+                node_mask: 0,
+            })
+            .collect()
+    }
 
     #[test]
-    fn dx12_compiles_and_warms_small_corpus() {
+    fn dx12_compiles_recorded_corpus_into_serialized_exoplib() {
         let ctx = Dx12WarmContext::new().expect("DX12 hardware device required");
-        let (blobs, _) = Dx12WarmContext::compile_hlsl_corpus(16, 4).expect("HLSL compile");
-        assert_eq!(blobs.len(), 16);
+        let records = make_recorded_compute_corpus(16);
+        let out_path =
+            std::env::temp_dir().join(format!("exo-dx12-rec-{}.exoplib", std::process::id()));
+        let _ = std::fs::remove_file(&out_path);
         let cancel = Arc::new(AtomicBool::new(false));
         let summary = ctx
-            .warm_compute_psos(&blobs, 4, &cancel, true)
-            .expect("PSO warm");
+            .compile_recorded_corpus(
+                &records, &out_path, 0x10DE, 0x2484, "595.79", 4, &cancel, true,
+            )
+            .expect("recorded corpus compile");
         assert_eq!(summary.compiled, 16);
         assert_eq!(summary.failed, 0);
         assert!(!summary.device_removed);
         assert!(summary.library_serialized_bytes > 0);
+        let (hdr, blob) = read_pipeline_library_if_compatible(&out_path, 0x10DE, 0x2484, "595.79")
+            .unwrap()
+            .expect("serialized .exoplib readable");
+        assert_eq!(hdr.pso_count, 16);
+        assert!(!blob.is_empty());
+        let _ = std::fs::remove_file(&out_path);
     }
 
     #[test]
-    fn dx12_pauses_cooperatively_on_cancel_signal() {
+    fn dx12_recorded_compile_pauses_cooperatively_on_cancel_signal() {
         let ctx = Dx12WarmContext::new().expect("DX12 hardware device required");
-        let (blobs, _) = Dx12WarmContext::compile_hlsl_corpus(60, 4).expect("HLSL compile");
+        let records = make_recorded_compute_corpus(16);
+        let out_path =
+            std::env::temp_dir().join(format!("exo-dx12-cancel-{}.exoplib", std::process::id()));
         let cancel = Arc::new(AtomicBool::new(true));
         let t0 = Instant::now();
         let summary = ctx
-            .warm_compute_psos(&blobs, 2, &cancel, true)
-            .expect("PSO warm");
+            .compile_recorded_corpus(
+                &records, &out_path, 0x10DE, 0x2484, "595.79", 2, &cancel, true,
+            )
+            .expect("recorded corpus cancel");
         let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
         assert!(summary.paused);
         assert_eq!(summary.compiled, 0);
+        assert!(!out_path.exists());
         assert!(
             elapsed_ms < 50.0,
             "cancel check latency {elapsed_ms:.2} ms exceeded 50 ms budget"

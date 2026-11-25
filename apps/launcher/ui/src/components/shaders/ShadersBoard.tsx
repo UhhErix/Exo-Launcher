@@ -189,7 +189,7 @@ export function ShadersBoard({ active, games }: { active: boolean; games: readon
       <Actions snap={snap} view={view} estimates={estimates} busy={busy} run={run} />
       <CacheStrip snap={snap} busy={busy} run={run} onRefresh={read} />
       {error || failed ? <ErrorNote className="exo-shaders-error" message={error ?? failed} /> : null}
-      {posters.length === 0 && !snap.app.scanning ? <p className="exo-shaders-empty">{snap.games.length ? 'Every game is compiled' : 'No games found'}</p> : null}
+      {posters.length === 0 && !snap.app.scanning ? <p className="exo-shaders-empty">{snap.games.length ? 'Nothing waiting to compile' : 'No games found'}</p> : null}
       <Posters
         posters={posters}
         lane={lane}
