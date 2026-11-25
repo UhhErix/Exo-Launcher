@@ -41,10 +41,16 @@ internal static partial class DriveSpace
     /// in Exo Shaders' data folder (<paramref name="shaders"/>, null when it isn't there): a compile's staged copy, whose
     /// cache Exo Shaders itself moves into its game's or deletes once the compile is done.
     /// </summary>
-    internal static List<CacheFolder> Old(IReadOnlyList<CacheFolder> caches, Func<string, bool?> programThere, Func<string, bool> steamInstalled, DateTime now, string? shaders)
+    internal static List<CacheFolder> Old(IReadOnlyList<CacheFolder> caches, Func<string, bool?> programThere, Func<string, bool> steamInstalled, DateTime now, string? shaders) =>
+        OldExcludingRoots(caches, programThere, steamInstalled, now, shaders is null ? [] : [shaders]);
+
+    internal static List<CacheFolder> OldExcludingRoots(IReadOnlyList<CacheFolder> caches, Func<string, bool?> programThere, Func<string, bool> steamInstalled, DateTime now, IReadOnlyList<string> shaderRoots)
     {
-        var inShaders = shaders is null ? null : Path.TrimEndingDirectorySeparator(shaders) + Path.DirectorySeparatorChar;
-        caches = [.. caches.Where(c => inShaders is null || c.Exe is null || !Plain(c.Exe).StartsWith(inShaders, StringComparison.OrdinalIgnoreCase))];
+        var protectedPrefixes = shaderRoots
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => Path.TrimEndingDirectorySeparator(r) + Path.DirectorySeparatorChar)
+            .ToList();
+        caches = [.. caches.Where(c => c.Exe is null || !protectedPrefixes.Any(p => Plain(c.Exe).StartsWith(p, StringComparison.OrdinalIgnoreCase)))];
         var old = new List<CacheFolder>();
         foreach (var cache in caches)
         {
@@ -138,7 +144,11 @@ internal static partial class DriveSpace
                 if (Path.GetFileName(folder) is { } app && app.All(char.IsAsciiDigit))
                     all.Add(new CacheFolder(folder, null, app, sizeOldOnly ? 0 : Size(folder), Written(folder)));
         }
-        var old = Old(all, ProgramThere, steamInstalled.Contains, DateTime.UtcNow, Directory.Exists(ScsKillerStatus.DataDir) ? ScsKillerStatus.DataDir : null);
+        var exoShadersDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ExoShaders");
+        var protectedDirs = new List<string>();
+        if (Directory.Exists(ScsKillerStatus.DataDir)) protectedDirs.Add(ScsKillerStatus.DataDir);
+        if (Directory.Exists(exoShadersDir)) protectedDirs.Add(exoShadersDir);
+        var old = OldExcludingRoots(all, ProgramThere, steamInstalled.Contains, DateTime.UtcNow, protectedDirs);
         if (sizeOldOnly) old = [.. old.Select(cache => cache with { Bytes = Size(cache.Path) })];
         return (all, old);
     }

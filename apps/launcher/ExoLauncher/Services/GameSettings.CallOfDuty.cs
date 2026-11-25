@@ -250,10 +250,70 @@ internal static partial class GameSettings
         .EnumerateFiles("*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = true })
         .Sum(file => file.Length));
 
-    internal static void ClearShaderCaches(IEnumerable<string> caches)
+    internal static string DefaultShaderCacheBackupRoot => Path.Combine(PathHelper.AppDataDir, "backups", "shader-caches");
+
+    internal static bool IsCacheProvablyInvalid(string? recordedDriver, string? currentDriver, string? recordedBuild, string? currentBuild)
     {
-        if (HostMode.IsDisposable) return;
-        foreach (var cache in caches) DeletionGate.DeleteDirectory(cache, recursive: true);
+        if (!string.IsNullOrWhiteSpace(recordedDriver)
+            && !string.IsNullOrWhiteSpace(currentDriver)
+            && !string.Equals(recordedDriver, currentDriver, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!string.IsNullOrWhiteSpace(recordedBuild)
+            && !string.IsNullOrWhiteSpace(currentBuild)
+            && !string.Equals(recordedBuild, currentBuild, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
+    internal static IReadOnlyList<string> ClearShaderCaches(IEnumerable<string> caches, string? backupRoot = null)
+    {
+        if (HostMode.IsDisposable) return [];
+        var root = backupRoot ?? DefaultShaderCacheBackupRoot;
+        var backups = new List<string>();
+        foreach (var cache in caches)
+        {
+            if (!Directory.Exists(cache)) continue;
+            var info = new DirectoryInfo(cache);
+            if (info.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+            var parentName = info.Parent?.Name ?? "game";
+            var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff");
+            var backupDir = Path.Combine(root, $"{stamp}_{parentName}_{info.Name}");
+            CopyDirectoryVerified(cache, backupDir);
+            backups.Add(backupDir);
+            DeletionGate.DeleteDirectory(cache, recursive: true);
+        }
+        return backups;
+    }
+
+    internal static IReadOnlyList<string> ClearStaleShaderCaches(
+        IEnumerable<string> caches,
+        string? recordedDriver,
+        string? currentDriver,
+        string? recordedBuild,
+        string? currentBuild,
+        string? backupRoot = null)
+    {
+        if (!IsCacheProvablyInvalid(recordedDriver, currentDriver, recordedBuild, currentBuild))
+            return [];
+        return ClearShaderCaches(caches, backupRoot);
+    }
+
+    private static void CopyDirectoryVerified(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+        foreach (var file in Directory.EnumerateFiles(sourceDir, "*", new EnumerationOptions { IgnoreInaccessible = false, AttributesToSkip = FileAttributes.ReparsePoint }))
+        {
+            var srcInfo = new FileInfo(file);
+            var target = Path.Combine(destDir, srcInfo.Name);
+            File.Copy(file, target, overwrite: true);
+            if (new FileInfo(target).Length != srcInfo.Length)
+                throw new IOException($"Shader cache backup size mismatch for {srcInfo.Name}.");
+        }
+        foreach (var sub in Directory.EnumerateDirectories(sourceDir, "*", new EnumerationOptions { IgnoreInaccessible = false, AttributesToSkip = FileAttributes.ReparsePoint }))
+        {
+            var name = Path.GetFileName(sub);
+            CopyDirectoryVerified(sub, Path.Combine(destDir, name));
+        }
     }
 
     /// <summary>
