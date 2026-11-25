@@ -1,7 +1,7 @@
 // The installed Exo: start it with a loopback-only debug port (in its own environment only), close it politely,
 // read its log, call its host, and keep the files a run may touch so they go back byte for byte.
 import { spawn, execFile } from 'node:child_process'
-import { copyFile, mkdir, readFile, stat, writeFile, open } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, rm, stat, writeFile, open } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,6 +22,7 @@ export const TEST_INSTANCE = process.env.EXO_E2E_TEST_INSTANCE === '1'
 const TEST_SCRIPT = fileURLToPath(new URL('../../test-instance.ps1', import.meta.url))
 const WIN_SCRIPT = fileURLToPath(new URL('./win.ps1', import.meta.url))
 const TEST_EXE = fileURLToPath(new URL('../../ExoLauncher/bin/x64/Debug/net10.0-windows10.0.26100.0/win-x64/ExoLauncher.exe', import.meta.url))
+const TEST_FOLDER_CUSTOM = Boolean(process.env.EXO_E2E_TEST_FOLDER)
 const TEST_FOLDER = process.env.EXO_E2E_TEST_FOLDER || join(process.env.TEMP, 'exo-e2e-test-instance')
 let test = null // { pid, port, dataDir } of the test instance this run started
 const q = (s) => String(s).replace(/'/g, "''")
@@ -45,8 +46,12 @@ export async function close(timeoutSec = 40) {
     // The script closes that PID only (CloseMainWindow, then waits up to 40 s); the installed Exo is never matched.
     if (!test) return
     await pwsh(`& '${q(TEST_SCRIPT)}' -Stop ${test.pid}`)
+    const dataDir = test.dataDir
     test = null
     await sleep(800)
+    if (!TEST_FOLDER_CUSTOM) {
+      await rm(dataDir || TEST_FOLDER, { recursive: true, force: true }).catch(() => {})
+    }
     return
   }
   await new Promise((resolve, reject) =>
