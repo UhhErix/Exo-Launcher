@@ -407,16 +407,8 @@ internal sealed partial class LeftoverScan
         foreach (var arg in args) start.ArgumentList.Add(arg);
         try
         {
-            using var process = System.Diagnostics.Process.Start(start);
-            if (process is null) return (-1, null);
-            var output = process.StandardOutput.ReadToEndAsync();
-            _ = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(budget))
-            {
-                try { ProcessTermination.Kill(process, entireProcessTree: true); } catch { }
-                return (-1, null);
-            }
-            return (process.ExitCode, output.Wait(TimeSpan.FromSeconds(2)) ? output.Result : null);
+            var result = ProcessOutput.RunCaptureText(start, budget, killTree: true);
+            return result.Completed ? (result.ExitCode, result.Stdout) : (-1, null);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {

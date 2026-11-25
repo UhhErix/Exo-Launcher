@@ -104,16 +104,16 @@ internal sealed partial class NetworkBest
             const string command = "[int](Get-NetTCPSetting -SettingName Internet).AutoTuningLevelLocal;[int](Get-NetOffloadGlobalSetting).ReceiveSideScaling";
             try
             {
-                using var process = Process.Start(new ProcessStartInfo(LeftoverScan.PowerShell, "-NoProfile -NonInteractive -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes(command)))
+                var info = new ProcessStartInfo(LeftoverScan.PowerShell, "-NoProfile -NonInteractive -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes(command)))
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
-                });
-                if (process is null) return null;
-                var output = process.StandardOutput.ReadToEndAsync();
-                if (!process.WaitForExit(4_000) || !output.Wait(1000)) return null;
-                var lines = output.Result.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    RedirectStandardError = true,
+                };
+                var result = ProcessOutput.RunCaptureText(info, TimeSpan.FromSeconds(4));
+                if (!result.Completed) return null;
+                var lines = result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 return lines.Length == 2 && int.TryParse(lines[0], out var tuning) && int.TryParse(lines[1], out var rss) ? new Tcp(tuning, rss == 1) : null;
             }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { return null; }
