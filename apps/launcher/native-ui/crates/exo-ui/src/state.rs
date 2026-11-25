@@ -4368,6 +4368,7 @@ impl AppState {
                     s.check_pending_notes_on_startup();
                     s.warm_store_on_startup();
                     s.wp4_warm_startup();
+                    s.check_system_eq_health_on_launch();
                 });
             }
             Err(e) => {

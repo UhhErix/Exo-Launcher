@@ -117,6 +117,12 @@ pub struct EqApoState {
     pub effects_off: bool,
     pub outputs: i32,
     pub installer_version: String,
+    pub native_available: bool,
+    pub system_eq_enabled: bool,
+    pub drm_disclosure_accepted: bool,
+    pub needs_reenable: bool,
+    pub reenable_reason: Option<String>,
+    pub protected_audio_dg_disabled: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
