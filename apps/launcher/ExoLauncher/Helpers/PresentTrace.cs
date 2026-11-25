@@ -307,15 +307,19 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
     [UnmanagedCallersOnly]
     private static void OnEvent(EventRecord* record)
     {
-        var kind = Classify(record->ProviderFirst, record->Id);
-        if (kind == PresentKind.None || Volatile.Read(ref _active) is not { } trace) return;
-        if (record->ProviderFirst == DxgiFirst && record->Id == DxgiPresent)
+        try
         {
-            // Its fields: the swap chain's pointer, then Flags.
-            var at = (record->HeaderFlags & Header32Bit) != 0 ? 4 : 8;
-            if (record->UserDataLength >= at + 4 && OnlyTests(*(uint*)(record->UserData + at))) return;
+            var kind = Classify(record->ProviderFirst, record->Id);
+            if (kind == PresentKind.None || Volatile.Read(ref _active) is not { } trace) return;
+            if (record->ProviderFirst == DxgiFirst && record->Id == DxgiPresent)
+            {
+                // Its fields: the swap chain's pointer, then Flags.
+                var at = (record->HeaderFlags & Header32Bit) != 0 ? 4 : 8;
+                if (record->UserDataLength >= at + 4 && OnlyTests(*(uint*)(record->UserData + at))) return;
+            }
+            trace._slots.Record((int)record->ProcessId, kind, record->TimeStamp);
         }
-        trace._slots.Record((int)record->ProcessId, kind, record->TimeStamp);
+        catch { }
     }
 
     private static int StartSession(out ulong session)

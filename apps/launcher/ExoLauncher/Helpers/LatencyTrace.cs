@@ -184,9 +184,13 @@ internal static unsafe partial class LatencyTrace
     [UnmanagedCallersOnly]
     private static void OnEvent(PresentTrace.EventRecord* record)
     {
-        if (record->ProviderFirst != PerfInfoFirst || Volatile.Read(ref _stats) is not { } stats) return;
-        if (Parse(record->Opcode, new ReadOnlySpan<byte>(record->UserData, record->UserDataLength)) is not { } run) return;
-        stats.Add(run.Interrupt, run.Routine, record->TimeStamp - run.Initial);
+        try
+        {
+            if (record->ProviderFirst != PerfInfoFirst || Volatile.Read(ref _stats) is not { } stats) return;
+            if (Parse(record->Opcode, new ReadOnlySpan<byte>(record->UserData, record->UserDataLength)) is not { } run) return;
+            stats.Add(run.Interrupt, run.Routine, record->TimeStamp - run.Initial);
+        }
+        catch { }
     }
 
     private static void Stop()

@@ -47,7 +47,10 @@ internal sealed unsafe class DaveSession : IDisposable
         _sendBinary = sendBinary;
         _sendJson = sendJson;
         _onFailure = (source, reason, _) =>
-            AppLog.Info($"Discord voice: DAVE {Marshal.PtrToStringUTF8(source)}: {Marshal.PtrToStringUTF8(reason)}");
+        {
+            try { AppLog.Info($"Discord voice: DAVE {Marshal.PtrToStringUTF8(source)}: {Marshal.PtrToStringUTF8(reason)}"); }
+            catch { }
+        };
         _session = Dave.SessionCreate(0, 0, Marshal.GetFunctionPointerForDelegate(_onFailure), 0);
         _encryptor = Dave.EncryptorCreate();
         Dave.EncryptorSetPassthrough(_encryptor, true);

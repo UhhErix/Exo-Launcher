@@ -138,12 +138,16 @@ internal static class MonitorDdc
         var found = IntPtr.Zero;
         EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (hMonitor, _, _, _) =>
         {
-            var info = new MonitorInfoEx { cbSize = Marshal.SizeOf<MonitorInfoEx>() };
-            if (GetMonitorInfoW(hMonitor, ref info) && string.Equals(info.szDevice, gdiName, StringComparison.OrdinalIgnoreCase))
+            try
             {
-                found = hMonitor;
-                return false;
+                var info = new MonitorInfoEx { cbSize = Marshal.SizeOf<MonitorInfoEx>() };
+                if (GetMonitorInfoW(hMonitor, ref info) && string.Equals(info.szDevice, gdiName, StringComparison.OrdinalIgnoreCase))
+                {
+                    found = hMonitor;
+                    return false;
+                }
             }
+            catch { }
             return true;
         }, IntPtr.Zero);
         return found;

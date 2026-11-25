@@ -88,7 +88,11 @@ public sealed partial class MainWindow
         return item;
     }
 
-    private async void ShowConnectedScriptDialogAsync(WebView2 surface, string label, Func<string, bool> trusted,
+    private void ShowConnectedScriptDialogAsync(WebView2 surface, string label, Func<string, bool> trusted,
+        CoreWebView2ScriptDialogOpeningEventArgs args) =>
+        _ = UiGuard.RunAsync(() => ShowConnectedScriptDialogCoreAsync(surface, label, trusted, args), "ConnectedScriptDialog");
+
+    private async Task ShowConnectedScriptDialogCoreAsync(WebView2 surface, string label, Func<string, bool> trusted,
         CoreWebView2ScriptDialogOpeningEventArgs args)
     {
         var deferral = args.GetDeferral();
