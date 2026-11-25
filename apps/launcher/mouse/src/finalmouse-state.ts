@@ -59,6 +59,10 @@ export function finalmouseUltraclickSupport(status: MouseStatus): FeatureSupport
   return { supported: hasIntent || mouseReady, needs: null }
 }
 
+export function finalmouseSmartRtAlwaysOn(status: MouseStatus): boolean {
+  return firmwarePartAtLeast(status, 'mouse', ULTRACLICK_FIRMWARE) === true
+}
+
 export function clickChoiceOf(mode: number, intent: number | null | undefined): ClickChoice {
   if (mode !== 1) return 'mechanical'
   return finalmouseIsUltraclick(intent) ? 'ultraclick' : 'analog'

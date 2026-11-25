@@ -2193,12 +2193,10 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
                 .color(FG)
                 .placeholder("Playlist name", fg_faint())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s
-                        .media
-                        .music_playlist_sheet
-                        .as_mut()
-                        .expect("sheet")
-                        .name_edit
+                    match s.media.music_playlist_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.name_edit,
+                        None => &mut s.ui_discard_edit,
+                    }
                 }))
                 .on_submit(|s: &mut AppState, _| s.music_playlist_sheet_save()),
         );
@@ -2218,12 +2216,10 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
                 .color(FG)
                 .placeholder("Add an optional description", fg_faint())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s
-                        .media
-                        .music_playlist_sheet
-                        .as_mut()
-                        .expect("sheet")
-                        .desc_edit
+                    match s.media.music_playlist_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.desc_edit,
+                        None => &mut s.ui_discard_edit,
+                    }
                 })),
         );
 

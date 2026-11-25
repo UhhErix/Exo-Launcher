@@ -885,6 +885,7 @@ impl AppState {
     pub fn open_whats_new_all(&mut self) {
         self.whats_new.auto_shown = true;
         self.whats_new.mode = Some(WhatsNewMode::All);
+        self.sync_mouse_panel_visibility();
     }
 
     pub fn maybe_auto_open_whats_new(&mut self) {
@@ -907,11 +908,13 @@ impl AppState {
         if !missed_releases(&ver, seen).is_empty() {
             self.whats_new.auto_shown = true;
             self.whats_new.mode = Some(WhatsNewMode::Missed);
+            self.sync_mouse_panel_visibility();
         }
     }
 
     pub fn close_whats_new(&mut self) {
         self.whats_new.mode = None;
+        self.sync_mouse_panel_visibility();
         if let Some(ver) = self.whats_new.current_version.clone()
             && self.whats_new.seen_version.as_deref() != Some(ver.as_str())
         {

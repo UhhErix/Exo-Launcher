@@ -3442,14 +3442,13 @@ fn replay_probe_script(rt: &mut rune::Runtime<AppState>, script_path: &str) {
                     "up" | "arrowup" => Some(Key::Up),
                     "down" | "arrowdown" => Some(Key::Down),
                     "backspace" => Some(Key::Backspace),
-                    s if s.len() == 1 => {
-                        let ch = s.chars().next().unwrap();
+                    s if s.chars().count() == 1 => s.chars().next().map(|ch| {
                         if cmd {
-                            Some(Key::Command(ch))
+                            Key::Command(ch)
                         } else {
-                            Some(Key::Text(s.to_string()))
+                            Key::Text(s.to_string())
                         }
-                    }
+                    }),
                     _ => None,
                 };
                 if let Some(k) = key {
@@ -6706,5 +6705,242 @@ mod motion_audit {
             exo_kit::EXO_MAX_BACKDROP_BLURS
         );
         assert!(rt.liquid_glass_frame().shapes.len() >= 6);
+    }
+
+    #[test]
+    fn onboarding_reduced_motion_layers_are_balanced() {
+        use rune::render::{KIND_LAYER, KIND_LAYER_END};
+        let check_balance = |rt: &Runtime<AppState>, label: &str| {
+            let mut depth = 0isize;
+            for (idx, inst) in rt.instances.iter().enumerate() {
+                let k = inst.params[1];
+                if k == KIND_LAYER {
+                    depth += 1;
+                } else if k == KIND_LAYER_END {
+                    depth -= 1;
+                    assert!(
+                        depth >= 0,
+                        "{label}: unbalanced KIND_LAYER_END at instance {idx}"
+                    );
+                }
+            }
+            assert_eq!(depth, 0, "{label}: unclosed KIND_LAYER depth={depth}");
+        };
+
+        for scale in [1.0f32, 1.25, 1.5] {
+            for whats_new_seen in [None, Some("3.31.1")] {
+                let state = AppState::for_host_pipe();
+                let mut rt =
+                    Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, scale));
+                rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+                rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+                rt.set_system_reduced_motion(true);
+                rt.frame(0.0);
+                check_balance(&rt, &format!("pipe-boot-s{scale}"));
+
+                let wn = whats_new_seen.map(str::to_string);
+                rt.update(move |s, _| {
+                    s.status = state::HostStatus::Connected;
+                    s.whats_new.current_version = Some("3.31.1".to_string());
+                    s.whats_new.seen_version = wn;
+                    s.whats_new.answered = true;
+                    s.whats_new.boot_hold_active = false;
+                    let mut set = exo_rpc::LauncherSettings::default();
+                    set.onboarding_complete = Some(false);
+                    set.reduce_motion = true;
+                    s.apply_settings(set);
+                    s.maybe_auto_open_whats_new();
+                });
+                for step in 1..=10 {
+                    rt.frame(step as f64 / 60.0);
+                    check_balance(&rt, &format!("pipe-onboard-s{scale}-f{step}"));
+                }
+                for stage in 0..setup::STAGES {
+                    rt.update(|s, _| s.setup_go(stage));
+                    rt.frame(1.0 + stage as f64 * 0.05);
+                    check_balance(&rt, &format!("pipe-stage-{stage}-s{scale}-a"));
+                    rt.frame(1.02 + stage as f64 * 0.05);
+                    check_balance(&rt, &format!("pipe-stage-{stage}-s{scale}-b"));
+                }
+                rt.update(|s, _| s.start_tour());
+                for beat in 0..9 {
+                    rt.frame(2.0 + beat as f64 * 0.05);
+                    check_balance(&rt, &format!("pipe-tour-{beat}-s{scale}"));
+                    rt.update(|s, _| s.tour_next());
+                }
+            }
+        }
+    }
+
+    fn assert_layers_balanced(rt: &Runtime<AppState>, label: &str) {
+        use rune::render::{KIND_LAYER, KIND_LAYER_END};
+        let mut depth = 0isize;
+        for (idx, inst) in rt.instances.iter().enumerate() {
+            let k = inst.params[1];
+            if k == KIND_LAYER {
+                depth += 1;
+            } else if k == KIND_LAYER_END {
+                depth -= 1;
+                assert!(
+                    depth >= 0,
+                    "{label}: unbalanced KIND_LAYER_END at instance {idx}"
+                );
+            }
+        }
+        assert_eq!(depth, 0, "{label}: unclosed KIND_LAYER depth={depth}");
+    }
+
+    #[test]
+    fn click_everything_all_rooms_settings_setup_overlays_balanced() {
+        for reduce_motion in [false, true] {
+            let mut state = AppState::with_demo_games();
+            state.settings.reduce_motion = reduce_motion;
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+            rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+            rt.set_system_reduced_motion(reduce_motion);
+
+            let mut t = 0.0f64;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "init");
+
+            let rooms = [
+                Room::Library,
+                Room::Store,
+                Room::Discord,
+                Room::Music,
+                Room::ExoAi,
+                Room::Devices,
+                Room::Settings,
+            ];
+            for room in rooms {
+                rt.update(|s, _| s.switch_room(room));
+                for _ in 0..4 {
+                    t += 1.0 / 60.0;
+                    rt.frame(t);
+                    assert_layers_balanced(&rt, &format!("room-{room:?}-rm-{reduce_motion}"));
+                }
+                t += 0.5;
+                rt.frame(t);
+                assert_layers_balanced(&rt, &format!("room-settled-{room:?}-rm-{reduce_motion}"));
+            }
+
+            rt.update(|s, _| s.switch_room(Room::Library));
+            t += 0.05;
+            rt.frame(t);
+            if let Some(first_id) = rt.state.games.first().map(|g| g.id.clone()) {
+                rt.update(move |s, _| s.open_game_page(&first_id));
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, "game-page");
+                assert!(rt.state.dismiss_top_layer());
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, "game-page-closed");
+            }
+
+            rt.update(|s, _| s.open_captures(None));
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "captures-open");
+            assert!(rt.state.dismiss_top_layer());
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "captures-closed");
+
+            rt.update(|s, tx| s.open_palette(tx));
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "palette-open");
+            assert!(rt.state.dismiss_top_layer());
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "palette-closed");
+
+            rt.update(|s, _| s.switch_room(Room::Settings));
+            t += 0.1;
+            rt.frame(t);
+            for sec in pc_state::SettingsSection::ALL {
+                let (sx, sy) = rt
+                    .find(sec.key())
+                    .unwrap_or_else(|| panic!("missing settings tab {}", sec.key()));
+                rt.pointer_down(sx, sy);
+                rt.pointer_up(sx, sy);
+                t += 0.05;
+                rt.frame(t);
+                assert_eq!(rt.state.pc.settings_section, sec);
+                assert_layers_balanced(&rt, &format!("settings-{}-rm-{reduce_motion}", sec.key()));
+            }
+
+            for stage in 0..setup::STAGES {
+                rt.update(|s, _| s.setup_go(stage));
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, &format!("setup-{stage}-rm-{reduce_motion}"));
+            }
+            rt.update(|s, _| s.setup_go_complete());
+            t += 0.05;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "setup-complete");
+
+            rt.update(|s, _| s.start_tour());
+            for beat in 0..9 {
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, &format!("tour-{beat}-rm-{reduce_motion}"));
+                rt.update(|s, _| s.tour_next());
+            }
+            rt.update(|s, _| s.finish_tour());
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "tour-finished");
+        }
+    }
+
+    #[test]
+    fn connected_open_mouse_page_and_devices_error_states() {
+        let mut state = AppState::with_demo_games();
+        state.status = state::HostStatus::Connected;
+        state.switch_room(Room::Devices);
+        let mut rt = Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+        rt.frame(0.0);
+
+        let (mx, my) = rt.find("dev-card-dev:mouse").expect("mouse card");
+        rt.pointer_down(mx, my);
+        rt.pointer_up(mx, my);
+        rt.frame(1.0 / 60.0);
+
+        assert!(rt.state.pc.mouse_panel_open);
+        assert!(rt.state.pc.mouse_panel_loading);
+        assert_eq!(rt.state.pc.selected_device_id.as_deref(), Some("dev:mouse"));
+        assert!(rt.find("room-devices-mouse").is_some());
+        assert!(rt.find("mouse-panel-slot").is_some());
+        assert!(rt.state.mouse_panel_should_be_visible());
+
+        rt.update(|s, tx| s.open_palette(tx));
+        rt.frame(2.0 / 60.0);
+        assert!(!rt.state.mouse_panel_should_be_visible());
+        assert!(rt.state.dismiss_top_layer());
+        rt.frame(3.0 / 60.0);
+        assert!(rt.state.mouse_panel_should_be_visible());
+
+        assert!(rt.state.dismiss_top_layer());
+        rt.frame(4.0 / 60.0);
+        assert!(!rt.state.pc.mouse_panel_open);
+        assert!(rt.state.pc.selected_device_id.is_none());
+
+        rt.update(|s, _| {
+            s.pc.devices_loading = false;
+            s.pc.devices_error = Some("pipe timeout".into());
+        });
+        rt.frame(5.0 / 60.0);
+        assert!(rt.find("devices-error-banner").is_some());
+        assert!(rt.find("devices-retry").is_some());
+
+        rt.update(|s, _| s.pc.devices = None);
+        rt.frame(6.0 / 60.0);
+        assert!(rt.find("devices-retry").is_some());
     }
 }

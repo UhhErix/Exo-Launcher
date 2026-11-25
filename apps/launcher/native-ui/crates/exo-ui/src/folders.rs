@@ -756,7 +756,10 @@ fn folder_sheet_body(
                 .color(FG)
                 .placeholder("Folder name", fg_muted())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s.lib.folder_sheet.as_mut().unwrap().name
+                    match s.lib.folder_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.name,
+                        None => &mut s.ui_discard_edit,
+                    }
                 }))
                 .on_submit(|s: &mut AppState, _| s.save_folder_sheet()),
         );
@@ -841,7 +844,10 @@ fn folder_sheet_body(
                 .color(FG)
                 .placeholder("Search your games", fg_muted())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s.lib.folder_sheet.as_mut().unwrap().search
+                    match s.lib.folder_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.search,
+                        None => &mut s.ui_discard_edit,
+                    }
                 })),
         );
 

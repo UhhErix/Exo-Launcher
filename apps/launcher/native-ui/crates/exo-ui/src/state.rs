@@ -743,6 +743,7 @@ pub struct AppState {
     pub key_modal: KeyModalState,
     pub notice_runtime: NoticeRuntimeState,
     pub palette_extras: PaletteExtrasState,
+    pub ui_discard_edit: TextEdit,
     pub web_host: Box<crate::web_host::LazyWebHostState>,
     #[cfg(windows)]
     pub rpc: Option<Arc<RpcClient>>,
@@ -986,6 +987,7 @@ impl AppState {
             key_modal: KeyModalState::default(),
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
+            ui_discard_edit: TextEdit::default(),
             web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,
@@ -1104,6 +1106,7 @@ impl AppState {
             key_modal: KeyModalState::default(),
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
+            ui_discard_edit: TextEdit::default(),
             web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,
@@ -3544,6 +3547,7 @@ impl AppState {
         self.load_palette_extras();
         self.load_notes_list(None);
         self.sync_chrome_layout();
+        self.sync_mouse_panel_visibility();
         tx.focus("palette-input", false);
     }
 
@@ -3552,6 +3556,7 @@ impl AppState {
         self.palette_needs_focus = false;
         self.palette_index = 0;
         self.sync_chrome_layout();
+        self.sync_mouse_panel_visibility();
     }
 
     pub fn palette_results(&self) -> Vec<PaletteItem> {

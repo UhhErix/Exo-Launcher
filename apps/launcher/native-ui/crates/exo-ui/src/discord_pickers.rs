@@ -1290,15 +1290,10 @@ pub fn slash_command_form(s: &AppState) -> Option<El> {
                             .color(FG)
                             .placeholder(placeholder, fg_faint())
                             .on_edit(edit_access(move |s: &mut AppState| {
-                                s.discord
-                                    .chat
-                                    .apps
-                                    .active_command
-                                    .as_mut()
-                                    .unwrap()
-                                    .values
-                                    .entry(opt_k.clone())
-                                    .or_default()
+                                match s.discord.chat.apps.active_command.as_mut() {
+                                    Some(cmd) => cmd.values.entry(opt_k.clone()).or_default(),
+                                    None => &mut s.ui_discard_edit,
+                                }
                             }))
                             .on_submit(|s: &mut AppState, _| s.run_active_slash_command()),
                     ),
@@ -1429,15 +1424,10 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
                     .color(FG)
                     .placeholder(placeholder, fg_faint())
                     .on_edit(edit_access(move |s: &mut AppState| {
-                        s.discord
-                            .chat
-                            .apps
-                            .active_modal
-                            .as_mut()
-                            .unwrap()
-                            .text_values
-                            .entry(cid_e.clone())
-                            .or_default()
+                        match s.discord.chat.apps.active_modal.as_mut() {
+                            Some(modal) => modal.text_values.entry(cid_e.clone()).or_default(),
+                            None => &mut s.ui_discard_edit,
+                        }
                     }));
                 if !is_para {
                     input = input.single_line();

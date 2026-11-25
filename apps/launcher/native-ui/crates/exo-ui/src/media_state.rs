@@ -4505,6 +4505,7 @@ impl AppState {
         self.media.open_capture_id = None;
         self.media.clip_player = None;
         self.load_captures();
+        self.sync_mouse_panel_visibility();
     }
 
     pub fn close_captures(&mut self) {
@@ -4519,6 +4520,7 @@ impl AppState {
         self.media.lightbox.close();
         self.media.lightbox_urls.clear();
         self.media.clip_player = None;
+        self.sync_mouse_panel_visibility();
     }
 
     pub fn load_captures(&mut self) {

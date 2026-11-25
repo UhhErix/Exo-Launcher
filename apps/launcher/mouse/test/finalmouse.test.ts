@@ -6,6 +6,7 @@ import {
   buildFinalmouseReport,
   decodeFinalmouseReport,
   encodeFinalmouseClickMode,
+  encodeFinalmouseTmrActuation,
   FINALMOUSE_COMMAND,
   FINALMOUSE_INTENT_TRIGGER,
   FINALMOUSE_REPORT,
@@ -16,6 +17,7 @@ import {
   buildClickModeArgs,
   clickChoiceOf,
   finalmouseIntentSupport,
+  finalmouseSmartRtAlwaysOn,
   finalmouseUltraclickSupport,
   nextIntentForChoice,
   ULTRACLICK_ACTUATION_STEPS,
@@ -180,4 +182,38 @@ test('firmware gating matches xpanel requirements for Intent Trigger (1.2.0) and
   const oldMouseNewDongle = slxStatus({ firmware: ['Mouse 1.1.1-5289564', 'Dongle RF 1.2.8-2d88a14'] })
   assert.deepEqual(finalmouseIntentSupport(oldMouseNewDongle), { supported: false, needs: 'Needs mouse firmware 1.2.0' })
   assert.deepEqual(finalmouseUltraclickSupport(oldMouseNewDongle), { supported: false, needs: 'Needs mouse firmware 1.2.8' })
+})
+
+test('Smart Rapid Trigger is fixed on firmware 1.2.8+ (including 1.2.9) and CMD 53 allows 0 actuation when setting RT alone', async () => {
+  assert.equal(finalmouseSmartRtAlwaysOn(slxStatus({ firmware: ['Mouse 1.2.9-471cda1', 'Dongle RF 1.2.9-471cda1'] })), true)
+  assert.equal(finalmouseSmartRtAlwaysOn(slxStatus({ firmware: ['Mouse 1.2.8-2d88a14'] })), true)
+  assert.equal(finalmouseSmartRtAlwaysOn(slxStatus({ firmware: ['Mouse 1.2.0-abc'] })), false)
+  assert.equal(finalmouseSmartRtAlwaysOn(slxStatus({ firmware: [] })), false)
+
+  assert.deepEqual([...encodeFinalmouseTmrActuation(0, 0, 220, 220)], [0, 0, 0, 0, 0xdc, 0, 0xdc, 0])
+  assert.throws(() => encodeFinalmouseTmrActuation(0, 0), /1-40/)
+
+  const writes: Array<{ reportId: number; bytes: number[] }> = []
+  const device = {
+    vendorId: 0x361d,
+    productId: 0x0300,
+    productName: 'Finalmouse SLX',
+    collections: [{ usagePage: 0xff00, usage: 1 }],
+    opened: true,
+    async open() {},
+    async close() {},
+    addEventListener() {},
+    removeEventListener() {},
+    async sendReport(reportId: number, data: BufferSource) {
+      const bytes = data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+      writes.push({ reportId, bytes: [...bytes.slice(0, 11)] })
+    },
+  } as unknown as HIDDevice
+
+  const client = new FinalmouseHidClient(device)
+  await client.open()
+  await client.setTmrActuation(0, 0, 200, 220)
+  assert.deepEqual(writes[0]?.bytes, [10, 0xb5, 8, 0, 0, 0, 0, 220, 0, 200, 0])
 })
