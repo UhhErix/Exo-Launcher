@@ -2,15 +2,20 @@ use rune::color::srgb_decode;
 use rune::{Color, Spring, TextStyle};
 use std::cell::Cell;
 
-pub const GOEIST_FONT: &[u8] =
-    include_bytes!("../../../../ExoLauncher/Assets/Fonts/Goeist-Variable.ttf");
-pub const GOEIST_ITALIC_FONT: &[u8] =
-    include_bytes!("../../../../ExoLauncher/Assets/Fonts/Goeist-Italic-Variable.ttf");
-pub const GOEIST_MONO_FONT: &[u8] =
-    include_bytes!("../../../../ExoLauncher/Assets/Fonts/GoeistMono-Variable.ttf");
+pub const GEIST_FONT: &[u8] = include_bytes!("../assets/fonts/Geist-Variable.ttf");
+pub const GEIST_ITALIC_FONT: &[u8] =
+    include_bytes!("../assets/fonts/Geist-Italic-Variable.ttf");
+pub const GEIST_MONO_FONT: &[u8] = include_bytes!("../assets/fonts/GeistMono-Variable.ttf");
+pub const GEIST_MONO_ITALIC_FONT: &[u8] =
+    include_bytes!("../assets/fonts/GeistMono-Italic-Variable.ttf");
 
-pub const FONTS: &[&[u8]] = &[GOEIST_FONT, GOEIST_ITALIC_FONT, GOEIST_MONO_FONT];
-pub const FONT_FAMILIES: (&str, &str) = ("Goeist", "Goeist Mono");
+pub const FONTS: &[&[u8]] = &[
+    GEIST_FONT,
+    GEIST_ITALIC_FONT,
+    GEIST_MONO_FONT,
+    GEIST_MONO_ITALIC_FONT,
+];
+pub const FONT_FAMILIES: (&str, &str) = ("Geist", "Geist Mono");
 
 thread_local! {
     static TEXT_SCALE: Cell<f32> = const { Cell::new(1.0) };
@@ -177,7 +182,10 @@ pub const PRESS_SCALE: f32 = 0.97;
 pub const SPRING_PRESS: Spring = Spring::new(0.09, 0.0);
 pub const SPRING_QUICK: Spring = Spring::new(0.12, 0.0);
 pub const SPRING_BASE: Spring = Spring::new(0.16, 0.0);
+pub const SPRING_SNAPPY: Spring = Spring::new(0.18, 0.12);
+pub const SPRING_POPOVER: Spring = Spring::new(0.19, 0.08);
 pub const SPRING_MOVE: Spring = Spring::new(0.22, 0.0);
+pub const SPRING_SMOOTH: Spring = Spring::new(0.26, 0.0);
 pub const SPRING_FLIGHT: Spring = Spring::new(0.30, 0.0);
 
 pub fn type_label() -> TextStyle {
@@ -281,10 +289,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn embedded_goeist_fonts_resolve_regular_italic_weights_and_mono() {
+    fn embedded_geist_fonts_resolve_regular_italic_weights_and_mono() {
         let _guard = rune::text::with_fonts(FONTS, FONT_FAMILIES);
         let (reg_adv, _, reg_mono) =
-            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0)).expect("Goeist regular");
+            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0)).expect("Geist regular");
         assert!(!reg_mono);
         let narrow = reg_adv[(b'i' - 32) as usize];
         let wide = reg_adv[(b'W' - 32) as usize];
@@ -294,12 +302,12 @@ mod tests {
         );
 
         let (italic_adv, _, italic_mono) =
-            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0).italic()).expect("Goeist Italic");
+            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0).italic()).expect("Geist Italic");
         assert!(!italic_mono);
         assert!(italic_adv[(b'a' - 32) as usize] > 0.0);
 
         let (mono_adv, _, is_mono) =
-            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0).mono()).expect("Goeist Mono");
+            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0).mono()).expect("Geist Mono");
         assert!(is_mono);
         let mono_i = mono_adv[(b'i' - 32) as usize];
         let mono_w = mono_adv[(b'W' - 32) as usize];
@@ -307,6 +315,12 @@ mod tests {
             (mono_i - mono_w).abs() < 0.05,
             "mono font should be fixed-pitch: i={mono_i}, W={mono_w}"
         );
+
+        let (mono_italic_adv, _, is_mono_italic) =
+            rune::text::ascii_metrics(TextStyle::new(14.0, 400.0).mono().italic())
+                .expect("Geist Mono Italic");
+        assert!(is_mono_italic);
+        assert!(mono_italic_adv[(b'a' - 32) as usize] > 0.0);
 
         let light = rune::text::primary_extents(TextStyle::new(14.0, 300.0)).expect("weight 300");
         let bold = rune::text::primary_extents(TextStyle::new(14.0, 700.0)).expect("weight 700");

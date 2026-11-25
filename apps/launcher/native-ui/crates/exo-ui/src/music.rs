@@ -11,8 +11,9 @@ use exo_kit::{
     BG, ExoGlass, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted,
     glass_button, glass_capsule, glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top,
-    good, hover_fill, icon_back, icon_chevron_left, icon_folder, icon_home, icon_maximize,
-    icon_more_horiz, icon_music, icon_pause, icon_pin, icon_play, icon_plus, icon_search,
+    good, hover_fill, icon_back, icon_chevron_left, icon_compass, icon_folder,
+    icon_four_point_sparkle, icon_home, icon_list_music, icon_maximize, icon_more_horiz,
+    icon_music, icon_pause, icon_pin, icon_play, icon_plus, icon_radio, icon_search,
     icon_skip_back, icon_skip_forward, icon_video, icon_volume, icon_volume_low, icon_volume_off,
     pressed_fill, slider_track,
 };
@@ -78,74 +79,6 @@ fn circle_pts(cx: f32, cy: f32, r: f32, steps: usize) -> Vec<[f32; 2]> {
             [cx + r * a.cos(), cy + r * a.sin()]
         })
         .collect()
-}
-
-fn arc_pts(cx: f32, cy: f32, r: f32, start_deg: f32, end_deg: f32, steps: usize) -> Vec<[f32; 2]> {
-    (0..=steps)
-        .map(|i| {
-            let t = i as f32 / steps as f32;
-            let a = (start_deg + (end_deg - start_deg) * t).to_radians();
-            [cx + r * a.cos(), cy + r * a.sin()]
-        })
-        .collect()
-}
-
-fn icon_list_music(size: f32, color: Color) -> El {
-    let shape = Shape::new()
-        .view_box(24.0, 24.0)
-        .stroke(vec![[4.0, 6.0], [16.0, 6.0]], 1.8, color)
-        .stroke(vec![[4.0, 12.0], [12.0, 12.0]], 1.8, color)
-        .stroke(vec![[4.0, 18.0], [10.0, 18.0]], 1.8, color)
-        .stroke(vec![[16.0, 18.0], [16.0, 10.0], [21.0, 9.0]], 1.8, color)
-        .stroke(circle_pts(14.5, 18.0, 2.0, 12), 1.8, color);
-    canvas(shape).size(size, size)
-}
-
-fn icon_radio(size: f32, color: Color) -> El {
-    let shape = Shape::new()
-        .view_box(24.0, 24.0)
-        .fill(circle_pts(12.0, 12.0, 2.2, 12), color)
-        .stroke(arc_pts(12.0, 12.0, 5.5, -45.0, 45.0, 10), 1.8, color)
-        .stroke(arc_pts(12.0, 12.0, 5.5, 135.0, 225.0, 10), 1.8, color)
-        .stroke(arc_pts(12.0, 12.0, 9.2, -45.0, 45.0, 12), 1.8, color)
-        .stroke(arc_pts(12.0, 12.0, 9.2, 135.0, 225.0, 12), 1.8, color);
-    canvas(shape).size(size, size)
-}
-
-fn icon_compass(size: f32, color: Color) -> El {
-    let shape = Shape::new()
-        .view_box(24.0, 24.0)
-        .stroke(circle_pts(12.0, 12.0, 9.0, 20), 1.8, color)
-        .stroke(
-            vec![
-                [15.5, 8.5],
-                [13.5, 13.5],
-                [8.5, 15.5],
-                [10.5, 10.5],
-                [15.5, 8.5],
-            ],
-            1.6,
-            color,
-        );
-    canvas(shape).size(size, size)
-}
-
-fn icon_four_point_sparkle(size: f32, color: Color) -> El {
-    strokes(
-        size,
-        &[&[
-            [12.0, 2.0],
-            [14.6, 9.4],
-            [22.0, 12.0],
-            [14.6, 14.6],
-            [12.0, 22.0],
-            [9.4, 14.6],
-            [2.0, 12.0],
-            [9.4, 9.4],
-            [12.0, 2.0],
-        ]],
-        color,
-    )
 }
 
 fn icon_shuffle(size: f32, color: Color) -> El {

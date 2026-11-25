@@ -11,7 +11,7 @@ use exo_kit::{
     hover_fill, icon_back, icon_camera, icon_check, icon_close, icon_external, icon_film,
     icon_folder, icon_gallery, icon_more_horiz, icon_notes, icon_pause, icon_play, icon_plus,
     icon_record_dot, icon_replay, icon_scissors, icon_settings, icon_sparkles, icon_star,
-    icon_trash, icon_volume, icon_volume_off, popover_transition_for, pressed_fill, primary_button,
+    icon_star_filled, icon_trash, icon_volume, icon_volume_off, popover_transition_for, pressed_fill, primary_button,
     progress_bar, scaled, scrim_fill, slider_track, status_badge, type_body, type_control,
     type_page, type_section, type_small, type_title, warn,
 };
@@ -1429,7 +1429,7 @@ fn clip_card(item: &CaptureItem, s: &AppState, scale: f32, badge: Option<String>
                     .on_press(move |s: &mut AppState| {
                         s.capture_viewer_action(&id_fav, "unfavourite");
                     })
-                    .child(icon_star(12.0, warn())),
+                    .child(icon_star_filled(12.0, warn())),
             ),
         );
     }
@@ -2066,7 +2066,11 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                         if is_fav { "unfavourite" } else { "favourite" },
                     );
                 })
-                .child(icon_star(14.0, if is_fav { warn() } else { FG })),
+                .child(if is_fav {
+                    icon_star_filled(14.0, warn())
+                } else {
+                    icon_star(14.0, FG)
+                }),
         )
         .child(
             el().key("cap-viewer-info")

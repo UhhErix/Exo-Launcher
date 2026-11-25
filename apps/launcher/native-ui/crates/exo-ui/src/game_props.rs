@@ -6,7 +6,8 @@ use crate::game_actions::{
 use crate::state::{AppState, HostStatus, InputMode, OpenDropdown};
 use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
-    SPRING_MOVE, SPRING_QUICK, SelectDismissCb, SelectMenuSpec, SelectOption, SelectTrigger,
+    SPRING_MOVE, SPRING_QUICK, SPRING_SNAPPY, SelectDismissCb, SelectMenuSpec, SelectOption,
+    SelectTrigger,
     TRANSPARENT, bad, fg_faint, fg_muted, glass_rim_bottom, glass_rim_top,
     glass_still_control_fill, good, hairline, hex, hover_fill, icon_refresh, icon_rotate_ccw,
     icon_upload, pressed_fill, progress_bar, scaled, select_menu_layers, select_trigger,
@@ -25,7 +26,7 @@ fn switch_pill_owned(key: String, label: String, on: bool) -> El {
         .fill(FG)
         .shadow(1.0, 3.0, BG.alpha(0.35))
         .absolute(if on { 18.0 } else { 2.0 }, 2.0)
-        .motion(SPRING_MOVE);
+        .motion(SPRING_SNAPPY);
     el().key(key)
         .role("switch")
         .label(label)
@@ -34,6 +35,7 @@ fn switch_pill_owned(key: String, label: String, on: bool) -> El {
         .hit()
         .cursor(Cursor::Pointer)
         .press_on_down()
+        .press_scale(PRESS_SCALE)
         .size(40.0, 24.0)
         .radius(RADIUS_PILL)
         .fill(if on { good() } else { track_fill() })

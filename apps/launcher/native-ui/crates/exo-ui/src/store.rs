@@ -1,12 +1,12 @@
 use crate::state::{AppState, InputMode, title_hue};
 use crate::store_page::{HERO_ROTATE_SECS, find_owned_game};
 use exo_kit::{
-    ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, glass_button,
-    glass_control_fill, glass_icon_circle_opt, glass_rim_bottom, glass_rim_top, good, hover_fill,
-    icon_arrow_right, icon_bookmark_filled, icon_check, icon_chevron_left, icon_chevron_right,
-    icon_close, icon_refresh, icon_search, pressed_fill, scaled, selected_fill, type_body,
-    type_control, type_section, type_small, type_title,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted,
+    glass_button, glass_control_fill, glass_icon_circle_opt, glass_rim_bottom, glass_rim_top, good,
+    hover_fill, icon_arrow_right, icon_bookmark_filled, icon_check, icon_chevron_left,
+    icon_chevron_right, icon_close, icon_refresh, icon_search, pressed_fill, scaled, selected_fill,
+    type_body, type_control, type_section, type_small, type_title,
 };
 use exo_rpc::{StoreArt, StoreTile, types::format_cents};
 use rune::{
@@ -301,6 +301,12 @@ fn store_tile_card_sized(
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .shadow(
+            if hovered { 10.0 } else { 4.0 },
+            if hovered { 22.0 } else { 10.0 },
+            BG.alpha(if hovered { 0.60 } else { 0.35 }),
+        )
         .matched(flight_id.clone())
         .motion(SPRING_FLIGHT);
     if let Some(loaded) = img {
@@ -350,11 +356,12 @@ fn store_tile_card_sized(
         .cursor(Cursor::Pointer)
         .hover_group()
         .press_on_down()
-        .press_scale(PRESS_SCALE)
+        .press_scale(0.98)
         .w(card_w)
         .gap(4.0)
         .offset(0.0, if hovered { -3.0 } else { 0.0 })
         .offset_motion(SPRING_MOVE)
+        .hover_motion(SPRING_QUICK, SPRING_MOVE)
         .motion(SPRING_MOVE)
         .on_hover_change(move |s: &mut AppState, inside, _tx| {
             if inside {

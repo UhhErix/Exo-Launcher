@@ -5,8 +5,9 @@ use crate::pc_state::{
 use crate::pc_wp9_actions::UndoTarget;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK,
-    TRANSPARENT, bad, fg_muted, float_line, glass_rim_bottom, glass_rim_top, good, hex, hover_fill,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_BASE,
+    SPRING_QUICK, TRANSPARENT, bad, fg_muted, float_line, glass_rim_bottom, glass_rim_top, good,
+    hex, hover_fill,
     icon_check, icon_chevron_down, icon_chevron_up, icon_search, pressed_fill, scaled,
     switch_pill_keyed, type_body, type_control, type_section, type_small, warn,
 };
@@ -45,6 +46,7 @@ fn apps_pill(key: &'static str, label: &'static str, active: bool) -> El {
         .fill(if active { FG } else { TRANSPARENT })
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(text(label).font(type_control()).color(if active {
             PRIMARY_FG
@@ -94,6 +96,7 @@ fn flat_btn(
         .fill(fill)
         .hover(hover_bg)
         .press(press_bg)
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(text(lbl).font(type_control()).color(fg));
     if primary {

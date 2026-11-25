@@ -6748,9 +6748,11 @@ mod motion_audit {
                     s.whats_new.seen_version = wn;
                     s.whats_new.answered = true;
                     s.whats_new.boot_hold_active = false;
-                    let mut set = exo_rpc::LauncherSettings::default();
-                    set.onboarding_complete = Some(false);
-                    set.reduce_motion = true;
+                    let set = exo_rpc::LauncherSettings {
+                        onboarding_complete: Some(false),
+                        reduce_motion: true,
+                        ..Default::default()
+                    };
                     s.apply_settings(set);
                     s.maybe_auto_open_whats_new();
                 });
