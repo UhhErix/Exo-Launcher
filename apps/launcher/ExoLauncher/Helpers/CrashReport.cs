@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 using ExoLauncher.Services;
 
 namespace ExoLauncher.Helpers;
@@ -175,7 +176,36 @@ public static partial class CrashReport
     /// Sends one report of a known kind (Hang, WebView2Crash, DiscordGateway, CaptureCrash, StoreFailure, UpdateFailure) with the
     /// recent stripped log lines. Fire and forget: never throws; the client limits in <see cref="SendAsync"/> decide whether it leaves.
     /// </summary>
+    private static readonly Channel<(string Kind, string What, string Area)> SubmitQueue =
+        Channel.CreateBounded<(string, string, string)>(new BoundedChannelOptions(16)
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.DropOldest,
+        });
+    private static int s_submitWorkerStarted;
+
     public static void Submit(string kind, string what, string area = "")
+    {
+        try
+        {
+            if (Interlocked.Exchange(ref s_submitWorkerStarted, 1) == 0)
+                _ = Task.Run(DrainSubmitQueueAsync);
+            SubmitQueue.Writer.TryWrite((kind, what, area));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Crash report ({kind}): not queued ({ex.GetType().Name}).");
+        }
+    }
+
+    private static async Task DrainSubmitQueueAsync()
+    {
+        await foreach (var (kind, what, area) in SubmitQueue.Reader.ReadAllAsync().ConfigureAwait(false))
+            await SubmitCoreAsync(kind, what, area).ConfigureAwait(false);
+    }
+
+    internal static async Task SubmitCoreAsync(string kind, string what, string area = "")
     {
         try
         {
@@ -193,7 +223,7 @@ public static partial class CrashReport
                 built = "";
             }
             var payload = Build(what, built, version, windows, Environment.UserName, profile, Environment.MachineName, kind);
-            _ = SendAsync(payload);
+            await SendAsync(payload).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
