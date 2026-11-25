@@ -1,11 +1,11 @@
 # GitHub releases
 
 The Windows 11 x64 installer and its checksum are available as assets on the
-[Exo Launcher 3.31.0 release](https://github.com/UhhErix/Exo-Launcher/releases/tag/v3.31.0).
+[Exo Launcher 3.31.1 release](https://github.com/UhhErix/Exo-Launcher/releases/tag/v3.31.1).
 
 | App | Version | Release asset | Bytes | SHA-256 |
 | --- | --- | --- | ---: | --- |
-| Exo Launcher | 3.31.0 | `ExoLauncher-3.31.0-Setup.exe` | 113,746,854 | `6f73f28428d4073be9b1ca13221ed10ec45d140a046779cdc38d3929ef7b7731` |
+| Exo Launcher | 3.31.1 | `ExoLauncher-3.31.1-Setup.exe` | 113,779,630 | `94ba2a2640993de0013cb52462da159d677cbf76ebc2e5f220f6e94231b38b1c` |
 
 Run `Get-FileHash -Algorithm SHA256 <path>` in PowerShell and compare the result
 with the SHA-256 above or the `.sha256` file attached to the release.
