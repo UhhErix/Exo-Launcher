@@ -421,8 +421,8 @@ public sealed partial class FrameGenModTests : IDisposable
     /// could fail: a pin filed under the wrong repo, a tag the floor refuses, a size over the mod's limit, or a digest that
     /// isn't a SHA-256.</summary>
     [Theory]
-    [InlineData("MFG-Unlocker", "v1.7.0", "MFGUnlocker-v1.7.0.zip", 4842619L, "5bd19d03288e1ece1d0bb2030ac072b36758045028da192044dcaad73fd901dd")]
-    [InlineData("OptiScaler", "v0.9.4", "Optiscaler_0.9.4-final.20260718._MM.7z", 55016448L, "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad")]
+    [InlineData("MFG-Unlocker", "v1.7.2", "MFGUnlocker-v1.7.2.zip", 5334929L, "e002d624e3e7ba5cedab7211043c096fe8f555c30ff43500235a0686c7893f22")]
+    [InlineData("OptiScaler", "v0.9.5", "Optiscaler_0.9.5-final.20261116.7z", 70418897L, "77e3ed76bed04e1fb32bacb5a72799ff172f3da22ed5231c0cf3e84fe6761662")]
     public void EachShippedPinIsSelectedForItsMod(string repo, string tag, string asset, long size, string sha)
     {
         var mod = new[] { MfgUnlocker, OptiScaler, DlssgSm86 }.Single(candidate => candidate.Repo == repo);

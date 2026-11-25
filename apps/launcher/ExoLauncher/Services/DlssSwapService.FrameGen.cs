@@ -88,10 +88,19 @@ public sealed partial class DlssSwapService
             new("OptiScaler.dll", ""),
             new("amd_fidelityfx_dx12.dll", @"OptiScaler\amd_fidelityfx_dx12.dll"),
             new("amd_fidelityfx_framegeneration_dx12.dll", @"OptiScaler\amd_fidelityfx_framegeneration_dx12.dll"),
+            new("amd_fidelityfx_upscaler_dx12.dll", @"OptiScaler\amd_fidelityfx_upscaler_dx12.dll", Optional: true),
+            new("amd_fidelityfx_vk.dll", @"OptiScaler\amd_fidelityfx_vk.dll", Optional: true),
+            new("amd_fidelityfx_framegeneration_vk.dll", @"OptiScaler\amd_fidelityfx_framegeneration_vk.dll", Optional: true),
+            new("amd_fidelityfx_upscaler_vk.dll", @"OptiScaler\amd_fidelityfx_upscaler_vk.dll", Optional: true),
             new("dlssg_to_fsr3_amd_is_better.dll", @"OptiScaler\dlssg_to_fsr3_amd_is_better.dll"),
             new("fakenvapi.dll", @"OptiScaler\fakenvapi.dll", OffNvidia: true),
             new("fakenvapi.ini", @"OptiScaler\fakenvapi.ini", OffNvidia: true),
             new("libxess.dll", @"OptiScaler\libxess.dll", OffNvidia: true),
+            new("libxess_dx11.dll", @"OptiScaler\libxess_dx11.dll", Optional: true),
+            new("libxess_fg.dll", @"OptiScaler\libxess_fg.dll", Optional: true),
+            new("libxell.dll", @"OptiScaler\libxell.dll", Optional: true),
+            new("D3D12_Optiscaler/D3D12Core.dll", @"OptiScaler\D3D12_Optiscaler\D3D12Core.dll", Optional: true),
+            new("Licenses/DirectX_LICENSE.txt", @"OptiScaler\Licenses\DirectX_LICENSE.txt", Optional: true),
             new("Licenses/FidelityFX_v1_LICENSE.md", @"OptiScaler\Licenses\FidelityFX_v1_LICENSE.md", Optional: true),
             new("Licenses/FidelityFX_v2_LICENSE.md", @"OptiScaler\Licenses\FidelityFX_v2_LICENSE.md", Optional: true),
             new("Licenses/XeSS_LICENSE.txt", @"OptiScaler\Licenses\XeSS_LICENSE.txt", OffNvidia: true, Optional: true),
@@ -195,8 +204,8 @@ public sealed partial class DlssSwapService
     /// </summary>
     internal static readonly (string Repo, FrameGenRelease Release)[] PinnedFrameGenReleases =
     [
-        ("MFG-Unlocker", new("v1.7.0", "MFGUnlocker-v1.7.0.zip", 4842619, "5bd19d03288e1ece1d0bb2030ac072b36758045028da192044dcaad73fd901dd")),
-        ("OptiScaler", new("v0.9.4", "Optiscaler_0.9.4-final.20260718._MM.7z", 55016448, "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad")),
+        ("MFG-Unlocker", new("v1.7.2", "MFGUnlocker-v1.7.2.zip", 5334929, "e002d624e3e7ba5cedab7211043c096fe8f555c30ff43500235a0686c7893f22")),
+        ("OptiScaler", new("v0.9.5", "Optiscaler_0.9.5-final.20261116.7z", 70418897, "77e3ed76bed04e1fb32bacb5a72799ff172f3da22ed5231c0cf3e84fe6761662")),
     ];
 
     /// <summary>The mod's newest pinned release, or why Exo takes none of them.</summary>
