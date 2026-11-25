@@ -138,6 +138,7 @@ public sealed class VoiceFocusTests
             }
         }
         Pass();
+        GC.Collect(0, GCCollectionMode.Forced, blocking: true, compacting: false);
         var before = GC.GetAllocatedBytesForCurrentThread();
         Pass();
         Assert.Equal(before, GC.GetAllocatedBytesForCurrentThread());
