@@ -215,14 +215,14 @@ internal static partial class Peripherals
     /// <summary>A device read that gives up after three seconds: hid.dll's control transfers block.</summary>
     private static string? Bounded(Func<string?> read)
     {
-        var task = Task.Run(() =>
+        var task = Task.Factory.StartNew(() =>
         {
             try { return read(); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException or ObjectDisposedException or ArgumentException)
             {
                 return null;
             }
-        });
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         return task.Wait(TimeSpan.FromSeconds(3)) ? task.Result : null;
     }
 

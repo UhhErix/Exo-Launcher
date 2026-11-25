@@ -104,6 +104,8 @@ public sealed class FailureReportRulesTests
     public void AHostCallIsABugOnlyWhenNobodyPlannedForItsFailure()
     {
         // A refusal meant for the person, a cancel, a timeout and another server's failure are answers, not bugs.
+        Assert.False(FailureReportRules.IsHostCallBug(new UserFacingException("Unknown method: app.info")));
+        Assert.False(FailureReportRules.IsHostCallBug(new UserFacingException("Your graphics driver didn't answer. Try again.")));
         Assert.False(FailureReportRules.IsHostCallBug(new InvalidOperationException("Sign in to Steam first.")));
         Assert.False(FailureReportRules.IsHostCallBug(new InvalidDataException("That file isn't a backup.")));
         Assert.False(FailureReportRules.IsHostCallBug(new OperationCanceledException()));
