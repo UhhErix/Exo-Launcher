@@ -5,13 +5,28 @@ use crate::game_actions::{
 use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
     FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK,
-    SelectTrigger, TRANSPARENT, amoled_card, bad, fg_faint, fg_muted, float_line, glass_rim_bottom,
-    glass_rim_top, glass_still_control_fill, good, hover_fill, icon_chevron_right, icon_external,
-    pressed_fill, select_trigger, switch_pill, switch_pill_keyed, type_control, type_section,
-    type_small, type_title,
+    SelectTrigger, TRANSPARENT, bad, fg_faint, fg_muted, float_line, glass_rim_bottom,
+    glass_rim_top, glass_still_control_fill, good, hex, hover_fill, icon_chevron_right,
+    icon_external, pressed_fill, select_trigger, switch_pill, switch_pill_keyed, type_control,
+    type_section, type_small, type_title,
 };
 use exo_rpc::{Game, GraphicsFeatureRow};
-use rune::{Cursor, El, Transition, col, el, row, text};
+use rune::{Cursor, El, LiquidGlass, Transition, col, el, row, text};
+
+fn panel_secondary() -> rune::Color {
+    hex(0xdcdcdc, 1.0)
+}
+
+fn game_glass_card() -> El {
+    col()
+        .w_full()
+        .min_w(0.0)
+        .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .liquid_glass(LiquidGlass::panel())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+}
 
 fn word_color(word: &LineWord) -> rune::Color {
     if word.bad {
@@ -19,7 +34,7 @@ fn word_color(word: &LineWord) -> rune::Color {
     } else if word.good {
         good()
     } else {
-        fg_muted()
+        panel_secondary()
     }
 }
 
@@ -55,7 +70,7 @@ fn perf_reading_row(name: &str, word: Option<LineWord>, right: Option<El>) -> El
         .child(
             row()
                 .w_full()
-                .min_h(44.0)
+                .min_h(49.0)
                 .py(6.0)
                 .gap(12.0)
                 .justify_between()
@@ -111,7 +126,7 @@ fn perf_action_row(
         .label(name.to_string())
         .grow(1.0)
         .min_w(0.0)
-        .min_h(44.0)
+        .min_h(49.0)
         .py(6.0)
         .px(if armed_question.is_some() { 10.0 } else { 0.0 })
         .gap(12.0)
@@ -144,7 +159,8 @@ fn perf_action_row(
     }
     btn = btn.child(copy).children(trailing_icon);
     el().w_full()
-        .py(6.0)
+        .pt(7.0)
+        .pb(5.0)
         .px(20.0)
         .border_sides([1.0, 0.0, 0.0, 0.0], float_line())
         .child(
@@ -234,21 +250,19 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
         };
         let view = upscaler_view(Some(dlss));
         let word = upscaler_line_word(&view, scan_err.as_deref());
-        if failed || word.text != "Not supported in this game" {
-            rows.push(perf_action_row(
-                PerfActionSpec {
-                    key: "gp-perf-upscalers",
-                    name: "Upscalers",
-                    word: Some(word),
-                    disabled: false,
-                    armed_question: None,
-                    trailing_icon: Some(icon_chevron_right(14.0, fg_muted())),
-                    control: None,
-                    gamepad_focus,
-                },
-                |st, _| st.open_game_system_page("upscalers"),
-            ));
-        }
+        rows.push(perf_action_row(
+            PerfActionSpec {
+                key: "gp-perf-upscalers",
+                name: "Upscalers",
+                word: Some(word),
+                disabled: false,
+                armed_question: None,
+                trailing_icon: Some(icon_chevron_right(14.0, fg_muted())),
+                control: None,
+                gamepad_focus,
+            },
+            |st, _| st.open_game_system_page("upscalers"),
+        ));
     }
 
     if let Some(ref sh) = s.game_page.shaders
@@ -282,7 +296,11 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
     }
 
     if s.game_frame_gen.is_some() || game.installed {
-        rows.push(crate::frame_gen_row::view(s, game));
+        rows.push(
+            el().w_full()
+                .min_h(61.0)
+                .child(crate::frame_gen_row::view(s, game)),
+        );
     } else if let Some(ref fg) = s.game_page.frame_gen {
         if !fg.ok {
             rows.push(perf_reading_row(
@@ -299,7 +317,11 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
         }
     }
     if s.game_frame_cap.is_some() || game.installed {
-        rows.push(crate::frame_cap_row::view(s, game));
+        rows.push(
+            el().w_full()
+                .min_h(61.0)
+                .child(crate::frame_cap_row::view(s, game)),
+        );
     }
 
     if let Some(ref screen) = s.pc.hdr
@@ -517,17 +539,14 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
     }
 
     let _ = PRIMARY_FG;
-    amoled_card(RADIUS_PANEL)
+    game_glass_card()
         .key("gp-perf-card")
-        .grow(1.15)
-        .min_w(0.0)
-        .h_full()
         .child(
-            el().w_full()
-                .pt(18.0)
-                .px(20.0)
-                .pb(15.0)
-                .child(text("Performance & graphics").font(type_title()).color(FG)),
+            el().w_full().pt(18.0).px(20.0).pb(14.0).child(
+                text("Performance & graphics")
+                    .font(type_title().letter_spacing(-0.015))
+                    .color(FG),
+            ),
         )
         .children(rows)
 }
@@ -612,16 +631,14 @@ pub fn graphics_features_card(s: &AppState, game: &Game) -> El {
         rows.push(perf_reading_row(&feat.name, Some(word), right));
     }
 
-    amoled_card(RADIUS_PANEL)
+    game_glass_card()
         .key("gp-graphics-features-card")
-        .w_full()
-        .min_w(0.0)
         .child(
-            el().w_full()
-                .pt(18.0)
-                .px(20.0)
-                .pb(15.0)
-                .child(text("Graphics features").font(type_title()).color(FG)),
+            el().w_full().pt(18.0).px(20.0).pb(15.0).child(
+                text("Graphics features")
+                    .font(type_title().letter_spacing(-0.015))
+                    .color(FG),
+            ),
         )
         .children(rows)
 }

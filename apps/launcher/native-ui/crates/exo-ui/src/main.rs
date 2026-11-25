@@ -763,6 +763,24 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 .or_else(|| state.games.first().map(|g| g.id.clone()))
             {
                 state.open_game_id = Some(gid.clone());
+                if let Some(ref cache_dir) = state.remote_cache_dir
+                    && let Some(game) = state.games.iter().find(|g| g.id == gid)
+                {
+                    let mut urls: Vec<String> = game
+                        .portrait_art_candidates()
+                        .into_iter()
+                        .map(|c| c.url)
+                        .filter(|u| u.starts_with("https://"))
+                        .collect();
+                    if let Some(ref u) = game.hero_url
+                        && u.starts_with("https://")
+                    {
+                        urls.push(u.clone());
+                    }
+                    for url in urls {
+                        let _ = exo_rpc::remote_art::fetch_cached_image(&url, cache_dir);
+                    }
+                }
                 if let Ok(ext) = client.call_blocking::<_, exo_rpc::GameExtras>(
                     exo_rpc::METHOD_GAME_EXTRAS,
                     &serde_json::json!({ "id": gid }),
@@ -807,6 +825,20 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     Duration::from_secs(6),
                 ) {
                     state.game_frame_gen = Some(fg);
+                }
+                if let Ok(fc) = client.call_blocking::<_, exo_rpc::GameFrameCap>(
+                    exo_rpc::METHOD_GAME_FRAME_CAP,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(6),
+                ) {
+                    state.game_frame_cap = Some(fc);
+                }
+                if let Ok(gf) = client.call_blocking::<_, exo_rpc::GameGraphicsFeaturesState>(
+                    exo_rpc::METHOD_GAME_GRAPHICS_FEATURES,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(6),
+                ) {
+                    state.game_page.graphics_features = Some(gf);
                 }
                 if let Ok(gs) = client.call_blocking::<_, exo_rpc::GameSettingsState>(
                     exo_rpc::METHOD_GAME_SETTINGS,
@@ -860,6 +892,19 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 ) && prog.is_active
                 {
                     state.install_progress = Some(prog);
+                }
+                if state
+                    .game_extras
+                    .as_ref()
+                    .and_then(|e| e.achievements_total)
+                    .is_none()
+                    && let Ok(ext) = client.call_blocking::<_, exo_rpc::GameExtras>(
+                        exo_rpc::METHOD_GAME_EXTRAS,
+                        &serde_json::json!({ "id": gid }),
+                        Duration::from_secs(6),
+                    )
+                {
+                    state.game_extras = Some(ext);
                 }
             }
         }
@@ -2262,23 +2307,26 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("game-props-files", |s: &mut AppState| {
         open_game_props_tab(s, 1);
+        s.game_page.props_tab_id = Some(game_actions::PropsSectionId::Files);
     }),
     ("game-props-anticheat", |s: &mut AppState| {
-        open_game_props_tab(s, 2);
+        open_game_props_tab(s, 0);
+        s.game_page.props_tab_id = Some(game_actions::PropsSectionId::General);
     }),
     ("game-props-dlss", |s: &mut AppState| {
-        open_game_props_tab(s, 3);
+        open_game_props_tab(s, 1);
+        s.game_page.props_tab_id = Some(game_actions::PropsSectionId::Files);
     }),
     ("game-props-betas", |s: &mut AppState| {
         open_game_props_tab(s, 2);
         s.game_page.props_tab_id = Some(game_actions::PropsSectionId::Betas);
     }),
     ("game-props-dlc", |s: &mut AppState| {
-        open_game_props_tab(s, 3);
+        open_game_props_tab(s, 0);
         s.game_page.props_tab_id = Some(game_actions::PropsSectionId::Content);
     }),
     ("game-props-artwork", |s: &mut AppState| {
-        open_game_props_tab(s, 4);
+        open_game_props_tab(s, 3);
         s.game_page.props_tab_id = Some(game_actions::PropsSectionId::Artwork);
     }),
     ("library-all", |s: &mut AppState| {
@@ -3514,8 +3562,7 @@ fn main() {
         }
     }
 
-    static WINDOW_VISIBLE: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(true);
+    static WINDOW_VISIBLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
     let handle = app.handle();
     let win_handle = handle.clone();
     app = app

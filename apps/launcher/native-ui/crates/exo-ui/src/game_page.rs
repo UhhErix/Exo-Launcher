@@ -9,13 +9,13 @@ use crate::state::{AppState, InputMode, title_hue};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     SPRING_FLIGHT, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, float_line,
-    glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, hover_fill,
+    glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, hex, hover_fill,
     icon_chevron_left, icon_download, icon_external, icon_folder, icon_pause, icon_play, icon_stop,
     icon_users, pressed_fill, scaled, store_logo, store_logo_or_fallback, surface_card,
     type_control, type_first_run, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, GameVariant, InstallProgress};
-use rune::{Cursor, El, SurfaceFit, TextStyle, col, el, oklch, row, text};
+use rune::{Cursor, El, LiquidGlass, SurfaceFit, TextStyle, col, el, oklch, row, text};
 
 const GAME_EDGE: f32 = 32.0;
 
@@ -565,13 +565,21 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
     }
 
     let identity = if let Some(logo) = s.logo_image(&game, scale) {
-        row().max_h(112.0).items_end().child(
-            el().max_w(440.0)
-                .max_h(112.0)
-                .w(400.0)
-                .h(96.0)
-                .pixels_fit(logo.pixels(), SurfaceFit::Fit),
-        )
+        let (lw, lh) = if let Some([pw, ph]) = logo.size()
+            && pw > 0
+            && ph > 0
+        {
+            let aspect = pw as f32 / ph as f32;
+            let w = (112.0 * aspect).min(440.0);
+            let h = w / aspect;
+            (w, h)
+        } else {
+            (400.0, 112.0)
+        };
+        row()
+            .h(112.0)
+            .items_end()
+            .child(el().w(lw).h(lh).pixels_fit(logo.pixels(), SurfaceFit::Fit))
     } else {
         row().items_end().pb(4.0).child(
             text(game.title.clone())
@@ -614,12 +622,12 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
 
     let stat_col = |val: String, label: &'static str, bar: Option<f32>, divider: bool| {
         let mut c = col()
-            .px(22.0)
+            .px(23.0)
             .gap(3.0)
             .child(
                 row()
                     .key(format!("gp-stat-val-{label}"))
-                    .h(26.0)
+                    .h(25.0)
                     .center_y()
                     .child(text(val).font(type_title()).color(FG)),
             )
@@ -627,13 +635,13 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
                 row().h(16.0).center_y().child(
                     text(label)
                         .font(TextStyle::new(scaled(12.0), 500.0))
-                        .color(fg_muted()),
+                        .color(hex(0xdcdcdc, 1.0)),
                 ),
             );
         if let Some(p) = bar {
-            let fill_w = (76.0 * p).max(if p > 0.0 { 4.0 } else { 0.0 });
+            let fill_w = (82.0 * p).max(if p > 0.0 { 4.0 } else { 0.0 });
             c = c.child(
-                el().w(76.0)
+                el().w(82.0)
                     .h(3.0)
                     .mt(4.0)
                     .radius(2.0)
@@ -670,17 +678,19 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
     let stats_area = if !stat_items.is_empty() || drive_slowed {
         let mut c = col().gap(10.0).items_end();
         if !stat_items.is_empty() {
-            c = c.child(apply_glass(
+            c = c.child(
                 row()
-                    .py(14.0)
+                    .pt(13.0)
+                    .pb(15.0)
                     .px(4.0)
                     .items_start()
                     .radius(RADIUS_PANEL)
                     .continuous_corners()
+                    .clip_rounded(RADIUS_PANEL)
+                    .liquid_glass(LiquidGlass::control())
+                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                     .children(stat_items),
-                ExoGlass::ClearMedia,
-                false,
-            ));
+            );
         }
         if drive_slowed {
             c = c.child(
@@ -740,18 +750,20 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .child(stage);
 
     if installed_actions {
+        let left_col = col()
+            .grow(1.15)
+            .min_w(0.0)
+            .gap(16.0)
+            .child(performance_card(s, &game))
+            .child(graphics_features_card(s, &game));
         let lower_cards = row()
             .w_full()
             .px(GAME_EDGE)
             .gap(16.0)
-            .items_stretch()
-            .child(performance_card(s, &game))
+            .items_start()
+            .child(left_col)
             .child(properties_card(s, &game));
-        let gfx_block = el()
-            .w_full()
-            .px(GAME_EDGE)
-            .child(graphics_features_card(s, &game));
-        page = page.child(lower_cards).child(gfx_block);
+        page = page.child(lower_cards);
     }
 
     if let Some(ref msg) = s.game_page.status_msg
@@ -836,11 +848,24 @@ mod tests {
         let (props_rect, _) = rt
             .presented("gp-props-card")
             .expect("gp-props-card presented");
-        let perf_bottom = perf_rect[1] + perf_rect[3];
-        let props_bottom = props_rect[1] + props_rect[3];
+        let (gfx_rect, _) = rt
+            .presented("gp-graphics-features-card")
+            .expect("gp-graphics-features-card presented");
         assert!(
-            (perf_bottom - props_bottom).abs() <= 1.0,
-            "bottom cards not flush: perf_bottom={perf_bottom} props_bottom={props_bottom}"
+            (perf_rect[1] - props_rect[1]).abs() <= 1.0,
+            "top cards not aligned: perf_y={} props_y={}",
+            perf_rect[1],
+            props_rect[1]
+        );
+        assert!(
+            (gfx_rect[0] - perf_rect[0]).abs() <= 1.0 && (gfx_rect[2] - perf_rect[2]).abs() <= 1.0,
+            "graphics features card must sit in left column under perf card: perf={perf_rect:?} gfx={gfx_rect:?}"
+        );
+        let expected_gfx_y = perf_rect[1] + perf_rect[3] + 16.0;
+        assert!(
+            (gfx_rect[1] - expected_gfx_y).abs() <= 1.0,
+            "graphics features card gap mismatch: gfx_y={} expected={expected_gfx_y}",
+            gfx_rect[1]
         );
 
         let stat_keys = [
