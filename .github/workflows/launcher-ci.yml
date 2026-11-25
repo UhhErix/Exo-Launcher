@@ -196,11 +196,11 @@ jobs:
         run: |
           set -euo pipefail
           logs=$(mktemp -d)
-          workers=(updates account reports covers riot)
+          workers=(updates account reports covers riot auth-proxy)
           pids=()
           for w in "${workers[@]}"; do
             (
-              if [ "$w" != "reports" ] && [ "${CACHE_HIT}" != "true" ]; then
+              if [ "$w" != "reports" ] && [ "$w" != "auth-proxy" ] && [ "${CACHE_HIT}" != "true" ]; then
                 npm ci --prefix "cloud/$w" --no-audit --no-fund --prefer-offline
               fi
               npm test --prefix "cloud/$w"
