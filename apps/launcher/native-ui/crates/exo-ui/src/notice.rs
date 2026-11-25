@@ -38,6 +38,9 @@ pub enum NoticeActionKind {
         notice_id: u64,
     },
     CancelPowerGuardShutdown,
+    ReenableSystemEq {
+        notice_key: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -784,6 +787,10 @@ impl AppState {
             }
             NoticeActionKind::CancelPowerGuardShutdown => {
                 self.cancel_power_guard_shutdown();
+            }
+            NoticeActionKind::ReenableSystemEq { notice_key } => {
+                self.dismiss_notice_by_key(&notice_key);
+                self.eq_act("system-eq", "reenable-system-eq", serde_json::json!({}));
             }
         }
     }

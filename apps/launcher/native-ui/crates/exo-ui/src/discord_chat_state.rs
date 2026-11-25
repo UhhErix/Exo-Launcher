@@ -24,9 +24,9 @@ use exo_rpc::{
     METHOD_DISCORD_MESSAGE_ACTION, METHOD_DISCORD_MESSAGES, METHOD_DISCORD_PINS,
     METHOD_DISCORD_POLL, METHOD_DISCORD_PROFILE, METHOD_DISCORD_REACT, METHOD_DISCORD_REACTORS,
     METHOD_DISCORD_REPORT, METHOD_DISCORD_SAVED, METHOD_DISCORD_SEARCH, METHOD_DISCORD_SEND,
-    METHOD_DISCORD_SERVER, METHOD_DISCORD_STICKER, METHOD_DISCORD_STICKERS, METHOD_DISCORD_THREAD,
-    METHOD_DISCORD_TYPING, METHOD_DISCORD_UNREADS, METHOD_DISCORD_UPLOAD, METHOD_FRIENDS_BADGE,
-    METHOD_SPOTIFY_LINK, SpotifyLinkReply, base64,
+    METHOD_DISCORD_SERVER, METHOD_DISCORD_STICKER, METHOD_DISCORD_STICKER_DATA,
+    METHOD_DISCORD_STICKERS, METHOD_DISCORD_THREAD, METHOD_DISCORD_TYPING, METHOD_DISCORD_UNREADS,
+    METHOD_DISCORD_UPLOAD, METHOD_FRIENDS_BADGE, METHOD_SPOTIFY_LINK, SpotifyLinkReply, base64,
 };
 use rune::TextEdit;
 use serde_json::{Value, json};
@@ -100,6 +100,7 @@ pub struct ExpressionPickerState {
     pub sticker_favorites: Vec<String>,
     pub stickers_guild_id: Option<String>,
     pub stickers_loading: bool,
+    pub sticker_lottie_json: HashMap<String, Option<String>>,
 }
 
 impl Default for ExpressionPickerState {
@@ -126,6 +127,7 @@ impl Default for ExpressionPickerState {
             sticker_favorites: Vec::new(),
             stickers_guild_id: None,
             stickers_loading: false,
+            sticker_lottie_json: HashMap::new(),
         }
     }
 }
@@ -1688,6 +1690,7 @@ impl AppState {
         let mut gifts = Vec::new();
         let mut jams = Vec::new();
         let mut text_files = Vec::new();
+        let mut lottie_stickers = Vec::new();
         for msg in list {
             for code in extract_invite_codes(&msg.content) {
                 if !self.discord.chat.links.invites.contains_key(&code) {
@@ -1713,6 +1716,18 @@ impl AppState {
                     text_files.push(att.url.clone());
                 }
             }
+            for st in &msg.sticker_items {
+                if st.format_type == 3
+                    && !self
+                        .discord
+                        .chat
+                        .picker
+                        .sticker_lottie_json
+                        .contains_key(&st.id)
+                {
+                    lottie_stickers.push(st.id.clone());
+                }
+            }
         }
         for code in invites.into_iter().take(6) {
             self.fetch_invite_card(&code);
@@ -1725,6 +1740,43 @@ impl AppState {
         }
         for url in text_files.into_iter().take(6) {
             self.fetch_file_text(&url);
+        }
+        for id in lottie_stickers.into_iter().take(6) {
+            self.fetch_sticker_data(&id);
+        }
+    }
+
+    pub fn fetch_sticker_data(&mut self, sticker_id: &str) {
+        if self
+            .discord
+            .chat
+            .picker
+            .sticker_lottie_json
+            .contains_key(sticker_id)
+        {
+            return;
+        }
+        self.discord
+            .chat
+            .picker
+            .sticker_lottie_json
+            .insert(sticker_id.to_string(), None);
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        #[cfg(windows)]
+        {
+            let id = sticker_id.to_string();
+            self.call_host_async(
+                METHOD_DISCORD_STICKER_DATA,
+                json!({ "id": id }),
+                move |s, res: Result<Value, String>| {
+                    let data = res
+                        .ok()
+                        .and_then(|v| v.get("json").and_then(|j| j.as_str()).map(str::to_string));
+                    s.discord.chat.picker.sticker_lottie_json.insert(id, data);
+                },
+            );
         }
     }
 

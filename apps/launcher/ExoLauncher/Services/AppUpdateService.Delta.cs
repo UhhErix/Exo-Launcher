@@ -149,7 +149,13 @@ public sealed partial class AppUpdateService
             timeout.CancelAfter(TimeSpan.FromSeconds(60));
             using var request = new HttpRequestMessage(HttpMethod.Get, offer.ManifestUrl);
             using var response = await SendFollowingAllowedRedirectsAsync(request, timeout.Token).ConfigureAwait(false);
-            if (response.StatusCode != HttpStatusCode.OK) throw new InvalidDataException($"files.json answered {(int)response.StatusCode}.");
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                var safeManifestUrl = FailureReportRules.SafeUpdateUrl(offer.ManifestUrl);
+                throw new InvalidDataException(safeManifestUrl is null
+                    ? $"files.json answered {(int)response.StatusCode}."
+                    : $"files.json answered {(int)response.StatusCode} on {safeManifestUrl}.");
+            }
             json = await ReadBoundedBytesAsync(response.Content, AppFiles.MaxManifestBytes, timeout.Token).ConfigureAwait(false);
         }
         if (offer.ManifestSize is { } size && json.LongLength != size) throw new InvalidDataException("files.json is not the size the address gave.");
@@ -389,7 +395,10 @@ public sealed partial class AppUpdateService
         if (response.StatusCode != HttpStatusCode.PartialContent)
         {
             var code = (int)response.StatusCode;
-            var message = $"The pack answered {code} to a range.";
+            var safePackUrl = FailureReportRules.SafeUpdateUrl(packUrl);
+            var message = safePackUrl is null
+                ? $"The pack answered {code} to a range."
+                : $"The pack answered {code} to a range on {safePackUrl}.";
             if (code >= 500 || response.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests)
                 throw new HttpRequestException(message, null, response.StatusCode);
             throw new InvalidDataException(message);

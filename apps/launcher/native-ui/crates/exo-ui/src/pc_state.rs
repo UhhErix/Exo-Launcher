@@ -468,6 +468,7 @@ pub struct SettingsAndPcState {
     pub apps_sort_back: bool,
     pub apps_only_unused: bool,
     pub apps_parts_open: bool,
+    pub startup_bg_open: bool,
     pub apps_select_mode: bool,
     pub apps_picked: HashSet<String>,
     pub apps_run: Option<(usize, usize)>,
@@ -1013,6 +1014,7 @@ impl SettingsAndPcState {
             apps_sort_back: false,
             apps_only_unused: false,
             apps_parts_open: false,
+            startup_bg_open: false,
             apps_select_mode: false,
             apps_picked: HashSet::new(),
             apps_run: None,
@@ -1424,6 +1426,7 @@ impl SettingsAndPcState {
             apps_sort_back: false,
             apps_only_unused: false,
             apps_parts_open: false,
+            startup_bg_open: false,
             apps_select_mode: false,
             apps_picked: HashSet::new(),
             apps_run: None,
@@ -1492,15 +1495,20 @@ impl SettingsAndPcState {
 }
 
 pub fn format_bytes(bytes: u64) -> String {
-    const KB: f64 = 1_000.0;
-    const MB: f64 = 1_000_000.0;
-    const GB: f64 = 1_000_000_000.0;
-    const TB: f64 = 1_000_000_000_000.0;
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    const GB: f64 = MB * 1024.0;
+    const TB: f64 = GB * 1024.0;
     let b = bytes as f64;
-    if b >= TB {
+    if b >= 1000.0 * GB {
         format!("{:.1} TB", b / TB)
     } else if b >= GB {
-        format!("{:.1} GB", b / GB)
+        let gb = b / GB;
+        if gb < 10.0 {
+            format!("{gb:.1} GB")
+        } else {
+            format!("{:.0} GB", gb.round())
+        }
     } else if b >= MB {
         format!("{:.0} MB", (b / MB).round())
     } else if b >= KB {
@@ -2254,11 +2262,11 @@ mod wp9_tests {
         };
         assert_eq!(
             leftover_said(&summary, true),
-            "2 folders, 3 files (120 MB), 5 registry entries and 1 shortcut"
+            "2 folders, 3 files (114 MB), 5 registry entries and 1 shortcut"
         );
         assert_eq!(
             leftover_cleared_line(&summary),
-            "Cleared 2 folders, 3 files, 5 registry entries and 1 shortcut: 120 MB back."
+            "Cleared 2 folders, 3 files, 5 registry entries and 1 shortcut: 114 MB back."
         );
 
         let old_app = InstalledAppItem {

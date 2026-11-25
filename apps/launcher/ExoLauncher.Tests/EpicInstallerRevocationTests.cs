@@ -14,13 +14,20 @@ public sealed class EpicInstallerRevocationTests
     {
         var setup = Path.Combine(Path.GetTempPath(), "exo-epic-revoke-" + Guid.NewGuid().ToString("N") + ".exe");
         File.WriteAllBytes(setup, [0x4D, 0x5A]);
-        var started = false;
-        var download = new EpicNewLauncherInstaller.Download(setup, null, new Uri("https://launcher-public-service-prod06.ol.epicgames.com/"));
+        try
+        {
+            var started = false;
+            var download = new EpicNewLauncherInstaller.Download(setup, null, new Uri("https://launcher-public-service-prod06.ol.epicgames.com/"));
 
-        var message = EpicNewLauncherInstaller.Open(download, _ => { started = true; return null; });
+            var message = EpicNewLauncherInstaller.Open(download, _ => { started = true; return null; });
 
-        Assert.Equal("Couldn't verify Epic's installer right now. Try again.", message);
-        Assert.False(started);
-        Assert.False(File.Exists(setup));
+            Assert.Equal("Couldn't verify Epic's installer right now. Try again.", message);
+            Assert.False(started);
+            Assert.False(File.Exists(setup));
+        }
+        finally
+        {
+            try { ExoLauncher.Helpers.DeletionGate.DeleteFile(setup); } catch { }
+        }
     }
 }

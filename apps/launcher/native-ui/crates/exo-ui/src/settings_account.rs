@@ -1,7 +1,8 @@
 use crate::settings::{set_btn, set_danger_btn, set_primary_btn, settings_card};
 use crate::settings_state::{
     AccountScreen, AccountSecurityForm, AccountSignedOutMode, RECOVERY_CODE_LENGTH,
-    format_unix_timestamp, held_sentences, normalize_recovery_code, recovery_code_confirmed,
+    account_session_label, format_unix_timestamp, held_sentences, normalize_recovery_code,
+    recovery_code_confirmed,
 };
 use crate::state::AppState;
 use exo_kit::{
@@ -540,6 +541,7 @@ pub fn account_section(s: &AppState) -> El {
         .on_press(|s: &mut AppState| {
             s.wp4.account_sessions_open = !s.wp4.account_sessions_open;
             s.wp4.account_sessions_note = None;
+            s.wp4.account_session_confirm_remove = None;
             if s.wp4.account_sessions_open {
                 s.wp4_load_account_sessions();
             }
@@ -562,11 +564,7 @@ pub fn account_section(s: &AppState) -> El {
                 let mut rows = col().w_full().px(18.0).pb(14.0).gap(8.0);
                 for sess in list {
                     let dev = sess.device.clone();
-                    let label = if sess.this_pc {
-                        "This PC"
-                    } else {
-                        "Another PC"
-                    };
+                    let label = account_session_label(sess);
                     let used = format!("Last used {}", format_unix_timestamp(sess.last_used));
                     let mut r = row().w_full().justify_between().center_y().gap(12.0).child(
                         row()
@@ -576,11 +574,38 @@ pub fn account_section(s: &AppState) -> El {
                             .child(text(used).font(type_small()).color(fg_muted())),
                     );
                     if !sess.this_pc {
-                        r = r.child(
+                        let confirming =
+                            s.wp4.account_session_confirm_remove.as_deref() == Some(dev.as_str());
+                        let ctrl = if confirming {
+                            row()
+                                .gap(8.0)
+                                .center_y()
+                                .child(
+                                    set_btn(format!("set-acct-rev-cancel-{dev}"), "Cancel", None)
+                                        .on_press(|s: &mut AppState| {
+                                            s.wp4.account_session_confirm_remove = None
+                                        }),
+                                )
+                                .child(
+                                    set_danger_btn(
+                                        format!("set-acct-rev-go-{dev}"),
+                                        "Remove?",
+                                        None,
+                                    )
+                                    .on_press(
+                                        move |s: &mut AppState| {
+                                            s.wp4_revoke_account_session(dev.clone())
+                                        },
+                                    ),
+                                )
+                        } else {
                             set_btn(format!("set-acct-rev-{dev}"), "Remove", None).on_press(
-                                move |s: &mut AppState| s.wp4_revoke_account_session(dev.clone()),
-                            ),
-                        );
+                                move |s: &mut AppState| {
+                                    s.wp4.account_session_confirm_remove = Some(dev.clone())
+                                },
+                            )
+                        };
+                        r = r.child(ctrl);
                     }
                     rows = rows.child(r);
                 }

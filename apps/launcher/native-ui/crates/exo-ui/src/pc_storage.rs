@@ -3,13 +3,12 @@ use crate::pc_state::{compress_words, format_bytes};
 use crate::state::AppState;
 use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, SPRING_MOVE,
-    SPRING_QUICK, amoled_card, bad, fg_muted, float_line, glass_button, good, hover_fill,
-    icon_chevron_left, icon_hard_drive, icon_refresh, pressed_fill, progress_bar, scaled,
-    status_badge, subtle_fill, track_fill, type_body, type_control, type_section, type_small,
-    type_title, warn,
+    SPRING_QUICK, amoled_card, bad, fg_muted, float_line, good, hover_fill, icon_chevron_left,
+    icon_hard_drive, icon_refresh, pressed_fill, progress_bar, status_badge, subtle_fill,
+    track_fill, type_body, type_control, type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{CompressListGame, DriveInfo, DrivesReply};
-use rune::{Cursor, El, Key, ScrollSpec, TextStyle, col, el, row, text};
+use rune::{Cursor, El, Key, ScrollSpec, col, el, row, text};
 
 const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
 const TIB: f64 = GIB * 1024.0;
@@ -495,6 +494,7 @@ fn compress_game_row(game: &CompressListGame, armed: Option<&str>) -> El {
         .child(
             row()
                 .w_full()
+                .min_h(62.0)
                 .py(10.0)
                 .gap(12.0)
                 .justify_between()
@@ -532,10 +532,11 @@ pub(crate) fn exo_ai_storage_view(s: &AppState) -> El {
 
     let mut drives_panel = col()
         .key("storage-drives-panel")
-        .grow(1.0)
+        .grow(1.05)
         .min_w(0.0)
-        .px(20.0)
-        .py(20.0)
+        .pt(18.0)
+        .px(24.0)
+        .pb(14.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
@@ -612,14 +613,18 @@ pub(crate) fn exo_ai_storage_view(s: &AppState) -> El {
         .key("storage-compress-panel")
         .grow(1.0)
         .min_w(0.0)
-        .px(20.0)
-        .py(20.0)
-        .gap(8.0)
+        .pt(18.0)
+        .px(24.0)
+        .pb(14.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(BG)
         .border(1.0, float_line())
-        .child(text("Compress games").font(type_title()).color(FG));
+        .child(
+            el().w_full()
+                .pb(10.0)
+                .child(text("Compress games").font(type_title()).color(FG)),
+        );
 
     if let Some(list) = compress {
         let eligible_count = list.games.iter().filter(|g| g.eligible).count();
@@ -658,7 +663,8 @@ pub(crate) fn exo_ai_storage_view(s: &AppState) -> El {
             .child(
                 row()
                     .w_full()
-                    .py(8.0)
+                    .min_h(62.0)
+                    .py(10.0)
                     .justify_between()
                     .center_y()
                     .child(
@@ -680,6 +686,7 @@ pub(crate) fn exo_ai_storage_view(s: &AppState) -> El {
             .child(
                 row()
                     .w_full()
+                    .min_h(62.0)
                     .py(10.0)
                     .justify_between()
                     .center_y()
@@ -695,6 +702,7 @@ pub(crate) fn exo_ai_storage_view(s: &AppState) -> El {
             .child(
                 row()
                     .w_full()
+                    .min_h(62.0)
                     .py(10.0)
                     .justify_between()
                     .center_y()
@@ -730,10 +738,10 @@ pub(crate) fn exo_ai_storage_view(s: &AppState) -> El {
         .key("storage-room")
         .w_full()
         .h_full()
-        .pt(60.0)
-        .px(16.0)
-        .pb(28.0)
-        .gap(16.0)
+        .pt(64.0)
+        .px(10.0)
+        .pb(20.0)
+        .gap(14.0)
         .on_key(|s: &mut AppState, ev, _| {
             if ev.key == Key::Escape {
                 if s.pc.armed_confirm.is_some() {
@@ -749,47 +757,87 @@ pub(crate) fn exo_ai_storage_view(s: &AppState) -> El {
         .child(
             row()
                 .w_full()
+                .py(2.0)
                 .justify_between()
                 .center_y()
                 .child(
                     row()
-                        .gap(14.0)
+                        .gap(12.0)
                         .center_y()
                         .child(
-                            glass_button(
-                                "storage-back",
-                                "Exo AI",
-                                Some(icon_chevron_left(14.0, FG)),
-                            )
-                            .on_press(|s: &mut AppState| {
-                                s.pc.exo_ai_storage_open = false;
-                                s.pc.armed_confirm = None;
-                            }),
+                            row()
+                                .key("storage-back")
+                                .role("button")
+                                .label("Exo AI")
+                                .focusable(true)
+                                .hit()
+                                .press_on_down()
+                                .press_scale(PRESS_SCALE)
+                                .cursor(Cursor::Pointer)
+                                .h(32.0)
+                                .pl(12.0)
+                                .pr(14.0)
+                                .gap(6.0)
+                                .center_y()
+                                .radius(RADIUS_PILL)
+                                .fill(subtle_fill())
+                                .border(1.0, float_line())
+                                .hover(hover_fill())
+                                .press(pressed_fill())
+                                .motion(SPRING_QUICK)
+                                .on_press(|s: &mut AppState| {
+                                    s.pc.exo_ai_storage_open = false;
+                                    s.pc.armed_confirm = None;
+                                })
+                                .child(icon_chevron_left(14.0, FG))
+                                .child(text("Exo AI").font(type_control()).color(FG)),
                         )
                         .child(
-                            col()
-                                .gap(2.0)
-                                .child(
-                                    text("Storage")
-                                        .font(TextStyle::new(scaled(22.0), 650.0))
-                                        .color(FG),
-                                )
-                                .children(
-                                    sub.map(|line| text(line).font(type_small()).color(fg_muted())),
-                                ),
+                            row()
+                                .gap(12.0)
+                                .items_end()
+                                .child(text("Storage").font(type_page()).color(FG))
+                                .children(sub.map(|line| {
+                                    el().pb(4.0)
+                                        .child(text(line).font(type_small()).color(fg_muted()))
+                                })),
                         ),
                 )
                 .child(
-                    glass_button(
-                        "storage-scan",
-                        if s.pc.storage_scanning {
+                    row()
+                        .key("storage-scan")
+                        .role("button")
+                        .label(if s.pc.storage_scanning {
                             "Scanning…"
                         } else {
                             "Scan space"
-                        },
-                        Some(icon_refresh(14.0, FG)),
-                    )
-                    .on_press(|s: &mut AppState| s.scan_storage_space()),
+                        })
+                        .focusable(true)
+                        .hit()
+                        .press_on_down()
+                        .press_scale(PRESS_SCALE)
+                        .cursor(Cursor::Pointer)
+                        .h(32.0)
+                        .px(12.0)
+                        .gap(6.0)
+                        .center_y()
+                        .radius(RADIUS_PILL)
+                        .fill(subtle_fill())
+                        .border(1.0, float_line())
+                        .hover(hover_fill())
+                        .press(pressed_fill())
+                        .motion(SPRING_QUICK)
+                        .on_press(|s: &mut AppState| s.scan_storage_space())
+                        .child(icon_refresh(14.0, FG))
+                        .child(
+                            text(if s.pc.storage_scanning {
+                                "Scanning…"
+                            } else {
+                                "Scan space"
+                            })
+                            .font(type_control())
+                            .color(FG),
+                        ),
                 ),
         )
         .child(
@@ -805,7 +853,7 @@ pub(crate) fn exo_ai_storage_view(s: &AppState) -> El {
                     row()
                         .w_full()
                         .items_start()
-                        .gap(14.0)
+                        .gap(10.0)
                         .child(drives_panel)
                         .child(compress_panel),
                 ),

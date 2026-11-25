@@ -7,14 +7,14 @@ use crate::pc_state::{
 use crate::pc_storage::{exo_ai_storage_view, format_gb_short};
 use crate::state::{AppState, HostStatus, title_hue};
 use exo_kit::{
-    BG, BadgeTone, ExoGlass, FG, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, bad, exo_glass, fg_faint, fg_muted, float_line, glass_button, good, hover_fill,
-    icon_app_window, icon_check, icon_cpu, icon_hard_drive, icon_monitor, pressed_fill,
-    primary_button, progress_bar, scaled, status_badge, surface_card, type_body, type_control,
+    BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, bad, fg_faint, fg_muted, float_line, good, hover_fill, icon_app_window,
+    icon_check, icon_cpu, icon_hard_drive, icon_monitor, icon_zap, pressed_fill, primary_button,
+    progress_bar, scaled, status_badge, subtle_fill, surface_card, type_body, type_control,
     type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{DriverEntry, RuntimeItem, RuntimesProgress, TunePart};
-use rune::{Cursor, El, SurfaceFit, TextStyle, col, el, oklch, row, text};
+use rune::{Cursor, El, ScrollSpec, SurfaceFit, TextStyle, col, el, oklch, row, text};
 use serde_json::json;
 
 fn strip_trademarks(raw: &str) -> String {
@@ -455,7 +455,7 @@ fn auto_tune_hardware_row(
         );
     }
 
-    let mut row_wrap = col().w_full().py(10.0).gap(6.0).child(
+    let mut row_wrap = col().w_full().min_h(68.0).py(14.0).gap(6.0).child(
         row()
             .w_full()
             .min_h(36.0)
@@ -576,10 +576,14 @@ fn runtimes_section_view(s: &AppState) -> Option<El> {
     let mut sec = col()
         .key("pc-runtimes-section")
         .w_full()
-        .pt(8.0)
+        .pt(14.0)
         .gap(6.0)
         .child(el().w_full().h(1.0).fill(float_line()))
-        .child(text("Game runtimes").font(type_section()).color(FG));
+        .child(
+            el().w_full()
+                .pt(8.0)
+                .child(text("Game runtimes").font(type_section()).color(FG)),
+        );
 
     if let Some(ref mode) = s.pc.runtimes_running {
         let prog = s.pc.runtimes_progress.as_ref();
@@ -636,6 +640,8 @@ fn runtimes_section_view(s: &AppState) -> Option<El> {
         sec = sec.child(
             row()
                 .w_full()
+                .min_h(54.0)
+                .py(10.0)
                 .justify_between()
                 .center_y()
                 .gap(8.0)
@@ -644,12 +650,12 @@ fn runtimes_section_view(s: &AppState) -> Option<El> {
                     row()
                         .gap(6.0)
                         .child(
-                            menu_btn("runtimes-repair".into(), "Repair all", false, false, false)
-                                .on_press(|s: &mut AppState| s.run_runtimes_install("repair")),
-                        )
-                        .child(
                             menu_btn("runtimes-install".into(), action_word, true, false, false)
                                 .on_press(|s: &mut AppState| s.run_runtimes_install("update")),
+                        )
+                        .child(
+                            menu_btn("runtimes-repair".into(), "Repair all", false, false, false)
+                                .on_press(|s: &mut AppState| s.run_runtimes_install("repair")),
                         ),
                 ),
         );
@@ -677,7 +683,7 @@ fn runtimes_section_view(s: &AppState) -> Option<El> {
                 .and_then(|p| p.id.as_deref())
                 == Some(i.id.as_str())
     }) {
-        let right = if let Some(res) = s.pc.runtimes_results.get(&item.id) {
+        let right = s.pc.runtimes_results.get(&item.id).map(|res| {
             let word = match res.outcome.as_str() {
                 "installed" => "Installed",
                 "newer" => "Already newer",
@@ -692,27 +698,32 @@ fn runtimes_section_view(s: &AppState) -> Option<El> {
                     BadgeTone::Good
                 },
             )
+        });
+        let detail = if item.state == "missing" {
+            "Missing".into()
         } else {
-            text(if item.state == "missing" {
-                "Missing".into()
-            } else {
-                format!(
-                    "{} → {}",
-                    item.installed.as_deref().unwrap_or(""),
-                    item.latest
-                )
-            })
-            .font(type_small())
-            .color(fg_muted())
+            format!(
+                "{} → {}",
+                item.installed.as_deref().unwrap_or(""),
+                item.latest
+            )
         };
-        sec = sec.child(
+        sec = sec.child(el().w_full().h(1.0).fill(float_line())).child(
             row()
                 .w_full()
-                .py(6.0)
+                .min_h(58.0)
+                .py(10.0)
                 .justify_between()
                 .center_y()
-                .child(text(item.name.clone()).font(type_control()).color(FG))
-                .child(right),
+                .child(
+                    col()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .gap(2.0)
+                        .child(text(item.name.clone()).font(type_control()).color(FG))
+                        .child(text(detail).font(type_small()).color(fg_muted())),
+                )
+                .children(right),
         );
     }
 
@@ -795,8 +806,9 @@ fn updates_card_view(s: &AppState) -> El {
     let mut card = col()
         .key("exo-ai-updates-card")
         .w_full()
-        .py(14.0)
+        .pt(18.0)
         .px(24.0)
+        .pb(20.0)
         .gap(4.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
@@ -805,7 +817,8 @@ fn updates_card_view(s: &AppState) -> El {
         .child(
             row()
                 .w_full()
-                .min_h(32.0)
+                .min_h(36.0)
+                .pb(6.0)
                 .justify_between()
                 .center_y()
                 .child(text("Updates").font(type_title()).color(FG))
@@ -1416,7 +1429,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     .px(14.0)
                     .center()
                     .radius(RADIUS_PILL)
-                    .liquid_glass(exo_glass(ExoGlass::Control, true))
+                    .fill(subtle_fill())
+                    .border(1.0, float_line())
                     .hover(hover_fill())
                     .press(pressed_fill())
                     .motion(SPRING_QUICK)
@@ -1429,13 +1443,15 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         } else {
             "Run Auto Tune"
         };
-        primary_button("ai-run-auto-tune", lbl, None)
+        primary_button("ai-run-auto-tune", lbl, Some(icon_zap(14.0, PRIMARY_FG)))
+            .h(44.0)
+            .px(22.0)
             .on_press(|s: &mut AppState| s.run_auto_tune_pipeline())
     };
 
     let header = row()
         .w_full()
-        .h(36.0)
+        .h(44.0)
         .justify_between()
         .center_y()
         .child(
@@ -1480,7 +1496,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .gap(6.0)
                         .center_y()
                         .radius(RADIUS_PILL)
-                        .liquid_glass(exo_glass(ExoGlass::Control, true))
+                        .fill(subtle_fill())
+                        .border(1.0, float_line())
                         .hover(hover_fill())
                         .press(pressed_fill())
                         .motion(SPRING_QUICK)
@@ -1551,7 +1568,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(
             row()
                 .w_full()
-                .min_h(42.0)
+                .min_h(32.0)
                 .pb(10.0)
                 .justify_between()
                 .center_y()
@@ -1565,7 +1582,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         )
         .child(el().w_full().h(1.0).fill(float_line()));
 
-    let mut stages_col = col().w_full().pt(4.0);
+    let mut stages_col = col().w_full();
     for (i, stage) in stages.iter().enumerate() {
         if i > 0 {
             stages_col = stages_col.child(el().w_full().h(1.0).fill(float_line()));
@@ -1597,8 +1614,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             row()
                 .key(format!("auto-tune-stage-{}", stage.id.key()))
                 .w_full()
-                .min_h(48.0)
-                .py(8.0)
+                .min_h(55.0)
+                .py(9.0)
                 .gap(10.0)
                 .center_y()
                 .child(marker)
@@ -1806,6 +1823,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
     let mut hw_card = col()
         .key("exo-ai-hw-card")
         .w_full()
+        .grow(1.0)
         .pt(20.0)
         .px(24.0)
         .pb(14.0)
@@ -1963,8 +1981,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .min_w(0.0)
         .gap(10.0)
         .child(auto_tune_card)
-        .child(hw_card)
-        .child(updates_card);
+        .child(hw_card);
 
     let shaders_working = s.pc.shaders_queue_running
         || s.pc.shaders_queue_current_id.is_some()
@@ -1976,7 +1993,10 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             .map(|g| g.id.clone())
             .collect();
 
-    let (shader_list, base_shader_summary) = if !s.pc.shader_snap_games.is_empty() {
+    let shaders_absent = s.pc.shaders.as_ref().is_some_and(|sh| !sh.present);
+    let (shader_list, base_shader_summary) = if shaders_absent {
+        (Vec::new(), String::new())
+    } else if !s.pc.shader_snap_games.is_empty() {
         let current = s.pc.shader_snap_games.iter().find(|g| g.compiling);
         let current_id = current.map(|g| g.id.as_str());
         let waiting: Vec<&exo_rpc::ShaderSnapGame> =
@@ -2122,7 +2142,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         let n = list.len();
         let summary = format!("{n} {}", if n == 1 { "game" } else { "games" });
         (list, summary)
-    } else {
+    } else if s.status == HostStatus::Standalone {
         let list: Vec<_> = s
             .games
             .iter()
@@ -2142,6 +2162,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         let n = list.len();
         let summary = format!("{n} {}", if n == 1 { "game" } else { "games" });
         (list, summary)
+    } else {
+        (Vec::new(), String::new())
     };
 
     let rebuild_summary = s.pc.shaders_rebuild.as_ref().and_then(|rb| {
@@ -2232,73 +2254,82 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         shader_rows = shader_rows.child(r);
     }
 
-    let mut shader_actions = row()
-        .gap(8.0)
-        .center_y()
-        .child(text(shader_summary).font(type_body()).color(fg_muted()))
-        .child(
-            glass_button(
-                "shaders-refresh",
-                if s.pc.shaders_scanning || s.pc.shaders_busy.as_deref() == Some("scan") {
-                    "Scanning…"
-                } else {
-                    "Refresh"
-                },
-                None,
-            )
-            .on_press(|s: &mut AppState| {
-                if s.pc.shaders.as_ref().is_some_and(|sh| sh.present) {
-                    s.run_shaders_steps("scan", vec![("scan", json!({}))]);
-                } else {
-                    s.load_pc_exo_ai();
-                }
-            }),
-        );
-
-    if shaders_working {
-        let paused = s.pc.shaders_queue_paused;
+    let mut shader_actions = row().gap(8.0).center_y();
+    if !shaders_absent {
         shader_actions = shader_actions
+            .child(text(shader_summary).font(type_body()).color(fg_muted()))
             .child(
-                glass_button(
-                    "shaders-pause",
-                    if paused { "Resume" } else { "Pause" },
-                    None,
-                )
-                .on_press(move |s: &mut AppState| {
-                    let m = if paused {
-                        "queue.resume"
+                menu_btn(
+                    "shaders-refresh".into(),
+                    if s.pc.shaders_scanning || s.pc.shaders_busy.as_deref() == Some("scan") {
+                        "Scanning…"
                     } else {
-                        "queue.pause"
-                    };
-                    s.run_shaders_steps("pause", vec![(m, json!({}))]);
-                }),
-            )
-            .child(
-                glass_button("shaders-stop", "Stop", None).on_press(|s: &mut AppState| {
-                    s.run_shaders_steps("stop", vec![("queue.stop", json!({}))]);
+                        "Refresh"
+                    },
+                    false,
+                    false,
+                    false,
+                )
+                .on_press(|s: &mut AppState| {
+                    if s.pc.shaders.as_ref().is_some_and(|sh| sh.present) {
+                        s.run_shaders_steps("scan", vec![("scan", json!({}))]);
+                    } else {
+                        s.load_pc_exo_ai();
+                    }
                 }),
             );
-    } else {
-        let ids_c = ready_ids.clone();
-        shader_actions = shader_actions.child(
-            primary_button("shaders-compile", "Compile", None).on_press(move |s: &mut AppState| {
-                if !ids_c.is_empty() || s.pc.shaders_queue_can_start {
-                    let mut steps = Vec::new();
-                    if !ids_c.is_empty() {
-                        steps.push(("queue.add", json!({ "ids": ids_c })));
-                    }
-                    steps.push(("queue.start", json!({})));
-                    s.run_shaders_steps("compile", steps);
-                } else {
-                    s.compile_shaders_all();
-                }
-            }),
-        );
+
+        if shaders_working {
+            let paused = s.pc.shaders_queue_paused;
+            shader_actions = shader_actions
+                .child(
+                    menu_btn(
+                        "shaders-pause".into(),
+                        if paused { "Resume" } else { "Pause" },
+                        false,
+                        false,
+                        false,
+                    )
+                    .on_press(move |s: &mut AppState| {
+                        let m = if paused {
+                            "queue.resume"
+                        } else {
+                            "queue.pause"
+                        };
+                        s.run_shaders_steps("pause", vec![(m, json!({}))]);
+                    }),
+                )
+                .child(
+                    menu_btn("shaders-stop".into(), "Stop", false, false, false).on_press(
+                        |s: &mut AppState| {
+                            s.run_shaders_steps("stop", vec![("queue.stop", json!({}))]);
+                        },
+                    ),
+                );
+        } else {
+            let ids_c = ready_ids.clone();
+            shader_actions =
+                shader_actions.child(primary_button("shaders-compile", "Compile", None).on_press(
+                    move |s: &mut AppState| {
+                        if !ids_c.is_empty() || s.pc.shaders_queue_can_start {
+                            let mut steps = Vec::new();
+                            if !ids_c.is_empty() {
+                                steps.push(("queue.add", json!({ "ids": ids_c })));
+                            }
+                            steps.push(("queue.start", json!({})));
+                            s.run_shaders_steps("compile", steps);
+                        } else {
+                            s.compile_shaders_all();
+                        }
+                    },
+                ));
+        }
     }
 
     let mut shaders_card = col()
         .key("exo-ai-shaders-card")
         .w_full()
+        .grow(1.0)
         .pt(18.0)
         .px(24.0)
         .pb(18.0)
@@ -2404,7 +2435,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .grow(1.0)
         .min_w(0.0)
         .gap(10.0)
-        .child(shaders_card);
+        .child(updates_card);
 
     if s.pc.gpu_processes.is_some() || s.status != HostStatus::Standalone {
         let gpu_data = s.pc.gpu_processes.as_ref();
@@ -2459,6 +2490,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     row()
                         .key(format!("gpu-proc-{}-{}", proc.pid, proc.adapter_luid))
                         .w_full()
+                        .min_h(50.0)
                         .py(8.0)
                         .gap(12.0)
                         .justify_between()
@@ -2486,6 +2518,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         right_col = right_col.child(gpu_card);
     }
 
+    right_col = right_col.child(shaders_card);
+
     col()
         .key("room-exo-ai")
         .w_full()
@@ -2497,17 +2531,28 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .fill(BG)
         .child(header)
         .child(
-            row()
-                .key("exo-ai-grid")
+            col()
+                .key("exo-ai-scroll")
                 .w_full()
+                .grow(1.0)
                 .min_h(0.0)
-                .items_start()
-                .gap(10.0)
-                .child(left_col)
-                .child(right_col),
+                .gap(12.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .child(
+                    row()
+                        .key("exo-ai-grid")
+                        .w_full()
+                        .min_h(938.0)
+                        .items_stretch()
+                        .gap(10.0)
+                        .child(left_col)
+                        .child(right_col),
+                )
+                .child(crate::power_guard::card_view(s))
+                .child(crate::hw_sensors::card_view(s)),
         )
-        .child(crate::power_guard::card_view(s))
-        .child(crate::hw_sensors::card_view(s))
 }
 
 pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
@@ -2560,40 +2605,25 @@ mod tests {
             "Exo AI should render Liquid Glass, got {glass_shapes}"
         );
 
-        let (auto_title, _) = rt
-            .presented("exo-ai-auto-tune-title")
-            .expect("exo-ai-auto-tune-title");
-        let (shaders_title, _) = rt
-            .presented("exo-ai-shaders-title")
-            .expect("exo-ai-shaders-title");
-        assert!(
-            (auto_title[1] - shaders_title[1]).abs() <= 1.0,
-            "Auto Tune y={} and Shaders y={} headers should align",
-            auto_title[1],
-            shaders_title[1]
-        );
-
         let (hw_rect, _) = rt.presented("exo-ai-hw-card").expect("exo-ai-hw-card");
         let (upd_rect, _) = rt
             .presented("exo-ai-updates-card")
             .expect("exo-ai-updates-card");
+        let (auto_card, _) = rt
+            .presented("exo-ai-auto-tune-title")
+            .expect("exo-ai-auto-tune-title");
         assert!(
-            (hw_rect[0] - upd_rect[0]).abs() <= 1.0 && upd_rect[1] > hw_rect[1],
-            "Updates card should sit directly below hardware card in left column"
+            upd_rect[0] > hw_rect[0],
+            "Updates card should sit in the right column beside Auto Tune"
         );
         assert!(
-            hw_rect[3] < 260.0,
-            "Hardware card should hug content at natural height, got h={}",
+            hw_rect[1] > auto_card[1],
+            "Hardware card should sit below Auto Tune in the left column"
+        );
+        assert!(
+            hw_rect[3] >= 200.0,
+            "Hardware card should fill remaining left-column height, got h={}",
             hw_rect[3]
-        );
-
-        let (left_col, _) = rt.presented("exo-ai-left-col").expect("exo-ai-left-col");
-        let (right_col, _) = rt.presented("exo-ai-right-col").expect("exo-ai-right-col");
-        let left_bottom = left_col[1] + left_col[3];
-        let right_bottom = right_col[1] + right_col[3];
-        assert!(
-            (left_bottom - right_bottom).abs() <= 40.0,
-            "Exo AI left bottom ({left_bottom}) and right bottom ({right_bottom}) drifted apart"
         );
     }
 

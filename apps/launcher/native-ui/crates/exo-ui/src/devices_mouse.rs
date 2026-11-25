@@ -1,6 +1,6 @@
 use crate::devices_audio::{
     DevicePageHeader, device_btn, device_page_shell_columns_no_rescan, device_panel, device_row,
-    device_switch,
+    device_row_compact, device_switch,
 };
 use crate::state::{AppState, HostStatus};
 use exo_hid_devices::auto_profiles::{
@@ -410,7 +410,7 @@ fn chip_button(key: impl Into<String>, label: impl Into<String>, active: bool) -
         .press_scale(PRESS_SCALE)
         .cursor(Cursor::Pointer)
         .h(30.0)
-        .px(11.0)
+        .px(9.0)
         .center_y()
         .radius(8.0)
         .fill(if active {
@@ -432,7 +432,7 @@ fn chip_button(key: impl Into<String>, label: impl Into<String>, active: bool) -
 }
 
 fn mouse_row(label: impl Into<String>, detail: Option<impl Into<String>>, control: El) -> El {
-    device_row(label, detail.map(Into::into), None, Some(control))
+    device_row_compact(label, detail.map(Into::into), None, Some(control))
 }
 
 fn mouse_badge(label: impl Into<String>, tone: BadgeTone) -> El {

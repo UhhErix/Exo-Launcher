@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.31.1 — November 25, 2026
+- **Reduce motion stays where you set it.** Stops account sync from overwriting your local Reduce motion preference, resolves setting conflicts using timestamps instead of older values, and flushes manual sync right away. _Checked in code only._
+- **Smoother app during heavy background tasks.** Isolates slow hardware, optimization, and system work onto separate lanes so rooms and controls stay responsive, submits crash reports in the background, and stops counting expected status messages as app errors. _Checked in code only._
+- **Fewer unexpected crashes and clearer crash diagnostics.** Protects UI events, Discord voice teardown, and Windows system callbacks against sudden exits, and writes privacy-scrubbed crash breadcrumbs to the log to help diagnose rare failures. _Checked in code only._
+
+## 3.31.0 — November 24, 2026
+- **Smaller install and faster startup.** Trims unused runtime locales and debug components, lazy-loads the changelog from a compressed file, and shrinks Exo Capture and Discord voice noise suppression binaries so Exo installs smaller and starts faster. _Verified: on screen._
+- **Cleaner background WebView2 memory.** Releases shared WebView2 environments and applies low-memory reclaim when temporary sign-in, gift, link, preview, and music windows close so background processes exit promptly. _Verified: on screen._
+- **Updated game capture, GameInput, frame generation, and shader libraries.** Updates the bundled OBS game capture hook to 33.0.3, Microsoft GameInput to 4.1.315, OptiScaler to v0.9.5, MFG-Unlocker to v1.7.2, and Exo Shaders' ValvePak library to 7.2. _Checked in code only._
+- **More reliable crash reports and helper-tool timeouts.** Prevents unhandled task exceptions when timed-out helper tools close their output streams, speeds up report scrubbing, and keeps useful diagnostic names readable without over-redacting them. _Checked in code only._
+
 ## 3.29.0 — November 22, 2026
 - **Interactive guided tour.** Opens once on launch to walk through Library, Search (`Ctrl+K`), Store, Discord, Music, Devices, Exo AI, Apps, and Settings with a live spotlight over each room. Skip anytime with `Skip` or `Escape`, jump to any step with the progress dots, or replay from Settings › About or `Ctrl+K`. _Verified: on screen._
 - **Overhauled Library, Store, Game Page, and Settings.** Replaces legacy Library filter pills with a clean poster HomeDeck and horizontal scroll arrows, opens Game Page details directly from the `⋯` menu, centers `Activate key` as a scrim modal dialog, groups Settings into a cleaner sidebar, and eliminates initial load layout shifts across Library and Music. _Verified: on screen._

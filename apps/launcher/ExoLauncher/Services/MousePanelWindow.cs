@@ -305,22 +305,26 @@ internal sealed class MousePanelWindow
         uint dwEventThread,
         uint dwmsEventTime)
     {
-        if (_closed || hwnd != _ownerHwnd || idObject != ObjIdWindow || idChild != ChildIdSelf) return;
-        if (eventType == EventObjectDestroy)
+        try
         {
-            OwnerDestroyed?.Invoke();
-            return;
+            if (_closed || hwnd != _ownerHwnd || idObject != ObjIdWindow || idChild != ChildIdSelf) return;
+            if (eventType == EventObjectDestroy)
+            {
+                OwnerDestroyed?.Invoke();
+                return;
+            }
+            if (eventType is EventObjectLocationChange
+                or EventObjectShow
+                or EventObjectHide
+                or EventSystemMinimizeStart
+                or EventSystemMinimizeEnd
+                or EventSystemMoveSizeStart
+                or EventSystemMoveSizeEnd)
+            {
+                SyncPositionAndVisibility(force: false);
+            }
         }
-        if (eventType is EventObjectLocationChange
-            or EventObjectShow
-            or EventObjectHide
-            or EventSystemMinimizeStart
-            or EventSystemMinimizeEnd
-            or EventSystemMoveSizeStart
-            or EventSystemMoveSizeEnd)
-        {
-            SyncPositionAndVisibility(force: false);
-        }
+        catch { }
     }
 
     private static void EnsureClassRegistered()
@@ -341,31 +345,35 @@ internal sealed class MousePanelWindow
 
     private static nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam)
     {
-        if (Instances.TryGetValue(hwnd, out var host))
+        try
         {
-            if (msg == WmSize)
+            if (Instances.TryGetValue(hwnd, out var host))
             {
-                host.SyncControllerBoundsFromClient();
-            }
-            else if (msg == WmDestroy)
-            {
-                Instances.Remove(hwnd);
-                host._hwnd = 0;
-                host.UnhookOwnerEvents();
-                if (!host._closed)
+                if (msg == WmSize)
                 {
-                    host._closed = true;
-                    var controller = host._controller;
-                    host._controller = null;
-                    host._core = null;
-                    if (controller is not null)
+                    host.SyncControllerBoundsFromClient();
+                }
+                else if (msg == WmDestroy)
+                {
+                    Instances.Remove(hwnd);
+                    host._hwnd = 0;
+                    host.UnhookOwnerEvents();
+                    if (!host._closed)
                     {
-                        try { controller.Close(); } catch { }
+                        host._closed = true;
+                        var controller = host._controller;
+                        host._controller = null;
+                        host._core = null;
+                        if (controller is not null)
+                        {
+                            try { controller.Close(); } catch { }
+                        }
+                        try { host.Closed?.Invoke(); } catch { }
                     }
-                    try { host.Closed?.Invoke(); } catch { }
                 }
             }
         }
+        catch { }
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 

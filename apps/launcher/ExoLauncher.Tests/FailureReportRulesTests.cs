@@ -42,13 +42,25 @@ public sealed class FailureReportRulesTests
     }
 
     [Fact]
-    public void UpdateDownloadReasonCarriesOnlyTheHttpStatus()
+    public void UpdateDownloadReasonCarriesHttpStatusAndSafeHostPath()
     {
         var withStatus = new HttpRequestException("Response status code does not indicate success.", null, HttpStatusCode.NotFound);
         Assert.Equal("Update download failed (HTTP 404)", FailureReportRules.UpdateDownloadReason(withStatus));
         Assert.Equal(
-            "Update download failed (HTTP 404) on /v1/launcher/download/v3.29.0/ExoLauncher-Setup.exe",
-            FailureReportRules.UpdateDownloadReason(withStatus, new Uri("https://updates.getexo.app/v1/launcher/download/v3.29.0/ExoLauncher-Setup.exe?token=secret")));
+            "Update download failed (HTTP 404) on updates.getexo.app/v1/launcher/download/v3.29.0/ExoLauncher-Setup.exe",
+            FailureReportRules.UpdateDownloadReason(withStatus, new Uri("https://updates.getexo.app/v1/launcher/download/v3.29.0/ExoLauncher-Setup.exe?token=secret#frag")));
+        Assert.Equal(
+            "Update download failed (HTTP 404) on updates.getexo.app/v1/launcher/download/v3.30.3/ExoLauncher-Setup.exe",
+            FailureReportRules.UpdateDownloadReason(withStatus, new Uri("https://user:secret@updates.getexo.app/v1/launcher/download/v3.30.3/ExoLauncher-Setup.exe?sig=abc")));
+        Assert.Equal(
+            "Update download failed (HTTP 404)",
+            FailureReportRules.UpdateDownloadReason(withStatus, new Uri("/v1/launcher/download/v3.30.3/ExoLauncher-Setup.exe?token=secret", UriKind.Relative)));
+
+        Assert.Equal(
+            "updates.getexo.app/v1/launcher/download/v3.30.3/files.pack",
+            FailureReportRules.SafeUpdateUrl("https://updates.getexo.app/v1/launcher/download/v3.30.3/files.pack?sig=secret"));
+        Assert.Null(FailureReportRules.SafeUpdateUrl((Uri?)null));
+        Assert.Null(FailureReportRules.SafeUpdateUrl("/relative/path?token=secret"));
 
         Assert.Equal("Update download failed", FailureReportRules.UpdateDownloadReason(new HttpRequestException("network")));
         Assert.Equal("Update download failed", FailureReportRules.UpdateDownloadReason(new IOException("disk")));
@@ -93,6 +105,7 @@ public sealed class FailureReportRulesTests
     {
         // A refusal meant for the person, a cancel, a timeout and another server's failure are answers, not bugs.
         Assert.False(FailureReportRules.IsHostCallBug(new UserFacingException("Unknown method: app.info")));
+        Assert.False(FailureReportRules.IsHostCallBug(new UserFacingException("Your graphics driver didn't answer. Try again.")));
         Assert.False(FailureReportRules.IsHostCallBug(new InvalidOperationException("Sign in to Steam first.")));
         Assert.False(FailureReportRules.IsHostCallBug(new InvalidDataException("That file isn't a backup.")));
         Assert.False(FailureReportRules.IsHostCallBug(new OperationCanceledException()));

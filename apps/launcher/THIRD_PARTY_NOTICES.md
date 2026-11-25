@@ -27,9 +27,9 @@ Exo EQ (the headphone EQ on your audio's page) is Exo's own code. It plays throu
 | .NET runtime (self-contained) | 10 | MIT |
 | Windows App SDK (WinUI) | 2.x | Microsoft Software License Terms |
 | [Win2D](https://github.com/microsoft/Win2D) (`Microsoft.Graphics.Win2D`), backdrop blur and saturation effects in the FPS overlay | 1.4.0 | MIT |
-| Microsoft Edge WebView2 SDK | 1.0.4314.35 | BSD-3-Clause |
+| Microsoft Edge WebView2 SDK | 1.0.4370.26 | BSD-3-Clause |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) (`onnxruntime.dll`, from the Microsoft.ML.OnnxRuntime package), driven by Exo's native Rust `exo_voice_ml.dll` for voice noise suppression and Only My Voice | 1.31.1 | MIT |
-| Microsoft.Data.Sqlite | 10.0.15 | MIT |
+| Microsoft.Data.Sqlite | 11.0.0 | MIT |
 | SQLitePCLRaw | 3.0.5 | Apache-2.0 |
 | SQLite | bundled with SQLitePCLRaw | Public domain |
 | [ZstdSharp.Port](https://github.com/oleg-st/ZstdSharp) (zstd for .NET; reads the in-app updater's files.pack) | 0.8.8 | MIT |

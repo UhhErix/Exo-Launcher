@@ -18,7 +18,9 @@ use exo_rpc::{
     METHOD_DISCORD_MIC_MONITOR, METHOD_DISCORD_MIC_TEST, METHOD_DISCORD_MY_VOICE,
     METHOD_DISCORD_SET_STATUS, METHOD_DISCORD_SOUND, METHOD_DISCORD_USER_SETTINGS,
 };
-use rune::{Cursor, El, ScrollSpec, TextEdit, col, edit_access, el, row, text, text_input};
+use rune::{
+    Cursor, El, LiquidGlass, ScrollSpec, TextEdit, col, edit_access, el, row, text, text_input,
+};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
@@ -1272,8 +1274,8 @@ fn account_page(s: &AppState) -> El {
 
     let mut page = col()
         .w_full()
-        .gap(4.0)
-        .child(text("Account").font(type_title()).color(FG).pb(8.0));
+        .gap(0.0)
+        .child(text("Account").font(type_title()).color(FG).pb(16.0));
 
     if let Some(ref err) = ext.account_error {
         page = page.child(text(err.clone()).font(type_small()).color(bad()).pb(6.0));
@@ -1281,12 +1283,12 @@ fn account_page(s: &AppState) -> El {
 
     if let Some(me) = me_home {
         page = page.child(
-            row()
-                .w_full()
-                .padding(14.0)
-                .mb(10.0)
-                .gap(14.0)
-                .center_y()
+            col()
+                .w(300.0)
+                .min_h(244.0)
+                .padding(18.0)
+                .mb(22.0)
+                .gap(8.0)
                 .radius(RADIUS_CARD)
                 .fill(BG)
                 .border(1.0, hairline())
@@ -1294,70 +1296,140 @@ fn account_page(s: &AppState) -> El {
                     s,
                     me.avatar.as_deref(),
                     &me.name,
-                    48.0,
-                    24.0,
+                    72.0,
+                    36.0,
                     me.status.as_deref(),
                     false,
                     1.0,
                 ))
                 .child(
-                    col()
-                        .gap(2.0)
-                        .grow(1.0)
-                        .child(text(display_name.clone()).font(type_section()).color(FG))
-                        .child(
-                            row()
-                                .gap(6.0)
-                                .center_y()
-                                .child(
-                                    el().size(8.0, 8.0)
-                                        .radius(4.0)
-                                        .fill(status_color(&cur_status)),
-                                )
-                                .child(
-                                    text(status_label(&cur_status))
-                                        .font(type_label())
-                                        .color(fg_muted()),
-                                ),
-                        ),
+                    text(display_name.clone())
+                        .font(type_section())
+                        .color(FG)
+                        .pt(6.0),
                 )
-                .child(
-                    sheet_action_btn("dc-set-edit-prof", "Edit profile").on_press(
-                        |s: &mut AppState| {
-                            s.select_discord_settings_page(DiscordSettingsPage::Profiles)
-                        },
-                    ),
-                ),
+                .child(text(username.clone()).font(type_small()).color(fg_muted()))
+                .children(crate::discord::format_snowflake_date(&me.id).map(|since| {
+                    col()
+                        .pt(12.0)
+                        .gap(4.0)
+                        .child(text("Member since").font(type_small()).color(fg_muted()))
+                        .child(text(since).font(type_label()).color(FG))
+                })),
         );
     }
 
+    let account_row = |label: &str, value: String, trailing: Option<El>| -> El {
+        let mut right = row()
+            .gap(10.0)
+            .center_y()
+            .child(text(value).font(type_body()).color(fg_muted()));
+        if let Some(t) = trailing {
+            right = right.child(t);
+        }
+        row()
+            .w_full()
+            .h(62.0)
+            .gap(12.0)
+            .center_y()
+            .justify_between()
+            .child(text(label).font(type_body()).color(FG))
+            .child(right)
+    };
+
+    let next_status = match cur_status.as_str() {
+        "online" => "idle",
+        "idle" => "dnd",
+        "dnd" => "invisible",
+        _ => "online",
+    };
+
     page = page
-        .child(value_row(
+        .child(account_row(
             "Display name",
             display_name,
             Some(
-                sheet_action_btn("dc-set-edit-dname", "Edit").on_press(|s: &mut AppState| {
-                    s.select_discord_settings_page(DiscordSettingsPage::Profiles);
-                }),
+                sheet_action_btn("dc-set-edit-dname", "Edit")
+                    .label("Edit display name")
+                    .on_press(|s: &mut AppState| {
+                        s.select_discord_settings_page(DiscordSettingsPage::Profiles);
+                    }),
             ),
         ))
-        .child(value_row("Username", username, None))
-        .child(value_row("Email", email, None))
-        .child(value_row("Phone number", phone, None))
-        .child(choice_row(
-            "dc-set-status",
-            "Status",
-            None,
-            cur_status,
-            vec![
-                ("online".into(), "Online"),
-                ("idle".into(), "Idle"),
-                ("dnd".into(), "Do not disturb"),
-                ("invisible".into(), "Invisible"),
-            ],
-            |s, next| s.set_discord_status(&next),
+        .child(account_row(
+            "Username",
+            username,
+            Some(
+                sheet_action_btn("dc-set-edit-uname", "Edit")
+                    .label("Edit: Username")
+                    .on_press(|s: &mut AppState| {
+                        s.open_external_url("https://discord.com/settings")
+                    }),
+            ),
         ))
-        .child(value_row(
+        .child(account_row(
+            "Email",
+            email.clone(),
+            Some(
+                sheet_action_btn(
+                    "dc-set-edit-email",
+                    if email != "None" { "Edit" } else { "Add" },
+                )
+                .label("Edit: Email")
+                .on_press(|s: &mut AppState| s.open_external_url("https://discord.com/settings")),
+            ),
+        ))
+        .child(account_row(
+            "Phone number",
+            phone.clone(),
+            Some(
+                sheet_action_btn(
+                    "dc-set-edit-phone",
+                    if phone != "None" { "Edit" } else { "Add" },
+                )
+                .label("Edit: Phone number")
+                .on_press(|s: &mut AppState| s.open_external_url("https://discord.com/settings")),
+            ),
+        ))
+        .child(el().h(20.0))
+        .child(
+            row()
+                .w_full()
+                .h(62.0)
+                .gap(12.0)
+                .center_y()
+                .justify_between()
+                .child(text("Status").font(type_body()).color(FG))
+                .child(
+                    row()
+                        .key("dc-set-status-trigger")
+                        .role("button")
+                        .label("Status")
+                        .focusable(true)
+                        .hit()
+                        .cursor(Cursor::Pointer)
+                        .h(32.0)
+                        .px(12.0)
+                        .gap(8.0)
+                        .center_y()
+                        .radius(RADIUS_PILL)
+                        .fill(glass_still_control_fill())
+                        .border(1.0, hairline())
+                        .hover(hover_fill())
+                        .on_press(move |s: &mut AppState| s.set_discord_status(next_status))
+                        .child(
+                            el().size(7.0, 7.0)
+                                .radius(4.0)
+                                .fill(status_color(&cur_status)),
+                        )
+                        .child(
+                            text(status_label(&cur_status))
+                                .font(type_control())
+                                .color(FG),
+                        ),
+                ),
+        )
+        .child(account_row(
             "Custom status",
             s.discord
                 .custom_status
@@ -1390,14 +1462,30 @@ fn account_page(s: &AppState) -> El {
             ),
         ))
         .child(section_head("Password and security"))
-        .child(value_row(
-            "Multi-factor authentication",
-            if mfa_on { "On" } else { "Off" },
-            None,
+        .child(account_row(
+            "Password",
+            String::new(),
+            Some(
+                sheet_action_btn("dc-set-edit-pass", "Edit")
+                    .label("Edit: Password")
+                    .on_press(|s: &mut AppState| {
+                        s.open_external_url("https://discord.com/settings")
+                    }),
+            ),
         ))
-        .child(value_row(
+        .child(account_row(
+            "Multi-factor authentication",
+            if mfa_on { "On" } else { "Off" }.into(),
+            Some(
+                sheet_action_btn("dc-set-edit-mfa", if mfa_on { "Manage" } else { "Set up" })
+                    .on_press(|s: &mut AppState| {
+                        s.open_external_url("https://discord.com/settings")
+                    }),
+            ),
+        ))
+        .child(account_row(
             "Logged-in devices",
-            "",
+            String::new(),
             Some(
                 sheet_action_btn("dc-set-devices", "View")
                     .on_press(|s: &mut AppState| s.load_discord_sessions()),
@@ -3159,9 +3247,12 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
         .w(820.0)
         .h(880.0)
         .radius(RADIUS_PANEL)
+        .continuous_corners()
         .transition(modal_card_transition())
         .modal(true, |s: &mut AppState| s.close_discord_settings_clean())
+        .modal_live(["top-bar"])
         .modal_scrim(scrim_fill())
+        .liquid_glass(LiquidGlass::panel())
         .hit()
         .child(nav)
         .child(
@@ -3173,7 +3264,9 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
                     col()
                         .w_full()
                         .h_full()
-                        .padding(24.0)
+                        .px(32.0)
+                        .pt(26.0)
+                        .pb(32.0)
                         .scroll(ScrollSpec {
                             stick_bottom: false,
                         })
@@ -3182,7 +3275,6 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
                 .child(close_btn),
         );
     let _ = blur;
-    let sheet = apply_glass(sheet, ExoGlass::Sheet, false);
 
     el().key("dc-settings-layer")
         .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))

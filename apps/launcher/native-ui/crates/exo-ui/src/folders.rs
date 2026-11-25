@@ -7,17 +7,17 @@ use crate::state::{AppState, ContextMenuTarget, InputMode, LibrarySort};
 use exo_kit::{
     BG, ExoGlass, FG, FOLDER_COLOR_IDS, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
     RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectOption,
-    SelectTrigger, TRANSPARENT, apply_glass, bad, danger_button, fg_muted, folder_color_label,
-    folder_color_mix_black, folder_color_swatch, glass_button, glass_control_fill,
-    glass_icon_circle, glass_panel_fill, glass_panel_opt, glass_rim, hover_fill, icon_check,
+    SelectTrigger, TRANSPARENT, bad, danger_button, fg_faint, fg_muted, folder_color_label,
+    folder_color_mix_black, folder_color_swatch, glass_button, glass_button_opt,
+    glass_control_fill, glass_icon_circle, glass_panel_fill, glass_rim, hover_fill, icon_check,
     icon_edit, icon_image_upload, icon_search, icon_zoom_in, icon_zoom_out, modal_card_transition,
     modal_scrim_transition, primary_button, scrim_fill, select_menu_layers, select_trigger,
-    slider_track, type_body, type_control, type_section, type_small, type_title,
+    slider_track, subtle_fill, type_body, type_control, type_section, type_small, type_title,
 };
 use exo_rpc::Game;
 use rune::{
-    Align, Cursor, El, FileDialogOptions, Phase, ScrollSpec, SurfaceFit, TextEdit, TextStyle, col,
-    edit_access, el, row, text, text_input,
+    Align, Cursor, El, FileDialogOptions, LiquidGlass, Phase, ScrollSpec, SurfaceFit, TextEdit,
+    TextStyle, col, edit_access, el, row, text, text_input,
 };
 use std::rc::Rc;
 
@@ -54,7 +54,7 @@ fn folder_art_el(
         let paper_h = paper_w * 1.5;
         for (idx, game) in papers.iter().enumerate() {
             let n = idx as f32 - (count.saturating_sub(1) as f32) * 0.5;
-            let spread = if hovered { 0.44 } else { 0.36 };
+            let spread = if hovered { 0.44 } else { 0.38 };
             let lift = if hovered { -14.0 } else { 0.0 };
             let left = (w - paper_w) * 0.5 + n * (paper_w * spread);
             let bottom = h * 0.40 - lift;
@@ -81,6 +81,8 @@ fn folder_art_el(
         .gap(2.0)
         .radius(RADIUS_CARD * 0.85)
         .continuous_corners()
+        .clip_rounded(RADIUS_CARD * 0.85)
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
         .border_gradient(1.0, FG.alpha(0.22), TRANSPARENT);
 
     if folder.art.is_none() {
@@ -119,6 +121,7 @@ pub fn folder_card(
     let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str())
         || s.lib.folder_drop_target.as_deref() == Some(folder.id.as_str());
     let is_dragging = s.lib.dragging_folder_id.as_deref() == Some(folder.id.as_str());
+    let is_open = s.lib.open_folder_id.as_deref() == Some(folder.id.as_str());
     let drop_into_active = s.lib.folder_drop_target.as_deref() == Some(folder.id.as_str());
 
     let art = folder_art_el(folder, s, scale, hovered, card_w, card_h);
@@ -156,6 +159,7 @@ pub fn folder_card(
         .size(card_w, card_h)
         .radius(RADIUS_CARD)
         .continuous_corners()
+        .opacity(if is_open { 0.0 } else { 1.0 })
         .scale(if is_dragging { 0.94 } else { 1.0 })
         .offset(0.0, if hovered && !is_dragging { -3.0 } else { 0.0 })
         .offset_motion(SPRING_MOVE)
@@ -426,7 +430,9 @@ pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .py(4.0)
         .children(rows);
 
-    let panel = glass_panel_opt("folder-panel", panel_w.min(1040.0), blur)
+    let panel = col()
+        .key("folder-panel")
+        .w(panel_w.min(1040.0))
         .max_h(720.0)
         .px(32.0)
         .pt(26.0)
@@ -434,6 +440,10 @@ pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .gap(20.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .transition(modal_card_transition())
         .child(head)
         .child(grid);
@@ -445,6 +455,7 @@ pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
             .center()
             .transition(modal_scrim_transition())
             .modal_tx(true, |s: &mut AppState, _| s.close_folder_panel())
+            .modal_live(["top-bar"])
             .child(panel),
     ];
 
@@ -490,7 +501,7 @@ fn folder_panel_game_tile(
     let fid_check = folder_id.to_string();
     let gid_check = game.id.clone();
     let flight_id = format!("folder-game:{}", game.id);
-    let art = cover_surface(game, s, scale, [ALL_CARD_W, ALL_CARD_H], true, true, false)
+    let art = cover_surface(game, s, scale, [ALL_CARD_W, ALL_CARD_H], false, true, false)
         .matched(flight_id.clone())
         .motion(SPRING_FLIGHT);
     let preview_title = game.title.clone();
@@ -602,6 +613,7 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         folder_sheet_body(s, sheet, accent, scale)
     };
 
+    let _ = blur;
     let mut panel = el()
         .key("folder-sheet-dialog")
         .role("dialog")
@@ -613,12 +625,16 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
             "Edit folder"
         })
         .w(860.0)
-        .h(740.0)
+        .h(760.0)
         .px(32.0)
         .pt(26.0)
         .pb(24.0)
         .radius(RADIUS_SHEET)
         .continuous_corners()
+        .clip_rounded(RADIUS_SHEET)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .transition(modal_card_transition())
         .modal_tx(true, |s: &mut AppState, tx| {
             if s.lib.folder_cropper.is_some() {
@@ -627,11 +643,9 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
                 s.request_close_folder_sheet(tx);
             }
         })
+        .modal_live(["top-bar"])
         .modal_scrim(scrim_fill())
         .child(body);
-
-    let _ = blur;
-    panel = apply_glass(panel, ExoGlass::Sheet, false);
 
     if s.lib.folder_cropper.is_none() {
         panel = panel
@@ -771,11 +785,13 @@ fn folder_sheet_body(
         "Add picture"
     };
     pic_row = pic_row.child(
-        glass_button(
+        glass_button_opt(
             "folder-sheet-pick-pic",
             pic_btn_label,
             Some(icon_image_upload(15.0, FG)),
+            false,
         )
+        .border(1.0, glass_rim())
         .on_press_tx(|_: &mut AppState, tx| {
             let opts =
                 FileDialogOptions::default().filter("Pictures", &["png", "jpg", "jpeg", "webp"]);
@@ -792,13 +808,13 @@ fn folder_sheet_body(
     );
     if sheet.art.is_some() {
         pic_row = pic_row.child(
-            glass_button("folder-sheet-remove-pic", "Remove picture", None).on_press(
-                |s: &mut AppState| {
+            glass_button_opt("folder-sheet-remove-pic", "Remove picture", None, false)
+                .border(1.0, glass_rim())
+                .on_press(|s: &mut AppState| {
                     if let Some(sh) = s.lib.folder_sheet.as_mut() {
                         sh.art = None;
                     }
-                },
-            ),
+                }),
         );
     }
     if let Some(err) = sheet.picture_error.as_deref() {
@@ -834,7 +850,7 @@ fn folder_sheet_body(
         let toggle_ids = not_installed;
         let remove = all_not_installed;
         tools_row = tools_row.child(
-            glass_button(
+            glass_button_opt(
                 "folder-sheet-toggle-not-installed",
                 if remove {
                     "Remove not installed"
@@ -842,7 +858,9 @@ fn folder_sheet_body(
                     "Add all not installed"
                 },
                 None,
+                false,
             )
+            .border(1.0, glass_rim())
             .on_press(move |s: &mut AppState| {
                 if let Some(sh) = s.lib.folder_sheet.as_mut() {
                     if remove {
@@ -860,7 +878,7 @@ fn folder_sheet_body(
     }
 
     let pick_cols = 7usize;
-    let pick_w = 102.0;
+    let pick_w = 102.28;
     let pick_h = pick_w * 1.5;
     let pick_grid = if shown.is_empty() {
         col()
@@ -926,7 +944,7 @@ fn folder_sheet_body(
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
-            .gap(12.0)
+            .gap(14.0)
             .px(4.0)
             .py(4.0)
             .children(rows)
@@ -941,18 +959,30 @@ fn folder_sheet_body(
     let cancel_btn = if cancel_armed {
         danger_button("folder-sheet-cancel", "Discard changes?", None)
     } else {
-        glass_button("folder-sheet-cancel", "Cancel", None)
+        glass_button_opt("folder-sheet-cancel", "Cancel", None, false).border(1.0, glass_rim())
     }
     .on_press_tx(|s: &mut AppState, tx| s.request_close_folder_sheet(tx));
 
     let ready = sheet.is_ready();
     let save_label = if sheet.is_new { "Create" } else { "Save" };
-    let mut save_btn = primary_button("folder-sheet-save", save_label, None).disabled(!ready);
-    if ready {
-        save_btn = save_btn.on_press(|s: &mut AppState| s.save_folder_sheet());
+    let save_btn = if ready {
+        primary_button("folder-sheet-save", save_label, None)
+            .on_press(|s: &mut AppState| s.save_folder_sheet())
     } else {
-        save_btn = save_btn.opacity(0.42);
-    }
+        row()
+            .key("folder-sheet-save")
+            .role("button")
+            .label(save_label)
+            .disabled(true)
+            .hit()
+            .cursor(Cursor::NotAllowed)
+            .h(32.0)
+            .px(14.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(subtle_fill())
+            .child(text(save_label).font(type_control()).color(fg_faint()))
+    };
 
     let footer = row()
         .w_full()

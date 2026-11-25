@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ExoLauncher.Helpers;
 using ExoLauncher.Models;
 using ExoLauncher.Services;
 using static ExoLauncher.Tests.KeepKit;
@@ -15,8 +16,15 @@ namespace ExoLauncher.Tests;
 /// - the report carries an id, a value or a count, or a game with no status;
 /// - a word is not the enum's own name with a lower-case first letter.
 /// </summary>
-public sealed class KeepStatusTests
+public sealed class KeepStatusTests : IDisposable
 {
+    private readonly List<string> _tempDirs = [];
+
+    public void Dispose()
+    {
+        foreach (var dir in _tempDirs)
+            try { DeletionGate.DeleteDirectory(dir, recursive: true); } catch { }
+    }
     /// <summary>A game with one group, not pending and with no put back, and one entry per state given.</summary>
     private static Keep.KeepGame Game(params KeepState[] states)
     {
@@ -116,6 +124,7 @@ public sealed class KeepStatusTests
     {
         var folder = Path.Combine(Path.GetTempPath(), "keepnoting-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
+        _tempDirs.Add(folder);
         var path = Path.Combine(folder, "keep.json");
         using var forced = Keep.ForcePathForTest(path);
         Assert.True(Keep.Update(doc => doc.Games["p1"] = new Keep.KeepGame { Keeping = new Keep.Keeping { Groups = ["g"] } }));
@@ -207,10 +216,11 @@ public sealed class KeepStatusTests
     private static Keep.KeepGame OneGroup() => new() { Keeping = new Keep.Keeping { Groups = ["latency"] } };
 
     /// <summary>A library entry whose profile is Modern Warfare 4's, found by its install folder's cod26 subfolder.</summary>
-    private static GameEntry Entry(string id)
+    private GameEntry Entry(string id)
     {
         var folder = Path.Combine(Path.GetTempPath(), "keeplibrary-install-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(folder, "cod26"));
+        _tempDirs.Add(folder);
         return new GameEntry { Id = id, Title = "Call of Duty", Store = StoreKind.Steam, Installed = true, Path = folder };
     }
 

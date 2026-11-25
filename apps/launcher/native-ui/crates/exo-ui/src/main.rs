@@ -555,19 +555,60 @@ fn settle_setup_host(client: &exo_rpc::RpcClient, state: &mut AppState) {
 #[cfg(windows)]
 fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
     let mut state = AppState::for_host_pipe();
-    let Ok(client) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(6), |_| {}) else {
-        state.status = state::HostStatus::Error("Connect failed".into());
-        state.refreshing = false;
-        return state;
+    let live_pad: std::sync::Arc<std::sync::Mutex<Option<exo_rpc::ControllerStateEvent>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(None));
+    let (mut client, bootstrapped) = {
+        let mut connected = None;
+        let mut got_boot = false;
+        for attempt in 0..12 {
+            let live_pad_cb = std::sync::Arc::clone(&live_pad);
+            if let Ok(c) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(3), move |ev| {
+                if let exo_rpc::HostEvent::ControllerState(cs) = ev
+                    && let Ok(mut slot) = live_pad_cb.lock()
+                {
+                    *slot = Some(cs);
+                }
+            }) {
+                if let Ok(boot) = c.call_blocking::<_, exo_rpc::ShellBootstrap>(
+                    exo_rpc::METHOD_SHELL_BOOTSTRAP,
+                    &serde_json::json!({}),
+                    Duration::from_secs(15),
+                ) {
+                    state.apply_bootstrap(boot);
+                    if !matches!(scene, Some("library-folders") | Some("library-folder-open")) {
+                        state
+                            .settings
+                            .library_folders
+                            .retain(|f| f.name != "Folder");
+                    }
+                    state.whats_new.boot_hold_active = false;
+                    state.whats_new.answered = true;
+                    state.whats_new.host_state = "idle".into();
+                    connected = Some(c);
+                    got_boot = true;
+                    break;
+                }
+                if attempt == 11 {
+                    connected = Some(c);
+                }
+            }
+            if attempt < 11 {
+                std::thread::sleep(Duration::from_millis(250));
+            }
+        }
+        let Some(c) = connected else {
+            state.status = state::HostStatus::Error("Connect failed".into());
+            state.refreshing = false;
+            return state;
+        };
+        (c, got_boot)
     };
-    if let Ok(boot) = client.call_blocking::<_, exo_rpc::ShellBootstrap>(
-        exo_rpc::METHOD_SHELL_BOOTSTRAP,
-        &serde_json::json!({}),
-        Duration::from_secs(12),
-    ) {
-        state.apply_bootstrap(boot);
+    if !bootstrapped {
+        state.status = state::HostStatus::Connected;
+        state.refreshing = false;
         state.whats_new.boot_hold_active = false;
         state.whats_new.answered = true;
+        state.whats_new.host_state = "idle".into();
     }
     if let Ok(badge) = client.call_blocking::<_, serde_json::Value>(
         "friends.badge",
@@ -610,13 +651,21 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
     if matches!(
         scene,
         None | Some("library")
+            | Some("library-all")
+            | Some("all-games")
+            | Some("library-more")
+            | Some("library-search")
+            | Some("library-select")
+            | Some("library-folders")
+            | Some("library-folder-open")
+            | Some("library-folder-sheet")
             | Some("palette")
             | Some("activate-key")
             | Some("downloads")
             | Some("tour")
     ) && let Some(ref cache_dir) = state.remote_cache_dir
     {
-        let urls: Vec<String> = state
+        let mut urls: Vec<String> = state
             .home_deck_games()
             .into_iter()
             .take(12)
@@ -624,6 +673,25 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             .filter_map(|g| g.cover_url.as_deref().map(str::to_string))
             .filter(|u| u.starts_with("https://"))
             .collect();
+        if matches!(
+            scene,
+            Some("library-all")
+                | Some("all-games")
+                | Some("library-select")
+                | Some("library-folders")
+                | Some("library-folder-open")
+                | Some("library-folder-sheet")
+        ) {
+            for g in state.games.iter().filter(|g| g.installed) {
+                if state.art_base.resolve_local_portrait(g).is_none()
+                    && let Some(u) = g.cover_url.as_deref()
+                    && u.starts_with("https://")
+                    && !urls.iter().any(|x| x == u)
+                {
+                    urls.push(u.to_string());
+                }
+            }
+        }
         if !urls.is_empty() {
             let chunks = urls.chunks((urls.len() / 6).max(1));
             std::thread::scope(|scope| {
@@ -636,6 +704,35 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
             });
         }
+    }
+    if matches!(
+        scene,
+        None | Some("library") | Some("library-all") | Some("all-games")
+    ) && let Ok(reply) = client.call_blocking::<_, exo_rpc::StoreAccountsReply>(
+        exo_rpc::METHOD_ACCOUNTS_LIST,
+        &serde_json::json!({}),
+        Duration::from_secs(2),
+    ) {
+        state.lib.riot_other_accounts = reply
+            .riot
+            .map(|r| {
+                r.accounts
+                    .into_iter()
+                    .filter(|a| a.saved && !a.current)
+                    .collect()
+            })
+            .unwrap_or_default();
+        state.lib.accounts_loaded = true;
+    }
+    if matches!(scene, Some("library-all") | Some("all-games"))
+        && let Ok(fr) = client.call_blocking::<_, exo_rpc::DiscordFriendsReply>(
+            exo_rpc::METHOD_DISCORD_FRIENDS,
+            &serde_json::json!({}),
+            Duration::from_secs(2),
+        )
+    {
+        state.discord.friends = fr.friends;
+        state.discord.loaded = true;
     }
     if scene.is_some_and(|s| s.starts_with("setup")) {
         settle_setup_host(&client, &mut state);
@@ -1376,6 +1473,28 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 &serde_json::json!({}),
                 Duration::from_secs(10),
             ) {
+                let mut wanted: Vec<String> = st
+                    .items
+                    .iter()
+                    .filter_map(|i| i.icon.clone())
+                    .chain(st.removed.iter().filter_map(|r| r.icon.clone()))
+                    .filter(|k| !k.is_empty() && !state.pc.app_icons.contains_key(k))
+                    .collect();
+                wanted.sort();
+                wanted.dedup();
+                if !wanted.is_empty()
+                    && let Ok(ic) = client.call_blocking::<_, exo_rpc::AppsIconsReply>(
+                        exo_rpc::METHOD_APPS_ICONS,
+                        &serde_json::json!({ "ids": wanted }),
+                        Duration::from_secs(10),
+                    )
+                {
+                    for (k, v) in ic.icons {
+                        if let Some(d) = v {
+                            state.pc.app_icons.insert(k, d);
+                        }
+                    }
+                }
                 state.pc.startup_list = Some(st);
             }
             if let Ok(tidy) = client.call_blocking::<_, exo_rpc::AppFind>(
@@ -1428,12 +1547,40 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             {
                 state.pc.windows_packages = pkgs.items;
             }
+            if let Ok(list) = client.call_blocking::<_, exo_rpc::AppsListReply>(
+                exo_rpc::METHOD_APPS_LIST,
+                &serde_json::json!({}),
+                Duration::from_secs(12),
+            ) {
+                let mut by_size: Vec<&exo_rpc::InstalledAppItem> = list.programs.iter().collect();
+                by_size.sort_by_key(|a| std::cmp::Reverse(a.bytes.unwrap_or(0)));
+                let missing: Vec<String> = by_size
+                    .into_iter()
+                    .take(100)
+                    .map(|p| p.id.clone())
+                    .filter(|id| !state.pc.app_icons.contains_key(id))
+                    .collect();
+                if !missing.is_empty()
+                    && let Ok(ic) = client.call_blocking::<_, exo_rpc::AppsIconsReply>(
+                        exo_rpc::METHOD_APPS_ICONS,
+                        &serde_json::json!({ "ids": missing }),
+                        Duration::from_secs(12),
+                    )
+                {
+                    for (k, v) in ic.icons {
+                        if let Some(d) = v {
+                            state.pc.app_icons.insert(k, d);
+                        }
+                    }
+                }
+                state.pc.apps_list = Some(list);
+            }
         }
         Some("pc-storage") => {
             if let Ok(drv) = client.call_blocking::<_, exo_rpc::DrivesReply>(
                 exo_rpc::METHOD_SYSTEM_DRIVES,
-                &serde_json::json!({ "space": true }),
-                Duration::from_secs(12),
+                &serde_json::json!({ "space": false }),
+                Duration::from_secs(10),
             ) {
                 state.pc.drives = Some(drv);
             }
@@ -1476,11 +1623,22 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
                 state.apply_eq_state(eq);
             }
-            if let Ok(list) = client.call_blocking::<_, exo_rpc::DevicesListReply>(
-                exo_rpc::METHOD_DEVICES_LIST,
-                &serde_json::json!({}),
-                Duration::from_secs(8),
-            ) {
+            let mut devices_list = None;
+            for attempt in 0..3 {
+                if let Ok(list) = client.call_blocking::<_, exo_rpc::DevicesListReply>(
+                    exo_rpc::METHOD_DEVICES_LIST,
+                    &serde_json::json!({}),
+                    Duration::from_secs(15),
+                ) && !list.devices.is_empty()
+                {
+                    devices_list = Some(list);
+                    break;
+                }
+                if attempt < 2 {
+                    std::thread::sleep(Duration::from_millis(400));
+                }
+            }
+            if let Some(list) = devices_list {
                 for dev in &list.devices {
                     if let Ok(reply) = client.call_blocking::<_, exo_rpc::DevicesImageReply>(
                         exo_rpc::METHOD_DEVICES_IMAGE,
@@ -1577,6 +1735,28 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                         Duration::from_secs(5),
                     ) {
                         state.pc.controller_ui.steam_input = Some(si);
+                    }
+                    if scene == Some("pc-devices-controller") {
+                        let _ = client.call_blocking::<_, serde_json::Value>(
+                            exo_rpc::METHOD_CONTROLLER_WATCH,
+                            &serde_json::json!({ "id": pid, "on": true }),
+                            Duration::from_secs(3),
+                        );
+                        for _ in 0..20 {
+                            if let Ok(slot) = live_pad.lock()
+                                && let Some(ref cs) = *slot
+                                && cs.id == *pid
+                            {
+                                state.pc.controller_ui.live = Some(cs.clone());
+                                break;
+                            }
+                            std::thread::sleep(Duration::from_millis(25));
+                        }
+                        let _ = client.call_blocking::<_, serde_json::Value>(
+                            exo_rpc::METHOD_CONTROLLER_WATCH,
+                            &serde_json::json!({ "id": pid, "on": false }),
+                            Duration::from_secs(3),
+                        );
                     }
                 }
                 state.pc.audio_output_id = out_id;
@@ -1942,7 +2122,50 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 &serde_json::json!({}),
                 Duration::from_secs(5),
             ) {
-                state.media.notes.notes = Some(nl.notes);
+                state.hydrate_notes_list_reply(nl);
+                if let Some(active_id) = state.media.notes.active.clone()
+                    && let Ok(reply) = client.call_blocking::<_, exo_rpc::NotesReadReply>(
+                        exo_rpc::METHOD_NOTES_READ,
+                        &serde_json::json!({ "id": active_id }),
+                        Duration::from_secs(5),
+                    )
+                    && reply.ok
+                    && let Some(doc) = state.media.notes.docs.get_mut(&active_id)
+                {
+                    if let Some(txt) = reply.text {
+                        doc.edit.text = txt.clone();
+                        doc.edit.sync_invariants();
+                        doc.sent = txt;
+                    }
+                    if let Some(info) = reply.note {
+                        doc.info = info;
+                    }
+                    doc.reading = false;
+                    doc.loaded = true;
+                    doc.problem = None;
+                }
+            }
+            if let Some(ref cache_dir) = state.remote_cache_dir {
+                let urls: Vec<String> = state
+                    .home_deck_games()
+                    .into_iter()
+                    .take(12)
+                    .filter(|g| state.art_base.resolve_local_portrait(g).is_none())
+                    .filter_map(|g| g.cover_url.as_deref().map(str::to_string))
+                    .filter(|u| u.starts_with("https://"))
+                    .collect();
+                if !urls.is_empty() {
+                    let chunks = urls.chunks((urls.len() / 6).max(1));
+                    std::thread::scope(|scope| {
+                        for chunk in chunks {
+                            scope.spawn(move || {
+                                for url in chunk {
+                                    let _ = exo_rpc::remote_art::fetch_cached_image(url, cache_dir);
+                                }
+                            });
+                        }
+                    });
+                }
             }
         }
         Some(sc) if sc.starts_with("discord") => {
@@ -1953,12 +2176,14 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.settings = settings;
             }
+            let mut err_retries = 0u8;
             for _ in 0..80 {
                 if let Ok(st) = client.call_blocking::<_, exo_rpc::DiscordStatus>(
                     exo_rpc::METHOD_DISCORD_STATUS,
                     &serde_json::json!({ "connect": true }),
                     Duration::from_secs(5),
                 ) {
+                    err_retries = 0;
                     let done = st.state == "ready" || st.state == "error" || !st.signed_in;
                     state.discord.status = st;
                     state.discord.loaded = true;
@@ -1966,7 +2191,16 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                         break;
                     }
                 } else {
-                    break;
+                    err_retries += 1;
+                    if err_retries > 4 {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(150));
+                    if let Ok(c) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(6), |_| {})
+                    {
+                        client = c;
+                    }
+                    continue;
                 }
                 std::thread::sleep(Duration::from_millis(250));
             }
@@ -2091,8 +2325,9 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                                     &serde_json::json!({ "channelId": cid, "limit": 40 }),
                                     Duration::from_secs(6),
                                 )
-                                && let Some(msgs) = rep.messages
+                                && let Some(mut msgs) = rep.messages
                             {
+                                msgs.reverse();
                                 state.discord.chat.messages_by_channel.insert(cid, msgs);
                             }
                         }
@@ -2104,14 +2339,32 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     ) {
                         state.discord.members_by_guild.insert(gid, ml);
                     }
-                    if sc == "discord-voice"
-                        && let Ok(aud) = client.call_blocking::<_, exo_rpc::DiscordAudioReply>(
+                    if sc == "discord-voice" {
+                        if let Ok(aud) = client.call_blocking::<_, exo_rpc::DiscordAudioReply>(
                             exo_rpc::METHOD_DISCORD_AUDIO,
                             &serde_json::json!({}),
                             Duration::from_secs(5),
-                        )
-                    {
-                        state.discord.voice_ui.audio = Some(aud);
+                        ) {
+                            state.discord.voice_ui.audio = Some(aud);
+                        }
+                        if let Ok(gl) = client.call_blocking::<_, exo_rpc::DiscordGoLiveReply>(
+                            exo_rpc::METHOD_DISCORD_GOLIVE,
+                            &serde_json::json!({ "action": "sources" }),
+                            Duration::from_secs(5),
+                        ) && gl.ok
+                        {
+                            state.discord.voice_ui.golive_sources = gl.sources;
+                            state.discord.voice_ui.golive_capture_mode = gl.capture_mode;
+                            state.discord.voice_ui.golive_service_disabled = gl.service_disabled;
+                        }
+                        if let Ok(acc) = client.call_blocking::<_, exo_rpc::DiscordAccountReply>(
+                            exo_rpc::METHOD_DISCORD_ACCOUNT,
+                            &serde_json::json!({ "action": "me" }),
+                            Duration::from_secs(5),
+                        ) && acc.ok
+                        {
+                            state.discord.settings_ext.account = acc.me;
+                        }
                     }
                 }
                 if let Some(ref cache_dir) = state.remote_cache_dir {
@@ -2364,10 +2617,12 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("library-all", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.library_all_games = true;
+        s.settings.library_folders.retain(|f| f.name != "Folder");
     }),
     ("all-games", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.library_all_games = true;
+        s.settings.library_folders.retain(|f| f.name != "Folder");
     }),
     ("library-more", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
@@ -2385,25 +2640,15 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             .into_iter()
             .map(|g| g.id.clone())
             .collect();
-        if s.settings.library_folders.is_empty() && ordered.len() >= 3 {
-            s.settings.library_folders = vec![
-                exo_rpc::LibraryFolder {
-                    id: "f-favorites".into(),
-                    name: "Favorites".into(),
-                    color: Some("blue".into()),
-                    sort: Some("folder".into()),
-                    art: None,
-                    games: vec![ordered[0].clone(), ordered[1].clone()],
-                },
-                exo_rpc::LibraryFolder {
-                    id: "f-coop".into(),
-                    name: "Co-op".into(),
-                    color: Some("green".into()),
-                    sort: Some("folder".into()),
-                    art: None,
-                    games: vec![ordered[2].clone()],
-                },
-            ];
+        if s.settings.library_folders.is_empty() && ordered.len() >= 2 {
+            s.settings.library_folders = vec![exo_rpc::LibraryFolder {
+                id: "f-parity".into(),
+                name: "Folder".into(),
+                color: Some("blue".into()),
+                sort: Some("folder".into()),
+                art: None,
+                games: vec![ordered[0].clone(), ordered[1].clone()],
+            }];
         }
     }),
     ("library-folder-open", |s: &mut AppState| {
@@ -2416,8 +2661,8 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             .collect();
         if s.settings.library_folders.is_empty() && ordered.len() >= 2 {
             s.settings.library_folders = vec![exo_rpc::LibraryFolder {
-                id: "f-favorites".into(),
-                name: "Favorites".into(),
+                id: "f-parity".into(),
+                name: "Folder".into(),
                 color: Some("blue".into()),
                 sort: Some("folder".into()),
                 art: None,
@@ -2431,21 +2676,17 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("library-folder-sheet", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.library_all_games = true;
-        let init: Vec<String> = s
-            .filtered_games()
-            .into_iter()
-            .take(2)
-            .map(|g| g.id.clone())
-            .collect();
-        s.open_new_folder_sheet(init);
+        s.settings.library_folders.retain(|f| f.name != "Folder");
+        s.open_new_folder_sheet(Vec::new());
     }),
     ("library-select", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
+        s.settings.library_folders.retain(|f| f.name != "Folder");
         s.enter_select_mode();
         let picks: Vec<String> = s
             .filtered_games()
             .into_iter()
-            .take(2)
+            .take(1)
             .map(|g| g.id.clone())
             .collect();
         for id in picks {
@@ -2695,7 +2936,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             s.open_game_id = Some(id);
         }
     }),
-    ("discord-voice", |s: &mut AppState| {
+    ("discord-voice-settings", |s: &mut AppState| {
         s.switch_room(state::Room::Discord);
         s.discord.settings_open = true;
         s.discord.settings_page = crate::discord_state::DiscordSettingsPage::Voice;
@@ -2826,16 +3067,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("captures-sheet", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
-        let present = s
-            .media
-            .capture_status
-            .as_ref()
-            .is_none_or(|st| st.present && st.state.as_ref().is_none_or(|l| l.present));
-        if present {
-            s.open_captures(None);
-        } else {
-            s.open_notes(None, false);
-        }
+        s.open_captures(None);
     }),
     ("captures-settings", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
@@ -3025,7 +3257,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
                 .unwrap_or_else(|| "vc-lounge".into());
             s.open_discord_guild(&gid);
             s.open_discord_channel(&voice_cid);
-            s.discord.voice.state = "connecting".into();
+            s.discord.voice.state = "connected".into();
             s.discord.voice.guild_id = Some(gid.clone());
             s.discord.voice.channel_id = Some(voice_cid.clone());
             s.discord.voice.e2ee = true;
@@ -3383,7 +3615,9 @@ fn run_parity_probe(
         "command-palette",
         "pc-part-menu",
         "library-filter-pop",
+        "folder-sheet-dialog",
         "dc-golive-panel",
+        "sg-media-strip",
     ];
     let legacy_menu_prefixes = ["dc-status-menu", "dc-menu"];
     let mut menu_items: Vec<String> = Vec::new();
