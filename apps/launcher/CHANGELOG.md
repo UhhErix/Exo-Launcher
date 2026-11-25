@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.31.1 — November 25, 2026
+- **Reduce motion stays where you set it.** Stops account sync from overwriting your local Reduce motion preference, resolves setting conflicts using timestamps instead of older values, and flushes manual sync right away. _Checked in code only._
+- **Smoother app during heavy background tasks.** Isolates slow hardware, optimization, and system work onto separate lanes so rooms and controls stay responsive, submits crash reports in the background, and stops counting expected status messages as app errors. _Checked in code only._
+- **Fewer unexpected crashes and clearer crash diagnostics.** Protects UI events, Discord voice teardown, and Windows system callbacks against sudden exits, and writes privacy-scrubbed crash breadcrumbs to the log to help diagnose rare failures. _Checked in code only._
+
 ## 3.31.0 — November 24, 2026
 - **Smaller install and faster startup.** Trims unused runtime locales and debug components, lazy-loads the changelog from a compressed file, and shrinks Exo Capture and Discord voice noise suppression binaries so Exo installs smaller and starts faster. _Verified: on screen._
 - **Cleaner background WebView2 memory.** Releases shared WebView2 environments and applies low-memory reclaim when temporary sign-in, gift, link, preview, and music windows close so background processes exit promptly. _Verified: on screen._
