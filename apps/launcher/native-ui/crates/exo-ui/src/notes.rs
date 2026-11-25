@@ -1,11 +1,13 @@
 use crate::devices_audio::device_btn;
+use crate::settings::set_btn;
 use crate::state::{AppState, HostStatus};
 use exo_kit::{
-    BG, BadgeTone, ExoGlass, FG, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SHEET, RADIUS_SMALL,
-    SPRING_QUICK, bad, exo_glass, fg_faint, fg_muted, filter_pill, float_line, glass_control_fill,
-    glass_rim, good, hairline, hover_fill, icon_close, icon_pin, icon_plus, icon_search,
-    primary_button, scaled, status_badge, type_body, type_control, type_page, type_section,
-    type_small, type_title,
+    BG, BadgeTone, ExoGlass, FG, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SHEET,
+    RADIUS_SMALL, SPRING_QUICK, bad, exo_glass, fg_faint, fg_muted, filter_pill, float_line,
+    glass_control_fill, glass_rim, good, hairline, hover_fill, icon_close, icon_external,
+    icon_gallery, icon_more_horiz, icon_notes, icon_pin, icon_plus, icon_search, primary_button,
+    scaled, selected_fill, status_badge, type_body, type_control, type_section, type_small,
+    type_title,
 };
 use exo_rpc::{
     ActionResult, METHOD_NOTES_ACT, METHOD_NOTES_LIST, METHOD_NOTES_OPEN, METHOD_NOTES_PENDING,
@@ -15,8 +17,8 @@ use exo_rpc::{
     NotesReadReply, NotesSaveAsReply, NotesSaveReply, NotesSpellReply, NotesTextFilesReply,
 };
 use rune::{
-    Color, Cursor, El, Key, KeyEvent, ScrollSpec, SurfaceFit, TextEdit, TextStyle, Tx, col,
-    edit_access, el, row, text, text_input,
+    Color, Cursor, El, Key, KeyEvent, LiquidGlass, ScrollSpec, SurfaceFit, TextEdit, TextStyle, Tx,
+    col, edit_access, el, row, text, text_input,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -586,6 +588,50 @@ impl AppState {
         } else if let Some(msg) = ev.message.filter(|s| !s.is_empty()) {
             self.notice = Some(msg);
         }
+    }
+
+    pub fn hydrate_notes_list_reply(&mut self, reply: NotesListReply) {
+        self.media.notes.failed = None;
+        self.media.notes.photos_base = reply.photos;
+        let mut list = reply.notes;
+        sort_notes(&mut list);
+        if !self.media.notes.session_loaded {
+            let mut open_tabs: Vec<String> = reply
+                .tabs
+                .into_iter()
+                .filter(|id| list.iter().any(|n| n.id == *id))
+                .collect();
+            let mut front = reply
+                .active
+                .filter(|id| open_tabs.contains(id))
+                .or_else(|| open_tabs.first().cloned());
+            for id in &open_tabs {
+                if let Some(info) = list.iter().find(|n| n.id == *id) {
+                    self.media
+                        .notes
+                        .docs
+                        .entry(id.clone())
+                        .or_insert_with(|| NoteDoc::from_info(info.clone()));
+                }
+            }
+            if let Some(req_id) = self.media.notes.pending_open_id.take()
+                && let Some(info) = list.iter().find(|n| n.id == req_id)
+            {
+                if !open_tabs.contains(&info.id) {
+                    open_tabs.push(info.id.clone());
+                    self.media
+                        .notes
+                        .docs
+                        .entry(info.id.clone())
+                        .or_insert_with(|| NoteDoc::from_info(info.clone()));
+                }
+                front = Some(info.id.clone());
+            }
+            self.media.notes.tabs = open_tabs;
+            self.media.notes.active = front;
+            self.media.notes.session_loaded = true;
+        }
+        self.media.notes.notes = Some(list);
     }
 
     pub fn load_notes_list(&mut self, query: Option<String>) {
@@ -1863,11 +1909,14 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .w_full()
         .px(20.0)
         .pt(18.0)
-        .pb(12.0)
+        .pb(10.0)
         .justify_between()
         .center_y()
-        .border_sides([0.0, 0.0, 1.0, 0.0], hairline())
-        .child(text("Notes").font(type_page()).color(FG))
+        .child(
+            text("Notes")
+                .font(TextStyle::new(scaled(20.0), 650.0))
+                .color(FG),
+        )
         .child(
             row()
                 .gap(8.0)
@@ -1877,18 +1926,25 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         .on_press(|s: &mut AppState| s.notes_new_note()),
                 )
                 .child(
-                    device_btn("notes-open", "Open", false)
+                    set_btn("notes-open", "Open", Some(icon_notes(14.0, FG)))
                         .on_press(|s: &mut AppState| s.notes_open_file()),
                 )
                 .child(
-                    device_btn("notes-more", "⋯", false).on_press(|s: &mut AppState| {
-                        s.media.notes.more_menu_open = !s.media.notes.more_menu_open;
-                        s.media.notes.note_menu_open = false;
-                    }),
+                    set_btn("notes-more", "", Some(icon_more_horiz(16.0, FG)))
+                        .label("More")
+                        .px(10.0)
+                        .on_press(|s: &mut AppState| {
+                            s.media.notes.more_menu_open = !s.media.notes.more_menu_open;
+                            s.media.notes.note_menu_open = false;
+                        }),
                 )
                 .child(
-                    device_btn("notes-back-captures", "Captures", false)
-                        .on_press(|s: &mut AppState| s.close_notes_to_captures()),
+                    set_btn(
+                        "notes-back-captures",
+                        "Captures",
+                        Some(icon_gallery(14.0, FG)),
+                    )
+                    .on_press(|s: &mut AppState| s.close_notes_to_captures()),
                 )
                 .child(
                     el().key("notes-close")
@@ -1900,8 +1956,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         .press_on_down()
                         .size(32.0, 32.0)
                         .radius(RADIUS_PILL)
-                        .fill(glass_control_fill())
-                        .border(1.0, glass_rim())
+                        .liquid_glass(LiquidGlass::control())
                         .hover(hover_fill())
                         .center()
                         .on_press(|s: &mut AppState| {
@@ -1920,11 +1975,14 @@ pub fn view(s: &AppState, scale: f32) -> El {
     let searched = notes.search_results.is_some();
 
     let mut sidebar = col()
-        .w(260.0)
+        .w(280.0)
         .h_full()
-        .padding(12.0)
-        .gap(8.0)
-        .border_sides([0.0, 1.0, 0.0, 0.0], hairline())
+        .pt(2.0)
+        .pr(12.0)
+        .pb(16.0)
+        .pl(20.0)
+        .gap(10.0)
+        .border_sides([0.0, 1.0, 0.0, 0.0], float_line())
         .child(
             row()
                 .w_full()
@@ -2025,8 +2083,12 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .px(10.0)
                 .py(8.0)
                 .gap(2.0)
-                .radius(RADIUS_SMALL)
-                .fill(if on { hover_fill() } else { Color::TRANSPARENT })
+                .radius(10.0)
+                .fill(if on {
+                    selected_fill()
+                } else {
+                    Color::TRANSPARENT
+                })
                 .hover(hover_fill())
                 .on_press(move |s: &mut AppState| s.notes_show_doc(info_clone.clone()))
                 .child(
@@ -2034,10 +2096,15 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         .gap(6.0)
                         .center_y()
                         .children(note.pinned.then(|| icon_pin(11.0, fg_muted())))
-                        .child(text(title).font(type_body()).color(FG).truncate()),
+                        .child(
+                            text(title)
+                                .font(TextStyle::new(scaled(13.0), 500.0))
+                                .color(FG)
+                                .truncate(),
+                        ),
                 )
                 .child(
-                    text(sub_parts.join(" · "))
+                    text(sub_parts.join("  "))
                         .font(type_small())
                         .color(fg_muted())
                         .truncate(),
@@ -2048,12 +2115,12 @@ pub fn view(s: &AppState, scale: f32) -> El {
 
     let tab_bar = row()
         .w_full()
-        .min_h(38.0)
-        .px(10.0)
-        .py(4.0)
-        .gap(4.0)
+        .min_h(34.0)
+        .pl(12.0)
+        .pr(20.0)
+        .pt(2.0)
+        .gap(2.0)
         .center_y()
-        .border_sides([0.0, 0.0, 1.0, 0.0], hairline())
         .children(notes.tabs.iter().filter_map(|key| {
             let doc = notes.docs.get(key)?;
             let is_active = notes.active.as_deref() == Some(key.as_str());
@@ -2100,13 +2167,14 @@ pub fn view(s: &AppState, scale: f32) -> El {
             } else {
                 row()
                     .key(format!("note-tab-{key}"))
-                    .h(30.0)
-                    .px(10.0)
-                    .gap(6.0)
+                    .h(32.0)
+                    .pl(12.0)
+                    .pr(4.0)
+                    .gap(4.0)
                     .center_y()
-                    .radius(RADIUS_SMALL)
+                    .radius(RADIUS_PILL)
                     .fill(if is_active {
-                        hover_fill()
+                        selected_fill()
                     } else {
                         Color::TRANSPARENT
                     })
@@ -2118,7 +2186,11 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         s.notes_ensure_active_loaded();
                         s.notes_save_session();
                     })
-                    .child(text(name).font(type_small()).color(FG))
+                    .child(
+                        text(name)
+                            .font(TextStyle::new(scaled(13.0), 500.0))
+                            .color(if is_active { FG } else { fg_muted() }),
+                    )
                     .children(
                         doc.info
                             .unsaved
@@ -2151,13 +2223,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         let own = !doc.info.external;
         let doc_key = doc.key.clone();
 
-        let mut toolbar = row()
-            .w_full()
-            .px(14.0)
-            .py(8.0)
-            .gap(6.0)
-            .center_y()
-            .border_sides([0.0, 0.0, 1.0, 0.0], hairline());
+        let mut toolbar = row().w_full().pl(12.0).pr(20.0).py(8.0).gap(6.0).center_y();
 
         if !doc.preview && (is_md || own) {
             if is_md {
@@ -2183,21 +2249,42 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 }
             } else {
                 let k = doc_key.clone();
-                toolbar = toolbar.child(device_btn("nf-link", "Link", false).on_press_tx(
-                    move |s: &mut AppState, tx| {
-                        s.notes_act(&k, "markdown", None);
-                        if let Some(d) = s.media.notes.docs.get_mut(&k) {
-                            apply_format(&mut d.edit, NoteFormat::Link);
-                            d.dirty_since = Some(tx.clock());
-                        }
-                    },
-                ));
+                toolbar = toolbar.child(
+                    el().key("nf-link")
+                        .role("button")
+                        .label("Link")
+                        .cursor(Cursor::Pointer)
+                        .focusable(true)
+                        .hit()
+                        .size(32.0, 32.0)
+                        .radius(RADIUS_PILL)
+                        .hover(hover_fill())
+                        .center()
+                        .on_press_tx(move |s: &mut AppState, tx| {
+                            s.notes_act(&k, "markdown", None);
+                            if let Some(d) = s.media.notes.docs.get_mut(&k) {
+                                apply_format(&mut d.edit, NoteFormat::Link);
+                                d.dirty_since = Some(tx.clock());
+                            }
+                        })
+                        .child(icon_external(15.0, FG)),
+                );
             }
             if own {
                 let k = doc_key.clone();
                 toolbar = toolbar.child(
-                    device_btn("nf-photo", "Photo", false)
-                        .on_press(move |s: &mut AppState| s.notes_add_photo(&k, None)),
+                    el().key("nf-photo")
+                        .role("button")
+                        .label("Add photo")
+                        .cursor(Cursor::Pointer)
+                        .focusable(true)
+                        .hit()
+                        .size(32.0, 32.0)
+                        .radius(RADIUS_PILL)
+                        .hover(hover_fill())
+                        .center()
+                        .on_press(move |s: &mut AppState| s.notes_add_photo(&k, None))
+                        .child(icon_gallery(15.0, FG)),
                 );
             }
         }
@@ -2245,29 +2332,45 @@ pub fn view(s: &AppState, scale: f32) -> El {
         }
 
         if !doc.preview {
-            toolbar = toolbar.child(device_btn("note-find-btn", "Find", false).on_press(
-                |s: &mut AppState| {
-                    if s.media.notes.find.is_some() {
-                        s.media.notes.find = None;
-                    } else {
-                        s.notes_open_find(false);
-                    }
-                },
-            ));
-            if doc.info.spelling {
-                toolbar = toolbar.child(
-                    device_btn("note-spell-btn", "Spell", false)
-                        .on_press(|s: &mut AppState| s.notes_check_spell_at_caret()),
-                );
-            }
+            toolbar = toolbar.child(
+                el().key("note-find-btn")
+                    .role("button")
+                    .label("Find")
+                    .cursor(Cursor::Pointer)
+                    .focusable(true)
+                    .hit()
+                    .size(32.0, 32.0)
+                    .radius(RADIUS_PILL)
+                    .hover(hover_fill())
+                    .center()
+                    .on_press(|s: &mut AppState| {
+                        if s.media.notes.find.is_some() {
+                            s.media.notes.find = None;
+                        } else {
+                            s.notes_open_find(false);
+                        }
+                    })
+                    .child(icon_search(15.0, FG)),
+            );
         }
 
-        toolbar = toolbar.child(device_btn("note-more-btn", "⋯", false).on_press(
-            |s: &mut AppState| {
-                s.media.notes.note_menu_open = !s.media.notes.note_menu_open;
-                s.media.notes.more_menu_open = false;
-            },
-        ));
+        toolbar = toolbar.child(
+            el().key("note-more-btn")
+                .role("button")
+                .label("Note actions")
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .size(32.0, 32.0)
+                .radius(RADIUS_PILL)
+                .hover(hover_fill())
+                .center()
+                .on_press(|s: &mut AppState| {
+                    s.media.notes.note_menu_open = !s.media.notes.note_menu_open;
+                    s.media.notes.more_menu_open = false;
+                })
+                .child(icon_more_horiz(16.0, FG)),
+        );
 
         main_area = main_area.child(toolbar);
 
@@ -2467,25 +2570,35 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
-                .padding(20.0)
-                .border(
-                    if notes.drop_hovered { 2.0 } else { 0.0 },
-                    if notes.drop_hovered {
-                        good()
-                    } else {
-                        Color::TRANSPARENT
-                    },
+                .pl(12.0)
+                .pr(20.0)
+                .child(
+                    col()
+                        .w_full()
+                        .grow(1.0)
+                        .min_h(0.0)
+                        .px(20.0)
+                        .py(16.0)
+                        .radius(RADIUS_CARD)
+                        .border(
+                            if notes.drop_hovered { 2.0 } else { 1.0 },
+                            if notes.drop_hovered {
+                                good()
+                            } else {
+                                float_line()
+                            },
+                        )
+                        .scroll(ScrollSpec {
+                            stick_bottom: false,
+                        })
+                        .on_drop_hover(|s: &mut AppState, hovered, _| {
+                            s.media.notes.drop_hovered = hovered;
+                        })
+                        .on_drop_files(|s: &mut AppState, paths, _| {
+                            s.notes_handle_file_drop(paths);
+                        })
+                        .child(editor),
                 )
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .on_drop_hover(|s: &mut AppState, hovered, _| {
-                    s.media.notes.drop_hovered = hovered;
-                })
-                .on_drop_files(|s: &mut AppState, paths, _| {
-                    s.notes_handle_file_drop(paths);
-                })
-                .child(editor)
         };
 
         let (caret_pos, _) = doc.edit.range();
@@ -2495,11 +2608,11 @@ pub fn view(s: &AppState, scale: f32) -> El {
 
         let status_bar = row()
             .w_full()
-            .px(16.0)
-            .py(8.0)
-            .gap(12.0)
+            .min_h(36.0)
+            .pl(12.0)
+            .pr(20.0)
+            .gap(14.0)
             .center_y()
-            .border_sides([1.0, 0.0, 0.0, 0.0], hairline())
             .children(
                 doc.problem
                     .as_ref()
@@ -2631,6 +2744,9 @@ pub fn view(s: &AppState, scale: f32) -> El {
             if pinned { "Unpin" } else { "Pin" },
             false,
         )];
+        if doc.info.spelling && !doc.preview {
+            entries.push(("spell", "Check spelling", false));
+        }
         if saved {
             entries.push(("rename", "Rename", false));
         }
@@ -2671,6 +2787,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                     .on_press(move |s: &mut AppState| {
                         s.media.notes.note_menu_open = false;
                         match id {
+                            "spell" => s.notes_check_spell_at_caret(),
                             "rename" => {
                                 let mut re = TextEdit::default();
                                 re.text = base_name(&nm).to_string();

@@ -2030,6 +2030,25 @@ impl AppState {
         loaded
     }
 
+    pub fn capture_full_image(&self, url: &str, scale: f32) -> Option<Image> {
+        let cache = self.image_cache.as_ref()?;
+        self.sync_budget_for_scale(scale);
+        let dim = bucket_dim(1280.0);
+        let key = format!("cap-full:{url}");
+        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
+            return existing;
+        }
+        let loaded = self
+            .art_base
+            .resolve_capture_file(url)
+            .or_else(|| self.art_base.resolve_capture_thumb(url))
+            .map(|path| cache.file_capped(path, dim, scale));
+        self.images
+            .borrow_mut()
+            .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
+        loaded
+    }
+
     pub fn remote_image(&self, url: &str, scale: f32) -> Option<Image> {
         self.remote_image_sized(url, 360.0, scale)
     }
