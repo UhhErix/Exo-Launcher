@@ -340,6 +340,7 @@ internal static class PlayerData
         new("data/games.json", "ScsKillerStatus", Why.ThisPc, "the shader engine's old game list, read to move it"),
         new("games.json", "ScsKillerStatus,WebHostBridge", Why.ThisPc, "the shader engine's game list and Steam's controller folder file name"),
         new("testing.json", "TuneStore", Why.ThisPc, "an AutoTune test in progress"),
+        new("last-run.txt", "TuneSignIn", Why.ThisPc, "what the AutoTune sign-in task did last, read into app.log"),
         new("steam-offline.json", "SteamLoginUsers", Why.ThisPc, "Steam's offline values before Exo set them"),
         new("update-pending.json", "UpdateStartupHealth", Why.ThisPc, "an update waiting for its health check"),
         new("update-result.json", "UpdateOutcome", Why.ThisPc, "how the last update went"),

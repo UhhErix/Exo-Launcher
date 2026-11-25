@@ -33,7 +33,7 @@ export async function run(t) {
   })
 
   await run.check('stress', 'sheets', 'a game\'s sheet opened and shut 25 times leaves the Library whole', async (c) => {
-    await k.nav('Library')
+    await k.libraryGrid()
     for (let i = 0; i < Math.round(25 * n); i++) {
       await t.shell.click((j) => document.querySelectorAll('.exo-game-grid button[data-game-id]')[j % 8], i)
       await sleep(120)
@@ -41,7 +41,7 @@ export async function run(t) {
       await sleep(80)
     }
     await sleep(800)
-    const open = await t.shell.eval(`!!document.querySelector('.exo-game-overlay-stage')?.checkVisibility()`)
+    const open = await t.shell.eval(`!!document.querySelector('.exo-game-room, .exo-game-overlay-stage')?.checkVisibility()`)
     return [...await whole(t, c, 'sheets', 'Library'), open && 'a sheet stayed open'].filter(Boolean)
   })
 
@@ -52,11 +52,12 @@ export async function run(t) {
       await t.shell.key('Escape'); await sleep(60)
     }
     for (let i = 0; i < Math.round(25 * n); i++) {
-      await t.shell.click(() => document.querySelector('.exo-library-more')); await sleep(60)
+      await t.shell.click(() => document.querySelector('main.exo-library-pane button[aria-label="More"], .exo-library-more')); await sleep(60)
       await t.shell.key('Escape'); await sleep(60)
     }
     await sleep(600)
     const s = await k.state()
+    await k.libraryHome()
     return [...await whole(t, c, 'search', 'Library'), s.dialogs && 'a dialog stayed open', s.menus && 'a menu stayed open'].filter(Boolean)
   })
 

@@ -78,6 +78,8 @@ internal sealed class VoiceGate
     /// </summary>
     internal const float VoiceOverNoiseDb = 0f;
 
+    internal const float MicOverFloorDb = 6f, MicVoiceOverFloorDb = 2f;
+
     /// <summary>
     /// Frames a sound waits, passing the rules each frame, before it opens a shut automatic gate: a syllable lasts longer
     /// than 40 ms, where a key's attack, a mouse click, a gunshot or a sword's clash is loud for one frame. The chain's
@@ -172,8 +174,9 @@ internal sealed class VoiceGate
         // click, and little from a voice); a steady fan is learned into both floors. A steady sound opens it on neither:
         // shut, the floors learn it, and a voice over it opens it again. Without suppression: the level over the noise floor.
         var onSpeech = automatic && before is not null && !steady && db > -65f && speech > SpeechDb && db > _cleanedFloor.Db + SpeechOverFloorDb;
+        var micMargin = speech is { } scored && scored > VoiceOverNoiseDb ? MicVoiceOverFloorDb : MicOverFloorDb;
         var loud = before is { } heard
-            ? !steady && db > -65f && db > heard - 15f && db > _cleanedFloor.Db + 15f && heard > _micFloor.Db + 6f
+            ? !steady && db > -65f && db > heard - 15f && db > _cleanedFloor.Db + 15f && heard > _micFloor.Db + micMargin
             : db > MathF.Max(_noiseFloor + 12f, -55f);
         // Loudness says how long a voice goes on, not what a sound is. It carries a voice already going out through its
         // soft consonants and its end; a shut gate opens only on a sound that passes Confirm + 1 frames in a row, each

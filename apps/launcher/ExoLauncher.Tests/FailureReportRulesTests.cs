@@ -128,4 +128,20 @@ public sealed class FailureReportRulesTests
         Assert.False(FailureReportRules.IsHostCallBug(new UserFacingException("Unknown method: app.info")));
         Assert.True(FailureReportRules.IsHostCallBug(new NullReferenceException("boom")));
     }
+
+    [Theory]
+    [InlineData("Close your game first.", true)]
+    [InlineData("Close your game first", true)]
+    [InlineData("Close your game first. Exo fixes the clients once nothing is playing.", true)]
+    [InlineData("Close Call of Duty first.", true)]
+    [InlineData("A game is running, so the update waits.", true)]
+    [InlineData("A game is running, so the update waits", true)]
+    [InlineData("A Discord call is running, so the update waits.", true)]
+    [InlineData("Leave your Discord call first.", true)]
+    [InlineData("The chipset driver didn't update.", false)]
+    [InlineData("Manifest verification failed.", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void ExpectedGuardNoticesSkipErrorReporting(string? message, bool expected) =>
+        Assert.Equal(expected, FailureReportRules.IsExpectedUserNotice(message));
 }

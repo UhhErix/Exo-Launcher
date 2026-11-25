@@ -48,8 +48,8 @@ public sealed class RuntimesTests : IDisposable
 
     [Theory]
     [InlineData("v14.44.35211.00", "Outdated")]
-    [InlineData("v14.51.36247.00", "Current")]
-    [InlineData("v14.52.37025.00", "Current")] // newer than Microsoft's permalink serves (the AIO's): never a downgrade
+    [InlineData("v14.52.37029.00", "Current")]
+    [InlineData("v14.53.38000.00", "Current")] // newer than Microsoft's permalink serves (the AIO's): never a downgrade
     [InlineData("v14.9.1.00", "Outdated")] // 9 < 51 as numbers, not as text
     public void VisualCpp14ComparesItsRecordedVersion(string recorded, string expected)
     {
@@ -61,13 +61,13 @@ public sealed class RuntimesTests : IDisposable
     public void VisualCpp14TrustsANewerRuntimeFileOverAStaleRecord()
     {
         // The x86 key can stay on 14.44 after SysWOW64 was replaced with 14.51. The file is what a game loads.
-        var statuses = Evaluate(Pc(values: new() { ["vc14:x86"] = "v14.44.35211.00" }, files: new() { ["wow:vcruntime140.dll"] = "14.51.36247.0" }));
+        var statuses = Evaluate(Pc(values: new() { ["vc14:x86"] = "v14.44.35211.00" }, files: new() { ["wow:vcruntime140.dll"] = "14.52.37029.0" }));
         Assert.Equal(State.Current, Of(statuses, "vc14-x86").State);
     }
 
     [Fact]
     public void VisualCpp14WhoseFilesAreGoneIsMissing() =>
-        Assert.Equal(State.Missing, Of(Evaluate(Pc(values: new() { ["vc14:x64"] = "v14.51.36247.00" })), "vc14-x64").State);
+        Assert.Equal(State.Missing, Of(Evaluate(Pc(values: new() { ["vc14:x64"] = "v14.52.37029.00" })), "vc14-x64").State);
 
     [Fact]
     public void VisualCpp2005ReadsWindowsInstallerVersionsAndShowsFileVersions()
@@ -121,9 +121,9 @@ public sealed class RuntimesTests : IDisposable
     [Fact]
     public void DotnetComparesAgainstMicrosoftsListElseTheCatalog()
     {
-        var pc = Pc(x64: ["8.0.33", "10.0.13", "11.0.0-rc.3.26522.148"], values: new() { ["ndp4"] = "528040", ["ndp35"] = "1" });
+        var pc = Pc(x64: ["8.0.34", "10.0.14", "11.0.0-rc.3.26522.148"], values: new() { ["ndp4"] = "528040", ["ndp35"] = "1" });
         var offline = Evaluate(pc, now: new DateTime(2026, 10, 26));
-        Assert.Equal(State.Outdated, Of(offline, "dotnet10-x64").State); // catalog: 10.0.14
+        Assert.Equal(State.Outdated, Of(offline, "dotnet10-x64").State); // catalog: 10.0.15
         Assert.Equal(State.Current, Of(offline, "dotnet8-x64").State);
         Assert.Equal(State.Missing, Of(offline, "dotnet9-x64").State);
         Assert.True(Of(offline, "dotnet6-x64").EndOfSupport);
@@ -133,16 +133,16 @@ public sealed class RuntimesTests : IDisposable
         Assert.Equal("4.8", Of(offline, "netfx481").Found!.Shown);
         Assert.Equal(State.Current, Of(offline, "netfx35").State);
 
-        var newer = new DotnetRelease("10.0.15", false, new Dictionary<string, (string, string)> { ["x64"] = ("https://builds.dotnet.microsoft.com/x.exe", new string('A', 128)) });
-        var online = Evaluate(Pc(x64: ["10.0.14"]), new Dictionary<string, DotnetRelease> { ["10-x64"] = newer });
+        var newer = new DotnetRelease("10.0.16", false, new Dictionary<string, DotnetFile> { ["x64"] = new("https://builds.dotnet.microsoft.com/x.exe", new string('A', 128)) });
+        var online = Evaluate(Pc(x64: ["10.0.15"]), new Dictionary<string, DotnetRelease> { ["10-x64"] = newer });
         Assert.Equal(State.Outdated, Of(online, "dotnet10-x64").State);
-        Assert.Equal("10.0.15", Of(online, "dotnet10-x64").Latest);
+        Assert.Equal("10.0.16", Of(online, "dotnet10-x64").Latest);
     }
 
     [Fact]
     public void PlanRunsInOrderAndLeavesOutWhatMicrosoftNoLongerSupports()
     {
-        var statuses = Evaluate(Pc(nvidia: true, values: new() { ["vc14:x64"] = "v14.40.1.00", ["vc14:x86"] = "v14.51.36247.00", ["webview2"] = "1.0" },
+        var statuses = Evaluate(Pc(nvidia: true, values: new() { ["vc14:x64"] = "v14.40.1.00", ["vc14:x86"] = "v14.52.37029.00", ["webview2"] = "1.0" },
             files: new() { ["sys:vcruntime140.dll"] = "", ["wow:vcruntime140.dll"] = "" }), now: new DateTime(2026, 10, 26));
         var missing = Plan(statuses, "missing", null).Select(s => s.Runtime.Id).ToList();
         Assert.DoesNotContain("dotnet6-x64", missing);
@@ -404,6 +404,8 @@ public sealed class RuntimesTests : IDisposable
     [InlineData(1618, "Another installation")]
     [InlineData(-2146498529, "0x800F081F")]
     [InlineData(-1001, "changed after Exo checked it")]
+    [InlineData(-1003, "couldn't copy")]
+    [InlineData(-1004, "Windows blocked it")]
     [InlineData(42, "code 42")]
     public void ExitCodesReadAsPlainWords(int code, string expected) => Assert.Contains(expected, Words(code));
 
@@ -559,9 +561,274 @@ public sealed class RuntimesTests : IDisposable
         var codes = new Dictionary<string, int>(StringComparer.Ordinal);
         var errors = new Dictionary<string, string>(StringComparer.Ordinal);
         ParseResultLines(lines, new HashSet<string> { "dotnet10-x64" }, null, codes, errors, stage);
-        Assert.Equal(-1002, codes["dotnet10-x64"]);
+        Assert.Equal(-1003, codes["dotnet10-x64"]);
         Assert.True(errors.ContainsKey("dotnet10-x64"));
         Assert.Contains("FileNotFoundException", errors["dotnet10-x64"]);
-        Assert.Contains("file is missing", DescribeFailure(-1002, errors["dotnet10-x64"]));
+        Assert.Contains("file is missing", DescribeFailure(-1003, errors["dotnet10-x64"]));
+    }
+
+    [Fact]
+    public void TheElevatedScriptReportsFailureDetailsAndDistinctCodes()
+    {
+        var dotnet = Find("dotnet10-x64")!;
+        var script = Script(@"C:\stage\abc", [(dotnet, false, @"C:\stage\abc\dotnet10-x64.exe", "AA")]);
+        Assert.Contains("-1003", script);
+        Assert.Contains("-1004", script);
+        Assert.Contains("ToBase64String", script);
+        Assert.Contains("HResult", script);
+        Assert.Contains("4551", script);
+        Assert.Contains("fatal ", script);
+    }
+
+    [Fact]
+    public async Task DotnetReleaseCacheRoundTripsUrlsAndHashesAcrossRestart()
+    {
+        var cachePath = Path.Combine(_folder, "dotnet-releases-roundtrip.json");
+        var hash10x64 = new string('a', 128).ToUpperInvariant();
+        var hash10x86 = new string('b', 128).ToUpperInvariant();
+        var hash8x64 = new string('c', 128).ToUpperInvariant();
+        var live = new Dictionary<string, DotnetRelease>(StringComparer.Ordinal)
+        {
+            ["10-x64"] = new("10.0.15", false, new Dictionary<string, DotnetFile>(StringComparer.Ordinal)
+            {
+                ["x64"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe", hash10x64),
+                ["x86"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x86.exe", hash10x86),
+            }),
+            ["10-x86"] = new("10.0.15", false, new Dictionary<string, DotnetFile>(StringComparer.Ordinal)
+            {
+                ["x64"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe", hash10x64),
+                ["x86"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x86.exe", hash10x86),
+            }),
+            ["8-x64"] = new("8.0.34", true, new Dictionary<string, DotnetFile>(StringComparer.Ordinal)
+            {
+                ["x64"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.34/windowsdesktop-runtime-8.0.34-win-x64.exe", hash8x64),
+            }),
+        };
+
+        var writer = new LatestCache<Dictionary<string, DotnetRelease>>(".NET test", TimeSpan.FromHours(6), cachePath);
+        var written = await LoadDotnetReleasesAsync(writer, _ => Task.FromResult<Dictionary<string, DotnetRelease>?>(live), CancellationToken.None);
+        Assert.Equal(3, written.Count);
+
+        var json = File.ReadAllText(cachePath);
+        Assert.Contains("windowsdesktop-runtime-10.0.15-win-x64.exe", json);
+        Assert.Contains(hash10x64, json);
+
+        var reader = new LatestCache<Dictionary<string, DotnetRelease>>(".NET test", TimeSpan.FromHours(6), cachePath);
+        var fetched = 0;
+        var reloaded = await LoadDotnetReleasesAsync(reader, _ => { fetched++; return Task.FromResult<Dictionary<string, DotnetRelease>?>(live); }, CancellationToken.None);
+        Assert.Equal(0, fetched);
+        Assert.Equal("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe", reloaded["10-x64"].Files["x64"].Url);
+        Assert.Equal(hash10x64, reloaded["10-x64"].Files["x64"].Sha512);
+        Assert.Equal("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x86.exe", reloaded["10-x86"].Files["x86"].Url);
+        Assert.Equal("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.34/windowsdesktop-runtime-8.0.34-win-x64.exe", reloaded["8-x64"].Files["x64"].Url);
+    }
+
+    [Fact]
+    public async Task CorruptV3291DotnetCacheIsClearedAndRefreshed()
+    {
+        var cachePath = Path.Combine(_folder, "dotnet-releases-corrupt.json");
+        var corruptJson = "{\"releases\":{\"At\":\"" + DateTime.UtcNow.ToString("O") + "\",\"Value\":{\"10-x64\":{\"Version\":\"10.0.15\",\"EndOfSupport\":false,\"Files\":{\"x64\":{},\"x86\":{}}},\"8-x64\":{\"Version\":\"8.0.34\",\"EndOfSupport\":true,\"Files\":{\"x64\":{},\"x86\":{}}}}}}";
+        File.WriteAllText(cachePath, corruptJson);
+
+        const string hash10x64 = "F838960962172F1A769C49FA600E6F60F56F8D08A28E3CB878890FFC2E3A7A2E1B65697588E23EFA767B8B8E8523EC01F55E875120507DDE16D9A0869102DAB3";
+        const string hash10x86 = "9A6D83C00AA9E292085CA234C0074CFF67070AE48832F64E9184B2F062B0AF05052626BEE633BD87E5DF0837958435A5098D84E2E969A18CB43F3F65F73E0F74";
+        const string hash8x64 = "E5D9049668425FDF88029005B33B563CD4793D5AFC6841C9B9E1622119A06466536A60CB09708E0B6D58457C1C0C49AC415DECBA47EC7A06EBDF828AFF903F62";
+        var fresh = new Dictionary<string, DotnetRelease>(StringComparer.Ordinal)
+        {
+            ["10-x64"] = new("10.0.15", false, new Dictionary<string, DotnetFile>(StringComparer.Ordinal)
+            {
+                ["x64"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe", hash10x64),
+                ["x86"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x86.exe", hash10x86),
+            }),
+            ["10-x86"] = new("10.0.15", false, new Dictionary<string, DotnetFile>(StringComparer.Ordinal)
+            {
+                ["x64"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe", hash10x64),
+                ["x86"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x86.exe", hash10x86),
+            }),
+            ["8-x64"] = new("8.0.34", true, new Dictionary<string, DotnetFile>(StringComparer.Ordinal)
+            {
+                ["x64"] = new("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.34/windowsdesktop-runtime-8.0.34-win-x64.exe", hash8x64),
+            }),
+        };
+
+        var cache = new LatestCache<Dictionary<string, DotnetRelease>>(".NET test", TimeSpan.FromHours(6), cachePath);
+        var fetched = 0;
+        var loaded = await LoadDotnetReleasesAsync(cache, _ => { fetched++; return Task.FromResult<Dictionary<string, DotnetRelease>?>(fresh); }, CancellationToken.None);
+        Assert.Equal(1, fetched);
+        Assert.Equal("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe", loaded["10-x64"].Files["x64"].Url);
+        Assert.Equal(hash10x64, loaded["10-x64"].Files["x64"].Sha512);
+        Assert.Equal("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x86.exe", loaded["10-x86"].Files["x86"].Url);
+        Assert.Equal("https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.34/windowsdesktop-runtime-8.0.34-win-x64.exe", loaded["8-x64"].Files["x64"].Url);
+        Assert.Contains("windowsdesktop-runtime-10.0.15-win-x64.exe", File.ReadAllText(cachePath));
+    }
+
+    [Fact]
+    public void ToStepRejectsNullOrIncompleteDotnetFileAndScriptRejectsMissingFile()
+    {
+        var statuses = Evaluate(Pc(x64: ["10.0.10"]));
+        var badMap = new Dictionary<string, DotnetRelease>(StringComparer.Ordinal)
+        {
+            ["10-x64"] = new("10.0.15", false, new Dictionary<string, DotnetFile>(StringComparer.Ordinal)
+            {
+                ["x64"] = new(null!, null!),
+            }),
+        };
+        var step = ToStep(Of(statuses, "dotnet10-x64"), repair: false, badMap);
+        Assert.Null(step.Url);
+        Assert.NotNull(step.Failure);
+        Assert.Contains("missing or incomplete", step.FailureDetail);
+
+        var rt = Find("dotnet10-x64")!;
+        Assert.Throws<InvalidOperationException>(() => Script(@"C:\stage\abc", [(rt, false, null, null)]));
+        Assert.Throws<InvalidOperationException>(() => Script(@"C:\stage\abc", [(rt, false, @"C:\stage\abc\dotnet10-x64.exe", null)]));
+    }
+
+    [Fact]
+    public void DownloadThenLaunchScriptCopiesVerifiesAndRunsStagedExecutable()
+    {
+        var stage = Path.Combine(_folder, "stage-launch");
+        Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(stage, "results.txt"), "");
+        var stagedExe = Path.Combine(stage, "dotnet10-x64.exe");
+        File.Copy(Path.Combine(Environment.SystemDirectory, "cmd.exe"), stagedExe);
+        var runSha = HashOf(stagedExe, SHA256.Create());
+        var rt = Find("dotnet10-x64")! with { Args = "/c exit 0" };
+        var rawScript = Script(stage, [(rt, false, stagedExe, runSha)]);
+        var runnableScript = rawScript
+            .Replace("$w = Join-Path $env:SystemRoot ('Temp\\ExoRuntimes-' + [Guid]::NewGuid().ToString('N'))",
+                "$w = Join-Path $s 'work'", StringComparison.Ordinal)
+            .Replace("[void][IO.Directory]::CreateDirectory($w, $acl)",
+                "[void][IO.Directory]::CreateDirectory($w)", StringComparison.Ordinal);
+        var scriptPath = Path.Combine(stage, "run.ps1");
+        File.WriteAllText(scriptPath, runnableScript);
+
+        using var hold = new FileStream(stagedExe, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var ps = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+        using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ps,
+            $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{scriptPath}\"")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+        })!;
+        Assert.True(proc.WaitForExit(15_000));
+        var lines = File.ReadAllLines(Path.Combine(stage, "results.txt"));
+        var codes = new Dictionary<string, int>(StringComparer.Ordinal);
+        var errors = new Dictionary<string, string>(StringComparer.Ordinal);
+        var started = new List<string>();
+        ParseResultLines(lines, new HashSet<string> { "dotnet10-x64" }, started.Add, codes, errors, stage);
+        Assert.Equal(["dotnet10-x64"], started);
+        Assert.Equal(0, codes["dotnet10-x64"]);
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void OutcomePopulatesRealCauseDetailForCopyDetailsAcrossFailureModes()
+    {
+        var rt = Find("dotnet10-x64")!;
+        var step = new Step(rt, false, "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe", null, new string('A', 128), 0, "10.0.15");
+        var before = Evaluate(Pc(x64: ["10.0.10"]));
+
+        var exitNonZero = Outcome(step, before, before, new Dictionary<string, int> { ["dotnet10-x64"] = 1603 });
+        Assert.Equal("failed", exitNonZero.Outcome);
+        Assert.Equal(1603, exitNonZero.Code);
+        Assert.Contains("1603", exitNonZero.Detail);
+
+        var notDetected = Outcome(step, before, before, new Dictionary<string, int> { ["dotnet10-x64"] = 0 });
+        Assert.Equal("failed", notDetected.Outcome);
+        Assert.Equal(0, notDetected.Code);
+        Assert.Contains("expected 10.0.15", notDetected.Detail);
+        Assert.Contains("detected 10.0.10", notDetected.Detail);
+
+        var aborted = Outcome(step, before, before, new Dictionary<string, int>(), elevatedExitCode: 9);
+        Assert.Equal("failed", aborted.Outcome);
+        Assert.Contains("exited with code 9", aborted.Detail);
+    }
+
+    [Fact]
+    public void CopyDetailsReportPreservesRuntimeDiagnosticsWithoutSecrets()
+    {
+        var now = new DateTime(2026, 11, 24, 9, 0, 0, DateTimeKind.Utc);
+        var sha = new string('a', 64);
+        string[] log =
+        [
+            "[2026-11-24T08:59:10.0000000Z] INFO Runtimes: dotnet10-x64 downloading url=https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe path=%TEMP%\\ExoLauncherDependencies\\dotnet10-x64.exe expectedBytes=0.",
+            $"[2026-11-24T08:59:15.0000000Z] INFO Runtimes: dotnet10-x64 verified url=https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe path=%TEMP%\\ExoLauncherDependencies\\dotnet10-x64.exe size=60066584 sha256={sha}.",
+            $"[2026-11-24T08:59:20.0000000Z] WARN Runtimes: dotnet10-x64 failed exitCode=1603 url=https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.exe path=%TEMP%\\ExoLauncherDependencies\\dotnet10-x64.exe size=60066584 sha256={sha} detail=Installer exited with code 1603 (0x00000643) for dotnet10-x64 (10.0.15).",
+        ];
+        var report = ExoLauncher.Helpers.AppLog.ReportFor(
+            "1 failed. (dotnet10-x64: Installer exited with code 1603 (0x00000643) for dotnet10-x64 (10.0.15).)",
+            "pc", log, now, "3.29.1", "10.0.26300.0", "Alice", @"C:\Users\Alice");
+        Assert.Contains("windowsdesktop-runtime-10.0.15-win-x64.exe", report);
+        Assert.Contains("size=60066584", report);
+        Assert.Contains($"sha256={sha}", report);
+        Assert.Contains("exitCode=1603", report);
+        Assert.DoesNotContain("Alice", report);
+    }
+
+    [Fact]
+    public void VisualCpp2012And2013DetectFromRegistryKeysAnd2005FromMsiCodes()
+    {
+        var statuses = Evaluate(Pc(
+            uninstall:
+            [
+                ("{710f4c1c-cc18-4c49-8cbf-51240c89a1a2}", "Localized VC2005", "8.0.61001"),
+                ("vcredist05_x64", "Microsoft Visual C++ 2005 Redistributable (x64) - 8.0.61186", "8.0.61186"),
+            ],
+            values: new()
+            {
+                ["vc11:x86"] = "v11.0.61030.00",
+                ["vc11:x64"] = "v11.0.61135.00",
+                ["vc12:x86"] = "v12.0.40664.00",
+                ["vc12:x64"] = "v12.0.21005.01",
+            }));
+        Assert.Equal(State.Current, Of(statuses, "vc2005-x86").State);
+        Assert.Equal(State.Current, Of(statuses, "vc2005-x64").State);
+        Assert.Equal(State.Current, Of(statuses, "vc2012-x86").State);
+        Assert.Equal(State.Current, Of(statuses, "vc2012-x64").State);
+        Assert.Equal(State.Current, Of(statuses, "vc2013-x86").State);
+        Assert.Equal(State.Outdated, Of(statuses, "vc2013-x64").State);
+    }
+
+    [Fact]
+    public void SteamSharedDepotsCoverDotnetXnaOpenAlAndPhysXAndFolderHintsFindUePrereqs()
+    {
+        const string acf = """
+            "AppState"
+            {
+                "SharedDepots"
+                {
+                    "229000"		"228980"
+                    "229005"		"228980"
+                    "229007"		"228980"
+                    "229012"		"228980"
+                    "229020"		"228980"
+                    "229030"		"228980"
+                    "229033"		"228980"
+                }
+            }
+            """;
+        var depots = SteamSharedDepots(acf).Distinct().ToList();
+        Assert.Equal(["netfx35", "netfx481", "xna40", "openal", "physx-legacy", "physx"], depots);
+
+        var ueGame = Path.Combine(_folder, "UeGame");
+        var prereq = Path.Combine(ueGame, "Engine", "Extras", "Redist", "en-us", "UEPrereqSetup_x64.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(prereq)!);
+        File.WriteAllBytes(prereq, [0]);
+        var ids = RuntimesFor(new GameEntry { Id = "local:ue", Title = "UeGame", Store = StoreKind.Local, Path = ueGame });
+        Assert.Equal(new[] { "directx", "vc14-x64", "vc14-x86" }, ids.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void NamedRepairAllowsAnyInstallableRuntimeWhileBulkRepairTargetsVisualCpp()
+    {
+        var statuses = Evaluate(Pc(nvidia: true, files: AllDirectX,
+            uninstall: [("{D69C8EDE-BBC5-436B-8E0E-C5A6D311CF4F}", "Microsoft XNA Framework Redistributable 4.0 Refresh", "4.0.30901.0")]));
+        var namedRepair = Plan(statuses, "repair", ["directx", "xna40", "netfx35"]).Select(s => s.Runtime.Id).ToList();
+        Assert.Equal(["netfx35", "directx", "xna40"], namedRepair);
+
+        var bulkRepair = Plan(statuses, "repair", null).Select(s => s.Runtime.Id).ToList();
+        Assert.All(bulkRepair, id => Assert.StartsWith("vc", id));
     }
 }

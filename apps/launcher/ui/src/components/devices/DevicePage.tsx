@@ -21,19 +21,20 @@ type Plan = { key: string; count: number; cuts: number[]; column: number }
  * Its panels (each child is one) stand in columns beside it, placed by useBand, every column ending level with the hero.
  * The audio page and the controller page are built on it.
  */
-export function DevicePage({ name, status, art, stats, credit, children }: {
+export function DevicePage({ name, status, art, stats, credit, controllerLab, children }: {
   name: string
   status: string
   art: ReactNode
   /** The readout: label and figure pairs; a pair whose figure is null isn't drawn. */
   stats: { label: string; value: ReactNode | null }[]
   credit?: ReactNode
+  controllerLab?: boolean
   children: ReactNode
 }) {
   const shown = stats.filter(stat => stat.value !== null && stat.value !== undefined)
   const { page, stack } = useBand(Children.toArray(children).length)
   return (
-    <section ref={page} className="exo-device-page" aria-label={name}>
+    <section ref={page} className="exo-device-page" aria-label={name} data-controller-lab={controllerLab ? 'active' : undefined}>
       <aside className="exo-device-page-hero">
         <div className="exo-device-hero-art">{art}</div>
         <div className="exo-device-page-id">
@@ -76,6 +77,12 @@ export function DevicePanel({ title, children }: { title: string; children: Reac
  * or goes, or a panel's rows change (a test's results, a search's matches), at most once a frame. Live readings (a
  * stick's dot, a trigger's pull) change attributes only, which nothing here watches.
  */
+function roomOf(page: HTMLElement | null): HTMLElement | null {
+  let parent = page?.parentElement ?? null
+  while (parent && getComputedStyle(parent).display === 'contents') parent = parent.parentElement
+  return parent
+}
+
 function useBand(panelCount: number) {
   const page = useRef<HTMLElement>(null)
   const stack = useRef<HTMLDivElement>(null)
@@ -84,7 +91,7 @@ function useBand(panelCount: number) {
   useLayoutEffect(() => {
     const p = page.current
     const s = stack.current
-    const room = p?.parentElement
+    const room = roomOf(p)
     if (!p || !s || !room) return
     let frame = 0
     const again = () => {
@@ -122,7 +129,7 @@ type Column = { start: number; end: number; height: number; rows: number }
  * still fit, so nothing jumps mid-test; a new size or a panel coming or going plans again.
  */
 function layOut(p: HTMLElement | null, s: HTMLElement | null, last: RefObject<Plan | null>) {
-  const room = p?.parentElement
+  const room = roomOf(p)
   if (!p || !s || !room) return
   const panels = [...s.querySelectorAll<HTMLElement>(':scope > .exo-device-page-panel')]
   const breaks = [...s.querySelectorAll<HTMLElement>(':scope > .exo-device-page-break')]

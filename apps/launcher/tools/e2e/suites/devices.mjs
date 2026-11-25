@@ -25,9 +25,9 @@ export async function run(t) {
     const expected = new Set([
       ...(detected.some(d => d.kind === 'mouse') ? ['mouse'] : []),
       ...(detected.some(d => d.kind === 'audio') ? ['audio'] : []),
-      ...detected.filter(d => d.kind === 'controller' && d.lab).map(d => d.id),
+      ...detected.filter(d => (d.kind === 'controller' || d.kind === 'keyboard') && d.lab).map(d => d.id),
     ])
-    const hidden = detected.filter(d => d.kind === 'keyboard' || (d.kind === 'controller' && !d.lab))
+    const hidden = detected.filter(d => (d.kind === 'keyboard' || d.kind === 'controller') && !d.lab)
     if (!grid && expected.size === 0) c.skip('no devices found on this PC')
     await t.shell.waitFor(() => document.querySelectorAll('[data-device-card] .exo-device-card-art > *').length === document.querySelectorAll('[data-device-card]').length || null, { timeoutMs: 15000 })
     // A picture from the catalog loads (or fails) before it is judged; one that fails is a broken picture, not drawn art.
@@ -170,7 +170,8 @@ export async function run(t) {
     if (!rows) failures.push('no Calibration row in Sticks')
     if (await t.shell.eval(`!!document.querySelector('.exo-device-page-panel[aria-label="Profiles"]')`)) failures.push("an Edge's on-board profile editor is back")
     if (await t.shell.eval(`!!document.querySelector('.exo-device-page-panel[aria-label="Profiles on the controller"] button')`)) failures.push("an Edge's on-board profiles can be edited: they are only read")
-    if (!await t.shell.eval(`!!document.querySelector('.exo-device-page-panel[aria-label="What Exo remembers"]')`)) failures.push('no What Exo remembers panel')
+    const remembers = await t.shell.waitFor(() => !!document.querySelector('.exo-device-page-panel[aria-label="What Exo remembers"]'), { timeoutMs: 8000 })
+    if (!remembers) failures.push('no What Exo remembers panel')
     if (await t.shell.click(() => [...document.querySelectorAll('.exo-device-page-panel[aria-label="Sticks"] button')].find(b => /^(Calibrate|Again)$/.test(b.textContent.trim())))) {
       const intro = await t.shell.waitFor(() => document.querySelector('.exo-calibrate h2')?.textContent ?? null, { timeoutMs: 5000 })
       if (intro !== 'Calibrate the sticks') failures.push(`calibration opened on "${intro}", not its first step`)

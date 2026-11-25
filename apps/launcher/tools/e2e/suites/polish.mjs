@@ -47,7 +47,8 @@ export function polishScan(TYPE, RADII) {
 
   // Too small to hit: under 24 px across is a warning, under 16 a failure (a tap target, not the glyph inside it).
   for (const e of controls) {
-    const r = e.getBoundingClientRect()
+    const boxEl = e.matches('input') ? (e.closest('label') ?? e) : e
+    const r = boxEl.getBoundingClientRect()
     if (e.matches('input[type="range"], a:not([role])') && r.height >= 14) continue
     const least = Math.min(r.width, r.height)
     if (least < 16) out.tiny.push(`${path(e)} ${Math.round(r.width)}x${Math.round(r.height)}`)
@@ -156,7 +157,10 @@ export async function run(t) {
       await sleep(120)
       const f = await t.shell.eval(`(() => { const e = document.activeElement; if (!e || e === document.body) return null
         const s = getComputedStyle(e), r = e.getBoundingClientRect()
-        const ring = (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0) || s.boxShadow !== 'none' || e.matches(':focus-visible') && [...document.styleSheets].length && s.backgroundColor !== 'rgba(0, 0, 0, 0)'
+        const host = e.matches('input, textarea, select') ? e.closest('label') : null
+        const hs = host ? getComputedStyle(host) : null
+        const hasRing = (cs) => (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0) || cs.boxShadow !== 'none'
+        const ring = hasRing(s) || (hs && hasRing(hs)) || e.matches(':focus-visible') && [...document.styleSheets].length && s.backgroundColor !== 'rgba(0, 0, 0, 0)'
         return { name: (e.getAttribute('aria-label') || e.textContent || e.tagName).trim().slice(0, 30), ring, shown: r.width > 0 && r.bottom > 0 && r.top < innerHeight } })()`)
       if (f && f.shown && !f.ring) unseen.push(f.name)
     }
@@ -165,13 +169,14 @@ export async function run(t) {
   }
 
   for (const room of ROOMS) {
-    await run.check('polish', room.toLowerCase(), `${room}: no code in its words, every control big enough and on its row's line, nothing moving once still, type, corners and lines from Exo's set`, async (c) => {
+    const slug = room.toLowerCase().replace(/\s+/g, '-')
+    await run.check('polish', slug, `${room}: no code in its words, every control big enough and on its row's line, nothing moving once still, type, corners and lines from Exo's set`, async (c) => {
       await k.nav(room)
       await sleep(1200)
       await k.settle(300, 8000)
       const failures = await review(c, room)
       await focusSeen(c, room)
-      await c.shot(`polish-${room.toLowerCase()}`, t.shell)
+      await c.shot(`polish-${slug}`, t.shell)
       await k.closeAll()
       return failures
     })
@@ -187,8 +192,9 @@ export async function run(t) {
       failures.push(...await review(c, label))
       await c.shot(`polish-${label}`, t.shell)
     }
-    await k.nav('Library')
+    await k.libraryGrid()
     await open('sort-menu', () => t.shell.click(() => document.querySelector('.exo-shelf-sort-trigger')), () => !!document.querySelector('[role="menu"], .exo-shelf-sort-menu'))
+    await k.libraryHome()
     await open('ctrl-k', () => t.shell.key('k', { ctrl: true }), () => !!document.querySelector('[role="dialog"] [role="combobox"]'))
     await open('settings', () => t.shell.click(() => document.querySelector('.exo-settings-btn')), () => !!document.querySelector('.exo-settings-nav')?.getClientRects().length)
     await k.nav('Discord')

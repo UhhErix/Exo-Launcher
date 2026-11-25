@@ -26,8 +26,8 @@ test('DevicesRoom reads computed styles once per sendRail and decouples ResizeOb
   assert.match(devicesRoom, /useEffect\(\(\) => \{ if \(shown\) sendRail\(\) \}, \[shown, sendRail\]\)/)
 })
 
-test('kit.nav measures Devices switch independently of PC navigation settle', () => {
-  const devicesBlock = /if \(room === 'Devices'\) \{[\s\S]*?const t0 = Date\.now\(\)/.exec(kit)?.[0] ?? ''
-  assert.ok(devicesBlock.length > 0)
-  assert.match(devicesBlock, /await k\.nav\('PC'\)[\s\S]*?const t0 = Date\.now\(\)/m)
+test('kit.nav switches directly to top-level Bar rooms including Devices', () => {
+  assert.match(kit, /export const ROOMS = \[[^\]]*'Devices'[^\]]*\]/)
+  assert.match(kit, /export const BAR_ROOMS = ROOMS/)
+  assert.match(kit, /async nav\(room\) \{\s*await k\.closeAll\(\)\s*const t0 = Date\.now\(\)/)
 })

@@ -106,4 +106,4 @@ migrations_dir = "migrations"
 
 # The daily job: every day at 04:20 UTC (src/worker.js scheduled: retention, pruning, and what GitHub was not told yet).
 [triggers]
-crons = []
+crons = ["20 4 * * *"]

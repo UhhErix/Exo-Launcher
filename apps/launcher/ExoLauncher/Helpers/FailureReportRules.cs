@@ -48,6 +48,20 @@ public static class FailureReportRules
             || message.Contains("free space", StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool IsExpectedUserNotice(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+        var text = message.Trim();
+        if (text.Contains("is running, so the update waits", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (text.StartsWith("Close ", StringComparison.OrdinalIgnoreCase)
+            && text.Contains(" first", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (text.StartsWith("Leave your Discord call first", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
     public static bool IsDiscordGatewayReportable(int? lastCloseCode, bool networkFailure) =>
         !networkFailure && lastCloseCode is not null;
 
@@ -57,7 +71,7 @@ public static class FailureReportRules
     /// or the network's, and an HTTP failure is some other server's; none of those is reported. Everything else is.
     /// </summary>
     public static bool IsHostCallBug(Exception ex) =>
-        ex is not (UserFacingException or InvalidOperationException or InvalidDataException or OperationCanceledException or TimeoutException
+        ex is not (InvalidOperationException or InvalidDataException or OperationCanceledException or TimeoutException
             or HttpRequestException or System.Net.Sockets.SocketException);
 
     /// <summary>

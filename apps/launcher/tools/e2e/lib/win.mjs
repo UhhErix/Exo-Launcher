@@ -24,7 +24,12 @@ export const win = {
   /** A real click, only where Exo's own window is the one on top; elsewhere it throws and clicks nothing. */
   click: async (x, y) => {
     const done = await run('click', { X: Math.round(x), Y: Math.round(y) })
-    if (!done.ok) throw new Error(`a real click at ${Math.round(x)},${Math.round(y)} held back: ${done.why}`)
+    if (!done.ok) {
+      const err = new Error(`a real click at ${Math.round(x)},${Math.round(y)} held back: ${done.why}`)
+      if (done.nonInputDesktop) err.nonInputDesktop = true
+      if (done.diag) err.diag = done.diag
+      throw err
+    }
     return done
   },
   move: (x, y) => run('move', { X: Math.round(x), Y: Math.round(y) }),

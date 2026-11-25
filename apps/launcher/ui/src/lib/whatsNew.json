@@ -1,5 +1,120 @@
 [
   {
+    "version": "3.30.3",
+    "items": [
+      {
+        "icon": "Mouse",
+        "title": "Reliable mouse profiles without repeat writes",
+        "detail": "Stops Finalmouse Starlight X profiles from repeatedly re-applying on connect, adds debounce for game profile switching, and protects mice with per-device write limits."
+      },
+      {
+        "icon": "Performance",
+        "title": "Cleaner Auto Tune finish",
+        "detail": "Keeps the Auto Tune completion view focused by dropping the long list of stages and showing only warnings or errors if something fails."
+      }
+    ]
+  },
+  {
+    "version": "3.30.2",
+    "items": [
+      {
+        "icon": "Scissors",
+        "title": "Reliable Snip and fullscreen captures",
+        "detail": "Fixes Snip showing a black screen by waiting for a live desktop frame and falling back cleanly through Windows Graphics Capture."
+      },
+      {
+        "icon": "Mouse",
+        "title": "Finalmouse TMR-DS Ultraclick & Intent Trigger",
+        "detail": "Adds Ultraclick mode and the Intent Trigger toggle for Finalmouse Starlight X (TMR-DS) in Devices › Mouse."
+      }
+    ]
+  },
+  {
+    "version": "3.30.1",
+    "items": [
+      {
+        "icon": "Download",
+        "title": "Complete all-in-one game runtime coverage & repair",
+        "detail": "Updates Visual C++ to 14.52, improves older VC++ detection, covers Steamworks, Unreal, and Epic prerequisites, and adds per-item runtime repair."
+      },
+      {
+        "icon": "Controller",
+        "title": "Steady Controller page without scroll jumps",
+        "detail": "Fixes the layout wrapper in Devices › Controller so the page stays steady while viewing and tuning your controller."
+      }
+    ]
+  },
+  {
+    "version": "3.30.0",
+    "items": [
+      {
+        "icon": "Mic",
+        "title": "Even louder and steadier Discord voices",
+        "detail": "Upgrades Level voices to BS.1770 LUFS per-speaker leveling with target loudness choices, a soft-knee limiter, and optional mic auto gain."
+      },
+      {
+        "icon": "Performance",
+        "title": "More per-game Optimize profiles",
+        "detail": "Improves Call of Duty and Rocket League tuning and adds safe profiles for Rainbow Six Siege, Apex Legends, Overwatch 2, and Minecraft Java with per-setting toggles."
+      },
+      {
+        "icon": "FrameGen",
+        "title": "One Frame generation row for every GPU",
+        "detail": "Unifies built-in DLSS/FSR/XeSS frame generation, NVIDIA Smooth Motion, AMD Fluid Motion Frames, OptiScaler, and Lossless Scaling on every game page."
+      },
+      {
+        "icon": "ThisPc",
+        "title": "Smarter Autopilot, Exo AI & System tuning",
+        "detail": "Audits System tweaks against benchmarks, migrates legacy myth keys, pauses background downloads while you play, and honors your saved Exo AI and Autopilot choices."
+      },
+      {
+        "icon": "Monitor",
+        "title": "Hardware, SSD TRIM & laptop HDR health checks",
+        "detail": "Checks Intel 13th/14th Gen microcode, single-channel RAM, Ryzen branch-prediction updates, SSD TRIM and firmware, and laptop HDR peak-brightness mismatches."
+      },
+      {
+        "icon": "Download",
+        "title": "Fixed .NET runtime installs & quieter notices",
+        "detail": "Fixes .NET Desktop Runtime installs failing with a missing installer file and keeps running-game notices out of error reports."
+      }
+    ]
+  },
+  {
+    "version": "3.29.1",
+    "items": [
+      {
+        "icon": "Home",
+        "title": "Tabs stay responsive after games close",
+        "detail": "Fixes top bar tabs and window controls stopping after exiting a fullscreen game or changing display scaling."
+      },
+      {
+        "icon": "Mic",
+        "title": "Clearer Discord voice & working friend requests",
+        "detail": "Stops voice from cutting out on noisy USB condenser mics, fixes accepting and adding Discord friends, and guards invalid member IDs."
+      },
+      {
+        "icon": "Performance",
+        "title": "Wooting keyboard fixes across every model",
+        "detail": "Fixes HID framing, live profile reload, actuation and Rapid Trigger read-back, backups, and key map layouts in Devices."
+      },
+      {
+        "icon": "Download",
+        "title": "Reliable runtime installs & persistent GPU tuning",
+        "detail": "Fixes silent runtime installer failures, defers installs while a game runs, keeps Auto tune and fan curves after sleep or restart, and pauses safely after a driver reset."
+      },
+      {
+        "icon": "Record",
+        "title": "Capture stability & cleaner PC updates",
+        "detail": "Prevents Exo Capture crashes on unsupported GPUs or during driver updates, handles AMD driver exit codes cleanly, and removes duplicate driver offers."
+      },
+      {
+        "icon": "Library",
+        "title": "Faster startup, onboarding & store detection",
+        "detail": "Fixes first-run health check timeouts and startup hangs, handles long paths in leftover cleanup, and detects classic Epic, Ubisoft, Rockstar, and Paradox installs."
+      }
+    ]
+  },
+  {
     "version": "3.29.0",
     "items": [
       {

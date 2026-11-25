@@ -16,6 +16,7 @@ internal sealed unsafe class SnipOverlay : UiThread.IWindow
     private readonly UiThread _ui;
     private readonly Win32.RECT _screen;
     private readonly List<(nint Hwnd, Win32.RECT Rect)> _windows;
+    private readonly IReadOnlyList<(Win32.RECT Rect, string Reason)> _failed;
     private readonly Action<SnipChoice?> _done;
     private nint _hwnd, _brightDc, _dimDc, _bright, _dim, _backDc, _back;
     private bool _down, _dragging, _finished, _ready;
@@ -25,26 +26,39 @@ internal sealed unsafe class SnipOverlay : UiThread.IWindow
     internal const string Hint = "Drag to snip  |  Click a window  |  Enter for the whole screen  |  Esc to cancel";
 
     /// <param name="bgra">The virtual screen's picture, top-down BGRA, <paramref name="screen"/>'s size.</param>
-    internal SnipOverlay(UiThread ui, Win32.RECT screen, byte[] bgra, List<(nint, Win32.RECT)> windows, Action<SnipChoice?> done)
+    internal SnipOverlay(UiThread ui, Win32.RECT screen, byte[] bgra, List<(nint, Win32.RECT)> windows, Action<SnipChoice?> done, IReadOnlyList<(Win32.RECT Rect, string Reason)>? failed = null)
     {
-        (_ui, _screen, _windows, _done) = (ui, screen, windows, done);
+        (_ui, _screen, _windows, _done, _failed) = (ui, screen, windows, done, failed ?? []);
         int w = screen.Width, h = screen.Height;
         var screenDc = Win32.GetDC(0);
-        (_brightDc, _bright) = Section(screenDc, w, h, out var brightBits);
-        (_dimDc, _dim) = Section(screenDc, w, h, out var dimBits);
-        (_backDc, _back) = Section(screenDc, w, h, out _);
-        Win32.ReleaseDC(0, screenDc);
-        fixed (byte* source = bgra)
+        if (screenDc == 0) throw new CaptureException("Couldn't prepare the snip overlay.");
+        try
         {
-            Buffer.MemoryCopy(source, brightBits, bgra.Length, bgra.Length);
-            var d = (byte*)dimBits;
-            for (var i = 0; i < bgra.Length; i += 4)
+            (_brightDc, _bright) = Section(screenDc, w, h, out var brightBits);
+            (_dimDc, _dim) = Section(screenDc, w, h, out var dimBits);
+            (_backDc, _back) = Section(screenDc, w, h, out _);
+            fixed (byte* source = bgra)
             {
-                d[i] = (byte)(source[i] * 45 / 100);
-                d[i + 1] = (byte)(source[i + 1] * 45 / 100);
-                d[i + 2] = (byte)(source[i + 2] * 45 / 100);
-                d[i + 3] = 255;
+                Buffer.MemoryCopy(source, brightBits, bgra.Length, bgra.Length);
+                var d = (byte*)dimBits;
+                for (var i = 0; i < bgra.Length; i += 4)
+                {
+                    d[i] = (byte)(source[i] * 45 / 100);
+                    d[i + 1] = (byte)(source[i + 1] * 45 / 100);
+                    d[i + 2] = (byte)(source[i + 2] * 45 / 100);
+                    d[i + 3] = 255;
+                }
             }
+        }
+        catch
+        {
+            foreach (var dc in new[] { _brightDc, _dimDc, _backDc }) if (dc != 0) Win32.DeleteDC(dc);
+            foreach (var bitmap in new[] { _bright, _dim, _back }) if (bitmap != 0) Win32.DeleteObject(bitmap);
+            throw;
+        }
+        finally
+        {
+            Win32.ReleaseDC(0, screenDc);
         }
     }
 
@@ -53,8 +67,14 @@ internal sealed unsafe class SnipOverlay : UiThread.IWindow
         var info = new Win32.BITMAPINFOHEADER { Size = (uint)sizeof(Win32.BITMAPINFOHEADER), Width = w, Height = -h, Planes = 1, BitCount = 32 };
         void* pixels;
         var bitmap = Win32.CreateDIBSection(screenDc, &info, 0, &pixels, 0, 0);
+        if (bitmap == 0 || pixels is null) throw new CaptureException("Couldn't allocate the snip surface.");
         bits = pixels;
         var dc = Win32.CreateCompatibleDC(screenDc);
+        if (dc == 0)
+        {
+            Win32.DeleteObject(bitmap);
+            throw new CaptureException("Couldn't prepare the snip surface.");
+        }
         Win32.SelectObject(dc, bitmap);
         return (dc, bitmap);
     }
@@ -176,6 +196,28 @@ internal sealed unsafe class SnipOverlay : UiThread.IWindow
         var dc = Win32.BeginPaint(hwnd, &ps);
         int w = _screen.Width, h = _screen.Height;
         Win32.CopyBits(_backDc, 0, 0, w, h, _dimDc, 0, 0, 0x00CC0020 /* SRCCOPY */);
+        foreach (var (fRect, fReason) in _failed)
+        {
+            var fx = fRect.Left - _screen.Left;
+            var fy = fRect.Top - _screen.Top;
+            var box = new Win32.RECT { Left = fx, Top = fy, Right = fx + fRect.Width, Bottom = fy + fRect.Height };
+            var fill = Win32.CreateSolidBrush(0x141414);
+            var oldB = Win32.SelectObject(_backDc, fill);
+            var border = Win32.CreatePen(0, 1, 0x3A3A3A);
+            var oldP = Win32.SelectObject(_backDc, border);
+            Win32.Rectangle(_backDc, box.Left, box.Top, box.Right, box.Bottom);
+            Win32.SelectObject(_backDc, oldP);
+            Win32.SelectObject(_backDc, oldB);
+            Win32.DeleteObject(border);
+            Win32.DeleteObject(fill);
+            var fFont = Win32.CreateFont(-16, 0, 0, 0, 500, 0, 0, 0, 1, 0, 0, 5, 0, _ui.FontFace);
+            var oldF = Win32.SelectObject(_backDc, fFont);
+            Win32.SetBkMode(_backDc, 1);
+            Win32.SetTextColor(_backDc, 0xFFFFFF);
+            Win32.DrawText(_backDc, "Couldn't capture this display: " + fReason, -1, &box, 0x1 | 0x4 | 0x20);
+            Win32.SelectObject(_backDc, oldF);
+            Win32.DeleteObject(fFont);
+        }
         if (_selection is { } s)
         {
             var x = s.Left - _screen.Left;

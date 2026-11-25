@@ -34,7 +34,9 @@ internal static class UninstallRun
                 foreach (var (pid, parent, name) in table)
                     if (family.Contains(parent) && !before.Contains(pid) && !NotWaitedFor.Contains(name, StringComparer.OrdinalIgnoreCase) && family.Add(pid)) grew = true;
             }
-            if (!table.Any(row => family.Contains(row.Pid))) return null;
+            if (table.Any(row => family.Contains(row.Pid))) continue;
+            if (process.HasExited && process.ExitCode != 0) AppLog.Warn($"Uninstall: the uninstaller ended with exit code {process.ExitCode}.");
+            return null;
         }
         return "Its uninstaller is still running.";
     }

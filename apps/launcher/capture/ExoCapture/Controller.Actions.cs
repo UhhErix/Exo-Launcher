@@ -158,65 +158,198 @@ internal sealed partial class Controller
     private static GpuDevice GpuFor(nint monitor) => GpuDevice.ForMonitor(monitor);
 
     /// <summary>The screens as they are this moment: one SDR picture of the virtual screen, and each HDR screen's own FP16 picture.</summary>
-    internal sealed record Frozen(Win32.RECT Screen, byte[] Bgra, List<(nint Monitor, Win32.RECT Rect, byte[] Half, float White, float Peak)> Hdr);
+    internal sealed record Frozen(
+        Win32.RECT Screen,
+        byte[] Bgra,
+        List<(nint Monitor, Win32.RECT Rect, byte[] Half, float White, float Peak)> Hdr,
+        List<(Win32.RECT Rect, string Reason)> Failed);
 
-    internal static bool TryGrabOrFallback(Func<bool> tryPrimary, Func<bool> tryFallback, Action<string>? log = null)
+    internal readonly record struct CaptureAttempt(string Name, Func<bool> Run);
+
+    internal static bool TryCaptureSteps(ReadOnlySpan<CaptureAttempt> steps, out string? failureReason, Action<string>? log = null)
     {
-        try
+        List<string>? errors = null;
+        foreach (var step in steps)
         {
-            if (tryPrimary()) return true;
+            try
+            {
+                if (step.Run())
+                {
+                    failureReason = null;
+                    return true;
+                }
+                var msg = $"{step.Name}: no frame";
+                (errors ??= []).Add(msg);
+                log?.Invoke("Snip capture fallback: " + msg);
+            }
+            catch (Exception ex) when (ex is CaptureException or SharpGen.Runtime.SharpGenException)
+            {
+                var msg = $"{step.Name}: {ex.Message}";
+                (errors ??= []).Add(msg);
+                log?.Invoke("Snip capture fallback: " + msg);
+            }
         }
-        catch (CaptureException ex)
-        {
-            log?.Invoke("Snip duplication fallback: " + ex.Message);
-        }
-        return tryFallback();
+        failureReason = errors is { Count: > 0 } ? string.Join("; ", errors) : "no capture path succeeded";
+        return false;
     }
 
-    private Frozen Freeze()
+    internal static string FormatFreezeFailure(IReadOnlyList<string> reasons)
     {
-        var screen = Win32.VirtualScreen();
+        if (reasons.Count == 0) return "Couldn't capture the screen.";
+        return "Couldn't capture the screen (" + reasons[0] + ").";
+    }
+
+    private Frozen Freeze(IReadOnlyList<nint>? onlyMonitors = null)
+    {
+        var monitors = onlyMonitors ?? Win32.Monitors();
+        var screen = onlyMonitors is { Count: 1 } ? Win32.MonitorInfo(onlyMonitors[0]).Monitor : Win32.VirtualScreen();
+        if (screen.Width < 2 || screen.Height < 2 || monitors.Count == 0)
+            throw new CaptureException("Couldn't capture the screen (no active display).");
         var bgra = new byte[screen.Width * screen.Height * 4];
         var hdr = new List<(nint, Win32.RECT, byte[], float, float)>();
-        foreach (var monitor in Win32.Monitors())
+        var failed = new List<(Win32.RECT Rect, string Reason)>();
+        var failureReasons = new List<string>();
+        var captured = 0;
+        foreach (var monitor in monitors)
         {
             var rect = Win32.MonitorInfo(monitor).Monitor;
             var gpu = GpuFor(monitor);
-            TryGrabOrFallback(
-                () =>
-                {
-                    using var source = new DuplicationSource(gpu, monitor, 0, hdr: true, "(screen)");
-                    if (source.Grab() is not { } texture) return false;
-                    var pixels = gpu.Read(texture, out var w, out var h, out var bpp);
-                    byte[] sdr;
-                    if (bpp == 8)
-                    {
-                        using var output = DuplicationSource.OutputOf(gpu, monitor, out var description);
-                        var white = Imaging.SdrWhiteNits(monitor);
-                        var peak = description.MaxLuminance > 0 ? description.MaxLuminance : 1000;
-                        hdr.Add((monitor, rect, pixels, white, peak));
-                        sdr = Imaging.ToneMap(pixels, w, h, white, peak);
-                    }
-                    else sdr = pixels;
-                    CopyMonitorBgra(bgra, screen, rect, sdr, w, h);
-                    return true;
-                },
-                () =>
-                {
-                    if (GrabMonitorGdi(rect) is not { } gdi) return false;
-                    CopyMonitorBgra(bgra, screen, rect, gdi, rect.Width, rect.Height);
-                    return true;
-                },
-                Host.Log);
+            CaptureAttempt[] steps =
+            [
+                new("duplication", () => GrabMonitorDuplication(gpu, monitor, rect, screen, bgra, hdr)),
+                new("Windows.Graphics.Capture", () => GrabMonitorWgc(gpu, monitor, rect, screen, bgra, hdr)),
+                new("GDI", () => GrabMonitorGdiFallback(rect, screen, bgra)),
+            ];
+            if (TryCaptureSteps(steps, out var reason, Host.Log))
+            {
+                captured++;
+            }
+            else
+            {
+                var detail = reason ?? "capture failed";
+                failed.Add((rect, detail));
+                failureReasons.Add(detail);
+            }
         }
-        return new Frozen(screen, bgra, hdr);
+        if (captured == 0)
+        {
+            var summary = FormatFreezeFailure(failureReasons);
+            Host.Log("Snip capture failed: " + string.Join(" | ", failureReasons));
+            throw new CaptureException(summary);
+        }
+        return new Frozen(screen, bgra, hdr, failed);
     }
 
-    private static void CopyMonitorBgra(byte[] bgra, Win32.RECT screen, Win32.RECT rect, byte[] sdr, int w, int h)
+    private static bool GrabMonitorDuplication(
+        GpuDevice gpu,
+        nint monitor,
+        Win32.RECT rect,
+        Win32.RECT screen,
+        byte[] bgra,
+        List<(nint Monitor, Win32.RECT Rect, byte[] Half, float White, float Peak)> hdr)
+    {
+        using var source = new DuplicationSource(gpu, monitor, 0, hdr: true, "(screen)");
+        if (source.Grab() is not { } texture) return false;
+        StoreMonitorPixels(gpu, monitor, rect, screen, bgra, hdr, texture, null);
+        return true;
+    }
+
+    private static bool GrabMonitorWgc(
+        GpuDevice gpu,
+        nint monitor,
+        Win32.RECT rect,
+        Win32.RECT screen,
+        byte[] bgra,
+        List<(nint Monitor, Win32.RECT Rect, byte[] Half, float White, float Peak)> hdr)
+    {
+        if (!WgcSource.Available(out var why))
+            throw new CaptureException(why ?? "Windows capture unavailable");
+        var isHdr = DuplicationSource.MonitorIsHdr(gpu, monitor);
+        WgcSource source;
+        try
+        {
+            source = WgcSource.ForMonitor(gpu, monitor, isHdr, cursor: false, "(screen)", TimeSpan.FromMilliseconds(16));
+        }
+        catch (CaptureException) when (isHdr)
+        {
+            source = WgcSource.ForMonitor(gpu, monitor, hdr: false, cursor: false, "(screen)", TimeSpan.FromMilliseconds(16));
+        }
+        using (source)
+        {
+            var until = Environment.TickCount64 + 500;
+            while (Environment.TickCount64 < until)
+            {
+                if (source.Latest() is { } frame)
+                {
+                    StoreMonitorPixels(gpu, monitor, rect, screen, bgra, hdr, frame.Texture, frame.Crop);
+                    return true;
+                }
+                Thread.Sleep(5);
+            }
+        }
+        return false;
+    }
+
+    private static bool GrabMonitorGdiFallback(Win32.RECT rect, Win32.RECT screen, byte[] bgra)
+    {
+        if (GrabMonitorGdi(rect) is not { } gdi) return false;
+        if (GoLive.IsAllBlack(gdi)) throw new CaptureException("GDI returned a black image");
+        CopyMonitorBgra(bgra, screen, rect, gdi, rect.Width, rect.Height);
+        return true;
+    }
+
+    private static void StoreMonitorPixels(
+        GpuDevice gpu,
+        nint monitor,
+        Win32.RECT rect,
+        Win32.RECT screen,
+        byte[] bgra,
+        List<(nint Monitor, Win32.RECT Rect, byte[] Half, float White, float Peak)> hdr,
+        Vortice.Direct3D11.ID3D11Texture2D texture,
+        Vortice.RawRect? crop)
+    {
+        var pixels = gpu.Read(texture, out var w, out var h, out var bpp);
+        if (crop is { } c)
+        {
+            var x = Math.Clamp(c.Left, 0, w);
+            var y = Math.Clamp(c.Top, 0, h);
+            var cw = Math.Min(c.Right - c.Left, w - x);
+            var ch = Math.Min(c.Bottom - c.Top, h - y);
+            if (cw > 0 && ch > 0 && (x != 0 || y != 0 || cw != w || ch != h))
+            {
+                pixels = Imaging.Crop(pixels, w, bpp, x, y, cw, ch);
+                w = cw;
+                h = ch;
+            }
+        }
+        byte[] sdr;
+        if (bpp == 8)
+        {
+            using var output = DuplicationSource.OutputOf(gpu, monitor, out var description);
+            var white = Imaging.SdrWhiteNits(monitor);
+            var peak = description.MaxLuminance > 0 ? description.MaxLuminance : 1000;
+            hdr.Add((monitor, rect, pixels, white, peak));
+            sdr = Imaging.ToneMap(pixels, w, h, white, peak);
+        }
+        else
+        {
+            sdr = pixels;
+        }
+        CopyMonitorBgra(bgra, screen, rect, sdr, w, h);
+    }
+
+    internal static void CopyMonitorBgra(byte[] bgra, Win32.RECT screen, Win32.RECT rect, byte[] sdr, int w, int h)
     {
         var copyW = Math.Min(w, rect.Width);
-        for (var y = 0; y < Math.Min(h, rect.Height); y++)
-            Buffer.BlockCopy(sdr, y * w * 4, bgra, ((rect.Top - screen.Top + y) * screen.Width + rect.Left - screen.Left) * 4, copyW * 4);
+        var copyH = Math.Min(h, rect.Height);
+        for (var y = 0; y < copyH; y++)
+        {
+            var srcOff = y * w * 4;
+            var dstOff = ((rect.Top - screen.Top + y) * screen.Width + rect.Left - screen.Left) * 4;
+            Buffer.BlockCopy(sdr, srcOff, bgra, dstOff, copyW * 4);
+            for (var x = 3; x < copyW * 4; x += 4)
+                bgra[dstOff + x] = 255;
+        }
     }
 
     private static unsafe byte[]? GrabMonitorGdi(Win32.RECT rect)
@@ -264,14 +397,49 @@ internal sealed partial class Controller
         {
             var game = _game;
             var inGame = game is not null && _gameWindow != 0 && Win32.GetAncestor(Win32.GetForegroundWindow(), Win32.GA_ROOT) == _gameWindow;
-            var frozen = Freeze();
+            Frozen frozen;
+            try
+            {
+                frozen = Freeze();
+            }
+            catch (CaptureException ex)
+            {
+                _ui.Toast("Couldn't capture the screen", ex.Message, ToastMonitor());
+                throw;
+            }
             var own = (uint)Environment.ProcessId;
             var windows = Win32.TopWindows()
                 .Where(w => Win32.Shown(w) && Win32.ProcessOf(w) != own && Win32.ClassName(w) is not ("Progman" or "WorkerW"))
                 .Select(w => (w, Bounds: Win32.FrameBounds(w))).Where(x => x.Bounds is not null).Select(x => (x.w, x.Bounds!.Value)).ToList();
             var done = new TaskCompletionSource<SnipChoice?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _ui.Invoke(() => new SnipOverlay(_ui, frozen.Screen, frozen.Bgra, windows, choice => done.TrySetResult(choice)).Show());
-            if (!done.Task.Wait(TimeSpan.FromMinutes(5)) || done.Task.Result is not { } chosen) return State();
+            _ui.Invoke(() =>
+            {
+                try
+                {
+                    new SnipOverlay(_ui, frozen.Screen, frozen.Bgra, windows, choice => done.TrySetResult(choice), frozen.Failed).Show();
+                }
+                catch (Exception ex)
+                {
+                    done.TrySetException(ex);
+                }
+            });
+            SnipChoice? chosen;
+            try
+            {
+                chosen = done.Task.WaitAsync(TimeSpan.FromMinutes(5)).GetAwaiter().GetResult();
+            }
+            catch (TimeoutException)
+            {
+                return State();
+            }
+            if (chosen is null) return State();
+            if (frozen.Failed.Count > 0 && frozen.Failed.Any(f => chosen.Rect.Left >= f.Rect.Left && chosen.Rect.Top >= f.Rect.Top && chosen.Rect.Right <= f.Rect.Right && chosen.Rect.Bottom <= f.Rect.Bottom))
+            {
+                var why = frozen.Failed.First(f => chosen.Rect.Left >= f.Rect.Left && chosen.Rect.Top >= f.Rect.Top && chosen.Rect.Right <= f.Rect.Right && chosen.Rect.Bottom <= f.Rect.Bottom).Reason;
+                var msg = FormatFreezeFailure([why]);
+                _ui.Toast("Couldn't capture that screen", msg, ToastMonitor());
+                throw new CaptureException(msg);
+            }
             SaveSnip(frozen, chosen, game, inGame, "snip");
             return State();
         }
@@ -339,11 +507,11 @@ internal sealed partial class Controller
             var gpu = GpuFor(monitor);
             if (GameWindow.FillsMonitor(window, monitor))
             {
-                var frozen = Freeze();
+                var frozen = Freeze([monitor]);
                 SaveSnip(frozen, new SnipChoice(Win32.MonitorInfo(monitor).Monitor, window, monitor, "screen"), game, game is not null, "screenshot");
                 return State();
             }
-            if (GoLive.Grab(gpu, window, 0) is { } grabbed) picture = (grabbed.Pixels, grabbed.Width, grabbed.Height, false);
+            if (GoLive.Grab(gpu, window, 0, timeoutMs: 500) is { } grabbed) picture = (grabbed.Pixels, grabbed.Width, grabbed.Height, false);
         }
         if (picture is not { } p) throw new CaptureException("That window gives no picture; is it minimized?");
         if (p.Hdr)

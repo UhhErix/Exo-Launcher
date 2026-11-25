@@ -47,7 +47,7 @@ test('a release\'s file list is served by its tag, as JSON, for a tag\'s hour', 
   assert.equal(res.status, 200)
   assert.equal(await res.text(), LIST)
   assert.equal(res.headers.get('content-type'), 'application/json; charset=utf-8')
-  assert.equal(res.headers.get('cache-control'), 'public, max-age=3600')
+  assert.equal(res.headers.get('cache-control'), 'public, max-age=86400')
   assert.equal(res.headers.get('location'), null, 'no redirect')
 })
 

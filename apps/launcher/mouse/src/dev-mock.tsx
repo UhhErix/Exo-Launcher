@@ -1,8 +1,10 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseStatus } from '@openmouse/protocol/drivers/mouse-types'
 import type { SupportedClient } from '@openmouse/protocol/drivers/registry'
 import { Room } from './App'
+import { versionOlder } from './finalmouse-state'
 import type { Candidate, Step, useMouse } from './mouse'
+import { notifyManualMouseWrite } from './profile-logic'
 
 /**
  * Development only: `npx vite` in mouse/, opened with ?mock, shows the room on a
@@ -36,10 +38,13 @@ const HITSCAN = params.has('hitscan')
 const AJAZZ = params.has('ajazz')
 const WLMOUSE = params.has('wlmouse')
 const ATK = params.has('atk')
+const LEGACY_SLX = params.has('legacy-slx')
 const DEVICE = RAZER ? '1532:c1' : LAMZU ? '3554:f5f7' : LOGITECH ? '46d:c54d' : HITSCAN ? '3770:300' : AJAZZ ? 'a8a5:2157'
-  : WLMOUSE ? '36a7:a887' : ATK ? '373b:1083' : '361d:200'
-const FIRMWARE = params.get('firmware') ?? '1.1.1'
-const OLD = FIRMWARE !== '1.1.1'
+  : WLMOUSE ? '36a7:a887' : ATK ? '373b:1083' : LEGACY_SLX ? '361d:300' : '361d:200'
+const FIRMWARE = params.get('firmware') ?? '1.2.8'
+const OLD_RELEASE = versionOlder(FIRMWARE, '1.1.1')
+const OLD_INTENT = versionOlder(FIRMWARE, '1.2.0')
+const ULTRACLICK = params.has('ultraclick') && !versionOlder(FIRMWARE, '1.2.8')
 const UNREAD = params.has('unread')
 
 const START = {
@@ -68,10 +73,12 @@ const START = {
   finalmouseTournamentScrollTimeoutMs: 500,
   finalmouseClickModeL: UNREAD ? null : 1,
   finalmouseClickModeR: UNREAD ? null : params.has('apart') ? 0 : 1,
-  finalmouseClickReleaseL: OLD || UNREAD ? null : 0,
-  finalmouseClickReleaseR: OLD || UNREAD ? null : 0,
-  finalmouseTmrThrL: 25,
-  finalmouseTmrThrR: 25,
+  finalmouseClickReleaseL: OLD_RELEASE || UNREAD ? null : 0,
+  finalmouseClickReleaseR: OLD_RELEASE || UNREAD ? null : 0,
+  finalmouseClickIntentL: OLD_INTENT || UNREAD ? null : ULTRACLICK ? 2 : 0,
+  finalmouseClickIntentR: OLD_INTENT || UNREAD ? null : ULTRACLICK ? 2 : 0,
+  finalmouseTmrThrL: ULTRACLICK ? 10 : 25,
+  finalmouseTmrThrR: ULTRACLICK ? 10 : 25,
   finalmouseTmrHystL: 220,
   finalmouseTmrHystR: 220,
   finalmouseTmrMspL: null,
@@ -82,7 +89,7 @@ const START = {
   finalmouseProfileActive: 0,
   finalmouseProfileEnabledMask: 0b111,
   finalmouseProfileNames: { 0: 'Profile 1', 1: 'Profile 2', 2: 'Profile 3' },
-  firmware: UNREAD ? ['Dongle RF 1.1.1'] : [`Mouse ${FIRMWARE}-5289564`, 'Dongle RF 1.1.1'],
+  firmware: UNREAD ? [`Dongle RF ${FIRMWARE}`] : [`Mouse ${FIRMWARE}-2d88a14`, `Dongle RF ${FIRMWARE}`],
 } as unknown as MouseStatus
 
 const RAZER_START = {
@@ -281,7 +288,13 @@ const SETTERS: Record<string, (s: Fields, ...a: number[]) => Fields> = {
   setDpi: (s, dpi) => ({ ...s, dpi }),
   setPawLodMm: (s, mm) => ({ ...s, finalmousePawLodMm: mm, finalmousePawLodCustom: false }),
   setLiftOffScale: (s, raw) => ({ ...s, finalmousePawLodMm: raw / 10, finalmousePawLodCustom: true }),
-  setClickMode: (s, l, r, rl, rr) => ({ ...s, finalmouseClickModeL: l, finalmouseClickModeR: r, ...(rl == null ? {} : { finalmouseClickReleaseL: rl, finalmouseClickReleaseR: rr }) }),
+  setClickMode: (s, l, r, rl, rr, il, ir) => ({
+    ...s,
+    finalmouseClickModeL: l,
+    finalmouseClickModeR: r,
+    ...(rl == null ? {} : { finalmouseClickReleaseL: rl, finalmouseClickReleaseR: rr }),
+    ...(il == null ? {} : { finalmouseClickIntentL: il, finalmouseClickIntentR: ir }),
+  }),
   setTmrActuation: (s, l, r, hl, hr) => ({ ...s, finalmouseTmrThrL: Math.round(l * 100), finalmouseTmrThrR: Math.round(r * 100), finalmouseTmrHystL: hl, finalmouseTmrHystR: hr }),
   setActiveProfile: (s, i) => ({ ...s, finalmouseProfileActive: i }),
   setDongleLedMode: (s, m) => ({ ...s, finalmouseDongleLedMode: m }),
@@ -343,10 +356,34 @@ const CANDIDATE = {
 
 const GAMES = [
   { id: 'steam:730', title: 'Counter-Strike 2' },
+  { id: 'steam:1938090', title: 'Call of Duty' },
   { id: 'riot:valorant', title: 'VALORANT' },
   { id: 'steam:1172470', title: 'Apex Legends' },
   { id: 'steam:2357570', title: 'Overwatch 2' },
 ]
+
+const LEGACY_SLX_START = {
+  ...START,
+  dpi: 1600,
+  pollingRateHz: 1000,
+  finalmouseDongleLedMode: 1,
+  finalmouseIndicatorColor: null,
+  finalmouseTournamentScrollMode: 0,
+  finalmouseTournamentScrollTimeoutMs: 1500,
+  finalmouseClickModeL: 0,
+  finalmouseClickModeR: 0,
+  finalmouseClickReleaseL: 0,
+  finalmouseClickReleaseR: 0,
+  finalmouseClickIntentL: 2,
+  finalmouseClickIntentR: 2,
+  finalmouseTmrThrL: 10,
+  finalmouseTmrThrR: 10,
+  finalmouseTmrHystL: 220,
+  finalmouseTmrHystR: 250,
+  finalmousePawLodMm: 1,
+  finalmousePawLodCustom: false,
+  firmware: ['Mouse 1.2.8-2d88a14', 'Dongle RF 1.2.8-2d88a14'],
+} as unknown as MouseStatus
 
 const PROFILES = {
   [DEVICE]: LOGITECH ? [
@@ -355,12 +392,57 @@ const PROFILES = {
     { id: 'tac', name: 'Tactical', games: ['steam:730', 'riot:valorant'], savedAt: '2026-10-02T12:00:00Z', polling: { Wireless: 4000, Wired: 8000 },
       steps: [['setDpi', [400]], ['setPollingRate', [4000]], ['setHostBunnyHopMs', [150]]] },
     { id: 'arena', name: 'Arena', games: ['steam:1172470'], savedAt: '2026-10-03T12:00:00Z', steps: [['setDpi', [1600]], ['setPollingRate', [1000]]] },
+  ] : LEGACY_SLX ? [
+    {
+      games: [],
+      id: '02ca4b41-ec09-4e5e-8b91-fe1a7034bbac',
+      isDefault: true,
+      name: 'Desktop',
+      polling: { Wireless: 1000 },
+      savedAt: '2026-11-20T03:20:46.352Z',
+      steps: [
+        ['setDpi', [1600]],
+        ['setPawLodMm', [1]],
+        ['setClickMode', [0, 0, 0, 0]],
+        ['setTmrActuation', [0.1, 0.1, 220, 250]],
+        ['setDongleLedMode', [1]],
+        ['setTournamentScrollMode', [0]],
+      ],
+    },
+    {
+      id: '8fb058cf-3893-4acd-bc3c-d47b5950d69f',
+      name: 'FPS',
+      steps: [
+        ['setDpi', [1600]],
+        ['setPawLodMm', [1]],
+        ['setClickMode', [1, 1, 0, 0, 2, 2]],
+        ['setTmrActuation', [0.1, 0.1, 220, 220]],
+        ['setDongleLedMode', [1]],
+        ['setTournamentScrollMode', [0]],
+      ],
+      polling: { Wireless: 1000 },
+      savedAt: '2026-11-24T14:19:50.881Z',
+      games: ['steam:1938090', 'riot:valorant'],
+    },
   ] : [
     { id: 'desktop', name: 'Desktop', isDefault: true, games: [], savedAt: '2026-10-01T12:00:00Z', steps: [['setDpi', [800]]] },
     { id: 'tac', name: 'Tactical', games: ['steam:730', 'riot:valorant'], savedAt: '2026-10-02T12:00:00Z', steps: [['setDpi', [400]]] },
     { id: 'arena', name: 'Arena', games: ['steam:1172470'], savedAt: '2026-10-03T12:00:00Z', steps: [['setDpi', [1600]]] },
   ],
 }
+
+const mockTelemetry = {
+  settingWrites: [] as Step[][],
+  profileWrites: [] as unknown[],
+  polls: 0,
+  emitGameRunState: (id: string, isRunning: boolean) => {
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { exo: 'mouse', event: 'game.runState', data: { id, isRunning } },
+      source: window,
+    }))
+  },
+}
+;(window as unknown as { __exoMouseMock?: typeof mockTelemetry }).__exoMouseMock = mockTelemetry
 
 /**
  * Exo's CPU core (exo.mouseCore): Measure takes its 10 s and finds the mouse late on busy CPU 0 with CPU 6 quiet;
@@ -495,6 +577,7 @@ function answerHost() {
     const m = message as { exo?: string; id?: number; method?: string; params?: { action?: unknown } } | null
     if (m?.exo !== 'mouse') return (post as (...a: unknown[]) => void)(message, ...rest)
     if (typeof m.id !== 'number') return
+    if (m.method === 'exo.profiles.write') mockTelemetry.profileWrites.push(m.params)
     const action = m.method === 'exo.mouseCore' ? m.params?.action : undefined
     const result = m.method === 'exo.profiles.read' ? { ok: true, data: PROFILES }
       : m.method === 'exo.games' ? { ok: true, games: GAMES }
@@ -517,15 +600,27 @@ function look() {
 
 function useMockMouse(): ReturnType<typeof useMouse> {
   const [status, setStatus] = useState(RAZER ? RAZER_START : LAMZU ? LAMZU_START : LOGITECH ? LOGITECH_START : HITSCAN ? HITSCAN_START
-    : AJAZZ ? AJAZZ_START : WLMOUSE ? WLMOUSE_START : ATK ? ATK_START : START)
+    : AJAZZ ? AJAZZ_START : WLMOUSE ? WLMOUSE_START : ATK ? ATK_START : LEGACY_SLX ? LEGACY_SLX_START : START)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [readAt, setReadAt] = useState(() => Date.now() - (params.has('asleep') ? 4 * 60_000 : 0))
   const now = useRef(status)
-  const applyAll = useCallback(async (steps: Step[]) => {
+  useEffect(() => {
+    if (!LEGACY_SLX) return
+    const timer = window.setInterval(() => {
+      mockTelemetry.polls++
+      setStatus(s => ({ ...s }))
+      setReadAt(Date.now())
+    }, 4_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const applyAll = useCallback(async (steps: Step[], options?: { source?: 'user' | 'profile' }) => {
+    if (steps.length === 0) return now.current
+    if (options?.source !== 'profile') notifyManualMouseWrite()
+    mockTelemetry.settingWrites.push(steps)
     setBusy(true)
     setError(null)
-    await new Promise(resolve => window.setTimeout(resolve, 900))
+    await new Promise(resolve => window.setTimeout(resolve, LEGACY_SLX ? 50 : 900))
     if (params.has('fail')) {
       setError('The mouse did not answer. Make sure it is on and close xpanel.')
       setBusy(false)

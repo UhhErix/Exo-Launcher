@@ -24,6 +24,8 @@ export const json = (value, status = 200, headers = {}) => new Response(JSON.str
 
 export const done = () => new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store', ...SECURED } })
 
+export const notModified = (headers = {}) => new Response(null, { status: 304, headers: { 'Cache-Control': 'no-store', ...SECURED, ...headers } })
+
 /**
  * The client address as the limits key it: an IPv4 address as sent, an IPv6 address as its /56 (a site or household holds
  * a /56 or larger, and a /64 is one host's share of it: keying by /56 blunts cheap rotation through IPv6). Anything else is

@@ -102,12 +102,19 @@ public sealed partial class MainWindow
             if (caption.Length == 0) return;
             var source = _captionInput ?? InputNonClientPointerSource.GetForWindowId(AppWindow.Id);
             _appliedCaption = caption;
-            source.SetRegionRects(NonClientRegionKind.Caption, caption);
-            source.SetRegionRects(NonClientRegionKind.Passthrough, passthrough);
-            // After an activation or a minimize the Maximize region stops answering the hit-test while GetRegionRects still
-            // lists it, and setting identical rects again does nothing: it is cleared first, then set (Cinema's a611ac5).
-            source.ClearRegionRects(NonClientRegionKind.Maximize);
-            if (maximize.Length > 0) source.SetRegionRects(NonClientRegionKind.Maximize, maximize);
+            // After an activation or a minimize a region can stop answering the hit-test while GetRegionRects still lists it,
+            // and setting identical rects again does nothing, so every region is cleared, then set (Cinema's a611ac5 did Maximize).
+            foreach (var write in CaptionDragRegions.WriteOrder(caption, passthrough, maximize))
+            {
+                var kind = write.Region switch
+                {
+                    CaptionDragRegions.CaptionRegion.Caption => NonClientRegionKind.Caption,
+                    CaptionDragRegions.CaptionRegion.Passthrough => NonClientRegionKind.Passthrough,
+                    _ => NonClientRegionKind.Maximize,
+                };
+                if (write.Rects is { } rects) source.SetRegionRects(kind, rects);
+                else source.ClearRegionRects(kind);
+            }
         }
         catch
         {

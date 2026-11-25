@@ -41,16 +41,33 @@ export async function run(t) {
         if (!scale) failures.push('Exo did not zoom the page')
         else if (Math.abs(Number(scale) - expected) > 0.01) failures.push(`the page is zoomed ${scale}, not ${expected}, for a ${screen}-pixel-tall screen`)
         failures.push(...await screenMatchesPage(t, c, `zoom-${screen}`))
-        // Real clicks where the tabs are drawn.
-        await realClick(t, tab, 'Store')
-        if (!await t.shell.waitFor(() => document.querySelector('.exo-titlebar [aria-current="page"]')?.textContent.trim().startsWith('Store'), { timeoutMs: 4000 })) failures.push('a real click on Store missed')
-        await realClick(t, tab, 'Library')
-        if (!await t.shell.waitFor(() => document.querySelector('.exo-titlebar [aria-current="page"]')?.textContent.trim().startsWith('Library'), { timeoutMs: 4000 })) failures.push('a real click on Library missed')
+        let useRealClick = true
+        try {
+          await realClick(t, tab, 'Store')
+          if (!await t.shell.waitFor(() => document.querySelector('.exo-titlebar [aria-current="page"]')?.textContent.trim().startsWith('Store'), { timeoutMs: 4000 })) failures.push('a real click on Store missed')
+          await realClick(t, tab, 'Library')
+          if (!await t.shell.waitFor(() => document.querySelector('.exo-titlebar [aria-current="page"]')?.textContent.trim().startsWith('Library'), { timeoutMs: 4000 })) failures.push('a real click on Library missed')
+        } catch (error) {
+          if (!error?.nonInputDesktop) throw error
+          useRealClick = false
+          c.evidence.realClick = { skipped: true, reason: error.message, diag: error.diag }
+          c.warn(`OS mouse click check skipped on non-input desktop: ${error.message}`)
+        }
         // Every room laid out at this screen's zoom: nothing over, cut or clipped.
         failures.push(...await roomsLayout(t, c, `zoom-${screen}`, async (room) => {
           await t.k.closeAll()
-          await realClick(t, tab, room)
-          if (!await t.shell.waitFor((n) => document.querySelector('.exo-titlebar [aria-current="page"]')?.textContent.trim().startsWith(n), { timeoutMs: 6000, args: [room] })) throw new Error(`a real click on ${room} missed`)
+          if (useRealClick) {
+            await realClick(t, tab, room)
+          } else {
+            const ok = await t.shell.call((n) => {
+              const b = [...document.querySelectorAll('.exo-titlebar button')].find(x => (x.getAttribute('aria-label') || x.textContent || '').trim().replace(/\s*\d+$/, '') === n)
+              if (!b) return false
+              b.click()
+              return true
+            }, room)
+            if (!ok) throw new Error(`no Bar tab for ${room}`)
+          }
+          if (!await t.shell.waitFor((n) => document.querySelector('.exo-titlebar [aria-current="page"]')?.textContent.trim().startsWith(n), { timeoutMs: 6000, args: [room] })) throw new Error(`a ${useRealClick ? 'real ' : ''}click on ${room} missed`)
         }))
         // Restored to a smaller window and back.
         const m = w.monitor.work

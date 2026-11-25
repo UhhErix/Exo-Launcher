@@ -36,8 +36,8 @@ const ANNOUNCE_STATUS = { 'not-live': 409, 'wrong-version': 409, refused: 409, f
 const FRESH_SECONDS = 60
 // The edge cache is shared by every Worker version: bump this whenever the latest response shape changes, so a deploy never serves an older version's cached answer.
 const CACHE_SCHEMA = 4
-// Release files are immutable under their tag: an hour at the edge, whatever the R2 object's own metadata says.
-const IMMUTABLE_SECONDS = 3600
+const TAG_SECONDS = 86400
+const ADVISORIES_SECONDS = 3600
 // A change list changes with each release, so it is kept at the edge a minute, as the newest-version answer is.
 const CHANGELOG_SECONDS = 60
 const CHANGELOG_TYPE = 'text/markdown; charset=utf-8'
@@ -57,8 +57,10 @@ const ADVISORIES_KEY = 'advisories.json'
 const filesOf = (app) => ({ setup: APPS[app].setup, sha256: APPS[app].setup + '.sha256', whatsNew: 'whats-new.json' })
 /** Exo Launcher's file-level update, when a release carries it: the file list and the pack. Both or neither. */
 const DELTA = { filesJson: NAMES.filesJson, filesPack: NAMES.filesPack }
+const EXOPACK_DELTA = { deltaPack: NAMES.deltaPack, deltaSig: NAMES.deltaSig }
+const EXOPACK_FULL = { fullPack: NAMES.fullPack, fullSig: NAMES.fullSig }
 /** Every file an app's release can serve; nothing else under a tag is ever served. */
-const servedOf = (app) => (app === 'launcher' ? { ...filesOf(app), ...DELTA } : filesOf(app))
+const servedOf = (app) => (app === 'launcher' ? { ...filesOf(app), ...DELTA, ...EXOPACK_DELTA, ...EXOPACK_FULL } : filesOf(app))
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
@@ -179,7 +181,12 @@ async function latest(app, origin, request, env, ctx) {
   const manifest = app === 'launcher' ? await launcherManifest(env, ctx) : await readManifest(app, env)
   if (!manifest) return new Response('No release found', { status: 503, headers: { 'cache-control': 'no-store' } })
   // The file-level update's two files are named only when the release has them; older apps never read them.
-  const names = { ...filesOf(app), ...(manifest.files?.filesJson ? DELTA : {}) }
+  const names = {
+    ...filesOf(app),
+    ...(manifest.files?.filesJson ? DELTA : {}),
+    ...(manifest.files?.deltaPack && manifest.files?.deltaSig ? EXOPACK_DELTA : {}),
+    ...(manifest.files?.fullPack && manifest.files?.fullSig ? EXOPACK_FULL : {}),
+  }
   const files = Object.fromEntries(Object.keys(names).map((part) => [part, `${origin}/v1/${app}/download/${manifest.tag}/${names[part]}`]))
   // Each file's size and SHA-256, from the manifest, so an app can check what it downloaded without asking again.
   const checks = manifest.files ? Object.fromEntries(Object.keys(names).map((part) => [part, manifest.files[part]])) : undefined
@@ -202,7 +209,9 @@ function revalidated(request, response) {
   const etag = response.headers.get('etag')
   const asked = request.headers.get('if-none-match')
   if (response.status !== 200 || !etag || !asked) return response
-  const named = asked.trim() === '*' || asked.split(',').map((tag) => tag.trim()).includes(etag)
+  const weak = (tag) => tag.trim().replace(/^W\//, '')
+  const target = weak(etag)
+  const named = asked.trim() === '*' || asked.split(',').some((tag) => weak(tag) === target)
   return named ? new Response(null, { status: 304, headers: response.headers }) : response
 }
 /**
@@ -226,9 +235,11 @@ function validManifest(app, manifest) {
   }
   const names = filesOf(app)
   if (!Object.keys(names).every((part) => good(part, names[part]))) return false
-  // The file-level update is all or nothing: both files, each well formed, or neither.
-  const delta = Object.keys(DELTA).filter((part) => manifest.files?.[part] !== undefined)
-  return delta.length === 0 || (app === 'launcher' && delta.length === 2 && delta.every((part) => good(part, DELTA[part])))
+  const pairValid = (group) => {
+    const present = Object.keys(group).filter((part) => manifest.files?.[part] !== undefined)
+    return present.length === 0 || (app === 'launcher' && present.length === 2 && present.every((part) => good(part, group[part])))
+  }
+  return pairValid(DELTA) && pairValid(EXOPACK_DELTA) && pairValid(EXOPACK_FULL)
 }
 /**
  * A release file: the mirror's copy. A launcher file the mirror doesn't hold yet comes from the tag's GitHub release
@@ -238,8 +249,12 @@ async function download(app, tag, name, request, env, ctx) {
   const part = Object.entries(servedOf(app)).find(([, file]) => file === name)?.[0]
   if (!part) return new Response('Not found', { status: 404 })
   const key = `${app}/${tag}/${name}`
-  const type = name === NAMES.filesJson ? 'application/json; charset=utf-8' : undefined
-  const served = await fromMirror(key, request, env, { type })
+  const type = name === NAMES.filesJson
+    ? 'application/json; charset=utf-8'
+    : name === NAMES.deltaSig || name === NAMES.fullSig
+      ? 'text/plain; charset=utf-8'
+      : undefined
+  const served = await fromMirror(key, request, env, { seconds: TAG_SECONDS, type })
   if (served.status !== 404 || app !== 'launcher' || !env.MIRROR) return served
   return fromGitHub(tag, part, key, type, request, env, ctx)
 }
@@ -257,7 +272,7 @@ async function fromGitHub(tag, part, key, type, request, env, ctx) {
     console.warn(`GitHub release ${tag} not served: ${error}.`)
     return missing()
   }
-  if (!LARGE.has(part)) return found(await fromMirror(key, request, env, { type }))
+  if (!LARGE.has(part)) return found(await fromMirror(key, request, env, { seconds: TAG_SECONDS, type }))
   const asset = assetsOf(release)[part]
   const expected = manifest.files[part]
   if (!asset || !expected) return missing()
@@ -270,7 +285,7 @@ function changelog(app, request, env) {
 }
 /** A release's file list, immutable under its tag as its other files are. Never kept when it is missing: it may arrive a moment later. */
 async function payload(app, tag, request, env) {
-  return found(await fromMirror(`${app}/${tag}/payload-manifest.json`, request, env, { type: 'application/json; charset=utf-8' }))
+  return found(await fromMirror(`${app}/${tag}/payload-manifest.json`, request, env, { seconds: TAG_SECONDS, type: 'application/json; charset=utf-8' }))
 }
 /** One app file by the SHA-256 of its bytes, gzipped. The name says what the bytes are, so it is kept for a year. */
 async function file(app, sha256, request, env) {
@@ -282,7 +297,7 @@ function found(response) {
 }
 /** The driver advisories, kept at the edge an hour (the app reads them at most once a day). */
 async function advisories(request, env) {
-  const copy = await fromMirror(ADVISORIES_KEY, request, env)
+  const copy = await fromMirror(ADVISORIES_KEY, request, env, { seconds: ADVISORIES_SECONDS })
   if (copy.status !== 200) return copy
   const headers = new Headers(copy.headers)
   headers.set('content-type', 'application/json')
@@ -333,7 +348,7 @@ function contentTypeOf(key) {
  * The mirror's copy, with byte ranges so an interrupted download picks up where it stopped, and a 304 when the client
  * already has this exact copy (R2 answers the condition itself, so the body is never read).
  */
-async function fromMirror(key, request, env, { seconds = IMMUTABLE_SECONDS, type, immutable = false } = {}) {
+async function fromMirror(key, request, env, { seconds = TAG_SECONDS, type, immutable = false } = {}) {
   if (!env.MIRROR) return new Response('Not available', { status: 503, headers: { 'cache-control': 'no-store' } })
   const heading = request.method === 'HEAD'
   // One byte range per request; a list of ranges is answered with the whole file, which HTTP allows.

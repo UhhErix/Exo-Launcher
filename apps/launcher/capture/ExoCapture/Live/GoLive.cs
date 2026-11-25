@@ -363,19 +363,28 @@ internal sealed class GoLive : IDisposable
         {
             if (GrabWindowViaPrint(window) is { } printed) return printed;
         }
-        using var source = CaptureSources.OpenCaptureSource(gpu, isWindow, isWindow ? window : monitor, cursor: false, TimeSpan.FromMilliseconds(16));
-        var until = Environment.TickCount64 + timeoutMs;
-        while (true)
+        try
         {
-            if (source.Latest() is { } frame)
+            using var source = CaptureSources.OpenCaptureSource(gpu, isWindow, isWindow ? window : monitor, cursor: false, TimeSpan.FromMilliseconds(16));
+            var until = Environment.TickCount64 + timeoutMs;
+            while (true)
             {
-                var pixels = gpu.Read(frame.Texture, out var w, out var h, out var bpp);
-                Win32.RECT? crop = frame.Crop is { } c ? new Win32.RECT { Left = c.Left, Top = c.Top, Right = c.Right, Bottom = c.Bottom } : null;
-                var (sdr, sw, sh) = ToSdrBgra(gpu, at, pixels, w, h, bpp, crop);
-                return sw > 0 && sh > 0 ? (sdr, sw, sh) : null;
+                if (source.Latest() is { } frame)
+                {
+                    var pixels = gpu.Read(frame.Texture, out var w, out var h, out var bpp);
+                    Win32.RECT? crop = frame.Crop is { } c ? new Win32.RECT { Left = c.Left, Top = c.Top, Right = c.Right, Bottom = c.Bottom } : null;
+                    var (sdr, sw, sh) = ToSdrBgra(gpu, at, pixels, w, h, bpp, crop);
+                    for (var i = 3; i < sdr.Length; i += 4) sdr[i] = 255;
+                    return sw > 0 && sh > 0 ? (sdr, sw, sh) : null;
+                }
+                if (Environment.TickCount64 >= until) break;
+                Thread.Sleep(10);
             }
-            if (Environment.TickCount64 >= until) return null;
-            Thread.Sleep(16);
         }
+        catch (Exception ex) when (ex is CaptureException or SharpGen.Runtime.SharpGenException)
+        {
+            Host.Log("Capture grab fallback: " + ex.Message);
+        }
+        return isWindow ? GrabWindowViaPrint(window) : null;
     }
 }

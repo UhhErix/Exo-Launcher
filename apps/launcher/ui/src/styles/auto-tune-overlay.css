@@ -523,10 +523,6 @@
 .exo-at-cine-results li svg {
   flex: none;
   margin-top: 2px;
-  color: var(--color-good);
-}
-
-.exo-at-cine-results li.is-warn svg {
   color: var(--color-warn);
 }
 

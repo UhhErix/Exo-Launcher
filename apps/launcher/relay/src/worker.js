@@ -78,7 +78,10 @@ export class Topic {
   /** The connection is done (it closed, or the relay closes it with code): the others are told. */
   gone(ws, code = 1000, reason = 'Bye') {
     const kept = ws.deserializeAttachment()
-    if (kept) this.others(ws, frame(GONE, kept.conn))
+    if (kept) {
+      ws.serializeAttachment(null)
+      this.others(ws, frame(GONE, kept.conn))
+    }
     try { ws.close(code, reason) } catch { /* already closed */ }
   }
 
