@@ -632,7 +632,7 @@ async function passkeySignInFinish(request, env) {
   await env.DB.prepare('UPDATE passkeys SET sign_count = ?, last_used = ? WHERE credential_id = ?')
     .bind(verified.signCount, now, row.credential_id).run()
   return json({
-    token: await newSession(env.DB, row.account, device),
+    token: await newSession(env.DB, row.account, device, appOf(input)),
     account: { id: row.account },
     deviceToken: await issueDeviceToken(env.DB, row.account, device),
   })
