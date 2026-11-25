@@ -28,7 +28,7 @@
 
     <PublishSelfContained>true</PublishSelfContained>
     <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
-    <PublishReadyToRun Condition="'$(Configuration)' == 'Release' and '$(PublishAot)' != 'true'">true</PublishReadyToRun>
+    <PublishReadyToRun Condition="'$(Configuration)' == 'Release'">true</PublishReadyToRun>
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>partial</TrimMode>
     <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
@@ -63,6 +63,10 @@
     <Compile Include="..\ExoLauncher\**\*.cs"
              Exclude="..\ExoLauncher\bin\**;..\ExoLauncher\obj\**;..\ExoLauncher\Program.cs;..\ExoLauncher\App.xaml.cs;..\ExoLauncher\MainWindow*.cs;..\ExoLauncher\FpsOverlay.cs;..\ExoLauncher\AchievementBanner.cs;..\ExoLauncher\Helpers\ChromePreview.cs;..\ExoLauncher\Helpers\EmbeddedClientFrame.cs;..\ExoLauncher\Helpers\ExoConnectedTheme.cs;..\ExoLauncher\Helpers\HangWatchdog.cs;..\ExoLauncher\Helpers\ReportSmokeHooks.cs;..\ExoLauncher\Ui\CaptionDragRegions.cs;..\ExoLauncher\Shell\Scene\Tokens.cs;..\ExoLauncher\Services\WebViewHostTransport.cs;..\ExoLauncher\Services\StoreAuthWindow.cs;..\ExoLauncher\Services\DiscordClient\DiscordNotifier.cs" />
   </ItemGroup>
+
+  <Target Name="RejectUnsupportedPublishAot" BeforeTargets="BeforeBuild;BeforePublish" Condition="'$(PublishAot)' == 'true'">
+    <Error Text="ExoLauncher.Host does not support PublishAot=true until all System.Text.Json call sites are migrated to source-generated JsonSerializerContext. Build or publish without -p:PublishAot=true (ReadyToRun)." />
+  </Target>
 
   <Target Name="TrimUnusedWebView2UiWrappers" BeforeTargets="ResolveAssemblyReferences">
     <ItemGroup>

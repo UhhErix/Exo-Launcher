@@ -75,7 +75,7 @@ public static class Program
             Environment.SetEnvironmentVariable("EXO_SILENT_INSTALL", null);
             try { Environment.CurrentDirectory = PathHelper.AppDataDir; } catch { }
 
-            if (RuneHostSession.TryParse(args) is { SpawnUi: false } headlessRune)
+            if (RuneHostSession.TryParse(args, onWarning: AppLog.Warn) is { SpawnUi: false } headlessRune)
             {
                 Environment.ExitCode = RuneHostSession.Run(headlessRune);
                 return;
@@ -108,7 +108,7 @@ public static class Program
             if (NoteTextFiles.NoteArgument(args) is { } note) WebHostBridge.QueueNoteFromWindows(note);
             if (ExoLinks.Find(args) is { } place) WebHostBridge.QueueOpen(place);
 
-            var runeOptions = RuneHostSession.TryParse(args)
+            var runeOptions = RuneHostSession.TryParse(args, onWarning: AppLog.Warn)
                 ?? new RuneHostSession.Options($"exo-launcher-rpc-{Environment.ProcessId}", SpawnUi: true, UiExecutableOverride: Environment.GetEnvironmentVariable("EXO_RUNE_UI_PATH"));
 
             instance.Activated += forwarded => UiGuard.Run(() =>

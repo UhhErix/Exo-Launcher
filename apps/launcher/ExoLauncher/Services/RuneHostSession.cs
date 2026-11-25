@@ -68,80 +68,150 @@ internal sealed partial class RuneHostSession
     }
 
     internal static Options? TryParse(
-        string[] args,
+        string[]? args,
         Func<string, string?>? readEnv = null,
         Func<string, bool>? fileExists = null,
+        Action<string>? onWarning = null,
         Func<bool>? readClassicPref = null)
     {
         readEnv ??= Environment.GetEnvironmentVariable;
         fileExists ??= File.Exists;
         readClassicPref ??= ReadUseClassicWebUiPreference;
-        string? explicitPipe = null;
-        string? uiMode = null;
-        string? uiExe = null;
-        var smokeTest = false;
-
-        for (var i = 0; i < args.Length; i++)
+        try
         {
-            var arg = args[i];
-            if (arg.Equals("--smoke-test", StringComparison.Ordinal))
-            {
-                smokeTest = true;
-            }
-            else if (arg.Equals("--host-pipe", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
-            {
-                explicitPipe = args[++i];
-            }
-            else if (arg.StartsWith("--host-pipe=", StringComparison.OrdinalIgnoreCase))
-            {
-                explicitPipe = arg["--host-pipe=".Length..];
-            }
-            else if (arg.Equals("--ui", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
-            {
-                uiMode = args[++i];
-            }
-            else if (arg.StartsWith("--ui=", StringComparison.OrdinalIgnoreCase))
-            {
-                uiMode = arg["--ui=".Length..];
-            }
-            else if (arg.Equals("--rune-ui-path", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
-            {
-                uiExe = args[++i];
-            }
-        }
+            string? explicitPipe = null;
+            var hasExplicitPipeFlag = false;
+            string? uiMode = null;
+            string? uiExe = null;
+            var smokeTest = false;
 
-        if (explicitPipe is not null)
-        {
-            if (!IsSafePipeName(explicitPipe))
-                throw new ArgumentException("Invalid named pipe identifier.", nameof(args));
-            return new Options(explicitPipe, SpawnUi: false, UiExecutableOverride: null);
-        }
+            if (args is not null)
+            {
+                for (var i = 0; i < args.Length; i++)
+                {
+                    var arg = args[i];
+                    if (string.IsNullOrEmpty(arg))
+                        continue;
 
-        if (smokeTest)
-            return null;
+                    if (arg.Equals("--smoke-test", StringComparison.Ordinal))
+                    {
+                        smokeTest = true;
+                    }
+                    else if (arg.Equals("--host-pipe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        hasExplicitPipeFlag = true;
+                        explicitPipe = i + 1 < args.Length ? args[++i] : string.Empty;
+                    }
+                    else if (arg.StartsWith("--host-pipe=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        hasExplicitPipeFlag = true;
+                        explicitPipe = arg["--host-pipe=".Length..];
+                    }
+                    else if (arg.Equals("--ui", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                    {
+                        uiMode = args[++i];
+                    }
+                    else if (arg.StartsWith("--ui=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        uiMode = arg["--ui=".Length..];
+                    }
+                    else if (arg.Equals("--rune-ui-path", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                    {
+                        uiExe = args[++i];
+                    }
+                    else if (arg.StartsWith("--rune-ui-path=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        uiExe = arg["--rune-ui-path=".Length..];
+                    }
+                }
+            }
 
-        uiMode ??= readEnv("EXO_UI");
-        if (string.Equals(uiMode, "web", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(uiMode, "webview", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(uiMode, "webview2", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
+            if (hasExplicitPipeFlag)
+            {
+                if (!IsSafePipeName(explicitPipe))
+                {
+                    SafeWarn(onWarning, "RuneHostSession: ignoring invalid --host-pipe argument; falling back.");
+                    return null;
+                }
+                return new Options(explicitPipe!, SpawnUi: false, UiExecutableOverride: null);
+            }
 
-        uiExe ??= readEnv("EXO_RUNE_UI_PATH");
-        var explicitRune = string.Equals(uiMode, "rune", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(uiMode, "native", StringComparison.OrdinalIgnoreCase);
-        if (!explicitRune)
-        {
-            if (readClassicPref())
+            if (smokeTest)
                 return null;
-            var bundledUi = Path.Combine(AppContext.BaseDirectory, "exo-ui.exe");
-            var hasOverride = !string.IsNullOrWhiteSpace(uiExe) && fileExists(uiExe);
-            if (!hasOverride && !fileExists(bundledUi))
-                return null;
-        }
 
-        return new Options($"exo-launcher-rpc-{Environment.ProcessId}", SpawnUi: true, UiExecutableOverride: uiExe);
+            uiMode ??= SafeReadEnv(readEnv, "EXO_UI", onWarning);
+            if (string.Equals(uiMode, "web", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(uiMode, "webview", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(uiMode, "webview2", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            uiExe ??= SafeReadEnv(readEnv, "EXO_RUNE_UI_PATH", onWarning);
+            var explicitRune = string.Equals(uiMode, "rune", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(uiMode, "native", StringComparison.OrdinalIgnoreCase);
+            if (!explicitRune)
+            {
+                if (SafeReadClassicPref(readClassicPref, onWarning))
+                    return null;
+                var bundledUi = Path.Combine(AppContext.BaseDirectory, "exo-ui.exe");
+                var hasOverride = !string.IsNullOrWhiteSpace(uiExe) && SafeFileExists(fileExists, uiExe, onWarning);
+                if (!hasOverride && !SafeFileExists(fileExists, bundledUi, onWarning))
+                    return null;
+            }
+
+            return new Options($"exo-launcher-rpc-{Environment.ProcessId}", SpawnUi: true, UiExecutableOverride: uiExe);
+        }
+        catch (Exception ex)
+        {
+            SafeWarn(onWarning, $"RuneHostSession: failed to parse launch options ({ex.GetType().Name}); falling back.");
+            return null;
+        }
+    }
+
+    private static string? SafeReadEnv(Func<string, string?> readEnv, string name, Action<string>? onWarning)
+    {
+        try
+        {
+            return readEnv(name);
+        }
+        catch (Exception ex)
+        {
+            SafeWarn(onWarning, $"RuneHostSession: failed to read {name} ({ex.GetType().Name}); ignoring.");
+            return null;
+        }
+    }
+
+    private static bool SafeFileExists(Func<string, bool> fileExists, string path, Action<string>? onWarning)
+    {
+        try
+        {
+            return fileExists(path);
+        }
+        catch (Exception ex)
+        {
+            SafeWarn(onWarning, $"RuneHostSession: failed to probe UI executable path ({ex.GetType().Name}); ignoring.");
+            return false;
+        }
+    }
+
+    private static bool SafeReadClassicPref(Func<bool> readClassicPref, Action<string>? onWarning)
+    {
+        try
+        {
+            return readClassicPref();
+        }
+        catch (Exception ex)
+        {
+            SafeWarn(onWarning, $"RuneHostSession: failed to read classic UI preference ({ex.GetType().Name}); ignoring.");
+            return false;
+        }
+    }
+
+    private static void SafeWarn(Action<string>? onWarning, string message)
+    {
+        if (onWarning is null) return;
+        try { onWarning(message); } catch { }
     }
 
     internal static bool IsSafePipeName(string? name) =>

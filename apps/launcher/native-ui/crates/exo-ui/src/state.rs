@@ -1204,6 +1204,11 @@ impl AppState {
                 }
             }
             let mut preload_ids: Vec<&Game> = self.filtered_games().into_iter().take(60).collect();
+            for g in self.games.iter().filter(|g| g.installed) {
+                if !preload_ids.iter().any(|existing| existing.id == g.id) {
+                    preload_ids.push(g);
+                }
+            }
             for folder in &self.settings.library_folders {
                 for gid in folder.games.iter().take(4) {
                     if let Some(g) = self.games.iter().find(|g| g.id == *gid)

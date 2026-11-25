@@ -170,4 +170,34 @@ public sealed class HeadlessHostTests
         Assert.True(StoreAuthWindow.IsIdentityProvider(new Uri("https://accounts.google.com/o/oauth2")));
         Assert.False(StoreAuthWindow.IsIdentityProvider(new Uri("https://example.invalid/")));
     }
+
+    [Fact]
+    public void RuneHostSessionTryParseFallsBackWithoutThrowingInHeadlessHost()
+    {
+        var warnings = new List<string>();
+        Assert.Null(RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null, _ => false, warnings.Add));
+        Assert.Single(warnings);
+        Assert.Null(RuneHostSession.TryParse(["--host-pipe"], _ => null, _ => false));
+        Assert.Null(RuneHostSession.TryParse(["--host-pipe=bad value"], _ => null, _ => true));
+        Assert.Null(RuneHostSession.TryParse(null, _ => null, _ => false));
+    }
+
+    [Fact]
+    public void SettingsJsonContextRoundTripsNullableIntSettingsInHeadlessHost()
+    {
+        var original = new ExoLauncher.Models.AppSettings
+        {
+            AppVersion = "4.0.0-host",
+            RtxVideoSuperResolution = 5,
+            DownloadHoursStart = 2,
+            DownloadHoursEnd = 6,
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(original, SettingsJsonContext.Default.AppSettings);
+        var loaded = System.Text.Json.JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
+        Assert.NotNull(loaded);
+        Assert.Equal("4.0.0-host", loaded!.AppVersion);
+        Assert.Equal(5, loaded.RtxVideoSuperResolution);
+        Assert.Equal(2, loaded.DownloadHoursStart);
+        Assert.Equal(6, loaded.DownloadHoursEnd);
+    }
 }

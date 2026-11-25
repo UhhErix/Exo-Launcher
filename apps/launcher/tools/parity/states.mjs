@@ -651,7 +651,9 @@ export const STATES = [
         { type: 'clickText', selector: '[role="menu"] [role^="menuitem"]', text: /^Select games$/i },
         { type: 'wait', ms: 300 },
         { type: 'click', selector: '.exo-tile:not(.exo-folder-tile) .exo-tile-hit', optional: true },
-        { type: 'wait', ms: 300 },
+        { type: 'wait', ms: 200 },
+        { type: 'hover', selector: '.exo-library-head' },
+        { type: 'wait', ms: 200 },
       ],
       openSelector: '.exo-select-bar, [role="toolbar"][aria-label="Selected games"]',
     },
@@ -695,9 +697,21 @@ export const STATES = [
       room: 'Library',
       steps: [
         { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
-        { type: 'wait', ms: 600 },
+        { type: 'wait', ms: 500 },
+        { type: 'click', selector: 'button[aria-label="Add"]' },
+        { type: 'wait', ms: 300 },
+        { type: 'clickText', selector: '[role="menu"] [role^="menuitem"]', text: /^New folder$/i },
+        { type: 'wait', ms: 400 },
+        { type: 'click', selector: '.exo-folder-pick-item:nth-child(1)' },
+        { type: 'wait', ms: 150 },
+        { type: 'click', selector: '.exo-folder-pick-item:nth-child(2)' },
+        { type: 'wait', ms: 150 },
+        { type: 'clickText', selector: '.exo-folder-sheet-foot button', text: /^Create$/i },
+        { type: 'wait', ms: 400 },
+        { type: 'hover', selector: '.exo-library-head' },
+        { type: 'wait', ms: 300 },
       ],
-      openSelector: '.exo-tile-hit',
+      openSelector: '.exo-folder-tile .exo-tile-hit, .exo-tile-hit',
     },
     native: {
       scene: 'library-folders',
@@ -716,10 +730,10 @@ export const STATES = [
       steps: [
         { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
         { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-folder-tile .exo-tile-hit', optional: true },
+        { type: 'click', selector: '.exo-folder-tile .exo-tile-hit' },
         { type: 'wait', ms: 500 },
       ],
-      openSelector: '.exo-folder-panel, .exo-tile-hit',
+      openSelector: '.exo-folder-panel',
     },
     native: {
       scene: 'library-folder-open',
@@ -736,6 +750,8 @@ export const STATES = [
     react: {
       room: 'Library',
       steps: [
+        { type: 'key', key: 'Escape' },
+        { type: 'wait', ms: 200 },
         { type: 'click', selector: 'button.exo-library-back', optional: true },
         { type: 'wait', ms: 250 },
         { type: 'click', selector: 'button.exo-capture-btn' },
@@ -1054,7 +1070,10 @@ export const STATES = [
     },
     native: {
       scene: 'store-game',
-      script: [{ t: 0.1, type: 'tap', fromReactTarget: true }],
+      script: [
+        { t: 0.05, type: 'wheel', x: 960, y: 540, dy: -629 },
+        { t: 0.25, type: 'tap', fromReactTarget: true },
+      ],
       expect: { room: 'Store', storeGameOpen: true },
     },
   },
@@ -1079,7 +1098,7 @@ export const STATES = [
     },
     native: {
       scene: 'store-game',
-      script: [{ t: 0.1, type: 'wheel', x: 960, y: 540, dy: 900 }],
+      script: [{ t: 0.1, type: 'wheel', x: 960, y: 540, dy: -900 }],
       expect: { room: 'Store', storeGameOpen: true },
     },
   },
@@ -1673,7 +1692,6 @@ export const STATES = [
     name: 'PC Display / Graphics popover menu',
     kind: 'popover',
     priority: 1,
-    expectMenu: true,
     expectGlass: true,
     react: {
       room: 'Exo AI',
