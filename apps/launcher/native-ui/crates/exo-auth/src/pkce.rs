@@ -26,6 +26,7 @@ pub struct PkceAuthSession {
     pub client_id: String,
     pub redirect_uri: String,
     pub authorize_url: String,
+    pub token_endpoint: String,
     pub state: String,
     pub code_verifier: String,
     pub code_challenge: String,
@@ -102,7 +103,7 @@ impl LoopbackPkceServer {
         let (code_verifier, code_challenge) = pkce_pair().map_err(AuthError::Os)?;
         let state = base64url_encode(&csprng_bytes(24).map_err(AuthError::Os)?);
         let scope_str = scopes.unwrap_or_else(|| provider.default_scopes());
-        Self::from_parts_with_mode(
+        let mut server = Self::from_parts_with_mode(
             provider,
             mode,
             client_id,
@@ -111,7 +112,9 @@ impl LoopbackPkceServer {
             state,
             code_verifier,
             code_challenge,
-        )
+        )?;
+        server.session.token_endpoint = config.token_endpoint_for(provider);
+        Ok(server)
     }
 
     pub fn from_parts(
@@ -165,6 +168,7 @@ impl LoopbackPkceServer {
                 client_id,
                 redirect_uri,
                 authorize_url,
+                token_endpoint: OAuthClientConfig::empty().token_endpoint_for(provider),
                 state,
                 code_verifier,
                 code_challenge,
@@ -172,6 +176,11 @@ impl LoopbackPkceServer {
             },
             listener,
         })
+    }
+
+    pub fn with_token_endpoint(mut self, endpoint: impl Into<String>) -> Self {
+        self.session.token_endpoint = endpoint.into();
+        self
     }
 
     #[cfg(windows)]
@@ -258,7 +267,7 @@ impl LoopbackPkceServer {
         );
         let resp = http_request(
             "POST",
-            self.session.provider.token_endpoint(),
+            &self.session.token_endpoint,
             &[
                 ("Content-Type", "application/x-www-form-urlencoded"),
                 ("Accept", "application/json"),
