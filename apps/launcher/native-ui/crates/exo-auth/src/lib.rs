@@ -8,8 +8,9 @@ pub mod wam;
 pub mod webauthn;
 
 pub use config::{
-    AuthError, FIXED_LOOPBACK_PORTS, LoopbackRedirectMode, OAuthClientConfig, OAuthProvider,
-    ProviderAuthStatus, is_valid_official_client_id,
+    AuthError, DEFAULT_TOKEN_PROXY_BASE, FIXED_LOOPBACK_PORTS, LoopbackRedirectMode,
+    OAuthClientConfig, OAuthProvider, ProviderAuthStatus, is_valid_official_client_id,
+    is_valid_token_proxy_base,
 };
 pub use device_code::{
     DeviceCodeChallenge, DevicePollOutcome, JellyfinQuickConnect, build_device_poll_body,
@@ -401,5 +402,106 @@ mod tests {
         let webauthn_probe = webauthn::probe_webauthn();
         assert!(webauthn_probe.ok);
         assert!(webauthn_probe.api_version >= 1);
+    }
+
+    #[test]
+    fn confidential_providers_route_token_exchange_through_proxy_with_config_override() {
+        let empty = OAuthClientConfig::empty();
+        assert_eq!(
+            empty.token_endpoint_for(OAuthProvider::Google),
+            "https://auth.getexo.app/oauth/google/token"
+        );
+        assert_eq!(
+            empty.token_endpoint_for(OAuthProvider::BattleNet),
+            "https://auth.getexo.app/oauth/battlenet/token"
+        );
+        assert_eq!(
+            empty.token_endpoint_for(OAuthProvider::Riot),
+            "https://auth.getexo.app/oauth/riot/token"
+        );
+        assert_eq!(
+            empty.token_endpoint_for(OAuthProvider::Epic),
+            "https://auth.getexo.app/oauth/epic/token"
+        );
+        assert_eq!(
+            empty.token_endpoint_for(OAuthProvider::Spotify),
+            "https://accounts.spotify.com/api/token"
+        );
+        assert_eq!(
+            empty.token_endpoint_for(OAuthProvider::Discord),
+            "https://discord.com/api/oauth2/token"
+        );
+        assert_eq!(
+            empty.token_endpoint_for(OAuthProvider::Twitch),
+            "https://id.twitch.tv/oauth2/token"
+        );
+        assert_eq!(
+            empty.token_endpoint_for(OAuthProvider::Microsoft),
+            "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
+        );
+
+        let custom = OAuthClientConfig::from_json_str(
+            r#"{"tokenProxyBase":"http://127.0.0.1:18080/","providers":{"epic":"epic_official_1234"}}"#,
+        )
+        .expect("custom proxy config");
+        assert_eq!(
+            custom.token_endpoint_for(OAuthProvider::Epic),
+            "http://127.0.0.1:18080/oauth/epic/token"
+        );
+        assert_eq!(
+            custom.token_endpoint_for(OAuthProvider::Discord),
+            "https://discord.com/api/oauth2/token"
+        );
+
+        let insecure = OAuthClientConfig::from_json_str(
+            r#"{"tokenProxyBase":"http://evil.example","providers":{"epic":"epic_official_1234"}}"#,
+        )
+        .expect("insecure base ignored");
+        assert_eq!(
+            insecure.token_endpoint_for(OAuthProvider::Epic),
+            "https://auth.getexo.app/oauth/epic/token"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn pkce_exchange_code_routes_epic_through_configured_local_mock_proxy() {
+        let mock_proxy = TcpListener::bind("127.0.0.1:0").expect("bind mock proxy");
+        let proxy_port = mock_proxy.local_addr().expect("proxy port").port();
+        let proxy_thread = std::thread::spawn(move || {
+            let (mut stream, _) = mock_proxy.accept().expect("accept proxy request");
+            let req = pkce::read_http_request(&mut stream);
+            let body =
+                r#"{"access_token":"proxied_tok_123","token_type":"Bearer","expires_in":3600}"#;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(resp.as_bytes()).expect("write proxy resp");
+            req
+        });
+
+        let cfg = OAuthClientConfig::from_json_str(&format!(
+            r#"{{"tokenProxyBase":"http://127.0.0.1:{proxy_port}","providers":{{"epic":"epic_official_9999"}}}}"#
+        ))
+        .expect("cfg");
+        let server =
+            LoopbackPkceServer::prepare(&cfg, OAuthProvider::Epic, None).expect("prepare epic");
+        assert_eq!(
+            server.session.token_endpoint,
+            format!("http://127.0.0.1:{proxy_port}/oauth/epic/token")
+        );
+        let tokens = server
+            .exchange_code("epic_auth_code_77")
+            .expect("exchange_code via mock proxy");
+        let raw_req = proxy_thread.join().expect("proxy thread");
+
+        assert_eq!(tokens.access_token, "proxied_tok_123");
+        assert!(raw_req.starts_with("POST /oauth/epic/token "));
+        assert!(raw_req.contains("grant_type=authorization_code"));
+        assert!(raw_req.contains("client_id=epic_official_9999"));
+        assert!(raw_req.contains("code=epic_auth_code_77"));
+        assert!(raw_req.contains("code_verifier="));
     }
 }

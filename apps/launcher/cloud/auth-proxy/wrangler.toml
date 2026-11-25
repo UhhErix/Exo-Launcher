@@ -1,0 +1,32 @@
+name = "exo-auth-proxy"
+main = "src/worker.js"
+compatibility_date = "2026-11-18"
+workers_dev = false
+preview_urls = false
+send_metrics = false
+
+routes = [{ pattern = "auth.getexo.app", custom_domain = true }]
+
+[observability]
+enabled = false
+
+[[ratelimits]]
+name = "TOKEN_EXCHANGE_LIMIT"
+namespace_id = "6101"
+simple = { limit = 30, period = 60 }
+
+[env.dev]
+name = "exo-auth-proxy-dev"
+main = "src/worker.js"
+compatibility_date = "2026-11-18"
+workers_dev = true
+preview_urls = false
+routes = []
+
+[env.dev.observability]
+enabled = false
+
+[[env.dev.ratelimits]]
+name = "TOKEN_EXCHANGE_LIMIT"
+namespace_id = "6102"
+simple = { limit = 30, period = 60 }

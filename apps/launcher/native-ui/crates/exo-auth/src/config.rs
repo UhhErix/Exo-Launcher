@@ -4,6 +4,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub const FIXED_LOOPBACK_PORTS: &[u16] = &[47823, 47824, 47825];
+pub const DEFAULT_TOKEN_PROXY_BASE: &str = "https://auth.getexo.app";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LoopbackRedirectMode {
@@ -244,12 +245,15 @@ impl std::error::Error for AuthError {}
 #[derive(Clone, Debug, Default)]
 pub struct OAuthClientConfig {
     client_ids: BTreeMap<OAuthProvider, String>,
+    token_proxy_base: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct ClientConfigFile {
     #[serde(default)]
     providers: BTreeMap<String, String>,
+    #[serde(default, alias = "token_proxy_base", rename = "tokenProxyBase")]
+    token_proxy_base: Option<String>,
 }
 
 impl OAuthClientConfig {
@@ -316,20 +320,55 @@ impl OAuthClientConfig {
         if trimmed.is_empty() {
             return Ok(());
         }
-        let entries = if let Ok(wrapped) = serde_json::from_str::<ClientConfigFile>(trimmed)
-            && !wrapped.providers.is_empty()
+        if let Ok(wrapped) = serde_json::from_str::<ClientConfigFile>(trimmed)
+            && (!wrapped.providers.is_empty() || wrapped.token_proxy_base.is_some())
         {
-            wrapped.providers
-        } else {
-            serde_json::from_str::<BTreeMap<String, String>>(trimmed)
-                .map_err(|e| AuthError::Protocol(format!("invalid oauth-clients.json: {e}")))?
-        };
+            if let Some(base) = wrapped.token_proxy_base {
+                self.set_token_proxy_base(base);
+            }
+            for (key, value) in wrapped.providers {
+                if let Some(provider) = OAuthProvider::from_id(&key) {
+                    self.set_client_id(provider, value);
+                }
+            }
+            return Ok(());
+        }
+        let entries = serde_json::from_str::<BTreeMap<String, String>>(trimmed)
+            .map_err(|e| AuthError::Protocol(format!("invalid oauth-clients.json: {e}")))?;
         for (key, value) in entries {
-            if let Some(provider) = OAuthProvider::from_id(&key) {
+            if key == "tokenProxyBase" || key == "token_proxy_base" {
+                self.set_token_proxy_base(value);
+            } else if let Some(provider) = OAuthProvider::from_id(&key) {
                 self.set_client_id(provider, value);
             }
         }
         Ok(())
+    }
+
+    pub fn set_token_proxy_base(&mut self, value: impl Into<String>) {
+        let candidate = value.into();
+        let trimmed = candidate.trim().trim_end_matches('/');
+        if is_valid_token_proxy_base(trimmed) {
+            self.token_proxy_base = Some(trimmed.to_string());
+        }
+    }
+
+    pub fn token_proxy_base(&self) -> &str {
+        self.token_proxy_base
+            .as_deref()
+            .unwrap_or(DEFAULT_TOKEN_PROXY_BASE)
+    }
+
+    pub fn token_endpoint_for(&self, provider: OAuthProvider) -> String {
+        if provider.requires_token_exchange_proxy() {
+            format!(
+                "{}/oauth/{}/token",
+                self.token_proxy_base().trim_end_matches('/'),
+                provider.id()
+            )
+        } else {
+            provider.token_endpoint().to_string()
+        }
     }
 
     pub fn merge_env(&mut self) {
@@ -403,6 +442,14 @@ fn unavailable_note(provider: OAuthProvider) -> String {
         provider.display_name(),
         provider.env_var()
     )
+}
+
+pub fn is_valid_token_proxy_base(candidate: &str) -> bool {
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() || trimmed.len() > 256 || trimmed.chars().any(char::is_whitespace) {
+        return false;
+    }
+    trimmed.starts_with("https://") || trimmed.starts_with("http://127.0.0.1:")
 }
 
 pub fn is_valid_official_client_id(candidate: &str) -> bool {
