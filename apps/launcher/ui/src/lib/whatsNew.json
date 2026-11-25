@@ -1,5 +1,20 @@
 [
   {
+    "version": "3.31.2",
+    "items": [
+      {
+        "icon": "Mouse",
+        "title": "Finalmouse 1.2.9 firmware & RT update",
+        "detail": "Matches XPanel for Starlight X 1.2.8 and 1.2.9 with Smart Rapid Trigger shown as Always on while keeping Release point and Ultraclick adjustable."
+      },
+      {
+        "icon": "Scissors",
+        "title": "Restores Exo Capture & Snipping reliably",
+        "detail": "Closes helper processes cleanly during updates and refreshes the full app payload so Snip, Record, and Instant Replay stay installed."
+      }
+    ]
+  },
+  {
     "version": "3.31.1",
     "items": [
       {

@@ -9,6 +9,7 @@ import {
   clickChoiceOf,
   CUSTOM_LOD_FIRMWARE,
   finalmouseIntentSupport,
+  finalmouseSmartRtAlwaysOn,
   finalmouseUltraclickSupport,
   firmwarePartAtLeast,
   LATE_FIRMWARE,
@@ -161,9 +162,14 @@ function Switches({ status, client, apply, busy }: Section) {
   const releases = relL != null && relR != null
   // Late: on firmware 1.1.1 or newer, or when the mouse's firmware is not known; dimmed, with why, on older.
   const lateNeeds = relL !== 2 && relR !== 2 && firmwareAtLeast(status, LATE_FIRMWARE) === false ? `Late needs firmware ${LATE_FIRMWARE}` : null
+  const smartRtAlwaysOn = finalmouseSmartRtAlwaysOn(status)
   const release = lateNeeds ? RELEASE.map(o => ({ ...o, disabled: o.value === 2 })) : RELEASE
   const actuation = can(client, 'setTmrActuation')
-  const tmr = (l: number, r: number, hl: number, hr: number) => void apply('setTmrActuation', l / 100, r / 100, hl, hr)
+  const tmr = (l: number, r: number, hl?: number, hr?: number) => (
+    hl != null && hr != null
+      ? void apply('setTmrActuation', l / 100, r / 100, hl, hr)
+      : void apply('setTmrActuation', l / 100, r / 100)
+  )
   // The mouse takes both sides in one command. Release points ride along once it reported them or one
   // is picked (the other side Normal); a firmware without them reads back none, and the row says so.
   const setModes = (l: number, r: number, rl = relL, rr = relR, il = intL, ir = intR) =>
@@ -202,9 +208,11 @@ function Switches({ status, client, apply, busy }: Section) {
                   : <Switch label={label('Intent Trigger')} checked={side.intentOn} onChange={set.intent} disabled={busy || side.intent == null} />}
               </Row>
             ) : null}
-            <Row label={label('Smart Rapid Trigger')} value={status.finalmouseTmrHystL == null ? unread : undefined}>
-              <Slider label={label('Smart Rapid Trigger')} min={150} max={250} step={10} value={side.rt} format={v => `${v} µm`}
-                onCommit={set.rt} disabled={busy} />
+            <Row label={label('Smart Rapid Trigger')} value={!smartRtAlwaysOn && status.finalmouseTmrHystL == null ? unread : undefined}>
+              {smartRtAlwaysOn
+                ? <span className="m-state">Always on</span>
+                : <Slider label={label('Smart Rapid Trigger')} min={150} max={250} step={10} value={side.rt} format={v => `${v} µm`}
+                    onCommit={set.rt} disabled={busy} />}
             </Row>
             <Row label={label('Release point')} value={releases ? lateNeeds ?? undefined : unread}>
               <Segmented label={label('Release point')} options={release} value={side.rel} onChange={set.rel} disabled={busy} />
@@ -228,23 +236,23 @@ function Switches({ status, client, apply, busy }: Section) {
           const nextInt = nextIntentForChoice(v, left.intent)
           setModes(modeNum(v), modeNum(v), relL, relL, nextInt, nextInt)
         },
-        thr: v => tmr(v, v, left.rt, left.rt),
-        rt: v => tmr(left.thr, left.thr, v, v),
+        thr: v => smartRtAlwaysOn ? tmr(v, v) : tmr(v, v, left.rt, left.rt),
+        rt: v => tmr(0, 0, v, v),
         rel: v => setModes(left.mode, left.mode, v, v, left.intent, left.intent),
         intent: on => setModes(left.mode, left.mode, relL, relL, intentBit(on), intentBit(on)),
       }) : (
         <>
           {rows('Left', left, {
             click: v => setModes(modeNum(v), modeR, relL, relR, nextIntentForChoice(v, left.intent), right.intent),
-            thr: v => tmr(v, right.thr, left.rt, right.rt),
-            rt: v => tmr(left.thr, right.thr, v, right.rt),
+            thr: v => smartRtAlwaysOn ? tmr(v, right.thr) : tmr(v, right.thr, left.rt, right.rt),
+            rt: v => tmr(0, 0, v, right.rt),
             rel: v => setModes(modeL, modeR, v, relR, intL, intR),
             intent: on => setModes(modeL, modeR, relL, relR, intentBit(on), right.intent),
           })}
           {rows('Right', right, {
             click: v => setModes(modeL, modeNum(v), relL, relR, left.intent, nextIntentForChoice(v, right.intent)),
-            thr: v => tmr(left.thr, v, left.rt, right.rt),
-            rt: v => tmr(left.thr, right.thr, left.rt, v),
+            thr: v => smartRtAlwaysOn ? tmr(left.thr, v) : tmr(left.thr, v, left.rt, right.rt),
+            rt: v => tmr(0, 0, left.rt, v),
             rel: v => setModes(modeL, modeR, relL, v, intL, intR),
             intent: on => setModes(modeL, modeR, relL, relR, left.intent, intentBit(on)),
           })}

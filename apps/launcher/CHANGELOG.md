@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.31.2 — November 25, 2026
+- **Finalmouse Starlight X 1.2.8 / 1.2.9 firmware RT support.** Shows Smart Rapid Trigger as Always on for Starlight X firmware 1.2.8 and newer (including 1.2.9) to match XPanel while keeping Release point and Ultraclick editable, and lets older firmware update rapid trigger sensitivity without overwriting actuation. _Checked in code only._
+- **Clean Exo Capture and helper restore during updates.** Stops Exo helper processes cleanly before swapping the app folder and refreshes the installer payload cleanly so Exo Capture (`Snip`, `Record`, `Save replay`) is restored properly when updating. _Checked in code only._
+
 ## 3.31.1 — November 25, 2026
 - **Reduce motion stays where you set it.** Stops account sync from overwriting your local Reduce motion preference, resolves setting conflicts using timestamps instead of older values, and flushes manual sync right away. _Checked in code only._
 - **Smoother app during heavy background tasks.** Isolates slow hardware, optimization, and system work onto separate lanes so rooms and controls stay responsive, submits crash reports in the background, and stops counting expected status messages as app errors. _Checked in code only._

@@ -78,6 +78,23 @@ function Get-ExoProfileRoots([string]$AppDirectory, [string]$DataDirectory) {
     Join-Path $AppDirectory 'ExoLauncher.exe.WebView2'
 }
 
+function Stop-ExoAppHelpers([string]$AppDirectory, [int]$SetupProcessId) {
+    $inside = $AppDirectory.TrimEnd('\') + '\'
+    $names = @('ExoCapture.exe', 'exo-capture.exe', 'ExoShaders.Service.exe', 'ExoLauncher.SteamIpc.exe', 'exo-ui.exe', 'exo-apo-helper.exe')
+    $deadline = [DateTime]::UtcNow.AddSeconds(4)
+    do {
+        $left = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.ProcessId -ne $SetupProcessId -and $_.ProcessId -ne $PID -and $_.ExecutablePath -and
+            $_.ExecutablePath.StartsWith($inside, [StringComparison]::OrdinalIgnoreCase) -and
+            ($names -contains $_.Name)
+        })
+        foreach ($process in $left) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }
+        if ($left.Count -eq 0) { return $true }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return $false
+}
+
 function Stop-ExoInstalledApp([string]$AppDirectory, [string]$DataDirectory, [int]$SetupProcessId) {
 $app = [IO.Path]::GetFullPath($AppDirectory).TrimEnd('\')
 $data = [IO.Path]::GetFullPath($DataDirectory).TrimEnd('\')
@@ -109,6 +126,8 @@ do {
     Start-Sleep -Milliseconds 100
 } while ([DateTime]::UtcNow -lt $deadline)
 if (@(Get-InstalledExoProcess).Count -gt 0) { return 1 }
+
+if (-not (Stop-ExoAppHelpers $app $SetupProcessId)) { return 1 }
 
 # An Exo from before 3.26 hosted Lucid from the app folder, which it would hold: closed here, and its sign-in entry goes.
 if (-not (Stop-ExoHostedLucid $app $data)) { return 1 }
