@@ -201,33 +201,37 @@ internal sealed class MusicWebHostWindow
 
     private static nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam)
     {
-        if (Instances.TryGetValue(hwnd, out var host))
+        try
         {
-            if (msg == WmSize)
+            if (Instances.TryGetValue(hwnd, out var host))
             {
-                host.SyncBounds();
-                try { host.MinimizedChanged?.Invoke(wParam == SizeMinimized); } catch { }
-            }
-            else if (msg == WmDestroy)
-            {
-                Instances.Remove(hwnd);
-                host._hwnd = 0;
-                if (!host._closed)
+                if (msg == WmSize)
                 {
-                    host._closed = true;
-                    var controller = host._controller;
-                    var lease = Interlocked.Exchange(ref host._environmentLease, null);
-                    host._controller = null;
-                    host._core = null;
-                    if (controller is not null)
+                    host.SyncBounds();
+                    try { host.MinimizedChanged?.Invoke(wParam == SizeMinimized); } catch { }
+                }
+                else if (msg == WmDestroy)
+                {
+                    Instances.Remove(hwnd);
+                    host._hwnd = 0;
+                    if (!host._closed)
                     {
-                        WebViewEnvironmentLifetime.CloseAndRelease(controller);
+                        host._closed = true;
+                        var controller = host._controller;
+                        var lease = Interlocked.Exchange(ref host._environmentLease, null);
+                        host._controller = null;
+                        host._core = null;
+                        if (controller is not null)
+                        {
+                            WebViewEnvironmentLifetime.CloseAndRelease(controller);
+                        }
+                        try { lease?.Dispose(); } catch { }
+                        try { host.Closed?.Invoke(); } catch { }
                     }
-                    try { lease?.Dispose(); } catch { }
-                    try { host.Closed?.Invoke(); } catch { }
                 }
             }
         }
+        catch { }
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 

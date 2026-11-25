@@ -27,13 +27,12 @@ public sealed class UiGuardTests : IDisposable
     }
 
     [Fact]
-    public void AnActionThatThrowsWritesOnePendingFileAndRethrowsTheSameException()
+    public void AnActionThatThrowsWritesOnePendingFileAndDoesNotRethrow()
     {
         var boom = new InvalidOperationException("boom");
 
-        var thrown = Assert.Throws<InvalidOperationException>(() => UiGuard.Run(() => { throw boom; }));
+        UiGuard.Run(() => { throw boom; });
 
-        Assert.Same(boom, thrown);
         Assert.Single(Directory.GetFiles(_dir, "*.json"));
     }
 
@@ -46,13 +45,21 @@ public sealed class UiGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task AnAsyncFunctionThatThrowsIsRecordedAndRethrown()
+    public void AFunctionThatThrowsRecordsAndReturnsDefaultWithoutRethrowing()
+    {
+        var result = UiGuard.Run<int>(() => throw new InvalidOperationException("boom"));
+
+        Assert.Equal(0, result);
+        Assert.Single(Directory.GetFiles(_dir, "*.json"));
+    }
+
+    [Fact]
+    public async Task AnAsyncFunctionThatThrowsIsRecordedAndDoesNotRethrow()
     {
         var boom = new InvalidOperationException("late");
 
-        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => UiGuard.RunAsync(() => Task.FromException(boom)));
+        await UiGuard.RunAsync(() => Task.FromException(boom));
 
-        Assert.Same(boom, thrown);
         Assert.Single(Directory.GetFiles(_dir, "*.json"));
     }
 
@@ -115,8 +122,18 @@ public sealed class UiGuardTests : IDisposable
     public void AGuardThatIsTheWholeBodyIsAccepted()
     {
         Assert.Empty(UiCallbackScanner.Scan("Snippet.cs", "timer.Tick += (_, _) =>\n{\n    UiGuard.Run(() => { Save(); Log(); });\n};", []));
-        Assert.Empty(UiCallbackScanner.Scan("Snippet.cs", "core.NavigationCompleted += async (s, e) => await UiGuard.RunAsync(() => DoneAsync(e));", []));
+        Assert.Empty(UiCallbackScanner.Scan("Snippet.cs", "core.NavigationCompleted += (s, e) => _ = UiGuard.RunAsync(() => DoneAsync(e));", []));
         Assert.Empty(UiCallbackScanner.Scan("Snippet.cs", "core.ProcessFailed += (_, e) => _queue.Enqueue(() => Recover(e));", []));
+    }
+
+    [Fact]
+    public void AsyncVoidMethodsAndAsyncLambdasOnDispatcherOrWinRtEventsAreReported()
+    {
+        Assert.Single(UiCallbackScanner.Scan("Snippet.cs", "private async void OnClick() { await Task.Yield(); }", []));
+        Assert.Single(UiCallbackScanner.Scan("Snippet.cs", "queue.TryEnqueue(async () => await UiGuard.RunAsync(() => Task.CompletedTask));", []));
+        Assert.Single(UiCallbackScanner.Scan("Snippet.cs", "queue.TryEnqueue(() => UiGuard.Run(async () => await Task.Yield()));", []));
+        Assert.Single(UiCallbackScanner.Scan("Snippet.cs", "core.NewWindowRequested += async (_, e) => await UiGuard.RunAsync(() => Task.CompletedTask);", []));
+        Assert.Empty(UiCallbackScanner.Scan("Snippet.cs", "queue.EnqueueAsync(async () => await Task.Yield());", []));
     }
 
     [Fact]
@@ -200,10 +217,23 @@ internal static class UiCallbackScanner
 
         if (file != "Helpers/UiGuard.cs")
         {
+            foreach (Match match in Regex.Matches(text, @"\basync\s+void\b"))
+            {
+                found.Add(Where(file, text, match.Index, "unguarded async void"));
+            }
+
             foreach (Match match in Regex.Matches(text, @"TryEnqueue\s*\("))
             {
                 var args = Span(text, match.Index + match.Length);
-                if (!WrapsItsBody(args)) found.Add(Where(file, text, match.Index, "raw TryEnqueue"));
+                if (IsAsyncVoidCallback(args) || !WrapsItsBody(args))
+                    found.Add(Where(file, text, match.Index, "raw TryEnqueue"));
+            }
+
+            foreach (Match match in Regex.Matches(text, @"UiGuard\.Run\s*\("))
+            {
+                var args = Span(text, match.Index + match.Length);
+                if (Regex.IsMatch(args.TrimStart(), @"^async\b"))
+                    found.Add(Where(file, text, match.Index, "async void lambda inside UiGuard.Run"));
             }
         }
 
@@ -213,16 +243,25 @@ internal static class UiCallbackScanner
             foreach (Match match in Regex.Matches(text, @"\." + name + @"\s*\+="))
             {
                 var handler = Span(text, match.Index + match.Length);
-                if (!WrapsItsBody(handler)) found.Add(Where(file, text, match.Index, "raw " + name + " handler"));
+                if (IsAsyncVoidCallback(handler) || !WrapsItsBody(handler))
+                    found.Add(Where(file, text, match.Index, "raw " + name + " handler"));
             }
         }
 
         return found;
     }
 
+    private static bool IsAsyncVoidCallback(string callback)
+    {
+        var arrow = callback.IndexOf("=>", StringComparison.Ordinal);
+        if (arrow < 0) return false;
+        var head = callback[..arrow];
+        return Regex.IsMatch(head, @"\basync\b");
+    }
+
     /// <summary>
     /// True when the callback is a lambda whose whole body runs inside UiGuard (or goes through the queue helper that
-    /// wraps it): the body is `UiGuard.Run(...)`, `await UiGuard.RunAsync(...)`, `x.Enqueue(...)`, or a block whose only
+    /// wraps it): the body is `UiGuard.Run(...)`, `_ = UiGuard.RunAsync(...)`, `x.Enqueue(...)`, or a block whose only
     /// statement is one of those. A UiGuard call after other work, or nested inside it, leaves that work unguarded.
     /// </summary>
     private static bool WrapsItsBody(string callback)
@@ -239,8 +278,9 @@ internal static class UiCallbackScanner
             if (Span(inner, 0).Trim().Length != inner.TrimEnd().TrimEnd(';').Trim().Length) return false;
             body = inner;
         }
+        if (body.StartsWith("_ =", StringComparison.Ordinal)) body = body[3..].TrimStart();
         if (body.StartsWith("await ", StringComparison.Ordinal)) body = body[6..].TrimStart();
-        return body.StartsWith("UiGuard.", StringComparison.Ordinal) || Regex.IsMatch(body, @"^[\w.]+\.Enqueue\(");
+        return body.StartsWith("UiGuard.", StringComparison.Ordinal) || Regex.IsMatch(body, @"^[\w.]+\.Enqueue(?:Async)?\(");
     }
 
     /// <summary>Text from <paramref name="start"/> up to the bracket or semicolon that closes it at depth zero.</summary>

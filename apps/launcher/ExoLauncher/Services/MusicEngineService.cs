@@ -129,12 +129,12 @@ internal sealed partial class MusicEngineService
             return work();
         }
         var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!dispatcher.TryEnqueue(async () => await UiGuard.RunAsync(async () =>
+        if (!dispatcher.EnqueueAsync(async () =>
         {
             EnsureSyncContext(dispatcher);
             try { tcs.TrySetResult(await work()); }
             catch (Exception ex) { tcs.TrySetException(ex); }
-        })))
+        }, "Music engine UI work"))
         {
             tcs.TrySetException(new InvalidOperationException("Music engine dispatcher is shutting down."));
         }
@@ -1057,7 +1057,7 @@ internal sealed partial class MusicEngineService
             }
             if (e.IsUserInitiated && MusicWebPolicy.IsHttps(e.Uri)) OpenMusicExternal(e.Uri);
         });
-        core.NewWindowRequested += async (sender, e) => await UiGuard.RunAsync(async () =>
+        core.NewWindowRequested += (sender, e) => _ = UiGuard.RunAsync(async () =>
         {
             _ = sender;
             e.Handled = true;

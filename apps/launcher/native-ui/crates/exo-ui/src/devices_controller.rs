@@ -6,8 +6,8 @@ use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
     BadgeTone, ExoGlass, FG, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, bad, exo_glass, fg_faint,
     fg_muted, float_line, glass_rim, good, hairline, icon_gamepad, modal_card_transition,
-    modal_scrim_transition, primary_button, progress_bar, scaled, scrim_fill, status_badge,
-    type_body, type_small, type_title,
+    modal_scrim_transition, primary_button, progress_bar, scrim_fill, status_badge, type_body,
+    type_small, type_title,
 };
 use exo_rpc::{
     ButtonCheck, ControllerCalibrateReply, ControllerGameProfile, ControllerGameProfilesReply,
@@ -21,8 +21,8 @@ use exo_rpc::{
     SteamInputStateReply, StickEdge, StickRest, TriggerSweep,
 };
 use rune::{
-    El, ScrollSpec, Shape, SurfaceFit, TextEdit, TextStyle, canvas, col, edit_access, el, row,
-    text, text_input,
+    El, ScrollSpec, Shape, SurfaceFit, TextEdit, canvas, col, edit_access, el, row, text,
+    text_input,
 };
 use serde_json::json;
 use std::collections::HashSet;
@@ -1276,13 +1276,12 @@ fn stick_visualizer(x: Option<u8>, y: Option<u8>, label: &'static str) -> El {
 
     col()
         .items_center()
-        .gap(6.0)
-        .child(canvas(shape).size(92.0, 92.0))
-        .child(text(label).font(type_small()).color(fg_muted()))
+        .gap(8.0)
+        .child(canvas(shape).label(label).size(112.0, 112.0))
         .child(
             text(format!("X {}% · Y {}%", axis_percent(x), axis_percent(y)))
-                .font(TextStyle::new(scaled(11.0), 500.0))
-                .color(FG),
+                .font(type_small())
+                .color(fg_muted()),
         )
 }
 
@@ -1335,8 +1334,10 @@ fn sticks_panel(
     let mut rows = vec![
         row()
             .w_full()
-            .py(8.0)
-            .justify_around()
+            .pt(4.0)
+            .pb(10.0)
+            .gap(32.0)
+            .justify_center()
             .center_y()
             .child(stick_visualizer(
                 live.map(|l| l.lx),
@@ -1661,6 +1662,41 @@ fn buttons_panel(s: &AppState, card: &PeripheralCard) -> El {
     device_panel("Buttons", rows)
 }
 
+fn pad_grid_box(label: String, highlighted: bool, underline_active: bool) -> El {
+    let mut cell = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .radius(10.0)
+        .clip_rounded(10.0)
+        .items_center();
+    if highlighted {
+        cell = cell
+            .fill(FG)
+            .py(8.0)
+            .px(12.0)
+            .child(text(label).font(type_body()).color(exo_kit::BG));
+    } else if underline_active {
+        cell = cell
+            .border(1.0, float_line())
+            .child(
+                el().w_full()
+                    .pt(8.0)
+                    .pb(6.0)
+                    .px(12.0)
+                    .center()
+                    .child(text(label).font(type_body()).color(FG)),
+            )
+            .child(el().w_full().h(2.0).fill(FG));
+    } else {
+        cell = cell
+            .border(1.0, float_line())
+            .py(8.0)
+            .px(12.0)
+            .child(text(label).font(type_body()).color(fg_muted()));
+    }
+    cell
+}
+
 fn edge_panels(s: &AppState, read: Option<&ControllerReadReply>) -> Vec<El> {
     let extras =
         s.pc.controller_ui
@@ -1669,31 +1705,22 @@ fn edge_panels(s: &AppState, read: Option<&ControllerReadReply>) -> Vec<El> {
             .map(|l| l.extras)
             .unwrap_or(0);
     let active_profile = s.pc.controller_ui.live.as_ref().and_then(|l| l.profile);
-    let keys_row = row()
-        .w_full()
-        .flex_wrap()
-        .gap(8.0)
-        .py(6.0)
-        .children(PAD_KEYS.iter().map(|(bit, lbl)| {
+    let mut keys_grid = col().w_full().gap(8.0).py(8.0);
+    for pair in PAD_KEYS.chunks(2) {
+        let mut r = row().w_full().gap(8.0);
+        for (bit, lbl) in pair {
             let held = (extras & *bit) != 0;
-            status_badge(
-                (*lbl).into(),
-                if held {
-                    BadgeTone::Good
-                } else {
-                    BadgeTone::Neutral
-                },
-            )
-        }));
+            r = r.child(pad_grid_box((*lbl).into(), held, false));
+        }
+        keys_grid = keys_grid.child(r);
+    }
 
-    let mut out = vec![device_panel("Back and Fn buttons", vec![keys_row])];
+    let mut out = vec![device_panel("Back and Fn buttons", vec![keys_grid])];
     if let Some(slots) = read.and_then(|r| r.slots.as_ref()) {
-        let slots_row = row()
-            .w_full()
-            .flex_wrap()
-            .gap(8.0)
-            .py(6.0)
-            .children(slots.iter().map(|slot| {
+        let mut slots_grid = col().w_full().gap(8.0).py(8.0);
+        for pair in slots.chunks(2) {
+            let mut r = row().w_full().gap(8.0);
+            for slot in pair {
                 let on = active_profile == Some(slot.number);
                 let label = if slot.empty {
                     format!("Slot {} empty", slot.number)
@@ -1702,16 +1729,14 @@ fn edge_panels(s: &AppState, read: Option<&ControllerReadReply>) -> Vec<El> {
                         .clone()
                         .unwrap_or_else(|| format!("Slot {}", slot.number))
                 };
-                status_badge(
-                    label,
-                    if on {
-                        BadgeTone::Good
-                    } else {
-                        BadgeTone::Neutral
-                    },
-                )
-            }));
-        out.push(device_panel("Profiles on the controller", vec![slots_row]));
+                r = r.child(pad_grid_box(label, false, on));
+            }
+            if pair.len() == 1 {
+                r = r.child(el().grow(1.0).min_w(0.0));
+            }
+            slots_grid = slots_grid.child(r);
+        }
+        out.push(device_panel("Profiles on the controller", vec![slots_grid]));
     }
     out
 }

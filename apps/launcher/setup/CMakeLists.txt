@@ -1,5 +1,5 @@
 # Exo Setup: Exo's own window for installing, updating and uninstalling Exo Launcher (see src/main.cpp).
-# Built by build.ps1 with the MSVC toolset; WebView2's static loader from third_party/wv2 (Microsoft.Web.WebView2 1.0.4314.35).
+# Built by build.ps1 with the MSVC toolset; WebView2's static loader from third_party/wv2 (Microsoft.Web.WebView2 1.0.4370.26).
 cmake_minimum_required(VERSION 3.25)
 project(ExoSetup LANGUAGES CXX RC)
 

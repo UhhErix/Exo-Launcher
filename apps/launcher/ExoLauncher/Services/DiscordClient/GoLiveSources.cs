@@ -47,7 +47,11 @@ internal static class GoLiveSources
         var windows = new List<Source>();
         EnumWindows((hwnd, _) =>
         {
-            if (Describe(hwnd, games) is { } source) windows.Add(source);
+            try
+            {
+                if (Describe(hwnd, games) is { } source) windows.Add(source);
+            }
+            catch { }
             return true;
         }, 0);
         sources.AddRange(windows);
@@ -79,8 +83,12 @@ internal static class GoLiveSources
         var found = new List<(MonitorInfoEx Info, nint Handle)>();
         EnumDisplayMonitors(0, 0, (monitor, _, _, _) =>
         {
-            var info = new MonitorInfoEx { Size = Marshal.SizeOf<MonitorInfoEx>() };
-            if (GetMonitorInfo(monitor, ref info)) found.Add((info, monitor));
+            try
+            {
+                var info = new MonitorInfoEx { Size = Marshal.SizeOf<MonitorInfoEx>() };
+                if (GetMonitorInfo(monitor, ref info)) found.Add((info, monitor));
+            }
+            catch { }
             return true;
         }, 0);
         return found
@@ -139,9 +147,13 @@ internal static class GoLiveSources
         uint found = 0;
         EnumChildWindows(frame, (child, _) =>
         {
-            if (ClassName(child) != "Windows.UI.Core.CoreWindow") return true;
-            GetWindowThreadProcessId(child, out found);
-            return false;
+            try
+            {
+                if (ClassName(child) != "Windows.UI.Core.CoreWindow") return true;
+                GetWindowThreadProcessId(child, out found);
+                return false;
+            }
+            catch { return true; }
         }, 0);
         return found == 0 ? null : found;
     }

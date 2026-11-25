@@ -213,12 +213,19 @@ export async function compareAll({ states, reactResults, nativeResults, outDir }
       }
     }
 
-    const menus = compareMenus(state, r, n)
-    const cursors = compareCursors(r, n)
-    const glass = compareGlass(state, r, n)
+    const isSkipped = opened.status === 'skip'
+    const menus = isSkipped
+      ? { status: 'na', equal: true, reactItems: [], nativeItems: [], missing: [], extra: [] }
+      : compareMenus(state, r, n)
+    const cursors = isSkipped
+      ? { status: 'na', checked: 0, matched: 0, mismatches: [] }
+      : compareCursors(r, n)
+    const glass = isSkipped
+      ? { status: 'pass', reactCount: 0, nativeCount: 0, appearedLate: false, detail: 'skipped' }
+      : compareGlass(state, r, n)
 
     let pixels = { status: 'na', meanAbsDiff: null, maxCellDiff: null, worstCells: [], sheet: null }
-    if (r?.screenshot && n?.screenshot && existsSync(r.screenshot) && existsSync(n.screenshot)) {
+    if (!isSkipped && r?.screenshot && n?.screenshot && existsSync(r.screenshot) && existsSync(n.screenshot)) {
       const sheetPath = join(sheetsDir, `${state.id}-compare.png`)
       const cmp = await runComparePy(r.screenshot, n.screenshot, sheetPath)
       if (!cmp.error) {

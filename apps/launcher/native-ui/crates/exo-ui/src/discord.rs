@@ -2299,6 +2299,7 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
                         .cursor(Cursor::Pointer)
                         .w_full()
                         .h(34.0)
+                        .mt(14.0)
                         .pt(3.0)
                         .px(8.0)
                         .gap(4.0)
@@ -4091,7 +4092,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
     }
 }
 
-fn format_snowflake_date(id: &str) -> Option<String> {
+pub(crate) fn format_snowflake_date(id: &str) -> Option<String> {
     let raw: u64 = id.parse().ok()?;
     let ms = (raw >> 22) + 1_420_070_400_000;
     let secs = (ms / 1000) as i64;

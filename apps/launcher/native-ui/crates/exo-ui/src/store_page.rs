@@ -2,11 +2,11 @@ use crate::state::{AppState, HostStatus, InputMode, NoticeTone, Room};
 use crate::store::{render_price, store_shelf_row};
 use crate::store_media::{ShownMedia, media_viewer, media_wait};
 use exo_kit::{
-    FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_QUICK, TRANSPARENT, bad,
-    fg_faint, fg_muted, float_line, glass_button, glass_control_fill, glass_rim_bottom,
+    ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_QUICK, TRANSPARENT,
+    bad, fg_faint, fg_muted, float_line, glass_button, glass_control_fill, glass_rim_bottom,
     glass_rim_top, good, hover_fill, icon_arrow_right, icon_bookmark, icon_check,
-    icon_chevron_left, icon_close, icon_external, pressed_fill, scaled, surface_card, type_body,
-    type_control, type_small,
+    icon_chevron_left, icon_close, icon_external, pressed_fill, scaled, type_body, type_control,
+    type_small,
 };
 #[cfg(windows)]
 use exo_rpc::{
@@ -1508,8 +1508,7 @@ fn tag_pills_row(tags: Option<&[String]>) -> El {
                     .px(12.0)
                     .center()
                     .radius(RADIUS_PILL)
-                    .fill(glass_control_fill())
-                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                    .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
                     .child(
                         text(tag.clone())
                             .font(TextStyle::new(scaled(12.0), 500.0))
@@ -1668,15 +1667,14 @@ fn buy_panel(
         .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(34.0)
+        .h(32.0)
         .px(14.0)
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
         .hover(hover_fill())
         .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
         .on_press(move |s: &mut AppState| {
             s.store_toggle_wishlist(tile_for_wish.clone(), wish_next);
@@ -1730,7 +1728,7 @@ fn buy_panel(
         if gamepad {
             lib_btn = lib_btn.focus_ring(2.0, 3.0, FG);
         }
-        let mut panel = col().w(400.0).gap(8.0).child(lib_btn);
+        let mut panel = col().w(360.0).gap(8.0).child(lib_btn);
         if wished {
             panel = panel.child(row().mt(4.0).gap(8.0).child(wish_btn));
         }
@@ -1757,15 +1755,14 @@ fn buy_panel(
         .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(34.0)
+        .h(32.0)
         .px(14.0)
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
         .hover(hover_fill())
         .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
         .on_press(move |s: &mut AppState| s.store_open_external_url(gg_url.clone()))
         .child(icon_external(14.0, FG))
@@ -1777,7 +1774,7 @@ fn buy_panel(
         gg_btn = gg_btn.focus_ring(2.0, 3.0, FG);
     }
 
-    let mut panel = col().w(400.0).gap(8.0);
+    let mut panel = col().w(360.0).gap(8.0);
     for off in &steam_offers {
         panel = panel.child(offer_row_button(s, off, true, free, soon, gamepad));
     }
@@ -1818,11 +1815,11 @@ fn about_card(game: Option<&StoreGame>) -> El {
         .py(16.0)
         .gap(10.0)
         .radius(RADIUS_CARD)
-        .fill(surface_card())
+        .fill(exo_kit::BG)
         .border(1.0, float_line())
         .child(
             text("About")
-                .font(TextStyle::new(scaled(13.0), 650.0))
+                .font(TextStyle::new(scaled(13.0), 650.0).lh(scaled(18.0)))
                 .color(FG),
         );
     match game {
@@ -1839,7 +1836,7 @@ fn about_card(game: Option<&StoreGame>) -> El {
             if !desc.is_empty() {
                 card = card.child(
                     text(desc.to_string())
-                        .font(type_body())
+                        .font(type_body().lh(scaled(20.0)))
                         .color(FG)
                         .w_full()
                         .wrap(),
@@ -1936,7 +1933,7 @@ fn facts_card(
         .px(18.0)
         .py(14.0)
         .radius(RADIUS_CARD)
-        .fill(surface_card())
+        .fill(exo_kit::BG)
         .border(1.0, float_line())
         .child(grid)
 }
@@ -2083,7 +2080,7 @@ fn specs_card(game: Option<&StoreGame>) -> El {
         .py(16.0)
         .gap(10.0)
         .radius(RADIUS_CARD)
-        .fill(surface_card())
+        .fill(exo_kit::BG)
         .border(1.0, float_line())
         .child(head)
         .child(rows)
@@ -2117,6 +2114,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
     let wished = s.store_is_wished(app_id, seed.wished);
 
     let mut back_btn = glass_button("sg-back", "Store", Some(icon_chevron_left(16.0, FG)))
+        .h(34.0)
         .on_press_tx(|s: &mut AppState, tx| {
             s.input_mode = InputMode::Pointer;
             s.close_store_game_tx(tx);
@@ -2152,7 +2150,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
             .center()
             .gap(12.0)
             .radius(RADIUS_CARD)
-            .fill(surface_card())
+            .fill(exo_kit::BG)
             .border(1.0, float_line())
             .child(
                 text("This page didn't load")
@@ -2181,7 +2179,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .child(about_card(game));
 
     let right_col = col()
-        .w(400.0)
+        .w(360.0)
         .gap(16.0)
         .child(facts_card(
             game,
@@ -2202,8 +2200,8 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .key(format!("store-game-page-{app_id}"))
         .w_full()
         .fill(exo_kit::BG)
-        .pt(56.0)
-        .pb(40.0)
+        .pt(4.0)
+        .pb(34.0)
         .gap(20.0)
         .transition(
             Transition::opacity()
@@ -2228,7 +2226,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
             scale,
             None,
         );
-        page = page.child(el().w_full().pt(8.0).child(more_row));
+        page = page.child(el().w_full().pt(12.0).child(more_row));
     }
 
     page

@@ -8,12 +8,6 @@ namespace ExoLauncher.Services;
 
 public sealed class SettingsService
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private readonly object _stateGate = new();
     private readonly object _persistenceGate = new();
     private AppSettings _current = new();
@@ -224,7 +218,7 @@ public sealed class SettingsService
     /// </summary>
     private static AppSettings? DeserializeSalvaging(string json, JsonElement root)
     {
-        try { return JsonSerializer.Deserialize<AppSettings>(json, JsonOpts); }
+        try { return JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings); }
         catch (JsonException first)
         {
             var kept = new System.Text.Json.Nodes.JsonObject();
@@ -232,12 +226,12 @@ public sealed class SettingsService
             foreach (var property in root.EnumerateObject())
             {
                 var single = new System.Text.Json.Nodes.JsonObject { [property.Name] = System.Text.Json.Nodes.JsonNode.Parse(property.Value.GetRawText()) };
-                try { JsonSerializer.Deserialize<AppSettings>(single.ToJsonString(), JsonOpts); kept[property.Name] = single[property.Name]!.DeepClone(); }
+                try { JsonSerializer.Deserialize(single.ToJsonString(), SettingsJsonContext.Default.AppSettings); kept[property.Name] = single[property.Name]!.DeepClone(); }
                 catch (JsonException) { dropped.Add(property.Name); }
             }
             if (dropped.Count == 0) throw;
             AppLog.Warn($"Settings: {dropped.Count} field(s) did not read and are back at their defaults ({string.Join(", ", dropped.Take(10))}); the rest are kept. {first.Message}");
-            return JsonSerializer.Deserialize<AppSettings>(kept.ToJsonString(), JsonOpts);
+            return JsonSerializer.Deserialize(kept.ToJsonString(), SettingsJsonContext.Default.AppSettings);
         }
     }
 
@@ -327,7 +321,7 @@ public sealed class SettingsService
     /// replacement succeeds. A failed write cannot change the meaning of a retry
     /// or roll back a different writer's successful change.
     /// </summary>
-    private bool TryCommitMutation(Action<AppSettings> mutate, out string? error)
+    private bool TryCommitMutation(Action<AppSettings> mutate, out string? error, bool fromSync = false)
     {
         error = null;
         lock (_persistenceGate)
@@ -337,6 +331,7 @@ public sealed class SettingsService
                 AppLog.Info("Settings: a change after the restore is not written; the restored settings.json stays.");
                 return true;
             }
+            AppSettings before;
             AppSettings candidate;
             lock (_stateGate)
             {
@@ -346,6 +341,7 @@ public sealed class SettingsService
                     AppLog.Warn(error);
                     return false;
                 }
+                before = Clone(_current);
                 candidate = Clone(_current);
             }
 
@@ -354,7 +350,7 @@ public sealed class SettingsService
             // A profile callback may retain its argument; never publish that
             // caller-owned object as mutable service state.
             var committed = Clone(candidate);
-            var json = JsonSerializer.Serialize(committed, JsonOpts);
+            var json = JsonSerializer.Serialize(committed, SettingsJsonContext.Default.AppSettings);
             if (string.Equals(json, _lastWrittenJson, StringComparison.Ordinal))
                 return true;
             try
@@ -369,11 +365,18 @@ public sealed class SettingsService
             }
 
             _lastWrittenJson = json;
-            AccountSyncHooks.SettingsSaved(committed);
             lock (_stateGate)
             {
                 _current = committed;
                 _revision++;
+            }
+            if (!fromSync)
+            {
+                var changedKeys = AccountSyncRules.ChangedKeys(
+                    AccountSyncMap.SettingsValue(before).ToJsonString(),
+                    AccountSyncMap.SettingsValue(committed).ToJsonString());
+                if (changedKeys.Count > 0)
+                    AccountSyncHooks.SettingsSaved(committed, changedKeys);
             }
             // The settings file is the commit point. A stale advisory marker
             // cannot override that explicit value on the next load.
@@ -382,9 +385,9 @@ public sealed class SettingsService
         return true;
     }
 
-    private void CommitMutation(Action<AppSettings> mutate)
+    private void CommitMutation(Action<AppSettings> mutate, bool fromSync = false)
     {
-        if (!TryCommitMutation(mutate, out var error))
+        if (!TryCommitMutation(mutate, out var error, fromSync))
             throw new InvalidOperationException(error ?? "Could not save settings.");
     }
 
@@ -652,6 +655,15 @@ public sealed class SettingsService
         {
             apply(settings);
         });
+    }
+
+    internal void ApplySynced(Action<AppSettings> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        CommitMutation(settings =>
+        {
+            apply(settings);
+        }, fromSync: true);
     }
 
     /// <summary>The anti-cheat the user accepted the risk of for this game's upscaler files, or null.</summary>

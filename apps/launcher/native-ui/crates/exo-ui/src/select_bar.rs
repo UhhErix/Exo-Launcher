@@ -2,8 +2,8 @@ use crate::library_state::format_bytes_short;
 use crate::state::{AppState, InputMode};
 use exo_kit::{
     ExoGlass, FG, MenuAnchor, MenuEntry, MenuItem, RADIUS_PILL, SPRING_BASE, apply_glass,
-    context_menu_layers, float_line, glass_button, icon_eye, icon_eye_off, icon_folder,
-    icon_folder_plus, icon_trash, primary_button, type_control,
+    context_menu_layers, float_line, glass_button_opt, glass_rim, icon_eye, icon_eye_off,
+    icon_folder, icon_folder_plus, icon_trash, primary_button, type_control,
 };
 use rune::{Align, El, Side, Tx, el, row, text};
 use std::rc::Rc;
@@ -41,11 +41,14 @@ pub fn select_bar_overlay(s: &AppState, blur: bool) -> Vec<El> {
     } else {
         icon_eye_off(15.0, FG)
     };
-    let mut hide_btn = glass_button(
+    let mut hide_btn = glass_button_opt(
         "select-bar-hide",
         if hidden_view { "Unhide" } else { "Hide" },
         Some(hide_icon),
+        false,
     )
+    .px(14.0)
+    .border(1.0, glass_rim())
     .disabled(count == 0);
     if count > 0 {
         hide_btn = hide_btn.on_press(|s: &mut AppState| s.bulk_hide_picked());
@@ -77,11 +80,14 @@ pub fn select_bar_overlay(s: &AppState, blur: bool) -> Vec<El> {
     );
 
     if !hidden_view {
-        let mut folder_btn = glass_button(
+        let mut folder_btn = glass_button_opt(
             "select-bar-folder",
             "Add to folder",
             Some(icon_folder(15.0, FG)),
+            false,
         )
+        .px(14.0)
+        .border(1.0, glass_rim())
         .disabled(count == 0);
         if count > 0 {
             folder_btn = folder_btn.on_press(|s: &mut AppState| {
@@ -129,15 +135,21 @@ pub fn select_bar_overlay(s: &AppState, blur: bool) -> Vec<El> {
 
     let rule = el().w(1.0).h(20.0).mx(4.0).fill(float_line());
     let all_or_clear = if count < total {
-        glass_button("select-bar-all", "Select all", None)
+        glass_button_opt("select-bar-all", "Select all", None, false)
+            .px(14.0)
+            .border(1.0, glass_rim())
             .on_press(|s: &mut AppState| s.pick_all_visible())
     } else {
-        glass_button("select-bar-clear", "Clear", None).on_press(|s: &mut AppState| {
-            s.lib.picked.clear();
-            s.lib.pick_anchor = None;
-        })
+        glass_button_opt("select-bar-clear", "Clear", None, false)
+            .px(14.0)
+            .border(1.0, glass_rim())
+            .on_press(|s: &mut AppState| {
+                s.lib.picked.clear();
+                s.lib.pick_anchor = None;
+            })
     };
     let done_btn = primary_button("select-bar-done", "Done", None)
+        .px(14.0)
         .on_press(|s: &mut AppState| s.exit_select_mode());
 
     bar = bar.child(rule).child(all_or_clear).child(done_btn);

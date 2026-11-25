@@ -632,7 +632,7 @@ internal sealed class MousePanelService
     {
         if (queue.HasThreadAccess) return work();
         var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!queue.TryEnqueue(() => UiGuard.Run(async () =>
+        if (!queue.EnqueueAsync(async () =>
         {
             try
             {
@@ -643,7 +643,7 @@ internal sealed class MousePanelService
             {
                 tcs.TrySetException(ex);
             }
-        })))
+        }, "Mouse panel UI work"))
         {
             tcs.TrySetException(new InvalidOperationException("Host UI queue is shut down."));
         }

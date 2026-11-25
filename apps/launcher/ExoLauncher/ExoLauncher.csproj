@@ -79,12 +79,12 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.7.0" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.261102100">
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.261119100">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4370.26" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0" />
     <!-- File-level updates: each file of files.pack is a zstd frame (Services/AppFiles.cs). MIT. -->
     <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
@@ -211,8 +211,8 @@
     <Content Include="..\voice\out\exo_apm.dll" Condition="Exists('..\voice\out\exo_apm.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- DeepFilterNet noise suppression (Exo's build of its C interface, voice\build.ps1): ships in the app, so a call has it from the first join. -->
     <Content Include="..\voice\out\exo-deepfilter.dll" Condition="Exists('..\voice\out\exo-deepfilter.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\native-ui\target\release\exo_voice_ml.dll" Condition="Exists('..\native-ui\target\release\exo_voice_ml.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\native-ui\target\release\exo_apo.dll" Condition="Exists('..\native-ui\target\release\exo_apo.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\native-ui\target\release-cdylib\exo_voice_ml.dll" Condition="Exists('..\native-ui\target\release-cdylib\exo_voice_ml.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\native-ui\target\release-cdylib\exo_apo.dll" Condition="Exists('..\native-ui\target\release-cdylib\exo_apo.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\native-ui\target\release\exo-apo-helper.exe" Condition="Exists('..\native-ui\target\release\exo-apo-helper.exe')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\voice\out\LICENSE-*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\voice\licenses\LICENSE-*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

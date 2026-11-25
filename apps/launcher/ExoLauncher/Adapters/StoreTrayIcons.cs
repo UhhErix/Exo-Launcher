@@ -41,8 +41,12 @@ internal static class StoreTrayIcons
         if (message == 0) return;
         EnumWindows((window, _) =>
         {
-            GetWindowThreadProcessId(window, out var pid);
-            if (pids.Contains(pid)) PostMessage(window, message, nint.Zero, nint.Zero);
+            try
+            {
+                GetWindowThreadProcessId(window, out var pid);
+                if (pids.Contains(pid)) PostMessage(window, message, nint.Zero, nint.Zero);
+            }
+            catch { }
             return true;
         }, nint.Zero);
     }

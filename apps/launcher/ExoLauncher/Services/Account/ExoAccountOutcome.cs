@@ -14,6 +14,9 @@ internal sealed record ExoAccountOutcome(bool Ok, string Message, string? Error,
     /// <summary>The answer to a request: a sentence for the screen, and the flags it needs.</summary>
     internal static ExoAccountOutcome From(AccountReply reply)
     {
+        if (reply.Error == ExoAccountClient.TestHostRefusedError)
+            return new ExoAccountOutcome(false, HostMode.Refusal, reply.Error, null, false, null);
+
         // The service's own key rotation (CLIENT.md 4.2): a calm sentence, not the offline screen; the same action is tried again later.
         if (reply.Error == "keyring-mismatch")
             return new ExoAccountOutcome(false, AccountMessages.For(reply.Error), reply.Error, null, false, null);
