@@ -57,6 +57,14 @@
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
     <InternalsVisibleTo Include="ExoLauncher.Tests" />
+    <AssemblyMetadata Include="EXO_OAUTH_SPOTIFY_CLIENT_ID" Value="$(EXO_OAUTH_SPOTIFY_CLIENT_ID)" Condition="'$(EXO_OAUTH_SPOTIFY_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_DISCORD_CLIENT_ID" Value="$(EXO_OAUTH_DISCORD_CLIENT_ID)" Condition="'$(EXO_OAUTH_DISCORD_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_GOOGLE_CLIENT_ID" Value="$(EXO_OAUTH_GOOGLE_CLIENT_ID)" Condition="'$(EXO_OAUTH_GOOGLE_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_TWITCH_CLIENT_ID" Value="$(EXO_OAUTH_TWITCH_CLIENT_ID)" Condition="'$(EXO_OAUTH_TWITCH_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_BATTLENET_CLIENT_ID" Value="$(EXO_OAUTH_BATTLENET_CLIENT_ID)" Condition="'$(EXO_OAUTH_BATTLENET_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_MICROSOFT_CLIENT_ID" Value="$(EXO_OAUTH_MICROSOFT_CLIENT_ID)" Condition="'$(EXO_OAUTH_MICROSOFT_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_RIOT_CLIENT_ID" Value="$(EXO_OAUTH_RIOT_CLIENT_ID)" Condition="'$(EXO_OAUTH_RIOT_CLIENT_ID)' != ''" />
+    <AssemblyMetadata Include="EXO_OAUTH_EPIC_CLIENT_ID" Value="$(EXO_OAUTH_EPIC_CLIENT_ID)" Condition="'$(EXO_OAUTH_EPIC_CLIENT_ID)' != ''" />
   </ItemGroup>
 
 

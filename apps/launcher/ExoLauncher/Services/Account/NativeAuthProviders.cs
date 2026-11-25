@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 
 namespace ExoLauncher.Services.Account;
@@ -6,20 +7,23 @@ internal static class NativeAuthProviders
 {
     internal const string ConfigFileName = "oauth-clients.json";
 
-    internal sealed record ProviderSpec(string Id, string DisplayName, string Flow, string EnvVar);
+    internal sealed record ProviderSpec(string Id, string DisplayName, string Flow, string EnvVar, bool RequiresTokenProxy);
 
     internal sealed record ProviderStatus(string Provider, string DisplayName, string Flow, bool Available, string Note);
 
     private static readonly ProviderSpec[] AllProviders =
     [
-        new("spotify", "Spotify", "pkce-system-browser", "EXO_OAUTH_SPOTIFY_CLIENT_ID"),
-        new("google", "Google / YouTube Music", "pkce-system-browser", "EXO_OAUTH_GOOGLE_CLIENT_ID"),
-        new("twitch", "Twitch", "pkce-system-browser", "EXO_OAUTH_TWITCH_CLIENT_ID"),
-        new("battlenet", "Battle.net", "pkce-system-browser", "EXO_OAUTH_BATTLENET_CLIENT_ID"),
-        new("microsoft", "Xbox / Microsoft", "wam", "EXO_OAUTH_MICROSOFT_CLIENT_ID"),
-        new("riot", "Riot Games", "pkce-system-browser", "EXO_OAUTH_RIOT_CLIENT_ID"),
-        new("epic", "Epic Games", "device-code", "EXO_OAUTH_EPIC_CLIENT_ID"),
+        new("spotify", "Spotify", "pkce-system-browser", "EXO_OAUTH_SPOTIFY_CLIENT_ID", false),
+        new("discord", "Discord", "pkce-system-browser", "EXO_OAUTH_DISCORD_CLIENT_ID", false),
+        new("google", "Google / YouTube Music", "pkce-system-browser", "EXO_OAUTH_GOOGLE_CLIENT_ID", true),
+        new("twitch", "Twitch", "device-code", "EXO_OAUTH_TWITCH_CLIENT_ID", false),
+        new("battlenet", "Battle.net", "pkce-system-browser", "EXO_OAUTH_BATTLENET_CLIENT_ID", true),
+        new("microsoft", "Xbox / Microsoft", "wam", "EXO_OAUTH_MICROSOFT_CLIENT_ID", false),
+        new("riot", "Riot Games", "pkce-system-browser", "EXO_OAUTH_RIOT_CLIENT_ID", true),
+        new("epic", "Epic Games", "pkce-system-browser", "EXO_OAUTH_EPIC_CLIENT_ID", true),
     ];
+
+    private static readonly Dictionary<string, string> BakedMetadata = ReadAssemblyBakedMetadata();
 
     private static readonly string[] RejectedFragments =
     [
@@ -37,16 +41,19 @@ internal static class NativeAuthProviders
 
     internal static IReadOnlyList<ProviderStatus> LoadStatuses(
         string dataDir,
-        Func<string, string?>? getEnv = null)
+        Func<string, string?>? getEnv = null,
+        Func<string, string?>? getBaked = null)
     {
-        var ids = LoadClientIds(dataDir, getEnv ?? Environment.GetEnvironmentVariable);
+        var ids = LoadClientIds(dataDir, getEnv, getBaked);
         var list = new List<ProviderStatus>(AllProviders.Length);
         foreach (var spec in AllProviders)
         {
             var available = ids.ContainsKey(spec.Id);
-            var note = available
-                ? $"Ready via {FlowLabel(spec.Flow)}."
-                : $"Unavailable: official {spec.DisplayName} OAuth client ID is not registered yet (configure {ConfigFileName} or {spec.EnvVar}).";
+            var note = !available
+                ? $"Unavailable: official {spec.DisplayName} OAuth client ID is not registered yet (configure {ConfigFileName} or {spec.EnvVar})."
+                : spec.RequiresTokenProxy
+                    ? $"Client ID configured for {FlowLabel(spec.Flow)}; confidential /token exchange requires cloud token proxy."
+                    : $"Ready via {FlowLabel(spec.Flow)}.";
             list.Add(new ProviderStatus(spec.Id, spec.DisplayName, spec.Flow, available, note));
         }
         return list;
@@ -54,9 +61,17 @@ internal static class NativeAuthProviders
 
     internal static Dictionary<string, string> LoadClientIds(
         string dataDir,
-        Func<string, string?>? getEnv = null)
+        Func<string, string?>? getEnv = null,
+        Func<string, string?>? getBaked = null)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var bakedReader = getBaked ?? ReadBakedValue;
+        foreach (var spec in AllProviders)
+        {
+            var baked = bakedReader(spec.EnvVar);
+            if (IsValidClientId(baked))
+                result[spec.Id] = baked!.Trim();
+        }
         var path = Path.Combine(dataDir, ConfigFileName);
         if (File.Exists(path))
         {
@@ -94,6 +109,20 @@ internal static class NativeAuthProviders
         return true;
     }
 
+    private static string? ReadBakedValue(string envVar) =>
+        BakedMetadata.TryGetValue(envVar, out var val) ? val : null;
+
+    private static Dictionary<string, string> ReadAssemblyBakedMetadata()
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var attr in typeof(NativeAuthProviders).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>())
+        {
+            if (attr.Key.StartsWith("EXO_OAUTH_", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(attr.Value))
+                map[attr.Key] = attr.Value.Trim();
+        }
+        return map;
+    }
+
     private static void MergeJson(string raw, Dictionary<string, string> target)
     {
         using var doc = JsonDocument.Parse(raw);
@@ -117,6 +146,7 @@ internal static class NativeAuthProviders
     private static string? NormalizeProviderId(string raw) => raw.Trim().ToLowerInvariant() switch
     {
         "spotify" => "spotify",
+        "discord" => "discord",
         "google" or "youtube" => "google",
         "twitch" => "twitch",
         "battlenet" or "battle.net" or "bnet" => "battlenet",

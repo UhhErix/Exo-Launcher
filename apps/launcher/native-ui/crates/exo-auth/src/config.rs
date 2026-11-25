@@ -3,10 +3,24 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+pub const FIXED_LOOPBACK_PORTS: &[u16] = &[47823, 47824, 47825];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoopbackRedirectMode {
+    DynamicPort {
+        host: &'static str,
+    },
+    FixedPorts {
+        host: &'static str,
+        ports: &'static [u16],
+    },
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum OAuthProvider {
     Spotify,
+    Discord,
     Google,
     Twitch,
     BattleNet,
@@ -18,6 +32,7 @@ pub enum OAuthProvider {
 impl OAuthProvider {
     pub const ALL: &'static [OAuthProvider] = &[
         OAuthProvider::Spotify,
+        OAuthProvider::Discord,
         OAuthProvider::Google,
         OAuthProvider::Twitch,
         OAuthProvider::BattleNet,
@@ -29,6 +44,7 @@ impl OAuthProvider {
     pub fn id(self) -> &'static str {
         match self {
             Self::Spotify => "spotify",
+            Self::Discord => "discord",
             Self::Google => "google",
             Self::Twitch => "twitch",
             Self::BattleNet => "battlenet",
@@ -41,6 +57,7 @@ impl OAuthProvider {
     pub fn display_name(self) -> &'static str {
         match self {
             Self::Spotify => "Spotify",
+            Self::Discord => "Discord",
             Self::Google => "Google / YouTube Music",
             Self::Twitch => "Twitch",
             Self::BattleNet => "Battle.net",
@@ -53,6 +70,7 @@ impl OAuthProvider {
     pub fn env_var(self) -> &'static str {
         match self {
             Self::Spotify => "EXO_OAUTH_SPOTIFY_CLIENT_ID",
+            Self::Discord => "EXO_OAUTH_DISCORD_CLIENT_ID",
             Self::Google => "EXO_OAUTH_GOOGLE_CLIENT_ID",
             Self::Twitch => "EXO_OAUTH_TWITCH_CLIENT_ID",
             Self::BattleNet => "EXO_OAUTH_BATTLENET_CLIENT_ID",
@@ -62,41 +80,59 @@ impl OAuthProvider {
         }
     }
 
+    pub fn baked_client_id(self) -> Option<&'static str> {
+        let raw = match self {
+            Self::Spotify => option_env!("EXO_OAUTH_SPOTIFY_CLIENT_ID"),
+            Self::Discord => option_env!("EXO_OAUTH_DISCORD_CLIENT_ID"),
+            Self::Google => option_env!("EXO_OAUTH_GOOGLE_CLIENT_ID"),
+            Self::Twitch => option_env!("EXO_OAUTH_TWITCH_CLIENT_ID"),
+            Self::BattleNet => option_env!("EXO_OAUTH_BATTLENET_CLIENT_ID"),
+            Self::Microsoft => option_env!("EXO_OAUTH_MICROSOFT_CLIENT_ID"),
+            Self::Riot => option_env!("EXO_OAUTH_RIOT_CLIENT_ID"),
+            Self::Epic => option_env!("EXO_OAUTH_EPIC_CLIENT_ID"),
+        };
+        raw.map(str::trim)
+            .filter(|s| is_valid_official_client_id(s))
+    }
+
     pub fn flow(self) -> &'static str {
         match self {
-            Self::Spotify | Self::Google | Self::Twitch | Self::BattleNet | Self::Riot => {
-                "pkce-system-browser"
-            }
+            Self::Spotify
+            | Self::Discord
+            | Self::Google
+            | Self::BattleNet
+            | Self::Riot
+            | Self::Epic => "pkce-system-browser",
             Self::Microsoft => "wam",
-            Self::Epic => "device-code",
+            Self::Twitch => "device-code",
         }
     }
 
     pub fn authorization_endpoint(self) -> Option<&'static str> {
         match self {
             Self::Spotify => Some("https://accounts.spotify.com/authorize"),
+            Self::Discord => Some("https://discord.com/oauth2/authorize"),
             Self::Google => Some("https://accounts.google.com/o/oauth2/v2/auth"),
-            Self::Twitch => Some("https://id.twitch.tv/oauth2/authorize"),
+            Self::Twitch => None,
             Self::BattleNet => Some("https://oauth.battle.net/authorize"),
             Self::Microsoft => {
                 Some("https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize")
             }
             Self::Riot => Some("https://auth.riotgames.com/authorize"),
-            Self::Epic => None,
+            Self::Epic => Some("https://www.epicgames.com/id/authorize"),
         }
     }
 
     pub fn token_endpoint(self) -> &'static str {
         match self {
             Self::Spotify => "https://accounts.spotify.com/api/token",
+            Self::Discord => "https://discord.com/api/oauth2/token",
             Self::Google => "https://oauth2.googleapis.com/token",
             Self::Twitch => "https://id.twitch.tv/oauth2/token",
             Self::BattleNet => "https://oauth.battle.net/token",
             Self::Microsoft => "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
             Self::Riot => "https://auth.riotgames.com/token",
-            Self::Epic => {
-                "https://account-public-service-prod.ol.epicgames.com/account/api/oauth/token"
-            }
+            Self::Epic => "https://api.epicgames.dev/epic/oauth/v2/token",
         }
     }
 
@@ -106,11 +142,43 @@ impl OAuthProvider {
             Self::Microsoft => {
                 Some("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode")
             }
-            Self::Epic => Some(
-                "https://account-public-service-prod.ol.epicgames.com/account/api/oauth/deviceAuthorization",
-            ),
             _ => None,
         }
+    }
+
+    pub fn loopback_redirect_mode(self) -> Option<LoopbackRedirectMode> {
+        match self {
+            Self::Spotify | Self::Google => {
+                Some(LoopbackRedirectMode::DynamicPort { host: "127.0.0.1" })
+            }
+            Self::Microsoft => Some(LoopbackRedirectMode::DynamicPort { host: "localhost" }),
+            Self::Discord | Self::BattleNet | Self::Riot | Self::Epic => {
+                Some(LoopbackRedirectMode::FixedPorts {
+                    host: "127.0.0.1",
+                    ports: FIXED_LOOPBACK_PORTS,
+                })
+            }
+            Self::Twitch => None,
+        }
+    }
+
+    pub fn registered_redirect_uris(self) -> Vec<String> {
+        match self {
+            Self::Spotify => vec!["http://127.0.0.1/callback".to_string()],
+            Self::Google | Self::Twitch => Vec::new(),
+            Self::Microsoft => vec!["http://localhost".to_string()],
+            Self::Discord | Self::BattleNet | Self::Riot | Self::Epic => FIXED_LOOPBACK_PORTS
+                .iter()
+                .map(|p| format!("http://127.0.0.1:{p}/callback"))
+                .collect(),
+        }
+    }
+
+    pub fn requires_token_exchange_proxy(self) -> bool {
+        matches!(
+            self,
+            Self::Google | Self::BattleNet | Self::Riot | Self::Epic
+        )
     }
 
     pub fn default_scopes(self) -> &'static str {
@@ -118,18 +186,20 @@ impl OAuthProvider {
             Self::Spotify => {
                 "user-read-playback-state user-modify-playback-state user-library-read"
             }
+            Self::Discord => "identify",
             Self::Google => "openid profile",
             Self::Twitch => "user:read:email",
             Self::BattleNet => "openid",
             Self::Microsoft => "XboxLive.signin offline_access",
             Self::Riot => "openid offline_access",
-            Self::Epic => "basic_profile",
+            Self::Epic => "basic_profile openid",
         }
     }
 
     pub fn from_id(id: &str) -> Option<Self> {
         match id.trim().to_ascii_lowercase().as_str() {
             "spotify" => Some(Self::Spotify),
+            "discord" => Some(Self::Discord),
             "google" | "youtube" => Some(Self::Google),
             "twitch" => Some(Self::Twitch),
             "battlenet" | "battle.net" | "bnet" => Some(Self::BattleNet),
@@ -195,6 +265,7 @@ impl OAuthClientConfig {
 
     pub fn load_default() -> Self {
         let mut cfg = Self::default();
+        cfg.merge_baked();
         if let Some(path) = Self::default_config_path() {
             cfg.merge_json_file(&path);
         }
@@ -202,10 +273,36 @@ impl OAuthClientConfig {
         cfg
     }
 
+    pub fn from_layers(
+        baked: &[(OAuthProvider, &str)],
+        json: Option<&str>,
+        env_overrides: &[(OAuthProvider, &str)],
+    ) -> Result<Self, AuthError> {
+        let mut cfg = Self::default();
+        for &(provider, value) in baked {
+            cfg.set_client_id(provider, value);
+        }
+        if let Some(raw) = json {
+            cfg.merge_json_str(raw)?;
+        }
+        for &(provider, value) in env_overrides {
+            cfg.set_client_id(provider, value);
+        }
+        Ok(cfg)
+    }
+
     pub fn from_json_str(raw: &str) -> Result<Self, AuthError> {
         let mut cfg = Self::default();
         cfg.merge_json_str(raw)?;
         Ok(cfg)
+    }
+
+    pub fn merge_baked(&mut self) {
+        for &provider in OAuthProvider::ALL {
+            if let Some(id) = provider.baked_client_id() {
+                self.set_client_id(provider, id);
+            }
+        }
     }
 
     pub fn merge_json_file(&mut self, path: &Path) {
@@ -267,16 +364,22 @@ impl OAuthClientConfig {
 
     pub fn status(&self, provider: OAuthProvider) -> ProviderAuthStatus {
         let available = self.client_id(provider).is_some();
+        let note = if !available {
+            unavailable_note(provider)
+        } else if provider.requires_token_exchange_proxy() {
+            format!(
+                "Client ID configured for {}; confidential /token exchange requires cloud token proxy.",
+                flow_label(provider.flow())
+            )
+        } else {
+            format!("Ready via {}.", flow_label(provider.flow()))
+        };
         ProviderAuthStatus {
             provider: provider.id().to_string(),
             display_name: provider.display_name().to_string(),
             flow: provider.flow().to_string(),
             available,
-            note: if available {
-                format!("Ready via {}.", flow_label(provider.flow()))
-            } else {
-                unavailable_note(provider)
-            },
+            note,
         }
     }
 

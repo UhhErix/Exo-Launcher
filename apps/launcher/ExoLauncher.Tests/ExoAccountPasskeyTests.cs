@@ -103,23 +103,54 @@ public sealed class ExoAccountPasskeyTests
         Directory.CreateDirectory(tempDir);
         try
         {
-            var empty = NativeAuthProviders.LoadStatuses(tempDir, _ => null);
-            Assert.NotEmpty(empty);
+            var empty = NativeAuthProviders.LoadStatuses(tempDir, _ => null, _ => null);
+            Assert.Equal(8, empty.Count);
             Assert.All(empty, p =>
             {
                 Assert.False(p.Available);
                 Assert.Contains("Unavailable", p.Note);
             });
 
+            var emptyById = empty.ToDictionary(p => p.Provider, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal("pkce-system-browser", emptyById["discord"].Flow);
+            Assert.Equal("device-code", emptyById["twitch"].Flow);
+            Assert.Equal("pkce-system-browser", emptyById["epic"].Flow);
+            Assert.Equal("wam", emptyById["microsoft"].Flow);
+
             File.WriteAllText(
                 Path.Combine(tempDir, NativeAuthProviders.ConfigFileName),
-                """{"providers":{"spotify":"sp_official_123456","epic":"PLACEHOLDER_ID_12345","microsoft":"your_client_id_here"}}""");
+                """{"providers":{"spotify":"sp_official_123456","discord":"dc_json_override_1","epic":"PLACEHOLDER_ID_12345","microsoft":"your_client_id_here"}}""");
 
-            var configured = NativeAuthProviders.LoadStatuses(tempDir, key => key == "EXO_OAUTH_TWITCH_CLIENT_ID" ? "tw_official_876543" : null);
+            string? Baked(string key) => key switch
+            {
+                "EXO_OAUTH_DISCORD_CLIENT_ID" => "dc_baked_default_0",
+                "EXO_OAUTH_RIOT_CLIENT_ID" => "riot_baked_123456",
+                _ => null,
+            };
+
+            string? Env(string key) => key switch
+            {
+                "EXO_OAUTH_TWITCH_CLIENT_ID" => "tw_official_876543",
+                "EXO_OAUTH_SPOTIFY_CLIENT_ID" => "sp_env_override_99",
+                _ => null,
+            };
+
+            var ids = NativeAuthProviders.LoadClientIds(tempDir, Env, Baked);
+            Assert.Equal("sp_env_override_99", ids["spotify"]);
+            Assert.Equal("dc_json_override_1", ids["discord"]);
+            Assert.Equal("riot_baked_123456", ids["riot"]);
+            Assert.Equal("tw_official_876543", ids["twitch"]);
+            Assert.False(ids.ContainsKey("epic"));
+            Assert.False(ids.ContainsKey("microsoft"));
+
+            var configured = NativeAuthProviders.LoadStatuses(tempDir, Env, Baked);
             var byId = configured.ToDictionary(p => p.Provider, StringComparer.OrdinalIgnoreCase);
 
             Assert.True(byId["spotify"].Available);
+            Assert.True(byId["discord"].Available);
             Assert.True(byId["twitch"].Available);
+            Assert.True(byId["riot"].Available);
+            Assert.Contains("cloud token proxy", byId["riot"].Note);
             Assert.False(byId["epic"].Available);
             Assert.False(byId["microsoft"].Available);
         }
