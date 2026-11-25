@@ -8,18 +8,18 @@ use crate::fossilize::{
     detect_default_steam_root, plan_fossilize_replay, run_fossilize_replay_with_scheduler,
 };
 use crate::game_cache::{
-    GameShaderProfile, PrecompileInvalidationReason, PrecompileNotice, classify_status_label,
+    GameShaderProfile, PrecompileInvalidationReason, PrecompileNotice, classify_status_for_game,
     evaluate_precompile_notice, scan_game_directory,
 };
 use crate::nvidia_drs::{
     NvidiaCacheLimitStatus, apply_nvidia_cache_limit, read_nvidia_cache_limit,
 };
-use crate::policy::{AntiCheatClass, resolve_anti_cheat_class};
+use crate::policy::{AntiCheatClass, RouteKind, evaluate_route, resolve_anti_cheat_class};
 use crate::pso_dx12::{Dx12WarmContext, recommended_worker_threads};
 use crate::pso_store::{
     DEFAULT_MAX_RECORDED_PSOS, RECORDER_SOURCE_DLL_NAME, RecorderConfig, RecorderMode,
-    deploy_recorder, is_recorder_deployed, pipeline_library_path, read_pso_records,
-    recorded_pso_path, remove_recorder,
+    deploy_recorder, is_recorder_deployed, pipeline_library_path,
+    read_pipeline_library_if_compatible, read_pso_records, recorded_pso_path, remove_recorder,
 };
 use crate::scheduler::{SchedulerLimits, TelemetrySample, system_idle_seconds};
 use serde::{Deserialize, Serialize};
@@ -176,17 +176,43 @@ impl ServiceState {
         } else {
             "idle"
         };
+        let mut ready_count = 0usize;
         let games_json: Vec<Value> = self
             .games
             .iter()
             .map(|g| {
-                let (st, reason) = classify_status_label(g);
+                let has_recorded = recorded_pso_path(&self.data_dir, &g.id).is_file();
+                let can_compile_recorded = has_recorded
+                    && evaluate_route(
+                        g.anti_cheat.class,
+                        RouteKind::RecordedLibraryCompile,
+                        false,
+                        true,
+                    )
+                    .is_permitted();
+                let (st, reason) = classify_status_for_game(g, has_recorded);
+                if can_compile_recorded {
+                    ready_count += 1;
+                }
+                let tone = match st {
+                    "ready" => "primary",
+                    "record" => "warn",
+                    _ => "muted",
+                };
                 json!({
                     "id": g.id,
                     "name": g.name,
+                    "installDir": g.install_dir,
                     "status": st,
+                    "statusText": reason,
                     "statusTitle": reason,
                     "statusReason": reason,
+                    "tone": tone,
+                    "inAddAllReady": can_compile_recorded,
+                    "actions": {
+                        "compile": can_compile_recorded,
+                        "compileText": if can_compile_recorded { "Compile" } else { reason },
+                    },
                     "pipelines": g.estimated_pipelines,
                     "precacheArtifacts": g.precache_artifacts,
                     "engine": g.engine,
@@ -221,9 +247,10 @@ impl ServiceState {
                 "status": status,
                 "statusLine": if status == "idle" { "Idle" } else { status },
                 "scanning": !at_rest && self.scanning,
+                "helperImplicitWarm": false,
                 "summary": format!("{} games scanned · {} driver cache", self.games.len(), format_bytes(self.inventory.total_bytes)),
-                "readyCount": self.games.len(),
-                "recommendedCount": self.games.len(),
+                "readyCount": ready_count,
+                "recommendedCount": ready_count,
                 "waitingCount": queue_items.len(),
                 "speedNote": format!("Native MIT Rust · {threads} of {cores} threads"),
                 "librarySort": "status",
@@ -257,10 +284,10 @@ impl ServiceState {
                     "path": self.inventory.dirs.first().map(|d| d.path.as_str()).unwrap_or(""),
                     "oldDriver": old_driver_bytes,
                     "oldDriverNote": old_driver_note,
-                    "intro": "Native Rust shader cache index",
+                    "intro": "Driver cache inventory and recorded D3D12 pipeline libraries",
                 },
                 "driverMode": "When the PC is idle",
-                "driverModeNote": "Re-warms automatically while idle after GPU driver updates.",
+                "driverModeNote": "Rebuilds recorded D3D12 libraries and Vulkan Fossilize caches while idle after GPU driver updates.",
                 "precompileNotices": precompile_notices,
                 "recording": { "count": "0", "space": "0 B", "games": [] },
                 "launchers": [],
@@ -270,6 +297,7 @@ impl ServiceState {
             "queue": {
                 "running": !at_rest && self.compiling,
                 "paused": !at_rest && self.paused,
+                "canStart": ready_count > 0,
                 "items": queue_items,
             },
             "settings": {},
@@ -283,8 +311,8 @@ impl ServiceState {
                 "memoryGB": 4,
                 "ramGB": 16,
                 "lines": [
-                    format!("Compiles with {threads} of {cores} CPU threads at below-normal priority"),
-                    "Zero GPL dependencies, zero phone-home requests",
+                    format!("Compiles recorded D3D12 PSOs with {threads} of {cores} CPU threads at below-normal priority"),
+                    "Driver cache hygiene and Vulkan Fossilize work zero-hook across all games",
                 ],
             },
             "manualFolders": [],
@@ -424,10 +452,59 @@ impl ServiceState {
                 Ok(json!({ "ok": true }))
             }
             "queue.start" => {
-                self.compiling = !self.queue.is_empty();
+                let queued = std::mem::take(&mut self.queue);
+                let mut compiled_games = 0usize;
+                let mut compiled_psos = 0usize;
+                let mut skipped_no_psos = Vec::new();
+                let mut skipped_anti_cheat = Vec::new();
+                let mut dx12: Option<Dx12WarmContext> = None;
                 self.paused = false;
+                for id in queued {
+                    let class = self
+                        .games
+                        .iter()
+                        .find(|g| g.id == id)
+                        .map(|g| g.anti_cheat.class)
+                        .unwrap_or(AntiCheatClass::Unknown);
+                    if !evaluate_route(class, RouteKind::RecordedLibraryCompile, false, true)
+                        .is_permitted()
+                    {
+                        skipped_anti_cheat.push(id);
+                        continue;
+                    }
+                    let rec_path = recorded_pso_path(&self.data_dir, &id);
+                    let records = read_pso_records(&rec_path).unwrap_or_default();
+                    if records.is_empty() {
+                        skipped_no_psos.push(id);
+                        continue;
+                    }
+                    if dx12.is_none() {
+                        dx12 = Some(Dx12WarmContext::new()?);
+                    }
+                    let lib_path = pipeline_library_path(&self.data_dir, &id);
+                    let cancel = Arc::new(AtomicBool::new(false));
+                    let summary = dx12.as_ref().unwrap().compile_recorded_corpus(
+                        &records,
+                        &lib_path,
+                        self.inventory.gpu.vendor_id,
+                        self.inventory.gpu.device_id,
+                        &self.inventory.gpu.driver_version,
+                        recommended_worker_threads(),
+                        &cancel,
+                        true,
+                    )?;
+                    compiled_games += 1;
+                    compiled_psos += summary.compiled;
+                }
+                self.compiling = false;
                 self.rev += 1;
-                Ok(json!({ "ok": true }))
+                Ok(json!({
+                    "ok": true,
+                    "compiledGames": compiled_games,
+                    "compiledPsos": compiled_psos,
+                    "skippedNoRecordedPsos": skipped_no_psos,
+                    "skippedAntiCheat": skipped_anti_cheat,
+                }))
             }
             "queue.pause" => {
                 self.paused = true;
@@ -451,6 +528,26 @@ impl ServiceState {
                     .and_then(|p| p.get("id"))
                     .and_then(Value::as_str)
                     .ok_or_else(|| "missing game id".to_string())?;
+                let class = self
+                    .games
+                    .iter()
+                    .find(|g| g.id == id)
+                    .map(|g| g.anti_cheat.class)
+                    .unwrap_or(AntiCheatClass::OfflineAntiCheat);
+                if !evaluate_route(class, RouteKind::RecordedLibraryCompile, false, true)
+                    .is_permitted()
+                {
+                    self.compiling = false;
+                    self.paused = false;
+                    self.queue.retain(|q| q != id);
+                    self.rev += 1;
+                    return Ok(json!({
+                        "ok": true,
+                        "compiled": 0,
+                        "reason": "antiCheatProtected",
+                        "note": "Driver cache managed (no proxy — online anti-cheat). Helper-only implicit warming is disabled."
+                    }));
+                }
                 if !self.queue.iter().any(|q| q == id) {
                     self.queue.push(id.to_string());
                 }
@@ -498,8 +595,21 @@ impl ServiceState {
                     .and_then(|p| p.get("id"))
                     .and_then(Value::as_str)
                     .unwrap_or("");
-                let exists = self.games.iter().any(|g| g.id == id);
-                Ok(json!({ "started": exists }))
+                let lib_path = pipeline_library_path(&self.data_dir, id);
+                let verified = read_pipeline_library_if_compatible(
+                    &lib_path,
+                    self.inventory.gpu.vendor_id,
+                    self.inventory.gpu.device_id,
+                    &self.inventory.gpu.driver_version,
+                )
+                .ok()
+                .flatten();
+                Ok(json!({
+                    "started": false,
+                    "verified": verified.is_some(),
+                    "psoCount": verified.as_ref().map(|(h, _)| h.pso_count).unwrap_or(0),
+                    "reason": if verified.is_some() { "exoplibCompatible" } else { "noCompatibleExoplib" },
+                }))
             }
             "recorder.auto" => {
                 if let Some(on) = params.and_then(|p| p.get("on")).and_then(Value::as_bool) {
@@ -1004,6 +1114,79 @@ mod tests {
         let freed = st.handle_method("cache.freeOldDriver", None).unwrap();
         assert_eq!(freed["cleared"], json!(1));
         assert!(!stale_lib.exists());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn queue_start_and_game_compile_never_fake_implicit_warming() {
+        let root = std::env::temp_dir().join(format!(
+            "exo-proto-b1-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let data_dir = root.join("data");
+        let offline_dir = root.join("offline_game");
+        let eac_dir = root.join("eac_game");
+        let _ = fs::create_dir_all(&offline_dir);
+        let _ = fs::create_dir_all(eac_dir.join("EasyAntiCheat"));
+
+        let mut st = ServiceState::new(data_dir, false).with_per_driver_roots(Vec::new());
+        let _ = st
+            .handle_method(
+                "exo.library",
+                Some(&json!({
+                    "games": [
+                        {
+                            "id": "steam:offline",
+                            "name": "Offline",
+                            "installDir": offline_dir.display().to_string(),
+                            "antiCheatClass": "offlineAntiCheat"
+                        },
+                        {
+                            "id": "steam:eac",
+                            "name": "Competitive",
+                            "installDir": eac_dir.display().to_string(),
+                            "antiCheatClass": "competitivePvpOnline"
+                        }
+                    ]
+                })),
+            )
+            .unwrap();
+
+        let snap = st.handle_method("snapshot", None).unwrap();
+        assert_eq!(snap["app"]["helperImplicitWarm"], json!(false));
+        assert_eq!(snap["app"]["readyCount"], json!(0));
+        assert_eq!(snap["queue"]["canStart"], json!(false));
+        let games = snap["games"].as_array().unwrap();
+        let eac_game = games.iter().find(|g| g["id"] == "steam:eac").unwrap();
+        assert_eq!(eac_game["status"], json!("managed"));
+        assert_eq!(
+            eac_game["statusText"],
+            json!("Driver cache managed (no proxy — online anti-cheat)")
+        );
+        assert_eq!(eac_game["inAddAllReady"], json!(false));
+
+        let ac_compile = st
+            .handle_method("game.compile", Some(&json!({ "id": "steam:eac" })))
+            .unwrap();
+        assert_eq!(ac_compile["compiled"], json!(0));
+        assert_eq!(ac_compile["reason"], json!("antiCheatProtected"));
+
+        let _ = st
+            .handle_method(
+                "queue.add",
+                Some(&json!({ "ids": ["steam:offline", "steam:eac"] })),
+            )
+            .unwrap();
+        let qs = st.handle_method("queue.start", None).unwrap();
+        assert_eq!(qs["compiledGames"], json!(0));
+        assert_eq!(qs["skippedNoRecordedPsos"], json!(["steam:offline"]));
+        assert_eq!(qs["skippedAntiCheat"], json!(["steam:eac"]));
+        assert!(!st.compiling);
 
         let _ = fs::remove_dir_all(&root);
     }

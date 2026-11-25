@@ -408,6 +408,13 @@ fn collect_fossilize(dir: &Path, depth: usize, out: &mut Vec<FossilizeArchiveInf
 }
 
 pub fn classify_status_label(profile: &GameShaderProfile) -> (&'static str, &'static str) {
+    classify_status_for_game(profile, false)
+}
+
+pub fn classify_status_for_game(
+    profile: &GameShaderProfile,
+    has_recorded_psos: bool,
+) -> (&'static str, &'static str) {
     let has_valid_foz = profile.fossilize_archives.iter().any(|a| a.valid);
     match profile.anti_cheat.class {
         AntiCheatClass::CompetitivePvpOnline | AntiCheatClass::Unknown => {
@@ -428,14 +435,14 @@ pub fn classify_status_label(profile: &GameShaderProfile) -> (&'static str, &'st
             }
         }
         AntiCheatClass::OfflineAntiCheat => {
-            if has_valid_foz {
+            if has_recorded_psos {
+                ("ready", "Recorded D3D12 shaders ready to compile")
+            } else if has_valid_foz {
                 ("ready", "Vulkan Fossilize cache available")
             } else if !profile.precache_artifacts.is_empty() {
                 ("ready", "Engine shader precache detected")
-            } else if profile.estimated_pipelines > 0 {
-                ("ready", "Ready to compile")
             } else {
-                ("ready", "No extra shader archives found")
+                ("record", "Play once with the recorder to capture shaders")
             }
         }
     }
@@ -444,6 +451,7 @@ pub fn classify_status_label(profile: &GameShaderProfile) -> (&'static str, &'st
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::policy::AntiCheatDetection;
 
     #[test]
     fn detects_engine_precache_artifacts_and_driver_rebuild_notices() {
@@ -542,5 +550,65 @@ mod tests {
         assert!(dota_notice.can_auto_prepare);
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    fn sample_profile(class: AntiCheatClass, has_foz: bool) -> GameShaderProfile {
+        GameShaderProfile {
+            id: "steam:1".into(),
+            name: "Sample".into(),
+            install_dir: "C:\\Games\\Sample".into(),
+            engine: EngineFamily::Unreal5,
+            anti_cheat: AntiCheatDetection {
+                class,
+                markers: Vec::new(),
+            },
+            pak_count: 2,
+            utoc_count: 1,
+            shader_cache_files: 1,
+            shader_cache_bytes: 4096,
+            precache_artifacts: Vec::new(),
+            fossilize_archives: if has_foz {
+                vec![FossilizeArchiveInfo {
+                    path: "steamapp_shader_cache.foz".into(),
+                    file_bytes: 1024,
+                    format_version: 6,
+                    valid: true,
+                }]
+            } else {
+                Vec::new()
+            },
+            sample_pak: None,
+            sample_utoc: None,
+            estimated_pipelines: 500,
+            scan_us: 10,
+        }
+    }
+
+    #[test]
+    fn classifies_honest_status_without_placebo_claims() {
+        let pvp = sample_profile(AntiCheatClass::CompetitivePvpOnline, false);
+        assert_eq!(
+            classify_status_for_game(&pvp, false),
+            (
+                "managed",
+                "Driver cache managed (no proxy — online anti-cheat)"
+            )
+        );
+
+        let pvp_foz = sample_profile(AntiCheatClass::CompetitivePvpOnline, true);
+        assert_eq!(
+            classify_status_for_game(&pvp_foz, false),
+            ("ready", "Vulkan Fossilize cache available (zero-hook)")
+        );
+
+        let offline_unrecorded = sample_profile(AntiCheatClass::OfflineAntiCheat, false);
+        assert_eq!(
+            classify_status_for_game(&offline_unrecorded, false),
+            ("record", "Play once with the recorder to capture shaders")
+        );
+        assert_eq!(
+            classify_status_for_game(&offline_unrecorded, true),
+            ("ready", "Recorded D3D12 shaders ready to compile")
+        );
     }
 }
