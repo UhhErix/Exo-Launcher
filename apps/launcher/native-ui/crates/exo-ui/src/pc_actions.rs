@@ -441,9 +441,47 @@ impl AppState {
                 }
             });
             let h2 = handle.clone();
+            let rpc_startup_icons = rpc.clone();
             rpc.call::<_, StartupListReply>(METHOD_STARTUP_LIST, &json!({}), move |res| {
                 if let Ok(list) = res {
-                    h2.update(move |s, _| s.pc.startup_list = Some(list));
+                    let mut seen = std::collections::HashSet::new();
+                    let icon_keys: Vec<String> = list
+                        .items
+                        .iter()
+                        .filter_map(|item| item.icon.as_deref())
+                        .chain(list.removed.iter().filter_map(|item| item.icon.as_deref()))
+                        .filter(|k| !k.is_empty())
+                        .filter(|k| seen.insert((*k).to_string()))
+                        .map(str::to_string)
+                        .collect();
+                    let h_ic = h2.clone();
+                    let rpc_ic = rpc_startup_icons.clone();
+                    h2.update(move |s, _| {
+                        let missing: Vec<String> = icon_keys
+                            .into_iter()
+                            .filter(|k| !s.pc.app_icons.contains_key(k))
+                            .collect();
+                        s.pc.startup_list = Some(list);
+                        for chunk in missing.chunks(100) {
+                            let chunk_vec: Vec<String> = chunk.to_vec();
+                            let h_c = h_ic.clone();
+                            rpc_ic.call::<_, AppsIconsReply>(
+                                METHOD_APPS_ICONS,
+                                &json!({ "ids": chunk_vec }),
+                                move |ic_res| {
+                                    if let Ok(reply) = ic_res {
+                                        h_c.update(move |s, _| {
+                                            for (k, v) in reply.icons {
+                                                if let Some(data_url) = v {
+                                                    s.pc.app_icons.insert(k, data_url);
+                                                }
+                                            }
+                                        });
+                                    }
+                                },
+                            );
+                        }
+                    });
                 }
             });
             self.load_pc_apps_extras(false);

@@ -1871,7 +1871,7 @@ impl AppState {
     pub fn cover_image(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(384.0);
+        let dim = bucket_dim(480.0);
         let mut waiting_remote = false;
         for cand in game.portrait_art_candidates() {
             if cand.url.starts_with(COVER_CACHE_ORIGIN) {
@@ -1940,7 +1940,7 @@ impl AppState {
     fn hero_image_direct(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(1440.0);
+        let dim = bucket_dim(1920.0);
         let key = format!("hero:{}#{}", game.id, game.art_revision.unwrap_or(0));
         if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
             if let Some(ready) = existing.filter(|i| i.error().is_none()) {
@@ -1988,7 +1988,7 @@ impl AppState {
     pub fn device_image(&self, url: &str, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(640.0);
+        let dim = bucket_dim(720.0);
         let key = format!("dev:{url}");
         if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
             return existing;

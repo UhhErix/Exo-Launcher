@@ -23,9 +23,9 @@ pub fn scale_bucket(scale: f32) -> u8 {
 
 pub fn budget_for_scale(scale: f32) -> (usize, usize) {
     match scale_bucket(scale) {
-        0 => (96 << 20, 320),
-        1 => (144 << 20, 384),
-        _ => (192 << 20, 448),
+        0 => (192 << 20, 384),
+        1 => (256 << 20, 448),
+        _ => (320 << 20, 512),
     }
 }
 
@@ -34,12 +34,12 @@ pub fn bucket_dim(max_dim: f32) -> f32 {
         64.0
     } else if max_dim <= 140.0 {
         128.0
-    } else if max_dim <= 400.0 {
-        360.0
-    } else if max_dim <= 720.0 {
-        640.0
+    } else if max_dim <= 512.0 {
+        480.0
+    } else if max_dim <= 800.0 {
+        720.0
     } else {
-        1440.0
+        1920.0
     }
 }
 
