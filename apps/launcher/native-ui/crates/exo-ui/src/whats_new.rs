@@ -730,7 +730,8 @@ impl AppState {
             || self.whats_new.busy()
             || (self.whats_new.latest.is_none()
                 && phase != UpdatePhase::Available
-                && phase != UpdatePhase::Failed)
+                && phase != UpdatePhase::Failed
+                && phase != UpdatePhase::Waiting)
         {
             return;
         }
