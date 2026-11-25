@@ -156,13 +156,13 @@ public sealed partial class FrameGenModTests
     {
         ProtectedGame();
         var before = Snapshot();
-        var ini = Path.Combine(_root, UnrealProgram, "scskiller.ini");
+        var cfg = Path.Combine(_root, UnrealProgram, RecorderSettingsName);
         var calls = new List<bool>();
         // OptiScaler: DLSSG SM86 keeps the recorder out (WithoutAntiCheatDlssgSm86KeepsTheRecorderOutOfItsSession).
         var service = Service(dlssgOffered: false, recorder: Recorder(calls));
         var ct = TestContext.Current.CancellationToken;
         Play(service);
-        File.WriteAllText(ini, "[scskiller]");
+        File.WriteAllText(cfg, "{}");
 
         Assert.Null(await service.TakeOutAfterSession(_game, ct));
         Assert.Equal([false], calls);
@@ -171,7 +171,7 @@ public sealed partial class FrameGenModTests
 
         Play(service);
         Assert.Equal([false, true], calls);
-        Assert.True(File.Exists(ini));
+        Assert.True(File.Exists(cfg));
         Assert.Null(await service.TakeOutAfterSession(_game, ct));
         Assert.Equal(before, Snapshot());
 
@@ -185,10 +185,10 @@ public sealed partial class FrameGenModTests
     /// <summary>A recorder that takes its settings file in and out beside the game's program, as Exo Shaders' engine does.</summary>
     private Func<string, bool, CancellationToken, Task<string?>> Recorder(List<bool> calls) => (_, on, _) =>
     {
-        var ini = Path.Combine(_root, UnrealProgram, "scskiller.ini");
+        var cfg = Path.Combine(_root, UnrealProgram, RecorderSettingsName);
         calls.Add(on);
-        if (on) File.WriteAllText(ini, "[scskiller]");
-        else if (File.Exists(ini)) DeletionGate.DeleteFile(ini);
+        if (on) File.WriteAllText(cfg, "{}");
+        else if (File.Exists(cfg)) DeletionGate.DeleteFile(cfg);
         return Task.FromResult<string?>(null);
     };
 
@@ -200,7 +200,7 @@ public sealed partial class FrameGenModTests
         var service = Service(recorder: Recorder(calls));
         var ct = TestContext.Current.CancellationToken;
         // The recorder was in before frame generation's first session: DLSSG SM86 goes in, so the recorder comes out.
-        File.WriteAllText(Path.Combine(_root, UnrealProgram, "scskiller.ini"), "[scskiller]");
+        File.WriteAllText(Path.Combine(_root, UnrealProgram, RecorderSettingsName), "{}");
         Play(service);
         Assert.Equal(DlssgSm86.Name, ReadFrameGenManifest(Path.Combine(_root, UnrealProgram))!.Mod);
         Assert.Equal([false], calls);
@@ -212,7 +212,7 @@ public sealed partial class FrameGenModTests
         calls.Clear();
         Play(service);
         Assert.Empty(calls);
-        Assert.False(File.Exists(Path.Combine(_root, UnrealProgram, "scskiller.ini")));
+        Assert.False(File.Exists(Path.Combine(_root, UnrealProgram, RecorderSettingsName)));
         Assert.Equal(new SessionHeld(_game.Id, null, true), service.SessionHeldFor(_game.Id));
     });
 
@@ -221,12 +221,12 @@ public sealed partial class FrameGenModTests
     {
         ProtectedGame();
         var before = Snapshot();
-        var ini = Path.Combine(_root, UnrealProgram, "scskiller.ini");
+        var cfg = Path.Combine(_root, UnrealProgram, RecorderSettingsName);
         // The engine doesn't answer: the recorder stays in.
         var service = Service(recorder: (_, _, _) => Task.FromResult<string?>("Exo Shaders couldn't turn its recorder off."));
-        File.WriteAllText(ini, "[scskiller]");
+        File.WriteAllText(cfg, "{}");
         Play(service);
-        DeletionGate.DeleteFile(ini);
+        DeletionGate.DeleteFile(cfg);
         Assert.Equal(before, Snapshot());
         Assert.Equal(DlssgSm86.Name, service.SessionHeldFrameGen(_game.Id)?.Mod);
         await Task.CompletedTask;
@@ -244,7 +244,7 @@ public sealed partial class FrameGenModTests
         // The player dropped a newer XeSS over Exo's and a DLL of their own beside it, and the recorder is on.
         var changed = Put(Path.Combine(UnrealProgram, @"OptiScaler\libxess.dll"), Pe(640, 4));
         var theirs = Put(Path.Combine(UnrealProgram, @"OptiScaler\custom.dll"), Pe(320, 5));
-        File.WriteAllText(Path.Combine(_root, UnrealProgram, "scskiller.ini"), "[scskiller]");
+        File.WriteAllText(Path.Combine(_root, UnrealProgram, RecorderSettingsName), "{}");
         var (changedSha, theirsSha) = (Sha(changed), Sha(theirs));
 
         Assert.NotNull(await service.TakeOutAfterSession(_game, ct));   // says what stayed

@@ -9,6 +9,7 @@ pub enum RouteKind {
     DriverCacheScan,
     OfflinePsoWarm,
     FileRoute,
+    RecorderProxy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,6 +62,26 @@ pub fn evaluate_route(
                 note: "Offline game: game-folder shader cache file route allowed while closed with restore record.".into(),
             },
         },
+        RouteKind::RecorderProxy if game_running => RouteDecision::Denied {
+            reason: "Game is currently running; never deploy or remove the D3D12 recorder while active.".into(),
+        },
+        RouteKind::RecorderProxy if !has_restore_record => RouteDecision::Denied {
+            reason: "Recorder proxy requires a tracked manifest before writing.".into(),
+        },
+        RouteKind::RecorderProxy => {
+            if class.allows_offline_dll_mod() {
+                RouteDecision::AllowedWithNote {
+                    note: "Offline game: clean-room D3D12 recorder allowed while closed and removed after session.".into(),
+                }
+            } else {
+                RouteDecision::Denied {
+                    reason: format!(
+                        "Anti-cheat policy ({}) forbids D3D12 recorder proxy deployment.",
+                        class.as_wire_str()
+                    ),
+                }
+            }
+        }
     }
 }
 

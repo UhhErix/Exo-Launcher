@@ -45,13 +45,13 @@ The internal security harnesses are omitted from this snapshot. The installer ch
 
 ## The add-ons
 
-Three programs ship beside Exo and are separate programs, each run as its own process. All three are in this repository (`capture/`, `mouse/`, `shaders/`), and each copyleft release's source is at [getexo.app/source](https://getexo.app/source); see the [third-party notices](THIRD_PARTY_NOTICES.md):
+Three programs ship beside Exo and are separate programs, each run as its own process. All three are in this repository (`capture/`, `mouse/`, `native-ui/crates/exo-shaders`), and each copyleft release's source is at [getexo.app/source](https://getexo.app/source); see the [third-party notices](THIRD_PARTY_NOTICES.md):
 
 | Add-on | License | Source | Build |
 | --- | --- | --- | --- |
 | Exo Capture | MIT (`capture/LICENSE`); bundled OBS game capture files are GPL-2.0-or-later (`capture/third_party/obs/README.md`) | `capture/` | `pwsh -File capture\build.ps1` (the .NET SDK and Visual Studio C++ tools for Native AOT) |
 | Exo Mouse | AGPL-3.0-or-later | [getexo.app/source](https://getexo.app/source) | `npm run build` in `mouse/` |
-| Exo Shaders | GPL-3.0-or-later, with a section 7 exception | `shaders/` and [getexo.app/source](https://getexo.app/source) | `pwsh -File shaders\engine\build\publish-service.ps1` (the .NET SDK; its native files are prebuilt from `shaders\proxy`) |
+| Exo Shaders | MIT (`LICENSE`); 3.x releases were GPL-3.0-or-later | `native-ui/crates/exo-shaders` and `native-ui/crates/exo-shaders-recorder` | `pwsh -File tools\Build-ShadersEngine.ps1` (Rust toolchain; builds `ExoShaders.Service.exe` and `exo_d3d12_recorder.dll`) |
 
 ## Checking a build against the release
 

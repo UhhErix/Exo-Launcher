@@ -13,8 +13,8 @@ See [RELEASES.md](RELEASES.md) for the installer filename and SHA-256 checksum.
 
 ## What's in this snapshot
 
-The Launcher host, UI, Exo Mouse, Exo Shaders (GPL-3.0-or-later, in
-`apps/launcher/shaders`) and Exo Capture (MIT, in `apps/launcher/capture`;
+The Launcher host, UI, Exo Mouse, Exo Shaders (MIT, in
+`apps/launcher/native-ui/crates/exo-shaders` and `exo-shaders-recorder`) and Exo Capture (MIT, in `apps/launcher/capture`;
 bundled OBS Studio game capture files are GPL-2.0-or-later) source are included.
 
 The snapshot also leaves out internal security test harnesses and production

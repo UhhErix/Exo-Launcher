@@ -4,5 +4,7 @@ pub mod game_cache;
 pub mod policy;
 pub mod protocol;
 pub mod pso_dx12;
+pub mod pso_format;
+pub mod pso_store;
 pub mod scheduler;
 pub mod ue_archive;

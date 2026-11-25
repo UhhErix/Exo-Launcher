@@ -4,7 +4,7 @@
 # mirror; -Release vX.Y.Z uploads files.json, files.pack and whats-new.json to that GitHub release (it must exist; gh signed in).
 #   pwsh -File tools\Build-Release.ps1 [-Release vX.Y.Z]
 # Steps: a clean Release publish (self-contained, ReadyToRun), the UI and Exo Mouse
-# builds, Exo Shaders' engine (from shaders\) under addons\shaders, Exo Capture under
+# builds, Exo Shaders' engine (from native-ui\crates\exo-shaders) under addons\shaders, Exo Capture under
 # addons\capture in the app folder,
 # then the NSIS installer and the SHA-256 file the in-app updater checks.
 [CmdletBinding()]
@@ -157,7 +157,7 @@ $voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'exo_voice
 $nativeAudio = $voice + 'exo_apo.dll'
 if (Test-Path (Join-Path $publish.FullName 'sherpa-onnx-c-api.dll')) { throw 'sherpa-onnx-c-api.dll must not ship; exo_voice_ml.dll replaces it.' }
 $parts = $nativeAudio + 'ExoLauncher.exe', 'exo-ui.exe', 'exo-apo-helper.exe', 'wwwroot\mouse\index.html', 'wwwroot\changelog.gz', 'steam-ipc\ExoLauncher.SteamIpc.exe',
-    'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe'
+    'addons\shaders\engine\ExoShaders.Service.exe', 'addons\shaders\engine\exo_d3d12_recorder.dll', 'addons\capture\ExoCapture.exe'
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($missing) { throw "The app folder lacks $($missing -join ', ')." }
 $leakedPdbs = @(Get-ChildItem -Recurse -File -Filter '*.pdb' $publish.FullName)
@@ -179,6 +179,7 @@ $symbolCandidates = @(
     (Join-Path $repo 'capture\out\ExoCapture.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_ui.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_shaders_service.pdb'),
+    (Join-Path $repo 'native-ui\target\release\exo_d3d12_recorder.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_voice_ml.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_apo.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_apo_helper.pdb')
@@ -248,7 +249,7 @@ Remove-Item $packShell -Recurse -Force
 $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -Path "$setup.sha256" -Value "$hash  ExoLauncher-Setup.exe" -NoNewline -Encoding ascii
 Set-Content -Path (Join-Path $artifacts 'whats-new.json') -Value ($whatsNew | ConvertTo-Json -Depth 4) -NoNewline -Encoding utf8NoBOM
-Write-Output "Exo Launcher ${version}: $setup ($([math]::Round((Get-Item $setup).Length / 1MB, 1)) MB), SHA-256 $hash, Exo Shaders engine from shaders\ at $shadersCommit"
+Write-Output "Exo Launcher ${version}: $setup ($([math]::Round((Get-Item $setup).Length / 1MB, 1)) MB), SHA-256 $hash, Exo Shaders engine from native-ui\crates\exo-shaders at $shadersCommit"
 Write-Output "File-level update: files.pack $([math]::Round((Get-Item (Join-Path $artifacts 'files.pack')).Length / 1MB, 1)) MB, installer revision $installerRevision"
 
 # The release's file list and pack (and its What's New) on the GitHub release, beside the installer. Never replaced: an

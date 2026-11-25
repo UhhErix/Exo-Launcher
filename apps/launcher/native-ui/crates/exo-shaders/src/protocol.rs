@@ -3,13 +3,20 @@ use crate::driver_cache::{
     format_bytes, scan_driver_caches,
 };
 use crate::game_cache::{GameShaderProfile, classify_status_label, scan_game_directory};
-use crate::policy::AntiCheatClass;
-use crate::pso_dx12::recommended_worker_threads;
+use crate::policy::{AntiCheatClass, resolve_anti_cheat_class};
+use crate::pso_dx12::{Dx12WarmContext, recommended_worker_threads};
+use crate::pso_store::{
+    DEFAULT_MAX_RECORDED_PSOS, RECORDER_SOURCE_DLL_NAME, RecorderConfig, RecorderMode,
+    deploy_recorder, is_recorder_deployed, pipeline_library_path, read_pso_records,
+    recorded_pso_path, remove_recorder,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -44,6 +51,8 @@ pub struct ServiceState {
     #[serde(skip)]
     pub data_dir: PathBuf,
     #[serde(skip)]
+    pub recorder_dll_path: Option<PathBuf>,
+    #[serde(skip)]
     pub last_activity: Instant,
 }
 
@@ -62,6 +71,10 @@ impl ServiceState {
         } else {
             check_driver_change(&data_dir, &inventory.gpu)
         };
+        let recorder_dll_path = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|dir| dir.join(RECORDER_SOURCE_DLL_NAME)))
+            .filter(|p| p.is_file());
         Self {
             rev: 1,
             safe,
@@ -76,8 +89,14 @@ impl ServiceState {
             driver_change,
             games: Vec::new(),
             data_dir,
+            recorder_dll_path,
             last_activity: Instant::now(),
         }
+    }
+
+    pub fn with_recorder_dll(mut self, path: PathBuf) -> Self {
+        self.recorder_dll_path = Some(path);
+        self
     }
 
     pub fn touch(&mut self) {
@@ -356,10 +375,44 @@ impl ServiceState {
                 if !self.queue.iter().any(|q| q == id) {
                     self.queue.push(id.to_string());
                 }
+                let rec_path = recorded_pso_path(&self.data_dir, id);
+                let records = read_pso_records(&rec_path).unwrap_or_default();
+                if records.is_empty() {
+                    self.compiling = false;
+                    self.paused = false;
+                    self.queue.retain(|q| q != id);
+                    self.rev += 1;
+                    return Ok(json!({
+                        "ok": true,
+                        "compiled": 0,
+                        "reason": "noRecordedPsos",
+                        "note": "No recorded D3D12 PSOs for this game yet. Play one session with the recorder enabled first."
+                    }));
+                }
                 self.compiling = true;
                 self.paused = false;
+                let lib_path = pipeline_library_path(&self.data_dir, id);
+                let cancel = Arc::new(AtomicBool::new(false));
+                let summary = Dx12WarmContext::new()?.compile_recorded_corpus(
+                    &records,
+                    &lib_path,
+                    self.inventory.gpu.vendor_id,
+                    self.inventory.gpu.device_id,
+                    &self.inventory.gpu.driver_version,
+                    recommended_worker_threads(),
+                    &cancel,
+                    true,
+                )?;
+                self.compiling = false;
+                self.queue.retain(|q| q != id);
                 self.rev += 1;
-                Ok(json!({ "ok": true }))
+                Ok(json!({
+                    "ok": true,
+                    "compiled": summary.compiled,
+                    "failed": summary.failed,
+                    "libraryBytes": summary.library_serialized_bytes,
+                    "psoCreateMs": summary.pso_create_ms,
+                }))
             }
             "game.verify" => {
                 let id = params
@@ -377,15 +430,79 @@ impl ServiceState {
                 Ok(json!({ "ok": true }))
             }
             "recorder.set" => {
+                let id = params
+                    .and_then(|p| p.get("id"))
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing game id".to_string())?;
                 let on = params
                     .and_then(|p| p.get("on"))
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
-                if on {
-                    return Err("exo-shaders never loads recorder DLLs into games.".into());
+                let game_running = params
+                    .and_then(|p| p.get("gameRunning"))
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let host_class = params
+                    .and_then(|p| p.get("antiCheatClass"))
+                    .and_then(|v| serde_json::from_value::<AntiCheatClass>(v.clone()).ok());
+                let target_dir = params
+                    .and_then(|p| p.get("gameDir"))
+                    .and_then(Value::as_str)
+                    .map(PathBuf::from)
+                    .or_else(|| {
+                        self.games
+                            .iter()
+                            .find(|g| g.id == id)
+                            .map(|g| PathBuf::from(&g.install_dir))
+                    });
+
+                if !on {
+                    if let Some(dir) = target_dir {
+                        remove_recorder(&dir, game_running)?;
+                    }
+                    self.rev += 1;
+                    return Ok(json!({ "ok": true, "deployed": false }));
                 }
+
+                let dir =
+                    target_dir.ok_or_else(|| "game install directory not known".to_string())?;
+                let existing_class = self
+                    .games
+                    .iter()
+                    .find(|g| g.id == id)
+                    .map(|g| g.anti_cheat.class);
+                let merged_host = match (existing_class, host_class) {
+                    (Some(a), Some(b)) => Some(a.stricter_of(b)),
+                    (Some(a), None) => Some(a),
+                    (None, Some(b)) => Some(b),
+                    (None, None) => None,
+                };
+                let resolved = resolve_anti_cheat_class(merged_host, &dir);
+                let dll_path = self
+                    .recorder_dll_path
+                    .as_deref()
+                    .ok_or_else(|| "exo_d3d12_recorder.dll is not installed".to_string())?;
+                let cfg = RecorderConfig {
+                    version: 1,
+                    enabled: true,
+                    game_id: id.to_string(),
+                    mode: RecorderMode::RecordAndWarm,
+                    record_path: recorded_pso_path(&self.data_dir, id).display().to_string(),
+                    library_path: pipeline_library_path(&self.data_dir, id)
+                        .display()
+                        .to_string(),
+                    expected_adapter_vendor: self.inventory.gpu.vendor_id,
+                    expected_adapter_device: self.inventory.gpu.device_id,
+                    expected_driver_version: self.inventory.gpu.driver_version.clone(),
+                    max_recorded_psos: DEFAULT_MAX_RECORDED_PSOS,
+                    stats_path: None,
+                };
+                deploy_recorder(&dir, dll_path, &cfg, resolved.class, game_running)?;
                 self.rev += 1;
-                Ok(json!({ "ok": true }))
+                Ok(json!({
+                    "ok": true,
+                    "deployed": is_recorder_deployed(&dir),
+                }))
             }
             "driver.setCacheLimit"
             | "driver.setCleanupGuard"
@@ -447,5 +564,87 @@ mod tests {
         let mut st = ServiceState::new(dir, true);
         let err = st.handle_method("nope", None).unwrap_err();
         assert_eq!(err, "unknown method 'nope'");
+    }
+
+    #[test]
+    fn recorder_set_enforces_anticheat_and_removes_cleanly() {
+        let root = std::env::temp_dir().join(format!(
+            "exo-proto-rec-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let data_dir = root.join("data");
+        let game_dir = root.join("offline_game");
+        let eac_dir = root.join("eac_game");
+        let _ = fs::create_dir_all(&game_dir);
+        let _ = fs::create_dir_all(eac_dir.join("EasyAntiCheat"));
+        let dll = root.join(RECORDER_SOURCE_DLL_NAME);
+        fs::write(&dll, b"EXO_RECORDER_TEST_DLL").unwrap();
+
+        let mut st = ServiceState::new(data_dir, false).with_recorder_dll(dll);
+        let _ = st
+            .handle_method(
+                "exo.library",
+                Some(&json!({
+                    "games": [
+                        {
+                            "id": "steam:offline",
+                            "name": "Offline",
+                            "installDir": game_dir.display().to_string(),
+                            "antiCheatClass": "offlineAntiCheat"
+                        },
+                        {
+                            "id": "steam:eac",
+                            "name": "OnlineEAC",
+                            "installDir": eac_dir.display().to_string(),
+                            "antiCheatClass": "offlineAntiCheat"
+                        }
+                    ]
+                })),
+            )
+            .unwrap();
+
+        assert!(
+            st.handle_method(
+                "recorder.set",
+                Some(&json!({ "id": "steam:eac", "on": true }))
+            )
+            .is_err()
+        );
+        assert!(
+            st.handle_method(
+                "recorder.set",
+                Some(&json!({ "id": "steam:offline", "on": true, "gameRunning": true }))
+            )
+            .is_err()
+        );
+
+        let deployed = st
+            .handle_method(
+                "recorder.set",
+                Some(&json!({ "id": "steam:offline", "on": true })),
+            )
+            .unwrap();
+        assert_eq!(deployed["deployed"], json!(true));
+        assert!(is_recorder_deployed(&game_dir));
+
+        let compile_empty = st
+            .handle_method("game.compile", Some(&json!({ "id": "steam:offline" })))
+            .unwrap();
+        assert_eq!(compile_empty["compiled"], json!(0));
+        assert_eq!(compile_empty["reason"], json!("noRecordedPsos"));
+
+        let removed = st
+            .handle_method(
+                "recorder.set",
+                Some(&json!({ "id": "steam:offline", "on": false })),
+            )
+            .unwrap();
+        assert_eq!(removed["deployed"], json!(false));
+        assert!(!is_recorder_deployed(&game_dir));
+        let _ = fs::remove_dir_all(&root);
     }
 }

@@ -1172,6 +1172,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "exo-shaders-recorder"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "exo-shaders",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
 name = "exo-stores"
 version = "0.1.0"
 dependencies = [

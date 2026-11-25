@@ -8,10 +8,10 @@ using ExoLauncher.Helpers;
 namespace ExoLauncher.Services;
 
 /// <summary>
-/// The shader add-on for System > Shaders (Exo Shaders, GPL-3.0-or-later; its source is this repository's
-/// <c>shaders\</c>, published at getexo.app/source): its own program, shipped in Exo's app folder under
+/// The shader add-on for System > Shaders (Exo Shaders, MIT, built from <c>native-ui\crates\exo-shaders</c> and
+/// <c>native-ui\crates\exo-shaders-recorder</c>): its own program, shipped in Exo's app folder under
 /// <c>addons\shaders</c> or installed beside Exo's data under <c>%LOCALAPPDATA%\ExoLauncher\addons\shaders</c>: an engine
-/// (<c>engine\ExoShaders.Service.exe</c>) that Exo's own Shaders page drives. Exo runs no part of it in-process. It starts the engine hidden at below-normal
+/// (<c>engine\ExoShaders.Service.exe</c> plus <c>engine\exo_d3d12_recorder.dll</c>) that Exo's own Shaders page drives. Exo runs no part of it in-process. It starts the engine hidden at below-normal
 /// priority, speaks newline-delimited JSON over its stdin and stdout, and passes
 /// requests and events between the engine and Exo's Shaders page. Without the add-on, Shaders says it is not installed.
 /// The engine starts when you press Compile or Refresh on the page (<see cref="StartMethods"/>), and for
