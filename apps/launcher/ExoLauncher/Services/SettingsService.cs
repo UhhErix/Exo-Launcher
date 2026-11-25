@@ -325,7 +325,7 @@ public sealed class SettingsService
     /// replacement succeeds. A failed write cannot change the meaning of a retry
     /// or roll back a different writer's successful change.
     /// </summary>
-    private bool TryCommitMutation(Action<AppSettings> mutate, out string? error)
+    private bool TryCommitMutation(Action<AppSettings> mutate, out string? error, bool fromSync = false)
     {
         error = null;
         lock (_persistenceGate)
@@ -335,6 +335,7 @@ public sealed class SettingsService
                 AppLog.Info("Settings: a change after the restore is not written; the restored settings.json stays.");
                 return true;
             }
+            AppSettings before;
             AppSettings candidate;
             lock (_stateGate)
             {
@@ -344,6 +345,7 @@ public sealed class SettingsService
                     AppLog.Warn(error);
                     return false;
                 }
+                before = Clone(_current);
                 candidate = Clone(_current);
             }
 
@@ -367,11 +369,18 @@ public sealed class SettingsService
             }
 
             _lastWrittenJson = json;
-            AccountSyncHooks.SettingsSaved(committed);
             lock (_stateGate)
             {
                 _current = committed;
                 _revision++;
+            }
+            if (!fromSync)
+            {
+                var changedKeys = AccountSyncRules.ChangedKeys(
+                    AccountSyncMap.SettingsValue(before).ToJsonString(),
+                    AccountSyncMap.SettingsValue(committed).ToJsonString());
+                if (changedKeys.Count > 0)
+                    AccountSyncHooks.SettingsSaved(committed, changedKeys);
             }
             // The settings file is the commit point. A stale advisory marker
             // cannot override that explicit value on the next load.
@@ -380,9 +389,9 @@ public sealed class SettingsService
         return true;
     }
 
-    private void CommitMutation(Action<AppSettings> mutate)
+    private void CommitMutation(Action<AppSettings> mutate, bool fromSync = false)
     {
-        if (!TryCommitMutation(mutate, out var error))
+        if (!TryCommitMutation(mutate, out var error, fromSync))
             throw new InvalidOperationException(error ?? "Could not save settings.");
     }
 
@@ -647,6 +656,15 @@ public sealed class SettingsService
         {
             apply(settings);
         });
+    }
+
+    internal void ApplySynced(Action<AppSettings> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        CommitMutation(settings =>
+        {
+            apply(settings);
+        }, fromSync: true);
     }
 
     /// <summary>The anti-cheat the user accepted the risk of for this game's upscaler files, or null.</summary>

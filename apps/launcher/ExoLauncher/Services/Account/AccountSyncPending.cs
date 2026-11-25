@@ -5,7 +5,7 @@ using ExoLauncher.Helpers;
 namespace ExoLauncher.Services.Account;
 
 /// <summary>A change made while no account is signed in (the value null is a deletion).</summary>
-internal sealed record PendingItem(string Type, string Id, string? Value, long Updated);
+internal sealed record PendingItem(string Type, string Id, string? Value, long Updated, List<string>? Changed = null, Dictionary<string, long>? ChangedAt = null);
 
 /// <summary>
 /// The changes made with no account signed in, kept on this PC (account-sync-pending.json) until one is. Logs (a play session,
@@ -53,6 +53,21 @@ internal static class AccountSyncPending
     /// <summary>Adds the item (a repeat of its id replaces it), then drops the oldest object items while the list is over the cap.</summary>
     internal static void Add(List<PendingItem> items, PendingItem item, long cap)
     {
+        var prior = items.FirstOrDefault(existing => existing.Type == item.Type && existing.Id == item.Id);
+        if (prior is not null && prior.Changed is not null && item.Changed is not null)
+        {
+            var mergedKeys = prior.Changed.Union(item.Changed, StringComparer.Ordinal).ToList();
+            var mergedAt = new Dictionary<string, long>(StringComparer.Ordinal);
+            if (prior.ChangedAt is not null)
+                foreach (var pair in prior.ChangedAt) mergedAt[pair.Key] = pair.Value;
+            else
+                foreach (var key in prior.Changed) mergedAt[key] = prior.Updated;
+            if (item.ChangedAt is not null)
+                foreach (var pair in item.ChangedAt) mergedAt[pair.Key] = pair.Value;
+            else
+                foreach (var key in item.Changed) mergedAt[key] = item.Updated;
+            item = item with { Changed = mergedKeys, ChangedAt = mergedAt };
+        }
         items.RemoveAll(existing => existing.Type == item.Type && existing.Id == item.Id);
         items.Add(item);
         var size = items.Sum(Size);

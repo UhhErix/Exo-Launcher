@@ -87,26 +87,28 @@ internal sealed class AccountSyncHost : IDisposable
 
     /// <summary>A pass pulls and pushes every 30 s; a local change pulls the push in after the debounce (Write). Nothing runs while signed out.</summary>
     private static readonly TimeSpan SyncEvery = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DebounceMargin = TimeSpan.FromMilliseconds(50);
 
     internal void Start() => timer ??= new Timer(_ => _ = SyncAsync(CancellationToken.None), null, TimeSpan.Zero, SyncEvery);
 
     /// <summary>Records a local change to a synced item. Ignored when no account is signed in.</summary>
-    internal void Write(string type, string id, string? value)
+    internal void Write(string type, string id, string? value, IReadOnlyCollection<string>? changedKeys = null)
     {
         lock (gate)
         {
             var sign = session();
             if (sign is null)
             {
-                Remember(type, id, value);
+                Remember(type, id, value, changedKeys);
                 return;
             }
             var state = Engine(sign);
             try
             {
-                state.Write(type, id, value, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), DateTimeOffset.UtcNow);
+                var now = DateTimeOffset.UtcNow;
+                state.Write(type, id, value, now.ToUnixTimeMilliseconds(), now, changedKeys);
                 AccountSyncStore.Save(dataDir, state.State);
-                timer?.Change(AccountSyncRules.Debounce, SyncEvery);
+                timer?.Change(AccountSyncRules.Debounce + DebounceMargin, SyncEvery);
             }
             catch (ArgumentException e)
             {
@@ -124,7 +126,7 @@ internal sealed class AccountSyncHost : IDisposable
     }
 
     /// <summary>One pass: pull every page, then push what is due. Concurrent calls wait for the one running.</summary>
-    internal async Task SyncAsync(CancellationToken ct)
+    internal async Task SyncAsync(CancellationToken ct, bool ignoreDebounce = false)
     {
         if (!await running.WaitAsync(0, ct)) return;
         try
@@ -148,13 +150,22 @@ internal sealed class AccountSyncHost : IDisposable
                 try { AfterFullPull?.Invoke(); }
                 catch (Exception e) when (e is IOException or InvalidOperationException or InvalidDataException) { AppLog.Warn("Sync: after a pull: " + e.GetType().Name); }
             }
-            await PushDueAsync(sign, ct);
+            await PushDueAsync(sign, ct, ignoreDebounce);
             bool ended;
             lock (gate)
             {
-                if (engine is not null && !engine.State.SignedOut) engine.State.LastSyncAt = DateTimeOffset.UtcNow;
+                var now = DateTimeOffset.UtcNow;
+                if (engine is not null && !engine.State.SignedOut) engine.State.LastSyncAt = now;
                 if (engine is not null) AccountSyncStore.Save(dataDir, engine.State);
                 ended = engine?.State.SignedOut == true;
+                if (engine is not null && !ended && !engine.State.PushStopped && engine.State.Dirty.Count > 0 && now >= engine.State.NextAttempt)
+                {
+                    var remaining = AccountSyncRules.Debounce - (now - engine.State.LastChange);
+                    if (remaining > TimeSpan.Zero)
+                    {
+                        try { timer?.Change(remaining + DebounceMargin, SyncEvery); } catch (ObjectDisposedException) { }
+                    }
+                }
             }
             // The service ended this session: the session file goes (its queue stays on disk), so the page asks to sign in.
             if (ended) AccountSessionStore.EndIfCurrent(dataDir, sign.Token);
@@ -249,21 +260,30 @@ internal sealed class AccountSyncHost : IDisposable
         return false;
     }
 
-    private async Task PushDueAsync(AccountSession sign, CancellationToken ct)
+    private async Task PushDueAsync(AccountSession sign, CancellationToken ct, bool ignoreDebounce = false)
     {
         for (var batch = 0; batch < 1000; batch++)
         {
             List<SyncItem>? due;
-            lock (gate) due = Engine(sign).NextPush(DateTimeOffset.UtcNow);
+            lock (gate) due = Engine(sign).NextPush(DateTimeOffset.UtcNow, ignoreDebounce);
             if (due is null) return;
 
             var reply = await client.PutItemsAsync(sign.Token, due);
+            List<PulledItem> applied = [];
             lock (gate)
             {
                 var state = Engine(sign);
+                state.Applied.Clear();
+                state.Added.Clear();
                 state.ApplyPut(due, reply, DateTimeOffset.UtcNow);
+                foreach (var key in state.Applied)
+                {
+                    if (state.State.Items.TryGetValue(key, out var entry))
+                        applied.Add(new PulledItem(entry.Type, entry.Id, entry.Value, IsNew: false));
+                }
                 AccountSyncStore.Save(dataDir, state.State);
             }
+            if (applied.Count > 0) Apply(sign, applied);
             // A backoff makes NextPush return null next time; a split or a hold goes on with the rest of the queue.
             ct.ThrowIfCancellationRequested();
         }
@@ -273,12 +293,15 @@ internal sealed class AccountSyncHost : IDisposable
     /// A change made with no account signed in waits here (AccountSyncPending), so it reaches the account at sign-in. Nothing
     /// here may fail the caller: a play session's end and a settings save are kept on this PC even when this file cannot be written.
     /// </summary>
-    private void Remember(string type, string id, string? value)
+    private void Remember(string type, string id, string? value, IReadOnlyCollection<string>? changedKeys = null)
     {
         try
         {
             var items = AccountSyncPending.Load(PendingPath());
-            AccountSyncPending.Add(items, new PendingItem(type, id, value, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()), AccountSyncPending.MaxBytes);
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var changed = changedKeys is null ? null : changedKeys.Distinct(StringComparer.Ordinal).ToList();
+            var changedAt = changed is null ? null : changed.ToDictionary(k => k, _ => nowMs, StringComparer.Ordinal);
+            AccountSyncPending.Add(items, new PendingItem(type, id, value, nowMs, changed, changedAt), AccountSyncPending.MaxBytes);
             AccountSyncPending.Save(PendingPath(), items);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -302,7 +325,7 @@ internal sealed class AccountSyncHost : IDisposable
         var now = DateTimeOffset.UtcNow;
         foreach (var item in items)
         {
-            try { state.Write(item.Type, item.Id, item.Value, item.Updated, now); }
+            try { state.Write(item.Type, item.Id, item.Value, item.Updated, now, item.Changed, item.ChangedAt); }
             catch (ArgumentException e) { AppLog.Warn("Sync write refused: " + e.Message); }
         }
         AccountSyncStore.Save(dataDir, state.State);
@@ -446,9 +469,9 @@ internal static class AccountSyncHooks
     }
 
     /// <summary>Settings were saved: the synced part goes up when it changed.</summary>
-    internal static void SettingsSaved(AppSettings settings)
+    internal static void SettingsSaved(AppSettings settings, IReadOnlyCollection<string>? changedKeys = null)
     {
-        host?.Write("settings", AccountSyncMap.SettingsId, AccountSyncMap.SettingsValue(settings).ToJsonString());
+        host?.Write("settings", AccountSyncMap.SettingsId, AccountSyncMap.SettingsValue(settings).ToJsonString(), changedKeys);
     }
 
     /// <summary>
@@ -543,7 +566,7 @@ internal static class AccountSyncHooks
         host?.Write("cover", AccountSyncRules.GameKeyId(gameId), new JsonObject { ["source"] = "store", ["game"] = gameId }.ToJsonString());
 
     /// <summary>Settings › Account › Sync now: a pull and push at once, whether or not anything waits.</summary>
-    internal static Task SyncNowAsync() => host?.SyncAsync(CancellationToken.None) ?? Task.CompletedTask;
+    internal static Task SyncNowAsync() => host?.SyncAsync(CancellationToken.None, ignoreDebounce: true) ?? Task.CompletedTask;
 }
 
 /// <summary>Starts the account sync on this PC and applies what it pulls (settings, and other PCs' playtime).</summary>
@@ -559,7 +582,7 @@ internal static class AccountSyncRuntime
             PathHelper.AppDataDir,
             new ExoAccountClient(),
             () => AccountSessionStore.Load(PathHelper.AppDataDir),
-            item => AccountSyncApply.Pulled(item, settings))
+            item => AccountSyncApply.Pulled(item, settings, () => host?.KnownValue("settings", AccountSyncMap.SettingsId)))
         {
             Seeds = () => Seeds(store()),
             AfterFullPull = () => settings.SettleMovedUiPrefs(host?.KnownValue("settings", AccountSyncMap.SettingsId)),
@@ -584,7 +607,7 @@ internal static class AccountSyncRuntime
 internal static class AccountSyncApply
 {
     /// <summary>Applies one pulled item; false only when a file it goes into could not be read or written, so the sync tries again.</summary>
-    internal static bool Pulled(AccountSyncHost.PulledItem item, SettingsService settings)
+    internal static bool Pulled(AccountSyncHost.PulledItem item, SettingsService settings, Func<string?>? latestSettings = null)
     {
         try
         {
@@ -594,7 +617,11 @@ internal static class AccountSyncApply
             else if (item.Type == "choice")
                 ApplyChoice(item.Id, item.Value);
             else if (item.Type == "settings" && item.Id == AccountSyncMap.SettingsId)
-                settings.UpdateProfile(target => AccountSyncMap.ApplySettings(target, item.Value));
+                settings.ApplySynced(target =>
+                {
+                    var current = latestSettings?.Invoke() ?? item.Value;
+                    if (current is not null) AccountSyncMap.ApplySettings(target, current);
+                });
             else if (item.Type == "riot-ledger")
                 RiotLedger.Merge(item.Value);
             else if (item.Type == "playtime-seed")
