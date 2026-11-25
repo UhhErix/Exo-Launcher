@@ -42,16 +42,13 @@ public static partial class AppLog
         @"(?i)\b(user[_-]?id|account[_-]?id|steam[_-]?id|friend[_-]?ids?|claimed[_-]?id|external[_-]?id|store[_-]?id|store[_-]?native[_-]?id)\s*[:=]\s*\S+",
         RegexOptions.CultureInvariant)]
     private static partial Regex IdentityAssignment();
-    [GeneratedRegex(@"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex Email();
+    private static readonly Regex EmailPattern = new(@"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     // Secrets logged with no label: a three-part token (JWT, Discord) and a long opaque
     // run of mixed-case letters and digits (OAuth access tokens). Lowercase hex hashes,
     // which download checks log on purpose, are one case and stay readable.
-    [GeneratedRegex(@"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])", RegexOptions.CultureInvariant)]
-    private static partial Regex DottedToken();
-    [GeneratedRegex(@"(?<![A-Za-z0-9_+=-])[A-Za-z0-9_+-]{40,}={0,2}(?![A-Za-z0-9_+=-])", RegexOptions.CultureInvariant)]
-    private static partial Regex OpaqueRun();
+    private static readonly Regex DottedTokenPattern = new(@"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{16,}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly Regex OpaqueRunPattern = new(@"[A-Za-z0-9_+-]{40,}={0,2}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     public static void Info(string message) => Write("INFO", message);
     public static void Warn(string message) => Write("WARN", message);
@@ -154,10 +151,28 @@ public static partial class AppLog
         text = Bearer().Replace(text, "$1[redacted]");
         text = SecretAssignment().Replace(text, "$1=[redacted]");
         text = IdentityAssignment().Replace(text, "$1=[redacted]");
-        text = DottedToken().Replace(text, "[redacted]");
-        text = OpaqueRun().Replace(text, static match => LooksLikeToken(match.ValueSpan) ? "[redacted]" : match.Value);
-        return Email().Replace(text, "[redacted-email]");
+        text = DottedTokenPattern.Replace(text, match =>
+        {
+            var start = match.Index;
+            var end = start + match.Length;
+            if ((start > 0 && IsDottedTokenChar(text[start - 1])) || (end < text.Length && IsDottedTokenChar(text[end])))
+                return match.Value;
+            return "[redacted]";
+        });
+        text = OpaqueRunPattern.Replace(text, match =>
+        {
+            var start = match.Index;
+            var end = start + match.Length;
+            if ((start > 0 && IsOpaqueRunChar(text[start - 1])) || (end < text.Length && IsOpaqueRunChar(text[end])))
+                return match.Value;
+            return LooksLikeToken(match.ValueSpan) ? "[redacted]" : match.Value;
+        });
+        return EmailPattern.Replace(text, "[redacted-email]");
     }
+
+    private static bool IsDottedTokenChar(char c) => char.IsAsciiLetterOrDigit(c) || c is '_' or '-';
+
+    private static bool IsOpaqueRunChar(char c) => char.IsAsciiLetterOrDigit(c) || c is '_' or '+' or '=' or '-';
 
     private static bool LooksLikeToken(ReadOnlySpan<char> run)
     {

@@ -1192,6 +1192,12 @@ pub struct StartupItem {
     #[serde(default)]
     pub status: Option<String>,
     #[serde(default)]
+    pub command: String,
+    #[serde(default)]
+    pub without: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
     pub memory: u64,
 }
 
@@ -1204,6 +1210,8 @@ pub struct StartupRemovedItem {
     pub name: String,
     #[serde(default)]
     pub at: String,
+    #[serde(default)]
+    pub icon: Option<String>,
     #[serde(default)]
     pub locked: bool,
 }

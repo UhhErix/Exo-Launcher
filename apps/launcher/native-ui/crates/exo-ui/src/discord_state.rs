@@ -116,15 +116,13 @@ pub enum DiscordSettingsPage {
 }
 
 impl DiscordSettingsPage {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 6] = [
         Self::Voice,
         Self::Chat,
         Self::Notifications,
         Self::Privacy,
         Self::Account,
         Self::Keybinds,
-        Self::Profiles,
-        Self::ConnectedApps,
     ];
 
     pub fn key(self) -> &'static str {
@@ -264,7 +262,7 @@ impl DiscordState {
             ignored_users: HashSet::new(),
             chat_compact: false,
             show_embeds: true,
-            developer_mode: true,
+            developer_mode: false,
             search_query: TextEdit::default(),
             dm_search_query: TextEdit::default(),
             add_friend_input: TextEdit::default(),

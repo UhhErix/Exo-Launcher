@@ -1755,8 +1755,7 @@ impl ArtBase {
         let root = self.captures_dir.as_deref()?;
         let rest = media_url.strip_prefix("https://captures.exo-launcher.local/")?;
         let without_query = rest.split('?').next().unwrap_or(rest);
-        let mut path = PathBuf::from(root);
-        let mut parts = 0usize;
+        let mut segments: Vec<String> = Vec::new();
         for seg in without_query.split('/') {
             if seg.is_empty() {
                 continue;
@@ -1765,13 +1764,26 @@ impl ArtBase {
             if !is_safe_leaf(&decoded) {
                 return None;
             }
-            path.push(decoded);
-            parts += 1;
+            segments.push(decoded);
         }
-        if parts == 0 || !path.is_file() {
+        if segments.is_empty() {
             return None;
         }
-        Some(path)
+        let direct = segments
+            .iter()
+            .fold(PathBuf::from(root), |acc, seg| acc.join(seg));
+        if direct.is_file() {
+            return Some(direct);
+        }
+        if segments.len() >= 2 {
+            let without_token = segments[1..]
+                .iter()
+                .fold(PathBuf::from(root), |acc, seg| acc.join(seg));
+            if without_token.is_file() {
+                return Some(without_token);
+            }
+        }
+        None
     }
 }
 
@@ -2013,5 +2025,32 @@ mod cover_policy_tests {
             "https://cdn1.epicgames.com/offer/sugar/portrait.jpg",
             false
         ));
+    }
+
+    #[test]
+    fn resolve_capture_file_strips_local_file_host_token_segment() {
+        let dir = std::env::temp_dir().join(format!("exo_rpc_capture_test_{}", std::process::id()));
+        let sub = dir.join("Desktop");
+        std::fs::create_dir_all(&sub).unwrap();
+        let file = sub.join("2026-11-24 12.15.09.png");
+        std::fs::write(&file, b"png").unwrap();
+
+        let base = ArtBase {
+            captures_dir: Some(dir.to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+        assert_eq!(
+            base.resolve_capture_file(
+                "https://captures.exo-launcher.local/abc123token/Desktop/2026-11-24%2012.15.09.png?v=1"
+            ),
+            Some(file.clone())
+        );
+        assert_eq!(
+            base.resolve_capture_file(
+                "https://captures.exo-launcher.local/Desktop/2026-11-24%2012.15.09.png"
+            ),
+            Some(file)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

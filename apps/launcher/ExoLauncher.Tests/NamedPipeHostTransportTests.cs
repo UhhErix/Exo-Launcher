@@ -422,13 +422,61 @@ public sealed class NamedPipeHostTransportTests
         var smokeBypass = RuneHostSession.TryParse(["--smoke-test"], _ => null, _ => true);
         Assert.Null(smokeBypass);
 
-        Assert.Throws<ArgumentException>(() => RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null, _ => false));
+        var warnings = new List<string>();
+        Assert.Null(RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null, _ => false, warnings.Add));
+        Assert.Single(warnings);
 
         var fakeExe = Path.Combine(Path.GetTempPath(), "exo-app-dir", "exo-ui.exe");
         var psi = RuneHostSession.BuildUiStartInfo(fakeExe, "exo-dev-123");
         Assert.Equal(PathHelper.AppDataDir, psi.WorkingDirectory);
         Assert.NotEqual(Path.GetDirectoryName(fakeExe), psi.WorkingDirectory);
         Assert.Equal(["--pipe", "exo-dev-123"], psi.ArgumentList);
+    }
+
+    [Fact]
+    public void RuneHostSessionTryParseNeverThrowsOnInvalidOrForeignInputs()
+    {
+        string[]?[] badPipeCases =
+        [
+            ["--host-pipe", "../escape"],
+            ["--host-pipe", @"\\.\pipe\exo-dev"],
+            ["--host-pipe", ""],
+            ["--host-pipe", "   "],
+            ["--host-pipe", "bad pipe name"],
+            ["--host-pipe", "--ui=rune"],
+            ["--host-pipe", new string('a', 121)],
+            ["--host-pipe"],
+            ["--host-pipe="],
+            ["--host-pipe=../escape"],
+            ["--host-pipe=bad=value"],
+        ];
+
+        foreach (var args in badPipeCases)
+        {
+            var warnings = new List<string>();
+            var parsed = RuneHostSession.TryParse(args, _ => "rune", _ => true, warnings.Add);
+            Assert.Null(parsed);
+            Assert.NotEmpty(warnings);
+        }
+
+        Assert.Null(RuneHostSession.TryParse(null, _ => null, _ => false));
+        Assert.Null(RuneHostSession.TryParse([null!, "", "--unknown", "exolauncher://library", "-Embedding"], _ => null, _ => false));
+        Assert.Null(RuneHostSession.TryParse(["--ui"], _ => null, _ => false));
+        Assert.Null(RuneHostSession.TryParse(["--rune-ui-path"], _ => null, _ => false));
+        Assert.Null(RuneHostSession.TryParse([], key => key == "EXO_UI" ? "unexpected-value" : null, _ => false));
+
+        var envWarnings = new List<string>();
+        Assert.Null(RuneHostSession.TryParse([], _ => throw new InvalidOperationException("env failure"), _ => false, envWarnings.Add));
+        Assert.NotEmpty(envWarnings);
+
+        var fsWarnings = new List<string>();
+        Assert.Null(RuneHostSession.TryParse([], key => key == "EXO_RUNE_UI_PATH" ? "C:\\bad|path\\exo-ui.exe" : null, _ => throw new ArgumentException("invalid path"), fsWarnings.Add));
+        Assert.NotEmpty(fsWarnings);
+
+        var overrideEq = RuneHostSession.TryParse(["--ui=rune", "--rune-ui-path=C:\\exo\\exo-ui.exe"], _ => null, _ => false);
+        Assert.NotNull(overrideEq);
+        Assert.True(overrideEq!.SpawnUi);
+        Assert.Equal(@"C:\exo\exo-ui.exe", overrideEq.UiExecutableOverride);
     }
 
     [Fact]

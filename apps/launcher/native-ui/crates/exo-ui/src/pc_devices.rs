@@ -1,19 +1,19 @@
 use crate::devices_audio::{
-    DevicePageHeader, device_btn, device_icon_btn, device_page_shell_columns_no_rescan,
-    device_panel, device_row, device_switch, port_short, port_words,
+    DevicePageHeader, device_btn, device_icon_btn, device_page_shell_band, device_panel,
+    device_row, device_switch, port_short, port_words,
 };
 use crate::state::AppState;
 use exo_kit::{
-    BG, BadgeTone, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_SMALL, SPRING_MOVE,
-    SPRING_QUICK, amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, float_line,
-    glass_button, good, hairline, hover_fill, icon_chevron_left, icon_gamepad, icon_headphones,
-    icon_keyboard, icon_mic, icon_mouse, icon_refresh, icon_zap, pressed_fill, primary_button,
-    scaled, status_badge, surface_card, type_body, type_control, type_label, type_section,
-    type_small, type_title,
+    BG, BadgeTone, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, SPRING_MOVE, SPRING_QUICK,
+    amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, glass_rim_bottom,
+    glass_rim_top, good, hairline, hover_fill, icon_chevron_left, icon_external, icon_gamepad,
+    icon_headphones, icon_keyboard, icon_mic, icon_mouse, icon_refresh, icon_zap, pressed_fill,
+    primary_button, scaled, status_badge, surface_card, type_body, type_control, type_label,
+    type_section, type_small, type_title,
 };
-use exo_rpc::keyboard_layouts::{FormFactor, KeyCap, KeyKind, build_keyboard_layout, find_key};
+use exo_rpc::keyboard_layouts::{KeyCap, KeyKind, build_keyboard_layout, find_key};
 use exo_rpc::{KeyboardReadReply, PeripheralCard};
-use rune::{Cursor, El, Phase, ScrollSpec, SurfaceFit, TextStyle, col, el, row, text};
+use rune::{Cursor, El, LiquidGlass, Phase, ScrollSpec, SurfaceFit, TextStyle, col, el, row, text};
 
 fn connection_label(conn: Option<&str>) -> &'static str {
     match conn.unwrap_or("") {
@@ -83,6 +83,16 @@ fn format_battery_pct(b: f64) -> i32 {
 }
 
 fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
+    device_showcase_card_sized(dev, s, scale, 468.0, 312.0)
+}
+
+fn device_showcase_card_sized(
+    dev: &PeripheralCard,
+    s: &AppState,
+    scale: f32,
+    max_w: f32,
+    max_h: f32,
+) -> El {
     let img_url = if dev.kind == "audio" && dev.role.as_deref() != Some("input") {
         s.pc.device_images
             .get("audio:worn")
@@ -95,9 +105,9 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
     let media = if let Some(photo) = img {
         el().w_full().grow(1.0).min_h(0.0).center().child(
             el().w_full()
-                .max_w(468.0)
+                .max_w(max_w)
                 .h_full()
-                .max_h(312.0)
+                .max_h(max_h)
                 .pixels_fit(photo.pixels(), SurfaceFit::Fit),
         )
     } else {
@@ -147,8 +157,9 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
         .gap(12.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(BG)
-        .border(1.0, float_line())
+        .clip_rounded(RADIUS_PANEL)
+        .liquid_glass(LiquidGlass::panel())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .hover(surface_card())
         .motion(SPRING_MOVE)
         .on_press(move |s: &mut AppState| {
@@ -193,25 +204,21 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
         )
 }
 
-fn key_cap_width(u: f32, unit: f32, gap: f32) -> f32 {
-    u * unit + (u - 1.0).max(0.0) * gap
-}
-
 fn render_key_section(
     rows: &[Vec<KeyCap>],
-    unit: f32,
-    key_h: f32,
-    gap: f32,
+    grow: f32,
     rt_on: bool,
     selected_key: Option<&str>,
 ) -> El {
-    let mut section = col().gap(gap);
+    let key_h = 26.0_f32;
+    let gap = 4.0_f32;
+    let lbl_font = TextStyle::new(scaled(10.0), 500.0);
+    let mut section = col().grow(grow).min_w(0.0).gap(gap);
     for r in rows {
-        let mut krow = row().gap(gap);
+        let mut krow = row().w_full().gap(gap);
         for cap in r {
-            let w = key_cap_width(cap.u, unit, gap);
             if cap.kind == KeyKind::Gap {
-                krow = krow.child(el().w(w).h(key_h));
+                krow = krow.child(el().grow(cap.u).min_w(0.0).h(key_h));
                 continue;
             }
             let is_selected = selected_key == Some(cap.id.as_str());
@@ -226,10 +233,11 @@ fn render_key_section(
                     .cursor(Cursor::Pointer)
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
-                    .w(w)
+                    .grow(cap.u)
+                    .min_w(0.0)
                     .h(key_h)
                     .px(6.0)
-                    .radius(RADIUS_SMALL)
+                    .radius(6.0)
                     .center_y()
                     .justify_between()
                     .fill(if is_selected {
@@ -242,7 +250,7 @@ fn render_key_section(
                         if is_selected {
                             FG.alpha(0.75)
                         } else {
-                            card_border()
+                            FG.alpha(0.16)
                         },
                     )
                     .on_press(move |s: &mut AppState| s.toggle_keyboard_key(key_id.clone()));
@@ -258,29 +266,28 @@ fn render_key_section(
                 continue;
             }
 
-            let is_hot = matches!(cap.kind, KeyKind::Wasd | KeyKind::Analog);
+            let is_wasd = cap.kind == KeyKind::Wasd;
+            let is_mod = matches!(cap.kind, KeyKind::Mod | KeyKind::Space);
             let fill = if is_selected {
-                FG.alpha(0.22)
-            } else if is_hot && rt_on {
-                good().alpha(0.18)
-            } else if is_hot {
-                FG.alpha(0.14)
-            } else if cap.kind == KeyKind::Mod {
-                FG.alpha(0.06)
+                FG.alpha(0.18)
+            } else if is_wasd && rt_on {
+                good().alpha(0.14)
+            } else if is_mod {
+                FG.alpha(0.03)
             } else {
-                FG.alpha(0.04)
+                FG.alpha(0.06)
             };
             let border_c = if is_selected {
-                FG.alpha(0.75)
-            } else if is_hot && rt_on {
-                good().alpha(0.70)
+                FG
+            } else if is_wasd && rt_on {
+                good().alpha(0.52)
             } else {
-                card_border()
+                FG.alpha(0.16)
             };
-            let lbl_font = if unit <= 30.0 {
-                type_label()
+            let txt_c = if is_selected || !is_mod {
+                FG
             } else {
-                type_small()
+                fg_muted()
             };
             krow = krow.child(
                 col()
@@ -292,18 +299,24 @@ fn render_key_section(
                     .cursor(Cursor::Pointer)
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
-                    .w(w)
+                    .grow(cap.u)
+                    .min_w(0.0)
                     .h(key_h)
-                    .radius(7.0)
+                    .px(2.0)
+                    .radius(6.0)
                     .center()
-                    .gap(1.0)
                     .fill(fill)
                     .hover(hover_fill())
                     .press(pressed_fill())
                     .border(1.0, border_c)
                     .motion(SPRING_QUICK)
                     .on_press(move |s: &mut AppState| s.toggle_keyboard_key(key_id.clone()))
-                    .child(text(cap.label.clone()).font(lbl_font).color(FG)),
+                    .child(
+                        text(cap.label.clone())
+                            .font(lbl_font)
+                            .color(txt_c)
+                            .truncate(),
+                    ),
             );
         }
         section = section.child(krow);
@@ -387,42 +400,24 @@ fn wooting_key_map_panel(s: &AppState, dev: &PeripheralCard, kb: &KeyboardReadRe
         kb.model.as_deref().or(dev.model.as_deref()),
         kb.layout.as_deref().or(dev.layout.as_deref()),
     );
-    let (unit, key_h, gap) = match spec.form {
-        FormFactor::Sixty => (36.0, 34.0, 4.0),
-        FormFactor::Eighty | FormFactor::Tkl => (30.0, 30.0, 3.0),
-        FormFactor::Full => (24.0, 28.0, 3.0),
-        FormFactor::Keypad3 => (52.0, 44.0, 6.0),
-    };
     let rt_on = kb.has_rapid_trigger && kb.rapid_trigger.unwrap_or(false);
     let selected_id = s.pc.keyboard_selected_key.as_deref();
 
-    let mut sections = row().gap(10.0).center_y().child(render_key_section(
-        &spec.main_rows,
-        unit,
-        key_h,
-        gap,
-        rt_on,
-        selected_id,
-    ));
-    if !spec.nav_rows.is_empty() {
-        sections = sections.child(render_key_section(
-            &spec.nav_rows,
-            unit,
-            key_h,
-            gap,
+    let mut sections = row()
+        .w_full()
+        .gap(10.0)
+        .items_end()
+        .child(render_key_section(
+            &spec.main_rows,
+            15.0,
             rt_on,
             selected_id,
         ));
+    if !spec.nav_rows.is_empty() {
+        sections = sections.child(render_key_section(&spec.nav_rows, 3.0, rt_on, selected_id));
     }
     if !spec.num_rows.is_empty() {
-        sections = sections.child(render_key_section(
-            &spec.num_rows,
-            unit,
-            key_h,
-            gap,
-            rt_on,
-            selected_id,
-        ));
+        sections = sections.child(render_key_section(&spec.num_rows, 4.0, rt_on, selected_id));
     }
 
     let active_prof = kb
@@ -490,17 +485,17 @@ fn wooting_key_map_panel(s: &AppState, dev: &PeripheralCard, kb: &KeyboardReadRe
                 row()
                     .grow(1.0)
                     .min_w(0.0)
-                    .h(4.0)
-                    .radius(2.0)
-                    .clip_rounded(2.0)
-                    .fill(hairline())
-                    .child(el().grow(ratio.max(0.005)).h(4.0).fill(FG))
-                    .child(el().grow((1.0 - ratio).max(0.005)).h(4.0)),
+                    .h(6.0)
+                    .radius(3.0)
+                    .clip_rounded(3.0)
+                    .fill(FG.alpha(0.10))
+                    .child(el().grow(ratio.max(0.005)).h(6.0).fill(FG))
+                    .child(el().grow((1.0 - ratio).max(0.005)).h(6.0)),
             )
             .child(
                 text(format!("{min_act:.1}–{max_act:.1} mm"))
-                    .font(type_small())
-                    .color(fg_muted()),
+                    .font(type_label())
+                    .color(fg_faint()),
             )
     });
 
@@ -553,22 +548,29 @@ fn wooting_key_map_panel(s: &AppState, dev: &PeripheralCard, kb: &KeyboardReadRe
     amoled_card(RADIUS_PANEL)
         .key("kb-matrix")
         .w_full()
-        .px(20.0)
-        .py(16.0)
-        .gap(12.0)
+        .pt(16.0)
+        .px(24.0)
+        .pb(12.0)
+        .gap(10.0)
         .child(text("Keyboard map").font(type_section()).color(FG))
         .child(
-            el().w_full()
-                .padding(12.0)
-                .radius(RADIUS_CARD)
-                .fill(BG)
-                .border(1.0, card_border())
-                .center()
-                .child(sections),
+            col()
+                .w_full()
+                .pt(17.0)
+                .pb(8.0)
+                .gap(12.0)
+                .child(
+                    el().w_full()
+                        .padding(12.0)
+                        .radius(RADIUS_CARD)
+                        .fill(FG.alpha(0.03))
+                        .border(1.0, FG.alpha(0.12))
+                        .child(sections),
+                )
+                .child(tags)
+                .children(travel_bar)
+                .child(note_el),
         )
-        .child(tags)
-        .children(travel_bar)
-        .child(note_el)
 }
 
 fn wooting_keyboard_page(
@@ -584,7 +586,8 @@ fn wooting_keyboard_page(
             .get(&dev.id)
             .and_then(|u| s.device_image(u, scale));
     let media = if let Some(photo) = hero_img {
-        el().size(355.0, 236.0)
+        el().w_full()
+            .h_full()
             .pixels_fit(photo.pixels(), SurfaceFit::Fit)
     } else {
         icon_keyboard(56.0, fg_faint())
@@ -719,7 +722,7 @@ fn wooting_keyboard_page(
                         .press_on_down()
                         .press_scale(PRESS_SCALE)
                         .cursor(Cursor::Pointer)
-                        .h(32.0)
+                        .h(34.0)
                         .px(12.0)
                         .gap(6.0)
                         .center_y()
@@ -755,8 +758,8 @@ fn wooting_keyboard_page(
                 vec![
                     col()
                         .w_full()
-                        .py(10.0)
-                        .gap(10.0)
+                        .py(if rt_on { 10.0 } else { 18.0 })
+                        .gap(if rt_on { 10.0 } else { 12.0 })
                         .child(
                             col()
                                 .gap(2.0)
@@ -994,7 +997,8 @@ fn wooting_keyboard_page(
                 vec![
                     row()
                         .w_full()
-                        .py(10.0)
+                        .min_h(if rt_on { 44.0 } else { 68.0 })
+                        .py(if rt_on { 12.0 } else { 15.0 })
                         .justify_between()
                         .center_y()
                         .gap(12.0)
@@ -1053,13 +1057,14 @@ fn wooting_keyboard_page(
             Some(woot_detail.into()),
             None,
             Some(
-                device_btn(
+                device_icon_btn(
                     "kb-open-wootility",
                     if kb.wootility_installed {
                         "Open Wootility"
                     } else {
                         "Wootility Web"
                     },
+                    Some(icon_external(14.0, FG)),
                     false,
                 )
                 .on_press(|s: &mut AppState| s.open_keyboard_app()),
@@ -1149,7 +1154,7 @@ fn wooting_keyboard_page(
         );
     }
 
-    device_page_shell_columns_no_rescan(
+    device_page_shell_band(
         DevicePageHeader {
             key: "room-devices-detail",
             name: kb_opt.and_then(|k| k.model.clone()).unwrap_or(display_name),
@@ -1346,11 +1351,11 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
                 .gap(8.0)
                 .center_y()
                 .child(
-                    glass_button("dev-macros", "Macros", Some(icon_zap(14.0, FG)))
+                    device_icon_btn("dev-macros", "Macros", Some(icon_zap(14.0, FG)), false)
                         .on_press(|s: &mut AppState| s.pc.macros_open = true),
                 )
                 .child(
-                    glass_button("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)))
+                    device_icon_btn("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)), false)
                         .on_press(|s: &mut AppState| s.load_pc_devices()),
                 ),
         );
@@ -1383,17 +1388,110 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
         }
     }
 
-    let mut grid = col().w_full().grow(1.0).min_h(0.0).gap(12.0);
-    for pair in ordered.chunks(2) {
-        let mut r = row().w_full().grow(1.0).min_h(160.0).gap(12.0);
-        for dev in pair {
-            r = r.child(device_showcase_card(dev, s, scale));
+    let grid = match ordered.len() {
+        1 => col()
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .child(device_showcase_card(ordered[0], s, scale)),
+        2 => row()
+            .w_full()
+            .grow(1.0)
+            .min_h(160.0)
+            .gap(12.0)
+            .child(device_showcase_card(ordered[0], s, scale))
+            .child(device_showcase_card(ordered[1], s, scale)),
+        3 => row()
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .gap(12.0)
+            .child(device_showcase_card_sized(
+                ordered[0], s, scale, 750.0, 500.0,
+            ))
+            .child(
+                col()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .h_full()
+                    .gap(12.0)
+                    .child(
+                        el().w_full()
+                            .grow(1.0)
+                            .min_h(160.0)
+                            .child(device_showcase_card(ordered[1], s, scale)),
+                    )
+                    .child(
+                        el().w_full()
+                            .grow(1.0)
+                            .min_h(160.0)
+                            .child(device_showcase_card(ordered[2], s, scale)),
+                    ),
+            ),
+        5 => col()
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .gap(12.0)
+            .child(
+                row()
+                    .w_full()
+                    .grow(1.0)
+                    .min_h(160.0)
+                    .gap(12.0)
+                    .child(device_showcase_card(ordered[0], s, scale))
+                    .child(device_showcase_card(ordered[1], s, scale))
+                    .child(device_showcase_card(ordered[2], s, scale)),
+            )
+            .child(
+                row()
+                    .w_full()
+                    .grow(1.0)
+                    .min_h(160.0)
+                    .gap(12.0)
+                    .child(device_showcase_card(ordered[3], s, scale))
+                    .child(device_showcase_card(ordered[4], s, scale)),
+            ),
+        6 => col()
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .gap(12.0)
+            .child(
+                row()
+                    .w_full()
+                    .grow(1.0)
+                    .min_h(160.0)
+                    .gap(12.0)
+                    .child(device_showcase_card(ordered[0], s, scale))
+                    .child(device_showcase_card(ordered[1], s, scale))
+                    .child(device_showcase_card(ordered[2], s, scale)),
+            )
+            .child(
+                row()
+                    .w_full()
+                    .grow(1.0)
+                    .min_h(160.0)
+                    .gap(12.0)
+                    .child(device_showcase_card(ordered[3], s, scale))
+                    .child(device_showcase_card(ordered[4], s, scale))
+                    .child(device_showcase_card(ordered[5], s, scale)),
+            ),
+        _ => {
+            let mut g = col().w_full().grow(1.0).min_h(0.0).gap(12.0);
+            for pair in ordered.chunks(2) {
+                let mut r = row().w_full().grow(1.0).min_h(160.0).gap(12.0);
+                for dev in pair {
+                    r = r.child(device_showcase_card(dev, s, scale));
+                }
+                if pair.len() == 1 {
+                    r = r.child(el().grow(1.0).min_w(0.0));
+                }
+                g = g.child(r);
+            }
+            g
         }
-        if pair.len() == 1 {
-            r = r.child(el().grow(1.0).min_w(0.0));
-        }
-        grid = grid.child(r);
-    }
+    };
 
     let mut page = col()
         .key("room-devices")

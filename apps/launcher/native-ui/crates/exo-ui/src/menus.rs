@@ -8,15 +8,15 @@ use crate::shell::room_icon;
 use crate::state::{AppState, ContextMenuTarget, InputMode, LibrarySort, OpenDropdown, Room};
 use exo_kit::{
     ContextMenuSpec, FG, MenuAnchor, MenuEntry, MenuItem, SelectMenuSpec, SelectOption, bad,
-    context_menu_layers, context_menu_layers_live, fg_faint, fg_muted, icon_bell_off, icon_camera,
-    icon_chat, icon_chevron_left, icon_chevron_right, icon_copy, icon_download, icon_edit,
-    icon_eye, icon_eye_off, icon_flag, icon_folder, icon_folder_plus, icon_forward, icon_gamepad,
-    icon_key, icon_link, icon_pin, icon_play, icon_record_dot, icon_refresh, icon_replay,
-    icon_reply, icon_scissors, icon_search, icon_select_many, icon_settings, icon_sliders,
-    icon_smile, icon_sparkles, icon_stop, icon_trash, icon_user, icon_user_plus, icon_volume,
+    context_menu_layers_live, context_menu_layers_with_cursor, fg_faint, fg_muted, icon_bell_off,
+    icon_camera, icon_chat, icon_chevron_left, icon_chevron_right, icon_copy, icon_download,
+    icon_edit, icon_eye, icon_eye_off, icon_flag, icon_folder, icon_folder_plus, icon_forward,
+    icon_gamepad, icon_key, icon_link, icon_pin, icon_play, icon_record_dot, icon_refresh,
+    icon_replay, icon_reply, icon_scissors, icon_search, icon_select_many, icon_settings,
+    icon_sliders, icon_smile, icon_sparkles, icon_trash, icon_user, icon_user_plus, icon_volume,
     select_menu_layers, store_logo,
 };
-use rune::{Align, El, Side, TextEdit, Tx};
+use rune::{Align, Cursor, El, Side, TextEdit, Tx};
 use serde_json::json;
 use std::rc::Rc;
 
@@ -627,7 +627,7 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
         ContextMenuTarget::GameCard(game_id) => {
             let game = s.games.iter().find(|g| g.id == *game_id);
             let is_running = game.is_some_and(|g| g.is_running);
-            let is_stop = game.is_some_and(|g| g.is_running && g.can_stop);
+            let can_stop = game.is_some_and(|g| g.can_stop);
             let is_installed = game.is_some_and(|g| g.installed);
             let is_add_portable = game.is_some_and(|g| g.is_add_portable);
             let is_riot = game.is_some_and(|g| g.store == "riot");
@@ -638,41 +638,35 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                 .hidden_games
                 .iter()
                 .any(|h| h.eq_ignore_ascii_case(&game_id));
-            let primary_label = if is_stop {
-                "Stop"
-            } else if is_running {
-                "Running"
-            } else if is_update {
-                "Update"
-            } else if is_installed {
-                "Play"
-            } else {
-                "Install"
-            };
-            let primary_icon = if is_stop {
-                icon_stop(15.0, FG)
-            } else if is_installed {
-                icon_play(15.0, FG)
-            } else {
-                icon_download(15.0, FG)
-            };
-            let gid_primary = game_id.clone();
-            let mut items = vec![MenuEntry::item(
-                MenuItem::new("ctx-game-primary", primary_label)
-                    .icon(primary_icon)
-                    .disabled(is_running && !is_stop)
-                    .on_select(move |s: &mut AppState, _| {
-                        if is_stop {
-                            s.stop_game_held(&gid_primary);
-                        } else if !is_installed {
-                            s.install_game(&gid_primary);
-                        } else if is_update {
-                            s.update_game(&gid_primary);
-                        } else {
-                            s.launch_game_held(&gid_primary);
-                        }
-                    }),
-            )];
+            let mut items: Vec<MenuEntry<AppState>> = Vec::new();
+            if !is_running && !can_stop {
+                let primary_label = if is_update {
+                    "Update"
+                } else if is_installed {
+                    "Play"
+                } else {
+                    "Install"
+                };
+                let primary_icon = if is_installed {
+                    icon_play(15.0, FG)
+                } else {
+                    icon_download(15.0, FG)
+                };
+                let gid_primary = game_id.clone();
+                items.push(MenuEntry::item(
+                    MenuItem::new("ctx-game-primary", primary_label)
+                        .icon(primary_icon)
+                        .on_select(move |s: &mut AppState, _| {
+                            if !is_installed {
+                                s.install_game(&gid_primary);
+                            } else if is_update {
+                                s.update_game(&gid_primary);
+                            } else {
+                                s.launch_game_held(&gid_primary);
+                            }
+                        }),
+                ));
+            }
             if is_riot && is_installed && !is_running {
                 for acct in &s.lib.riot_other_accounts {
                     let gid_as = game_id.clone();
@@ -1000,14 +994,16 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                             },
                         ),
                     ));
-                    items.push(MenuEntry::item(
-                        MenuItem::new("dc-dm-copy-uid", "Copy user ID")
-                            .trailing_icon(icon_copy(14.0, fg_muted()))
-                            .on_select(move |s: &mut AppState, tx| {
-                                tx.copy(uid.clone());
-                                s.notice = Some("Copied user ID".into());
-                            }),
-                    ));
+                    if s.discord.developer_mode {
+                        items.push(MenuEntry::item(
+                            MenuItem::new("dc-dm-copy-uid", "Copy user ID")
+                                .trailing_icon(icon_copy(14.0, fg_muted()))
+                                .on_select(move |s: &mut AppState, tx| {
+                                    tx.copy(uid.clone());
+                                    s.notice = Some("Copied user ID".into());
+                                }),
+                        ));
+                    }
                 }
             } else {
                 items.push(MenuEntry::item(
@@ -1047,14 +1043,16 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                 items.push(MenuEntry::Separator);
             }
 
-            items.push(MenuEntry::item(
-                MenuItem::new("dc-dm-copy-cid", "Copy channel ID")
-                    .trailing_icon(icon_copy(14.0, fg_muted()))
-                    .on_select(move |s: &mut AppState, tx| {
-                        tx.copy(dm_id.clone());
-                        s.notice = Some("Copied channel ID".into());
-                    }),
-            ));
+            if s.discord.developer_mode {
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-dm-copy-cid", "Copy channel ID")
+                        .trailing_icon(icon_copy(14.0, fg_muted()))
+                        .on_select(move |s: &mut AppState, tx| {
+                            tx.copy(dm_id.clone());
+                            s.notice = Some("Copied channel ID".into());
+                        }),
+                ));
+            }
             items
         }
         ContextMenuTarget::DiscordChannel {
@@ -2088,26 +2086,45 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
         }
     };
 
-    context_menu_layers_live(
-        ContextMenuSpec {
-            id: menu_id,
-            anchor,
-            width,
-            blur,
-            submenu_blur,
-            open_submenu: cm.open_submenu,
-            return_focus,
-            gamepad_focus,
-            entries,
-            on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.close_context_menu()),
-            on_submenu: Rc::new(|s: &mut AppState, idx: Option<usize>, _: &mut Tx| {
-                if let Some(ref mut cm) = s.context_menu {
-                    cm.open_submenu = idx;
-                }
-            }),
-        },
-        &["top-bar"],
-    )
+    let is_library_card_menu = matches!(
+        cm.target,
+        ContextMenuTarget::GameCard(_) | ContextMenuTarget::FolderCard(_)
+    );
+    let extra_live: Option<String> = match &cm.target {
+        ContextMenuTarget::DiscordStatusMenu => Some("dc-me-trigger".into()),
+        ContextMenuTarget::DiscordDm { dm_id, .. } => Some(format!("dc-dm-{dm_id}")),
+        ContextMenuTarget::DiscordChannel { channel_id, .. } => Some(format!("dc-ch-{channel_id}")),
+        _ => None,
+    };
+    let mut live_refs: Vec<&str> = vec!["top-bar"];
+    if let Some(ref key) = extra_live {
+        live_refs.push(key.as_str());
+    }
+    if is_library_card_menu && let Some(ref rf) = return_focus {
+        live_refs.push(rf.as_str());
+    }
+    let spec = ContextMenuSpec {
+        id: menu_id,
+        anchor,
+        width,
+        blur,
+        submenu_blur,
+        open_submenu: cm.open_submenu,
+        return_focus: return_focus.clone(),
+        gamepad_focus,
+        entries,
+        on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.close_context_menu()),
+        on_submenu: Rc::new(|s: &mut AppState, idx: Option<usize>, _: &mut Tx| {
+            if let Some(ref mut cm) = s.context_menu {
+                cm.open_submenu = idx;
+            }
+        }),
+    };
+    if is_library_card_menu {
+        context_menu_layers_with_cursor(spec, &live_refs, Cursor::Default)
+    } else {
+        context_menu_layers_live(spec, &live_refs)
+    }
 }
 
 pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
@@ -2151,27 +2168,31 @@ pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
     let (anchor_key, side) = if s.library_all_games {
         ("all-games-more-btn", Side::Bottom)
     } else {
-        ("home-more-btn", Side::Top)
+        ("home-more-btn", Side::Bottom)
     };
 
-    context_menu_layers(ContextMenuSpec {
-        id: "library-more".into(),
-        anchor: MenuAnchor::Element {
-            key: anchor_key.into(),
-            side,
-            align: Align::End,
-            gap: 8.0,
+    context_menu_layers_with_cursor(
+        ContextMenuSpec {
+            id: "library-more".into(),
+            anchor: MenuAnchor::Element {
+                key: anchor_key.into(),
+                side,
+                align: Align::End,
+                gap: 8.0,
+            },
+            width: 240.0,
+            blur,
+            submenu_blur: false,
+            open_submenu: None,
+            return_focus: Some(anchor_key.into()),
+            gamepad_focus,
+            entries,
+            on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.library_more_open = false),
+            on_submenu: Rc::new(|_: &mut AppState, _: Option<usize>, _: &mut Tx| {}),
         },
-        width: 240.0,
-        blur,
-        submenu_blur: false,
-        open_submenu: None,
-        return_focus: Some(anchor_key.into()),
-        gamepad_focus,
-        entries,
-        on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.library_more_open = false),
-        on_submenu: Rc::new(|_: &mut AppState, _: Option<usize>, _: &mut Tx| {}),
-    })
+        &["top-bar", anchor_key],
+        Cursor::Default,
+    )
 }
 
 pub fn library_add_overlay(s: &AppState, blur: bool) -> Vec<El> {
@@ -2200,27 +2221,31 @@ pub fn library_add_overlay(s: &AppState, blur: bool) -> Vec<El> {
     let (anchor_key, side) = if s.library_all_games {
         ("all-games-add-btn", Side::Bottom)
     } else {
-        ("home-add-btn", Side::Top)
+        ("home-add-btn", Side::Bottom)
     };
 
-    context_menu_layers(ContextMenuSpec {
-        id: "library-add".into(),
-        anchor: MenuAnchor::Element {
-            key: anchor_key.into(),
-            side,
-            align: Align::End,
-            gap: 8.0,
+    context_menu_layers_with_cursor(
+        ContextMenuSpec {
+            id: "library-add".into(),
+            anchor: MenuAnchor::Element {
+                key: anchor_key.into(),
+                side,
+                align: Align::End,
+                gap: 8.0,
+            },
+            width: 240.0,
+            blur,
+            submenu_blur: false,
+            open_submenu: None,
+            return_focus: Some(anchor_key.into()),
+            gamepad_focus,
+            entries,
+            on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.library_add_open = false),
+            on_submenu: Rc::new(|_: &mut AppState, _: Option<usize>, _: &mut Tx| {}),
         },
-        width: 240.0,
-        blur,
-        submenu_blur: false,
-        open_submenu: None,
-        return_focus: Some(anchor_key.into()),
-        gamepad_focus,
-        entries,
-        on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.library_add_open = false),
-        on_submenu: Rc::new(|_: &mut AppState, _: Option<usize>, _: &mut Tx| {}),
-    })
+        &["top-bar", anchor_key],
+        Cursor::Default,
+    )
 }
 
 pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
@@ -2338,24 +2363,28 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
                         s.lib.picked.clear();
                     }),
             ));
-            context_menu_layers(ContextMenuSpec {
-                id: "dd-library-sort".into(),
-                anchor: MenuAnchor::Element {
-                    key: "sort-cycle".into(),
-                    side: Side::Bottom,
-                    align: Align::End,
-                    gap: 4.0,
+            context_menu_layers_with_cursor(
+                ContextMenuSpec {
+                    id: "dd-library-sort".into(),
+                    anchor: MenuAnchor::Element {
+                        key: "sort-cycle".into(),
+                        side: Side::Bottom,
+                        align: Align::End,
+                        gap: 8.0,
+                    },
+                    width: 240.0,
+                    blur,
+                    submenu_blur: false,
+                    open_submenu: None,
+                    return_focus: Some("sort-cycle".into()),
+                    gamepad_focus,
+                    entries,
+                    on_dismiss: dismiss,
+                    on_submenu: Rc::new(|_: &mut AppState, _: Option<usize>, _: &mut Tx| {}),
                 },
-                width: 238.0,
-                blur,
-                submenu_blur: false,
-                open_submenu: None,
-                return_focus: Some("sort-cycle".into()),
-                gamepad_focus,
-                entries,
-                on_dismiss: dismiss,
-                on_submenu: Rc::new(|_: &mut AppState, _: Option<usize>, _: &mut Tx| {}),
-            })
+                &["top-bar", "sort-cycle"],
+                Cursor::Default,
+            )
         }
         OpenDropdown::GameDisplayMode
         | OpenDropdown::GameLanguage

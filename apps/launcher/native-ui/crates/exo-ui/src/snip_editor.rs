@@ -3,7 +3,8 @@ use crate::state::{AppState, HostStatus};
 use exo_kit::{
     BG, FG, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, bad, fg_faint, fg_muted,
     filter_pill, float_line, glass_control_fill, glass_rim, good, hairline, hover_fill, icon_close,
-    primary_button, scaled, srgb, type_body, type_control, type_section, type_small,
+    icon_notes, icon_scissors, icon_sliders, icon_sparkles, primary_button, scaled, srgb,
+    type_body, type_control, type_section, type_small,
 };
 use exo_rpc::{
     CaptureItem, CaptureSaveImageReply, CaptureTextReply, METHOD_CAPTURE_SAVE_IMAGE,
@@ -581,35 +582,59 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
         .center_y()
         .border_sides([0.0, 0.0, 1.0, 0.0], hairline())
         .child(
-            device_btn("snip-revert", "Revert", !dirty).on_press(|s: &mut AppState| {
-                if let Some(ref mut e) = s.media.snip_editor {
-                    e.revert();
-                }
-            }),
+            device_btn("snip-revert", "Revert", !dirty)
+                .cursor(if dirty {
+                    Cursor::Pointer
+                } else {
+                    Cursor::NotAllowed
+                })
+                .on_press(|s: &mut AppState| {
+                    if let Some(ref mut e) = s.media.snip_editor {
+                        e.revert();
+                    }
+                }),
         )
         .child(
-            device_btn("snip-undo", "Undo", !can_undo).on_press(|s: &mut AppState| {
-                if let Some(ref mut e) = s.media.snip_editor {
-                    e.canvas.undo();
-                }
-            }),
+            device_btn("snip-undo", "Undo", !can_undo)
+                .cursor(if can_undo {
+                    Cursor::Pointer
+                } else {
+                    Cursor::NotAllowed
+                })
+                .on_press(|s: &mut AppState| {
+                    if let Some(ref mut e) = s.media.snip_editor {
+                        e.canvas.undo();
+                    }
+                }),
         )
         .child(
-            device_btn("snip-redo", "Redo", !can_redo).on_press(|s: &mut AppState| {
-                if let Some(ref mut e) = s.media.snip_editor {
-                    e.canvas.redo();
-                }
-            }),
+            device_btn("snip-redo", "Redo", !can_redo)
+                .cursor(if can_redo {
+                    Cursor::Pointer
+                } else {
+                    Cursor::NotAllowed
+                })
+                .on_press(|s: &mut AppState| {
+                    if let Some(ref mut e) = s.media.snip_editor {
+                        e.canvas.redo();
+                    }
+                }),
         )
         .child(el().grow(1.0))
         .child(
             device_btn("snip-cancel", "Cancel", ed.busy)
+                .cursor(if ed.busy {
+                    Cursor::NotAllowed
+                } else {
+                    Cursor::Pointer
+                })
                 .on_press(|s: &mut AppState| s.close_snip_editor()),
         )
         .child(if can_save {
             primary_button("snip-save", "Save", None).on_press(|s: &mut AppState| s.snip_save())
         } else {
             device_btn("snip-save", if ed.busy { "Saving…" } else { "Save" }, true)
+                .cursor(Cursor::NotAllowed)
         });
 
     let media_stage = if let Some(ref px) = ed.pixels {
@@ -619,12 +644,13 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
             .min_w(0.0)
             .min_h(0.0)
             .fill(BG)
+            .px(12.0)
+            .pb(14.0)
             .center()
-            .padding(16.0)
             .child(
                 ImageCanvas::new(&ed.canvas, px)
                     .key("snip-image-canvas")
-                    .size(920.0, 620.0)
+                    .size(940.0, 810.0)
                     .crop_scrim(crop_scrim())
                     .crop_border(FG)
                     .handle_color(FG)
@@ -652,13 +678,42 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
         ]
         .into_iter()
         .map(|(tab, key, label)| {
-            filter_pill(key, label, ed.tab == tab).on_press(move |s: &mut AppState| {
-                if let Some(ref mut e) = s.media.snip_editor {
-                    e.tab = tab;
-                    e.said = None;
-                    e.sync_tool();
-                }
-            })
+            let active = ed.tab == tab;
+            let ic_color = if active { PRIMARY_FG } else { FG };
+            let ic = match tab {
+                SnipTab::Crop => icon_scissors(14.0, ic_color),
+                SnipTab::Markup => icon_sparkles(14.0, ic_color),
+                SnipTab::Blur => icon_sliders(14.0, ic_color),
+                SnipTab::Text => icon_notes(14.0, ic_color),
+            };
+            row()
+                .key(key)
+                .role("tab")
+                .label(label)
+                .checked(active)
+                .focusable(true)
+                .hit()
+                .cursor(Cursor::Pointer)
+                .h(28.0)
+                .px(10.0)
+                .gap(5.0)
+                .center_y()
+                .radius(RADIUS_PILL)
+                .fill(if active { FG } else { Color::TRANSPARENT })
+                .hover(if active { FG } else { hover_fill() })
+                .on_press(move |s: &mut AppState| {
+                    if let Some(ref mut e) = s.media.snip_editor {
+                        e.tab = tab;
+                        e.said = None;
+                        e.sync_tool();
+                    }
+                })
+                .child(ic)
+                .child(
+                    text(label)
+                        .font(type_small())
+                        .color(if active { PRIMARY_FG } else { FG }),
+                )
         }),
     );
 
@@ -713,23 +768,52 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
             }
         }
         SnipTab::Markup => {
-            let tools = row().w_full().flex_wrap().gap(8.0).children(
-                [
-                    (SnipMarkupTool::Arrow, "snip-mk-arrow", "Arrow"),
-                    (SnipMarkupTool::Box, "snip-mk-box", "Box"),
-                    (SnipMarkupTool::Highlight, "snip-mk-hl", "Highlight"),
-                    (SnipMarkupTool::Freehand, "snip-mk-draw", "Draw"),
-                ]
-                .into_iter()
-                .map(|(tool, key, label)| {
-                    filter_pill(key, label, ed.markup == tool).on_press(move |s: &mut AppState| {
+            let mk_tile = |tool: SnipMarkupTool, key: &'static str, label: &'static str| {
+                let on = ed.markup == tool;
+                col()
+                    .key(key)
+                    .role("button")
+                    .label(label)
+                    .focusable(true)
+                    .hit()
+                    .cursor(Cursor::Pointer)
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .h(56.0)
+                    .center()
+                    .radius(10.0)
+                    .fill(if on { hover_fill() } else { Color::TRANSPARENT })
+                    .border(1.0, if on { FG.alpha(0.35) } else { glass_rim() })
+                    .hover(hover_fill())
+                    .on_press(move |s: &mut AppState| {
                         if let Some(ref mut e) = s.media.snip_editor {
                             e.markup = tool;
                             e.sync_tool();
                         }
                     })
-                }),
-            );
+                    .child(text(label).font(type_small()).color(FG))
+            };
+            let tools = col()
+                .w_full()
+                .gap(8.0)
+                .child(
+                    row()
+                        .w_full()
+                        .gap(8.0)
+                        .child(mk_tile(SnipMarkupTool::Arrow, "snip-mk-arrow", "Arrow"))
+                        .child(mk_tile(SnipMarkupTool::Box, "snip-mk-box", "Box")),
+                )
+                .child(
+                    row()
+                        .w_full()
+                        .gap(8.0)
+                        .child(mk_tile(
+                            SnipMarkupTool::Highlight,
+                            "snip-mk-hl",
+                            "Highlight",
+                        ))
+                        .child(mk_tile(SnipMarkupTool::Freehand, "snip-mk-draw", "Draw")),
+                );
             let hint = match ed.markup {
                 SnipMarkupTool::Arrow => "Drag from where it starts to what it points at.",
                 _ => "Drag over it.",
@@ -778,7 +862,7 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
     }
 
     let inspector = col()
-        .w(300.0)
+        .w(304.0)
         .h_full()
         .padding(16.0)
         .gap(16.0)

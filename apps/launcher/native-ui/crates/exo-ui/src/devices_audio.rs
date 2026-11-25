@@ -3,8 +3,9 @@ use crate::state::{AppState, HostStatus, NoticeTone};
 use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
     SPRING_QUICK, amoled_card, bad, fg_faint, fg_muted, glass_control_fill, glass_rim, good,
-    hairline, hover_fill, icon_chevron_left, icon_search, primary_button, scaled, slider_track,
-    status_badge, track_fill, type_body, type_control, type_section, type_small, type_title,
+    hairline, hover_fill, icon_chevron_down, icon_chevron_left, icon_heart, icon_search,
+    primary_button, scaled, slider_track, status_badge, track_fill, type_body, type_control,
+    type_section, type_small, type_title,
 };
 use exo_rpc::{
     ActionResult, AudioFormatOption, AudioFormatsReply, AudioReadReply, DevicesImageReply,
@@ -282,7 +283,7 @@ pub fn device_switch(
         .focusable(!disabled)
         .hit()
         .cursor(if disabled {
-            Cursor::NotAllowed
+            Cursor::Default
         } else {
             Cursor::Pointer
         })
@@ -312,7 +313,7 @@ pub fn device_icon_btn(
         .press_on_down()
         .press_scale(if disabled { 1.0 } else { PRESS_SCALE })
         .cursor(if disabled {
-            Cursor::NotAllowed
+            Cursor::Default
         } else {
             Cursor::Pointer
         })
@@ -350,8 +351,9 @@ pub fn device_panel(title: impl Into<String>, rows: Vec<El>) -> El {
     }
     amoled_card(RADIUS_PANEL)
         .w_full()
-        .px(20.0)
-        .py(16.0)
+        .pt(16.0)
+        .px(24.0)
+        .pb(8.0)
         .gap(10.0)
         .child(text(title).font(type_section()).color(FG))
         .child(body)
@@ -362,6 +364,26 @@ pub fn device_row(
     detail: Option<String>,
     error: Option<String>,
     control: Option<El>,
+) -> El {
+    device_row_sized(label, detail, error, control, 15.0, Some(68.0))
+}
+
+pub fn device_row_compact(
+    label: impl Into<String>,
+    detail: Option<String>,
+    error: Option<String>,
+    control: Option<El>,
+) -> El {
+    device_row_sized(label, detail, error, control, 10.0, None)
+}
+
+fn device_row_sized(
+    label: impl Into<String>,
+    detail: Option<String>,
+    error: Option<String>,
+    control: Option<El>,
+    pad_y: f32,
+    min_h: Option<f32>,
 ) -> El {
     let mut left = col()
         .grow(1.0)
@@ -380,11 +402,14 @@ pub fn device_row(
     }
     let mut r = row()
         .w_full()
-        .py(10.0)
+        .py(pad_y)
         .gap(12.0)
         .justify_between()
         .center_y()
         .child(left);
+    if let Some(mh) = min_h {
+        r = r.min_h(mh);
+    }
     if let Some(c) = control {
         r = r.child(c);
     }
@@ -405,16 +430,11 @@ pub fn device_page_shell(
     panels: Vec<El>,
     on_back: impl Fn(&mut AppState) + 'static,
 ) -> El {
-    let mut col_a = Vec::new();
-    let mut col_b = Vec::new();
-    for (idx, p) in panels.into_iter().enumerate() {
-        if idx % 2 == 0 {
-            col_a.push(p);
-        } else {
-            col_b.push(p);
-        }
-    }
-    device_page_shell_columns_no_rescan(header, col_a, col_b, on_back)
+    let cut = panels.len().div_ceil(2);
+    let mut iter = panels.into_iter();
+    let col_a: Vec<El> = iter.by_ref().take(cut).collect();
+    let col_b: Vec<El> = iter.collect();
+    device_page_shell_inner(header, col_a, col_b, false, on_back)
 }
 
 pub fn device_page_shell_columns_no_rescan(
@@ -423,13 +443,23 @@ pub fn device_page_shell_columns_no_rescan(
     col_b: Vec<El>,
     on_back: impl Fn(&mut AppState) + 'static,
 ) -> El {
-    device_page_shell_inner(header, col_a, col_b, on_back)
+    device_page_shell_inner(header, col_a, col_b, false, on_back)
+}
+
+pub fn device_page_shell_band(
+    header: DevicePageHeader,
+    col_a: Vec<El>,
+    col_b: Vec<El>,
+    on_back: impl Fn(&mut AppState) + 'static,
+) -> El {
+    device_page_shell_inner(header, col_a, col_b, true, on_back)
 }
 
 fn device_page_shell_inner(
     header: DevicePageHeader,
     col_a: Vec<El>,
     col_b: Vec<El>,
+    stretch_band: bool,
     on_back: impl Fn(&mut AppState) + 'static,
 ) -> El {
     let DevicePageHeader {
@@ -441,37 +471,47 @@ fn device_page_shell_inner(
         credit,
     } = header;
     let mut hero = amoled_card(RADIUS_PANEL)
-        .w(405.0)
+        .w(409.0)
         .h_full()
-        .px(24.0)
-        .py(20.0)
-        .gap(16.0)
-        .child(el().w_full().grow(1.0).min_h(220.0).center().child(media))
+        .child(
+            el().w_full()
+                .grow(1.0)
+                .min_h(120.0)
+                .px(16.0)
+                .py(16.0)
+                .center()
+                .child(media),
+        )
         .child(
             col()
                 .w_full()
+                .pt(16.0)
+                .px(24.0)
                 .gap(4.0)
                 .child(text(name).font(type_title()).color(FG))
-                .child(text(status).font(type_body()).color(fg_muted())),
+                .child(text(status).font(type_small()).color(fg_muted())),
         );
 
     if !stats.is_empty() {
-        let mut dl = col().w_full();
-        for (row_idx, pair) in stats.chunks(2).enumerate() {
-            if row_idx > 0 {
-                dl = dl.child(el().w_full().h(1.0).fill(hairline()));
-            }
-            let mut r = row().w_full().gap(16.0).py(12.0);
-            for (k, v) in pair {
+        let mut dl = col().w_full().mt(16.0);
+        for pair in stats.chunks(2) {
+            dl = dl.child(el().w_full().h(1.0).fill(hairline()));
+            let mut r = row().w_full();
+            for (col_idx, (k, v)) in pair.iter().enumerate() {
+                if col_idx > 0 {
+                    r = r.child(el().w(1.0).h_full().fill(hairline()));
+                }
                 r = r.child(
                     col()
                         .grow(1.0)
                         .min_w(0.0)
+                        .py(16.0)
+                        .px(24.0)
                         .gap(4.0)
                         .child(text(*k).font(type_small()).color(fg_muted()))
                         .child(
                             text(v.clone())
-                                .font(TextStyle::new(scaled(17.0), 600.0))
+                                .font(TextStyle::new(scaled(20.0), 400.0))
                                 .color(FG)
                                 .w_full()
                                 .wrap(),
@@ -479,27 +519,64 @@ fn device_page_shell_inner(
                 );
             }
             if pair.len() == 1 {
-                r = r.child(el().grow(1.0).min_w(0.0));
+                r = r
+                    .child(el().w(1.0).h_full().fill(hairline()))
+                    .child(el().grow(1.0).min_w(0.0));
             }
             dl = dl.child(r);
         }
-        hero = hero.child(el().w_full().h(1.0).fill(hairline())).child(dl);
+        hero = hero.child(dl);
     }
 
     if let Some(cred) = credit {
         hero = hero.child(el().w_full().h(1.0).fill(hairline())).child(
-            text(cred)
-                .font(TextStyle::new(scaled(11.0), 400.0))
-                .color(fg_faint()),
+            row()
+                .w_full()
+                .py(10.0)
+                .px(24.0)
+                .gap(6.0)
+                .center_y()
+                .child(text(cred).font(type_small()).color(fg_faint()))
+                .child(icon_heart(12.0, bad())),
         );
     }
 
+    let stretch_last = |mut list: Vec<El>| -> Vec<El> {
+        if stretch_band && let Some(last) = list.pop() {
+            list.push(last.grow(1.0));
+        }
+        list
+    };
+    let col_a = stretch_last(col_a);
+    let col_b = stretch_last(col_b);
+
     let right = if col_b.is_empty() {
-        col().grow(1.0).min_w(0.0).gap(12.0).children(col_a)
+        let c = col().w_full().gap(12.0).children(col_a);
+        if stretch_band { c.h_full() } else { c }
+    } else if stretch_band {
+        row()
+            .w_full()
+            .h_full()
+            .gap(12.0)
+            .child(
+                col()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .h_full()
+                    .gap(12.0)
+                    .children(col_a),
+            )
+            .child(
+                col()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .h_full()
+                    .gap(12.0)
+                    .children(col_b),
+            )
     } else {
         row()
-            .grow(1.0)
-            .min_w(0.0)
+            .w_full()
             .gap(12.0)
             .child(col().grow(1.0).min_w(0.0).gap(12.0).children(col_a))
             .child(col().grow(1.0).min_w(0.0).gap(12.0).children(col_b))
@@ -520,17 +597,17 @@ fn device_page_shell_inner(
         .w_full()
         .h_full()
         .fill(BG)
-        .pt(60.0)
-        .px(16.0)
-        .pb(24.0)
-        .gap(16.0)
+        .pt(66.0)
+        .px(10.0)
+        .pb(16.0)
+        .gap(12.0)
         .child(top_strip)
         .child(
             row()
                 .grow(1.0)
                 .min_h(0.0)
                 .w_full()
-                .gap(16.0)
+                .gap(12.0)
                 .child(hero)
                 .child(
                     col()
@@ -541,7 +618,6 @@ fn device_page_shell_inner(
                         .scroll(ScrollSpec {
                             stick_bottom: false,
                         })
-                        .pb(16.0)
                         .child(right),
                 ),
         )
@@ -1887,12 +1963,12 @@ fn endpoint_panel(
             None,
             fmt_err,
             Some(
-                device_btn(format!("aud-fmt-btn-{prefix}"), current_label, false).on_press(
-                    move |s: &mut AppState| {
+                device_btn(format!("aud-fmt-btn-{prefix}"), current_label, false)
+                    .child(icon_chevron_down(12.0, fg_muted()))
+                    .on_press(move |s: &mut AppState| {
                         s.pc.audio_ui.open_picker =
                             if picker_open { None } else { Some(pk.clone()) };
-                    },
-                ),
+                    }),
             ),
         ));
         if picker_open {
@@ -2095,7 +2171,8 @@ pub fn audio_page(
             .get("audio:worn")
             .or_else(|| output.and_then(|d| s.pc.device_images.get(&d.id)));
     let media = if let Some(photo) = img_url.and_then(|u| s.device_image(u, scale)) {
-        el().size(300.0, 200.0)
+        el().w_full()
+            .h_full()
             .pixels_fit(photo.pixels(), SurfaceFit::Fit)
     } else {
         exo_kit::icon_volume(64.0, fg_muted())
@@ -2125,30 +2202,31 @@ pub fn audio_page(
         o.model.as_deref() != Some("speakers") && o.model.as_deref() != Some("monitor")
     });
 
-    let mut panels = Vec::new();
+    let mut col_a = Vec::new();
+    let mut col_b = Vec::new();
     if let Some(p) = apo_panel(s) {
-        panels.push(p);
+        col_a.push(p);
     }
     if worn && let Some(p) = headphone_panel(s) {
-        panels.push(p);
+        col_a.push(p);
     }
     if let Some(p) = sound_panel(s) {
-        panels.push(p);
+        col_a.push(p);
     }
     if let Some(p) = night_panel(s) {
-        panels.push(p);
+        col_a.push(p);
     }
     if let (Some(_), Some(ep)) = (output, s.pc.audio.as_ref().and_then(|a| a.output.as_ref())) {
-        panels.push(endpoint_panel(s, "Output", true, ep));
+        col_a.push(endpoint_panel(s, "Output", true, ep));
     }
     if let (Some(_), Some(ep)) = (mic, s.pc.audio.as_ref().and_then(|a| a.mic.as_ref())) {
-        panels.push(endpoint_panel(s, "Microphone", false, ep));
+        col_b.push(endpoint_panel(s, "Microphone", false, ep));
     }
     if let Some(p) = voice_panel(s) {
-        panels.push(p);
+        col_b.push(p);
     }
 
-    device_page_shell(
+    device_page_shell_band(
         DevicePageHeader {
             key: "room-devices-audio",
             name: display_name,
@@ -2157,7 +2235,8 @@ pub fn audio_page(
             stats,
             credit: Some("Corrections by AutoEq, sound by Equalizer APO"),
         },
-        panels,
+        col_a,
+        col_b,
         |s| {
             s.pc.selected_device_id = None;
             s.pc.audio_ui.open_picker = None;

@@ -191,6 +191,25 @@ test('sessions: one per PC, the caller marked current, a removed PC ends its ses
   assert.equal((await call(env, 'GET', '/v1/account', { token: again })).body.error, 'signed-out')
 })
 
+test('sessions: two apps on the same PC share one device id without signing each other out', async () => {
+  const env = account()
+  const launcher = (await call(env, 'POST', '/v1/account', { body: { email: EMAIL, password: PASSWORD, device: DEVICE, app: 'launcher' } })).body.token
+  const cinema = (await call(env, 'POST', '/v1/session', { body: { email: EMAIL, password: PASSWORD, device: DEVICE, app: 'cinema' } })).body.token
+  assert.equal((await call(env, 'GET', '/v1/account', { token: launcher })).status, 200)
+  assert.equal((await call(env, 'GET', '/v1/account', { token: cinema })).status, 200)
+  const launcherAgain = (await call(env, 'POST', '/v1/session', { body: { email: EMAIL, password: PASSWORD, device: DEVICE, app: 'launcher' } })).body.token
+  assert.equal((await call(env, 'GET', '/v1/account', { token: launcher })).body.error, 'signed-out')
+  assert.equal((await call(env, 'GET', '/v1/account', { token: cinema })).status, 200)
+  const listed = await call(env, 'GET', '/v1/sessions', { token: launcherAgain })
+  assert.equal(listed.body.sessions.length, 2)
+  assert.equal((await call(env, 'POST', '/v1/signout', { token: cinema })).status, 204)
+  assert.equal((await call(env, 'GET', '/v1/account', { token: launcherAgain })).status, 200)
+  assert.equal(env.DB.rows('devices').length, 1)
+  assert.equal((await call(env, 'DELETE', `/v1/sessions/${DEVICE}`, { token: launcherAgain })).status, 204)
+  assert.equal((await call(env, 'GET', '/v1/account', { token: launcherAgain })).body.error, 'signed-out')
+  assert.equal(env.DB.rows('devices').length, 0)
+})
+
 test('password change: the current password is needed, other PCs are signed out, this one stays, the old password stops working', async () => {
   const env = account()
   const mine = (await signUp(env)).body.token

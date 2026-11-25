@@ -1151,14 +1151,22 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 Room::Discord => discord::view(s, scale, budget),
             };
 
-            col()
+            let scrolled = col()
                 .key(format!("{room_key}-scroll"))
                 .w_full()
                 .h_full()
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(page)
+                .child(page);
+            if s.room == Room::Store && s.store_has_page_open() {
+                el().w_full()
+                    .h_full()
+                    .pt(exo_kit::TITLEBAR_HEIGHT * 2.0)
+                    .child(scrolled)
+            } else {
+                scrolled
+            }
         }
     });
 
