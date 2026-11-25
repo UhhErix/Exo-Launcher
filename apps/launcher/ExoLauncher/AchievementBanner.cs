@@ -127,6 +127,7 @@ internal static class AchievementBanner
         private Windows.UI.Composition.Desktop.DesktopWindowTarget? _target;
         private Windows.UI.Composition.ContainerVisual? _root;
         private CoreWebView2CompositionController? _controller;
+        private WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? _environmentLease;
         private static WndProc? _proc;
         private static bool _registered;
         private readonly int _width, _height;
@@ -139,39 +140,46 @@ internal static class AchievementBanner
         internal static async Task<Overlay> CreateAsync(int width, int height)
         {
             var overlay = new Overlay(width, height);
-            overlay.MakeWindow();
-            EnsureSystemDispatcher();
-            overlay._compositor = new Windows.UI.Composition.Compositor();
-            var interop = (ICompositorDesktopInterop)Marshal.GetObjectForIUnknown(((IWinRTObject)overlay._compositor).NativeObject.ThisPtr);
-            interop.CreateDesktopWindowTarget(overlay._hwnd, true, out var target);
-            overlay._target = Windows.UI.Composition.Desktop.DesktopWindowTarget.FromAbi(target);
-            overlay._root = overlay._compositor.CreateContainerVisual();
-            overlay._target.Root = overlay._root;
+            try
+            {
+                overlay.MakeWindow();
+                EnsureSystemDispatcher();
+                overlay._compositor = new Windows.UI.Composition.Compositor();
+                var interop = (ICompositorDesktopInterop)Marshal.GetObjectForIUnknown(((IWinRTObject)overlay._compositor).NativeObject.ThisPtr);
+                interop.CreateDesktopWindowTarget(overlay._hwnd, true, out var target);
+                overlay._target = Windows.UI.Composition.Desktop.DesktopWindowTarget.FromAbi(target);
+                overlay._root = overlay._compositor.CreateContainerVisual();
+                overlay._target.Root = overlay._root;
 
-            var environment = await WebViewEnvironmentFactory.GetAsync().ConfigureAwait(true);
-            overlay._controller = await environment.CreateCoreWebView2CompositionControllerAsync(CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)overlay._hwnd)).AsTask().ConfigureAwait(true);
-            overlay._controller.DefaultBackgroundColor = new Windows.UI.Color { A = 0, R = 0, G = 0, B = 0 };
-            overlay._controller.ShouldDetectMonitorScaleChanges = false;
-            overlay._controller.RootVisualTarget = overlay._root;
-            var core = overlay._controller.CoreWebView2;
-            core.Settings.IsWebMessageEnabled = true;
-            core.Settings.AreDevToolsEnabled = false;
-            core.Settings.AreDefaultContextMenusEnabled = false;
-            core.Settings.IsStatusBarEnabled = false;
-            core.Settings.IsZoomControlEnabled = false;
-            core.SetVirtualHostNameToFolderMapping(Host, Path.Combine(AppContext.BaseDirectory, "Assets", "Overlay"), CoreWebView2HostResourceAccessKind.DenyCors);
-            core.NavigationStarting += (_, e) => UiGuard.Run(() => { if (!e.Uri.StartsWith($"https://{Host}/", StringComparison.Ordinal)) e.Cancel = true; });
-            // Size the visual and WebView2 bounds before navigating so the first frame lays out at full dimensions.
-            overlay._root.Size = new System.Numerics.Vector2(width, height);
-            overlay._controller.Bounds = new Windows.Foundation.Rect(0, 0, width, height);
-            overlay._controller.IsVisible = true;
-            // The page says when its listener is attached (banner.ready) and when a banner sound is due.
-            core.WebMessageReceived += (_, e) => UiGuard.Run(() => overlay.OnWebMessage(e.WebMessageAsJson));
-            core.NavigationCompleted += (_, e) => UiGuard.Run(() => overlay.OnNavigationCompleted(e.IsSuccess));
-            core.Navigate($"https://{Host}/banner.html");
-            return overlay;
+                overlay._environmentLease = await WebViewEnvironmentFactory.AcquireAsync().ConfigureAwait(true);
+                var environment = overlay._environmentLease.Environment;
+                overlay._controller = await environment.CreateCoreWebView2CompositionControllerAsync(CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)overlay._hwnd)).AsTask().ConfigureAwait(true);
+                overlay._controller.DefaultBackgroundColor = new Windows.UI.Color { A = 0, R = 0, G = 0, B = 0 };
+                overlay._controller.ShouldDetectMonitorScaleChanges = false;
+                overlay._controller.RootVisualTarget = overlay._root;
+                var core = overlay._controller.CoreWebView2;
+                WebViewEnvironmentLifetime.ApplyLowMemoryTarget(core);
+                core.Settings.IsWebMessageEnabled = true;
+                core.Settings.AreDevToolsEnabled = false;
+                core.Settings.AreDefaultContextMenusEnabled = false;
+                core.Settings.IsStatusBarEnabled = false;
+                core.Settings.IsZoomControlEnabled = false;
+                core.SetVirtualHostNameToFolderMapping(Host, Path.Combine(AppContext.BaseDirectory, "Assets", "Overlay"), CoreWebView2HostResourceAccessKind.DenyCors);
+                core.NavigationStarting += (_, e) => UiGuard.Run(() => { if (!e.Uri.StartsWith($"https://{Host}/", StringComparison.Ordinal)) e.Cancel = true; });
+                overlay._root.Size = new System.Numerics.Vector2(width, height);
+                overlay._controller.Bounds = new Windows.Foundation.Rect(0, 0, width, height);
+                overlay._controller.IsVisible = true;
+                core.WebMessageReceived += (_, e) => UiGuard.Run(() => overlay.OnWebMessage(e.WebMessageAsJson));
+                core.NavigationCompleted += (_, e) => UiGuard.Run(() => overlay.OnNavigationCompleted(e.IsSuccess));
+                core.Navigate($"https://{Host}/banner.html");
+                return overlay;
+            }
+            catch
+            {
+                overlay.Dispose();
+                throw;
+            }
         }
-
         /// <summary>
         /// On the game: the top centre of the game's own window (the one in front while it plays; a windowed game's
         /// frame, a full-screen one's whole screen), kept inside its screen, at that screen's scale, shown without activating.
@@ -300,7 +308,7 @@ internal static class AchievementBanner
         {
             _readyFallback?.Dispose();
             _readyFallback = null;
-            try { _controller?.Close(); } catch (COMException) { }
+            WebViewEnvironmentLifetime.CloseAndRelease(_controller);
             _controller = null;
             _target?.Dispose();
             _target = null;
@@ -312,6 +320,7 @@ internal static class AchievementBanner
             _hwnd = IntPtr.Zero;
             if (_ownerHwnd != IntPtr.Zero) DestroyWindow(_ownerHwnd);
             _ownerHwnd = IntPtr.Zero;
+            Interlocked.Exchange(ref _environmentLease, null)?.Dispose();
         }
 
         /// <summary>Windows.UI.Composition needs a Windows.System dispatcher queue on its thread; WinUI's own isn't one.</summary>

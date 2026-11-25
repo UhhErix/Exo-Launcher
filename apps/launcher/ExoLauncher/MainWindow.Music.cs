@@ -17,6 +17,7 @@ namespace ExoLauncher;
 public sealed partial class MainWindow
 {
     private WebView2? _musicWeb;
+    private WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? _musicWebEnvironmentLease;
     private Task? _musicWebInit;
     private TaskCompletionSource? _musicWebLoad;
     private string? _musicWebService;
@@ -556,9 +557,12 @@ public sealed partial class MainWindow
         ReevaluateShellSleep();
         _embeddedRenderers = Array.Empty<EmbeddedRendererInfo>();
         ApplyWebViewMemoryTarget(WindowIsHiddenOrMinimized());
-        if (previous is null) return;
-        try { WebExtensions.Detach(previous.CoreWebView2); previous.Close(); } catch { }
-        ContentHost.Children.Remove(previous);
+        if (previous is not null)
+        {
+            try { WebExtensions.Detach(previous.CoreWebView2); previous.Close(); } catch { }
+            ContentHost.Children.Remove(previous);
+        }
+        Interlocked.Exchange(ref _musicWebEnvironmentLease, null)?.Dispose();
     }
 
     private void CloseMusicWeb()
@@ -701,19 +705,39 @@ public sealed partial class MainWindow
     private async Task InitializeMusicWebAsync(WebView2 view, string service)
     {
         var initTimer = Stopwatch.StartNew();
-        var environment = await WebViewEnvironmentFactory.GetAsync();
-        var envMs = initTimer.ElapsedMilliseconds;
-        if (_musicWebClosed || !ReferenceEquals(_musicWeb, view)) return;
-        await view.EnsureCoreWebView2Async(environment, WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
-        var coreMs = initTimer.ElapsedMilliseconds;
-        if (!_musicWebClosed && ReferenceEquals(_musicWeb, view))
-            WebViewEnvironmentFactory.LogEmbeddedProfileOnce(view.CoreWebView2);
-        if (_musicWebClosed || !ReferenceEquals(_musicWeb, view)) return;
+        WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? lease = null;
+        CoreWebView2Environment environment;
+        long envMs;
+        long coreMs;
+        try
+        {
+            lease = await WebViewEnvironmentFactory.AcquireAsync();
+            environment = lease.Environment;
+            envMs = initTimer.ElapsedMilliseconds;
+            if (_musicWebClosed || !ReferenceEquals(_musicWeb, view))
+            {
+                lease.Dispose();
+                return;
+            }
+            await view.EnsureCoreWebView2Async(environment, WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
+            coreMs = initTimer.ElapsedMilliseconds;
+            if (_musicWebClosed || !ReferenceEquals(_musicWeb, view))
+            {
+                lease.Dispose();
+                return;
+            }
+            Interlocked.Exchange(ref _musicWebEnvironmentLease, lease)?.Dispose();
+            lease = null;
+        }
+        catch
+        {
+            lease?.Dispose();
+            throw;
+        }
+        WebViewEnvironmentFactory.LogEmbeddedProfileOnce(view.CoreWebView2);
         EmbeddedClientFrame.Apply(view);
         var core = view.CoreWebView2;
         HideWebViewWindows();
-        // Installed extensions apply to the profile regardless of bookkeeping;
-        // attach in parallel so the first navigation is never blocked by it.
         _ = WebExtensions.AttachAsync(core, MusicWebPolicy.Label(service), WinRT.Interop.WindowNative.GetWindowHandle(this));
         await ResetPermissionGrantsAsync(core.Profile);
         var permissionsMs = initTimer.ElapsedMilliseconds;
@@ -870,6 +894,7 @@ public sealed partial class MainWindow
             var deferral = e.GetDeferral();
             var popupTimer = Stopwatch.StartNew();
             Window? child = null;
+            WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? popupLease = null;
             var popupDismissed = false;
             try
             {
@@ -890,6 +915,7 @@ public sealed partial class MainWindow
                     }
                     ApplyWebViewMemoryTarget(WindowIsHiddenOrMinimized());
                     try { WebExtensions.Detach(view.CoreWebView2); view.Close(); } catch { }
+                    Interlocked.Exchange(ref popupLease, null)?.Dispose();
                 };
                 // A window the page opens on its own (a sign-in's next step) takes the front only while Exo has it.
                 if (e.IsUserInitiated || ForegroundWatcher.ExoInFront(WinRT.Interop.WindowNative.GetWindowHandle(this)))
@@ -898,14 +924,16 @@ public sealed partial class MainWindow
                     window.Activate();
                 }
                 else window.AppWindow.Show(activateWindow: false);
-                await view.EnsureCoreWebView2Async(environment, WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
+                popupLease = WebViewEnvironmentFactory.TryAcquire(environment) ?? await WebViewEnvironmentFactory.AcquireAsync();
+                var popupEnv = popupLease.Environment;
+                await view.EnsureCoreWebView2Async(popupEnv, WebViewEnvironmentFactory.EmbeddedControllerOptions(popupEnv));
                 var ensureMs = popupTimer.ElapsedMilliseconds;
-                if (_musicWebClosed || _musicWebService != service || generation != _musicWebGeneration) { window.Close(); return; }
+                if (popupDismissed || _musicWebClosed || _musicWebService != service || generation != _musicWebGeneration) { window.Close(); return; }
                 _ = WebExtensions.AttachAsync(view.CoreWebView2, MusicWebPolicy.Label(service), WinRT.Interop.WindowNative.GetWindowHandle(window));
                 if (popupDismissed || _musicWebClosed || _musicWebService != service || generation != _musicWebGeneration) { window.Close(); return; }
                 await SetMusicMotionPreferenceAsync(view.CoreWebView2);
                 if (popupDismissed || _musicWebClosed || _musicWebService != service || generation != _musicWebGeneration) { window.Close(); return; }
-                ConfigureMusicCore(view.CoreWebView2, environment, view, service, popup: true);
+                ConfigureMusicCore(view.CoreWebView2, popupEnv, view, service, popup: true);
                 await view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(EmbeddedClientPresentation.Script);
                 void UpdatePopupActivity(bool force = false)
                 {
@@ -937,6 +965,7 @@ public sealed partial class MainWindow
             {
                 var dismissed = popupDismissed;
                 try { child?.Close(); } catch { }
+                try { popupLease?.Dispose(); } catch { }
                 if (!dismissed && generation == _musicWebGeneration)
                     PublishMusicStatus(service, "error", "The player's window could not open. Try opening it in your browser.");
             }

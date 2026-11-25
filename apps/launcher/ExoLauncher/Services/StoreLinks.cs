@@ -67,51 +67,56 @@ internal static class StoreLinks
         if (!IsRedirect(url)) return url;
         lock (Resolved) if (Resolved.TryGetValue(url.AbsoluteUri, out var known)) return known;
 
-        CoreWebView2Controller? controller = null;
         try
         {
-            var environment = await WebViewEnvironmentFactory.GetAsync();
-            var options = environment.CreateCoreWebView2ControllerOptions();
-            options.IsInPrivateModeEnabled = true;
-            controller = await environment.CreateCoreWebView2ControllerAsync(
-                CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)owner), options);
-            controller.IsVisible = false;
-            var core = controller.CoreWebView2;
-            core.Settings.AreHostObjectsAllowed = false;
-            core.Settings.IsWebMessageEnabled = false;
-            core.Settings.AreDevToolsEnabled = false;
-            core.Settings.AreDefaultScriptDialogsEnabled = false;
-            core.Settings.IsStatusBarEnabled = false;
-            // No one sees this page: a link from it to another app is refused and logged, never asked.
-            WebPageGuard.Attach(core, "Store link");
-            var landed = new TaskCompletionSource<Uri?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            core.NavigationStarting += (_, e) => UiGuard.Run(() =>
+            using var lease = await WebViewEnvironmentFactory.AcquireAsync(ct: ct);
+            CoreWebView2Controller? controller = null;
+            try
             {
-                if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var next) || IsRedirect(next)) return;
-                e.Cancel = true;
-                landed.TrySetResult(next.Scheme == Uri.UriSchemeHttps ? next : null);
-            });
-            core.NewWindowRequested += (_, e) => UiGuard.Run(() => e.Handled = true);
-            core.Navigate(url.AbsoluteUri);
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(10));
-            var page = await landed.Task.WaitAsync(timeout.Token);
-            if (page is not null)
-                lock (Resolved)
+                var environment = lease.Environment;
+                var options = environment.CreateCoreWebView2ControllerOptions();
+                options.IsInPrivateModeEnabled = true;
+                controller = await environment.CreateCoreWebView2ControllerAsync(
+                    CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)owner), options);
+                controller.IsVisible = false;
+                var core = controller.CoreWebView2;
+                WebViewEnvironmentLifetime.ApplyLowMemoryTarget(core);
+                core.Settings.AreHostObjectsAllowed = false;
+                core.Settings.IsWebMessageEnabled = false;
+                core.Settings.AreDevToolsEnabled = false;
+                core.Settings.AreDefaultScriptDialogsEnabled = false;
+                core.Settings.IsStatusBarEnabled = false;
+                // No one sees this page: a link from it to another app is refused and logged, never asked.
+                WebPageGuard.Attach(core, "Store link");
+                var landed = new TaskCompletionSource<Uri?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                core.NavigationStarting += (_, e) => UiGuard.Run(() =>
                 {
-                    if (Resolved.Count >= 64) Resolved.Clear();
-                    Resolved[url.AbsoluteUri] = page;
-                }
-            return page;
+                    if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var next) || IsRedirect(next)) return;
+                    e.Cancel = true;
+                    landed.TrySetResult(next.Scheme == Uri.UriSchemeHttps ? next : null);
+                });
+                core.NewWindowRequested += (_, e) => UiGuard.Run(() => e.Handled = true);
+                core.Navigate(url.AbsoluteUri);
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                var page = await landed.Task.WaitAsync(timeout.Token);
+                if (page is not null)
+                    lock (Resolved)
+                    {
+                        if (Resolved.Count >= 64) Resolved.Clear();
+                        Resolved[url.AbsoluteUri] = page;
+                    }
+                return page;
+            }
+            finally
+            {
+                WebViewEnvironmentLifetime.CloseAndRelease(controller);
+            }
         }
         catch (Exception ex) when (ex is OperationCanceledException or TimeoutException or System.Runtime.InteropServices.COMException or InvalidOperationException)
         {
             AppLog.Debug("Store link not resolved: " + ex.Message);
             return null;
-        }
-        finally
-        {
-            controller?.Close();
         }
     }
 

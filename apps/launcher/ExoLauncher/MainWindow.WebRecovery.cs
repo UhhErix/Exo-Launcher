@@ -29,7 +29,10 @@ public sealed partial class MainWindow
     private static readonly TimeSpan PaintWait = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PageBackWait = TimeSpan.FromSeconds(15);
     private readonly RecoveryBudget _webRecoveries = new(3, TimeSpan.FromMinutes(1));
+    private WebViewEnvironmentRefPool<CoreWebView2Environment>.Lease? _shellEnvironmentLease;
     private CoreWebView2Environment? _shellEnvironment;
+    private Windows.Foundation.TypedEventHandler<CoreWebView2Environment, object>? _processInfosChangedHandler;
+    private Windows.Foundation.TypedEventHandler<CoreWebView2Environment, CoreWebView2BrowserProcessExitedEventArgs>? _browserProcessExitedHandler;
     private Task _shellBrowserGone = Task.CompletedTask;
     // The page's GPU process exited since the page last loaded.
     private bool _gpuLostSinceLoad;
@@ -40,7 +43,10 @@ public sealed partial class MainWindow
     {
         var kind = e.ProcessFailedKind;
         var action = WebRecovery.For(kind);
-        var what = $"kind={kind} reason={e.Reason} exit={e.ExitCode}";
+        var desc = e.ProcessDescription;
+        var what = string.IsNullOrWhiteSpace(desc)
+            ? $"kind={kind} reason={e.Reason} exit={e.ExitCode}"
+            : $"kind={kind} reason={e.Reason} exit={e.ExitCode} desc={desc}";
         var line = "webview-process-failed " + what;
         // Out of memory is usually Windows' commit limit, reached by whatever else runs: say how full it was and who held it.
         if (e.Reason == CoreWebView2ProcessFailedReason.OutOfMemory) line += " " + SystemCommitLine();
@@ -165,9 +171,7 @@ public sealed partial class MainWindow
             ShowBootPanel("Recovering the Exo window…");
             if (browserGone)
             {
-                WebViewEnvironmentFactory.Reset(_shellEnvironment);
-                _shellEnvironment = null;
-                _processWatchAttached = false;
+                ReleaseShellEnvironmentLease(resetPool: true);
                 try { await _shellBrowserGone.WaitAsync(TimeSpan.FromSeconds(5)); }
                 catch (TimeoutException) { AppLog.Warn("webview-recovery: the old browser's processes outlived 5 s."); }
             }
@@ -196,6 +200,29 @@ public sealed partial class MainWindow
             ShowWebFallback(crashed: true);
         }
         finally { _recreatingWeb = false; }
+    }
+
+    private void ReleaseShellEnvironmentLease(bool resetPool = false)
+    {
+        var env = _shellEnvironment;
+        var processInfosHandler = _processInfosChangedHandler;
+        var browserExitedHandler = _browserProcessExitedHandler;
+        _shellEnvironment = null;
+        _processInfosChangedHandler = null;
+        _browserProcessExitedHandler = null;
+        _processWatchAttached = false;
+        if (env is not null)
+        {
+            if (processInfosHandler is not null)
+                try { env.ProcessInfosChanged -= processInfosHandler; } catch { }
+            if (browserExitedHandler is not null)
+                try { env.BrowserProcessExited -= browserExitedHandler; } catch { }
+            if (resetPool)
+                WebViewEnvironmentFactory.Reset(env);
+        }
+        var lease = _shellEnvironmentLease;
+        _shellEnvironmentLease = null;
+        try { lease?.Dispose(); } catch { }
     }
 
     /// <summary>

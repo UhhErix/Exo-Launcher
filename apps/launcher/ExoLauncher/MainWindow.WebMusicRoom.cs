@@ -283,6 +283,7 @@ public sealed partial class MainWindow
         _musicSignInWindow = window;
         _musicPopouts[view] = window;
         var closed = false;
+        WebViewEnvironmentRefPool<Microsoft.Web.WebView2.Core.CoreWebView2Environment>.Lease? lease = null;
         window.Closed += (_, _) =>
         {
             closed = true;
@@ -290,12 +291,14 @@ public sealed partial class MainWindow
             CancelConnectedPermissions(view);
             _musicPopouts.Remove(view);
             try { view.Close(); } catch { }
+            Interlocked.Exchange(ref lease, null)?.Dispose();
         };
         ForegroundWatcher.Asked(label + "'s sign-in window");
         window.Activate();
         try
         {
-            var environment = await WebViewEnvironmentFactory.GetAsync();
+            lease = await WebViewEnvironmentFactory.AcquireAsync();
+            var environment = lease.Environment;
             await view.EnsureCoreWebView2Async(environment, WebViewEnvironmentFactory.EmbeddedControllerOptions(environment));
             if (closed || _musicWebService != service || generation != _musicWebGeneration)
             {
@@ -325,6 +328,7 @@ public sealed partial class MainWindow
         {
             AppLog.Warn(label + " sign-in window could not open: " + error.GetType().Name);
             try { window.Close(); } catch { }
+            try { lease?.Dispose(); } catch { }
             return new { ok = false, message = label + " could not start sign-in. Try again." };
         }
     }
