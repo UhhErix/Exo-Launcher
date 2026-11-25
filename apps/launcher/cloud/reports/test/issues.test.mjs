@@ -15,8 +15,8 @@ import { DatabaseSync } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import worker from '../src/worker.js'
 import { limiters } from './limiters.mjs'
-import { fingerprintOf, normalizeFrame, signatureOf } from '../src/fingerprint.js'
-import { DAILY, compareVersions, dueNow, safeTitle, withStats } from '../src/issues.js'
+import { TEST_RUN, VERSION_SKEW, fingerprintOf, isTestRun, isVersionSkew, legacyFingerprintOf, normalizeFrame, signatureOf } from '../src/fingerprint.js'
+import { DAILY, compareVersions, dueNow, kindOf, safeTitle, withStats } from '../src/issues.js'
 import { parseUserReport } from '../src/user-report.js'
 
 const MIGRATIONS = ['0002_telemetry.sql', '0003_crash_index.sql', '0004_crash_days.sql', '0005_alert_days.sql', '0006_github_issues.sql']
@@ -159,6 +159,183 @@ test('a report with no stack is grouped by its error line, numbers and quoted va
   const ui = (message) => ({ ...crash, errorType: 'UiError', excerpt: `Exo Launcher 3.26.0 · Windows 10.0.26300.1 · 2026-11-19 10:00 UTC\nError (ui): ${message}\n` })
   assert.equal(await fingerprintOf(ui('Cannot read "name" of undefined at row 12')), await fingerprintOf(ui('Cannot read "title" of undefined at row 7')))
   assert.notEqual(await fingerprintOf(ui('Cannot read "name" of undefined')), await fingerprintOf(ui('Network request failed')))
+})
+
+test('async CLR and WinUI plumbing frames are skipped before picking top frames', async () => {
+  const asyncTrace = (caller) => ({
+    ...crash,
+    excerpt: [
+      'Exo Launcher 3.30.2 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC',
+      'Error (rpc): NullReferenceException',
+      '   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()',
+      '   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)',
+      '   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)',
+      `   at ${caller}()`,
+      '   at ExoLauncher.Services.WebHostBridge.HandleAsync()',
+    ].join('\n'),
+  })
+  const a = asyncTrace('ExoLauncher.Services.StoreService.HomeAsync')
+  const b = asyncTrace('ExoLauncher.Services.DiscordSession.ConnectOnceAsync')
+  assert.deepEqual(signatureOf(a).frames, [
+    'ExoLauncher.Services.StoreService.HomeAsync',
+    'ExoLauncher.Services.WebHostBridge.HandleAsync',
+  ])
+  assert.notEqual(await fingerprintOf(a), await fingerprintOf(b))
+})
+
+test('a report for an existing legacy plumbing-frame group attaches to it and does not open a duplicate issue', async () => {
+  const { env, db, github } = makeEnv()
+  const report = {
+    ...crash,
+    version: '3.30.3',
+    excerpt: [
+      'Exo Launcher 3.30.3 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC',
+      'Error (rpc): NullReferenceException',
+      '   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()',
+      '   at System.Runtime.CompilerServices.TaskAwaiter.GetResult()',
+      '   at Microsoft.UI.Dispatching.DispatcherQueue.TryEnqueue()',
+      '   at ExoLauncher.Services.StoreService.HomeAsync()',
+      '   at ExoLauncher.Services.WebHostBridge.HandleAsync()',
+    ].join('\n'),
+  }
+  const modern = await fingerprintOf(report)
+  const legacy = await legacyFingerprintOf(report)
+  assert.notEqual(modern, legacy)
+
+  github.issues.set(14, {
+    number: 14,
+    state: 'open',
+    title: '[launcher] NullReferenceException: System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw',
+    body: `<!-- exo:group ${legacy} -->\n<!-- exo:stats -->\n**Seen 1 time**\n<!-- /exo:stats -->`,
+    labels: ['app:launcher', 'kind:crash', 'v3.30.2'],
+  })
+  db.sql.prepare(
+    'INSERT INTO crash_groups (fingerprint, app, error_type, count, versions, newest_version, first_day, last_day, os_build, sample_key, issue_number, synced_count, synced_version, pending) '
+    + 'VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 14, 1, ?, 0)',
+  ).run(legacy, report.app, report.errorType, '["3.30.2"]', '3.30.2', '2026-11-20', '2026-11-20', report.osBuild, 'reports/2026-11-20/old.json', '3.30.2')
+
+  assert.equal((await send(env, report)).status, 202)
+  assert.equal(github.issues.size, 1)
+  assert.equal(github.calls.filter((call) => call === 'POST /issues').length, 0)
+  assert.match(github.issues.get(14).body, /\*\*Seen 2 times\*\*/)
+  assert.equal(groups(db).length, 1)
+  assert.equal(groups(db)[0].fingerprint, legacy)
+  assert.equal(groups(db)[0].count, 2)
+  assert.equal(groups(db)[0].newest_version, '3.30.3')
+})
+
+test('HostCallFailed Unknown method reports are classified as version-skew and skipped from alarms and GitHub issues', async () => {
+  const skewReport = {
+    ...crash,
+    errorType: 'HostCallFailed',
+    excerpt: [
+      'Exo Launcher 3.30.3 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC',
+      'Error (rpc): Unknown method: app.info',
+      '',
+      "Exo's log (1 entry):",
+      '[2026-11-24T09:59:58.001Z] WARN: RPC app.info: Unknown method: app.info',
+    ].join('\n'),
+  }
+  const realHostBug = {
+    ...crash,
+    errorType: 'HostCallFailed',
+    excerpt: [
+      'Exo Launcher 3.30.3 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC',
+      'Error (rpc): library.get: NullReferenceException',
+    ].join('\n'),
+  }
+
+  assert.equal(isVersionSkew(skewReport), true)
+  assert.equal(isVersionSkew({
+    ...skewReport,
+    excerpt: 'Exo Launcher 3.30.2 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC\nError (rpc): RPC app.info: Unknown method: app.info',
+  }), true)
+  assert.equal(isVersionSkew(realHostBug), false)
+  assert.equal(kindOf(skewReport.errorType, skewReport), VERSION_SKEW)
+  assert.equal(kindOf(realHostBug.errorType, realHostBug), 'crash')
+
+  const withGh = makeEnv()
+  assert.equal((await send(withGh.env, skewReport)).status, 202)
+  assert.equal((await send(withGh.env, skewReport)).status, 202)
+  await worker.scheduled({}, withGh.env)
+  assert.equal(withGh.github.issues.size, 0)
+  assert.equal(withGh.posts.length, 0)
+  const skewGroups = groups(withGh.db)
+  assert.equal(skewGroups.length, 1)
+  assert.equal(skewGroups[0].error_type, VERSION_SKEW)
+  assert.equal(skewGroups[0].count, 2)
+  assert.equal(skewGroups[0].pending, 0)
+  assert.equal(skewGroups[0].issue_number, null)
+  const dayRows = withGh.db.sql.prepare('SELECT error_type, count FROM crash_days').all()
+  assert.deepEqual(dayRows.map((r) => [r.error_type, r.count]), [[VERSION_SKEW, 2]])
+
+  const withoutGh = makeEnv({ token: null })
+  assert.equal((await send(withoutGh.env, skewReport)).status, 202)
+  assert.equal(withoutGh.posts.length, 0)
+  assert.equal((await send(withoutGh.env, realHostBug)).status, 202)
+  assert.equal(withoutGh.posts.length, 1)
+  assert.match(withoutGh.posts[0].content, /HostCallFailed/)
+})
+
+test('test-run reports (9.9.9, CI runner markers on 10.0.26100, or GpuPreferenceTests/WootingTests) return 202 and count without creating crash_groups', async () => {
+  const version999 = {
+    ...crash,
+    version: '9.9.9',
+    errorType: 'UpdateFailure',
+    excerpt: 'Exo Launcher 9.9.9 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC\nError (update): HTTP 404',
+  }
+  const ciWindows2025 = {
+    ...crash,
+    osBuild: '10.0.26100.2894',
+    excerpt: 'Exo Launcher 3.30.3 · Windows 10.0.26100.2894 · host windows-2025\nError (test): simulated failure',
+  }
+  const ciGithubActions = {
+    ...crash,
+    osBuild: '10.0.26100.1',
+    excerpt: 'Exo Launcher 3.30.3 · GITHUB_ACTIONS=true\nError (test): simulated failure',
+  }
+  const ciRunnerHost = {
+    ...crash,
+    osBuild: '10.0.26100.1',
+    excerpt: 'Exo Launcher 3.30.3 · RUNNER_NAME=win-ci\nError (test): simulated failure',
+  }
+  const gpuPrefLog = {
+    ...crash,
+    excerpt: 'Exo Launcher 3.30.3 · Windows 10.0.26300.1\nError (gpu): GpuPreferenceTests failed',
+  }
+  const wootingLog = {
+    ...crash,
+    excerpt: 'Exo Launcher 3.30.3 · Windows 10.0.26300.1\nError (hid): WootingTests probe failed',
+  }
+  const realOn26100 = {
+    ...crash,
+    osBuild: '10.0.26100.1',
+  }
+
+  for (const synthetic of [version999, ciWindows2025, ciGithubActions, ciRunnerHost, gpuPrefLog, wootingLog]) {
+    assert.equal(isTestRun(synthetic), true)
+  }
+  assert.equal(isTestRun(realOn26100), false)
+
+  const withGh = makeEnv()
+  for (const synthetic of [version999, ciWindows2025, ciGithubActions, ciRunnerHost, gpuPrefLog, wootingLog]) {
+    assert.equal((await send(withGh.env, synthetic)).status, 202)
+  }
+  await worker.scheduled({}, withGh.env)
+  assert.equal(groups(withGh.db).length, 0)
+  assert.equal(withGh.github.issues.size, 0)
+  assert.equal(withGh.posts.length, 0)
+  const testDayTotal = withGh.db.sql.prepare('SELECT SUM(count) AS total FROM crash_days WHERE error_type = ?').get(TEST_RUN).total
+  assert.equal(testDayTotal, 6)
+
+  const withoutGh = makeEnv({ token: null })
+  assert.equal((await send(withoutGh.env, version999)).status, 202)
+  assert.equal(withoutGh.posts.length, 0)
+  assert.equal(groups(withoutGh.db).length, 0)
+
+  assert.equal((await send(withGh.env, realOn26100)).status, 202)
+  assert.equal(groups(withGh.db).length, 1)
+  assert.equal(withGh.github.issues.size, 1)
 })
 
 // ---- Create versus update ----
