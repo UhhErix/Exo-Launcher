@@ -1904,7 +1904,50 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 &serde_json::json!({}),
                 Duration::from_secs(5),
             ) {
-                state.media.notes.notes = Some(nl.notes);
+                state.hydrate_notes_list_reply(nl);
+                if let Some(active_id) = state.media.notes.active.clone()
+                    && let Ok(reply) = client.call_blocking::<_, exo_rpc::NotesReadReply>(
+                        exo_rpc::METHOD_NOTES_READ,
+                        &serde_json::json!({ "id": active_id }),
+                        Duration::from_secs(5),
+                    )
+                    && reply.ok
+                    && let Some(doc) = state.media.notes.docs.get_mut(&active_id)
+                {
+                    if let Some(txt) = reply.text {
+                        doc.edit.text = txt.clone();
+                        doc.edit.sync_invariants();
+                        doc.sent = txt;
+                    }
+                    if let Some(info) = reply.note {
+                        doc.info = info;
+                    }
+                    doc.reading = false;
+                    doc.loaded = true;
+                    doc.problem = None;
+                }
+            }
+            if let Some(ref cache_dir) = state.remote_cache_dir {
+                let urls: Vec<String> = state
+                    .home_deck_games()
+                    .into_iter()
+                    .take(12)
+                    .filter(|g| state.art_base.resolve_local_portrait(g).is_none())
+                    .filter_map(|g| g.cover_url.as_deref().map(str::to_string))
+                    .filter(|u| u.starts_with("https://"))
+                    .collect();
+                if !urls.is_empty() {
+                    let chunks = urls.chunks((urls.len() / 6).max(1));
+                    std::thread::scope(|scope| {
+                        for chunk in chunks {
+                            scope.spawn(move || {
+                                for url in chunk {
+                                    let _ = exo_rpc::remote_art::fetch_cached_image(url, cache_dir);
+                                }
+                            });
+                        }
+                    });
+                }
             }
         }
         Some(sc) if sc.starts_with("discord") => {
@@ -2788,16 +2831,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("captures-sheet", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
-        let present = s
-            .media
-            .capture_status
-            .as_ref()
-            .is_none_or(|st| st.present && st.state.as_ref().is_none_or(|l| l.present));
-        if present {
-            s.open_captures(None);
-        } else {
-            s.open_notes(None, false);
-        }
+        s.open_captures(None);
     }),
     ("captures-settings", |s: &mut AppState| {
         s.switch_room(state::Room::Library);

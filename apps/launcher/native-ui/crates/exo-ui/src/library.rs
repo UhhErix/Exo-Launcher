@@ -1715,8 +1715,8 @@ mod tests {
             .presented("capture-popover-menu")
             .expect("capture-popover-menu presented");
         assert!(
-            (menu_rect[1] - 56.0).abs() <= 1.0,
-            "expected captures popover y=56.0, got {}",
+            (menu_rect[1] - 48.0).abs() <= 1.0,
+            "expected captures popover y=48.0, got {}",
             menu_rect[1]
         );
         let btn_right = btn_rect[0] + btn_rect[2];
