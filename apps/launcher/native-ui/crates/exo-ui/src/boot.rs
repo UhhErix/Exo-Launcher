@@ -501,6 +501,7 @@ impl AppState {
                 Ok(boot) => {
                     s.apply_bootstrap(boot);
                     s.status = HostStatus::Connected;
+                    s.check_system_eq_health_on_launch();
                 }
                 Err(why) => {
                     s.status = HostStatus::Error(why);

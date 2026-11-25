@@ -467,7 +467,22 @@ export type EqHeadphone = { id: string; name: string; source: string; form: 'in-
 export type EqState = {
   ok: boolean
   message?: string | null
-  apo: { installed: boolean; installing: boolean; version: string | null; onOutput: boolean; restart: boolean; effectsOff: boolean; outputs: number; installerVersion: string }
+  apo: {
+    installed: boolean
+    installing: boolean
+    version: string | null
+    onOutput: boolean
+    restart: boolean
+    effectsOff: boolean
+    outputs: number
+    installerVersion: string
+    nativeAvailable?: boolean
+    systemEqEnabled?: boolean
+    drmDisclosureAccepted?: boolean
+    needsReenable?: boolean
+    reenableReason?: string | null
+    protectedAudioDgDisabled?: boolean
+  }
   on: boolean
   comparing: boolean
   output: { name: string | null } | null
@@ -483,7 +498,7 @@ export type EqState = {
   guess: EqHeadphone | null
   lucidPlays: boolean
 }
-export type EqAction = 'state' | 'install' | 'devices' | 'sound-settings' | 'headphone' | 'sound' | 'custom' | 'compare' | 'on' | 'game' | 'night' | 'lucid-off'
+export type EqAction = 'state' | 'install' | 'devices' | 'sound-settings' | 'headphone' | 'sound' | 'custom' | 'compare' | 'on' | 'game' | 'night' | 'lucid-off' | 'enable-system-eq' | 'reenable-system-eq' | 'disable-system-eq'
 
 /** What the microphone's chain ran on the sound just now (see VoiceStages in the host). */
 export type VoiceStages = {

@@ -82,8 +82,8 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
             LiveAudio.Begin();
         }
         if (capture && render) _echo ??= EchoCanceller.Create();
-        if (capture && VoiceProcessing.Current.LoopbackEcho && _echo is not null)
-            _loopback ??= new LoopbackEchoReference(frame => _echo?.Render(frame, Deafened));
+        if (capture && VoiceProcessing.Current.LoopbackEcho && Volatile.Read(ref _echo) is not null)
+            _loopback ??= new LoopbackEchoReference(frame => Volatile.Read(ref _echo)?.Render(frame, Deafened));
         if (capture)
         {
             _voice ??= new Thread(Hand) { IsBackground = true, Name = "Exo voice", Priority = ThreadPriority.Highest };
@@ -129,13 +129,14 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
     private void CancelEcho(float[] frame)
     {
         var processing = VoiceProcessing.Current;
-        var cancel = _echo is not null && (!_onHead || processing.LoopbackEcho) && processing.EchoCancellation;
-        if (_echo is not null && (cancel != EchoCancelling || !_echoSaid))
+        var echo = Volatile.Read(ref _echo);
+        var cancel = echo is not null && (!_onHead || processing.LoopbackEcho) && processing.EchoCancellation;
+        if (echo is not null && (cancel != EchoCancelling || !_echoSaid))
         {
             (EchoCancelling, _echoSaid) = (cancel, true);
             AppLog.Info($"Discord voice: echo cancellation {(cancel ? "on" : _onHead ? "off: the speakers are on your head" : "off")}.");
         }
-        if (cancel) _echo!.Capture(frame);
+        if (cancel) echo!.Capture(frame);
     }
 
     // On the capture thread: a whole frame to the voice thread, or dropped when it is a whole ring behind.
@@ -633,7 +634,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
         var gain = App.Services.Settings.Shared.DiscordOutputVolume / 100f;
         if (gain != 1f) for (var i = 0; i < mix.Length; i++) mix[i] *= gain;
         _limiter.Process(mix);
-        _echo?.Render(mix, Deafened);
+        Volatile.Read(ref _echo)?.Render(mix, Deafened);
         // The call as it plays here, for Go Live to know it again in another app's sound (nothing plays while deafened).
         if (!Call) return;
         if (Deafened) CallEcho.Heard.Quiet(Opus.FrameSamples, QpcNow());
@@ -664,14 +665,15 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
         _stop.Cancel();
         _captureStop.Cancel();
         _renderStop.Cancel();
+        var loopback = Interlocked.Exchange(ref _loopback, null);
+        loopback?.Dispose();
         _capture?.Join(1000);
         _render?.Join(1000);
         if (_voice is { IsAlive: true } voice) voice.Join(1000);
         // The wake event the microphone's thread sets and the voice thread waits on, once both are gone.
         if (_capture is not { IsAlive: true } && _voice is not { IsAlive: true }) _cut.Dispose();
-        _loopback?.Dispose();
-        _loopback = null;
-        _echo?.Dispose();
+        var echo = Interlocked.Exchange(ref _echo, null);
+        echo?.Dispose();
         if (_live)
         {
             _live = false;

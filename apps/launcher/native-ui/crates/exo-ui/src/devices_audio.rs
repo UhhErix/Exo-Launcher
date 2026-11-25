@@ -1,4 +1,5 @@
-use crate::state::{AppState, HostStatus};
+use crate::notice::{NoticeActionKind, NoticeActionSpec, RichNoticeSpec};
+use crate::state::{AppState, HostStatus, NoticeTone};
 use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
     SPRING_QUICK, amoled_card, bad, fg_faint, fg_muted, glass_control_fill, glass_rim, good,
@@ -39,6 +40,9 @@ impl Wearing {
     }
 }
 
+pub const SYSTEM_EQ_DRM_DISCLOSURE: &str = "Some protected audio playback (DRM streams) may not play while system-wide EQ is on. You can turn it off any time.";
+pub const SYSTEM_EQ_REENABLE_NOTICE_KEY: &str = "exo-eq-reenable";
+
 #[derive(Debug, Clone, Default)]
 pub struct AudioEqUiState {
     pub eq: Option<EqStateReply>,
@@ -46,6 +50,8 @@ pub struct AudioEqUiState {
     pub eq_busy_row: Option<String>,
     pub eq_row_error: Option<(String, String)>,
     pub eq_seq: u64,
+    pub system_eq_disclosure_open: bool,
+    pub launch_eq_health_checked: bool,
     pub headphone_picker_open: bool,
     pub headphone_query: TextEdit,
     pub headphones_list: Option<Vec<EqHeadphone>>,
@@ -90,6 +96,12 @@ impl AudioEqUiState {
                     effects_off: false,
                     outputs: 1,
                     installer_version: "1.4.2".into(),
+                    native_available: true,
+                    system_eq_enabled: false,
+                    drm_disclosure_accepted: false,
+                    needs_reenable: false,
+                    reenable_reason: None,
+                    protected_audio_dg_disabled: false,
                 },
                 on: true,
                 comparing: false,
@@ -990,6 +1002,31 @@ impl AppState {
         let _ = out_id;
     }
 
+    pub fn check_system_eq_health_on_launch(&mut self) {
+        if self.pc.audio_ui.launch_eq_health_checked {
+            return;
+        }
+        self.pc.audio_ui.launch_eq_health_checked = true;
+        self.refresh_eq_state();
+    }
+
+    pub fn open_system_eq_disclosure(&mut self) {
+        self.pc.audio_ui.system_eq_disclosure_open = true;
+    }
+
+    pub fn cancel_system_eq_disclosure(&mut self) {
+        self.pc.audio_ui.system_eq_disclosure_open = false;
+    }
+
+    pub fn confirm_enable_system_eq(&mut self) {
+        self.pc.audio_ui.system_eq_disclosure_open = false;
+        self.eq_act(
+            "system-eq",
+            "enable-system-eq",
+            json!({ "drmDisclosureAccepted": true }),
+        );
+    }
+
     pub fn apply_eq_state(&mut self, eq: EqStateReply) {
         if let Some(ref hp) = eq.headphone {
             self.pc.eq_headphone = Some(hp.clone());
@@ -997,8 +1034,34 @@ impl AppState {
         } else {
             self.pc.eq_headphone = None;
         }
+        let needs_reenable = eq.apo.system_eq_enabled && eq.apo.needs_reenable;
+        let reason_text = reenable_reason_detail(eq.apo.reenable_reason.as_deref());
         self.pc.audio_ui.eq_load_error = None;
         self.pc.audio_ui.eq = Some(eq);
+        if needs_reenable {
+            self.push_rich_notice(RichNoticeSpec {
+                key_id: Some(SYSTEM_EQ_REENABLE_NOTICE_KEY.into()),
+                title: Some("System-wide EQ paused".into()),
+                where_label: Some("Audio".into()),
+                text: reason_text.into(),
+                tone: NoticeTone::Neutral,
+                sticky: Some(true),
+                lasting: true,
+                action: Some(NoticeActionSpec {
+                    label: "Re-enable system EQ".into(),
+                    primary: true,
+                    danger: false,
+                    busy: false,
+                    confirm: None,
+                    kind: NoticeActionKind::ReenableSystemEq {
+                        notice_key: SYSTEM_EQ_REENABLE_NOTICE_KEY.into(),
+                    },
+                }),
+                ..RichNoticeSpec::default()
+            });
+        } else {
+            self.dismiss_notice_by_key(SYSTEM_EQ_REENABLE_NOTICE_KEY);
+        }
     }
 
     pub fn eq_act(&mut self, row: &'static str, action: &'static str, extra: Value) {
@@ -1037,6 +1100,34 @@ impl AppState {
                         }
                     }
                     "lucid-off" => eq.lucid_plays = false,
+                    "enable-system-eq" => {
+                        if extra
+                            .get("drmDisclosureAccepted")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false)
+                        {
+                            eq.apo.system_eq_enabled = true;
+                            eq.apo.drm_disclosure_accepted = true;
+                            eq.apo.needs_reenable = false;
+                            eq.apo.reenable_reason = None;
+                            eq.apo.protected_audio_dg_disabled = true;
+                            eq.apo.installed = true;
+                            eq.apo.on_output = true;
+                        }
+                    }
+                    "reenable-system-eq" => {
+                        eq.apo.system_eq_enabled = true;
+                        eq.apo.needs_reenable = false;
+                        eq.apo.reenable_reason = None;
+                        eq.apo.protected_audio_dg_disabled = true;
+                        eq.apo.on_output = true;
+                    }
+                    "disable-system-eq" => {
+                        eq.apo.system_eq_enabled = false;
+                        eq.apo.needs_reenable = false;
+                        eq.apo.reenable_reason = None;
+                        eq.apo.protected_audio_dg_disabled = false;
+                    }
                     _ => {}
                 }
             }
@@ -1224,6 +1315,24 @@ fn eq_error_for(s: &AppState, row_name: &str) -> Option<String> {
         .map(|(_, msg)| msg.clone())
 }
 
+fn reenable_reason_detail(reason: Option<&str>) -> &'static str {
+    match reason {
+        Some("protected-audiodg-reset") => {
+            "Windows reset the unsigned APO setting after an update. Re-enable to restore system-wide EQ."
+        }
+        Some("audiodg-rejected") => {
+            "Windows Audio rejected Exo's EQ engine. Re-enable to reapply settings and restart Audio."
+        }
+        Some("endpoint-reset") => {
+            "Windows reset the audio endpoint settings. Re-enable to reconnect system-wide EQ."
+        }
+        Some("effects-off") => {
+            "Windows turned audio enhancements off for this output. Re-enable system-wide EQ when ready."
+        }
+        _ => "System-wide EQ needs to be re-enabled after a Windows audio change.",
+    }
+}
+
 fn apo_panel(s: &AppState) -> Option<El> {
     let Some(eq) = s.pc.audio_ui.eq.as_ref() else {
         let err = s.pc.audio_ui.eq_load_error.clone()?;
@@ -1249,7 +1358,89 @@ fn apo_panel(s: &AppState) -> Option<El> {
         .and_then(|o| o.name.as_deref())
         .unwrap_or("this output");
 
-    if !apo.installed {
+    let mut rows = Vec::new();
+    if apo.native_available {
+        if apo.system_eq_enabled && apo.needs_reenable {
+            rows.push(device_row(
+                "System-wide EQ needs re-enabling",
+                Some(reenable_reason_detail(apo.reenable_reason.as_deref()).into()),
+                eq_error_for(s, "system-eq"),
+                Some(
+                    row()
+                        .gap(8.0)
+                        .center_y()
+                        .child(
+                            primary_button("eq-reenable", "Re-enable system EQ", None).on_press(
+                                |s: &mut AppState| {
+                                    s.eq_act("system-eq", "reenable-system-eq", json!({}))
+                                },
+                            ),
+                        )
+                        .child(
+                            device_btn("eq-disable", "Turn off system EQ", busy).on_press(
+                                |s: &mut AppState| {
+                                    s.eq_act("system-eq", "disable-system-eq", json!({}))
+                                },
+                            ),
+                        ),
+                ),
+            ));
+        } else if apo.system_eq_enabled {
+            rows.push(device_row(
+                "System-wide EQ",
+                Some(format!(
+                    "Exo's audio engine is active on {out_name}. Turning it off restores Windows' prior audio policy and restarts Audio."
+                )),
+                eq_error_for(s, "system-eq"),
+                Some(
+                    row()
+                        .gap(8.0)
+                        .center_y()
+                        .child(status_badge("On".into(), BadgeTone::Good))
+                        .child(
+                            device_btn("eq-disable", "Turn off system EQ", busy).on_press(
+                                |s: &mut AppState| {
+                                    s.eq_act("system-eq", "disable-system-eq", json!({}))
+                                },
+                            ),
+                        ),
+                ),
+            ));
+        } else if s.pc.audio_ui.system_eq_disclosure_open {
+            rows.push(device_row(
+                "Before turning on system-wide EQ",
+                Some(SYSTEM_EQ_DRM_DISCLOSURE.into()),
+                eq_error_for(s, "system-eq"),
+                Some(
+                    row()
+                        .gap(8.0)
+                        .center_y()
+                        .child(
+                            device_btn("eq-disclosure-cancel", "Cancel", busy)
+                                .on_press(|s: &mut AppState| s.cancel_system_eq_disclosure()),
+                        )
+                        .child(
+                            primary_button("eq-disclosure-confirm", "Confirm & enable", None)
+                                .on_press(|s: &mut AppState| s.confirm_enable_system_eq()),
+                        ),
+                ),
+            ));
+        } else {
+            rows.push(device_row(
+                "System-wide EQ",
+                Some(format!(
+                    "Runs Exo's built-in audio engine on {out_name} with one-click rollback."
+                )),
+                eq_error_for(s, "system-eq"),
+                Some(
+                    primary_button("eq-enable-native", "Enable system EQ", None)
+                        .on_press(|s: &mut AppState| s.open_system_eq_disclosure()),
+                ),
+            ));
+        }
+    }
+
+    if !apo.installed && !apo.native_available {
         let label = if apo.installing {
             "Installing Equalizer APO"
         } else {
@@ -1278,26 +1469,29 @@ fn apo_panel(s: &AppState) -> Option<El> {
         ));
     }
 
-    let mut rows = Vec::new();
-    if !apo.on_output {
-        rows.push(device_row(
-            format!("Equalizer APO isn't on {out_name}"),
-            Some("Tick it in Equalizer APO's Device Selector, then restart the PC once.".into()),
-            eq_error_for(s, "devices"),
-            Some(
-                device_btn("eq-devices", "Choose outputs", busy)
-                    .on_press(|s: &mut AppState| s.eq_act("devices", "devices", json!({}))),
-            ),
-        ));
-    } else if apo.restart {
-        rows.push(device_row(
-            "Restart to hear Exo EQ",
-            Some(format!(
-                "Equalizer APO was just turned on for {out_name}. It plays after the PC restarts."
-            )),
-            None,
-            Some(status_badge("Restart".into(), BadgeTone::Warn)),
-        ));
+    if apo.installed && !apo.system_eq_enabled {
+        if !apo.on_output {
+            rows.push(device_row(
+                format!("Equalizer APO isn't on {out_name}"),
+                Some(
+                    "Tick it in Equalizer APO's Device Selector, then restart the PC once.".into(),
+                ),
+                eq_error_for(s, "devices"),
+                Some(
+                    device_btn("eq-devices", "Choose outputs", busy)
+                        .on_press(|s: &mut AppState| s.eq_act("devices", "devices", json!({}))),
+                ),
+            ));
+        } else if apo.restart {
+            rows.push(device_row(
+                "Restart to hear Exo EQ",
+                Some(format!(
+                    "Equalizer APO was just turned on for {out_name}. It plays after the PC restarts."
+                )),
+                None,
+                Some(status_badge("Restart".into(), BadgeTone::Warn)),
+            ));
+        }
     }
     if apo.effects_off {
         rows.push(device_row(
@@ -1481,7 +1675,7 @@ fn headphone_panel(s: &AppState) -> Option<El> {
 
 fn sound_panel(s: &AppState) -> Option<El> {
     let eq = s.pc.audio_ui.eq.as_ref()?;
-    if !eq.apo.installed {
+    if !eq.apo.installed && !eq.apo.system_eq_enabled {
         return None;
     }
     let active_sound = eq
@@ -1600,7 +1794,7 @@ fn sound_panel(s: &AppState) -> Option<El> {
 
 fn night_panel(s: &AppState) -> Option<El> {
     let eq = s.pc.audio_ui.eq.as_ref()?;
-    if !eq.apo.installed {
+    if !eq.apo.installed && !eq.apo.system_eq_enabled {
         return None;
     }
     let night = &eq.night;
@@ -2097,5 +2291,67 @@ mod tests {
         assert_eq!(slots[0], ("00:00".into(), "12:00 AM".into()));
         assert_eq!(slots[24], ("12:00".into(), "12:00 PM".into()));
         assert_eq!(slots[47], ("23:30".into(), "11:30 PM".into()));
+    }
+
+    #[test]
+    fn system_eq_disclosure_requires_explicit_confirm_and_matches_required_copy() {
+        assert_eq!(
+            SYSTEM_EQ_DRM_DISCLOSURE,
+            "Some protected audio playback (DRM streams) may not play while system-wide EQ is on. You can turn it off any time."
+        );
+        let mut s = AppState::default();
+        s.pc.audio_ui = AudioEqUiState::demo();
+        assert!(!s.pc.audio_ui.eq.as_ref().unwrap().apo.system_eq_enabled);
+        assert!(!s.pc.audio_ui.system_eq_disclosure_open);
+
+        s.open_system_eq_disclosure();
+        assert!(s.pc.audio_ui.system_eq_disclosure_open);
+        assert!(!s.pc.audio_ui.eq.as_ref().unwrap().apo.system_eq_enabled);
+        assert!(apo_panel(&s).is_some());
+
+        s.cancel_system_eq_disclosure();
+        assert!(!s.pc.audio_ui.system_eq_disclosure_open);
+        assert!(!s.pc.audio_ui.eq.as_ref().unwrap().apo.system_eq_enabled);
+
+        s.open_system_eq_disclosure();
+        s.confirm_enable_system_eq();
+        assert!(!s.pc.audio_ui.system_eq_disclosure_open);
+        let apo = &s.pc.audio_ui.eq.as_ref().unwrap().apo;
+        assert!(apo.system_eq_enabled);
+        assert!(apo.drm_disclosure_accepted);
+    }
+
+    #[test]
+    fn launch_health_check_prompts_reenable_without_auto_elevating() {
+        let mut s = AppState::default();
+        let mut eq = AudioEqUiState::demo().eq.unwrap();
+        eq.apo.system_eq_enabled = true;
+        eq.apo.needs_reenable = true;
+        eq.apo.reenable_reason = Some("protected-audiodg-reset".into());
+
+        s.apply_eq_state(eq);
+        assert!(s.pc.audio_ui.eq_busy_row.is_none());
+        let notice = s
+            .notices
+            .iter()
+            .find(|n| n.key_id.as_deref() == Some(SYSTEM_EQ_REENABLE_NOTICE_KEY))
+            .expect("reenable prompt notice pushed");
+        let action = notice.action.as_ref().expect("reenable action present");
+        assert_eq!(action.label, "Re-enable system EQ");
+        assert!(matches!(
+            action.kind,
+            NoticeActionKind::ReenableSystemEq { .. }
+        ));
+        assert!(apo_panel(&s).is_some());
+
+        let mut healthy = s.pc.audio_ui.eq.clone().unwrap();
+        healthy.apo.needs_reenable = false;
+        healthy.apo.reenable_reason = None;
+        s.apply_eq_state(healthy);
+        assert!(
+            !s.notices
+                .iter()
+                .any(|n| n.key_id.as_deref() == Some(SYSTEM_EQ_REENABLE_NOTICE_KEY))
+        );
     }
 }

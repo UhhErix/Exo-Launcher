@@ -137,10 +137,12 @@ if (@('dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll') | Where-Objec
 Push-Location native-ui
 cargo build --release --locked --bin exo-ui
 if ($LASTEXITCODE) { throw "Native UI release build failed ($LASTEXITCODE)." }
-cargo build --release --locked -p exo-voice-ml
+cargo build --profile release-cdylib --locked -p exo-voice-ml
 if ($LASTEXITCODE) { throw "Exo Voice ML release build failed ($LASTEXITCODE)." }
-cargo build --release --locked -p exo-audio-apo --lib --bin exo-apo-helper
-if ($LASTEXITCODE) { throw "Exo Audio APO release build failed ($LASTEXITCODE)." }
+cargo build --profile release-cdylib --locked -p exo-audio-apo --lib
+if ($LASTEXITCODE) { throw "Exo Audio APO library release build failed ($LASTEXITCODE)." }
+cargo build --release --locked -p exo-audio-apo --bin exo-apo-helper
+if ($LASTEXITCODE) { throw "Exo Audio APO helper release build failed ($LASTEXITCODE)." }
 cargo build --release --locked -p exo-installer
 if ($LASTEXITCODE) { throw "Exo Installer release build failed ($LASTEXITCODE)." }
 Pop-Location
@@ -202,8 +204,8 @@ $symbolCandidates = @(
     (Join-Path $repo 'capture\out\ExoCapture.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_ui.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_shaders_service.pdb'),
-    (Join-Path $repo 'native-ui\target\release\exo_voice_ml.pdb'),
-    (Join-Path $repo 'native-ui\target\release\exo_apo.pdb'),
+    (Join-Path $repo 'native-ui\target\release-cdylib\exo_voice_ml.pdb'),
+    (Join-Path $repo 'native-ui\target\release-cdylib\exo_apo.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_apo_helper.pdb'),
     (Join-Path $repo 'native-ui\target\release\exo_installer.pdb')
 )

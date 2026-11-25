@@ -213,3 +213,48 @@ pub unsafe extern "C" fn exo_voice_voxlock_process_16k(
     })
     .unwrap_or(f32::NAN)
 }
+
+#[cfg(test)]
+mod ffi_unwind_tests {
+    use super::*;
+
+    #[test]
+    fn catch_unwind_contains_panics_for_ffi_boundaries() {
+        let caught = catch_unwind(|| -> i32 {
+            panic!("simulated ffi panic");
+        });
+        assert!(caught.is_err());
+    }
+
+    #[test]
+    fn workspace_cdylib_release_profile_keeps_unwinding_enabled() {
+        let manifest = include_str!("../../../Cargo.toml");
+        let cdylib_section = manifest
+            .split("[profile.release-cdylib]")
+            .nth(1)
+            .expect("missing [profile.release-cdylib] in workspace Cargo.toml");
+        assert!(
+            cdylib_section.contains("inherits = \"release\"")
+                && cdylib_section.contains("panic = \"unwind\""),
+            "[profile.release-cdylib] must inherit release and set panic = \"unwind\" so exo_voice_ml.dll catch_unwind works"
+        );
+    }
+
+    #[test]
+    fn null_ffi_inputs_return_safe_sentinels() {
+        assert_eq!(exo_voice_ml_version(), 1);
+        assert!(exo_voice_dpdfnet_create(null_mut(), null_mut(), 1).is_null());
+        assert!(exo_voice_titanet_create(null_mut(), null_mut(), 1).is_null());
+        assert!(exo_voice_voxlock_create(null_mut(), null_mut(), null_mut(), 1).is_null());
+        unsafe {
+            assert_eq!(exo_voice_dpdfnet_sample_rate(null_mut()), 0);
+            assert!(exo_voice_dpdfnet_process_48k_stereo(null_mut(), null_mut(), 0).is_nan());
+            assert_eq!(
+                exo_voice_titanet_embed(null_mut(), null_mut(), 0, null_mut(), 0),
+                0
+            );
+            assert_eq!(exo_voice_voxlock_enroll_16k(null_mut(), null_mut(), 0), 0);
+            assert!(exo_voice_voxlock_process_16k(null_mut(), null_mut(), null_mut(), 0).is_nan());
+        }
+    }
+}

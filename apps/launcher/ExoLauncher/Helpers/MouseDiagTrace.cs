@@ -396,12 +396,16 @@ internal static unsafe partial class MouseDiagTrace
     [UnmanagedCallersOnly]
     private static void OnEvent(PresentTrace.EventRecord* record)
     {
-        if (record->ProviderFirst != PerfInfoFirst || Volatile.Read(ref _active) is not { } agg) return;
-        var raw = (byte*)record;
-        var processor = (record->HeaderFlags & FlagProcessorIndex) != 0
-            ? (int)*(ushort*)(raw + 80)
-            : raw[80];
-        agg.AddEvent(record->Opcode, processor, record->TimeStamp, new ReadOnlySpan<byte>(record->UserData, record->UserDataLength), Volatile.Read(ref _activeFrequency));
+        try
+        {
+            if (record->ProviderFirst != PerfInfoFirst || Volatile.Read(ref _active) is not { } agg) return;
+            var raw = (byte*)record;
+            var processor = (record->HeaderFlags & FlagProcessorIndex) != 0
+                ? (int)*(ushort*)(raw + 80)
+                : raw[80];
+            agg.AddEvent(record->Opcode, processor, record->TimeStamp, new ReadOnlySpan<byte>(record->UserData, record->UserDataLength), Volatile.Read(ref _activeFrequency));
+        }
+        catch { }
     }
 
     private static PresentTrace.TraceProperties BuildProperties() => new()

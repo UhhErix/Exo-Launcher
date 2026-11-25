@@ -4,8 +4,11 @@ use std::collections::{BTreeMap, HashMap};
 pub const RENDER_ENDPOINTS_ROOT: &str =
     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Render";
 pub const COM_CLSID_ROOT: &str = "SOFTWARE\\Classes\\CLSID";
+pub const APO_REGISTRATION_ROOT: &str = "SOFTWARE\\Classes\\AudioEngine\\AudioProcessingObjects";
 pub const AUDIO_POLICY_ROOT: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Audio";
 pub const DISABLE_PROTECTED_AUDIO_DG_VALUE: &str = "DisableProtectedAudioDG";
+pub const AUDIO_SERVICE_NAME: &str = "Audiosrv";
+pub const IAUDIO_PROCESSING_OBJECT_IID: &str = "{FD7F2B29-24D0-4B5C-B177-592C39F9CA10}";
 
 pub const PKEY_FX_ASSOCIATION: &str = "{D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},0";
 pub const PKEY_FX_PREMIX_CLSID: &str = "{D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},1";
@@ -123,6 +126,20 @@ pub struct EndpointBackup {
     pub preserved_oem_clsids: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", content = "value", rename_all = "camelCase")]
+pub enum PriorDwordState {
+    Absent,
+    Present(u32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ApoSigningMode {
+    UnsignedFreeRoute,
+    Signed,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KeepBackupLedger {
@@ -132,6 +149,16 @@ pub struct KeepBackupLedger {
     pub registered_dll_path: Option<String>,
     #[serde(default)]
     pub com_clsids_registered: Vec<String>,
+    #[serde(default)]
+    pub apo_reg_clsids_registered: Vec<String>,
+    #[serde(default)]
+    pub prior_disable_protected_audio_dg: Option<PriorDwordState>,
+    #[serde(default)]
+    pub signing_mode: Option<ApoSigningMode>,
+    #[serde(default)]
+    pub system_eq_enabled: bool,
+    #[serde(default)]
+    pub drm_disclosure_accepted: bool,
 }
 
 impl KeepBackupLedger {
@@ -141,6 +168,11 @@ impl KeepBackupLedger {
             endpoints: HashMap::new(),
             registered_dll_path: None,
             com_clsids_registered: Vec::new(),
+            apo_reg_clsids_registered: Vec::new(),
+            prior_disable_protected_audio_dg: None,
+            signing_mode: None,
+            system_eq_enabled: false,
+            drm_disclosure_accepted: false,
         }
     }
 
@@ -400,10 +432,148 @@ pub fn uninstall_endpoint<R: RegistryStore>(
     Ok(true)
 }
 
+pub trait AudioServiceController {
+    fn restart_audio_service(&mut self) -> std::io::Result<()>;
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MockAudioServiceController {
+    pub restart_count: usize,
+    pub fail_next: bool,
+}
+
+impl MockAudioServiceController {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl AudioServiceController for MockAudioServiceController {
+    fn restart_audio_service(&mut self) -> std::io::Result<()> {
+        if self.fail_next {
+            self.fail_next = false;
+            return Err(std::io::Error::other("mock Audiosrv restart failed"));
+        }
+        self.restart_count += 1;
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+pub struct Win32AudioServiceController;
+
+#[cfg(windows)]
+impl Win32AudioServiceController {
+    fn wait_for_state(
+        svc: windows::Win32::System::Services::SC_HANDLE,
+        desired: u32,
+        timeout_ms: u64,
+    ) -> std::io::Result<()> {
+        use std::time::{Duration, Instant};
+        use windows::Win32::System::Services::{QueryServiceStatus, SERVICE_STATUS};
+
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        loop {
+            let mut status = SERVICE_STATUS::default();
+            unsafe {
+                QueryServiceStatus(svc, &mut status)
+                    .map_err(|e| std::io::Error::from_raw_os_error(e.code().0))?;
+            }
+            if status.dwCurrentState.0 == desired {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "timed out waiting for Audiosrv state transition",
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+}
+
+#[cfg(windows)]
+impl AudioServiceController for Win32AudioServiceController {
+    fn restart_audio_service(&mut self) -> std::io::Result<()> {
+        use windows::Win32::System::Services::{
+            CloseServiceHandle, ControlService, OpenSCManagerW, OpenServiceW, SC_MANAGER_CONNECT,
+            SERVICE_CONTROL_STOP, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START,
+            SERVICE_STATUS, SERVICE_STOP, SERVICE_STOPPED, StartServiceW,
+        };
+        use windows_core::PCWSTR;
+
+        let wide_name: Vec<u16> = AUDIO_SERVICE_NAME
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let scm = unsafe { OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT) }
+            .map_err(|e| std::io::Error::from_raw_os_error(e.code().0))?;
+        let svc_res = unsafe {
+            OpenServiceW(
+                scm,
+                PCWSTR(wide_name.as_ptr()),
+                SERVICE_STOP | SERVICE_START | SERVICE_QUERY_STATUS,
+            )
+        };
+        let svc = match svc_res {
+            Ok(h) => h,
+            Err(e) => {
+                unsafe {
+                    let _ = CloseServiceHandle(scm);
+                }
+                return Err(std::io::Error::from_raw_os_error(e.code().0));
+            }
+        };
+
+        let result = (|| {
+            let mut status = SERVICE_STATUS::default();
+            let stop_res = unsafe { ControlService(svc, SERVICE_CONTROL_STOP, &mut status) };
+            if stop_res.is_ok() {
+                Self::wait_for_state(svc, SERVICE_STOPPED.0, 15_000)?;
+            }
+            unsafe {
+                StartServiceW(svc, None)
+                    .map_err(|e| std::io::Error::from_raw_os_error(e.code().0))?;
+            }
+            Self::wait_for_state(svc, SERVICE_RUNNING.0, 15_000)?;
+            Ok(())
+        })();
+
+        unsafe {
+            let _ = CloseServiceHandle(svc);
+            let _ = CloseServiceHandle(scm);
+        }
+        result
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RollbackOutcome {
     pub restored_endpoints: usize,
     pub removed_com_clsids: usize,
+    pub restored_protected_audio_dg: Option<PriorDwordState>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReenableReason {
+    ProtectedAudioDgReset,
+    EndpointReset,
+    AudiodgRejected,
+    EffectsOff,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemEqHealthReport {
+    pub system_eq_enabled: bool,
+    pub drm_disclosure_accepted: bool,
+    pub protected_audio_dg_disabled: bool,
+    pub endpoints_registered: bool,
+    pub audiodg_rejected: bool,
+    pub needs_reenable: bool,
+    pub reason: Option<ReenableReason>,
 }
 
 pub fn com_clsid_key_path(clsid: &str) -> String {
@@ -412,6 +582,69 @@ pub fn com_clsid_key_path(clsid: &str) -> String {
 
 pub fn com_inproc_key_path(clsid: &str) -> String {
     format!("{COM_CLSID_ROOT}\\{clsid}\\InprocServer32")
+}
+
+pub fn apo_reg_key_path(clsid: &str) -> String {
+    format!("{APO_REGISTRATION_ROOT}\\{clsid}")
+}
+
+pub fn read_protected_audio_dg_state<R: RegistryStore>(
+    store: &R,
+) -> std::io::Result<PriorDwordState> {
+    match store.read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)? {
+        Some(RegValue::Dword(v)) => Ok(PriorDwordState::Present(v)),
+        _ => Ok(PriorDwordState::Absent),
+    }
+}
+
+pub fn is_protected_audio_dg_disabled<R: RegistryStore>(store: &R) -> bool {
+    matches!(
+        store.read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE),
+        Ok(Some(RegValue::Dword(1)))
+    )
+}
+
+pub fn enable_unsigned_apo_policy<R: RegistryStore>(
+    store: &mut R,
+    ledger: &mut KeepBackupLedger,
+) -> std::io::Result<PriorDwordState> {
+    let prior = if let Some(saved) = ledger.prior_disable_protected_audio_dg {
+        saved
+    } else {
+        let current = read_protected_audio_dg_state(store)?;
+        ledger.prior_disable_protected_audio_dg = Some(current);
+        current
+    };
+    store.ensure_key(AUDIO_POLICY_ROOT)?;
+    store.write_value(
+        AUDIO_POLICY_ROOT,
+        DISABLE_PROTECTED_AUDIO_DG_VALUE,
+        &RegValue::Dword(1),
+    )?;
+    Ok(prior)
+}
+
+pub fn restore_unsigned_apo_policy<R: RegistryStore>(
+    store: &mut R,
+    ledger: &mut KeepBackupLedger,
+) -> std::io::Result<Option<PriorDwordState>> {
+    let Some(prior) = ledger.prior_disable_protected_audio_dg.take() else {
+        return Ok(None);
+    };
+    match prior {
+        PriorDwordState::Absent => {
+            store.delete_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)?;
+        }
+        PriorDwordState::Present(v) => {
+            store.ensure_key(AUDIO_POLICY_ROOT)?;
+            store.write_value(
+                AUDIO_POLICY_ROOT,
+                DISABLE_PROTECTED_AUDIO_DG_VALUE,
+                &RegValue::Dword(v),
+            )?;
+        }
+    }
+    Ok(Some(prior))
 }
 
 pub fn register_com_server<R: RegistryStore>(
@@ -444,6 +677,36 @@ pub fn register_com_server<R: RegistryStore>(
         if !contains_ci(&ledger.com_clsids_registered, clsid) {
             ledger.com_clsids_registered.push(clsid.to_string());
         }
+
+        let apo_key = apo_reg_key_path(clsid);
+        store.ensure_key(&apo_key)?;
+        store.write_value(
+            &apo_key,
+            "FriendlyName",
+            &RegValue::String("Exo Audio APO".to_string()),
+        )?;
+        store.write_value(
+            &apo_key,
+            "Copyright",
+            &RegValue::String("Exo Launcher".to_string()),
+        )?;
+        store.write_value(&apo_key, "MajorVersion", &RegValue::Dword(1))?;
+        store.write_value(&apo_key, "MinorVersion", &RegValue::Dword(0))?;
+        store.write_value(&apo_key, "Flags", &RegValue::Dword(0x0000_0001))?;
+        store.write_value(&apo_key, "MinInputConnections", &RegValue::Dword(1))?;
+        store.write_value(&apo_key, "MaxInputConnections", &RegValue::Dword(1))?;
+        store.write_value(&apo_key, "MinOutputConnections", &RegValue::Dword(1))?;
+        store.write_value(&apo_key, "MaxOutputConnections", &RegValue::Dword(1))?;
+        store.write_value(&apo_key, "MaxInstances", &RegValue::Dword(u32::MAX))?;
+        store.write_value(&apo_key, "NumAPOInterfaces", &RegValue::Dword(1))?;
+        store.write_value(
+            &apo_key,
+            "APOInterface0",
+            &RegValue::String(IAUDIO_PROCESSING_OBJECT_IID.to_string()),
+        )?;
+        if !contains_ci(&ledger.apo_reg_clsids_registered, clsid) {
+            ledger.apo_reg_clsids_registered.push(clsid.to_string());
+        }
     }
     ledger.registered_dll_path = Some(dll_path.to_string());
     Ok(ledger.com_clsids_registered.len())
@@ -457,6 +720,10 @@ pub fn unregister_com_server<R: RegistryStore>(
     for clsid in &clsids {
         store.delete_key(&com_inproc_key_path(clsid))?;
         store.delete_key(&com_clsid_key_path(clsid))?;
+    }
+    let apo_clsids = std::mem::take(&mut ledger.apo_reg_clsids_registered);
+    for clsid in &apo_clsids {
+        store.delete_key(&apo_reg_key_path(clsid))?;
     }
     ledger.registered_dll_path = None;
     Ok(clsids.len())
@@ -479,16 +746,128 @@ pub fn register_with_explicit_consent<R: RegistryStore>(
     register_endpoint(store, ledger, endpoint_id)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct EnableSystemEqRequest<'a> {
+    pub endpoint_id: &'a str,
+    pub dll_path: &'a str,
+    pub mode: ApoSigningMode,
+    pub explicit_user_consent: bool,
+    pub drm_disclosure_accepted: bool,
+}
+
+pub fn enable_system_eq<R: RegistryStore, S: AudioServiceController>(
+    store: &mut R,
+    service: &mut S,
+    ledger: &mut KeepBackupLedger,
+    req: EnableSystemEqRequest<'_>,
+) -> std::io::Result<RegisterOutcome> {
+    if !req.explicit_user_consent {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "explicit user consent is required to enable system-wide EQ",
+        ));
+    }
+    if req.mode == ApoSigningMode::UnsignedFreeRoute && !req.drm_disclosure_accepted {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "DRM protected-audio disclosure must be accepted before enabling unsigned APO",
+        ));
+    }
+    if req.mode == ApoSigningMode::UnsignedFreeRoute {
+        enable_unsigned_apo_policy(store, ledger)?;
+        ledger.drm_disclosure_accepted = true;
+    }
+    register_com_server(store, ledger, req.dll_path)?;
+    let outcome = register_endpoint(store, ledger, req.endpoint_id)?;
+    ledger.signing_mode = Some(req.mode);
+    ledger.system_eq_enabled = true;
+    service.restart_audio_service()?;
+    Ok(outcome)
+}
+
 pub fn one_click_rollback<R: RegistryStore>(
     store: &mut R,
     ledger: &mut KeepBackupLedger,
 ) -> std::io::Result<RollbackOutcome> {
     let restored_endpoints = uninstall_all(store, ledger)?;
     let removed_com_clsids = unregister_com_server(store, ledger)?;
+    let restored_protected_audio_dg = restore_unsigned_apo_policy(store, ledger)?;
+    ledger.system_eq_enabled = false;
+    ledger.signing_mode = None;
     Ok(RollbackOutcome {
         restored_endpoints,
         removed_com_clsids,
+        restored_protected_audio_dg,
     })
+}
+
+pub fn disable_system_eq<R: RegistryStore, S: AudioServiceController>(
+    store: &mut R,
+    service: &mut S,
+    ledger: &mut KeepBackupLedger,
+) -> std::io::Result<RollbackOutcome> {
+    let outcome = one_click_rollback(store, ledger)?;
+    service.restart_audio_service()?;
+    Ok(outcome)
+}
+
+pub fn check_system_eq_health<R: RegistryStore>(
+    store: &R,
+    ledger: &KeepBackupLedger,
+    audiodg_rejected: bool,
+) -> SystemEqHealthReport {
+    let protected_audio_dg_disabled = is_protected_audio_dg_disabled(store);
+    if !ledger.system_eq_enabled {
+        return SystemEqHealthReport {
+            system_eq_enabled: false,
+            drm_disclosure_accepted: ledger.drm_disclosure_accepted,
+            protected_audio_dg_disabled,
+            endpoints_registered: false,
+            audiodg_rejected: false,
+            needs_reenable: false,
+            reason: None,
+        };
+    }
+
+    let mut endpoints_registered = !ledger.endpoints.is_empty();
+    let mut effects_off = false;
+    for guid in ledger.endpoints.keys() {
+        let fx_path = endpoint_fx_key_path(guid);
+        if let Ok(vals) = store.list_values(&fx_path)
+            && matches!(
+                vals.get(PKEY_AUDIOENDPOINT_DISABLE_SYSFX),
+                Some(RegValue::Dword(v)) if *v != 0
+            )
+        {
+            effects_off = true;
+        }
+        if !is_exo_registered_on_endpoint(store, guid) {
+            endpoints_registered = false;
+        }
+    }
+
+    let requires_unsigned_policy = ledger.signing_mode != Some(ApoSigningMode::Signed);
+    let reason = if requires_unsigned_policy && !protected_audio_dg_disabled {
+        Some(ReenableReason::ProtectedAudioDgReset)
+    } else if audiodg_rejected {
+        Some(ReenableReason::AudiodgRejected)
+    } else if !endpoints_registered {
+        Some(ReenableReason::EndpointReset)
+    } else if effects_off {
+        Some(ReenableReason::EffectsOff)
+    } else {
+        None
+    };
+
+    SystemEqHealthReport {
+        system_eq_enabled: true,
+        drm_disclosure_accepted: ledger.drm_disclosure_accepted,
+        protected_audio_dg_disabled,
+        endpoints_registered,
+        audiodg_rejected,
+        needs_reenable: reason.is_some(),
+        reason,
+    }
 }
 
 pub fn uninstall_all<R: RegistryStore>(
@@ -971,5 +1350,184 @@ mod tests {
         assert_eq!(mock, before);
         assert!(ledger.endpoints.is_empty());
         assert!(ledger.com_clsids_registered.is_empty());
+    }
+
+    #[test]
+    fn unsigned_free_route_snapshots_and_restores_all_three_prior_states_with_service_restart() {
+        for prior in [
+            PriorDwordState::Absent,
+            PriorDwordState::Present(0),
+            PriorDwordState::Present(1),
+        ] {
+            let mut mock = MockRegistryStore::new();
+            let mut original = BTreeMap::new();
+            original.insert(
+                PKEY_FX_ENDPOINT_EFFECT_CLSID.to_string(),
+                RegValue::String(OEM_REALTEK_CLSID.to_string()),
+            );
+            mock.seed_endpoint(TEST_GUID, original);
+            match prior {
+                PriorDwordState::Absent => {
+                    mock.ensure_key(AUDIO_POLICY_ROOT).unwrap();
+                }
+                PriorDwordState::Present(v) => {
+                    mock.ensure_key(AUDIO_POLICY_ROOT).unwrap();
+                    mock.write_value(
+                        AUDIO_POLICY_ROOT,
+                        DISABLE_PROTECTED_AUDIO_DG_VALUE,
+                        &RegValue::Dword(v),
+                    )
+                    .unwrap();
+                }
+            }
+            let before = mock.clone();
+            let mut svc = MockAudioServiceController::new();
+            let mut ledger = KeepBackupLedger::new();
+
+            enable_system_eq(
+                &mut mock,
+                &mut svc,
+                &mut ledger,
+                EnableSystemEqRequest {
+                    endpoint_id: TEST_GUID,
+                    dll_path: "C:\\Exo\\exo_apo.dll",
+                    mode: ApoSigningMode::UnsignedFreeRoute,
+                    explicit_user_consent: true,
+                    drm_disclosure_accepted: true,
+                },
+            )
+            .expect("enable unsigned system eq");
+
+            assert_eq!(ledger.prior_disable_protected_audio_dg, Some(prior));
+            assert!(ledger.system_eq_enabled);
+            assert!(ledger.drm_disclosure_accepted);
+            assert_eq!(svc.restart_count, 1);
+            assert_eq!(
+                mock.read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)
+                    .unwrap(),
+                Some(RegValue::Dword(1))
+            );
+            assert!(mock.key_exists(&apo_reg_key_path(EXO_APO_EFX_CLSID_STR)));
+
+            let rb =
+                disable_system_eq(&mut mock, &mut svc, &mut ledger).expect("turn off system eq");
+            assert_eq!(rb.restored_endpoints, 1);
+            assert_eq!(rb.removed_com_clsids, 3);
+            assert_eq!(rb.restored_protected_audio_dg, Some(prior));
+            assert_eq!(svc.restart_count, 2);
+            assert!(!ledger.system_eq_enabled);
+            assert_eq!(mock, before);
+            match prior {
+                PriorDwordState::Absent => assert!(
+                    mock.read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)
+                        .unwrap()
+                        .is_none()
+                ),
+                PriorDwordState::Present(v) => assert_eq!(
+                    mock.read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)
+                        .unwrap(),
+                    Some(RegValue::Dword(v))
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn unsigned_free_route_refuses_without_drm_disclosure_and_never_restarts_service() {
+        let mut mock = MockRegistryStore::new();
+        mock.seed_endpoint(TEST_GUID, BTreeMap::new());
+        let before = mock.clone();
+        let mut svc = MockAudioServiceController::new();
+        let mut ledger = KeepBackupLedger::new();
+
+        let err = enable_system_eq(
+            &mut mock,
+            &mut svc,
+            &mut ledger,
+            EnableSystemEqRequest {
+                endpoint_id: TEST_GUID,
+                dll_path: "C:\\Exo\\exo_apo.dll",
+                mode: ApoSigningMode::UnsignedFreeRoute,
+                explicit_user_consent: true,
+                drm_disclosure_accepted: false,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(mock, before);
+        assert_eq!(svc.restart_count, 0);
+        assert!(!ledger.system_eq_enabled);
+    }
+
+    #[test]
+    fn launch_health_check_detects_windows_update_reset_and_audiodg_rejection_and_reenable_keeps_original_prior()
+     {
+        let mut mock = MockRegistryStore::new();
+        mock.seed_endpoint(TEST_GUID, BTreeMap::new());
+        mock.ensure_key(AUDIO_POLICY_ROOT).unwrap();
+        let mut svc = MockAudioServiceController::new();
+        let mut ledger = KeepBackupLedger::new();
+
+        let off = check_system_eq_health(&mock, &ledger, false);
+        assert!(!off.system_eq_enabled);
+        assert!(!off.needs_reenable);
+
+        enable_system_eq(
+            &mut mock,
+            &mut svc,
+            &mut ledger,
+            EnableSystemEqRequest {
+                endpoint_id: TEST_GUID,
+                dll_path: "C:\\Exo\\exo_apo.dll",
+                mode: ApoSigningMode::UnsignedFreeRoute,
+                explicit_user_consent: true,
+                drm_disclosure_accepted: true,
+            },
+        )
+        .unwrap();
+        let ok = check_system_eq_health(&mock, &ledger, false);
+        assert!(ok.system_eq_enabled);
+        assert!(!ok.needs_reenable);
+
+        let rejected = check_system_eq_health(&mock, &ledger, true);
+        assert!(rejected.needs_reenable);
+        assert_eq!(rejected.reason, Some(ReenableReason::AudiodgRejected));
+
+        mock.write_value(
+            AUDIO_POLICY_ROOT,
+            DISABLE_PROTECTED_AUDIO_DG_VALUE,
+            &RegValue::Dword(0),
+        )
+        .unwrap();
+        let reset = check_system_eq_health(&mock, &ledger, false);
+        assert!(reset.needs_reenable);
+        assert_eq!(reset.reason, Some(ReenableReason::ProtectedAudioDgReset));
+
+        enable_system_eq(
+            &mut mock,
+            &mut svc,
+            &mut ledger,
+            EnableSystemEqRequest {
+                endpoint_id: TEST_GUID,
+                dll_path: "C:\\Exo\\exo_apo.dll",
+                mode: ApoSigningMode::UnsignedFreeRoute,
+                explicit_user_consent: true,
+                drm_disclosure_accepted: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            ledger.prior_disable_protected_audio_dg,
+            Some(PriorDwordState::Absent)
+        );
+        let healed = check_system_eq_health(&mock, &ledger, false);
+        assert!(!healed.needs_reenable);
+
+        disable_system_eq(&mut mock, &mut svc, &mut ledger).unwrap();
+        assert!(
+            mock.read_value(AUDIO_POLICY_ROOT, DISABLE_PROTECTED_AUDIO_DG_VALUE)
+                .unwrap()
+                .is_none()
+        );
     }
 }

@@ -300,6 +300,7 @@ internal static class PlayerData
         new("display-links.json", "DisplayLink", Why.ThisPc, "what was learned about this PC's screens and cables"),
         new("download-intents.json", "LaunchOrchestrator", Why.ThisPc, "downloads queued on this PC"),
         new("epic-quiet.json", "EpicQuietSettings", Why.ThisPc, "Epic's settings before Exo quieted them"),
+        new("exo-apo-ledger.json", "ExoNativeApo", Why.ThisPc, "machine-local rollback journal for DisableProtectedAudioDG and audio endpoint APO registration"),
         new("exo-drives.json", "Drives", Why.ThisPc, "this PC's drive settings before Exo changed them"),
         new("exo-network-best.json", "NetworkBest", Why.ThisPc, "this PC's DNS and TCP settings before Best settings › Network, and the items turned off"),
         new("exo-network-tune.json", "NetworkTune", Why.ThisPc, "network adapter values before Exo tuned them"),
