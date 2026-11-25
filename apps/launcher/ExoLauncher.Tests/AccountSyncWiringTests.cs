@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using ExoLauncher.Helpers;
 using ExoLauncher.Models;
 using ExoLauncher.Services.Account;
 
@@ -13,13 +14,22 @@ namespace ExoLauncher.Tests;
 /// - a PUT body the service would refuse (a key the fixture does not have);
 /// - a PC that is not signed in writing to the queue, or a signed-out PC losing its queue on disk.
 /// </summary>
-public sealed class AccountSyncWiringTests
+public sealed class AccountSyncWiringTests : IDisposable
 {
-    private static string FreshDir()
+    private readonly List<string> _tempDirs = [];
+
+    private string FreshDir()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "exo-account-wiring", Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(Path.GetTempPath(), "exo-account-wiring-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        _tempDirs.Add(dir);
         return dir;
+    }
+
+    public void Dispose()
+    {
+        foreach (var dir in _tempDirs)
+            try { DeletionGate.DeleteDirectory(dir, recursive: true); } catch { }
     }
 
     private sealed class Answer(HttpStatusCode status, string body) : HttpMessageHandler

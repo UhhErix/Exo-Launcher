@@ -15,12 +15,19 @@ public sealed class EpicInstallerTrustTests
     {
         var setup = Path.Combine(Path.GetTempPath(), "exo-epic-trust-" + Guid.NewGuid().ToString("N") + ".exe");
         File.WriteAllBytes(setup, [0x4D, 0x5A]);
-        var started = false;
+        try
+        {
+            var started = false;
 
-        var message = EpicNewLauncherInstaller.Open(setup, () => false, _ => { started = true; return null; });
+            var message = EpicNewLauncherInstaller.Open(setup, () => false, _ => { started = true; return null; });
 
-        Assert.Equal("That download wasn't signed by Epic Games, so Exo deleted it.", message);
-        Assert.False(started);
-        Assert.False(File.Exists(setup));
+            Assert.Equal("That download wasn't signed by Epic Games, so Exo deleted it.", message);
+            Assert.False(started);
+            Assert.False(File.Exists(setup));
+        }
+        finally
+        {
+            try { DeletionGate.DeleteFile(setup); } catch { }
+        }
     }
 }
