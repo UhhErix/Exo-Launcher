@@ -1,9 +1,10 @@
+use crate::pso_format::{EXOPLIB_MAGIC, PipelineLibraryHeader};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Instant, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE, IDXGIDevice, IDXGIFactory1,
 };
@@ -201,6 +202,301 @@ pub fn default_driver_cache_roots() -> Vec<(String, String, PathBuf)> {
     roots
 }
 
+pub fn default_per_driver_roots() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(local) = env::var("LOCALAPPDATA")
+        && let Some(app_data) = PathBuf::from(local).parent()
+    {
+        let nv = app_data
+            .join("LocalLow")
+            .join("NVIDIA")
+            .join("PerDriverVersion");
+        if nv.is_dir() {
+            out.push(nv);
+        }
+    }
+    out
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaleDriverCacheEntry {
+    pub kind: String,
+    pub path: String,
+    pub cached_driver: String,
+    pub current_driver: String,
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OldDriverCleanupReport {
+    pub inspected: usize,
+    pub kept_valid: usize,
+    pub cleared: usize,
+    pub backed_up_bytes: u64,
+    pub backup_paths: Vec<String>,
+}
+
+fn looks_like_driver_version_dir(name: &str) -> bool {
+    if name.len() < 4 || name.len() > 32 {
+        return false;
+    }
+    let parts: Vec<&str> = name.split('.').collect();
+    if parts.len() < 2 || parts.len() > 4 {
+        return false;
+    }
+    parts
+        .iter()
+        .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+}
+
+fn normalize_driver_label(ver: &str) -> String {
+    ver.trim().to_ascii_lowercase()
+}
+
+fn driver_versions_differ(cached: &str, current: &str) -> bool {
+    let a = normalize_driver_label(cached);
+    let b = normalize_driver_label(current);
+    if a.is_empty()
+        || b.is_empty()
+        || a == "unknown"
+        || b == "unknown"
+        || a == "0.0.0.0"
+        || b == "0.0.0.0"
+    {
+        return false;
+    }
+    if a == b {
+        return false;
+    }
+    let a_digits: String = a.chars().filter(|c| c.is_ascii_digit()).collect();
+    let b_digits: String = b.chars().filter(|c| c.is_ascii_digit()).collect();
+    !(!a_digits.is_empty()
+        && !b_digits.is_empty()
+        && (a_digits.ends_with(&b_digits) || b_digits.ends_with(&a_digits)))
+}
+
+fn read_exoplib_header(path: &Path) -> Option<PipelineLibraryHeader> {
+    let bytes = fs::read(path).ok()?;
+    if bytes.len() < 12 || &bytes[..8] != EXOPLIB_MAGIC {
+        return None;
+    }
+    let header_len = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]) as usize;
+    if 12 + header_len > bytes.len() {
+        return None;
+    }
+    serde_json::from_slice::<PipelineLibraryHeader>(&bytes[12..12 + header_len]).ok()
+}
+
+fn dir_byte_size(root: &Path) -> u64 {
+    let Ok(meta) = fs::symlink_metadata(root) else {
+        return 0;
+    };
+    if meta.file_type().is_symlink() {
+        return 0;
+    }
+    if meta.is_file() {
+        return meta.len();
+    }
+    if !meta.is_dir() {
+        return 0;
+    }
+    let mut total = 0u64;
+    let Ok(entries) = fs::read_dir(root) else {
+        return 0;
+    };
+    for entry in entries.flatten() {
+        total = total.saturating_add(dir_byte_size(&entry.path()));
+    }
+    total
+}
+
+fn copy_path_verified(src: &Path, dst: &Path) -> Result<u64, String> {
+    let meta =
+        fs::symlink_metadata(src).map_err(|e| format!("stat {} failed: {e}", src.display()))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!("refusing to follow symlink {}", src.display()));
+    }
+    if meta.is_file() {
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("create_dir_all failed: {e}"))?;
+        }
+        let copied = fs::copy(src, dst).map_err(|e| {
+            format!(
+                "backup copy {} -> {} failed: {e}",
+                src.display(),
+                dst.display()
+            )
+        })?;
+        if copied != meta.len() {
+            return Err(format!(
+                "backup byte mismatch for {}: expected {}, got {}",
+                src.display(),
+                meta.len(),
+                copied
+            ));
+        }
+        return Ok(copied);
+    }
+    if meta.is_dir() {
+        fs::create_dir_all(dst)
+            .map_err(|e| format!("create_dir_all {} failed: {e}", dst.display()))?;
+        let mut total = 0u64;
+        for entry in
+            fs::read_dir(src).map_err(|e| format!("read_dir {} failed: {e}", src.display()))?
+        {
+            let entry = entry.map_err(|e| format!("read_dir entry failed: {e}"))?;
+            total += copy_path_verified(&entry.path(), &dst.join(entry.file_name()))?;
+        }
+        return Ok(total);
+    }
+    Err(format!("unsupported path type {}", src.display()))
+}
+
+pub fn find_stale_old_driver_caches(
+    data_dir: &Path,
+    per_driver_roots: &[PathBuf],
+    current_vendor: u32,
+    current_device: u32,
+    current_driver: &str,
+) -> Vec<StaleDriverCacheEntry> {
+    let mut stale = Vec::new();
+    let lib_dir = data_dir.join("libraries");
+    if let Ok(entries) = fs::read_dir(&lib_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("exoplib") {
+                continue;
+            }
+            let Some(hdr) = read_exoplib_header(&path) else {
+                continue;
+            };
+            let adapter_diff = (hdr.adapter_vendor != 0
+                && current_vendor != 0
+                && hdr.adapter_vendor != current_vendor)
+                || (hdr.adapter_device != 0
+                    && current_device != 0
+                    && hdr.adapter_device != current_device);
+            let driver_diff = driver_versions_differ(&hdr.driver_version, current_driver);
+            if adapter_diff || driver_diff {
+                stale.push(StaleDriverCacheEntry {
+                    kind: "exo-exoplib".into(),
+                    path: path.display().to_string(),
+                    cached_driver: hdr.driver_version,
+                    current_driver: current_driver.to_string(),
+                    bytes: dir_byte_size(&path),
+                });
+            }
+        }
+    }
+
+    for root in per_driver_roots {
+        let Ok(entries) = fs::read_dir(root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(meta) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if meta.file_type().is_symlink() || !meta.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !looks_like_driver_version_dir(&name) {
+                continue;
+            }
+            if driver_versions_differ(&name, current_driver) {
+                stale.push(StaleDriverCacheEntry {
+                    kind: "per-driver-dir".into(),
+                    path: path.display().to_string(),
+                    cached_driver: name,
+                    current_driver: current_driver.to_string(),
+                    bytes: dir_byte_size(&path),
+                });
+            }
+        }
+    }
+
+    stale.sort_by(|a, b| a.path.cmp(&b.path));
+    stale
+}
+
+pub fn backup_and_clear_old_driver_caches(
+    data_dir: &Path,
+    per_driver_roots: &[PathBuf],
+    current_vendor: u32,
+    current_device: u32,
+    current_driver: &str,
+) -> Result<OldDriverCleanupReport, String> {
+    let mut report = OldDriverCleanupReport::default();
+    let lib_dir = data_dir.join("libraries");
+    if let Ok(entries) = fs::read_dir(&lib_dir) {
+        report.inspected += entries
+            .flatten()
+            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("exoplib"))
+            .count();
+    }
+    for root in per_driver_roots {
+        if let Ok(entries) = fs::read_dir(root) {
+            report.inspected += entries.flatten().count();
+        }
+    }
+
+    let stale = find_stale_old_driver_caches(
+        data_dir,
+        per_driver_roots,
+        current_vendor,
+        current_device,
+        current_driver,
+    );
+    let backup_root = data_dir.join("backups").join("old-driver");
+    for item in &stale {
+        let src = Path::new(&item.path);
+        if !src.exists() {
+            continue;
+        }
+        let name = src
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "cache".into());
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let backup_dst = backup_root.join(format!("{stamp}_{name}"));
+        let copied = copy_path_verified(src, &backup_dst)?;
+        let meta =
+            fs::symlink_metadata(src).map_err(|e| format!("stat {} failed: {e}", src.display()))?;
+        if meta.is_dir() {
+            fs::remove_dir_all(src)
+                .map_err(|e| format!("remove_dir_all {} failed: {e}", src.display()))?;
+        } else {
+            fs::remove_file(src)
+                .map_err(|e| format!("remove_file {} failed: {e}", src.display()))?;
+        }
+        report.cleared += 1;
+        report.backed_up_bytes = report.backed_up_bytes.saturating_add(copied);
+        report.backup_paths.push(backup_dst.display().to_string());
+    }
+    report.kept_valid = report.inspected.saturating_sub(report.cleared);
+    Ok(report)
+}
+
+pub fn restore_backed_up_cache(backup_path: &Path, restore_target: &Path) -> Result<u64, String> {
+    if !backup_path.exists() {
+        return Err(format!("backup not found: {}", backup_path.display()));
+    }
+    if restore_target.exists() {
+        return Err(format!(
+            "refusing to overwrite existing target: {}",
+            restore_target.display()
+        ));
+    }
+    copy_path_verified(backup_path, restore_target)
+}
+
 pub fn scan_driver_caches(roots: &[(String, String, PathBuf)]) -> DriverCacheInventory {
     let start = Instant::now();
     let gpu = query_primary_gpu();
@@ -395,5 +691,95 @@ mod tests {
             DriverChange::Updated { .. }
         ));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn old_driver_cleanup_only_touches_provably_stale_and_backs_up_first() {
+        let root = env::temp_dir().join(format!(
+            "exo-old-drv-clean-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let data_dir = root.join("data");
+        let libs = data_dir.join("libraries");
+        let per_drv = root.join("PerDriverVersion");
+        fs::create_dir_all(&libs).unwrap();
+        fs::create_dir_all(per_drv.join("566.36")).unwrap();
+        fs::create_dir_all(per_drv.join("621.35")).unwrap();
+        fs::create_dir_all(per_drv.join("DXCache")).unwrap();
+        fs::write(per_drv.join("566.36").join("old.bin"), b"old-driver-blob").unwrap();
+        fs::write(per_drv.join("621.35").join("cur.bin"), b"current-blob").unwrap();
+        fs::write(per_drv.join("DXCache").join("active.nvph"), b"active").unwrap();
+
+        let valid_lib = libs.join("steam_cur.exoplib");
+        let stale_lib = libs.join("steam_old.exoplib");
+        crate::pso_format::write_pipeline_library(
+            &valid_lib, 0x10DE, 0x2484, "621.35", 4, b"valid",
+        )
+        .unwrap();
+        crate::pso_format::write_pipeline_library(
+            &stale_lib, 0x10DE, 0x2484, "566.36", 4, b"stale",
+        )
+        .unwrap();
+
+        let stale_found = find_stale_old_driver_caches(
+            &data_dir,
+            std::slice::from_ref(&per_drv),
+            0x10DE,
+            0x2484,
+            "621.35",
+        );
+        assert_eq!(stale_found.len(), 2);
+
+        let report = backup_and_clear_old_driver_caches(
+            &data_dir,
+            std::slice::from_ref(&per_drv),
+            0x10DE,
+            0x2484,
+            "621.35",
+        )
+        .unwrap();
+        assert_eq!(report.cleared, 2);
+        assert_eq!(report.kept_valid, 3);
+        assert_eq!(report.backup_paths.len(), 2);
+        assert!(valid_lib.exists());
+        assert!(!stale_lib.exists());
+        assert!(per_drv.join("621.35").join("cur.bin").exists());
+        assert!(per_drv.join("DXCache").join("active.nvph").exists());
+        assert!(!per_drv.join("566.36").exists());
+        for bp in &report.backup_paths {
+            assert!(Path::new(bp).exists());
+        }
+
+        let dir_backup = report
+            .backup_paths
+            .iter()
+            .find(|p| p.ends_with("_566.36"))
+            .unwrap();
+        let restored_dir = per_drv.join("566.36");
+        let restored_dir_bytes =
+            restore_backed_up_cache(Path::new(dir_backup), &restored_dir).unwrap();
+        assert_eq!(restored_dir_bytes, b"old-driver-blob".len() as u64);
+        assert_eq!(
+            fs::read(restored_dir.join("old.bin")).unwrap(),
+            b"old-driver-blob"
+        );
+        assert!(restore_backed_up_cache(Path::new(dir_backup), &restored_dir).is_err());
+
+        let lib_backup = report
+            .backup_paths
+            .iter()
+            .find(|p| p.ends_with("_steam_old.exoplib"))
+            .unwrap();
+        let restored_lib_bytes =
+            restore_backed_up_cache(Path::new(lib_backup), &stale_lib).unwrap();
+        assert!(restored_lib_bytes > 0);
+        assert!(stale_lib.is_file());
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

@@ -1,7 +1,9 @@
+pub mod asd;
 pub mod cache_guard;
 pub mod driver_cache;
 pub mod fossilize;
 pub mod game_cache;
+pub mod nvidia_drs;
 pub mod policy;
 pub mod protocol;
 pub mod pso_dx12;
