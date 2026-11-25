@@ -56,14 +56,29 @@ internal sealed class ExoAiCoordinator : IDisposable
             return attention;
         },
         () => Autopilot.Engine.Snapshot(),
-        () => DateTimeOffset.UtcNow);
+        () => DateTimeOffset.UtcNow,
+        async ct =>
+        {
+            var attention = new List<string>();
+            try
+            {
+                var reading = await PcHealth.ReadAsync(PowerPlan.Shared, false, false, ct).ConfigureAwait(false);
+                foreach (var item in PcHealth.Decide(reading))
+                    if (!item.Applied && !item.Current && !item.Held && item.Key != "power" && !item.Busy)
+                        attention.Add(item.Label);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: health read skipped: " + ex.GetType().Name); }
+            return attention;
+        });
 
     private readonly Func<bool> _isGaming;
     private readonly Func<IReadOnlyList<string>> _applySafe;
     private readonly Func<IReadOnlyList<string>> _readAttention;
+    private readonly Func<CancellationToken, Task<IReadOnlyList<string>>>? _readAttentionAsync;
     private readonly Func<ExoAiAutopilotSnapshot> _autopilotSnapshot;
     private readonly Func<DateTimeOffset> _now;
     private readonly Lock _gate = new();
+    private int _driftRunning;
 
     private Func<ExoAiSettings>? _getSettings;
     private ExoAiSettings? _lastSettings;
@@ -82,12 +97,14 @@ internal sealed class ExoAiCoordinator : IDisposable
         Func<IReadOnlyList<string>> applySafe,
         Func<IReadOnlyList<string>> readAttention,
         Func<ExoAiAutopilotSnapshot> autopilotSnapshot,
-        Func<DateTimeOffset> now)
+        Func<DateTimeOffset> now,
+        Func<CancellationToken, Task<IReadOnlyList<string>>>? readAttentionAsync = null)
     {
         Fans = fans;
         _isGaming = isGaming;
         _applySafe = applySafe;
         _readAttention = readAttention;
+        _readAttentionAsync = readAttentionAsync;
         _autopilotSnapshot = autopilotSnapshot;
         _now = now;
     }
@@ -102,7 +119,7 @@ internal sealed class ExoAiCoordinator : IDisposable
             _lastSettings = initial;
             if (_running) return;
             _running = true;
-            _driftTimer = new Timer(_ => RunDriftCheck(), null, InitialDelay, DriftInterval);
+            _driftTimer = new Timer(_ => _ = RunDriftCheckAsync(), null, InitialDelay, DriftInterval);
         }
         ApplyFanPreset(initial.FanPreset);
     }
@@ -171,6 +188,47 @@ internal sealed class ExoAiCoordinator : IDisposable
         var current = ReadSettings();
         if (!current.BackgroundDriftCheck) return;
         RunSafeCheck(applySafe: current.AutoApplyBestSettings);
+    }
+
+    internal async Task RunDriftCheckAsync(CancellationToken ct = default)
+    {
+        if (_isGaming()) return;
+        var current = ReadSettings();
+        if (!current.BackgroundDriftCheck) return;
+        if (Interlocked.Exchange(ref _driftRunning, 1) != 0) return;
+        try
+        {
+            await RunSafeCheckAsync(applySafe: current.AutoApplyBestSettings, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            Volatile.Write(ref _driftRunning, 0);
+        }
+    }
+
+    private async Task RunSafeCheckAsync(bool applySafe, CancellationToken ct)
+    {
+        IReadOnlyList<string> applied = [];
+        if (applySafe)
+        {
+            try { applied = await Task.Run(_applySafe, ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("ExoAI: safe optimization failed: " + ex.GetType().Name); }
+        }
+        IReadOnlyList<string> attention = [];
+        try
+        {
+            attention = _readAttentionAsync is not null
+                ? await _readAttentionAsync(ct).ConfigureAwait(false)
+                : await Task.Run(_readAttention, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: attention scan failed: " + ex.GetType().Name); }
+
+        lock (_gate)
+        {
+            _autoApplied = applied;
+            _needsAttention = attention;
+            _lastCheckUtc = _now();
+        }
     }
 
     private ExoAiSettings ReadSettings()
