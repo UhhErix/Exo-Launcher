@@ -9,6 +9,12 @@
 - **Optional passkey sign-in and safer account connections.** Adds Windows Hello passkey sign-in for Exo accounts and switches connected services to standard browser sign-in flows. _Checked in code only._
 - **Includes all 3.30.x fixes.** Carries forward every 3.29.1–3.30.3 reliability fix for mouse profiles, Snip captures, all-in-one game runtimes (VC++ 14.52 and .NET), Discord voice leveling, and Auto Tune. _Verified: end-to-end._
 
+## 3.31.0 — November 24, 2026
+- **Smaller install and faster startup.** Trims unused runtime locales and debug components, lazy-loads the changelog from a compressed file, and shrinks Exo Capture and Discord voice noise suppression binaries so Exo installs smaller and starts faster. _Verified: on screen._
+- **Cleaner background WebView2 memory.** Releases shared WebView2 environments and applies low-memory reclaim when temporary sign-in, gift, link, preview, and music windows close so background processes exit promptly. _Verified: on screen._
+- **Updated game capture, GameInput, frame generation, and shader libraries.** Updates the bundled OBS game capture hook to 33.0.3, Microsoft GameInput to 4.1.315, OptiScaler to v0.9.5, MFG-Unlocker to v1.7.2, and Exo Shaders' ValvePak library to 7.2. _Checked in code only._
+- **More reliable crash reports and helper-tool timeouts.** Prevents unhandled task exceptions when timed-out helper tools close their output streams, speeds up report scrubbing, and keeps useful diagnostic names readable without over-redacting them. _Checked in code only._
+
 ## 3.30.3 — November 24, 2026
 - **Exo Mouse no longer loops or overwrites your settings.** Matches saved pre-3.30.2 Finalmouse Starlight X click-mode profiles against 6-byte firmware 1.2.8 read-backs, removes the 60-second connect-time retry loop so settings write only when you change them or switch to a different profile, adds 2-second debounce/hysteresis and browser/launcher exclusions for game profile auto-switching, and guards HID writes per device with rate limiting and diagnostics. _Verified: on screen._
 - **Cleaner Auto Tune finish.** Drops the verbose what-changed list after Auto Tune completes, showing only warnings or errors when a stage fails. _Checked in code only._
