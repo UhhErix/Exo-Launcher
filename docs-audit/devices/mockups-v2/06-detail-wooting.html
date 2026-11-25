@@ -355,7 +355,13 @@
       actuation: "0.4",
       rt: "0.15",
       onSelect: (id, label) => {
-        document.getElementById("det-key-status").innerHTML = `Selected key: <strong>${label}</strong> (${id}) · Actuation ${document.getElementById("det-act-lbl").textContent} · RT ${document.getElementById("det-rt-lbl").textContent}`;
+        const strong = document.createElement("strong");
+        strong.textContent = label;
+        document.getElementById("det-key-status").replaceChildren(
+          "Selected key: ",
+          strong,
+          ` (${id}) · Actuation ${document.getElementById("det-act-lbl").textContent} · RT ${document.getElementById("det-rt-lbl").textContent}`
+        );
         document.getElementById("det-travel-key").textContent = `Key ${label}`;
       }
     });

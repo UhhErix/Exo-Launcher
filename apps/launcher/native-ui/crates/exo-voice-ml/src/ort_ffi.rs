@@ -385,7 +385,8 @@ impl OrtSessionHandle {
         inputs: &[*const OrtValue],
         output_names: &[*const c_char],
     ) -> Result<Vec<OrtValueHandle<'a>>, String> {
-        let mut raw_outs: Vec<*mut OrtValue> = vec![null_mut(); output_names.len()];
+        let mut raw_outs: Vec<std::mem::MaybeUninit<*mut OrtValue>> =
+            vec![std::mem::MaybeUninit::zeroed(); output_names.len()];
         let run_fn: unsafe extern "system" fn(
             *mut OrtSession,
             *const OrtRunOptions,
@@ -405,13 +406,20 @@ impl OrtSessionHandle {
                 inputs.len(),
                 output_names.as_ptr(),
                 output_names.len(),
-                raw_outs.as_mut_ptr(),
+                raw_outs.as_mut_ptr().cast::<*mut OrtValue>(),
             )
         })?;
-        Ok(raw_outs
+        raw_outs
             .into_iter()
-            .map(|val| OrtValueHandle { rt: self.rt, val })
-            .collect())
+            .map(|slot| {
+                let val = unsafe { slot.assume_init() };
+                if val.is_null() {
+                    Err("null output tensor".to_string())
+                } else {
+                    Ok(OrtValueHandle { rt: self.rt, val })
+                }
+            })
+            .collect()
     }
 }
 

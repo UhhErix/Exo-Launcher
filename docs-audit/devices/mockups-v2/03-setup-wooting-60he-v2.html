@@ -402,7 +402,13 @@
       actuation: "0.4",
       rt: "0.15",
       onSelect: (id, label) => {
-        readout.innerHTML = `Selected key: <strong>${label}</strong> (${id}) · Actuation ${document.getElementById("act-val").textContent} · RT ${document.getElementById("rt-val").textContent}`;
+        const strong = document.createElement("strong");
+        strong.textContent = label;
+        readout.replaceChildren(
+          "Selected key: ",
+          strong,
+          ` (${id}) · Actuation ${document.getElementById("act-val").textContent} · RT ${document.getElementById("rt-val").textContent}`
+        );
         document.getElementById("travel-key").textContent = `Key ${label}`;
       }
     });

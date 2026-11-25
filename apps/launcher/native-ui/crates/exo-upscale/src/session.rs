@@ -85,7 +85,7 @@ impl SessionMods {
         let json =
             serde_json::to_string_pretty(journal).map_err(|e| format!("serialize journal: {e}"))?;
         fs::write(&tmp, json.as_bytes()).map_err(|e| format!("write journal tmp: {e}"))?;
-        atomic_replace_file(&tmp, &dst)
+        atomic_replace_file(&tmp, &dst).map_err(|_| "replace session journal failed".to_string())
     }
 
     pub fn begin_session(

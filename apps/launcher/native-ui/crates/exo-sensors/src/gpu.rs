@@ -598,8 +598,8 @@ fn open_nvapi_addon() -> Option<NvapiAddon> {
 pub struct AmdAdlxSensorBackend {
     _lib: DynLib,
     terminate: Option<unsafe extern "C" fn() -> i32>,
-    system: *mut std::ffi::c_void,
-    gpu: *mut std::ffi::c_void,
+    system: std::ptr::NonNull<std::ffi::c_void>,
+    gpu: Option<std::ptr::NonNull<std::ffi::c_void>>,
     name: String,
     vram_total_mb: Option<u64>,
 }
@@ -617,48 +617,51 @@ impl AmdAdlxSensorBackend {
         if unsafe { query_ver(&mut ver) } != 0 {
             return None;
         }
-        let mut system: *mut std::ffi::c_void = null_mut();
-        if unsafe { init(ver, &mut system) } != 0 || system.is_null() {
+        let mut system_out = std::mem::MaybeUninit::<*mut std::ffi::c_void>::zeroed();
+        if unsafe { init(ver, system_out.as_mut_ptr()) } != 0 {
             return None;
         }
-        let mut list: *mut std::ffi::c_void = null_mut();
-        if unsafe { adlx_call_out(system, 1, &mut list) } != 0 || list.is_null() {
+        let system = std::ptr::NonNull::new(unsafe { system_out.assume_init() })?;
+        let Some(list) = (unsafe { adlx_call_out(system, 1) }) else {
             if let Some(t) = terminate {
                 unsafe {
                     t();
                 }
             }
             return None;
-        }
+        };
         let size: u32 = unsafe {
             let f: unsafe extern "system" fn(*mut std::ffi::c_void) -> u32 = adlx_vt(list, 3);
-            f(list)
+            f(list.as_ptr())
         };
-        let mut chosen: *mut std::ffi::c_void = null_mut();
+        let mut chosen: Option<std::ptr::NonNull<std::ffi::c_void>> = None;
         for idx in 0..size {
-            let mut item: *mut std::ffi::c_void = null_mut();
+            let mut item_out = std::mem::MaybeUninit::<*mut std::ffi::c_void>::zeroed();
             let rc = unsafe {
                 let f: unsafe extern "system" fn(
                     *mut std::ffi::c_void,
                     u32,
                     *mut *mut std::ffi::c_void,
                 ) -> i32 = adlx_vt(list, 11);
-                f(list, idx, &mut item)
+                f(list.as_ptr(), idx, item_out.as_mut_ptr())
             };
-            if rc != 0 || item.is_null() {
+            let Some(item) = (rc == 0)
+                .then(|| std::ptr::NonNull::new(unsafe { item_out.assume_init() }))
+                .flatten()
+            else {
                 continue;
-            }
+            };
             let mut gtype = 0i32;
             let discrete = unsafe {
                 let f: unsafe extern "system" fn(*mut std::ffi::c_void, *mut i32) -> i32 =
                     adlx_vt(item, 5);
-                f(item, &mut gtype) == 0 && gtype == 2
+                f(item.as_ptr(), &mut gtype) == 0 && gtype == 2
             };
-            if chosen.is_null() || discrete {
-                if !chosen.is_null() {
-                    unsafe { adlx_release(chosen) };
+            if chosen.is_none() || discrete {
+                if let Some(prev) = chosen {
+                    unsafe { adlx_release(prev) };
                 }
-                chosen = item;
+                chosen = Some(item);
                 if discrete {
                     break;
                 }
@@ -667,19 +670,19 @@ impl AmdAdlxSensorBackend {
             }
         }
         unsafe { adlx_release(list) };
-        if chosen.is_null() {
+        let Some(chosen) = chosen else {
             if let Some(t) = terminate {
                 unsafe {
                     t();
                 }
             }
             return None;
-        }
+        };
         let name = unsafe {
             let mut p: *const i8 = std::ptr::null();
             let f: unsafe extern "system" fn(*mut std::ffi::c_void, *mut *const i8) -> i32 =
                 adlx_vt(chosen, 7);
-            if f(chosen, &mut p) == 0 && !p.is_null() {
+            if f(chosen.as_ptr(), &mut p) == 0 && !p.is_null() {
                 CStr::from_ptr(p).to_string_lossy().trim().to_string()
             } else {
                 "AMD Radeon GPU".into()
@@ -689,13 +692,13 @@ impl AmdAdlxSensorBackend {
             let mut total = 0u32;
             let f: unsafe extern "system" fn(*mut std::ffi::c_void, *mut u32) -> i32 =
                 adlx_vt(chosen, 11);
-            (f(chosen, &mut total) == 0 && total > 0).then_some(total as u64)
+            (f(chosen.as_ptr(), &mut total) == 0 && total > 0).then_some(total as u64)
         };
         Some(Self {
             _lib: lib,
             terminate,
             system,
-            gpu: chosen,
+            gpu: Some(chosen),
             name,
             vram_total_mb,
         })
@@ -705,8 +708,8 @@ impl AmdAdlxSensorBackend {
 impl Drop for AmdAdlxSensorBackend {
     fn drop(&mut self) {
         unsafe {
-            if !self.gpu.is_null() {
-                adlx_release(self.gpu);
+            if let Some(gpu) = self.gpu.take() {
+                adlx_release(gpu);
             }
             if let Some(t) = self.terminate {
                 t();
@@ -721,122 +724,125 @@ impl GpuTelemetryBackend for AmdAdlxSensorBackend {
     }
 
     fn read(&mut self) -> Option<GpuSnapshot> {
-        let mut perf: *mut std::ffi::c_void = null_mut();
-        let mut sup: *mut std::ffi::c_void = null_mut();
-        let mut cur: *mut std::ffi::c_void = null_mut();
+        let gpu = self.gpu?;
+        let perf = unsafe { adlx_call_out(self.system, 9) }?;
+        let mut sup: Option<std::ptr::NonNull<std::ffi::c_void>> = None;
+        let mut cur: Option<std::ptr::NonNull<std::ffi::c_void>> = None;
         let res = unsafe {
-            if adlx_call_out(self.system, 9, &mut perf) != 0 || perf.is_null() {
-                None
+            let f_sup: unsafe extern "system" fn(
+                *mut std::ffi::c_void,
+                *mut std::ffi::c_void,
+                *mut *mut std::ffi::c_void,
+            ) -> i32 = adlx_vt(perf, 21);
+            let f_cur: unsafe extern "system" fn(
+                *mut std::ffi::c_void,
+                *mut std::ffi::c_void,
+                *mut *mut std::ffi::c_void,
+            ) -> i32 = adlx_vt(perf, 18);
+            let mut sup_out = std::mem::MaybeUninit::<*mut std::ffi::c_void>::zeroed();
+            if f_sup(perf.as_ptr(), gpu.as_ptr(), sup_out.as_mut_ptr()) == 0 {
+                sup = std::ptr::NonNull::new(sup_out.assume_init());
+            }
+            let mut cur_out = std::mem::MaybeUninit::<*mut std::ffi::c_void>::zeroed();
+            if f_cur(perf.as_ptr(), gpu.as_ptr(), cur_out.as_mut_ptr()) == 0 {
+                cur = std::ptr::NonNull::new(cur_out.assume_init());
+            }
+            if let (Some(sup_ptr), Some(cur_ptr)) = (sup, cur) {
+                let usage = adlx_real(sup_ptr, cur_ptr, 3, 4);
+                let gclk = adlx_int(sup_ptr, cur_ptr, 4, 5).map(|v| v.max(0) as u32);
+                let mclk = adlx_int(sup_ptr, cur_ptr, 5, 6).map(|v| v.max(0) as u32);
+                let temp = adlx_real(sup_ptr, cur_ptr, 6, 7);
+                let hotspot = adlx_real(sup_ptr, cur_ptr, 7, 8);
+                let watts = adlx_real(sup_ptr, cur_ptr, 9, 10)
+                    .or_else(|| adlx_real(sup_ptr, cur_ptr, 8, 9));
+                let fan = adlx_int(sup_ptr, cur_ptr, 10, 11).map(|v| v.max(0) as u32);
+                let vram_used = adlx_int(sup_ptr, cur_ptr, 11, 12).map(|v| v.max(0) as u64);
+                Some(GpuSnapshot {
+                    timestamp_ms: now_unix_ms(),
+                    backend: GpuBackendKind::AmdAdlx,
+                    vendor: GpuVendor::Amd,
+                    name: self.name.clone(),
+                    driver_version: None,
+                    core_temp_c: temp,
+                    hotspot_temp_c: hotspot,
+                    memory_temp_c: None,
+                    board_power_w: watts,
+                    power_limit_w: None,
+                    enforced_power_limit_w: None,
+                    min_power_limit_w: None,
+                    max_power_limit_w: None,
+                    power_pct: None,
+                    gpu_clock_mhz: gclk,
+                    mem_clock_mhz: mclk,
+                    vram_used_mb: vram_used,
+                    vram_total_mb: self.vram_total_mb,
+                    gpu_util_pct: usage.map(|u| u.round().clamp(0.0, 100.0) as u32),
+                    fan_pct: None,
+                    fan_rpm: fan,
+                    pstate: None,
+                    pcie_gen_current: None,
+                    pcie_gen_max: None,
+                    pcie_width_current: None,
+                    pcie_width_max: None,
+                    temp_target_c: hotspot.map(|_| 100),
+                    temp_max_c: hotspot.map(|_| 110),
+                    temp_slowdown_c: hotspot.map(|_| 110),
+                    throttle_flags: 0,
+                    connector: None,
+                })
             } else {
-                let f_sup: unsafe extern "system" fn(
-                    *mut std::ffi::c_void,
-                    *mut std::ffi::c_void,
-                    *mut *mut std::ffi::c_void,
-                ) -> i32 = adlx_vt(perf, 21);
-                let f_cur: unsafe extern "system" fn(
-                    *mut std::ffi::c_void,
-                    *mut std::ffi::c_void,
-                    *mut *mut std::ffi::c_void,
-                ) -> i32 = adlx_vt(perf, 18);
-                if f_sup(perf, self.gpu, &mut sup) != 0
-                    || sup.is_null()
-                    || f_cur(perf, self.gpu, &mut cur) != 0
-                    || cur.is_null()
-                {
-                    None
-                } else {
-                    let usage = adlx_real(sup, cur, 3, 4);
-                    let gclk = adlx_int(sup, cur, 4, 5).map(|v| v.max(0) as u32);
-                    let mclk = adlx_int(sup, cur, 5, 6).map(|v| v.max(0) as u32);
-                    let temp = adlx_real(sup, cur, 6, 7);
-                    let hotspot = adlx_real(sup, cur, 7, 8);
-                    let watts = adlx_real(sup, cur, 9, 10).or_else(|| adlx_real(sup, cur, 8, 9));
-                    let fan = adlx_int(sup, cur, 10, 11).map(|v| v.max(0) as u32);
-                    let vram_used = adlx_int(sup, cur, 11, 12).map(|v| v.max(0) as u64);
-                    Some(GpuSnapshot {
-                        timestamp_ms: now_unix_ms(),
-                        backend: GpuBackendKind::AmdAdlx,
-                        vendor: GpuVendor::Amd,
-                        name: self.name.clone(),
-                        driver_version: None,
-                        core_temp_c: temp,
-                        hotspot_temp_c: hotspot,
-                        memory_temp_c: None,
-                        board_power_w: watts,
-                        power_limit_w: None,
-                        enforced_power_limit_w: None,
-                        min_power_limit_w: None,
-                        max_power_limit_w: None,
-                        power_pct: None,
-                        gpu_clock_mhz: gclk,
-                        mem_clock_mhz: mclk,
-                        vram_used_mb: vram_used,
-                        vram_total_mb: self.vram_total_mb,
-                        gpu_util_pct: usage.map(|u| u.round().clamp(0.0, 100.0) as u32),
-                        fan_pct: None,
-                        fan_rpm: fan,
-                        pstate: None,
-                        pcie_gen_current: None,
-                        pcie_gen_max: None,
-                        pcie_width_current: None,
-                        pcie_width_max: None,
-                        temp_target_c: hotspot.map(|_| 100),
-                        temp_max_c: hotspot.map(|_| 110),
-                        temp_slowdown_c: hotspot.map(|_| 110),
-                        throttle_flags: 0,
-                        connector: None,
-                    })
-                }
+                None
             }
         };
         unsafe {
-            if !cur.is_null() {
-                adlx_release(cur);
+            if let Some(cur_ptr) = cur {
+                adlx_release(cur_ptr);
             }
-            if !sup.is_null() {
-                adlx_release(sup);
+            if let Some(sup_ptr) = sup {
+                adlx_release(sup_ptr);
             }
-            if !perf.is_null() {
-                adlx_release(perf);
-            }
+            adlx_release(perf);
         }
         res
     }
 }
 
-unsafe fn adlx_vt<T: Copy>(obj: *mut std::ffi::c_void, slot: usize) -> T {
-    let vt = unsafe { *(obj as *const *const *const std::ffi::c_void) };
+unsafe fn adlx_vt<T: Copy>(obj: std::ptr::NonNull<std::ffi::c_void>, slot: usize) -> T {
+    let vt = unsafe { *(obj.as_ptr() as *const *const *const std::ffi::c_void) };
     let p = unsafe { *vt.add(slot) };
     unsafe { std::mem::transmute_copy(&p) }
 }
 
 unsafe fn adlx_call_out(
-    obj: *mut std::ffi::c_void,
+    obj: std::ptr::NonNull<std::ffi::c_void>,
     slot: usize,
-    out: *mut *mut std::ffi::c_void,
-) -> i32 {
+) -> Option<std::ptr::NonNull<std::ffi::c_void>> {
+    let mut out = std::mem::MaybeUninit::<*mut std::ffi::c_void>::zeroed();
     let f: unsafe extern "system" fn(*mut std::ffi::c_void, *mut *mut std::ffi::c_void) -> i32 =
         unsafe { adlx_vt(obj, slot) };
-    unsafe { f(obj, out) }
+    if unsafe { f(obj.as_ptr(), out.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    std::ptr::NonNull::new(unsafe { out.assume_init() })
 }
 
-unsafe fn adlx_release(obj: *mut std::ffi::c_void) {
+unsafe fn adlx_release(obj: std::ptr::NonNull<std::ffi::c_void>) {
     let f: unsafe extern "system" fn(*mut std::ffi::c_void) -> i64 = unsafe { adlx_vt(obj, 1) };
     unsafe {
-        f(obj);
+        f(obj.as_ptr());
     }
 }
 
-unsafe fn adlx_supported(sup: *mut std::ffi::c_void, slot: usize) -> bool {
+unsafe fn adlx_supported(sup: std::ptr::NonNull<std::ffi::c_void>, slot: usize) -> bool {
     let mut on = 0u8;
     let f: unsafe extern "system" fn(*mut std::ffi::c_void, *mut u8) -> i32 =
         unsafe { adlx_vt(sup, slot) };
-    unsafe { f(sup, &mut on) == 0 && on != 0 }
+    unsafe { f(sup.as_ptr(), &mut on) == 0 && on != 0 }
 }
 
 unsafe fn adlx_real(
-    sup: *mut std::ffi::c_void,
-    cur: *mut std::ffi::c_void,
+    sup: std::ptr::NonNull<std::ffi::c_void>,
+    cur: std::ptr::NonNull<std::ffi::c_void>,
     ss: usize,
     vs: usize,
 ) -> Option<f64> {
@@ -846,12 +852,12 @@ unsafe fn adlx_real(
     let mut v = 0.0_f64;
     let f: unsafe extern "system" fn(*mut std::ffi::c_void, *mut f64) -> i32 =
         unsafe { adlx_vt(cur, vs) };
-    (unsafe { f(cur, &mut v) } == 0 && v.is_finite()).then_some(v)
+    (unsafe { f(cur.as_ptr(), &mut v) } == 0 && v.is_finite()).then_some(v)
 }
 
 unsafe fn adlx_int(
-    sup: *mut std::ffi::c_void,
-    cur: *mut std::ffi::c_void,
+    sup: std::ptr::NonNull<std::ffi::c_void>,
+    cur: std::ptr::NonNull<std::ffi::c_void>,
     ss: usize,
     vs: usize,
 ) -> Option<i32> {
@@ -861,7 +867,7 @@ unsafe fn adlx_int(
     let mut v = 0i32;
     let f: unsafe extern "system" fn(*mut std::ffi::c_void, *mut i32) -> i32 =
         unsafe { adlx_vt(cur, vs) };
-    (unsafe { f(cur, &mut v) } == 0).then_some(v)
+    (unsafe { f(cur.as_ptr(), &mut v) } == 0).then_some(v)
 }
 
 pub struct IntelIgclSensorBackend {
