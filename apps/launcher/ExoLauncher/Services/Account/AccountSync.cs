@@ -24,6 +24,8 @@ internal sealed class SyncEntry
     public bool Deleted { get; set; }
     /// <summary>Settings: the top-level keys this PC changed since Base, so a conflict keeps the server's other keys.</summary>
     public List<string> Changed { get; set; } = [];
+    public string? BaseValue { get; set; }
+    public Dictionary<string, long> ChangedAt { get; set; } = [];
 }
 
 /// <summary>The queue and the local copy, saved as account-sync.json (CLIENT.md 7.5). It is data, not a secret.</summary>
@@ -155,13 +157,13 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
     public List<string> Added { get; } = [];
 
     /// <summary>Records a local change. A null value on a value type is a deletion. Unknown types are refused.</summary>
-    public void Write(string type, string id, string? value, long updated, DateTimeOffset now)
+    public void Write(string type, string id, string? value, long updated, DateTimeOffset now, IReadOnlyCollection<string>? changedKeys = null, IReadOnlyDictionary<string, long>? changedAt = null)
     {
         var kind = AccountSyncRules.KindOf(type) ?? throw new ArgumentException("Not a synced type: " + type, nameof(type));
         if (!AccountSyncRules.ValidType(type) || !AccountSyncRules.ValidId(id)) throw new ArgumentException("Bad item name: " + type + "/" + id);
         var key = AccountSyncRules.Key(type, id);
         state.Items.TryGetValue(key, out var entry);
-        if (kind == MergeKind.Object && entry?.Value == value) return; // nothing changed: nothing to send
+        if (kind == MergeKind.Object && changedKeys is null && entry?.Value == value) return; // nothing changed: nothing to send
 
         switch (kind)
         {
@@ -174,10 +176,34 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
                 entry = new SyncEntry { Type = type, Id = id, Updated = updated, Value = value };
                 break;
             case MergeKind.Object:
-                entry ??= new SyncEntry { Type = type, Id = id };
-                entry.Changed = entry.Changed.Union(AccountSyncRules.ChangedKeys(entry.Value, value)).ToList();
-                entry.Value = value;
-                entry.Updated = updated;
+                if (entry is null)
+                {
+                    var initialKeys = changedKeys is not null
+                        ? changedKeys.Distinct(StringComparer.Ordinal).ToList()
+                        : AccountSyncRules.ChangedKeys(null, value);
+                    if (initialKeys.Count == 0 && changedKeys is not null) return;
+                    entry = new SyncEntry { Type = type, Id = id, Changed = initialKeys, Value = value };
+                    foreach (var k in initialKeys)
+                        entry.ChangedAt[k] = changedAt is not null && changedAt.TryGetValue(k, out var ts) ? ts : updated;
+                    entry.Updated = entry.ChangedAt.Count > 0 ? entry.ChangedAt.Values.Max() : updated;
+                }
+                else
+                {
+                    var nextValue = changedKeys is not null ? AccountSyncRules.Overlay(entry.Value, value, changedKeys) : value;
+                    var diff = AccountSyncRules.ChangedKeys(entry.Value, nextValue);
+                    var wasDirty = state.Dirty.Contains(key);
+                    if (diff.Count == 0 && !wasDirty) return;
+                    var tracked = changedKeys is not null
+                        ? diff.Union(changedKeys.Where(k => entry.Changed.Contains(k))).ToList()
+                        : diff;
+                    if (tracked.Count == 0) return;
+                    if (entry.BaseValue is null && !wasDirty && entry.Base > 0) entry.BaseValue = entry.Value;
+                    entry.Changed = entry.Changed.Union(diff).ToList();
+                    foreach (var k in tracked)
+                        entry.ChangedAt[k] = changedAt is not null && changedAt.TryGetValue(k, out var ts) ? ts : updated;
+                    entry.Value = nextValue;
+                    entry.Updated = entry.ChangedAt.Count > 0 ? entry.ChangedAt.Values.Max() : updated;
+                }
                 break;
             default:
                 entry ??= new SyncEntry { Type = type, Id = id };
@@ -194,10 +220,10 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
     }
 
     /// <summary>The batch to send now, or null when there is nothing due: nothing dirty, the debounce is still running, a retry is waiting, or the account stopped pushes.</summary>
-    public List<SyncItem>? NextPush(DateTimeOffset now)
+    public List<SyncItem>? NextPush(DateTimeOffset now, bool ignoreDebounce = false)
     {
         if (state.SignedOut || state.PushStopped || state.Dirty.Count == 0) return null;
-        if (now < state.NextAttempt || now - state.LastChange < AccountSyncRules.Debounce) return null;
+        if (now < state.NextAttempt || (!ignoreDebounce && now - state.LastChange < AccountSyncRules.Debounce)) return null;
 
         var batch = new List<SyncItem>();
         long bytes = 0;
@@ -263,6 +289,7 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
         state.BatchLimit = AccountSyncRules.MaxBatchItems;
         var body = reply.Body as JsonObject;
         var sentUpdated = (sent ?? []).ToDictionary(item => AccountSyncRules.Key(item.Type, item.Id), item => item.Updated);
+        var sentValues = (sent ?? []).ToDictionary(item => AccountSyncRules.Key(item.Type, item.Id), item => item.Value);
 
         foreach (var written in Array(body, "written"))
         {
@@ -275,6 +302,12 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
             {
                 state.Dirty.Remove(key);
                 entry.Changed.Clear();
+                entry.ChangedAt.Clear();
+                entry.BaseValue = entry.Value;
+            }
+            else if (sentValues.TryGetValue(key, out var sentValue))
+            {
+                entry.BaseValue = sentValue;
             }
         }
 
@@ -282,10 +315,11 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
         {
             var key = AccountSyncRules.Key(Str(conflict, "type"), Str(conflict, "id"));
             if (!state.Items.TryGetValue(key, out var local)) continue;
+            var serverValue = conflict["value"]?.GetValue<string>();
             var server = new SyncEntry
             {
                 Type = Str(conflict, "type"), Id = Str(conflict, "id"), Base = Num(conflict, "version"),
-                Updated = Num(conflict, "updated"), Value = conflict["value"]?.GetValue<string>(), Deleted = conflict["value"] is null,
+                Updated = Num(conflict, "updated"), Value = serverValue, BaseValue = serverValue, Deleted = serverValue is null,
             };
             ResolveConflict(key, local, server, now);
         }
@@ -305,10 +339,11 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
             var key = AccountSyncRules.Key(type, Str(item, "id"));
             Applied.Add(key);
             if (!state.Items.ContainsKey(key)) Added.Add(key);
+            var serverValue = item["value"]?.GetValue<string>();
             var server = new SyncEntry
             {
                 Type = type, Id = Str(item, "id"), Base = Num(item, "version"), Updated = Num(item, "updated"),
-                Value = item["value"]?.GetValue<string>(), Deleted = item["deleted"]?.GetValue<bool>() == true || item["value"] is null,
+                Value = serverValue, BaseValue = serverValue, Deleted = item["deleted"]?.GetValue<bool>() == true || serverValue is null,
             };
             state.Items.TryGetValue(key, out var local);
             var mine = state.Dirty.Contains(key) && local is not null;
@@ -327,11 +362,7 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
                     state.Dirty.Remove(key);
                     break;
                 case MergeKind.Object when mine:
-                    state.Items[key] = new SyncEntry
-                    {
-                        Type = type, Id = server.Id, Base = server.Base, Updated = local!.Updated,
-                        Value = AccountSyncRules.Overlay(server.Value, local.Value, local.Changed), Changed = local.Changed,
-                    };
+                    MergeObject(key, local!, server);
                     break;
                 case MergeKind.Value when mine && local!.Updated > server.Updated:
                     Rebase(local!, server);
@@ -369,27 +400,28 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
                 // The entry is already on the server: drop the queued copy and keep the server's.
                 state.Dirty.Remove(key);
                 state.Items[key] = server;
+                Applied.Add(key);
                 break;
             case MergeKind.Seed:
                 state.Dirty.Remove(key);
                 state.Items[key] = server;
+                Applied.Add(key);
                 break;
             case MergeKind.Object:
                 // Start from the server's object, overlay what this PC changed, and send it again on the new base.
                 // Three conflicts in a row for one key: keep the queue and retry later, not in a tight loop (CLIENT.md 7.4).
-                state.Items[key] = new SyncEntry
+                var stillDirty = MergeObject(key, local, server);
+                Applied.Add(key);
+                if (stillDirty)
                 {
-                    Type = local.Type, Id = local.Id, Base = server.Base, Updated = local.Updated,
-                    Value = AccountSyncRules.Overlay(server.Value, local.Value, local.Changed), Changed = local.Changed,
-                };
-                state.Dirty.Add(key);
-                state.ObjectTries.TryGetValue(key, out var tries);
-                if (++tries >= 3)
-                {
-                    state.ObjectTries.Remove(key);
-                    state.NextAttempt = now.Add(ObjectRetryWait);
+                    state.ObjectTries.TryGetValue(key, out var tries);
+                    if (++tries >= 3)
+                    {
+                        state.ObjectTries.Remove(key);
+                        state.NextAttempt = now.Add(ObjectRetryWait);
+                    }
+                    else state.ObjectTries[key] = tries;
                 }
-                else state.ObjectTries[key] = tries;
                 break;
             default:
                 // The newer local change wins and is sent again; otherwise the server's value stands.
@@ -398,9 +430,60 @@ internal sealed class AccountSyncEngine(SyncState state, Random? random = null)
                 {
                     state.Items[key] = server;
                     state.Dirty.Remove(key);
+                    Applied.Add(key);
                 }
                 break;
         }
+    }
+
+    private bool MergeObject(string key, SyncEntry local, SyncEntry server)
+    {
+        var (kept, keptAt) = ResolveObjectKeys(local, server);
+        if (kept.Count == 0)
+        {
+            state.Items[key] = server;
+            state.Dirty.Remove(key);
+            state.ObjectTries.Remove(key);
+            return false;
+        }
+        state.Items[key] = new SyncEntry
+        {
+            Type = local.Type,
+            Id = local.Id,
+            Base = server.Base,
+            BaseValue = server.Value,
+            Updated = keptAt.Values.Max(),
+            Value = AccountSyncRules.Overlay(server.Value, local.Value, kept),
+            Changed = kept,
+            ChangedAt = keptAt,
+        };
+        state.Dirty.Add(key);
+        return true;
+    }
+
+    private static (List<string> Kept, Dictionary<string, long> KeptAt) ResolveObjectKeys(SyncEntry local, SyncEntry server)
+    {
+        var serverObj = server.Value is null ? new JsonObject() : JsonNode.Parse(server.Value)?.AsObject() ?? new JsonObject();
+        var localObj = local.Value is null ? new JsonObject() : JsonNode.Parse(local.Value)?.AsObject() ?? new JsonObject();
+        var baseObj = local.BaseValue is null ? null : JsonNode.Parse(local.BaseValue)?.AsObject() ?? new JsonObject();
+        var serverChangedAny = baseObj is not null && AccountSyncRules.ChangedKeys(local.BaseValue, server.Value).Count > 0;
+
+        var kept = new List<string>();
+        var keptAt = new Dictionary<string, long>(StringComparer.Ordinal);
+        foreach (var k in local.Changed.Distinct(StringComparer.Ordinal))
+        {
+            if (JsonNode.DeepEquals(serverObj[k], localObj[k])) continue;
+            var keyUpdated = local.ChangedAt.TryGetValue(k, out var ts) ? ts : local.Updated;
+            var serverTouchedKey = baseObj is null
+                || !JsonNode.DeepEquals(baseObj[k], serverObj[k])
+                || (server.Base > local.Base && !serverChangedAny);
+            if (!serverTouchedKey || keyUpdated > server.Updated)
+            {
+                kept.Add(k);
+                keptAt[k] = keyUpdated;
+            }
+        }
+        return (kept, keptAt);
     }
 
     /// <summary>Keeps the local change queued on the server's new version.</summary>
