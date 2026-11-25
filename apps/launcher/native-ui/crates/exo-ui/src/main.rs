@@ -566,6 +566,12 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     Duration::from_secs(12),
                 ) {
                     state.apply_bootstrap(boot);
+                    if !matches!(scene, Some("library-folders") | Some("library-folder-open")) {
+                        state
+                            .settings
+                            .library_folders
+                            .retain(|f| f.name != "Folder");
+                    }
                     state.whats_new.boot_hold_active = false;
                     state.whats_new.answered = true;
                     connected = Some(c);
@@ -634,13 +640,21 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
     if matches!(
         scene,
         None | Some("library")
+            | Some("library-all")
+            | Some("all-games")
+            | Some("library-more")
+            | Some("library-search")
+            | Some("library-select")
+            | Some("library-folders")
+            | Some("library-folder-open")
+            | Some("library-folder-sheet")
             | Some("palette")
             | Some("activate-key")
             | Some("downloads")
             | Some("tour")
     ) && let Some(ref cache_dir) = state.remote_cache_dir
     {
-        let urls: Vec<String> = state
+        let mut urls: Vec<String> = state
             .home_deck_games()
             .into_iter()
             .take(12)
@@ -648,6 +662,25 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             .filter_map(|g| g.cover_url.as_deref().map(str::to_string))
             .filter(|u| u.starts_with("https://"))
             .collect();
+        if matches!(
+            scene,
+            Some("library-all")
+                | Some("all-games")
+                | Some("library-select")
+                | Some("library-folders")
+                | Some("library-folder-open")
+                | Some("library-folder-sheet")
+        ) {
+            for g in state.games.iter().filter(|g| g.installed) {
+                if state.art_base.resolve_local_portrait(g).is_none()
+                    && let Some(u) = g.cover_url.as_deref()
+                    && u.starts_with("https://")
+                    && !urls.iter().any(|x| x == u)
+                {
+                    urls.push(u.to_string());
+                }
+            }
+        }
         if !urls.is_empty() {
             let chunks = urls.chunks((urls.len() / 6).max(1));
             std::thread::scope(|scope| {
@@ -660,6 +693,35 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
             });
         }
+    }
+    if matches!(
+        scene,
+        None | Some("library") | Some("library-all") | Some("all-games")
+    ) && let Ok(reply) = client.call_blocking::<_, exo_rpc::StoreAccountsReply>(
+        exo_rpc::METHOD_ACCOUNTS_LIST,
+        &serde_json::json!({}),
+        Duration::from_secs(2),
+    ) {
+        state.lib.riot_other_accounts = reply
+            .riot
+            .map(|r| {
+                r.accounts
+                    .into_iter()
+                    .filter(|a| a.saved && !a.current)
+                    .collect()
+            })
+            .unwrap_or_default();
+        state.lib.accounts_loaded = true;
+    }
+    if matches!(scene, Some("library-all") | Some("all-games"))
+        && let Ok(fr) = client.call_blocking::<_, exo_rpc::DiscordFriendsReply>(
+            exo_rpc::METHOD_DISCORD_FRIENDS,
+            &serde_json::json!({}),
+            Duration::from_secs(2),
+        )
+    {
+        state.discord.friends = fr.friends;
+        state.discord.loaded = true;
     }
     if scene.is_some_and(|s| s.starts_with("setup")) {
         settle_setup_host(&client, &mut state);
@@ -2511,10 +2573,12 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("library-all", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.library_all_games = true;
+        s.settings.library_folders.retain(|f| f.name != "Folder");
     }),
     ("all-games", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.library_all_games = true;
+        s.settings.library_folders.retain(|f| f.name != "Folder");
     }),
     ("library-more", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
@@ -2532,25 +2596,15 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             .into_iter()
             .map(|g| g.id.clone())
             .collect();
-        if s.settings.library_folders.is_empty() && ordered.len() >= 3 {
-            s.settings.library_folders = vec![
-                exo_rpc::LibraryFolder {
-                    id: "f-favorites".into(),
-                    name: "Favorites".into(),
-                    color: Some("blue".into()),
-                    sort: Some("folder".into()),
-                    art: None,
-                    games: vec![ordered[0].clone(), ordered[1].clone()],
-                },
-                exo_rpc::LibraryFolder {
-                    id: "f-coop".into(),
-                    name: "Co-op".into(),
-                    color: Some("green".into()),
-                    sort: Some("folder".into()),
-                    art: None,
-                    games: vec![ordered[2].clone()],
-                },
-            ];
+        if s.settings.library_folders.is_empty() && ordered.len() >= 2 {
+            s.settings.library_folders = vec![exo_rpc::LibraryFolder {
+                id: "f-parity".into(),
+                name: "Folder".into(),
+                color: Some("blue".into()),
+                sort: Some("folder".into()),
+                art: None,
+                games: vec![ordered[0].clone(), ordered[1].clone()],
+            }];
         }
     }),
     ("library-folder-open", |s: &mut AppState| {
@@ -2563,8 +2617,8 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             .collect();
         if s.settings.library_folders.is_empty() && ordered.len() >= 2 {
             s.settings.library_folders = vec![exo_rpc::LibraryFolder {
-                id: "f-favorites".into(),
-                name: "Favorites".into(),
+                id: "f-parity".into(),
+                name: "Folder".into(),
                 color: Some("blue".into()),
                 sort: Some("folder".into()),
                 art: None,
@@ -2578,21 +2632,17 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("library-folder-sheet", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.library_all_games = true;
-        let init: Vec<String> = s
-            .filtered_games()
-            .into_iter()
-            .take(2)
-            .map(|g| g.id.clone())
-            .collect();
-        s.open_new_folder_sheet(init);
+        s.settings.library_folders.retain(|f| f.name != "Folder");
+        s.open_new_folder_sheet(Vec::new());
     }),
     ("library-select", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
+        s.settings.library_folders.retain(|f| f.name != "Folder");
         s.enter_select_mode();
         let picks: Vec<String> = s
             .filtered_games()
             .into_iter()
-            .take(2)
+            .take(1)
             .map(|g| g.id.clone())
             .collect();
         for id in picks {
@@ -3521,6 +3571,7 @@ fn run_parity_probe(
         "command-palette",
         "pc-part-menu",
         "library-filter-pop",
+        "folder-sheet-dialog",
         "dc-golive-panel",
     ];
     let legacy_menu_prefixes = ["dc-status-menu", "dc-menu"];

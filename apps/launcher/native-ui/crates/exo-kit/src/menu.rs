@@ -1,11 +1,10 @@
 use crate::components::popover_transition_from;
-use crate::glass::{ExoGlass, apply_glass};
 use crate::icons::{icon_check, icon_chevron_right};
 use crate::tokens::{
-    FG, RADIUS_CARD, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, hairline,
-    hover_fill, pressed_fill, subtle_fill, type_control, type_label, type_small,
+    FG, RADIUS_CARD, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, float_line,
+    hairline, hover_fill, pressed_fill, subtle_fill, type_control, type_small,
 };
-use rune::{Align, Cursor, El, Key, Side, Tx, Vec2, col, el, row, text};
+use rune::{Align, Cursor, El, Key, LiquidGlass, Side, Tx, Vec2, col, el, row, text};
 use std::rc::Rc;
 
 pub type MenuAction<S> = Rc<dyn Fn(&mut S, &mut Tx)>;
@@ -121,19 +120,19 @@ pub struct ContextMenuSpec<S: 'static> {
 }
 
 fn glass_menu_surface(key: String, width: f32, _blur: bool, origin: Vec2) -> El {
-    let panel = col()
+    col()
         .key(key)
         .min_w(width)
-        .px(6.0)
-        .py(6.0)
+        .px(8.0)
+        .py(8.0)
         .gap(2.0)
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .transition(popover_transition_from(origin));
-    apply_glass(panel, ExoGlass::Menu, false)
+        .liquid_glass(LiquidGlass::panel())
+        .transition(popover_transition_from(origin))
 }
 
 fn keycap_badge(hint: String) -> El {
@@ -151,15 +150,27 @@ fn first_enabled_key<S: 'static>(entries: &[MenuEntry<S>]) -> Option<String> {
     })
 }
 
-fn build_menu_rows<S: 'static>(
-    entries: Vec<MenuEntry<S>>,
+struct MenuRowOpts {
     open_submenu: Option<usize>,
     gamepad_focus: bool,
     is_submenu: bool,
     parent_trigger_key: Option<String>,
+    item_cursor: Cursor,
+}
+
+fn build_menu_rows<S: 'static>(
+    entries: Vec<MenuEntry<S>>,
+    opts: MenuRowOpts,
     on_dismiss: &MenuDismissCb<S>,
     on_submenu: &MenuSubmenuCb<S>,
 ) -> (Vec<El>, Option<SubmenuBranch<S>>) {
+    let MenuRowOpts {
+        open_submenu,
+        gamepad_focus,
+        is_submenu,
+        parent_trigger_key,
+        item_cursor,
+    } = opts;
     let has_icon_col = entries.iter().any(|e| match e {
         MenuEntry::Item(item) => item.icon.is_some(),
         _ => false,
@@ -179,13 +190,29 @@ fn build_menu_rows<S: 'static>(
                 );
             }
             MenuEntry::Section(title) => {
-                rows.push(
-                    el().w_full()
-                        .px(10.0)
-                        .pt(6.0)
-                        .pb(2.0)
-                        .child(text(title).font(type_label()).color(fg_faint())),
-                );
+                if idx > 0 {
+                    rows.push(
+                        col()
+                            .w_full()
+                            .mt(4.0)
+                            .child(el().w_full().h(1.0).fill(float_line()))
+                            .child(
+                                el().w_full()
+                                    .px(10.0)
+                                    .pt(10.0)
+                                    .pb(4.0)
+                                    .child(text(title).font(type_small()).color(fg_faint())),
+                            ),
+                    );
+                } else {
+                    rows.push(
+                        el().w_full()
+                            .px(10.0)
+                            .pt(8.0)
+                            .pb(4.0)
+                            .child(text(title).font(type_small()).color(fg_faint())),
+                    );
+                }
             }
             MenuEntry::Item(item) => {
                 let MenuItem {
@@ -222,8 +249,8 @@ fn build_menu_rows<S: 'static>(
                     .role("menuitem")
                     .label(label.clone())
                     .w_full()
-                    .min_h(36.0)
-                    .px(10.0)
+                    .min_h(38.0)
+                    .px(12.0)
                     .gap(10.0)
                     .center_y()
                     .radius(RADIUS_SMALL)
@@ -234,7 +261,7 @@ fn build_menu_rows<S: 'static>(
                     .cursor(if disabled {
                         Cursor::Default
                     } else {
-                        Cursor::Pointer
+                        item_cursor
                     })
                     .fill(if is_sub_open {
                         hover_fill()
@@ -345,17 +372,29 @@ fn build_menu_rows<S: 'static>(
 }
 
 pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
-    build_context_menu_layers(spec, &[])
+    build_context_menu_layers(spec, &[], Cursor::Pointer)
 }
 
 pub fn context_menu_layers_live<S: 'static>(
     spec: ContextMenuSpec<S>,
     live_keys: &[&str],
 ) -> Vec<El> {
-    build_context_menu_layers(spec, live_keys)
+    build_context_menu_layers(spec, live_keys, Cursor::Pointer)
 }
 
-fn build_context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>, live_keys: &[&str]) -> Vec<El> {
+pub fn context_menu_layers_with_cursor<S: 'static>(
+    spec: ContextMenuSpec<S>,
+    live_keys: &[&str],
+    item_cursor: Cursor,
+) -> Vec<El> {
+    build_context_menu_layers(spec, live_keys, item_cursor)
+}
+
+fn build_context_menu_layers<S: 'static>(
+    spec: ContextMenuSpec<S>,
+    live_keys: &[&str],
+    item_cursor: Cursor,
+) -> Vec<El> {
     let ContextMenuSpec {
         id,
         anchor,
@@ -376,7 +415,7 @@ fn build_context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>, live_keys: &[
         MenuAnchor::Point(x, y) => {
             let pt_key = format!("{id}-anchor-pt");
             menu_nodes.push(el().key(pt_key.clone()).absolute(x, y).size(0.0, 0.0));
-            (pt_key, Side::Bottom, Align::Start, 2.0, Vec2::new(0.0, 0.0))
+            (pt_key, Side::Bottom, Align::Start, 1.0, Vec2::new(0.0, 0.0))
         }
         MenuAnchor::Element {
             key,
@@ -395,10 +434,13 @@ fn build_context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>, live_keys: &[
 
     let (rows, active_sub) = build_menu_rows(
         entries,
-        open_submenu,
-        gamepad_focus,
-        false,
-        None,
+        MenuRowOpts {
+            open_submenu,
+            gamepad_focus,
+            is_submenu: false,
+            parent_trigger_key: None,
+            item_cursor,
+        },
         &on_dismiss,
         &on_submenu,
     );
@@ -418,10 +460,13 @@ fn build_context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>, live_keys: &[
     if let Some((trigger_key, sub_entries)) = active_sub {
         let (sub_rows, _) = build_menu_rows(
             sub_entries,
-            None,
-            gamepad_focus,
-            true,
-            Some(trigger_key.clone()),
+            MenuRowOpts {
+                open_submenu: None,
+                gamepad_focus,
+                is_submenu: true,
+                parent_trigger_key: Some(trigger_key.clone()),
+                item_cursor,
+            },
             &on_dismiss,
             &on_submenu,
         );
