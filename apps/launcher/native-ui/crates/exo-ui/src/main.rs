@@ -1568,8 +1568,8 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
         Some("pc-storage") => {
             if let Ok(drv) = client.call_blocking::<_, exo_rpc::DrivesReply>(
                 exo_rpc::METHOD_SYSTEM_DRIVES,
-                &serde_json::json!({ "space": true }),
-                Duration::from_secs(12),
+                &serde_json::json!({ "space": false }),
+                Duration::from_secs(10),
             ) {
                 state.pc.drives = Some(drv);
             }

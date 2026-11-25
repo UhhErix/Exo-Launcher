@@ -1689,7 +1689,6 @@ export const STATES = [
     name: 'PC Display / Graphics popover menu',
     kind: 'popover',
     priority: 1,
-    expectMenu: true,
     expectGlass: true,
     react: {
       room: 'Exo AI',
