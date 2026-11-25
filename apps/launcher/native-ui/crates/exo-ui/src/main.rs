@@ -3617,6 +3617,7 @@ fn run_parity_probe(
         "library-filter-pop",
         "folder-sheet-dialog",
         "dc-golive-panel",
+        "sg-media-strip",
     ];
     let legacy_menu_prefixes = ["dc-status-menu", "dc-menu"];
     let mut menu_items: Vec<String> = Vec::new();
