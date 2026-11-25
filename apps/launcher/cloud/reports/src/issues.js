@@ -1,5 +1,5 @@
 import { GitHubError, gitHubOf } from './github.js'
-import { VERSION_SKEW, fingerprintOf, groupTypeOf, isVersionSkew, legacyFingerprintOf, signatureOf } from './fingerprint.js'
+import { VERSION_SKEW, fingerprintOf, groupTypeOf, isTestRun, isVersionSkew, legacyFingerprintOf, signatureOf } from './fingerprint.js'
 import { utcDay } from './telemetry-store.js'
 import { trimExcerpt } from './triage.js'
 
@@ -240,7 +240,7 @@ function settle(db, group, { closedVersion, threshold }) {
 }
 
 export async function fileCrash(env, report, key, day) {
-  if (!env.TELEMETRY) return
+  if (!env.TELEMETRY || isTestRun(report)) return
   try {
     const { group, newVersion } = await recordGroup(env.TELEMETRY, report, key, day)
     const gh = gitHubOf(env)

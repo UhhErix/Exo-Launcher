@@ -1,8 +1,12 @@
 export const TOP_FRAMES = 3
 export const VERSION_SKEW = 'version-skew'
+export const TEST_RUN = 'test-run'
 
 const FRAME = /^\s*at\s+(.+?)\s*$/
 const ERROR_LINE = /^Error \([^)]*\):\s*(.*)$/
+const CI_OS_BUILD = /^10\.0\.26100(?:\.|$)/
+const CI_RUNNER_MARKER = /\b(?:windows-2025|GITHUB_ACTIONS|RUNNER_[A-Z0-9_]+|runner-[a-z0-9-]+)\b/i
+const TEST_SUITE_LOG = /\b(?:GpuPreferenceTests|WootingTests)\b/
 const PLUMBING_FRAMES = [
   /^System\.Runtime\.CompilerServices\./,
   /^System\.Runtime\.ExceptionServices\.ExceptionDispatchInfo\./,
@@ -85,13 +89,23 @@ export function errorMessageOf(report) {
   return errorLine.trim()
 }
 
+export function isTestRun(report) {
+  if (!report || typeof report !== 'object') return false
+  if (String(report.version ?? '').trim() === '9.9.9') return true
+  const excerpt = String(report.excerpt ?? '')
+  if (TEST_SUITE_LOG.test(excerpt)) return true
+  if (CI_OS_BUILD.test(String(report.osBuild ?? '')) && CI_RUNNER_MARKER.test(excerpt)) return true
+  return false
+}
+
 export function isVersionSkew(report) {
   if (report?.errorType !== 'HostCallFailed') return false
   const message = errorMessageOf(report)
-  return /^Unknown method:/i.test(message) || /^HostCallFailed:\s*Unknown method:/i.test(message)
+  return /^(?:(?:HostCallFailed|RPC\s+[^:]+):\s*)?Unknown method:/i.test(message)
 }
 
 export function groupTypeOf(report) {
+  if (isTestRun(report)) return TEST_RUN
   return isVersionSkew(report) ? VERSION_SKEW : report.errorType
 }
 

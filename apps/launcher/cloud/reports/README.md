@@ -49,12 +49,10 @@ after its index row is written; the dev copy has no index, so it answers 503 for
 
 ## Lifecycle: 30 days
 
-Reports expire 30 days after they are stored. R2 lifecycle rules are set on the bucket, not in `wrangler.toml`. Once per
-bucket, after it exists (done for both):
+Reports expire 30 days after they are stored. R2 lifecycle rules are set on the bucket, not in `wrangler.toml`. Once on the live bucket (already set):
 
 ```
 npx wrangler@4.165.0 r2 bucket lifecycle add exo-crash-reports reports-30-days reports/ --expire-days 30
-npx wrangler@4.165.0 r2 bucket lifecycle add exo-crash-reports-dev reports-30-days reports/ --expire-days 30
 ```
 
 `wrangler r2 bucket lifecycle add --help` lists the flags. Check the rule with `wrangler r2 bucket lifecycle list`.
@@ -98,6 +96,9 @@ the deploy and the token.
   `CONTACT_MAIL` is reserved strictly for `/v1/contact`. Groups and messages are still recorded, and the daily job files
   the backlog as issues once the token is set (a group already past 10 reports is labelled, not commented); from then on no
   alert, digest or message is posted to Discord.
+- **Filtered noise (counted, never filed):**
+  - **Version skew** (`HostCallFailed` whose message starts with `Unknown method:` or `RPC <method>: Unknown method:`): stored in `crash_groups` and `crash_days` under `error_type = 'version-skew'` with `pending = 0`; never triggers Discord crash alarms or opens a GitHub issue.
+  - **Test runs** (app version `9.9.9`, Windows build `10.0.26100.*` carrying a CI/runner marker such as `windows-2025`, `GITHUB_ACTIONS`, `RUNNER_*`, or `runner-*`, or logs naming `GpuPreferenceTests` or `WootingTests`): accepted with `202` and counted in `crash_days` under `error_type = 'test-run'`, then dropped before `crash_groups` so they never create or bump crash groups, alarms, or GitHub issues.
 - **Counted** as before in `crash_days` (`migrations/0004_crash_days.sql`) by app, version, error type and UTC day, for
   `triage.mjs`. The daily job removes counts and cap tallies older than 90 days.
 - **From this PC.** `node triage.mjs [--days 7] [--app launcher] [--version 3.26.0] [--show 3]` lists the groups, what is
@@ -190,17 +191,25 @@ is stopped), and that no IP address, cookie or client id reaches R2, and the add
 and edits instead of comments, the 10/100/1000 comments, regression reopening, GitHub down and no token (queued, filed by
 the daily job), the daily caps, and Report a problem's issue, refusals and Delete my data.
 
-## Before deploy
+## Redeploy
 
-1. Create the buckets `exo-crash-reports` and `exo-crash-reports-dev` (`wrangler r2 bucket create`), then add the two
-   lifecycle rules above.
-2. Create the rate limiting namespaces `4002`, `4003` and `4004` (live) and `4102`, `4103` and `4104` (dev) in the account;
-   `4001` and `4101` (the per-app limit they replace) are no longer bound. The ids are chosen here; if one is taken on
-   the account, change it in `wrangler.toml`.
-3. `reports.getexo.app` is a custom domain on the `getexo.app` zone: its DNS record is created on deploy. The updates
-   address (`updates.getexo.app`) and the account service use the same zone.
-4. Deploy with `npx wrangler@4.165.0 deploy` from this folder (the dev copy with `--env dev`), after the owner's OK.
-5. Then `PRIVACY.md` and `NetworkDestinations.cs` already name `reports.getexo.app`; a host change must update both.
+There is no remote `exo-reports-dev` Worker, `exo-crash-reports-dev` R2 bucket, or dev D1 database on Cloudflare. Verify changes locally with `npm test` and `wrangler dev --local` (local D1 with `migrations/` and local R2), then deploy production `exo-reports` with the owner's OK:
+
+1. **Run tests and local verification** from this folder:
+   - `npm test` (`node --test test`)
+   - Prepare an untracked local/deploy config outside git (copy `wrangler.toml`, fill `bucket_name = "exo-crash-reports"`, `database_id` for `exo-telemetry`, `routes = [{ pattern = "reports.getexo.app", custom_domain = true }]`, and `crons = ["20 4 * * *"]`). Never commit real resource IDs.
+   - Apply migrations locally and exercise `POST /v1/report` against `npx wrangler@4.165.0 dev --local --config <untracked-config> --persist-to <temp-dir>`.
+2. **Diff against live before deploying:** compare the untracked config against the live `exo-reports` bindings, custom domain (`reports.getexo.app`), and cron (`20 4 * * *`), and record the current live version ID (`npx wrangler@4.165.0 deployments list --name exo-reports`) so you can run `npx wrangler@4.165.0 rollback --name exo-reports` immediately if anything regresses.
+3. **Apply any new D1 migrations** to `exo-telemetry` (`npx wrangler@4.165.0 d1 migrations apply exo-telemetry --remote --config <untracked-config>`) after checking `SELECT name FROM d1_migrations ORDER BY id`.
+4. **Deploy prod** (with the owner's OK): `npx wrangler@4.165.0 deploy --config <untracked-config>`. Existing secrets (`CONTACT_TO`, `DISCORD_WEBHOOK_REPORTS`, `GITHUB_REPORTS_TOKEN`) stay intact. Delete `<untracked-config>` when done.
+5. **Verify live:** run `npx wrangler@4.165.0 tail exo-reports --format pretty` (~10 min) and read-only `SELECT`s on `crash_groups` and `crash_index` to confirm zero errors and normal ingest.
+
+## Before deploy (first-time setup)
+
+1. Create the bucket `exo-crash-reports` (`wrangler r2 bucket create`), then add the lifecycle rules above.
+2. Create the rate limiting namespaces `4002`, `4003`, `4004`, and `4201` in the account.
+3. `reports.getexo.app` is a custom domain on the `getexo.app` zone: its DNS record is created on deploy.
+4. `PRIVACY.md` and `NetworkDestinations.cs` already name `reports.getexo.app`; a host change must update both.
 
 Cost on the paid Workers plan: one Worker request and one R2 write per report that passes, a few D1 rows, and GitHub calls
 within the caps above.

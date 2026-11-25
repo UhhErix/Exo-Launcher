@@ -15,7 +15,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import worker from '../src/worker.js'
 import { limiters } from './limiters.mjs'
-import { VERSION_SKEW, fingerprintOf, isVersionSkew, legacyFingerprintOf, normalizeFrame, signatureOf } from '../src/fingerprint.js'
+import { TEST_RUN, VERSION_SKEW, fingerprintOf, isTestRun, isVersionSkew, legacyFingerprintOf, normalizeFrame, signatureOf } from '../src/fingerprint.js'
 import { DAILY, compareVersions, dueNow, kindOf, safeTitle, withStats } from '../src/issues.js'
 import { parseUserReport } from '../src/user-report.js'
 
@@ -246,6 +246,10 @@ test('HostCallFailed Unknown method reports are classified as version-skew and s
   }
 
   assert.equal(isVersionSkew(skewReport), true)
+  assert.equal(isVersionSkew({
+    ...skewReport,
+    excerpt: 'Exo Launcher 3.30.2 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC\nError (rpc): RPC app.info: Unknown method: app.info',
+  }), true)
   assert.equal(isVersionSkew(realHostBug), false)
   assert.equal(kindOf(skewReport.errorType, skewReport), VERSION_SKEW)
   assert.equal(kindOf(realHostBug.errorType, realHostBug), 'crash')
@@ -271,6 +275,67 @@ test('HostCallFailed Unknown method reports are classified as version-skew and s
   assert.equal((await send(withoutGh.env, realHostBug)).status, 202)
   assert.equal(withoutGh.posts.length, 1)
   assert.match(withoutGh.posts[0].content, /HostCallFailed/)
+})
+
+test('test-run reports (9.9.9, CI runner markers on 10.0.26100, or GpuPreferenceTests/WootingTests) return 202 and count without creating crash_groups', async () => {
+  const version999 = {
+    ...crash,
+    version: '9.9.9',
+    errorType: 'UpdateFailure',
+    excerpt: 'Exo Launcher 9.9.9 · Windows 10.0.26300.1 · 2026-11-24 10:00 UTC\nError (update): HTTP 404',
+  }
+  const ciWindows2025 = {
+    ...crash,
+    osBuild: '10.0.26100.2894',
+    excerpt: 'Exo Launcher 3.30.3 · Windows 10.0.26100.2894 · host windows-2025\nError (test): simulated failure',
+  }
+  const ciGithubActions = {
+    ...crash,
+    osBuild: '10.0.26100.1',
+    excerpt: 'Exo Launcher 3.30.3 · GITHUB_ACTIONS=true\nError (test): simulated failure',
+  }
+  const ciRunnerHost = {
+    ...crash,
+    osBuild: '10.0.26100.1',
+    excerpt: 'Exo Launcher 3.30.3 · RUNNER_NAME=win-ci\nError (test): simulated failure',
+  }
+  const gpuPrefLog = {
+    ...crash,
+    excerpt: 'Exo Launcher 3.30.3 · Windows 10.0.26300.1\nError (gpu): GpuPreferenceTests failed',
+  }
+  const wootingLog = {
+    ...crash,
+    excerpt: 'Exo Launcher 3.30.3 · Windows 10.0.26300.1\nError (hid): WootingTests probe failed',
+  }
+  const realOn26100 = {
+    ...crash,
+    osBuild: '10.0.26100.1',
+  }
+
+  for (const synthetic of [version999, ciWindows2025, ciGithubActions, ciRunnerHost, gpuPrefLog, wootingLog]) {
+    assert.equal(isTestRun(synthetic), true)
+  }
+  assert.equal(isTestRun(realOn26100), false)
+
+  const withGh = makeEnv()
+  for (const synthetic of [version999, ciWindows2025, ciGithubActions, ciRunnerHost, gpuPrefLog, wootingLog]) {
+    assert.equal((await send(withGh.env, synthetic)).status, 202)
+  }
+  await worker.scheduled({}, withGh.env)
+  assert.equal(groups(withGh.db).length, 0)
+  assert.equal(withGh.github.issues.size, 0)
+  assert.equal(withGh.posts.length, 0)
+  const testDayTotal = withGh.db.sql.prepare('SELECT SUM(count) AS total FROM crash_days WHERE error_type = ?').get(TEST_RUN).total
+  assert.equal(testDayTotal, 6)
+
+  const withoutGh = makeEnv({ token: null })
+  assert.equal((await send(withoutGh.env, version999)).status, 202)
+  assert.equal(withoutGh.posts.length, 0)
+  assert.equal(groups(withoutGh.db).length, 0)
+
+  assert.equal((await send(withGh.env, realOn26100)).status, 202)
+  assert.equal(groups(withGh.db).length, 1)
+  assert.equal(withGh.github.issues.size, 1)
 })
 
 // ---- Create versus update ----
