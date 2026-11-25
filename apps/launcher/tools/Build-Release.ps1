@@ -42,6 +42,49 @@ if ($whatsNewJson.Length -gt 65536 -or [Text.Encoding]::UTF8.GetByteCount($whats
     throw "ui\src\lib\whatsNew.json ($version) exceeds the 65536-byte limit."
 }
 
+$oauthProviders = @(
+    @{ Name = 'spotify';   Var = 'EXO_OAUTH_SPOTIFY_CLIENT_ID' }
+    @{ Name = 'discord';   Var = 'EXO_OAUTH_DISCORD_CLIENT_ID' }
+    @{ Name = 'google';    Var = 'EXO_OAUTH_GOOGLE_CLIENT_ID' }
+    @{ Name = 'twitch';    Var = 'EXO_OAUTH_TWITCH_CLIENT_ID' }
+    @{ Name = 'battlenet'; Var = 'EXO_OAUTH_BATTLENET_CLIENT_ID' }
+    @{ Name = 'microsoft'; Var = 'EXO_OAUTH_MICROSOFT_CLIENT_ID' }
+    @{ Name = 'riot';      Var = 'EXO_OAUTH_RIOT_CLIENT_ID' }
+    @{ Name = 'epic';      Var = 'EXO_OAUTH_EPIC_CLIENT_ID' }
+)
+$hasGh = $null -ne (Get-Command gh -ErrorAction SilentlyContinue)
+$bakedOAuth = [System.Collections.Generic.List[string]]::new()
+$missingOAuth = [System.Collections.Generic.List[string]]::new()
+foreach ($p in $oauthProviders) {
+    $val = [Environment]::GetEnvironmentVariable($p.Var)
+    if ([string]::IsNullOrWhiteSpace($val) -and $hasGh) {
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $fetched = (& gh variable get $p.Var 2>$null | Out-String).Trim()
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($fetched)) {
+                [Environment]::SetEnvironmentVariable($p.Var, $fetched, 'Process')
+                $val = $fetched
+            }
+        } catch {
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($val)) {
+        $bakedOAuth.Add($p.Name)
+    } else {
+        $missingOAuth.Add($p.Name)
+    }
+}
+$bakedText = if ($bakedOAuth.Count -gt 0) { $bakedOAuth -join ', ' } else { 'none' }
+$missingText = if ($missingOAuth.Count -gt 0) { $missingOAuth -join ', ' } else { 'none' }
+if ($missingOAuth.Count -gt 0) {
+    Write-Warning "OAuth client IDs baked: [$bakedText]; missing: [$missingText]."
+} else {
+    Write-Host "OAuth client IDs baked: [$bakedText]; missing: [$missingText]."
+}
+
 # The release gate: the telemetry and crash-report tests (what may leave this PC, and in what shape) and the UI's tests,
 # run before anything is built or published.
 dotnet test --project ExoLauncher.Tests\ExoLauncher.Tests.csproj -c Release -p:Platform=x64 --filter "FullyQualifiedName~TelemetryTests|FullyQualifiedName~CrashSendTests|FullyQualifiedName~AppsConfirmReasonTests|FullyQualifiedName~NetworkDestinationsTests"
