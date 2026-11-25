@@ -260,13 +260,24 @@ internal sealed partial class WindowsUpdateDrivers(string folder, Func<DriverIte
             });
             if (process is null) return null;
             try { process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (InvalidOperationException) { /* already ended */ }
-            var output = process.StandardOutput.ReadToEndAsync(ct);
-            var error = process.StandardError.ReadToEndAsync(ct);
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(limit);
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            if (process.ExitCode != 0) AppLog.Warn($"Drivers: Windows Update search ended {process.ExitCode}: {(await error.ConfigureAwait(false)).Trim()}");
-            return process.ExitCode == 0 ? await output.ConfigureAwait(false) : null;
+            var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var error = process.StandardError.ReadToEndAsync(timeout.Token);
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+                await Task.WhenAll(output, error).WaitAsync(TimeSpan.FromSeconds(2), timeout.Token).ConfigureAwait(false);
+                if (process.ExitCode != 0) AppLog.Warn($"Drivers: Windows Update search ended {process.ExitCode}: {(await error.ConfigureAwait(false)).Trim()}");
+                return process.ExitCode == 0 ? await output.ConfigureAwait(false) : null;
+            }
+            finally
+            {
+                try { timeout.Cancel(); } catch { }
+                try { if (!process.HasExited) ProcessTermination.Kill(process, entireProcessTree: true); } catch { }
+                try { if (!process.HasExited) await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false); } catch { }
+                await ProcessOutput.DrainAndObserveAsync(output, error, TimeSpan.FromSeconds(2), timeout).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using ExoLauncher.Services;
 
 namespace ExoLauncher.Helpers;
@@ -184,7 +185,15 @@ internal sealed class PendingReports
         var type = ex.GetType().Name;
         var message = ex.Message ?? "";
         var what = type + ": " + (message.Length > 2000 ? message[..2000] : message);
-        var report = AppLog.ReportFor(what, "crash", _recentLines(), _clock(), id.Version, id.Windows, id.UserName, id.Profile);
+        string report;
+        try
+        {
+            report = AppLog.ReportFor(what, "crash", _recentLines(), _clock(), id.Version, id.Windows, id.UserName, id.Profile);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            report = "";
+        }
         return CrashReport.Build(type, report, id.Version, id.Windows, id.UserName, id.Profile, id.MachineName);
     }
 
