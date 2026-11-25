@@ -290,7 +290,7 @@ internal static class PlayerData
         new("queue.jsonl", "Telemetry", Why.ThisPc, "telemetry events waiting to be sent"),
         new("sent.jsonl", "Telemetry", Why.ThisPc, "telemetry events already sent"),
         new("crash-report-limit.json", "CrashReportLimiter", Why.ThisPc, "how many crash reports went out today"),
-        new("device-id.txt", "AccountDevice,AccountDevices", Why.ThisPc, "this PC's random device id for the account"),
+        new("device-id.txt", "AccountDevice", Why.ThisPc, "legacy per-folder device id read to map earlier sessions onto this PC"),
         new("display-links.json", "DisplayLink", Why.ThisPc, "what was learned about this PC's screens and cables"),
         new("download-intents.json", "LaunchOrchestrator", Why.ThisPc, "downloads queued on this PC"),
         new("epic-quiet.json", "EpicQuietSettings", Why.ThisPc, "Epic's settings before Exo quieted them"),

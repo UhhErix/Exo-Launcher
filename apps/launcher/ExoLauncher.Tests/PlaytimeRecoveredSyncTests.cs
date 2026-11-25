@@ -41,7 +41,7 @@ public sealed class PlaytimeRecoveredSyncTests : IDisposable
         // Left open by a crash: started two hours ago, last seen an hour ago (60 minutes).
         var stamp = $"{{\"minutes\":{{}},\"activeSessions\":{{\"{Crashed}\":{{\"startUtc\":\"{now.AddHours(-2):O}\",\"checkpointUtc\":\"{now.AddHours(-1):O}\"}}}}}}";
         File.WriteAllText(Path.Combine(_data, "playtime.json"), stamp);
-        var accountDir = Path.Combine(Path.GetTempPath(), "exo-recovered-account-" + Guid.NewGuid().ToString("N"));
+        var accountDir = Path.Combine(_data, "account");
         Directory.CreateDirectory(accountDir);
         var session = new AccountSession("token-value", "acc-1", "person@example.com");
         var host = new AccountSyncHost(accountDir,

@@ -185,10 +185,10 @@ function Devices({ onChanged }: { onChanged: () => void }) {
               <ul className="exo-account-list">
                 {sessions.map(row => (
                   <li key={row.device} className="exo-account-row">
-                    <span>{row.thisPc ? 'This PC' : 'Another PC'}</span>
+                    <span>{row.thisPc ? (row.name ? `${row.name} (This PC)` : 'This PC') : (row.name || 'Another PC')}</span>
                     <span className="exo-account-hint">Last used {when(row.lastUsed)}</span>
                     {row.thisPc ? null : (
-                      <ActionButton className="exo-set-btn" context="AccountSection.revoke" fallback="That PC was not signed out. Try again."
+                      <ActionButton className="exo-set-btn" question="Remove?" danger context="AccountSection.revoke" fallback="That PC was not signed out. Try again."
                         onPress={() => { setNote(null); return host.exoAccountRevoke(row.device) }} onDone={revoked}>Remove</ActionButton>
                     )}
                   </li>
