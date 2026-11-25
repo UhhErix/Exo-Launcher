@@ -9,10 +9,12 @@ use crate::{
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
     CAPTION_TRAILING_INSET, ExoGlass, FG, GAP, GLASS_CONTAINER_SPACING, GlassAccessibility,
-    PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_MOVE, SPRING_QUICK, TRANSPARENT,
-    apply_glass, bad, exo_mark, exo_titlebar, fg_muted, glass_capsule_opt, glass_enter,
-    glass_panel_opt, good, hover_fill, icon_camera, icon_chat, icon_close, icon_grid, icon_library,
-    icon_minimize, icon_mouse, icon_music, icon_settings, icon_sparkles, icon_store, icon_volume,
+    PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK,
+    SPRING_SMOOTH, TRANSPARENT, apply_glass, bad, exo_mark, exo_titlebar, fg_muted, glass_capsule_opt, glass_enter,
+    glass_panel_opt, good, hover_fill, icon_camera, icon_chat, icon_chat_filled, icon_close,
+    icon_grid, icon_grid_filled, icon_library, icon_library_filled, icon_minimize, icon_mouse,
+    icon_mouse_filled, icon_music, icon_music_filled, icon_settings, icon_settings_filled,
+    icon_sparkles, icon_sparkles_filled, icon_store, icon_store_filled, icon_volume,
     icon_volume_low, icon_volume_off, icon_win_maximize, icon_win_restore, modal_scrim_transition,
     popover_transition_for, pressed_fill, scrim_fill, selected_fill, set_glass_accessibility,
     set_text_scale, slider_track, type_body, type_section, type_small,
@@ -471,9 +473,11 @@ fn mini_player_transition() -> Transition {
 }
 
 fn room_transition(dir: f32) -> Transition {
-    let enter = Transition::offset(12.0 * dir, 0.0).combined(Transition::opacity());
-    let exit = Transition::offset(-12.0 * dir, 0.0).combined(Transition::opacity());
-    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
+    let enter = Transition::offset(18.0 * dir, 0.0)
+        .combined(Transition::scale(0.992))
+        .combined(Transition::opacity());
+    let exit = Transition::offset(-14.0 * dir, 0.0).combined(Transition::opacity());
+    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -534,15 +538,23 @@ impl BlurBudget {
 
 pub fn room_icon(room: Room, active: bool) -> El {
     let color = if active { PRIMARY_FG } else { FG };
-    match room {
-        Room::Library => icon_library(16.0, color),
-        Room::Store => icon_store(16.0, color),
-        Room::Discord => icon_chat(16.0, color),
-        Room::Music => icon_music(16.0, color),
-        Room::Devices => icon_mouse(16.0, color),
-        Room::ExoAi => icon_sparkles(16.0, color),
-        Room::Apps => icon_grid(16.0, color),
-        Room::Settings => icon_settings(16.0, color),
+    match (room, active) {
+        (Room::Library, true) => icon_library_filled(16.0, color),
+        (Room::Library, false) => icon_library(16.0, color),
+        (Room::Store, true) => icon_store_filled(16.0, color),
+        (Room::Store, false) => icon_store(16.0, color),
+        (Room::Discord, true) => icon_chat_filled(16.0, color),
+        (Room::Discord, false) => icon_chat(16.0, color),
+        (Room::Music, true) => icon_music_filled(16.0, color),
+        (Room::Music, false) => icon_music(16.0, color),
+        (Room::Devices, true) => icon_mouse_filled(16.0, color),
+        (Room::Devices, false) => icon_mouse(16.0, color),
+        (Room::ExoAi, true) => icon_sparkles_filled(16.0, color),
+        (Room::ExoAi, false) => icon_sparkles(16.0, color),
+        (Room::Apps, true) => icon_grid_filled(16.0, color),
+        (Room::Apps, false) => icon_grid(16.0, color),
+        (Room::Settings, true) => icon_settings_filled(16.0, color),
+        (Room::Settings, false) => icon_settings(16.0, color),
     }
 }
 
@@ -813,7 +825,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                         .key("nav-active-pill")
                         .matched("nav-active-pill")
                         .matched_crop()
-                        .motion(SPRING_MOVE)
+                        .motion(SPRING_BASE)
                         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                         .h(30.0)
                         .px(nav_px)
@@ -936,14 +948,11 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .on_secondary_press(|s: &mut AppState, p, _| {
             s.open_context_menu(ContextMenuTarget::SettingsButton, p.x, p.y);
         })
-        .child(icon_settings(
-            16.0,
-            if settings_active {
-                PRIMARY_FG
-            } else {
-                fg_muted()
-            },
-        ));
+        .child(if settings_active {
+            icon_settings_filled(16.0, PRIMARY_FG)
+        } else {
+            icon_settings(16.0, fg_muted())
+        });
 
     let divider = el().size(1.0, 16.0).mx(3.0).fill(selected_fill());
 
@@ -1445,5 +1454,95 @@ mod tests {
         rt.update(|s, _| s.finish_tour());
         rt.frame(3.0 / 60.0);
         assert!(rt.state.setup.beat.is_none());
+    }
+
+    #[test]
+    fn all_rooms_glass_transitions_keep_layers_balanced() {
+        use rune::render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END};
+
+        let mut rt = Runtime::new(
+            AppState::with_demo_games(),
+            view,
+            (1920.0, 1080.0),
+            Env::new(false, 1.0),
+        );
+        rt.set_system_reduced_motion(false);
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+        rt.frame(0.0);
+
+        let rooms = [
+            Room::Library,
+            Room::Store,
+            Room::Discord,
+            Room::Music,
+            Room::Devices,
+            Room::ExoAi,
+            Room::Apps,
+            Room::Settings,
+        ];
+        let mut t = 0.0_f64;
+        for (idx, room) in rooms.iter().enumerate() {
+            rt.update(|s, _| s.switch_room(*room));
+            for _ in 0..4 {
+                t += 1.0 / 60.0;
+                rt.frame(t);
+            }
+            if idx % 2 == 0 {
+                rt.update(|s, _| {
+                    s.palette_open = true;
+                });
+                t += 1.0 / 60.0;
+                rt.frame(t);
+                assert!(rt.presented("cmd-palette-modal").is_some() || rt.state.palette_open);
+                rt.update(|s, _| {
+                    s.dismiss_top_layer();
+                });
+                t += 1.0 / 60.0;
+                rt.frame(t);
+            } else {
+                let target_room = *room;
+                rt.update(|s, _| {
+                    s.open_context_menu(ContextMenuTarget::NavTab(target_room), 860.0, 28.0);
+                });
+                t += 1.0 / 60.0;
+                rt.frame(t);
+                rt.update(|s, _| {
+                    s.dismiss_top_layer();
+                });
+                t += 1.0 / 60.0;
+                rt.frame(t);
+            }
+            rt.settle_all();
+            t += 1.0 / 60.0;
+            rt.frame(t);
+
+            assert!(rt.presented("nav-capsule").is_some());
+            if *room != Room::Settings {
+                assert!(rt.presented("nav-active-pill").is_some());
+            } else {
+                assert!(rt.presented("settings-shell").is_some());
+            }
+            let layers = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_LAYER)
+                .count();
+            let layer_ends = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_LAYER_END)
+                .count();
+            assert_eq!(layers, layer_ends, "unbalanced layers in room {room:?}");
+            let blurs = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+                .count();
+            assert!(
+                blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+                "room {room:?} exceeded blur cap: {blurs}"
+            );
+        }
     }
 }

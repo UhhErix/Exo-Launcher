@@ -13,8 +13,8 @@ use exo_kit::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_BASE, SPRING_FLIGHT, SPRING_QUICK, bad, fg_faint, fg_muted, glass_button, glass_rim,
     glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_arrow_up, icon_bell_off,
-    icon_bookmark, icon_check, icon_close, icon_copy, icon_download, icon_edit, icon_external,
-    icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply,
+    icon_bookmark, icon_bookmark_filled, icon_check, icon_close, icon_copy, icon_download,
+    icon_edit, icon_external, icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply,
     icon_search, icon_smile, icon_sparkles, icon_trash, popover_transition_from, pressed_fill,
     primary_button, scrim_fill, subtle_fill, type_body, type_control, type_label, type_page,
     type_section, type_small,
@@ -1364,7 +1364,11 @@ fn message_row(
                     "Bookmark"
                 },
                 false,
-                icon_bookmark(13.0, if bookmarked { good() } else { fg_faint() }),
+                if bookmarked {
+                    icon_bookmark_filled(13.0, good())
+                } else {
+                    icon_bookmark(13.0, fg_faint())
+                },
             )
             .on_press(move |s: &mut AppState| {
                 if bookmarked {

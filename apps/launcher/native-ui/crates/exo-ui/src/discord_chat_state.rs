@@ -750,7 +750,7 @@ impl DiscordChatState {
                             },
                         ],
                         footer: Some(DiscordEmbedFooter {
-                            text: Some("wgpu DX12 · Goeist Variable".into()),
+                            text: Some("wgpu DX12 · Geist Variable".into()),
                             ..Default::default()
                         }),
                         ..Default::default()

@@ -147,7 +147,7 @@ fn device_showcase_card_sized(
         .focusable(true)
         .hit()
         .press_on_down()
-        .press_scale(0.99)
+        .press_scale(0.98)
         .grow(1.0)
         .min_w(0.0)
         .h_full()
@@ -160,7 +160,9 @@ fn device_showcase_card_sized(
         .clip_rounded(RADIUS_PANEL)
         .liquid_glass(LiquidGlass::panel())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .shadow(6.0, 18.0, BG.alpha(0.45))
         .hover(surface_card())
+        .hover_motion(SPRING_QUICK, SPRING_MOVE)
         .motion(SPRING_MOVE)
         .on_press(move |s: &mut AppState| {
             if is_mouse {

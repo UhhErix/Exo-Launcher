@@ -8,14 +8,17 @@ use crate::game_props::{artwork_tools, properties_card};
 use crate::state::{AppState, InputMode, title_hue};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_FLIGHT, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, float_line,
-    glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, hex, hover_fill,
-    icon_chevron_left, icon_download, icon_external, icon_folder, icon_pause, icon_play, icon_stop,
-    icon_users, pressed_fill, scaled, store_logo, store_logo_or_fallback, surface_card,
-    type_control, type_first_run, type_section, type_small, type_title, warn,
+    SPRING_FLIGHT, SPRING_QUICK, SPRING_SMOOTH, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted,
+    float_line, glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, hex,
+    hover_fill, icon_chevron_left, icon_download, icon_external, icon_folder, icon_pause,
+    icon_play, icon_stop, icon_users, pressed_fill, scaled, store_logo, store_logo_or_fallback,
+    surface_card, type_control, type_first_run, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, GameVariant, InstallProgress};
-use rune::{Cursor, El, LiquidGlass, SurfaceFit, TextStyle, col, el, oklch, row, text};
+use rune::{
+    Cursor, El, LiquidGlass, SpringPair, SurfaceFit, TextStyle, Transition, col, el, oklch, row,
+    text,
+};
 
 const GAME_EDGE: f32 = 32.0;
 
@@ -467,9 +470,10 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::PI,
             [
-                (0.0, BG.alpha(0.30)),
-                (0.20, BG.alpha(0.0)),
-                (0.72, BG.alpha(0.48)),
+                (0.0, BG.alpha(0.32)),
+                (0.18, BG.alpha(0.0)),
+                (0.48, BG.alpha(0.12)),
+                (0.76, BG.alpha(0.62)),
                 (1.0, BG),
             ],
         );
@@ -548,8 +552,9 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .fill(surface_card())
-        .shadow(0.0, 20.0, BG.alpha(0.75));
+        .shadow(8.0, 26.0, BG.alpha(0.78));
     if let Some(ref img) = cover {
         poster = poster.pixels_fit(img.pixels(), SurfaceFit::Fill);
     } else {
@@ -629,7 +634,7 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
                     .key(format!("gp-stat-val-{label}"))
                     .h(25.0)
                     .center_y()
-                    .child(text(val).font(type_title()).color(FG)),
+                    .child(text(val).font(type_title().features("'tnum' 1")).color(FG)),
             )
             .child(
                 row().h(16.0).center_y().child(
@@ -750,19 +755,24 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .child(stage);
 
     if installed_actions {
+        let card_enter =
+            Transition::opacity().springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK));
         let left_col = col()
+            .key("gp-lower-left")
+            .transition(card_enter)
             .grow(1.15)
             .min_w(0.0)
             .gap(14.0)
             .child(performance_card(s, &game))
             .child(graphics_features_card(s, &game));
+        let props_card = properties_card(s, &game).transition(card_enter);
         let lower_cards = row()
             .w_full()
             .px(GAME_EDGE)
             .gap(14.0)
             .items_start()
             .child(left_col)
-            .child(properties_card(s, &game));
+            .child(props_card);
         page = page.child(lower_cards);
     }
 

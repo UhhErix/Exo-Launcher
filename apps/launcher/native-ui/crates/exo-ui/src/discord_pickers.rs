@@ -7,8 +7,8 @@ use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted, glass_button,
     glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill,
-    icon_check, icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_trash,
-    modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, switch_pill,
+    icon_check, icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_star_filled,
+    icon_trash, modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, switch_pill,
     type_body, type_control, type_label, type_section, type_small,
 };
 use exo_rpc::{DiscordMessage, DiscordReaction};
@@ -662,7 +662,11 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
                 .on_press(move |s: &mut AppState| {
                     s.toggle_gif_favorite(&url_star, &src_star, gw, gh)
                 })
-                .child(icon_star(13.0, if is_star { good() } else { fg_muted() })),
+                .child(if is_star {
+                    icon_star_filled(13.0, good())
+                } else {
+                    icon_star(13.0, fg_muted())
+                }),
         );
 
         if idx % 2 == 0 {

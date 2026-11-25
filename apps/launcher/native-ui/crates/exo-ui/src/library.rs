@@ -10,19 +10,19 @@ use crate::state::{
 };
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, exo_play_button,
-    fg_faint, fg_muted, glass_button, glass_button_opt, glass_icon_circle, glass_icon_circle_opt,
-    glass_panel_fill, glass_plate_fill, glass_rim, glass_rim_bottom, glass_rim_top,
-    glass_still_control_fill, good, hover_fill, icon_check, icon_chevron_left, icon_chevron_right,
-    icon_close, icon_download, icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus,
-    icon_search, popover_transition_for, pressed_fill, primary_button, progress_bar,
-    select_trigger, store_logo, surface_card, type_body, type_control, type_first_run,
-    type_section, type_small, type_title, warn,
+    SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_PRESS, SPRING_QUICK, SPRING_SMOOTH,
+    SelectTrigger, TRANSPARENT, exo_play_button, fg_faint, fg_muted, glass_button,
+    glass_button_opt, glass_icon_circle, glass_icon_circle_opt, glass_panel_fill, glass_plate_fill,
+    glass_rim, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hover_fill,
+    icon_check, icon_chevron_left, icon_chevron_right, icon_close, icon_download, icon_filter,
+    icon_grid, icon_more_horiz, icon_play, icon_plus, icon_search, popover_transition_for,
+    pressed_fill, primary_button, progress_bar, select_trigger, store_logo, surface_card,
+    type_body, type_control, type_first_run, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, InstallProgress};
 use rune::{
-    Align, Cursor, El, LiquidGlass, Side, SurfaceFit, TextStyle, Tx, col, edit_access, el, oklch,
-    row, text, text_input,
+    Align, Cursor, El, LiquidGlass, Side, SpringPair, SurfaceFit, TextStyle, Transition, Tx, col,
+    edit_access, el, oklch, row, text, text_input,
 };
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -32,8 +32,8 @@ const DECK_CARD_W: f32 = 224.0;
 const DECK_CARD_H: f32 = 336.0;
 pub const ALL_CARD_W: f32 = 163.63;
 pub const ALL_CARD_H: f32 = 245.45;
-const ALL_GRID_GAP: f32 = 10.0;
-const ALL_GRID_PAD_X: f32 = 10.0;
+const ALL_GRID_GAP: f32 = 14.0;
+const ALL_GRID_PAD_X: f32 = 24.0;
 
 pub fn all_grid_metrics(viewport_w: f32) -> (usize, f32, f32) {
     let usable = if viewport_w > 0.0 {
@@ -117,6 +117,7 @@ pub(crate) fn cover_surface(
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .fill(if dim { BG } else { surface_card() });
 
     let cover = if load_cover {
@@ -264,13 +265,19 @@ fn tile_plate(game: &Game) -> El {
     }
 
     let mut plate = col()
+        .key(format!("tile-plate-{}", game.id))
+        .transition(
+            Transition::offset(0.0, 6.0)
+                .combined(Transition::opacity())
+                .springs(SpringPair::new(SPRING_QUICK, SPRING_PRESS)),
+        )
         .pin(Some(6.0), None, Some(6.0), Some(6.0))
         .px(10.0)
         .py(8.0)
         .gap(2.0)
         .radius(RADIUS_CARD - 4.0)
         .fill(glass_plate_fill())
-        .border(1.0, glass_rim())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .inert()
         .child(
             text(game.title.clone())
@@ -325,12 +332,18 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
-        .press_scale(PRESS_SCALE)
+        .press_scale(0.975)
         .hover(hover_fill())
         .press(pressed_fill())
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .size(DECK_CARD_W, DECK_CARD_H)
         .radius(RADIUS_CARD)
         .continuous_corners()
+        .shadow(
+            if active || hovered { 10.0 } else { 4.0 },
+            if active || hovered { 24.0 } else { 12.0 },
+            BG.alpha(if active || hovered { 0.65 } else { 0.38 }),
+        )
         .opacity(if active || hovered { 1.0 } else { 0.88 })
         .offset(
             0.0,
@@ -537,12 +550,18 @@ fn all_games_poster_tile(game: &Game, card_w: f32, card_h: f32, s: &AppState, sc
         .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
-        .press_scale(PRESS_SCALE)
+        .press_scale(0.975)
         .size(card_w, card_h)
         .radius(RADIUS_CARD)
         .continuous_corners()
+        .shadow(
+            if hovered { 10.0 } else { 4.0 },
+            if hovered { 22.0 } else { 10.0 },
+            BG.alpha(if hovered { 0.62 } else { 0.36 }),
+        )
         .offset(0.0, if hovered { -3.0 } else { 0.0 })
         .offset_motion(SPRING_MOVE)
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_MOVE)
         .on_hover_change(move |s: &mut AppState, inside, _| {
             if inside {
@@ -817,18 +836,23 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .or_else(|| deck_games.first());
     let active_id = active_game.map(|g| g.id.clone());
 
-    let mut hero_art = el()
+    let mut hero_layer = el()
+        .key(format!(
+            "hero-art-{}",
+            active_id.as_deref().unwrap_or("none")
+        ))
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG);
+        .fill(BG)
+        .transition(Transition::opacity().springs(SpringPair::new(SPRING_SMOOTH, SPRING_BASE)));
 
     if let Some(game) = active_game {
         if let Some(img) = s.hero_image(game, scale) {
-            hero_art = hero_art
+            hero_layer = hero_layer
                 .pixels_fit(img.pixels(), SurfaceFit::Fill)
                 .surface_anchor_fraction(0.5, 0.22);
         } else {
             let hue = title_hue(&game.title);
-            hero_art = hero_art.linear_gradient(
+            hero_layer = hero_layer.linear_gradient(
                 0.35,
                 [
                     (0.0, oklch(0.28, 0.12, hue)),
@@ -844,10 +868,10 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::PI,
             [
-                (0.0, BG.alpha(0.26)),
-                (0.18, BG.alpha(0.0)),
-                (0.48, BG.alpha(0.0)),
-                (0.78, BG.alpha(0.56)),
+                (0.0, BG.alpha(0.28)),
+                (0.20, BG.alpha(0.0)),
+                (0.46, BG.alpha(0.04)),
+                (0.76, BG.alpha(0.62)),
                 (1.0, BG),
             ],
         );
@@ -857,13 +881,17 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::FRAC_PI_2,
             [
-                (0.0, BG.alpha(0.62)),
-                (0.36, BG.alpha(0.20)),
-                (0.70, BG.alpha(0.0)),
+                (0.0, BG.alpha(0.68)),
+                (0.34, BG.alpha(0.24)),
+                (0.68, BG.alpha(0.0)),
             ],
         );
 
-    hero_art = hero_art.child(hero_vignette_v).child(hero_vignette_h);
+    let hero_art = el()
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .child(hero_layer)
+        .child(hero_vignette_v)
+        .child(hero_vignette_h);
 
     let hero_lockup = if let Some(game) = active_game {
         let transfer = active_transfer_for(s, game);
@@ -953,6 +981,12 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         });
 
         col()
+            .key(format!("hero-lockup-{}", game.id))
+            .transition(
+                Transition::offset(0.0, 10.0)
+                    .combined(Transition::opacity())
+                    .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
+            )
             .gap(14.0)
             .max_w(600.0)
             .child(identity)

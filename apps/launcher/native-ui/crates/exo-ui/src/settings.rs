@@ -9,15 +9,16 @@ use crate::settings_stores::{shaders_section, stores_section};
 use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, SelectTrigger, TRANSPARENT, bad, exo_glass, fg_muted, float_line,
+    SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, SelectTrigger, TRANSPARENT, bad, exo_glass,
+    fg_muted, float_line,
     glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline, hover_fill,
     icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_music, icon_search,
     icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled, select_trigger, slider_track,
     switch_pill, type_body, type_control, type_page, type_section, type_small,
 };
 use rune::{
-    Cursor, El, LiquidGlass, Phase, ScrollSpec, TextStyle, Transition, col, edit_access, el, row,
-    text, text_input,
+    Cursor, El, LiquidGlass, Phase, ScrollSpec, SpringPair, TextStyle, Transition, col,
+    edit_access, el, row, text, text_input,
 };
 
 pub(crate) fn settings_card() -> El {
@@ -939,7 +940,7 @@ pub fn view(s: &AppState) -> El {
             .gap(3.0)
             .children(SettingsSection::ALL.into_iter().map(|sec| {
                 let active = s.pc.settings_section == sec;
-                let mut item = row()
+                let mut item = el()
                     .key(sec.key())
                     .role("tab")
                     .label(nav_label(sec))
@@ -950,30 +951,43 @@ pub fn view(s: &AppState) -> El {
                     .press_scale(PRESS_SCALE)
                     .w_full()
                     .min_h(36.0)
-                    .py(6.0)
-                    .px(12.0)
-                    .gap(10.0)
-                    .center_y()
                     .radius(RADIUS_SMALL)
-                    .fill(if active { FG.alpha(0.15) } else { TRANSPARENT })
-                    .hover(hover_fill())
-                    .press(pressed_fill())
+                    .fill(TRANSPARENT)
+                    .hover(if active { TRANSPARENT } else { hover_fill() })
+                    .press(if active { TRANSPARENT } else { pressed_fill() })
                     .motion(SPRING_QUICK)
                     .on_press(move |s: &mut AppState| {
                         s.pc.settings_section = sec;
                         s.pc.settings_query.text.clear();
                         s.pc.settings_query.sync_invariants();
-                    })
-                    .child(nav_icon(sec, active))
-                    .child(
-                        text(nav_label(sec))
-                            .font(if active { type_section() } else { type_body() })
-                            .color(if active { FG } else { fg_muted() }),
-                    );
+                    });
                 if active {
-                    item = item.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+                    item = item.child(
+                        el().key("settings-nav-pill")
+                            .matched("settings-nav-pill")
+                            .motion(SPRING_SNAPPY)
+                            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                            .radius(RADIUS_SMALL)
+                            .fill(FG.alpha(0.15))
+                            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                            .inert(),
+                    );
                 }
-                item
+                item.child(
+                    row()
+                        .w_full()
+                        .min_h(36.0)
+                        .py(6.0)
+                        .px(12.0)
+                        .gap(10.0)
+                        .center_y()
+                        .child(nav_icon(sec, active))
+                        .child(
+                            text(nav_label(sec))
+                                .font(if active { type_section() } else { type_body() })
+                                .color(if active { FG } else { fg_muted() }),
+                        ),
+                )
             }))
     };
 
@@ -1019,7 +1033,11 @@ pub fn view(s: &AppState) -> El {
         .child(
             col()
                 .key(format!("settings-pane-{:?}", s.pc.settings_section))
-                .transition(Transition::offset(0.0, 6.0).combined(Transition::opacity()))
+                .transition(
+                    Transition::offset(0.0, 10.0)
+                        .combined(Transition::opacity())
+                        .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
+                )
                 .w_full()
                 .max_w(scaled(960.0))
                 .pt(24.0)
