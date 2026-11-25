@@ -8,7 +8,7 @@ The [Launcher source](apps/launcher) is in this repository.
 
 ## Download
 
-Download the [Exo Launcher 3.30.3 installer](https://github.com/UhhErix/Exo-Launcher/releases/tag/v3.30.3) for Windows 11 x64 from GitHub Releases.
+Download the [Exo Launcher 3.31.0 installer](https://github.com/UhhErix/Exo-Launcher/releases/tag/v3.31.0) for Windows 11 x64 from GitHub Releases.
 See [RELEASES.md](RELEASES.md) for the installer filename and SHA-256 checksum.
 
 ## What's in this snapshot
