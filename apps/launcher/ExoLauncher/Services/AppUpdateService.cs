@@ -205,7 +205,8 @@ public sealed partial class AppUpdateService
         }
         catch (Exception ex)
         {
-            AppLog.Warn("Update check failed: " + ex.GetType().Name + ": " + ex.Message);
+            var latestUrl = FailureReportRules.SafeUpdateUrl(new Uri(UpdateAddress, "latest"));
+            AppLog.Warn((latestUrl is null ? "Update check failed: " : $"Update check failed ({latestUrl}): ") + ex.GetType().Name + ": " + ex.Message);
             return new CheckResult
             {
                 LocalVersion = local,
@@ -439,7 +440,9 @@ public sealed partial class AppUpdateService
         catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
         {
             Move(UpdateFlow.Step.DownloadFailed);
-            CrashReport.Submit("UpdateFailure", "Update download timed out", "update");
+            var timedOutUrl = FailureReportRules.SafeUpdateUrl(uri);
+            AppLog.Warn((timedOutUrl is null ? "Update download timed out: " : $"Update download timed out ({timedOutUrl}): ") + ex.GetType().Name);
+            CrashReport.Submit("UpdateFailure", timedOutUrl is null ? "Update download timed out" : $"Update download timed out on {timedOutUrl}", "update");
             Helpers.Telemetry.Track("update.result", ("from", check.LocalVersion ?? ""), ("to", check.RemoteVersion ?? ""), ("ok", false), ("error_kind", "timeout"));
             // A stalled or timed-out transfer is not a user cancel.
             // ResumableDownload keeps its SHA-keyed partial (strong ETag only),
@@ -456,7 +459,8 @@ public sealed partial class AppUpdateService
         {
             Move(swapping ? UpdateFlow.Step.ApplyFailed : UpdateFlow.Step.DownloadFailed);
             // A file or Windows error names a path under the updates folder: the log has it, the page does not.
-            AppLog.Warn("Update install failed (" + uri.GetLeftPart(UriPartial.Path) + "): " + ex.GetType().Name + ": " + ex.Message);
+            var failedUrl = FailureReportRules.SafeUpdateUrl(uri);
+            AppLog.Warn((failedUrl is null ? "Update install failed: " : $"Update install failed ({failedUrl}): ") + ex.GetType().Name + ": " + ex.Message);
             Helpers.Telemetry.Track("update.result", ("from", check.LocalVersion ?? ""), ("to", check.RemoteVersion ?? ""), ("ok", false),
                 ("error_kind", swapping ? "install" : "other"));
             CrashReport.Submit("UpdateFailure", swapping ? "Update install failed" : FailureReportRules.UpdateDownloadReason(ex, uri), "update");
