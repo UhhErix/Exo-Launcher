@@ -883,11 +883,13 @@ impl AppState {
                     handle.update(move |s, _| {
                         s.media.captures_ui.picking_folder = false;
                         match res {
-                            Ok(r) if r.ok && r.path.is_some() => {
-                                s.capture_save_settings_patch(
-                                    "folder",
-                                    json!({ "folder": r.path.unwrap() }),
-                                );
+                            Ok(r) if r.ok => {
+                                if let Some(path) = r.path {
+                                    s.capture_save_settings_patch(
+                                        "folder",
+                                        json!({ "folder": path }),
+                                    );
+                                }
                             }
                             Ok(r) if r.cancelled => {}
                             Ok(r) => {

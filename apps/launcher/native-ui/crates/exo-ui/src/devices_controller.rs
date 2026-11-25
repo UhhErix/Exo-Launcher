@@ -2503,13 +2503,10 @@ fn profile_editor_overlay(s: &AppState) -> Option<El> {
                             .color(FG)
                             .placeholder("Find a game", fg_faint())
                             .on_edit(edit_access(|s: &mut AppState| {
-                                &mut s
-                                    .pc
-                                    .controller_ui
-                                    .profile_editor
-                                    .as_mut()
-                                    .unwrap()
-                                    .game_query
+                                match s.pc.controller_ui.profile_editor.as_mut() {
+                                    Some(ed) => &mut ed.game_query,
+                                    None => &mut s.ui_discard_edit,
+                                }
                             })),
                     ),
             )
@@ -2677,13 +2674,10 @@ fn profile_editor_overlay(s: &AppState) -> Option<El> {
                         .color(FG)
                         .placeholder("Profile name", fg_faint())
                         .on_edit(edit_access(|s: &mut AppState| {
-                            &mut s
-                                .pc
-                                .controller_ui
-                                .profile_editor
-                                .as_mut()
-                                .unwrap()
-                                .name_edit
+                            match s.pc.controller_ui.profile_editor.as_mut() {
+                                Some(ed) => &mut ed.name_edit,
+                                None => &mut s.ui_discard_edit,
+                            }
                         }))
                         .on_input_change(|s: &mut AppState, _| {
                             if let Some(ref mut e) = s.pc.controller_ui.profile_editor {

@@ -368,15 +368,16 @@ export class FinalmouseHidClient {
    */
   async setTmrActuation(actuationMmL: number, actuationMmR: number, rtUmL?: number, rtUmR?: number): Promise<void> {
     this.requireSlx("TMR actuation");
-    const thrL = finalmouseActuationMmToSteps(actuationMmL);
-    const thrR = finalmouseActuationMmToSteps(actuationMmR);
+    const hasHyst = rtUmL !== undefined && rtUmR !== undefined;
+    const thrL = hasHyst && actuationMmL <= 0 ? 0 : finalmouseActuationMmToSteps(actuationMmL);
+    const thrR = hasHyst && actuationMmR <= 0 ? 0 : finalmouseActuationMmToSteps(actuationMmR);
     await this.write(
       this.txReport,
       FINALMOUSE_COMMAND.tmrActuation,
       encodeFinalmouseTmrActuation(thrR, thrL, rtUmR, rtUmL),
     );
-    this.telemetry.tmrThrL = thrL;
-    this.telemetry.tmrThrR = thrR;
+    if (thrL > 0) this.telemetry.tmrThrL = thrL;
+    if (thrR > 0) this.telemetry.tmrThrR = thrR;
     if (rtUmL !== undefined && rtUmR !== undefined) {
       this.telemetry.tmrHystL = rtUmL;
       this.telemetry.tmrHystR = rtUmR;

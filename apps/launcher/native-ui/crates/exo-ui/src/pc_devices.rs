@@ -1504,17 +1504,63 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
         .fill(BG)
         .child(header);
 
-    if devices.is_empty() {
+    if let Some(ref err) = s.pc.devices_error
+        && !s.pc.devices_loading
+        && !devices.is_empty()
+    {
         page = page.child(
-            amoled_card(RADIUS_PANEL).w_full().grow(1.0).center().child(
-                text(if s.pc.devices_loading {
-                    "Scanning connected devices…"
-                } else {
-                    "No peripherals detected yet."
-                })
+            amoled_card(RADIUS_PANEL)
+                .key("devices-error-banner")
+                .w_full()
+                .px(16.0)
+                .py(12.0)
+                .child(
+                    row()
+                        .w_full()
+                        .justify_between()
+                        .center_y()
+                        .gap(12.0)
+                        .child(
+                            text(format!("Device scan failed: {err}"))
+                                .font(type_body())
+                                .color(fg_muted())
+                                .truncate(),
+                        )
+                        .child(
+                            device_btn("devices-retry", "Try again", false)
+                                .on_press(|s: &mut AppState| s.load_pc_devices()),
+                        ),
+                ),
+        );
+    }
+
+    if devices.is_empty() {
+        let empty_body = if s.pc.devices_loading {
+            text("Scanning connected devices…")
                 .font(type_section())
-                .color(fg_muted()),
-            ),
+                .color(fg_muted())
+        } else if let Some(ref err) = s.pc.devices_error {
+            col()
+                .center()
+                .gap(12.0)
+                .px(24.0)
+                .child(text("Could not load devices").font(type_title()).color(FG))
+                .child(text(err.clone()).font(type_body()).color(fg_muted()))
+                .child(
+                    device_btn("devices-retry", "Try again", false)
+                        .on_press(|s: &mut AppState| s.load_pc_devices()),
+                )
+        } else {
+            text("No peripherals detected yet.")
+                .font(type_section())
+                .color(fg_muted())
+        };
+        page = page.child(
+            amoled_card(RADIUS_PANEL)
+                .w_full()
+                .grow(1.0)
+                .center()
+                .child(empty_body),
         );
     } else {
         page = page.child(grid);

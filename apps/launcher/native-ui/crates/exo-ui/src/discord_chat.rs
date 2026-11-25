@@ -1502,7 +1502,10 @@ fn message_row(
                             .w_full()
                             .color(FG)
                             .on_edit(edit_access(|s: &mut AppState| {
-                                &mut s.discord.chat.editing.as_mut().unwrap().1
+                                match s.discord.chat.editing.as_mut() {
+                                    Some(editing) => &mut editing.1,
+                                    None => &mut s.ui_discard_edit,
+                                }
                             }))
                             .on_submit(|s: &mut AppState, _| s.save_discord_edit()),
                         1,
