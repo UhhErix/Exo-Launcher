@@ -40,6 +40,7 @@ export const win = {
   closeTitle: (name, timeoutMs = 0) => run('closeTitle', { Name: name, W: timeoutMs }),
   waitWebview: (target, direction, timeoutMs = 5000) => run('waitWebview', { Name: direction, W: target, H: timeoutMs }),
   udp: () => run('udp'),
+  games: () => run('games'),
   /** Visible windows on a monitor belonging to processes with this name: { running, shown }. */
   shown: (name) => run('shown', { Name: name }),
   /** Which of Exo's own assemblies shipped without ReadyToRun code: { checked, plain }. */

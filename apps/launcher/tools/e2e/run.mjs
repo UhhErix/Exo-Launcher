@@ -65,6 +65,10 @@ t.host = (method, params) => exo.host(t.shell, method, params)
 let gameMark = await exo.logMark()
 const check = run.check.bind(run)
 async function gameStarted() {
+  if (!flag('allow-game')) {
+    const active = await win.games().catch(() => ({ running: [] }))
+    if (active.running?.length) return `process running: ${active.running.join(', ')}`
+  }
   const next = await exo.logMark()
   const line = (await exo.logSince(gameMark)).find(l => /^Launch: |^Game running signal: set/.test(l.text))
   gameMark = next
@@ -89,8 +93,9 @@ t.relaunch = async (env = {}) => {
   if (t.halt) throw t.halt
   try { t.shell?.close() } catch { /* already gone */ }
   if ((await exo.pids()).length) await exo.close()
-  t.logMark = await exo.logMark()
+  t.logMark = exo.TEST_INSTANCE ? 0 : await exo.logMark()
   const started = await exo.launch({ port, env })
+  if (exo.TEST_INSTANCE) gameMark = 0
   t.shell = started.shell
   t.startedAt = started.startedAt
   t.console = await t.shell.collectConsole()
@@ -105,9 +110,11 @@ try {
   console.log(`Exo ${run.meta.version}; suites: ${chosen.join(', ')}; report: ${out}`)
 
   // Never during a call (a restart ends it) or a game.
-  if ((await exo.pids()).length) {
-    const udp = await win.udp().catch(() => ({ count: 0 }))
-    if (udp.count > 0) throw Object.assign(new Error('Exo is in a voice call; try again after it'), { code: 2 })
+  const udp = await win.udp().catch(() => ({ count: 0 }))
+  if (udp.count > 0) throw Object.assign(new Error('Exo is in a voice call; try again after it'), { code: 2 })
+  if (!flag('allow-game')) {
+    const active = await win.games().catch(() => ({ running: [] }))
+    if (active.running?.length) throw Object.assign(new Error(`a game is running (${active.running.join(', ')}); try again after it`), { code: 2 })
   }
   await guard.save()
 

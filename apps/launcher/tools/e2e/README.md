@@ -24,11 +24,12 @@ numbers), `screenshots/` and `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt` in 
 is **PASS**, **WARN** (works, but a budget or a soft rule was missed), **FAIL** or **SKIP** (couldn't be tried here,
 and why). Exit code 0: nothing failed; 1: a check failed; 2: the run itself couldn't go on.
 
-**Test instance.** With `EXO_E2E_TEST_INSTANCE=1` the run starts a disposable web host through `tools/test-instance.ps1`
-instead of the installed Exo: its own data folder under `EXO_E2E_TEST_FOLDER` (default `%TEMP%\exo-e2e-test-instance`,
-recreated each launch), its window on the second screen, and a free debug port. The installed Exo is never closed, and its
+**Test instance.** With `EXO_E2E_TEST_INSTANCE=1` the run starts a disposable classic web host (`EXO_UI=web`, WebView2 + CDP)
+through `tools/test-instance.ps1` instead of the installed Exo: its own data folder under `EXO_E2E_TEST_FOLDER` (default
+`%TEMP%\exo-e2e-test-instance`, recreated each launch), its own `app.log` at `<EXO_E2E_TEST_FOLDER>\instance\logs\app.log`,
+its window on the second screen, and a free debug port. The installed Exo is never closed, its `app.log` is never read, and its
 settings files are neither saved nor restored. The run closes the test instance at the end unless `--keep`. It refuses
-without a second screen and while a game runs, like the script does.
+without a second screen, during an Exo voice call (UDP endpoint check), and while a game runs (explicit process check).
 
 ## What it checks
 

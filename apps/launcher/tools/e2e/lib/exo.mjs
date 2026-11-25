@@ -3,40 +3,90 @@
 import { spawn, execFile } from 'node:child_process'
 import { copyFile, mkdir, readFile, rm, stat, writeFile, open } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { join, basename } from 'node:path'
+import { join, basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openShell, openPage, sleep } from '../cdp.mjs'
 
-export const DATA = join(process.env.LOCALAPPDATA, 'ExoLauncher')
-export const EXE = join(DATA, 'app', 'ExoLauncher.exe')
-export const LOG = join(DATA, 'logs', 'app.log')
+const TEST_SCRIPT = fileURLToPath(new URL('../../test-instance.ps1', import.meta.url))
+const WIN_SCRIPT = fileURLToPath(new URL('./win.ps1', import.meta.url))
+const TEST_EXE = fileURLToPath(new URL('../../../ExoLauncher/bin/x64/Debug/net10.0-windows10.0.26100.0/win-x64/ExoLauncher.exe', import.meta.url))
+const REPO_VERSION_FILE = fileURLToPath(new URL('../../../VERSION', import.meta.url))
+
+export function resolvePaths(env = process.env, { testExe = TEST_EXE } = {}) {
+  const testInstance = env.EXO_E2E_TEST_INSTANCE === '1'
+  const installedData = join(env.LOCALAPPDATA || '', 'ExoLauncher')
+  const installedExe = join(installedData, 'app', 'ExoLauncher.exe')
+  const testFolderCustom = Boolean(env.EXO_E2E_TEST_FOLDER)
+  const testFolder = env.EXO_E2E_TEST_FOLDER
+    ? resolve(env.EXO_E2E_TEST_FOLDER)
+    : join(env.TEMP || '', 'exo-e2e-test-instance')
+  const testData = join(testFolder, 'instance')
+  const data = testInstance ? testData : installedData
+  const exe = testInstance ? testExe : installedExe
+  const log = join(data, 'logs', 'app.log')
+  const guarded = ['settings.json', 'web-client-preferences.json', 'window-placement.json'].map(f => join(data, f))
+  return { testInstance, installedData, installedExe, testFolderCustom, testFolder, testData, data, exe, log, guarded }
+}
+
+const resolved = resolvePaths()
+
+export const DATA = resolved.data
+export const EXE = resolved.exe
+export const LOG = resolved.log
 
 /** What a run may change: put back as it was at the end. */
-export const GUARDED = ['settings.json', 'web-client-preferences.json', 'window-placement.json'].map(f => join(DATA, f))
+export const GUARDED = resolved.guarded
 
 /**
  * EXO_E2E_TEST_INSTANCE=1: the run starts a disposable test instance (tools/test-instance.ps1) instead of the installed
  * Exo, and touches none of the installed one: it is not closed, and its settings files are neither saved nor restored.
  */
-export const TEST_INSTANCE = process.env.EXO_E2E_TEST_INSTANCE === '1'
-const TEST_SCRIPT = fileURLToPath(new URL('../../test-instance.ps1', import.meta.url))
-const WIN_SCRIPT = fileURLToPath(new URL('./win.ps1', import.meta.url))
-const TEST_EXE = fileURLToPath(new URL('../../ExoLauncher/bin/x64/Debug/net10.0-windows10.0.26100.0/win-x64/ExoLauncher.exe', import.meta.url))
-const TEST_FOLDER_CUSTOM = Boolean(process.env.EXO_E2E_TEST_FOLDER)
-const TEST_FOLDER = process.env.EXO_E2E_TEST_FOLDER || join(process.env.TEMP, 'exo-e2e-test-instance')
+export const TEST_INSTANCE = resolved.testInstance
+const TEST_FOLDER_CUSTOM = resolved.testFolderCustom
+const TEST_FOLDER = resolved.testFolder
 let test = null // { pid, port, dataDir } of the test instance this run started
 const q = (s) => String(s).replace(/'/g, "''")
 
 const pwsh = (script) => new Promise((resolve, reject) =>
   execFile('pwsh', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 90000 }, (e, out, err) => e ? reject(new Error((err || e.message).trim())) : resolve(out.trim())))
 
-export async function version() {
-  return pwsh(`(Get-Item '${q(TEST_INSTANCE ? TEST_EXE : EXE)}').VersionInfo.ProductVersion`)
+export function logPath(activeDataDir = test?.dataDir, fallbackLog = LOG) {
+  return activeDataDir ? join(activeDataDir, 'logs', 'app.log') : fallbackLog
+}
+
+const isPlaceholderVersion = (v) => !v || /^0+(\.0+)*$/.test(v) || v === '1.0.0.0'
+
+export function pickVersion({ productVersion = '', fileVersion = '', versionFileText = '' } = {}) {
+  const pv = String(productVersion || '').trim()
+  if (pv && !/^0+(\.0+)*$/.test(pv)) return pv
+  const fv = String(fileVersion || '').trim()
+  if (!isPlaceholderVersion(fv)) return fv
+  const vf = String(versionFileText || '').trim().split(/\r?\n/)[0]?.trim() || ''
+  if (vf) return vf
+  if (fv && !/^0+(\.0+)*$/.test(fv)) return fv
+  return 'unknown'
+}
+
+async function readPeVersion(exePath) {
+  const out = await pwsh(`$ErrorActionPreference = 'Stop'; $v = (Get-Item -LiteralPath '${q(exePath)}').VersionInfo; [ordered]@{ productVersion = [string]$v.ProductVersion; fileVersion = [string]$v.FileVersion } | ConvertTo-Json -Compress`)
+  return JSON.parse(out)
+}
+
+export async function version({ exe = EXE, versionFiles = [join(dirname(exe), 'VERSION'), REPO_VERSION_FILE], readExeVersion = readPeVersion } = {}) {
+  const info = await readExeVersion(exe).catch(() => ({ productVersion: '', fileVersion: '' }))
+  let versionFileText = ''
+  for (const vf of versionFiles) {
+    try {
+      const text = (await readFile(vf, 'utf8')).trim()
+      if (text) { versionFileText = text; break }
+    } catch {}
+  }
+  return pickVersion({ ...info, versionFileText })
 }
 
 export async function pids() {
   if (TEST_INSTANCE) return test ? [test.pid] : []
-  const out = await pwsh(`@(Get-Process ExoLauncher -ErrorAction SilentlyContinue | Where-Object Path -eq '${EXE}' | ForEach-Object Id) -join ','`)
+  const out = await pwsh(`@(Get-Process ExoLauncher -ErrorAction SilentlyContinue | Where-Object Path -eq '${q(EXE)}' | ForEach-Object Id) -join ','`)
   return out ? out.split(',').map(Number) : []
 }
 
@@ -101,22 +151,26 @@ export async function attach(port) {
 }
 
 /** The log's length now: pass it to logSince to read only what a step wrote. */
-export async function logMark() {
-  try { return (await stat(LOG)).size } catch { return 0 }
+export async function logMark(file = logPath()) {
+  try { return (await stat(file)).size } catch { return 0 }
 }
 
 /** app.log lines written since `mark`, as { at, level, text }. */
-export async function logSince(mark) {
+export async function logSince(mark, file = logPath()) {
   try {
-    const handle = await open(LOG, 'r')
-    const size = (await handle.stat()).size
-    const buffer = Buffer.alloc(Math.max(0, size - mark))
-    await handle.read(buffer, 0, buffer.length, mark)
-    await handle.close()
-    return buffer.toString('utf8').split(/\r?\n/).filter(Boolean).map(line => {
-      const m = /^\[([^\]]+)\]\s+(\w+)\s+(.*)$/.exec(line)
-      return m ? { at: m[1], level: m[2], text: m[3] } : { at: '', level: 'INFO', text: line }
-    })
+    const handle = await open(file, 'r')
+    try {
+      const size = (await handle.stat()).size
+      const offset = mark > size ? 0 : Math.max(0, mark)
+      const buffer = Buffer.alloc(Math.max(0, size - offset))
+      await handle.read(buffer, 0, buffer.length, offset)
+      return buffer.toString('utf8').split(/\r?\n/).filter(Boolean).map(line => {
+        const m = /^\[([^\]]+)\]\s+(\w+)\s+(.*)$/.exec(line)
+        return m ? { at: m[1], level: m[2], text: m[3] } : { at: '', level: 'INFO', text: line }
+      })
+    } finally {
+      await handle.close()
+    }
   } catch { return [] }
 }
 
