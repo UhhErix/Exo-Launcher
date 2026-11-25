@@ -102,3 +102,12 @@ test('0008 adds passkeys and webauthn_challenges without disturbing existing acc
   )
   assert.deepEqual(db.prepare('SELECT id FROM accounts').all().map(r => r.id), ['a'])
 })
+
+test('0009 adds app column to sessions with empty default without disturbing existing sessions', () => {
+  const db = migrated([...BEFORE_0004, '0004_drop_legacy.sql', '0005_counters.sql', '0006_keyring_and_pending.sql', '0007_devices.sql', '0008_passkeys.sql'])
+  db.exec("INSERT INTO accounts (id, email_mac, password_hash, recovery_mac, item_key, created) VALUES ('a', 'k1:x', 'h', 'k1:y', X'00', 1)")
+  db.exec("INSERT INTO sessions (token_hash, account, device, created, last_used) VALUES ('h1', 'a', 'pc', 5, 5)")
+  db.exec(migration('0009_session_app.sql'))
+  assert.ok(db.prepare('PRAGMA table_info(sessions)').all().map(c => c.name).includes('app'))
+  assert.deepEqual(db.prepare('SELECT token_hash, app FROM sessions').all().map(r => [r.token_hash, r.app]), [['h1', '']])
+})

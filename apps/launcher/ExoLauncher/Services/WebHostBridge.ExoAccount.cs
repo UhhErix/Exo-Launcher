@@ -27,7 +27,7 @@ public sealed partial class WebHostBridge
     /// </summary>
     private async Task<object> ExoAccountProbeAsync()
     {
-        using var client = new ExoAccountClient();
+        using var client = new ExoAccountClient(dataDir: PathHelper.AppDataDir);
         var reachable = await client.ReachableAsync().ConfigureAwait(true);
         return new { reachable, gameRunning = _services.Launcher.AnyGameRunning || GameRunningSignal.Running };
     }
@@ -130,7 +130,7 @@ public sealed partial class WebHostBridge
             message = outcome.Message,
             error = outcome.Error,
             // The service keeps no PC names (CLIENT.md gap 1): this PC shows its own name, the others show none.
-            sessions = rows.Select(row => new { device = row.Device, created = row.Created, lastUsed = row.LastUsed, current = row.Current, thisPc = row.ThisPc, name = row.ThisPc ? Environment.MachineName : null }).ToArray(),
+            sessions = rows.Select(row => new { device = row.Device, created = row.Created, lastUsed = row.LastUsed, current = row.Current, thisPc = row.ThisPc, name = row.Name ?? (row.ThisPc ? Environment.MachineName : null) }).ToArray(),
         };
     }
 

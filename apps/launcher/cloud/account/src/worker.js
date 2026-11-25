@@ -73,6 +73,7 @@ async function throttle(request, env) {
 }
 
 const deviceOf = input => (typeof input.device === 'string' && DEVICE.test(input.device) ? input.device : null)
+const appOf = input => (typeof input.app === 'string' && NAME.test(input.app) ? input.app : '')
 
 /** A new account with its address, password, recovery code and item key, and a session on this PC. */
 async function signUp(request, env) {
@@ -99,7 +100,7 @@ async function signUp(request, env) {
     if (/UNIQUE constraint failed/.test(error?.message ?? '')) refuse(409, 'email-taken')
     throw error
   }
-  const token = await newSession(env.DB, id, device)
+  const token = await newSession(env.DB, id, device, appOf(input))
   return json({ token, account: { id }, recoveryCode: shownCode(code), deviceToken: await issueDeviceToken(env.DB, id, device) }, 201)
 }
 
@@ -120,7 +121,7 @@ async function signIn(request, env) {
   await upgradeRecord(env, record, email)
   await rehashIfOld(env.DB, record, password)
   return json({
-    token: await newSession(env.DB, record.id, device),
+    token: await newSession(env.DB, record.id, device, appOf(input)),
     account: { id: record.id },
     deviceToken: await issueDeviceToken(env.DB, record.id, device),
   })
@@ -131,7 +132,7 @@ async function signOut(request, env) {
   // This PC's token goes with its session: after a sign-out the PC is no longer known to the account.
   await env.DB.batch([
     env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(tokenHash),
-    env.DB.prepare('DELETE FROM devices WHERE account = ? AND device = ?').bind(account, device),
+    env.DB.prepare('DELETE FROM devices WHERE account = ? AND device = ? AND NOT EXISTS (SELECT 1 FROM sessions WHERE account = ? AND device = ?)').bind(account, device, account, device),
   ])
   return done()
 }
@@ -219,7 +220,7 @@ async function resetPassword(request, env) {
     env.DB.prepare('DELETE FROM sessions WHERE account = ?').bind(record.id),
     env.DB.prepare('DELETE FROM devices WHERE account = ?').bind(record.id),
   ])
-  const token = await newSession(env.DB, record.id, device)
+  const token = await newSession(env.DB, record.id, device, appOf(input))
   return json({ token, account: { id: record.id }, recoveryCode: shownCode(next), deviceToken: await issueDeviceToken(env.DB, record.id, device) })
 }
 
@@ -241,11 +242,11 @@ async function newCode(request, env) {
 /** The account's sessions, oldest first; current marks the caller's own. */
 async function getSessions(request, env) {
   const { account, tokenHash } = await sessionOf(request, env)
-  const { results } = await env.DB.prepare('SELECT token_hash, device, created, last_used FROM sessions WHERE account = ? AND last_used > ? ORDER BY created, rowid')
+  const { results } = await env.DB.prepare('SELECT token_hash, device, app, created, last_used FROM sessions WHERE account = ? AND last_used > ? ORDER BY created, rowid')
     .bind(account, seconds() - limits.idleSeconds).all()
   const { results: devices } = await env.DB.prepare('SELECT device, first_seen, last_seen FROM devices WHERE account = ? AND last_seen > ? ORDER BY first_seen').bind(account, seconds() - limits.idleSeconds).all()
   return json({
-    sessions: results.map(row => ({ device: row.device, created: row.created, lastUsed: row.last_used, current: row.token_hash === tokenHash })),
+    sessions: results.map(row => ({ device: row.device, ...(row.app ? { app: row.app } : {}), created: row.created, lastUsed: row.last_used, current: row.token_hash === tokenHash })),
     devices: devices.map(row => ({ device: row.device, firstSeen: row.first_seen, lastSeen: row.last_seen })),
   })
 }
@@ -631,7 +632,7 @@ async function passkeySignInFinish(request, env) {
   await env.DB.prepare('UPDATE passkeys SET sign_count = ?, last_used = ? WHERE credential_id = ?')
     .bind(verified.signCount, now, row.credential_id).run()
   return json({
-    token: await newSession(env.DB, row.account, device),
+    token: await newSession(env.DB, row.account, device, appOf(input)),
     account: { id: row.account },
     deviceToken: await issueDeviceToken(env.DB, row.account, device),
   })
