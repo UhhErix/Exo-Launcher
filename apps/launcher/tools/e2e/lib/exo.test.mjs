@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -11,6 +11,30 @@ import { logMark, logPath, logSince, pickVersion, resolvePaths, version } from '
 const EXO_MODULE_URL = pathToFileURL(fileURLToPath(new URL('./exo.mjs', import.meta.url))).href
 const LAUNCHER_ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 const TEST_INSTANCE_SCRIPT = fileURLToPath(new URL('../../test-instance.ps1', import.meta.url))
+
+function loadModuleExports(extraEnv) {
+  return JSON.parse(execFileSync(
+    process.execPath,
+    ['--input-type=module', '-e', `import * as exo from ${JSON.stringify(EXO_MODULE_URL)}; console.log(JSON.stringify({ TEST_INSTANCE: exo.TEST_INSTANCE, DATA: exo.DATA, LOG: exo.LOG, EXE: exo.EXE }))`],
+    {
+      env: {
+        ...process.env,
+        LOCALAPPDATA: 'C:\\Users\\Test\\AppData\\Local',
+        TEMP: 'C:\\Temp',
+        ...extraEnv,
+      },
+      encoding: 'utf8',
+    },
+  ).trim())
+}
+
+let testModeExports
+let installedModeExports
+
+before(() => {
+  testModeExports = loadModuleExports({ EXO_E2E_TEST_INSTANCE: '1', EXO_E2E_TEST_FOLDER: 'C:\\Temp\\b7-run' })
+  installedModeExports = loadModuleExports({ EXO_E2E_TEST_INSTANCE: '0', EXO_E2E_TEST_FOLDER: '' })
+})
 
 test('resolvePaths uses installed Exo paths when EXO_E2E_TEST_INSTANCE is not 1', () => {
   const env = { LOCALAPPDATA: 'C:\\Users\\Test\\AppData\\Local', TEMP: 'C:\\Temp' }
@@ -53,31 +77,15 @@ test('resolvePaths defaults test-instance folder under TEMP when EXO_E2E_TEST_FO
 })
 
 test('module exports switch LOG and DATA between test-instance mode and installed mode', () => {
-  const inspect = (extraEnv) => JSON.parse(execFileSync(
-    process.execPath,
-    ['--input-type=module', '-e', `import * as exo from ${JSON.stringify(EXO_MODULE_URL)}; console.log(JSON.stringify({ TEST_INSTANCE: exo.TEST_INSTANCE, DATA: exo.DATA, LOG: exo.LOG, EXE: exo.EXE }))`],
-    {
-      env: {
-        ...process.env,
-        LOCALAPPDATA: 'C:\\Users\\Test\\AppData\\Local',
-        TEMP: 'C:\\Temp',
-        ...extraEnv,
-      },
-      encoding: 'utf8',
-    },
-  ).trim())
+  assert.equal(testModeExports.TEST_INSTANCE, true)
+  assert.equal(testModeExports.DATA, join(resolve('C:\\Temp\\b7-run'), 'instance'))
+  assert.equal(testModeExports.LOG, join(resolve('C:\\Temp\\b7-run'), 'instance', 'logs', 'app.log'))
+  assert.ok(testModeExports.EXE.startsWith(join(LAUNCHER_ROOT, 'ExoLauncher')), testModeExports.EXE)
 
-  const testMode = inspect({ EXO_E2E_TEST_INSTANCE: '1', EXO_E2E_TEST_FOLDER: 'C:\\Temp\\b7-run' })
-  assert.equal(testMode.TEST_INSTANCE, true)
-  assert.equal(testMode.DATA, join(resolve('C:\\Temp\\b7-run'), 'instance'))
-  assert.equal(testMode.LOG, join(resolve('C:\\Temp\\b7-run'), 'instance', 'logs', 'app.log'))
-  assert.ok(testMode.EXE.startsWith(join(LAUNCHER_ROOT, 'ExoLauncher')), testMode.EXE)
-
-  const installedMode = inspect({ EXO_E2E_TEST_INSTANCE: '0', EXO_E2E_TEST_FOLDER: '' })
-  assert.equal(installedMode.TEST_INSTANCE, false)
-  assert.equal(installedMode.DATA, join('C:\\Users\\Test\\AppData\\Local', 'ExoLauncher'))
-  assert.equal(installedMode.LOG, join('C:\\Users\\Test\\AppData\\Local', 'ExoLauncher', 'logs', 'app.log'))
-  assert.equal(installedMode.EXE, join('C:\\Users\\Test\\AppData\\Local', 'ExoLauncher', 'app', 'ExoLauncher.exe'))
+  assert.equal(installedModeExports.TEST_INSTANCE, false)
+  assert.equal(installedModeExports.DATA, join('C:\\Users\\Test\\AppData\\Local', 'ExoLauncher'))
+  assert.equal(installedModeExports.LOG, join('C:\\Users\\Test\\AppData\\Local', 'ExoLauncher', 'logs', 'app.log'))
+  assert.equal(installedModeExports.EXE, join('C:\\Users\\Test\\AppData\\Local', 'ExoLauncher', 'app', 'ExoLauncher.exe'))
 })
 
 test('logPath prefers active test dataDir over fallback log', () => {
