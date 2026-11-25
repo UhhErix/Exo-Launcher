@@ -1,5 +1,25 @@
 [
   {
+    "version": "3.31.1",
+    "items": [
+      {
+        "icon": "Settings",
+        "title": "Reduce motion stays where you set it",
+        "detail": "Fixes account sync reverting your local Reduce motion preference and resolves synced setting conflicts cleanly."
+      },
+      {
+        "icon": "Performance",
+        "title": "Smoother controls during heavy background work",
+        "detail": "Keeps rooms and clicks responsive while slow hardware or tuning tasks run, and sends crash reports in the background."
+      },
+      {
+        "icon": "Info",
+        "title": "Stronger crash protection and diagnostics",
+        "detail": "Hardens UI events, Discord voice cleanup, and Windows callbacks against sudden exits, and adds scrubbed crash breadcrumbs to the log."
+      }
+    ]
+  },
+  {
     "version": "3.31.0",
     "items": [
       {
