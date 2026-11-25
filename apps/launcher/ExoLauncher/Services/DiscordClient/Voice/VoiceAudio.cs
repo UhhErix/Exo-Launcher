@@ -124,13 +124,14 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
 
     private void CancelEcho(float[] frame)
     {
-        var cancel = _echo is not null && !_onHead && VoiceProcessing.Current.EchoCancellation;
-        if (_echo is not null && (cancel != EchoCancelling || !_echoSaid))
+        var echo = Volatile.Read(ref _echo);
+        var cancel = echo is not null && !_onHead && VoiceProcessing.Current.EchoCancellation;
+        if (echo is not null && (cancel != EchoCancelling || !_echoSaid))
         {
             (EchoCancelling, _echoSaid) = (cancel, true);
             AppLog.Info($"Discord voice: echo cancellation {(cancel ? "on" : _onHead ? "off: the speakers are on your head" : "off")}.");
         }
-        if (cancel) _echo!.Capture(frame);
+        if (cancel) echo!.Capture(frame);
     }
 
     // On the capture thread: a whole frame to the voice thread, or dropped when it is a whole ring behind.
@@ -628,7 +629,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
         var gain = App.Services.Settings.Shared.DiscordOutputVolume / 100f;
         if (gain != 1f) for (var i = 0; i < mix.Length; i++) mix[i] *= gain;
         _limiter.Process(mix);
-        _echo?.Render(mix, Deafened);
+        Volatile.Read(ref _echo)?.Render(mix, Deafened);
         // The call as it plays here, for Go Live to know it again in another app's sound (nothing plays while deafened).
         if (!Call) return;
         if (Deafened) CallEcho.Heard.Quiet(Opus.FrameSamples, QpcNow());
@@ -664,7 +665,8 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
         if (_voice is { IsAlive: true } voice) voice.Join(1000);
         // The wake event the microphone's thread sets and the voice thread waits on, once both are gone.
         if (_capture is not { IsAlive: true } && _voice is not { IsAlive: true }) _cut.Dispose();
-        _echo?.Dispose();
+        var echo = Interlocked.Exchange(ref _echo, null);
+        echo?.Dispose();
         if (_live)
         {
             _live = false;

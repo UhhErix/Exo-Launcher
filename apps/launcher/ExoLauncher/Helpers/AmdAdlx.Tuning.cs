@@ -17,7 +17,8 @@ internal static unsafe partial class AmdAdlx
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static byte OnAutoTuned(nint self, nint happened)
     {
-        AutoTuneDone.Set();
+        try { AutoTuneDone.Set(); }
+        catch { }
         return 1;
     }
 

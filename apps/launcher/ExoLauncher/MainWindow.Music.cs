@@ -873,7 +873,7 @@ public sealed partial class MainWindow
             }
             if (e.IsUserInitiated && MusicWebPolicy.IsHttps(e.Uri)) OpenMusicExternal(e.Uri);
         });
-        core.NewWindowRequested += async (sender, e) => await UiGuard.RunAsync(async () =>
+        core.NewWindowRequested += (sender, e) => _ = UiGuard.RunAsync(async () =>
         {
             e.Handled = true;
             if (_musicWebClosed || _musicWebService != service || generation != _musicWebGeneration) return;

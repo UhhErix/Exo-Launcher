@@ -63,7 +63,10 @@ public sealed partial class MainWindow
         if (_musicWeb?.CoreWebView2 is { } music) await ResetPermissionGrantsAsync(music.Profile);
     }
 
-    private async void OnConnectedPermissionRequested(CoreWebView2PermissionRequestedEventArgs e, WebView2 surface, bool popup, string? service)
+    private void OnConnectedPermissionRequested(CoreWebView2PermissionRequestedEventArgs e, WebView2 surface, bool popup, string? service) =>
+        _ = UiGuard.RunAsync(() => OnConnectedPermissionRequestedAsync(e, surface, popup, service), "ConnectedPermission");
+
+    private async Task OnConnectedPermissionRequestedAsync(CoreWebView2PermissionRequestedEventArgs e, WebView2 surface, bool popup, string? service)
     {
         e.SavesInProfile = false;
         e.Handled = true;

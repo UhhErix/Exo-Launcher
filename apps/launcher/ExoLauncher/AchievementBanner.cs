@@ -287,7 +287,11 @@ internal static class AchievementBanner
             var instance = GetModuleHandle(null);
             if (!_registered)
             {
-                _proc = (hwnd, msg, w, l) => msg == 0x0084 ? new IntPtr(-1) : DefWindowProc(hwnd, msg, w, l); // WM_NCHITTEST: HTTRANSPARENT
+                _proc = (hwnd, msg, w, l) =>
+                {
+                    try { return msg == 0x0084 ? new IntPtr(-1) : DefWindowProc(hwnd, msg, w, l); } // WM_NCHITTEST: HTTRANSPARENT
+                    catch { return IntPtr.Zero; }
+                };
                 var cls = new WndClassEx { Size = Marshal.SizeOf<WndClassEx>(), Proc = Marshal.GetFunctionPointerForDelegate(_proc), Instance = instance, ClassName = "ExoAchievementBanner" };
                 if (RegisterClassEx(ref cls) == 0) throw new InvalidOperationException("The banner window class wasn't registered.");
                 _registered = true;
