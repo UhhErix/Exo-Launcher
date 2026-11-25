@@ -2123,8 +2123,8 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'exoAccount.state': () => ({ signedIn: mockAccountSignedIn, email: mockAccountSignedIn ? 'you@example.com' : null, accountId: null, accountAsked: false }),
   'exoAccount.overview': () => mockAccountOverview(),
   'exoAccount.sessions': () => ({ ok: true, sessions: [
-    { device: MOCK_DEVICE_HERE, created: 1794000000, lastUsed: 1794090000, current: true, name: 'DESKTOP-EXO' },
-    { device: 'a1b2c3d4e5f60718293a4b5c6d7e8f90', created: 1794010000, lastUsed: 1794080000, current: false },
+    { device: MOCK_DEVICE_HERE, created: 1794000000, lastUsed: 1794090000, current: true, thisPc: true, name: 'DESKTOP-EXO' },
+    { device: 'a1b2c3d4e5f60718293a4b5c6d7e8f90', created: 1794010000, lastUsed: 1794080000, current: false, thisPc: false },
   ] }),
   'exoAccount.revoke': () => ({ ok: true, message: '', error: null, offline: false }),
   'exoAccount.changePassword': (params) => mockPasswordAnswer(params),

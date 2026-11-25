@@ -463,12 +463,12 @@ export async function sessionOf(request, env) {
  * A new session for this PC on the account, ending the one this PC had there and the sessions idle too long. Answers
  * the token as base64url.
  */
-export async function newSession(db, account, device) {
+export async function newSession(db, account, device, app = '') {
   const token = random(32)
   const now = seconds()
   await db.batch([
-    db.prepare('DELETE FROM sessions WHERE account = ? AND (device = ? OR last_used <= ?)').bind(account, device, now - limits.idleSeconds),
-    db.prepare('INSERT INTO sessions (token_hash, account, device, created, last_used) VALUES (?, ?, ?, ?, ?)').bind(hex(await sha256(token)), account, device, now, now),
+    db.prepare('DELETE FROM sessions WHERE account = ? AND ((device = ? AND app = ?) OR last_used <= ?)').bind(account, device, app, now - limits.idleSeconds),
+    db.prepare('INSERT INTO sessions (token_hash, account, device, app, created, last_used) VALUES (?, ?, ?, ?, ?, ?)').bind(hex(await sha256(token)), account, device, app, now, now),
     db.prepare('DELETE FROM sessions WHERE account = ? AND token_hash NOT IN (SELECT token_hash FROM sessions WHERE account = ? ORDER BY last_used DESC, rowid DESC LIMIT ?)')
       .bind(account, account, limits.accountSessions),
     // A device with no session left is no longer known: its token goes with its last session.

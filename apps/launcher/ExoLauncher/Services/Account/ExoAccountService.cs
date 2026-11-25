@@ -11,14 +11,14 @@ internal static class ExoAccountService
 {
     internal static async Task<ExoAccountOutcome> CreateAsync(string dataDir, string email, string password, HttpMessageHandler? handler = null)
     {
-        using var client = new ExoAccountClient(handler);
+        using var client = new ExoAccountClient(handler, dataDir: dataDir);
         var reply = await client.CreateAccountAsync(email.Trim(), password, AccountDevice.Id(dataDir));
         return Finish(dataDir, reply, email.Trim(), expectsCode: true);
     }
 
     internal static async Task<ExoAccountOutcome> SignInAsync(string dataDir, string email, string password, HttpMessageHandler? handler = null)
     {
-        using var client = new ExoAccountClient(handler);
+        using var client = new ExoAccountClient(handler, dataDir: dataDir);
         var reply = await client.SignInAsync(email.Trim(), password, AccountDevice.Id(dataDir), DeviceTokenFor(dataDir));
         return Finish(dataDir, reply, email.Trim());
     }
