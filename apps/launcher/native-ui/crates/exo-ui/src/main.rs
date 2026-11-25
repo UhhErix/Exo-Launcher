@@ -555,17 +555,41 @@ fn settle_setup_host(client: &exo_rpc::RpcClient, state: &mut AppState) {
 #[cfg(windows)]
 fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
     let mut state = AppState::for_host_pipe();
-    let Ok(client) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(6), |_| {}) else {
-        state.status = state::HostStatus::Error("Connect failed".into());
-        state.refreshing = false;
-        return state;
+    let (mut client, bootstrapped) = {
+        let mut connected = None;
+        let mut got_boot = false;
+        for attempt in 0..5 {
+            if let Ok(c) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(6), |_| {}) {
+                if let Ok(boot) = c.call_blocking::<_, exo_rpc::ShellBootstrap>(
+                    exo_rpc::METHOD_SHELL_BOOTSTRAP,
+                    &serde_json::json!({}),
+                    Duration::from_secs(12),
+                ) {
+                    state.apply_bootstrap(boot);
+                    state.whats_new.boot_hold_active = false;
+                    state.whats_new.answered = true;
+                    connected = Some(c);
+                    got_boot = true;
+                    break;
+                }
+                if attempt == 4 {
+                    connected = Some(c);
+                }
+            }
+            if attempt < 4 {
+                std::thread::sleep(Duration::from_millis(150));
+            }
+        }
+        let Some(c) = connected else {
+            state.status = state::HostStatus::Error("Connect failed".into());
+            state.refreshing = false;
+            return state;
+        };
+        (c, got_boot)
     };
-    if let Ok(boot) = client.call_blocking::<_, exo_rpc::ShellBootstrap>(
-        exo_rpc::METHOD_SHELL_BOOTSTRAP,
-        &serde_json::json!({}),
-        Duration::from_secs(12),
-    ) {
-        state.apply_bootstrap(boot);
+    if !bootstrapped {
+        state.status = state::HostStatus::Connected;
+        state.refreshing = false;
         state.whats_new.boot_hold_active = false;
         state.whats_new.answered = true;
     }
@@ -2046,12 +2070,14 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.settings = settings;
             }
+            let mut err_retries = 0u8;
             for _ in 0..80 {
                 if let Ok(st) = client.call_blocking::<_, exo_rpc::DiscordStatus>(
                     exo_rpc::METHOD_DISCORD_STATUS,
                     &serde_json::json!({ "connect": true }),
                     Duration::from_secs(5),
                 ) {
+                    err_retries = 0;
                     let done = st.state == "ready" || st.state == "error" || !st.signed_in;
                     state.discord.status = st;
                     state.discord.loaded = true;
@@ -2059,7 +2085,16 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                         break;
                     }
                 } else {
-                    break;
+                    err_retries += 1;
+                    if err_retries > 4 {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(150));
+                    if let Ok(c) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(6), |_| {})
+                    {
+                        client = c;
+                    }
+                    continue;
                 }
                 std::thread::sleep(Duration::from_millis(250));
             }
@@ -2184,8 +2219,9 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                                     &serde_json::json!({ "channelId": cid, "limit": 40 }),
                                     Duration::from_secs(6),
                                 )
-                                && let Some(msgs) = rep.messages
+                                && let Some(mut msgs) = rep.messages
                             {
+                                msgs.reverse();
                                 state.discord.chat.messages_by_channel.insert(cid, msgs);
                             }
                         }
@@ -2197,14 +2233,32 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     ) {
                         state.discord.members_by_guild.insert(gid, ml);
                     }
-                    if sc == "discord-voice"
-                        && let Ok(aud) = client.call_blocking::<_, exo_rpc::DiscordAudioReply>(
+                    if sc == "discord-voice" {
+                        if let Ok(aud) = client.call_blocking::<_, exo_rpc::DiscordAudioReply>(
                             exo_rpc::METHOD_DISCORD_AUDIO,
                             &serde_json::json!({}),
                             Duration::from_secs(5),
-                        )
-                    {
-                        state.discord.voice_ui.audio = Some(aud);
+                        ) {
+                            state.discord.voice_ui.audio = Some(aud);
+                        }
+                        if let Ok(gl) = client.call_blocking::<_, exo_rpc::DiscordGoLiveReply>(
+                            exo_rpc::METHOD_DISCORD_GOLIVE,
+                            &serde_json::json!({ "action": "sources" }),
+                            Duration::from_secs(5),
+                        ) && gl.ok
+                        {
+                            state.discord.voice_ui.golive_sources = gl.sources;
+                            state.discord.voice_ui.golive_capture_mode = gl.capture_mode;
+                            state.discord.voice_ui.golive_service_disabled = gl.service_disabled;
+                        }
+                        if let Ok(acc) = client.call_blocking::<_, exo_rpc::DiscordAccountReply>(
+                            exo_rpc::METHOD_DISCORD_ACCOUNT,
+                            &serde_json::json!({ "action": "me" }),
+                            Duration::from_secs(5),
+                        ) && acc.ok
+                        {
+                            state.discord.settings_ext.account = acc.me;
+                        }
                     }
                 }
                 if let Some(ref cache_dir) = state.remote_cache_dir {
@@ -2788,7 +2842,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             s.open_game_id = Some(id);
         }
     }),
-    ("discord-voice", |s: &mut AppState| {
+    ("discord-voice-settings", |s: &mut AppState| {
         s.switch_room(state::Room::Discord);
         s.discord.settings_open = true;
         s.discord.settings_page = crate::discord_state::DiscordSettingsPage::Voice;
@@ -3109,7 +3163,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
                 .unwrap_or_else(|| "vc-lounge".into());
             s.open_discord_guild(&gid);
             s.open_discord_channel(&voice_cid);
-            s.discord.voice.state = "connecting".into();
+            s.discord.voice.state = "connected".into();
             s.discord.voice.guild_id = Some(gid.clone());
             s.discord.voice.channel_id = Some(voice_cid.clone());
             s.discord.voice.e2ee = true;

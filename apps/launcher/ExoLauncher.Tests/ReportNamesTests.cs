@@ -110,4 +110,88 @@ public sealed class ReportNamesTests : IDisposable
         Assert.Empty(ReportNames.Snapshot());
         Assert.Equal("Quillbeak", Scrub("Quillbeak"));
     }
+
+    [Fact]
+    public void WorstCaseOneMegabyteInputFinishesUnder100Ms()
+    {
+        var names = Enumerable.Range(0, 600)
+            .Select(i => $"{(char)('A' + (i % 26))}{(char)('a' + ((i / 26) % 26))}Name_{i:D4}_Guild")
+            .ToArray();
+        ReportNames.Add(names);
+        var repeated = new string('a', 4096);
+        var dotted = string.Join('.', Enumerable.Repeat("segment", 200));
+        var sb = new System.Text.StringBuilder(1_050_000);
+        while (sb.Length < 1_000_000)
+        {
+            sb.Append("[2026-11-24T12:00:00.0000000Z] WARN Worker: ")
+              .Append(repeated)
+              .Append(' ')
+              .Append(dotted)
+              .Append(' ')
+              .Append(names[^1])
+              .Append(" at System.IO.MemoryStream.WriteAsync()\n");
+        }
+        var input = sb.ToString();
+
+        _ = CrashReport.Scrub("warmup", "ErixUser", Profile, "DESKTOP-K3J9");
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var redacted = ReportNames.Redact(input);
+        var personal = AppLog.Personal(redacted, "ErixUser", Profile);
+        var scrubbed = CrashReport.Scrub(input, "ErixUser", Profile, "DESKTOP-K3J9");
+        sw.Stop();
+
+        Assert.DoesNotContain(names[^1], redacted);
+        Assert.DoesNotContain(names[^1], personal);
+        Assert.DoesNotContain(names[^1], scrubbed);
+        Assert.True(sw.ElapsedMilliseconds < 100, $"Scrub took {sw.ElapsedMilliseconds} ms (limit 100 ms)");
+    }
+
+    [Fact]
+    public void ExoProductNamesAreNeverRegisteredOrRedacted()
+    {
+        ReportNames.Add("Exo", "Exo Launcher", "Exo Mouse", "Exo Shaders", "Exo Capture", "Quillbeak");
+
+        Assert.Equal(new[] { "Quillbeak" }, ReportNames.Snapshot());
+        var scrubbed = Scrub("Exo Launcher 3.30.3\nExo's log (20 entries):\nQuillbeak opened Exo Mouse");
+
+        Assert.Contains("Exo Launcher 3.30.3", scrubbed);
+        Assert.Contains("Exo's log (20 entries):", scrubbed);
+        Assert.Contains("Exo Mouse", scrubbed);
+        Assert.DoesNotContain("<name> Launcher", scrubbed);
+        Assert.DoesNotContain("<name>'s log", scrubbed);
+        Assert.DoesNotContain("Quillbeak", scrubbed);
+    }
+
+    [Fact]
+    public void StackFramesAndDotNetNamespacesStayReadableWhilePrivacyHolds()
+    {
+        ReportNames.Add("MemoryStream", "Library", "Launch", "System", "Quillbeak");
+
+        var sample = string.Join('\n',
+        [
+            "CRASH Unhandled: System.IO.ObjectDisposedException in System.Net.Http.HttpRequestException",
+            @"   at System.IO.MemoryStream.WriteAsync(Byte[] buffer) in C:\Users\Erix\Code\exo\Library.cs:line 88",
+            "   at ExoLauncher.Services.Library.Launch(String appId)",
+            "   at Erix.DESKTOP-K3J9.Run()",
+            "WARN Quillbeak emailed pat@contoso.org from api.example.com on DESKTOP-K3J9 for Erix",
+        ]);
+
+        var scrubbed = CrashReport.Scrub(sample, "Erix", @"C:\Users\Erix", "DESKTOP-K3J9");
+
+        Assert.Contains("System.IO.ObjectDisposedException", scrubbed);
+        Assert.Contains("System.Net.Http.HttpRequestException", scrubbed);
+        Assert.Contains("at System.IO.MemoryStream.WriteAsync(Byte[] buffer)", scrubbed);
+        Assert.Contains("at ExoLauncher.Services.Library.Launch(String appId)", scrubbed);
+        Assert.DoesNotContain("<host>.MemoryStream", scrubbed);
+        Assert.DoesNotContain("Erix", scrubbed);
+        Assert.DoesNotContain("DESKTOP-K3J9", scrubbed);
+        Assert.DoesNotContain("Quillbeak", scrubbed);
+        Assert.DoesNotContain("pat@contoso.org", scrubbed);
+        Assert.DoesNotContain("api.example.com", scrubbed);
+        Assert.DoesNotContain(@"C:\Users\", scrubbed);
+        Assert.Contains("<user>", scrubbed);
+        Assert.Contains("<host>", scrubbed);
+        Assert.Contains("<path>", scrubbed);
+    }
 }

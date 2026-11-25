@@ -1000,14 +1000,16 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                             },
                         ),
                     ));
-                    items.push(MenuEntry::item(
-                        MenuItem::new("dc-dm-copy-uid", "Copy user ID")
-                            .trailing_icon(icon_copy(14.0, fg_muted()))
-                            .on_select(move |s: &mut AppState, tx| {
-                                tx.copy(uid.clone());
-                                s.notice = Some("Copied user ID".into());
-                            }),
-                    ));
+                    if s.discord.developer_mode {
+                        items.push(MenuEntry::item(
+                            MenuItem::new("dc-dm-copy-uid", "Copy user ID")
+                                .trailing_icon(icon_copy(14.0, fg_muted()))
+                                .on_select(move |s: &mut AppState, tx| {
+                                    tx.copy(uid.clone());
+                                    s.notice = Some("Copied user ID".into());
+                                }),
+                        ));
+                    }
                 }
             } else {
                 items.push(MenuEntry::item(
@@ -1047,14 +1049,16 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                 items.push(MenuEntry::Separator);
             }
 
-            items.push(MenuEntry::item(
-                MenuItem::new("dc-dm-copy-cid", "Copy channel ID")
-                    .trailing_icon(icon_copy(14.0, fg_muted()))
-                    .on_select(move |s: &mut AppState, tx| {
-                        tx.copy(dm_id.clone());
-                        s.notice = Some("Copied channel ID".into());
-                    }),
-            ));
+            if s.discord.developer_mode {
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-dm-copy-cid", "Copy channel ID")
+                        .trailing_icon(icon_copy(14.0, fg_muted()))
+                        .on_select(move |s: &mut AppState, tx| {
+                            tx.copy(dm_id.clone());
+                            s.notice = Some("Copied channel ID".into());
+                        }),
+                ));
+            }
             items
         }
         ContextMenuTarget::DiscordChannel {
@@ -2088,6 +2092,17 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
         }
     };
 
+    let extra_live: Option<String> = match &cm.target {
+        ContextMenuTarget::DiscordStatusMenu => Some("dc-me-trigger".into()),
+        ContextMenuTarget::DiscordDm { dm_id, .. } => Some(format!("dc-dm-{dm_id}")),
+        ContextMenuTarget::DiscordChannel { channel_id, .. } => Some(format!("dc-ch-{channel_id}")),
+        _ => None,
+    };
+    let mut live_refs: Vec<&str> = vec!["top-bar"];
+    if let Some(ref key) = extra_live {
+        live_refs.push(key.as_str());
+    }
+
     context_menu_layers_live(
         ContextMenuSpec {
             id: menu_id,
@@ -2106,7 +2121,7 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                 }
             }),
         },
-        &["top-bar"],
+        &live_refs,
     )
 }
 

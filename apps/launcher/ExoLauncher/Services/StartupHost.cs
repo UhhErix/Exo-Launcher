@@ -487,16 +487,12 @@ internal sealed class RealStartupHost : IStartupHost
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
                 ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", script },
             };
-            using var process = Process.Start(info);
-            if (process is null) return (programs, false, null);
-            _ = process.StandardError.ReadToEndAsync();
-            var output = process.StandardOutput.ReadToEndAsync();
-            if (process.WaitForExit(20000))
+            var result = ProcessOutput.RunCaptureText(info, TimeSpan.FromSeconds(20));
+            if (result.Completed)
             {
-                programs.AddRange(output.Result.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(line => line.Length > 3));
-                return (programs, process.ExitCode == 0, null);
+                programs.AddRange(result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(line => line.Length > 3));
+                return (programs, result.ExitCode == 0, null);
             }
-            ProcessTermination.Kill(process);
             return (programs, false, "it did not answer in time");
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
@@ -562,15 +558,10 @@ internal sealed class RealStartupHost : IStartupHost
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
         };
         foreach (var arg in arguments) info.ArgumentList.Add(arg);
-        using var process = Process.Start(info);
-        if (process is null) return -1;
-        using var bytes = new MemoryStream();
-        var copy = process.StandardOutput.BaseStream.CopyToAsync(bytes);
-        _ = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit((int)(wait ?? 15000))) { ProcessTermination.Kill(process); return -1; }
-        copy.Wait(2000);
-        output = bytes.ToArray();
-        return process.ExitCode;
+        var result = ProcessOutput.RunCaptureBytes(info, TimeSpan.FromMilliseconds(wait ?? 15000));
+        if (!result.Completed) return -1;
+        output = result.Stdout;
+        return result.ExitCode;
     }
 
     /// <summary>

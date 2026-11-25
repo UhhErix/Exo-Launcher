@@ -100,7 +100,7 @@ impl DiscordVoiceUiState {
     pub fn empty() -> Self {
         Self {
             panel: VoicePanel::None,
-            show_voice_chat: false,
+            show_voice_chat: true,
             watching_stream: None,
             fullscreen_stream: false,
             active_video_feeds: HashSet::new(),
