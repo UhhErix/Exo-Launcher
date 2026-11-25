@@ -107,7 +107,7 @@ public static class Program
             // Inside the app folder it would hold it open after Exo exits, and the next
             // update could not swap the folder; Exo's data folder is never replaced.
             try { Environment.CurrentDirectory = Helpers.PathHelper.AppDataDir; } catch { }
-            if (Services.RuneHostSession.TryParse(args) is { SpawnUi: false } headlessRune)
+            if (Services.RuneHostSession.TryParse(args, onWarning: AppLog.Warn) is { SpawnUi: false } headlessRune)
             {
                 ComWrappersSupport.InitializeComWrappers();
                 Environment.ExitCode = Services.RuneHostSession.Run(headlessRune);
@@ -152,7 +152,7 @@ public static class Program
             if (Services.NoteTextFiles.NoteArgument(args) is { } note) Services.WebHostBridge.QueueNoteFromWindows(note);
             // An exolauncher:// link Exo started with: that place, once the page asks.
             if (Services.ExoLinks.Find(args) is { } place) Services.WebHostBridge.QueueOpen(place);
-            if (Services.RuneHostSession.TryParse(args) is { } runeOptions)
+            if (Services.RuneHostSession.TryParse(args, onWarning: AppLog.Warn) is { } runeOptions)
             {
                 mainInstance.Activated += (_, _) => UiGuard.Run(Services.RuneHostSession.RequestActivate);
                 Environment.ExitCode = Services.RuneHostSession.Run(runeOptions);
