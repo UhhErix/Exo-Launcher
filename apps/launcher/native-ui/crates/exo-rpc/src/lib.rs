@@ -219,6 +219,7 @@ pub const METHOD_DLSS_DOWNLOAD_NEWER: &str = "dlss.downloadNewer";
 pub const METHOD_DLSS_FRAME_GEN: &str = "dlss.frameGen";
 pub const METHOD_DLSS_NEWER: &str = "dlss.newer";
 pub const METHOD_DLSS_RESTORE: &str = "dlss.restore";
+pub const METHOD_DLSS_UPDATE_ALL: &str = "dlss.updateAll";
 pub const METHOD_DLSS_STATUS: &str = "dlss.status";
 pub const METHOD_GPU_GAME: &str = "gpu.game";
 pub const METHOD_HDR_GAME: &str = "hdr.game";
@@ -409,9 +410,6 @@ pub const METHOD_GAME_SETTINGS: &str = "game.settings";
 pub const METHOD_GAME_GRAPHICS_FEATURES: &str = "game.graphicsFeatures";
 pub const METHOD_GAME_GRAPHICS_FEATURES_SET: &str = "game.graphicsFeatures.set";
 pub const METHOD_GAME_FRAME_GEN: &str = "game.frameGen";
-pub const METHOD_GAME_FRAME_CAP: &str = "game.frameCap";
-pub const METHOD_GAME_CAP_LAB_RUN: &str = "game.capLab.run";
-pub const METHOD_GAME_CAP_LAB_CANCEL: &str = "game.capLab.cancel";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
 pub const METHOD_MOUSE_PANEL_BOUNDS: &str = "mouse.panel.bounds";
@@ -564,6 +562,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DLSS_NEWER,
     METHOD_DLSS_RESTORE,
     METHOD_DLSS_STATUS,
+    METHOD_DLSS_UPDATE_ALL,
     METHOD_GPU_GAME,
     METHOD_HDR_GAME,
     METHOD_KEEP_STATUS,
@@ -753,9 +752,6 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_GRAPHICS_FEATURES,
     METHOD_GAME_GRAPHICS_FEATURES_SET,
     METHOD_GAME_FRAME_GEN,
-    METHOD_GAME_FRAME_CAP,
-    METHOD_GAME_CAP_LAB_RUN,
-    METHOD_GAME_CAP_LAB_CANCEL,
     METHOD_KEYS_PREVIEW,
     METHOD_KEYS_ACTIVATE,
     METHOD_MOUSE_PANEL_BOUNDS,
@@ -2155,9 +2151,6 @@ fn parse_event(
                     .unwrap_or_else(|_| raw_fallback(name, data_raw)))
             }
         }
-        "game.capLab" => Ok(serde_json::from_str::<CapLabStatus>(data_raw)
-            .map(|status| HostEvent::GameCapLab(Box::new(status)))
-            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "shaders.changed" => Ok(HostEvent::ShadersChanged),
         "shaders.event" => Ok(serde_json::from_str::<ShadersEventPayload>(data_raw)
             .map(HostEvent::ShadersEvent)

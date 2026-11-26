@@ -73,43 +73,34 @@ public sealed class AppUpdateSafetyTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateNowDuringAGameDownloadsAndWaitsInsteadOfInstalling()
+    public async Task UpdateNowDuringAGameInstallsImmediately()
     {
         var rig = new Rig { Game = true };
         var service = Service(new Address(), rig);
         var result = await service.InstallAsync("1.0.0", null, TestContext.Current.CancellationToken);
-        Assert.True(result.Staged);
-        Assert.False(result.Installed);
-        Assert.False(result.ShouldExit);
-        Assert.Equal(AppUpdateService.WaitsForGameMessage, result.Message);
-        Assert.Empty(rig.Started);
-        Assert.Equal(UpdateFlow.State.WaitingForGame, service.State);
-        var staged = AppUpdateService.ReadStaged(_updates);
-        Assert.NotNull(staged);
-        Assert.Equal(Remote, staged.Version);
-        Assert.Equal(Installer, File.ReadAllBytes(Path.Combine(_updates, staged.File)));
+        Assert.True(result.Installed);
+        Assert.True(result.ShouldExit);
+        Assert.False(result.Staged);
+        Assert.Single(rig.Started);
+        Assert.Equal(UpdateFlow.State.Restarting, service.State);
+        // Started once: the record keeps the count, so a rolled-back installer runs at most once more.
+        Assert.Equal(1, AppUpdateService.ReadStaged(_updates)!.Starts);
     }
 
     [Fact]
-    public async Task AfterTheGameTheKeptInstallerGoesInWithoutASecondDownload()
+    public async Task StagedInstallerReusesVerifiedFileAndInstallsDuringAGame()
     {
+        // Pre-stage a verified installer while a game runs and install immediately without downloading again.
+        Stage(Remote);
         var rig = new Rig { Game = true };
         var address = new Address();
         var service = Service(address, rig);
-        Assert.True((await service.InstallAsync("1.0.0", null, TestContext.Current.CancellationToken)).Staged);
-        Assert.Equal(1, address.InstallerAsked);
-        // Try again while the game still runs: still kept, nothing started, nothing downloaded again.
-        Assert.True((await service.InstallAsync("1.0.0", null, TestContext.Current.CancellationToken)).Staged);
-        Assert.Empty(rig.Started);
-        rig.Game = false;
-        service.GameChanged();
-        Assert.Equal(UpdateFlow.State.Ready, service.State);
         var result = await service.InstallAsync("1.0.0", null, TestContext.Current.CancellationToken);
+        Assert.True(result.Installed);
         Assert.True(result.ShouldExit);
         Assert.Single(rig.Started);
-        Assert.Equal(1, address.InstallerAsked);
+        Assert.Equal(0, address.InstallerAsked);
         Assert.Equal(UpdateFlow.State.Restarting, service.State);
-        // Started once: the record keeps the count, so a rolled-back installer runs at most once more.
         Assert.Equal(1, AppUpdateService.ReadStaged(_updates)!.Starts);
     }
 

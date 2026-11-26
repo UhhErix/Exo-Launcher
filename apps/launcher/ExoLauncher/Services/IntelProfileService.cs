@@ -227,8 +227,7 @@ internal sealed class IntelProfileService(IGpuDriver driver, string folder, Func
         {
             var games = LoadGames();
             var wantFg = games.FrameGen.TryGetValue(gameId, out var fgVal) && fgVal > 0;
-            var wantCap = games.FrameLimit.TryGetValue(gameId, out var capVal) && capVal > 0 && !IntelIgcl.FrameLimitCapability().PerApp;
-            if ((!wantFg && !wantCap) || !isIntel()) return;
+            if (!wantFg || !isIntel()) return;
             if (driver.Read() is not { } state)
             {
                 AppLog.Warn($"Intel launch settings for {title}: Intel's driver did not answer, so nothing was switched.");
@@ -239,11 +238,6 @@ internal sealed class IntelProfileService(IGpuDriver driver, string folder, Func
             {
                 games.Restore.TryAdd(Keys.FrameGen, nowFg);
                 writes.Add(new(Keys.FrameGen, fgVal));
-            }
-            if (wantCap && state.Values.TryGetValue(Keys.FrameLimit, out var nowCap) && nowCap != capVal)
-            {
-                games.Restore.TryAdd(Keys.FrameLimit, nowCap);
-                writes.Add(new(Keys.FrameLimit, capVal));
             }
             if (writes.Count == 0) return;
             if (!SaveGames(games)) return;

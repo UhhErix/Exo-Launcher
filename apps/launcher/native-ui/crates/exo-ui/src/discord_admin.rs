@@ -1886,11 +1886,14 @@ impl AppState {
             |s, res: Result<DiscordReportReply, String>| {
                 if let Some(ref mut st) = s.discord.admin.report {
                     match res {
-                        Ok(rep) if rep.ok && rep.menu.is_some() => {
-                            let menu = rep.menu.unwrap();
-                            let root = menu.root_node_id;
-                            st.path = vec![(root, None)];
-                            st.menu = Some(menu);
+                        Ok(rep) if rep.ok => {
+                            if let Some(menu) = rep.menu {
+                                let root = menu.root_node_id;
+                                st.path = vec![(root, None)];
+                                st.menu = Some(menu);
+                            } else {
+                                st.error = Some("Discord didn't send its report questions.".into());
+                            }
                         }
                         Ok(rep) => {
                             st.error = rep.message.or_else(|| {
@@ -4921,11 +4924,13 @@ fn report_modal(s: &AppState, blur: bool) -> El {
                     .on_press(|s: &mut AppState| s.discord.admin.report = None),
                 )
                 .children(
-                    (!ended && btn_kind == Some("next") && btn_target.is_some()).then(|| {
-                        let to = btn_target.unwrap();
-                        primary_button("dc-rep-next", "Next", None)
-                            .on_press(move |s: &mut AppState| s.report_advance(to, None))
-                    }),
+                    (!ended && btn_kind == Some("next"))
+                        .then_some(btn_target)
+                        .flatten()
+                        .map(|to| {
+                            primary_button("dc-rep-next", "Next", None)
+                                .on_press(move |s: &mut AppState| s.report_advance(to, None))
+                        }),
                 )
                 .children((!ended && btn_kind == Some("submit")).then(|| {
                     primary_button(

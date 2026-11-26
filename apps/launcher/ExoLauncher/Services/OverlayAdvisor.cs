@@ -207,6 +207,16 @@ internal sealed class OverlayAdvisor(OverlayAdvisor.ISystem system, string backu
         }
     }
 
+    internal string? DisableAllButStores()
+    {
+        var failed = Read().Items
+            .Where(i => i.Enabled && i.CanToggle && i.Id != SteamId)
+            .Select(i => Disable(i.Id) is null ? null : i.Name)
+            .OfType<string>()
+            .ToList();
+        return failed.Count == 0 ? null : $"{string.Join(", ", failed)} couldn't be turned off.";
+    }
+
     internal string? Restore(string id)
     {
         lock (_gate)

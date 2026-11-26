@@ -12,7 +12,7 @@ use exo_kit::{
     type_small, type_title,
 };
 use exo_rpc::{HostEvent, UpdateProgress};
-use rune::{Cursor, El, LiquidGlass, ScrollSpec, TextStyle, Transition, col, el, row, text};
+use rune::{Cursor, El, ScrollSpec, TextStyle, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::sync::OnceLock;
 
@@ -730,7 +730,8 @@ impl AppState {
             || self.whats_new.busy()
             || (self.whats_new.latest.is_none()
                 && phase != UpdatePhase::Available
-                && phase != UpdatePhase::Failed)
+                && phase != UpdatePhase::Failed
+                && phase != UpdatePhase::Waiting)
         {
             return;
         }
@@ -885,6 +886,7 @@ impl AppState {
     pub fn open_whats_new_all(&mut self) {
         self.whats_new.auto_shown = true;
         self.whats_new.mode = Some(WhatsNewMode::All);
+        self.sync_mouse_panel_visibility();
     }
 
     pub fn maybe_auto_open_whats_new(&mut self) {
@@ -907,11 +909,13 @@ impl AppState {
         if !missed_releases(&ver, seen).is_empty() {
             self.whats_new.auto_shown = true;
             self.whats_new.mode = Some(WhatsNewMode::Missed);
+            self.sync_mouse_panel_visibility();
         }
     }
 
     pub fn close_whats_new(&mut self) {
         self.whats_new.mode = None;
+        self.sync_mouse_panel_visibility();
         if let Some(ver) = self.whats_new.current_version.clone()
             && self.whats_new.seen_version.as_deref() != Some(ver.as_str())
         {
@@ -1143,7 +1147,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(false, |s: &mut AppState| s.close_whats_new())

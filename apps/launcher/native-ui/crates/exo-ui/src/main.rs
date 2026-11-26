@@ -21,7 +21,6 @@ mod discord_voice_state;
 mod downloads;
 mod events;
 mod folders;
-mod frame_cap_row;
 mod frame_gen_row;
 mod game_actions;
 mod game_page;
@@ -45,7 +44,6 @@ mod music_pages;
 mod music_sound;
 mod native_autopilot;
 mod native_media;
-mod notes;
 mod notice;
 mod palette;
 mod pc;
@@ -458,12 +456,11 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let lib = s.tick_library(now);
     s.tick_audio_eq_polling(now);
     s.tick_controller_watch(now);
-    s.tick_notes_autosave(now);
     let store = s.store_tick(now);
     let wp4 = s.wp4_tick(now);
     let hb = s.tick_shell_heartbeat(now, tx);
-    let wp9 = s.pc_wp9_tick(now);
-    let music = s.music_tick(now);
+    let music = s.music_tick_with_tx(now, Some(tx));
+    let snip = s.tick_snip_editor_reload();
     let pg = s.tick_power_guard(now);
     let hw = s.tick_hw_sensors(now);
     let web = s.poll_web_host();
@@ -476,8 +473,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
         || store
         || wp4
         || hb
-        || wp9
         || music
+        || snip
         || pg
         || hw
         || web
@@ -967,20 +964,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 ) {
                     state.game_frame_gen = Some(fg);
                 }
-                if let Ok(fc) = client.call_blocking::<_, exo_rpc::GameFrameCap>(
-                    exo_rpc::METHOD_GAME_FRAME_CAP,
-                    &serde_json::json!({ "id": gid }),
-                    Duration::from_secs(6),
-                ) {
-                    state.game_frame_cap = Some(fc);
-                }
-                if let Ok(gf) = client.call_blocking::<_, exo_rpc::GameGraphicsFeaturesState>(
-                    exo_rpc::METHOD_GAME_GRAPHICS_FEATURES,
-                    &serde_json::json!({ "id": gid }),
-                    Duration::from_secs(6),
-                ) {
-                    state.game_page.graphics_features = Some(gf);
-                }
                 if let Ok(gs) = client.call_blocking::<_, exo_rpc::GameSettingsState>(
                     exo_rpc::METHOD_GAME_SETTINGS,
                     &serde_json::json!({ "id": gid }),
@@ -1396,13 +1379,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 Duration::from_secs(8),
             ) {
                 state.pc.drives = Some(drv);
-            }
-            if let Ok(gp) = client.call_blocking::<_, exo_rpc::GpuProcessesState>(
-                exo_rpc::METHOD_GPU_PROCESSES,
-                &serde_json::json!({ "limit": 8 }),
-                Duration::from_secs(6),
-            ) {
-                state.pc.gpu_processes = Some(gp);
             }
             if let Ok(qos) = client.call_blocking::<_, exo_rpc::QosState>(
                 exo_rpc::METHOD_SYSTEM_QOS,
@@ -2116,34 +2092,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 Duration::from_secs(8),
             ) {
                 state.media.capture_items = list.items;
-            }
-            if let Ok(nl) = client.call_blocking::<_, exo_rpc::NotesListReply>(
-                exo_rpc::METHOD_NOTES_LIST,
-                &serde_json::json!({}),
-                Duration::from_secs(5),
-            ) {
-                state.hydrate_notes_list_reply(nl);
-                if let Some(active_id) = state.media.notes.active.clone()
-                    && let Ok(reply) = client.call_blocking::<_, exo_rpc::NotesReadReply>(
-                        exo_rpc::METHOD_NOTES_READ,
-                        &serde_json::json!({ "id": active_id }),
-                        Duration::from_secs(5),
-                    )
-                    && reply.ok
-                    && let Some(doc) = state.media.notes.docs.get_mut(&active_id)
-                {
-                    if let Some(txt) = reply.text {
-                        doc.edit.text = txt.clone();
-                        doc.edit.sync_invariants();
-                        doc.sent = txt;
-                    }
-                    if let Some(info) = reply.note {
-                        doc.info = info;
-                    }
-                    doc.reading = false;
-                    doc.loaded = true;
-                    doc.problem = None;
-                }
             }
             if let Some(ref cache_dir) = state.remote_cache_dir {
                 let urls: Vec<String> = state
@@ -3070,9 +3018,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.open_captures(None);
     }),
     ("captures-settings", |s: &mut AppState| {
-        s.switch_room(state::Room::Library);
-        s.open_captures(None);
-        s.media.captures_settings_open = true;
+        s.open_capture_settings();
     }),
     ("capture-clip", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
@@ -3080,10 +3026,6 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         if let Some(first) = s.media.capture_items.first().map(|c| c.id.clone()) {
             s.open_capture_item(&first);
         }
-    }),
-    ("captures-notes", |s: &mut AppState| {
-        s.switch_room(state::Room::Library);
-        s.open_notes(None, false);
     }),
     ("captures-clip-edit", |s: &mut AppState| {
         s.open_captures(None);
@@ -3442,14 +3384,13 @@ fn replay_probe_script(rt: &mut rune::Runtime<AppState>, script_path: &str) {
                     "up" | "arrowup" => Some(Key::Up),
                     "down" | "arrowdown" => Some(Key::Down),
                     "backspace" => Some(Key::Backspace),
-                    s if s.len() == 1 => {
-                        let ch = s.chars().next().unwrap();
+                    s if s.chars().count() == 1 => s.chars().next().map(|ch| {
                         if cmd {
-                            Some(Key::Command(ch))
+                            Key::Command(ch)
                         } else {
-                            Some(Key::Text(s.to_string()))
+                            Key::Text(s.to_string())
                         }
-                    }
+                    }),
                     _ => None,
                 };
                 if let Some(k) = key {
@@ -3677,7 +3618,6 @@ fn run_parity_probe(
         "paletteOpen": rt.state.palette_open,
         "captureMenuOpen": rt.state.capture_menu_open,
         "capturesOpen": rt.state.media.captures_open,
-        "capturesSettingsOpen": rt.state.media.captures_settings_open,
         "keyModalOpen": rt.state.key_modal_open,
         "downloadsOpen": rt.state.downloads.open,
         "whatsNewOpen": rt.state.whats_new.mode.is_some(),
@@ -3763,7 +3703,52 @@ fn run_parity_probe(
     );
 }
 
+pub(crate) fn app_data_dir() -> std::path::PathBuf {
+    if let Ok(overridden) = std::env::var("EXO_LAUNCHER_DATA_DIR")
+        && !overridden.trim().is_empty()
+    {
+        return std::path::PathBuf::from(overridden);
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA")
+        && !local.trim().is_empty()
+    {
+        return std::path::PathBuf::from(local).join("ExoLauncher");
+    }
+    std::env::temp_dir().join("ExoLauncher")
+}
+
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("unknown panic");
+        let loc = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown".into());
+        let bt = std::backtrace::Backtrace::force_capture();
+        let summary = format!("exo-ui panic at {loc}: {payload}");
+        eprintln!("{summary}\n{bt}");
+        let logs = app_data_dir().join("logs");
+        if std::fs::create_dir_all(&logs).is_ok()
+            && let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(logs.join("exo-ui-panic.log"))
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "{summary}\n{bt}\n---");
+        }
+        default_hook(info);
+    }));
+}
+
 fn main() {
+    install_panic_hook();
     let cli = split_cli_args();
     let pipe_name = cli.pipe;
     let rune_args = cli.passthrough;
@@ -3819,7 +3804,7 @@ fn main() {
 
     let mut app = App::new(spec)
         .args(rune_args)
-        .glass(exo_kit::EXO_GLASS_POLICY)
+        .glass(rune::GlassPolicy::Glass)
         .max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS)
         .titlebar(exo_titlebar())
         .on_rest(AppState::on_rest)
@@ -4055,7 +4040,7 @@ mod tests {
     use crate::state::{LibraryChip, LibrarySort, Room};
     use rune::{
         Cursor, Env, Mods, Runtime,
-        render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END, KIND_LIQUID_GLASS, KIND_SEGMENT},
+        render::{KIND_BACKDROP_BLUR, KIND_GLYPH, KIND_LAYER, KIND_LAYER_END, KIND_LIQUID_GLASS},
     };
 
     #[test]
@@ -4082,12 +4067,15 @@ mod tests {
             "expected 2..={} floating glass surfaces within EXO_MAX_BACKDROP_BLURS, got {glass_shapes}",
             exo_kit::EXO_MAX_BACKDROP_BLURS
         );
-        let strokes = rt
+        let glyphs = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_SEGMENT)
+            .filter(|i| i.params[1] == KIND_GLYPH)
             .count();
-        assert!(strokes >= 10, "expected vector icons, got {strokes}");
+        assert!(
+            glyphs >= 10,
+            "expected rasterized glyph/icon instances, got {glyphs}"
+        );
 
         let (tx, ty) = rt.find("tile-demo:cyberpunk").expect("Cyberpunk tile");
         rt.pointer_down(tx, ty);
@@ -6582,9 +6570,9 @@ mod motion_audit {
             .iter()
             .find(|sh| sh.rect[0] < 30.0 && sh.rect[1] < 20.0)
             .expect("search-capsule liquid glass shape");
-        assert!(
-            search_shape_live.glow[3] > 0.0,
-            "interactive search-capsule must emit touch glow on press"
+        assert_eq!(
+            search_shape_live.glow[3], 0.0,
+            "glass never draws a cursor-follow touch glow"
         );
         rt.pointer_up(sx, sy);
         rt.frame(7.0 / 60.0);
@@ -6658,5 +6646,244 @@ mod motion_audit {
             exo_kit::EXO_MAX_BACKDROP_BLURS
         );
         assert!(rt.liquid_glass_frame().shapes.len() >= 6);
+    }
+
+    #[test]
+    fn onboarding_reduced_motion_layers_are_balanced() {
+        use rune::render::{KIND_LAYER, KIND_LAYER_END};
+        let check_balance = |rt: &Runtime<AppState>, label: &str| {
+            let mut depth = 0isize;
+            for (idx, inst) in rt.instances.iter().enumerate() {
+                let k = inst.params[1];
+                if k == KIND_LAYER {
+                    depth += 1;
+                } else if k == KIND_LAYER_END {
+                    depth -= 1;
+                    assert!(
+                        depth >= 0,
+                        "{label}: unbalanced KIND_LAYER_END at instance {idx}"
+                    );
+                }
+            }
+            assert_eq!(depth, 0, "{label}: unclosed KIND_LAYER depth={depth}");
+        };
+
+        for scale in [1.0f32, 1.25, 1.5] {
+            for whats_new_seen in [None, Some("3.31.1")] {
+                let state = AppState::for_host_pipe();
+                let mut rt =
+                    Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, scale));
+                rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+                rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+                rt.set_system_reduced_motion(true);
+                rt.frame(0.0);
+                check_balance(&rt, &format!("pipe-boot-s{scale}"));
+
+                let wn = whats_new_seen.map(str::to_string);
+                rt.update(move |s, _| {
+                    s.status = state::HostStatus::Connected;
+                    s.whats_new.current_version = Some("3.31.1".to_string());
+                    s.whats_new.seen_version = wn;
+                    s.whats_new.answered = true;
+                    s.whats_new.boot_hold_active = false;
+                    let set = exo_rpc::LauncherSettings {
+                        onboarding_complete: Some(false),
+                        reduce_motion: true,
+                        ..Default::default()
+                    };
+                    s.apply_settings(set);
+                    s.maybe_auto_open_whats_new();
+                });
+                for step in 1..=10 {
+                    rt.frame(step as f64 / 60.0);
+                    check_balance(&rt, &format!("pipe-onboard-s{scale}-f{step}"));
+                }
+                for stage in 0..setup::STAGES {
+                    rt.update(|s, _| s.setup_go(stage));
+                    rt.frame(1.0 + stage as f64 * 0.05);
+                    check_balance(&rt, &format!("pipe-stage-{stage}-s{scale}-a"));
+                    rt.frame(1.02 + stage as f64 * 0.05);
+                    check_balance(&rt, &format!("pipe-stage-{stage}-s{scale}-b"));
+                }
+                rt.update(|s, _| s.start_tour());
+                for beat in 0..9 {
+                    rt.frame(2.0 + beat as f64 * 0.05);
+                    check_balance(&rt, &format!("pipe-tour-{beat}-s{scale}"));
+                    rt.update(|s, _| s.tour_next());
+                }
+            }
+        }
+    }
+
+    fn assert_layers_balanced(rt: &Runtime<AppState>, label: &str) {
+        use rune::render::{KIND_LAYER, KIND_LAYER_END};
+        let mut depth = 0isize;
+        for (idx, inst) in rt.instances.iter().enumerate() {
+            let k = inst.params[1];
+            if k == KIND_LAYER {
+                depth += 1;
+            } else if k == KIND_LAYER_END {
+                depth -= 1;
+                assert!(
+                    depth >= 0,
+                    "{label}: unbalanced KIND_LAYER_END at instance {idx}"
+                );
+            }
+        }
+        assert_eq!(depth, 0, "{label}: unclosed KIND_LAYER depth={depth}");
+    }
+
+    #[test]
+    fn click_everything_all_rooms_settings_setup_overlays_balanced() {
+        for reduce_motion in [false, true] {
+            let mut state = AppState::with_demo_games();
+            state.settings.reduce_motion = reduce_motion;
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+            rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+            rt.set_system_reduced_motion(reduce_motion);
+
+            let mut t = 0.0f64;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "init");
+
+            let rooms = [
+                Room::Library,
+                Room::Store,
+                Room::Discord,
+                Room::Music,
+                Room::ExoAi,
+                Room::Devices,
+                Room::Settings,
+            ];
+            for room in rooms {
+                rt.update(|s, _| s.switch_room(room));
+                for _ in 0..4 {
+                    t += 1.0 / 60.0;
+                    rt.frame(t);
+                    assert_layers_balanced(&rt, &format!("room-{room:?}-rm-{reduce_motion}"));
+                }
+                t += 0.5;
+                rt.frame(t);
+                assert_layers_balanced(&rt, &format!("room-settled-{room:?}-rm-{reduce_motion}"));
+            }
+
+            rt.update(|s, _| s.switch_room(Room::Library));
+            t += 0.05;
+            rt.frame(t);
+            if let Some(first_id) = rt.state.games.first().map(|g| g.id.clone()) {
+                rt.update(move |s, _| s.open_game_page(&first_id));
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, "game-page");
+                assert!(rt.state.dismiss_top_layer());
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, "game-page-closed");
+            }
+
+            rt.update(|s, _| s.open_captures(None));
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "captures-open");
+            assert!(rt.state.dismiss_top_layer());
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "captures-closed");
+
+            rt.update(|s, tx| s.open_palette(tx));
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "palette-open");
+            assert!(rt.state.dismiss_top_layer());
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "palette-closed");
+
+            rt.update(|s, _| s.switch_room(Room::Settings));
+            t += 0.1;
+            rt.frame(t);
+            for sec in pc_state::SettingsSection::ALL {
+                let (sx, sy) = rt
+                    .find(sec.key())
+                    .unwrap_or_else(|| panic!("missing settings tab {}", sec.key()));
+                rt.pointer_down(sx, sy);
+                rt.pointer_up(sx, sy);
+                t += 0.05;
+                rt.frame(t);
+                assert_eq!(rt.state.pc.settings_section, sec);
+                assert_layers_balanced(&rt, &format!("settings-{}-rm-{reduce_motion}", sec.key()));
+            }
+
+            for stage in 0..setup::STAGES {
+                rt.update(|s, _| s.setup_go(stage));
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, &format!("setup-{stage}-rm-{reduce_motion}"));
+            }
+            rt.update(|s, _| s.setup_go_complete());
+            t += 0.05;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "setup-complete");
+
+            rt.update(|s, _| s.start_tour());
+            for beat in 0..9 {
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, &format!("tour-{beat}-rm-{reduce_motion}"));
+                rt.update(|s, _| s.tour_next());
+            }
+            rt.update(|s, _| s.finish_tour());
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "tour-finished");
+        }
+    }
+
+    #[test]
+    fn connected_open_mouse_page_and_devices_error_states() {
+        let mut state = AppState::with_demo_games();
+        state.status = state::HostStatus::Connected;
+        state.switch_room(Room::Devices);
+        let mut rt = Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+        rt.frame(0.0);
+
+        let (mx, my) = rt.find("dev-card-dev:mouse").expect("mouse card");
+        rt.pointer_down(mx, my);
+        rt.pointer_up(mx, my);
+        rt.frame(1.0 / 60.0);
+
+        assert!(rt.state.pc.mouse_panel_open);
+        assert!(rt.state.pc.mouse_panel_loading);
+        assert_eq!(rt.state.pc.selected_device_id.as_deref(), Some("dev:mouse"));
+        assert!(rt.find("room-devices-mouse").is_some());
+        assert!(rt.find("mouse-panel-slot").is_some());
+        assert!(rt.state.mouse_panel_should_be_visible());
+
+        rt.update(|s, tx| s.open_palette(tx));
+        rt.frame(2.0 / 60.0);
+        assert!(!rt.state.mouse_panel_should_be_visible());
+        assert!(rt.state.dismiss_top_layer());
+        rt.frame(3.0 / 60.0);
+        assert!(rt.state.mouse_panel_should_be_visible());
+
+        assert!(rt.state.dismiss_top_layer());
+        rt.frame(4.0 / 60.0);
+        assert!(!rt.state.pc.mouse_panel_open);
+        assert!(rt.state.pc.selected_device_id.is_none());
+
+        rt.update(|s, _| {
+            s.pc.devices_loading = false;
+            s.pc.devices_error = Some("pipe timeout".into());
+        });
+        rt.frame(5.0 / 60.0);
+        assert!(rt.find("devices-error-banner").is_some());
+        assert!(rt.find("devices-retry").is_some());
+
+        rt.update(|s, _| s.pc.devices = None);
+        rt.frame(6.0 / 60.0);
+        assert!(rt.find("devices-retry").is_some());
     }
 }

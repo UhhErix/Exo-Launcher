@@ -26,13 +26,12 @@ public sealed class UpdateFlowTests
     }
 
     [Fact]
-    public void NothingIsAppliedWhileAGameRuns()
+    public void UpdateAppliesEvenWhileAGameRuns()
     {
-        foreach (var row in Table.Where(row => row.To == State.Applying))
-            Assert.False(row.Game ?? true, $"{row.From} + {row.On} applies an update whatever a game is doing");
-        foreach (var state in Enum.GetValues<State>())
-            foreach (var step in Enum.GetValues<Step>())
-                if (state != State.Applying) Assert.NotEqual(State.Applying, Next(state, step, gameRunning: true));
+        Assert.Equal(State.Applying, Next(State.Ready, Step.Install, gameRunning: true));
+        Assert.Equal(State.Applying, Next(State.Ready, Step.Apply, gameRunning: true));
+        Assert.Equal(State.Applying, Next(State.WaitingForGame, Step.Install, gameRunning: true));
+        Assert.Equal(State.Applying, Next(State.WaitingForGame, Step.Apply, gameRunning: true));
     }
 
     [Fact]
@@ -59,16 +58,15 @@ public sealed class UpdateFlowTests
     }
 
     [Fact]
-    public void ADownloadFinishedDuringAGameWaitsThenIsReadyThenGoesIn()
+    public void ADownloadFinishedDuringAGameIsReadyAndAppliesImmediately()
     {
         var state = Next(State.Idle, Step.Install, gameRunning: true);
         Assert.Equal(State.Downloading, state);
         state = Next(state, Step.Verified, gameRunning: true);
-        Assert.Equal(State.WaitingForGame, state);
-        Assert.Equal(State.WaitingForGame, Next(state, Step.Apply, gameRunning: true));
-        state = Next(state, Step.GameEnded, gameRunning: false);
         Assert.Equal(State.Ready, state);
-        Assert.Equal(State.Restarting, Next(Next(state, Step.Apply, gameRunning: false), Step.InstallerStarted, gameRunning: false));
+        Assert.Equal(State.Restarting, Next(Next(state, Step.Apply, gameRunning: true), Step.InstallerStarted, gameRunning: true));
+        Assert.Equal(State.WaitingForGame, Next(State.Ready, Step.GameStarted, gameRunning: true));
+        Assert.Equal(State.Ready, Next(State.WaitingForGame, Step.GameEnded, gameRunning: false));
     }
 
     [Fact]

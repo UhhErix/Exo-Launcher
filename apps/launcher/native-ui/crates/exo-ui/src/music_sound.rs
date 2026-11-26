@@ -9,13 +9,16 @@ use crate::music::{
 use crate::state::AppState;
 use exo_kit::{
     BG, ContextMenuSpec, FG, MenuAnchor, MenuDismissCb, MenuEntry, MenuItem, MenuSubmenuCb,
-    PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT,
-    bad, context_menu_layers, danger_button, fg_faint, fg_muted, filter_pill, glass_button,
-    glass_rim, good, hairline, hover_fill, icon_chevron_down, icon_close, icon_link, icon_maximize,
-    pressed_fill, primary_button, qr_code_view, switch_pill,
+    PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, SPRING_SMOOTH,
+    TRANSPARENT, bad, context_menu_layers, danger_button, fg_faint, fg_muted, filter_pill,
+    glass_button, glass_rim, good, hairline, hover_fill, icon_chevron_down, icon_close, icon_link,
+    icon_maximize, pressed_fill, primary_button, qr_code_view, switch_pill,
 };
 use exo_rpc::{PlayerCard, PlayerTrack, SpotifyAudio};
-use rune::{Align, El, Phase, ScrollSpec, Side, col, edit_access, el, row, text, text_input};
+use rune::{
+    Align, Cursor, El, Phase, ScrollSpec, Side, Span, TextStyle, col, edit_access, el, row, text,
+    text_input,
+};
 use serde_json::json;
 use std::rc::Rc;
 
@@ -63,9 +66,10 @@ pub(crate) fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
         .min_h(0.0)
         .padding(16.0)
         .radius(RADIUS_PANEL)
+        .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .fill(BG)
-        .border(1.0, glass_rim());
+        .fill(exo_kit::surface_elevated())
+        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom());
 
     if let Some(heading) = title {
         panel_col = panel_col.child(
@@ -270,47 +274,151 @@ pub(crate) fn lyrics_view(s: &AppState, large: bool) -> El {
         vec![None; lines.len()]
     };
     let lead_agent = lines.iter().find_map(|l| l.agent.as_deref());
-    let line_font = if large {
-        scaled_title(s)
-    } else {
-        scaled_body(s)
+    let ts = match s.settings.text_size.as_deref() {
+        Some("small") => 0.9,
+        Some("large") => 1.14,
+        _ => 1.0,
     };
+    let active_large_font = TextStyle::new(26.0 * ts, 700.0).lh(26.0 * ts * 1.32);
+    let idle_large_font = TextStyle::new(22.0 * ts, 600.0).lh(22.0 * ts * 1.35);
 
     let mut list = col()
         .key("music-lyrics-list")
         .w_full()
+        .min_w(0.0)
         .gap(if large { 14.0 } else { 8.0 });
+    if large {
+        list = list.py(84.0).px(14.0);
+    }
     for (i, line) in lines.iter().enumerate() {
         if let Some((from, to)) = gaps[i] {
             let active_gap = pos_ms.is_some_and(|p| p >= from && p < to);
             let share = pos_ms
-                .map(|p| ((p - from) / (to - from).max(1.0)).clamp(0.0, 1.0))
+                .map(|p| ((p - from) / (to - from).max(1.0)).clamp(0.0, 1.0) as f32)
                 .unwrap_or(0.0);
-            let dots = row().gap(6.0).py(4.0).children((0..3).map(|d| {
-                let lit = active_gap && share > (d as f64 / 3.0);
-                el().size(6.0, 6.0)
-                    .radius(3.0)
-                    .fill(if lit { FG } else { fg_faint() })
-            }));
+            let dot_sz = if large { 8.0 } else { 6.0 };
+            let dots = row()
+                .gap(if large { 8.0 } else { 6.0 })
+                .py(6.0)
+                .children((0..3).map(|d| {
+                    let threshold = d as f32 / 3.0;
+                    let pulse = if active_gap {
+                        ((share - threshold) * 3.0).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    let dot_alpha = if active_gap {
+                        0.22 + 0.78 * pulse
+                    } else {
+                        0.18
+                    };
+                    el().size(dot_sz, dot_sz)
+                        .radius(dot_sz * 0.5)
+                        .fill(FG.alpha(dot_alpha))
+                        .scale(if active_gap {
+                            0.85 + 0.30 * pulse
+                        } else {
+                            0.85
+                        })
+                        .motion(SPRING_SMOOTH)
+                }));
             list = list.child(dots);
         }
         let is_active = active == Some(i);
         let is_past = active.is_some_and(|a| i < a);
-        let color = if !synced || is_active {
-            FG
-        } else if is_past {
-            fg_muted()
+        let dist = active.map(|a| a.abs_diff(i));
+        let (color, font) = if large {
+            if !synced {
+                (FG.alpha(0.86), idle_large_font)
+            } else if is_active {
+                (FG, active_large_font)
+            } else if dist == Some(1) {
+                (FG.alpha(0.46), idle_large_font)
+            } else if is_past {
+                (FG.alpha(0.24), idle_large_font)
+            } else {
+                (FG.alpha(0.28), idle_large_font)
+            }
         } else {
-            fg_faint()
+            let c = if !synced || is_active {
+                FG
+            } else if is_past {
+                fg_muted()
+            } else {
+                fg_faint()
+            };
+            (c, scaled_body(s))
         };
         let other_singer =
             lead_agent.is_some() && line.agent.as_deref().is_some_and(|a| Some(a) != lead_agent);
-        let display = if line.text.is_empty() {
-            " ".to_string()
+
+        let mut line_el = if large
+            && synced
+            && is_active
+            && !line.words.is_empty()
+            && let Some(pos) = pos_ms
+        {
+            let mut full = String::new();
+            let mut spans = Vec::with_capacity(line.words.len());
+            for (wi, w) in line.words.iter().enumerate() {
+                if wi > 0
+                    && !full.ends_with(char::is_whitespace)
+                    && !w.text.starts_with(char::is_whitespace)
+                {
+                    full.push(' ');
+                }
+                let start_b = full.len();
+                full.push_str(&w.text);
+                let end_b = full.len();
+                let word_color = if pos >= w.end {
+                    if w.bg { FG.alpha(0.76) } else { FG }
+                } else if pos >= w.start {
+                    let frac =
+                        ((pos - w.start) / (w.end - w.start).max(40.0)).clamp(0.0, 1.0) as f32;
+                    let a = if w.bg {
+                        0.32 + 0.44 * frac
+                    } else {
+                        0.45 + 0.55 * frac
+                    };
+                    FG.alpha(a)
+                } else if w.bg {
+                    FG.alpha(0.26)
+                } else {
+                    FG.alpha(0.38)
+                };
+                let mut sp = Span::new(start_b, end_b).color(word_color);
+                if w.bg {
+                    sp.size = Some(21.0 * ts);
+                } else if pos >= w.start && pos < w.end {
+                    sp.weight = Some(750.0);
+                }
+                spans.push(sp);
+            }
+            if full.is_empty() {
+                text(" ").font(font).color(color).w_full().min_w(0.0).wrap()
+            } else {
+                text(full)
+                    .font(font)
+                    .color(color)
+                    .spans(spans)
+                    .w_full()
+                    .min_w(0.0)
+                    .wrap()
+            }
         } else {
-            line.text.clone()
+            let display = if line.text.is_empty() {
+                " ".to_string()
+            } else {
+                line.text.clone()
+            };
+            text(display)
+                .font(font)
+                .color(color)
+                .w_full()
+                .min_w(0.0)
+                .wrap()
         };
-        let mut line_el = text(display).font(line_font).color(color).wrap();
+
         if synced && !line.text.is_empty() {
             let start = line.start;
             let mut btn = el()
@@ -319,12 +427,16 @@ pub(crate) fn lyrics_view(s: &AppState, large: bool) -> El {
                 .label(line.text.clone())
                 .focusable(true)
                 .hit()
+                .cursor(Cursor::Pointer)
                 .press_on_down()
                 .w_full()
-                .px(6.0)
-                .py(4.0)
-                .radius(RADIUS_SMALL)
+                .min_w(0.0)
+                .px(if large { 14.0 } else { 6.0 })
+                .py(if large { 8.0 } else { 4.0 })
+                .radius(if large { RADIUS_CARD } else { RADIUS_SMALL })
+                .fill(TRANSPARENT)
                 .hover(hover_fill())
+                .motion(SPRING_SMOOTH)
                 .on_press(move |s: &mut AppState| s.music_seek_ms(start))
                 .child(line_el);
             if other_singer {

@@ -166,9 +166,9 @@ pub(crate) fn wait_view(s: &AppState) -> El {
             .child(bone().w(160.0).h(18.0))
             .child(
                 el().w_full()
-                    .equal_columns(8)
-                    .gap(24.0)
-                    .children((0..8).map(move |j| {
+                    .equal_columns(5)
+                    .gap(20.0)
+                    .children((0..5).map(move |j| {
                         col()
                             .key(format!("music-wait-card-{idx}-{j}"))
                             .w_full()
@@ -1903,13 +1903,44 @@ pub(crate) fn track_row_full(s: &AppState, a: TrackRowArgs<'_>) -> El {
     };
 
     let lead = if a.numbered {
-        el().w(32.0).center().child(
-            text(format!("{}", a.idx + 1))
-                .font(scaled_small(s))
-                .color(if active { good() } else { fg_muted() }),
-        )
+        el().size(32.0, 32.0)
+            .center()
+            .child(
+                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .center()
+                    .group_opacity(1.0, 0.0)
+                    .child(
+                        text(format!("{}", a.idx + 1))
+                            .font(scaled_small(s))
+                            .color(if active { good() } else { fg_muted() }),
+                    ),
+            )
+            .child(
+                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .center()
+                    .group_opacity(0.0, 1.0)
+                    .child(icon_play(13.0, if active { good() } else { FG })),
+            )
     } else {
-        render_art(s, &a.track.image, Some(40.0), RADIUS_SMALL, false, a.scale)
+        el().size(40.0, 40.0)
+            .radius(RADIUS_SMALL)
+            .clip_rounded(RADIUS_SMALL)
+            .child(render_art(
+                s,
+                &a.track.image,
+                Some(40.0),
+                RADIUS_SMALL,
+                false,
+                a.scale,
+            ))
+            .child(
+                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .radius(RADIUS_SMALL)
+                    .fill(rune::Color::BLACK.alpha(0.62))
+                    .center()
+                    .group_opacity(0.0, 1.0)
+                    .child(icon_play(14.0, FG)),
+            )
     };
 
     let mut title_row = row().w_full().gap(6.0).center_y().child(
@@ -2007,10 +2038,12 @@ pub(crate) fn track_row_full(s: &AppState, a: TrackRowArgs<'_>) -> El {
 
     let mut r = row()
         .key(format!("{}-{}", a.key_prefix, a.idx))
+        .hover_group()
         .role("button")
         .label(a.track.title.clone())
         .focusable(true)
         .hit()
+        .cursor(rune::Cursor::Pointer)
         .press_on_down()
         .w_full()
         .min_h(52.0)
@@ -2193,12 +2226,10 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
                 .color(FG)
                 .placeholder("Playlist name", fg_faint())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s
-                        .media
-                        .music_playlist_sheet
-                        .as_mut()
-                        .expect("sheet")
-                        .name_edit
+                    match s.media.music_playlist_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.name_edit,
+                        None => &mut s.ui_discard_edit,
+                    }
                 }))
                 .on_submit(|s: &mut AppState, _| s.music_playlist_sheet_save()),
         );
@@ -2218,12 +2249,10 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
                 .color(FG)
                 .placeholder("Add an optional description", fg_faint())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s
-                        .media
-                        .music_playlist_sheet
-                        .as_mut()
-                        .expect("sheet")
-                        .desc_edit
+                    match s.media.music_playlist_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.desc_edit,
+                        None => &mut s.ui_discard_edit,
+                    }
                 })),
         );
 

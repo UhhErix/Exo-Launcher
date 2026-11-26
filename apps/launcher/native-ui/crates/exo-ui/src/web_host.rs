@@ -764,14 +764,11 @@ mod win_wv2 {
     unsafe impl Sync for RuntimeHost {}
 
     fn user_data_dir(profile: WebProfile) -> PathBuf {
-        let base = std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
         let leaf = match profile {
             WebProfile::MediaDrm => "web-media",
             WebProfile::AuthSignIn => "web-auth",
         };
-        let dir = base.join("ExoLauncher").join("native-web-host").join(leaf);
+        let dir = crate::app_data_dir().join("native-web-host").join(leaf);
         let _ = std::fs::create_dir_all(&dir);
         dir
     }

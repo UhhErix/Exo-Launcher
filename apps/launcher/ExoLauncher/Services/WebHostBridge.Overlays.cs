@@ -12,6 +12,7 @@ public sealed partial class WebHostBridge
         {
             "off" => id is null ? "Exo doesn't know that overlay." : await Task.Run(() => OverlayAdvisor.Shared.Disable(id), ct).ConfigureAwait(false),
             "restore" => id is null ? "Exo doesn't know that overlay." : await Task.Run(() => OverlayAdvisor.Shared.Restore(id), ct).ConfigureAwait(false),
+            "auto" => await Task.Run(OverlayAdvisor.Shared.DisableAllButStores, ct).ConfigureAwait(false),
             _ => null,
         };
         var state = await Task.Run(OverlayAdvisor.Shared.Read, ct).ConfigureAwait(false);

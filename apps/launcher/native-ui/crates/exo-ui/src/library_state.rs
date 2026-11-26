@@ -1316,7 +1316,7 @@ impl AppState {
     pub fn folder_art_image(&self, art: &str, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(320.0);
+        let dim = bucket_dim(480.0);
         let key = format!("folder-art:{art}");
         if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
             return existing;

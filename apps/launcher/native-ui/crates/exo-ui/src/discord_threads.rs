@@ -242,7 +242,10 @@ pub fn create_dm_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
                         .color(FG)
                         .placeholder("Find a friend", fg_muted())
                         .on_edit(edit_access(|s: &mut AppState| {
-                            &mut s.discord.chat.create_dm.as_mut().unwrap().query
+                            match s.discord.chat.create_dm.as_mut() {
+                                Some(dlg) => &mut dlg.query,
+                                None => &mut s.ui_discard_edit,
+                            }
                         })),
                 ),
         )
@@ -309,7 +312,16 @@ pub fn poll_creator_overlay(s: &AppState, blur: bool) -> Option<El> {
                         .color(FG)
                         .placeholder(format!("Answer {}", i + 1), fg_faint())
                         .on_edit(edit_access(move |s: &mut AppState| {
-                            &mut s.discord.chat.poll_creator.as_mut().unwrap().answers[i]
+                            match s
+                                .discord
+                                .chat
+                                .poll_creator
+                                .as_mut()
+                                .and_then(|p| p.answers.get_mut(i))
+                            {
+                                Some(ans) => ans,
+                                None => &mut s.ui_discard_edit,
+                            }
                         })),
                 ),
         );
@@ -418,7 +430,10 @@ pub fn poll_creator_overlay(s: &AppState, blur: bool) -> Option<El> {
                                 .color(FG)
                                 .placeholder("What question do you want to ask?", fg_faint())
                                 .on_edit(edit_access(|s: &mut AppState| {
-                                    &mut s.discord.chat.poll_creator.as_mut().unwrap().question
+                                    match s.discord.chat.poll_creator.as_mut() {
+                                        Some(p) => &mut p.question,
+                                        None => &mut s.ui_discard_edit,
+                                    }
                                 })),
                         ),
                 ),
@@ -907,7 +922,10 @@ pub fn invite_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El>
                         .color(FG)
                         .placeholder("Search for friends", fg_muted())
                         .on_edit(edit_access(|s: &mut AppState| {
-                            &mut s.discord.chat.invite_dialog.as_mut().unwrap().query
+                            match s.discord.chat.invite_dialog.as_mut() {
+                                Some(dlg) => &mut dlg.query,
+                                None => &mut s.ui_discard_edit,
+                            }
                         })),
                 ),
         )
@@ -1154,7 +1172,10 @@ pub fn forward_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
                         .color(FG)
                         .placeholder("Search", fg_muted())
                         .on_edit(edit_access(|s: &mut AppState| {
-                            &mut s.discord.chat.forward_dialog.as_mut().unwrap().query
+                            match s.discord.chat.forward_dialog.as_mut() {
+                                Some(dlg) => &mut dlg.query,
+                                None => &mut s.ui_discard_edit,
+                            }
                         })),
                 ),
         )
@@ -1185,7 +1206,10 @@ pub fn forward_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
                         .color(FG)
                         .placeholder("Add an optional message", fg_faint())
                         .on_edit(edit_access(|s: &mut AppState| {
-                            &mut s.discord.chat.forward_dialog.as_mut().unwrap().note
+                            match s.discord.chat.forward_dialog.as_mut() {
+                                Some(dlg) => &mut dlg.note,
+                                None => &mut s.ui_discard_edit,
+                            }
                         }))
                         .on_submit(|s: &mut AppState, _| s.submit_forward_dialog()),
                 ),
@@ -1247,7 +1271,10 @@ pub fn new_thread_dialog_overlay(s: &AppState, blur: bool) -> Option<El> {
                         .color(FG)
                         .placeholder("Thread name", fg_faint())
                         .on_edit(edit_access(|s: &mut AppState| {
-                            &mut s.discord.chat.new_thread_dialog.as_mut().unwrap().name
+                            match s.discord.chat.new_thread_dialog.as_mut() {
+                                Some(dlg) => &mut dlg.name,
+                                None => &mut s.ui_discard_edit,
+                            }
                         }))
                         .on_submit(|s: &mut AppState, _| s.submit_new_thread_dialog()),
                 ),

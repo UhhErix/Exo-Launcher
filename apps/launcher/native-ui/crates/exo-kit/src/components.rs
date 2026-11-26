@@ -2,9 +2,9 @@ use crate::glass::{ExoGlass, apply_glass, apply_glass_opt};
 use crate::icons::{icon_close, icon_minimize, icon_win_maximize, icon_win_restore};
 use crate::tokens::{
     BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
-    SPRING_MOVE, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, bad, fg_muted, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, pressed_fill, subtle_fill,
-    track_fill, type_control, type_section, type_small, warn,
+    SPRING_POPOVER, SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, TITLEBAR_HEIGHT, TRANSPARENT, bad,
+    fg_muted, glass_rim, glass_rim_bottom, glass_rim_top, good, hover_fill, pressed_fill,
+    subtle_fill, surface_elevated, track_fill, type_control, type_section, type_small, warn,
 };
 use rune::{
     Align, CaptionGlyph, CaptionStyle, Color, Cursor, Effect, El, Side, SpringPair, Titlebar,
@@ -82,9 +82,12 @@ pub fn glass_enter(scale: f32, anchor: Vec2) -> Transition {
 }
 
 pub fn popover_transition_from(anchor: Vec2) -> Transition {
-    let enter = glass_enter(0.96, anchor);
-    Transition::asymmetric(enter, Transition::scale_anchor(0.96, anchor))
-        .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
+    let slide = Vec2::new((0.5 - anchor.x) * 4.0, (0.5 - anchor.y) * 8.0);
+    let mut enter = glass_enter(0.965, anchor);
+    enter.insertion.offset = slide;
+    let exit =
+        Transition::scale_anchor(0.965, anchor).combined(Transition::offset(slide.x, slide.y));
+    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_POPOVER, SPRING_QUICK))
 }
 
 pub fn modal_scrim_transition() -> Transition {
@@ -93,9 +96,10 @@ pub fn modal_scrim_transition() -> Transition {
 }
 
 pub fn modal_card_transition() -> Transition {
-    let enter = glass_enter(0.98, Vec2::new(0.5, 0.5));
-    Transition::asymmetric(enter, Transition::scale(0.98))
-        .springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
+    let mut enter = glass_enter(0.965, Vec2::new(0.5, 0.5));
+    enter.insertion.offset = Vec2::new(0.0, 10.0);
+    let exit = Transition::scale(0.965).combined(Transition::offset(0.0, 6.0));
+    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK))
 }
 
 pub fn glass_capsule(key: &'static str) -> El {
@@ -168,7 +172,7 @@ pub fn amoled_card(radius: f32) -> El {
     col()
         .radius(radius)
         .continuous_corners()
-        .fill(BG)
+        .fill(surface_elevated())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
 }
 
@@ -192,6 +196,8 @@ pub fn exo_play_button(key: &'static str, label: &'static str, icon: Option<El>)
         .fill(FG)
         .hover(FG.alpha(0.92))
         .press(FG.alpha(0.84))
+        .shadow(2.0, 10.0, BG.alpha(0.35))
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -218,11 +224,13 @@ pub fn glass_icon_circle_opt(
         .hit()
         .cursor(Cursor::Pointer)
         .press_on_down()
+        .press_scale(PRESS_SCALE)
         .size(size, size)
         .center()
         .radius(RADIUS_PILL)
         .hover(hover_fill())
         .press(pressed_fill())
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(icon);
     apply_glass_opt(btn, ExoGlass::Control, true, blur)
@@ -255,6 +263,7 @@ pub fn primary_button_dyn(
         .fill(FG)
         .hover(FG.alpha(0.92))
         .press(FG.alpha(0.84))
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -282,6 +291,7 @@ pub fn glass_button_dyn(
             .hit()
             .cursor(Cursor::Pointer)
             .press_on_down()
+            .press_scale(PRESS_SCALE)
             .h(32.0)
             .px(12.0)
             .gap(6.0)
@@ -289,6 +299,7 @@ pub fn glass_button_dyn(
             .radius(RADIUS_PILL)
             .hover(hover_fill())
             .press(pressed_fill())
+            .hover_motion(SPRING_QUICK, SPRING_BASE)
             .motion(SPRING_QUICK),
         ExoGlass::Control,
         true,
@@ -320,6 +331,7 @@ pub fn danger_button_dyn(key: impl Into<String>, label: impl Into<String>, icon:
         .hover(bad().alpha(0.24))
         .press(bad().alpha(0.32))
         .border(1.0, bad().alpha(0.36))
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -342,6 +354,7 @@ pub fn glass_button_opt(
             .hit()
             .cursor(Cursor::Pointer)
             .press_on_down()
+            .press_scale(PRESS_SCALE)
             .h(32.0)
             .px(12.0)
             .gap(6.0)
@@ -349,6 +362,7 @@ pub fn glass_button_opt(
             .radius(RADIUS_PILL)
             .hover(hover_fill())
             .press(pressed_fill())
+            .hover_motion(SPRING_QUICK, SPRING_BASE)
             .motion(SPRING_QUICK),
         ExoGlass::Control,
         true,
@@ -378,6 +392,7 @@ pub fn filter_pill(key: impl Into<String>, label: impl Into<String>, active: boo
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
         .border(if active { 0.0 } else { 1.0 }, glass_rim())
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(
             text(label)
@@ -435,6 +450,7 @@ pub fn danger_button(key: &'static str, label: &'static str, icon: Option<El>) -
         .fill(bad())
         .hover(bad().alpha(0.90))
         .press(bad().alpha(0.80))
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -478,7 +494,7 @@ pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: b
         .fill(FG)
         .shadow(1.0, 3.0, BG.alpha(0.35))
         .absolute(if on { 18.0 } else { 2.0 }, 2.0)
-        .motion(SPRING_MOVE);
+        .motion(SPRING_SNAPPY);
 
     el().key(key)
         .role("switch")
@@ -488,6 +504,7 @@ pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: b
         .hit()
         .cursor(Cursor::Pointer)
         .press_on_down()
+        .press_scale(PRESS_SCALE)
         .size(40.0, 24.0)
         .radius(RADIUS_PILL)
         .fill(if on { good() } else { track_fill() })
@@ -591,7 +608,6 @@ pub fn section_card(title: &'static str, subtitle: Option<String>) -> El {
         .gap(12.0)
         .radius(RADIUS_PANEL)
         .fill(subtle_fill())
-        .border(1.0, hairline())
         .child(header)
 }
 

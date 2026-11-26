@@ -5,10 +5,10 @@ use crate::pc_state::{
 use crate::pc_wp9_actions::UndoTarget;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK,
-    TRANSPARENT, bad, fg_muted, float_line, glass_rim_bottom, glass_rim_top, good, hex, hover_fill,
-    icon_check, icon_chevron_down, icon_chevron_up, icon_search, pressed_fill, scaled,
-    switch_pill_keyed, type_body, type_control, type_section, type_small, warn,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_BASE,
+    SPRING_QUICK, TRANSPARENT, bad, fg_muted, float_line, glass_rim_bottom, glass_rim_top, good,
+    hex, hover_fill, icon_check, icon_chevron_down, icon_chevron_up, icon_search, pressed_fill,
+    scaled, switch_pill_keyed, type_body, type_control, type_section, type_small, warn,
 };
 use exo_rpc::{
     AppFind, AppLeftover, InstalledAppItem, LeftoverSummary, StartupItem, StartupRemovedItem,
@@ -45,6 +45,7 @@ fn apps_pill(key: &'static str, label: &'static str, active: bool) -> El {
         .fill(if active { FG } else { TRANSPARENT })
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(text(label).font(type_control()).color(if active {
             PRIMARY_FG
@@ -94,6 +95,7 @@ fn flat_btn(
         .fill(fill)
         .hover(hover_bg)
         .press(press_bg)
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(text(lbl).font(type_control()).color(fg));
     if primary {
@@ -613,85 +615,6 @@ fn ready_section(s: &AppState, programs: &[InstalledAppItem]) -> El {
                     }
                 },
             ),
-        ));
-    }
-
-    let bloat: Vec<&InstalledAppItem> = programs
-        .iter()
-        .filter(|a| a.bloat.is_some() && is_pickable(a))
-        .collect();
-    if !bloat.is_empty() {
-        let b_names: Vec<String> = bloat.iter().map(|a| a.name.clone()).collect();
-        let b_ids: Vec<String> = bloat.iter().map(|a| a.id.clone()).collect();
-        let is_armed = armed == Some("apps-bloat");
-        let btn_lbl = if is_armed {
-            format!("Uninstall {}?", bloat.len())
-        } else {
-            format!("Remove {}", bloat.len())
-        };
-        sec = sec.child(ready_row(
-            format!(
-                "{} {}",
-                bloat.len(),
-                if bloat.len() == 1 {
-                    "app you didn’t ask for"
-                } else {
-                    "apps you didn’t ask for"
-                }
-            ),
-            Some(names_summary(&b_names)),
-            false,
-            None,
-            flat_btn("apps-remove-bloat".into(), btn_lbl, false, true, busy).on_press(
-                move |s: &mut AppState| {
-                    if s.pc.armed_confirm.as_deref() == Some("apps-bloat") {
-                        s.uninstall_many_apps(b_ids.clone());
-                    } else {
-                        s.pc.armed_confirm = Some("apps-bloat".into());
-                    }
-                },
-            ),
-        ));
-    }
-
-    let unneeded_items: Vec<String> =
-        s.pc.startup_list
-            .as_ref()
-            .map(|st| {
-                st.items
-                    .iter()
-                    .filter(|i| i.unneeded)
-                    .map(|i| i.name.clone())
-                    .collect()
-            })
-            .unwrap_or_default();
-    let unneeded_count = unneeded_items.len()
-        + s.pc
-            .startup_list
-            .as_ref()
-            .map(|st| st.extras.max(0) as usize)
-            .unwrap_or(0);
-    if unneeded_count > 0 {
-        sec = sec.child(ready_row(
-            format!(
-                "{unneeded_count} {} starting with Windows can go",
-                if unneeded_count == 1 {
-                    "thing"
-                } else {
-                    "things"
-                }
-            ),
-            (!unneeded_items.is_empty()).then(|| names_summary(&unneeded_items)),
-            false,
-            s.pc.startup_errors.get("clean").cloned(),
-            flat_btn(
-                "apps-startup-clean".into(),
-                format!("Turn off {unneeded_count}"),
-                false,
-                false,
-                busy,
-            )
-            .on_press(|s: &mut AppState| s.startup_clean_unneeded()),
         ));
     }
 
@@ -1462,7 +1385,8 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
         .pb(20.0)
         .scroll(ScrollSpec {
             stick_bottom: false,
-        });
+        })
+        .chain_scroll_offset(crate::shell::bar_scroll_watch);
 
     if broken.is_empty() && on_items.is_empty() && off_rows.is_empty() && bg_count == 0 {
         let empty = if searching {
@@ -1526,7 +1450,7 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             .iter()
             .find_map(|id| s.pc.startup_errors.get(id).cloned());
         let ctrl = if r.locked {
-            startup_tag_pill("Required", None)
+            row()
         } else {
             switch_pill_keyed(
                 format!("startup-sw-{}", r.id),
@@ -1542,7 +1466,11 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             r.icon.as_deref(),
             "Off",
             None,
-            r.detail.clone(),
+            if r.locked {
+                String::new()
+            } else {
+                r.detail.clone()
+            },
             r.amount.clone(),
             err,
             ctrl,
@@ -1930,15 +1858,12 @@ pub(crate) fn apps_room(s: &AppState) -> El {
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .gap(18.0)
+            .gap(14.0)
             .pb(20.0)
             .scroll(ScrollSpec {
                 stick_bottom: false,
-            });
-
-        if !searching && !s.pc.apps_only_unused {
-            list_col = list_col.child(ready_section(s, programs));
-        }
+            })
+            .chain_scroll_offset(crate::shell::bar_scroll_watch);
 
         if s.pc.apps_only_unused {
             list_col = list_col.child(
@@ -2037,11 +1962,11 @@ pub(crate) fn apps_room(s: &AppState) -> El {
             list_col = list_col.child(parts_sec);
         }
 
-        col()
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .gap(12.0)
+        let mut table_block = col().w_full().grow(1.0).min_h(0.0).gap(12.0);
+        if !searching && !s.pc.apps_only_unused {
+            table_block = table_block.child(ready_section(s, programs));
+        }
+        table_block
             .child(table_head)
             .children(s.pc.apps_errors.get("many").map(|err| {
                 el().w_full()
@@ -2059,10 +1984,10 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         .pt(20.0)
         .px(24.0)
         .pb(8.0)
-        .gap(12.0)
+        .gap(14.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(BG)
+        .fill(exo_kit::surface_elevated())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(header)
         .child(body);
@@ -2072,7 +1997,7 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         .w_full()
         .h_full()
         .pt(64.0)
-        .px(10.0)
+        .px(24.0)
         .pb(20.0)
         .fill(BG)
         .on_key(|s: &mut AppState, ev, _| {
@@ -2363,5 +2288,22 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert!(rt.state.pc.startup_bg_open);
         assert!(rt.find("startup-row-task:bg-1").is_some());
+    }
+
+    #[test]
+    fn startup_icon_box_resolves_cached_app_icon_entry() {
+        let mut state = AppState::default();
+        state.install_waker(std::sync::Arc::new(|| {}));
+        let tiny_png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2dIAAAAASUVORK5CYII=";
+        state
+            .pc
+            .app_icons
+            .insert("startup:demo".to_string(), tiny_png.to_string());
+        let resolved = state.app_icon_image("startup:demo");
+        assert!(
+            resolved.is_some(),
+            "startup icon key present in pc.app_icons should decode to an Image"
+        );
+        let _el = super::startup_icon_box(&state, "Demo App", Some("startup:demo"));
     }
 }

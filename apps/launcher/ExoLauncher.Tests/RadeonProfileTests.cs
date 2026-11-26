@@ -108,8 +108,8 @@ public sealed class RadeonProfileTests : IDisposable
         Assert.Equal(0, values[Keys.Sharpening]);
         Assert.Equal(GpuProfile.VSyncGameDecides, values[Keys.VSync]);   // WFVR_OFF_UNLESS_APP_SPECIFIES
         Assert.Equal(1, values[Keys.AntiLag]);   // always on: the user's choice
-        Assert.Equal(1, values[Keys.FreeSync + "LG ULTRAGEAR"]);
-        Assert.Equal(1, values[Keys.FreeSync + "DELL P2419H"]);
+        Assert.Equal(0, values[Keys.FreeSync + "LG ULTRAGEAR"]);
+        Assert.Equal(0, values[Keys.FreeSync + "DELL P2419H"]);
         Assert.Equal(1, values[Keys.Fsr]);
 
         // An old driver with the base 3D settings only: nothing else is written.
@@ -395,8 +395,8 @@ public sealed class RadeonProfileTests : IDisposable
     public void SummarySaysWhatTheProfileDoes()
     {
         var writes = GpuProfile.Radeon(FakeDriver.Current().Read()!);
-        Assert.Equal("FreeSync on, FSR 4 for FSR 3.1 games, Anti-Lag on, V-Sync as each game sets it; "
-            + "Chill, Boost, Super Resolution, Image Sharpening and Enhanced Sync off",
+        Assert.Equal("FSR 4 for FSR 3.1 games, Anti-Lag on, V-Sync as each game sets it; "
+            + "Chill, Boost, Super Resolution, Image Sharpening, Enhanced Sync and FreeSync off",
             GpuProfile.RadeonSummary(writes));
     }
 

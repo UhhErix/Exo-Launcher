@@ -16,10 +16,7 @@ use exo_kit::{
     scaled, scrim_fill, store_logo_or_fallback, subtle_fill, type_body, type_control, type_page,
     type_small, type_title,
 };
-use rune::{
-    Align, Color, Cursor, El, LiquidGlass, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row,
-    text,
-};
+use rune::{Align, Color, Cursor, El, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row, text};
 use serde_json::json;
 use std::collections::VecDeque;
 
@@ -2585,7 +2582,7 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
         .padding(20.0)
         .gap(14.0)
         .transition(modal_card_transition())

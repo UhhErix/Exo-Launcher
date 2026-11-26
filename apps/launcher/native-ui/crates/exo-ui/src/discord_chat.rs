@@ -13,11 +13,11 @@ use exo_kit::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_BASE, SPRING_FLIGHT, SPRING_QUICK, bad, fg_faint, fg_muted, glass_button, glass_rim,
     glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_arrow_up, icon_bell_off,
-    icon_bookmark, icon_check, icon_close, icon_copy, icon_download, icon_edit, icon_external,
-    icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply,
-    icon_search, icon_smile, icon_sparkles, icon_trash, popover_transition_from, pressed_fill,
-    primary_button, scrim_fill, subtle_fill, type_body, type_control, type_label, type_page,
-    type_section, type_small,
+    icon_bookmark, icon_bookmark_filled, icon_check, icon_close, icon_copy, icon_download,
+    icon_edit, icon_external, icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin,
+    icon_plus, icon_reply, icon_search, icon_smile, icon_sparkles, icon_trash,
+    popover_transition_from, pressed_fill, primary_button, scrim_fill, subtle_fill, type_body,
+    type_control, type_label, type_page, type_section, type_small,
 };
 use exo_rpc::{DiscordAppComponent, DiscordAttachment, DiscordEmbed, DiscordMessage};
 use rune::{
@@ -42,11 +42,11 @@ fn send_with_launch(s: &mut AppState, tx: &mut Tx) {
 }
 
 fn pane_surface() -> Color {
-    BG
+    exo_kit::surface_elevated()
 }
 
 fn card_surface() -> Color {
-    BG
+    exo_kit::surface_elevated_hi()
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -179,23 +179,167 @@ fn embed_card(
         }
         inner = inner.child(frow);
     }
+    let is_gifv = embed.kind.as_deref() == Some("gifv");
+    if is_gifv {
+        let video_gif = embed
+            .video
+            .as_ref()
+            .and_then(|v| v.url.as_deref().or(v.proxy_url.as_deref()))
+            .map(exo_rpc::remote_art::normalize_gif_image_url)
+            .filter(|u| {
+                let lower = u.split('?').next().unwrap_or(u).to_ascii_lowercase();
+                !lower.ends_with(".mp4") && !lower.ends_with(".webm")
+            });
+        let img_gif = embed
+            .image
+            .as_ref()
+            .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
+            .map(exo_rpc::remote_art::normalize_gif_image_url);
+        let thumb_gif = embed
+            .thumbnail
+            .as_ref()
+            .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
+            .map(exo_rpc::remote_art::normalize_gif_image_url);
+        let gif_url = video_gif.or(img_gif).or(thumb_gif);
+        let (gw, gh) = embed
+            .video
+            .as_ref()
+            .or(embed.thumbnail.as_ref())
+            .or(embed.image.as_ref())
+            .and_then(|m| match (m.width, m.height) {
+                (Some(w), Some(h)) if w > 0 && h > 0 => {
+                    let aspect = (h as f32 / w as f32).clamp(0.42, 1.45);
+                    let dw = (w as f32).clamp(180.0, 340.0);
+                    Some((dw, (dw * aspect).clamp(110.0, 280.0)))
+                }
+                _ => None,
+            })
+            .unwrap_or((300.0, 200.0));
+        if let Some(url) = gif_url {
+            let orig_c = embed
+                .url
+                .clone()
+                .or_else(|| embed.thumbnail.as_ref().and_then(|m| m.url.clone()))
+                .unwrap_or_else(|| url.clone());
+            let lb_src = url.clone();
+            let lb_orig = orig_c.clone();
+            let lb_cap = embed.title.clone().unwrap_or_else(|| "GIF".into());
+            let mut tile = el()
+                .w(gw)
+                .h(gh)
+                .radius(RADIUS_SMALL)
+                .continuous_corners()
+                .clip_rounded(RADIUS_SMALL)
+                .fill(Color::WHITE.alpha(0.03))
+                .border(1.0, Color::WHITE.alpha(0.06))
+                .cursor(Cursor::Pointer)
+                .hit()
+                .on_press(move |s: &mut AppState| {
+                    if let Some(cid) = s.active_chat_channel_id() {
+                        s.open_channel_image_lightbox(&cid, &lb_src, &lb_orig, &lb_cap, &lb_cap);
+                    } else {
+                        s.open_discord_lightbox(
+                            vec![LightboxSlide {
+                                src: lb_src.clone(),
+                                original_url: lb_orig.clone(),
+                                caption: lb_cap.clone(),
+                                alt: lb_cap.clone(),
+                            }],
+                            0,
+                        );
+                    }
+                })
+                .on_secondary_press(move |s: &mut AppState, p, _| {
+                    s.discord.chat.links.image_menu = Some(ImageMenuState {
+                        original_url: orig_c.clone(),
+                        x: p.x,
+                        y: p.y,
+                    });
+                });
+            if let Some(img) = s.remote_image_sized(&url, gw.max(320.0), scale) {
+                tile = tile.pixels_fit(img.pixels(), SurfaceFit::Fill);
+            } else if let Some(thumb) = embed
+                .thumbnail
+                .as_ref()
+                .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
+                .and_then(|u| s.remote_image_sized(u, gw.max(320.0), scale))
+            {
+                tile = tile.pixels_fit(thumb.pixels(), SurfaceFit::Fill);
+            }
+            return tile;
+        }
+    }
+
     if let Some(url) = embed
         .image
         .as_ref()
         .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
-        && let Some(img) = s.remote_image_sized(url, 360.0, scale)
+        .map(exo_rpc::remote_art::normalize_gif_image_url)
+        && let Some(img) = s.remote_image_sized(&url, 360.0, scale)
     {
         let orig_c = embed
             .image
             .as_ref()
             .and_then(|m| m.url.clone())
-            .unwrap_or_else(|| url.to_string());
-        let lb_src = url.to_string();
+            .unwrap_or_else(|| url.clone());
+        let lb_src = url.clone();
         let lb_orig = orig_c.clone();
         let lb_cap = embed.title.clone().unwrap_or_default();
         inner = inner.child(
             el().w(360.0)
                 .h(202.0)
+                .radius(RADIUS_SMALL)
+                .clip_rounded(RADIUS_SMALL)
+                .cursor(Cursor::Pointer)
+                .hit()
+                .on_press(move |s: &mut AppState| {
+                    if let Some(cid) = s.active_chat_channel_id() {
+                        s.open_channel_image_lightbox(&cid, &lb_src, &lb_orig, &lb_cap, &lb_cap);
+                    } else {
+                        s.open_discord_lightbox(
+                            vec![LightboxSlide {
+                                src: lb_src.clone(),
+                                original_url: lb_orig.clone(),
+                                caption: lb_cap.clone(),
+                                alt: lb_cap.clone(),
+                            }],
+                            0,
+                        );
+                    }
+                })
+                .on_secondary_press(move |s: &mut AppState, p, _| {
+                    s.discord.chat.links.image_menu = Some(ImageMenuState {
+                        original_url: orig_c.clone(),
+                        x: p.x,
+                        y: p.y,
+                    });
+                })
+                .pixels_fit(img.pixels(), SurfaceFit::Fit),
+        );
+    } else if let Some(url) = embed
+        .thumbnail
+        .as_ref()
+        .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
+        .map(exo_rpc::remote_art::normalize_gif_image_url)
+        && let Some(img) = s.remote_image_sized(&url, 240.0, scale)
+    {
+        let orig_c = embed
+            .thumbnail
+            .as_ref()
+            .and_then(|m| m.url.clone())
+            .unwrap_or_else(|| url.clone());
+        let lb_src = url.clone();
+        let lb_orig = orig_c.clone();
+        let lb_cap = embed.title.clone().unwrap_or_default();
+        let has_copy = embed.title.is_some() || embed.description.is_some();
+        let (tw, th) = if has_copy {
+            (112.0, 112.0)
+        } else {
+            (300.0, 190.0)
+        };
+        inner = inner.child(
+            el().w(tw)
+                .h(th)
                 .radius(RADIUS_SMALL)
                 .clip_rounded(RADIUS_SMALL)
                 .cursor(Cursor::Pointer)
@@ -1364,7 +1508,11 @@ fn message_row(
                     "Bookmark"
                 },
                 false,
-                icon_bookmark(13.0, if bookmarked { good() } else { fg_faint() }),
+                if bookmarked {
+                    icon_bookmark_filled(13.0, good())
+                } else {
+                    icon_bookmark(13.0, fg_faint())
+                },
             )
             .on_press(move |s: &mut AppState| {
                 if bookmarked {
@@ -1502,7 +1650,10 @@ fn message_row(
                             .w_full()
                             .color(FG)
                             .on_edit(edit_access(|s: &mut AppState| {
-                                &mut s.discord.chat.editing.as_mut().unwrap().1
+                                match s.discord.chat.editing.as_mut() {
+                                    Some(editing) => &mut editing.1,
+                                    None => &mut s.ui_discard_edit,
+                                }
                             }))
                             .on_submit(|s: &mut AppState, _| s.save_discord_edit()),
                         1,
@@ -2017,6 +2168,7 @@ pub fn timeline_and_composer(
                 .key(format!("dc-vrows-{channel_id}"))
                 .w_full()
                 .growth(GrowthSpec::default())
+                .selection_group(true)
                 .virtual_rows(
                     msgs.len(),
                     68.0,
@@ -2685,17 +2837,23 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
         let save_src = im.original_url.clone();
         let copy_link = im.original_url.clone();
         let open_link = im.original_url.clone();
+        let pt_key = format!(
+            "dc-image-menu-pt-{}-{}",
+            im.x.round() as i32,
+            im.y.round() as i32
+        );
         let menu = col()
             .key("dc-image-menu")
             .role("menu")
             .focus_group()
-            .pin(Some(im.x), Some(im.y), None, None)
+            .anchored_fit(pt_key.clone(), rune::Side::Bottom, rune::Align::Start, 1.0)
             .w(196.0)
             .padding(6.0)
             .gap(2.0)
             .radius(RADIUS_CARD)
-            .fill(BG)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+            .continuous_corners()
+            .clip_rounded(RADIUS_CARD)
+            .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu, false))
             .transition(popover_transition_from(rune::Vec2::new(0.0, 0.0)))
             .child(
                 row()
@@ -2774,6 +2932,7 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
                 .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                 .hit()
                 .on_press(|s: &mut AppState| s.discord.chat.links.image_menu = None)
+                .child(el().key(pt_key).absolute(im.x, im.y).size(0.0, 0.0))
                 .child(menu.hit().on_press(|_: &mut AppState| {})),
         );
     }
@@ -2835,4 +2994,106 @@ pub fn header_tools(s: &AppState) -> El {
                     if pins_open { FG } else { fg_muted() },
                 )),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::shell;
+    use crate::state::{AppState, Room};
+    use exo_rpc::{DiscordMessage, DiscordUser};
+    use rune::render::KIND_GLYPH;
+    use rune::{Env, Key, KeyEvent, Mods, Runtime};
+
+    #[test]
+    fn discord_messages_are_selectable_and_copyable() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        let clipboard = rune::clipboard::memory();
+        rt.use_clipboard(&clipboard);
+
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_guild("g-exo");
+            if let Some(list) = s.discord.chat.messages_by_channel.get_mut("ch-general") {
+                list.push(DiscordMessage {
+                    id: "msg-copy-test".into(),
+                    channel_id: "ch-general".into(),
+                    author: DiscordUser {
+                        id: "u-copy".into(),
+                        username: "copier".into(),
+                        global_name: Some("Copier".into()),
+                        ..Default::default()
+                    },
+                    content: "SelectableDiscordPhrase".into(),
+                    timestamp: "2026-11-25T12:00:00.000Z".into(),
+                    ..Default::default()
+                });
+            }
+        });
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let (row_rect, _) = rt
+            .presented("dc-msg-row-msg-copy-test")
+            .expect("message row presented");
+
+        // Locate glyphs rendered inside the bottom half (message body) of the row.
+        let body_y_min = row_rect[1] + row_rect[3] * 0.45;
+        let mut glyphs: Vec<(f32, f32)> = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_GLYPH)
+            .map(|i| (i.rect[0] + i.rect[2] * 0.5, i.rect[1] + i.rect[3] * 0.5))
+            .filter(|&(x, y)| {
+                x >= row_rect[0]
+                    && x <= row_rect[0] + row_rect[2]
+                    && y >= body_y_min
+                    && y <= row_rect[1] + row_rect[3]
+            })
+            .collect();
+        glyphs.sort_by(|a, b| a.0.total_cmp(&b.0));
+        assert!(
+            glyphs.len() >= 6,
+            "expected rendered glyphs for selectable message body, found {}",
+            glyphs.len()
+        );
+        let first = glyphs[0];
+        let last = *glyphs.last().unwrap();
+
+        rt.pointer_move(first.0 - 4.0, first.1);
+        rt.pointer_down(first.0 - 4.0, first.1);
+        rt.frame(2.0 / 60.0);
+        rt.pointer_move(last.0 + 6.0, last.1);
+        rt.frame(3.0 / 60.0);
+        rt.pointer_up(last.0 + 6.0, last.1);
+        rt.frame(4.0 / 60.0);
+
+        assert!(
+            rt.selected_text()
+                .as_deref()
+                .is_some_and(|t| t.contains("SelectableDiscordPhrase")),
+            "expected drag across Discord message to highlight text, got {:?}",
+            rt.selected_text()
+        );
+
+        rt.key(KeyEvent {
+            key: Key::Command('c'),
+            mods: Mods {
+                cmd: true,
+                ..Mods::default()
+            },
+        });
+        rt.frame(5.0 / 60.0);
+
+        let copied = clipboard.text().unwrap_or_default();
+        assert!(
+            copied.contains("SelectableDiscordPhrase"),
+            "expected Ctrl+C after dragging across Discord message to copy text, got {copied:?}"
+        );
+    }
 }

@@ -71,7 +71,27 @@ impl Default for NativeMouseUiState {
 impl NativeMouseUiState {
     pub fn demo() -> Self {
         let devices = dev_mock_devices();
-        let first = devices.first().cloned().expect("dev mock devices");
+        let Some(first) = devices.first().cloned() else {
+            return Self {
+                devices: Vec::new(),
+                selected_index: 0,
+                profiles: Vec::new(),
+                active_profile_id: String::new(),
+                game_rules: Vec::new(),
+                auto_engine: AutoProfileEngine::new(MouseConfig::default(), 500),
+                rate_limiter: HidWriteRateLimiter::default(),
+                irq_plan: None,
+                last_polling: None,
+                write_error: None,
+                notice: None,
+                total_writes: 0,
+                skipped_redundant_writes: 0,
+                rate_limited_count: 0,
+                dirty_flash: false,
+                profiles_loaded: false,
+                mock_active_game: None,
+            };
+        };
         let profiles = default_named_profiles(&first.config, &first.capabilities);
         let rules = default_game_rules(&first.config, &first.capabilities);
         let mut auto_engine = AutoProfileEngine::new(first.config.clone(), 500);
@@ -320,8 +340,9 @@ fn default_cpu_cores() -> Vec<CpuCoreDescriptor> {
 impl AppState {
     pub fn open_mouse_page(&mut self, dev_id: String) {
         self.pc.selected_device_id = Some(dev_id.clone());
-        self.pc.mouse_panel_open = false;
-        self.pc.mouse_panel_loading = false;
+        let use_host_panel = self.status != HostStatus::Standalone;
+        self.pc.mouse_panel_open = use_host_panel;
+        self.pc.mouse_panel_loading = use_host_panel;
         self.pc.mouse_panel_error = None;
         self.pc.mouse_panel_rect = None;
         self.pc.mouse_panel_visible = false;
@@ -347,8 +368,7 @@ impl AppState {
     }
 
     pub fn close_mouse_page(&mut self) {
-        self.pc.selected_device_id = None;
-        self.pc.mouse_panel_open = false;
+        self.close_mouse_panel();
     }
 
     pub fn load_mouse_profiles_from_host(&mut self) {

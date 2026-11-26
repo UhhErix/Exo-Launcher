@@ -7,9 +7,9 @@ use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted, glass_button,
     glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill,
-    icon_check, icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_trash,
-    modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, switch_pill,
-    type_body, type_control, type_label, type_section, type_small,
+    icon_check, icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_star_filled,
+    icon_trash, modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill,
+    switch_pill, type_body, type_control, type_label, type_section, type_small,
 };
 use exo_rpc::{DiscordMessage, DiscordReaction};
 use rune::{
@@ -576,9 +576,10 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
             .gif_favorites
             .iter()
             .map(|g| {
+                let anim = exo_rpc::remote_art::normalize_gif_image_url(&g.src);
                 (
                     g.url.clone(),
-                    g.src.clone(),
+                    anim,
                     "Favorite GIF".into(),
                     g.width,
                     g.height,
@@ -592,11 +593,13 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
             .gifs
             .iter()
             .map(|g| {
-                let thumb = g
-                    .preview
-                    .clone()
-                    .or_else(|| g.gif_src.clone())
-                    .unwrap_or_else(|| g.src.clone());
+                let raw = g
+                    .gif_src
+                    .as_deref()
+                    .filter(|u| !u.is_empty())
+                    .or_else(|| g.preview.as_deref().filter(|u| !u.is_empty()))
+                    .unwrap_or(&g.src);
+                let thumb = exo_rpc::remote_art::normalize_gif_image_url(raw);
                 (
                     g.url.clone(),
                     thumb,
@@ -662,7 +665,11 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
                 .on_press(move |s: &mut AppState| {
                     s.toggle_gif_favorite(&url_star, &src_star, gw, gh)
                 })
-                .child(icon_star(13.0, if is_star { good() } else { fg_muted() })),
+                .child(if is_star {
+                    icon_star_filled(13.0, good())
+                } else {
+                    icon_star(13.0, fg_muted())
+                }),
         );
 
         if idx % 2 == 0 {
@@ -1290,15 +1297,10 @@ pub fn slash_command_form(s: &AppState) -> Option<El> {
                             .color(FG)
                             .placeholder(placeholder, fg_faint())
                             .on_edit(edit_access(move |s: &mut AppState| {
-                                s.discord
-                                    .chat
-                                    .apps
-                                    .active_command
-                                    .as_mut()
-                                    .unwrap()
-                                    .values
-                                    .entry(opt_k.clone())
-                                    .or_default()
+                                match s.discord.chat.apps.active_command.as_mut() {
+                                    Some(cmd) => cmd.values.entry(opt_k.clone()).or_default(),
+                                    None => &mut s.ui_discard_edit,
+                                }
                             }))
                             .on_submit(|s: &mut AppState, _| s.run_active_slash_command()),
                     ),
@@ -1429,15 +1431,10 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
                     .color(FG)
                     .placeholder(placeholder, fg_faint())
                     .on_edit(edit_access(move |s: &mut AppState| {
-                        s.discord
-                            .chat
-                            .apps
-                            .active_modal
-                            .as_mut()
-                            .unwrap()
-                            .text_values
-                            .entry(cid_e.clone())
-                            .or_default()
+                        match s.discord.chat.apps.active_modal.as_mut() {
+                            Some(modal) => modal.text_values.entry(cid_e.clone()).or_default(),
+                            None => &mut s.ui_discard_edit,
+                        }
                     }));
                 if !is_para {
                     input = input.single_line();

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use exo_kit::{
-    BG, BadgeTone, FG, RADIUS_CARD, RADIUS_PANEL, bad, fg_muted, float_line, status_badge,
-    subtle_fill, track_fill, type_control, type_section, type_small, type_title, warn,
+    BadgeTone, FG, RADIUS_CARD, RADIUS_PANEL, bad, fg_muted, float_line, status_badge, subtle_fill,
+    track_fill, type_control, type_small, type_title, warn,
 };
 use exo_power_guard::backends::nvidia::try_set_nvidia_power_limit_w;
 use exo_power_guard::guard::{
@@ -12,13 +12,13 @@ use exo_power_guard::guard::{
 };
 use exo_power_guard::monitor::{LiveGuardState, PowerGuardController};
 use exo_power_guard::types::{
-    BackendKind, GpuSnapshot, THROTTLE_CURRENT_LIMIT, THROTTLE_HW_POWER_BRAKE, THROTTLE_HW_THERMAL,
+    GpuSnapshot, THROTTLE_CURRENT_LIMIT, THROTTLE_HW_POWER_BRAKE, THROTTLE_HW_THERMAL,
     THROTTLE_SW_POWER_CAP, THROTTLE_SW_THERMAL,
 };
 use rune::{El, col, el, row, text};
 
 use crate::notice::{NoticeActionKind, NoticeActionSpec, RichNoticeSpec};
-use crate::pc_menus::{menu_btn, menu_row, menu_switch};
+use crate::pc_menus::{menu_btn, menu_row};
 use crate::state::{AppState, NoticeTone, Room};
 
 #[cfg(windows)]
@@ -27,51 +27,20 @@ unsafe extern "system" {
     fn MessageBeep(u_type: u32) -> i32;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PendingOptInConfirm {
-    LowerPowerLimit,
-    CloseGame,
-    ShutdownPc,
-}
-
-impl PendingOptInConfirm {
-    pub fn title(self) -> &'static str {
-        match self {
-            Self::LowerPowerLimit => "Enable Stage 1: Lower GPU power limit?",
-            Self::CloseGame => "Enable Stage 2: Close running game?",
-            Self::ShutdownPc => "Enable Stage 3: Emergency PC shutdown?",
-        }
-    }
-
-    pub fn detail(self) -> &'static str {
-        match self {
-            Self::LowerPowerLimit => {
-                "On a sustained critical GPU or connector fault, Exo lowers the GPU power limit by 30% (within hardware bounds). The original limit is journaled to disk and restored automatically when the fault clears, the game exits, Exo closes, or on next start after a crash."
-            }
-            Self::CloseGame => {
-                "If a sustained critical GPU or connector fault persists after Stage 1, Exo stops the active game immediately to drop GPU power load. Unsaved game progress may be lost."
-            }
-            Self::ShutdownPc => {
-                "If a sustained critical GPU or connector fault persists after Stage 2, Exo starts a 30-second cancelable shutdown countdown with a sticky toast and alert sound before shutting down Windows."
-            }
-        }
-    }
-
-    pub fn confirm_label(self) -> &'static str {
-        match self {
-            Self::LowerPowerLimit => "Enable power limit drop",
-            Self::CloseGame => "Enable game close",
-            Self::ShutdownPc => "Enable emergency shutdown",
-        }
+pub fn exo_guard_policy() -> GuardPolicy {
+    GuardPolicy {
+        alerts_enabled: true,
+        opt_in_lower_power_limit: true,
+        opt_in_close_game: true,
+        opt_in_shutdown_pc: false,
+        ..GuardPolicy::default()
     }
 }
 
 pub struct PowerGuardUiState {
     pub live: LiveGuardState,
-    pub export_note: Option<String>,
     pub last_poll_at: f64,
     pub last_any_game_running: bool,
-    pub pending_confirm: Option<PendingOptInConfirm>,
     pub dev_mock_actions: bool,
     pub mock_lowered_limits_w: Vec<f64>,
     pub mock_restored_limits_w: Vec<f64>,
@@ -86,11 +55,12 @@ pub struct PowerGuardUiState {
 impl Default for PowerGuardUiState {
     fn default() -> Self {
         Self {
-            live: LiveGuardState::default(),
-            export_note: None,
+            live: LiveGuardState {
+                policy: exo_guard_policy(),
+                ..LiveGuardState::default()
+            },
             last_poll_at: -10.0,
             last_any_game_running: false,
-            pending_confirm: None,
             dev_mock_actions: false,
             mock_lowered_limits_w: Vec::new(),
             mock_restored_limits_w: Vec::new(),
@@ -99,7 +69,7 @@ impl Default for PowerGuardUiState {
             mock_pc_shutdowns: 0,
             journal: PowerLimitJournal::new(PowerLimitJournal::default_path()),
             journal_recovered: false,
-            controller: PowerGuardController::new(GuardPolicy::default()),
+            controller: PowerGuardController::new(exo_guard_policy()),
         }
     }
 }
@@ -519,96 +489,6 @@ impl AppState {
             GuardAction::None | GuardAction::Countdown { .. } => {}
         }
     }
-
-    pub fn toggle_power_guard_alerts(&mut self) {
-        self.pc.power_guard_ui.live.policy.alerts_enabled =
-            !self.pc.power_guard_ui.live.policy.alerts_enabled;
-        let pol = self.pc.power_guard_ui.live.policy.clone();
-        self.pc.power_guard_ui.controller.set_policy(pol);
-    }
-
-    pub fn toggle_power_guard_lower_power(&mut self) {
-        if self.pc.power_guard_ui.live.policy.opt_in_lower_power_limit {
-            self.pc.power_guard_ui.live.policy.opt_in_lower_power_limit = false;
-            self.pc.power_guard_ui.pending_confirm = None;
-            let pol = self.pc.power_guard_ui.live.policy.clone();
-            self.pc.power_guard_ui.controller.set_policy(pol);
-        } else {
-            self.pc.power_guard_ui.pending_confirm = Some(PendingOptInConfirm::LowerPowerLimit);
-        }
-    }
-
-    pub fn toggle_power_guard_close_game(&mut self) {
-        if self.pc.power_guard_ui.live.policy.opt_in_close_game {
-            self.pc.power_guard_ui.live.policy.opt_in_close_game = false;
-            self.pc.power_guard_ui.pending_confirm = None;
-            let pol = self.pc.power_guard_ui.live.policy.clone();
-            self.pc.power_guard_ui.controller.set_policy(pol);
-        } else {
-            self.pc.power_guard_ui.pending_confirm = Some(PendingOptInConfirm::CloseGame);
-        }
-    }
-
-    pub fn toggle_power_guard_shutdown(&mut self) {
-        if self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc {
-            self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc = false;
-            self.pc.power_guard_ui.pending_confirm = None;
-            let pol = self.pc.power_guard_ui.live.policy.clone();
-            self.pc.power_guard_ui.controller.set_policy(pol);
-        } else {
-            self.pc.power_guard_ui.pending_confirm = Some(PendingOptInConfirm::ShutdownPc);
-        }
-    }
-
-    pub fn confirm_power_guard_opt_in(&mut self) {
-        let Some(stage) = self.pc.power_guard_ui.pending_confirm.take() else {
-            return;
-        };
-        match stage {
-            PendingOptInConfirm::LowerPowerLimit => {
-                self.pc.power_guard_ui.live.policy.opt_in_lower_power_limit = true;
-            }
-            PendingOptInConfirm::CloseGame => {
-                self.pc.power_guard_ui.live.policy.opt_in_close_game = true;
-            }
-            PendingOptInConfirm::ShutdownPc => {
-                self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc = true;
-            }
-        }
-        let pol = self.pc.power_guard_ui.live.policy.clone();
-        self.pc.power_guard_ui.controller.set_policy(pol);
-        self.record_power_guard_event("opt-in-enabled", stage.title().to_string());
-    }
-
-    pub fn cancel_power_guard_opt_in(&mut self) {
-        self.pc.power_guard_ui.pending_confirm = None;
-    }
-
-    pub fn export_power_guard_html(&mut self) {
-        if self.pc.power_guard_ui.live.sample_count == 0 {
-            self.pc.power_guard_ui.export_note = Some("No session samples recorded yet".into());
-            return;
-        }
-        let html = self.pc.power_guard_ui.controller.export_html();
-        let out_path = std::env::temp_dir().join("exo-power-guard-session.html");
-        match std::fs::write(&out_path, html) {
-            Ok(()) => {
-                self.pc.power_guard_ui.export_note = Some(format!("Saved {}", out_path.display()));
-            }
-            Err(err) => {
-                self.pc.power_guard_ui.export_note = Some(format!("Export failed: {err}"));
-            }
-        }
-    }
-}
-
-fn backend_label(kind: BackendKind) -> &'static str {
-    match kind {
-        BackendKind::NvidiaNvmlNvapi => "NVML + NvAPI",
-        BackendKind::AmdAdlx => "AMD ADLX",
-        BackendKind::IntelIgcl => "Intel IGCL",
-        BackendKind::WindowsD3dkmt => "Windows D3DKMT",
-    }
 }
 
 fn format_headline_metrics(snap: &GpuSnapshot) -> String {
@@ -654,52 +534,6 @@ fn format_throttle_badge(flags: u32) -> (String, BadgeTone) {
         return ("Power cap".into(), BadgeTone::Neutral);
     }
     ("None".into(), BadgeTone::Good)
-}
-
-fn confirm_sheet_view(stage: PendingOptInConfirm, key_prefix: &str) -> El {
-    let is_danger = stage == PendingOptInConfirm::ShutdownPc;
-    col()
-        .key(format!("{key_prefix}-confirm-sheet"))
-        .w_full()
-        .px(12.0)
-        .py(10.0)
-        .gap(8.0)
-        .radius(RADIUS_CARD)
-        .continuous_corners()
-        .fill(subtle_fill())
-        .border(1.0, if is_danger { bad() } else { float_line() })
-        .child(text(stage.title()).font(type_control()).color(FG))
-        .child(
-            text(stage.detail())
-                .font(type_small())
-                .color(fg_muted())
-                .wrap(),
-        )
-        .child(
-            row()
-                .w_full()
-                .gap(8.0)
-                .child(
-                    menu_btn(
-                        format!("{key_prefix}-confirm-enable"),
-                        stage.confirm_label(),
-                        !is_danger,
-                        is_danger,
-                        false,
-                    )
-                    .on_press(|s: &mut AppState| s.confirm_power_guard_opt_in()),
-                )
-                .child(
-                    menu_btn(
-                        format!("{key_prefix}-confirm-cancel"),
-                        "Cancel",
-                        false,
-                        false,
-                        false,
-                    )
-                    .on_press(|s: &mut AppState| s.cancel_power_guard_opt_in()),
-                ),
-        )
 }
 
 fn session_graph_view(s: &AppState) -> El {
@@ -809,39 +643,37 @@ fn session_graph_view(s: &AppState) -> El {
         .child(text(caption).font(type_small()).color(fg_muted()))
 }
 
-pub(crate) fn card_view(s: &AppState) -> El {
-    let pg = &s.pc.power_guard_ui;
-    let pol = &pg.live.policy;
-
-    let (status_word, status_tone) = match pg.live.evaluation.as_ref().map(|e| e.severity) {
-        Some(Severity::Normal) => ("Healthy", BadgeTone::Good),
+fn power_guard_status(pg: &PowerGuardUiState) -> (&'static str, BadgeTone) {
+    match pg.live.evaluation.as_ref().map(|e| e.severity) {
         Some(Severity::Warning) => ("Warning", BadgeTone::Warn),
         Some(Severity::Critical) => ("Critical", BadgeTone::Bad),
-        None => (
-            if pg.live.sidecar_running {
-                "Reading"
-            } else {
-                "Standby"
-            },
-            BadgeTone::Neutral,
-        ),
-    };
+        Some(Severity::Normal) if pg.live.sidecar_running => ("Watching", BadgeTone::Good),
+        _ => ("On", BadgeTone::Good),
+    }
+}
 
-    let headline_metrics = pg
-        .live
-        .snapshot
-        .as_ref()
-        .map(format_headline_metrics)
-        .unwrap_or_else(|| "0% CPU while hidden".into());
+const POWER_GUARD_PROMISE: &str = "Watches your graphics card's power, heat and power connector. If one stays dangerously high, Exo lowers the card's power, then closes the game.";
 
-    let header = row()
+pub(crate) fn card_view(s: &AppState) -> El {
+    let pg = &s.pc.power_guard_ui;
+    let (status_word, status_tone) = power_guard_status(pg);
+
+    let mut card = col()
+        .key("exo-ai-power-guard-card")
         .w_full()
-        .justify_between()
-        .center_y()
+        .pt(16.0)
+        .px(20.0)
+        .pb(16.0)
         .gap(10.0)
+        .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .fill(exo_kit::surface_elevated())
+        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
         .child(
             row()
-                .gap(8.0)
+                .w_full()
+                .min_h(30.0)
+                .justify_between()
                 .center_y()
                 .child(
                     text("Power guard")
@@ -849,306 +681,106 @@ pub(crate) fn card_view(s: &AppState) -> El {
                         .font(type_title())
                         .color(FG),
                 )
-                .child(status_badge(status_word.into(), status_tone))
-                .child(text(headline_metrics).font(type_small()).color(fg_muted())),
+                .child(status_badge(status_word.into(), status_tone)),
         )
         .child(
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(
-                    text(
-                        pg.export_note
-                            .clone()
-                            .unwrap_or_else(|| format!("{} samples", pg.live.sample_count)),
-                    )
-                    .font(type_small())
-                    .color(fg_muted()),
-                )
-                .child(
-                    menu_btn(
-                        "pg-card-export-html".into(),
-                        "Export HTML",
-                        false,
-                        false,
-                        pg.live.sample_count == 0,
-                    )
-                    .on_press(|s: &mut AppState| s.export_power_guard_html()),
-                ),
+            text(POWER_GUARD_PROMISE)
+                .font(type_small())
+                .color(fg_muted())
+                .wrap(),
         );
 
-    let mut left_info = col()
-        .grow(1.25)
-        .min_w(0.0)
-        .gap(6.0)
-        .child(session_graph_view(s));
-
     if let Some(ref snap) = pg.live.snapshot {
-        let caps = snap.capabilities();
-        let backend_txt = format!("{} · {}", snap.name, backend_label(snap.backend));
         let (throttle_word, throttle_tone) = format_throttle_badge(snap.throttle_flags);
-
-        left_info = left_info.child(
+        card = card.child(
             row()
                 .w_full()
+                .gap(8.0)
                 .justify_between()
                 .center_y()
-                .gap(8.0)
                 .child(
-                    text(format!("{backend_txt} · {}", caps.summary))
-                        .font(type_small())
+                    text(format_headline_metrics(snap))
+                        .font(type_control())
                         .color(FG)
                         .truncate(),
                 )
-                .child(status_badge(throttle_word, throttle_tone)),
+                .children(
+                    (!matches!(throttle_tone, BadgeTone::Good))
+                        .then(|| status_badge(throttle_word, throttle_tone)),
+                ),
         );
-
+        if !pg.live.history.is_empty() {
+            card = card.child(session_graph_view(s));
+        }
         if let Some(ref conn) = snap.connector {
-            let max_a = conn.max_pin_current_a();
-            let spread = conn.imbalance_spread_a();
             let temp_txt = conn
                 .max_connector_temp_c()
-                .map(|t| format!(" · {t:.1} °C"))
+                .map(|t| format!(" · {t:.0} °C"))
                 .unwrap_or_default();
-            let pins_line: String = conn
-                .pins
-                .iter()
-                .map(|p| format!("P{}:{:.1}A", p.pin, p.current_a))
-                .collect::<Vec<_>>()
-                .join("  ");
-            left_info = left_info.child(
+            card = card.child(
                 text(format!(
-                    "12V-2x6 ({}) · max {max_a:.2} A · spread {spread:.2} A{temp_txt} · {pins_line}",
-                    conn.source.as_str()
+                    "Power connector · busiest pin {:.1} A · spread {:.1} A{temp_txt}",
+                    conn.max_pin_current_a(),
+                    conn.imbalance_spread_a()
                 ))
                 .font(type_small())
                 .color(fg_muted())
                 .wrap(),
             );
-        } else if let Some(note) = caps.limitation_note {
-            left_info = left_info.child(text(note).font(type_small()).color(fg_muted()).wrap());
         }
-    } else {
-        left_info = left_info.child(
-            text("Board power, temps, and HW throttle flags across NVML/NvAPI, ADLX, IGCL, and D3DKMT. Per-pin 12V-2x6 current requires shunt hardware (Astral, WireView Pro II, or MSI PSU).")
-                .font(type_small())
-                .color(fg_muted())
-                .wrap(),
-        );
     }
 
     if let Some(ref ev) = pg.live.evaluation
         && let Some(first) = ev.alerts.first()
     {
-        let alert_color = if ev.severity == Severity::Critical {
-            bad()
-        } else {
-            warn()
-        };
-        let extra = match ev.action {
-            GuardAction::Countdown {
-                next_stage,
-                remaining_ms,
-            } => format!(
-                " · {} in {:.0} s",
-                next_stage.label(),
-                (remaining_ms as f64 / 1000.0).ceil()
-            ),
-            GuardAction::ShutdownCountdown { remaining_secs, .. } => {
-                format!(" · Shutdown in {remaining_secs} s")
-            }
-            _ => String::new(),
-        };
-        left_info = left_info.child(
-            text(format!("{}{extra}", first.message))
+        card = card.child(
+            text(first.message.clone())
                 .font(type_small())
-                .color(alert_color)
+                .color(if ev.severity == Severity::Critical {
+                    bad()
+                } else {
+                    warn()
+                })
                 .wrap(),
         );
     }
 
     if let Some(rem) = pg.live.shutdown_countdown_secs {
-        left_info = left_info.child(
-            row().w_full().gap(8.0).center_y().child(
-                menu_btn(
-                    "pg-card-cancel-shutdown".into(),
-                    format!("Cancel shutdown ({rem} s)"),
-                    false,
-                    true,
-                    false,
-                )
-                .on_press(|s: &mut AppState| s.cancel_power_guard_shutdown()),
-            ),
+        card = card.child(
+            menu_btn(
+                "pg-card-cancel-shutdown".into(),
+                format!("Cancel shutdown ({rem} s)"),
+                false,
+                true,
+                false,
+            )
+            .on_press(|s: &mut AppState| s.cancel_power_guard_shutdown()),
         );
     }
 
     if let Some(ref note) = pg.live.last_action_note {
-        left_info = left_info.child(text(note.clone()).font(type_small()).color(FG).wrap());
+        card = card.child(text(note.clone()).font(type_small()).color(FG).wrap());
     }
 
-    let opt_in_btn = |key: &str, label: &str, active: bool, danger: bool| {
-        let txt = format!("{label}: {}", if active { "On" } else { "Off" });
-        menu_btn(key.into(), txt, active && !danger, active && danger, false)
-    };
-
-    let mut right_controls = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(6.0)
-        .child(
-            text("Sustained fault actions (opt-in, off by default)")
-                .font(type_control())
-                .color(FG),
-        )
-        .child(
-            row()
-                .w_full()
-                .gap(6.0)
-                .child(
-                    opt_in_btn("pg-card-alerts", "Alerts", pol.alerts_enabled, false)
-                        .on_press(|s: &mut AppState| s.toggle_power_guard_alerts()),
-                )
-                .child(
-                    opt_in_btn(
-                        "pg-card-stage1",
-                        "1. Power limit",
-                        pol.opt_in_lower_power_limit,
-                        false,
-                    )
-                    .on_press(|s: &mut AppState| s.toggle_power_guard_lower_power()),
-                ),
-        )
-        .child(
-            row()
-                .w_full()
-                .gap(6.0)
-                .child(
-                    opt_in_btn(
-                        "pg-card-stage2",
-                        "2. Close game",
-                        pol.opt_in_close_game,
-                        false,
-                    )
-                    .on_press(|s: &mut AppState| s.toggle_power_guard_close_game()),
-                )
-                .child(
-                    opt_in_btn(
-                        "pg-card-stage3",
-                        "3. Shut down",
-                        pol.opt_in_shutdown_pc,
-                        true,
-                    )
-                    .on_press(|s: &mut AppState| s.toggle_power_guard_shutdown()),
-                ),
-        );
-
-    if let Some(stage) = pg.pending_confirm {
-        right_controls = right_controls.child(confirm_sheet_view(stage, "pg-card"));
-    }
-
-    col()
-        .key("exo-ai-power-guard-card")
-        .w_full()
-        .h_full()
-        .pt(16.0)
-        .px(24.0)
-        .pb(16.0)
-        .gap(10.0)
-        .radius(RADIUS_PANEL)
-        .continuous_corners()
-        .fill(BG)
-        .border(1.0, float_line())
-        .child(header)
-        .child(
-            row()
-                .w_full()
-                .items_start()
-                .gap(16.0)
-                .child(left_info)
-                .child(right_controls),
-        )
+    card
 }
 
 pub(crate) fn view(s: &AppState) -> El {
     let pg = &s.pc.power_guard_ui;
-    let pol = &pg.live.policy;
-    let (status_word, status_tone) = match pg.live.evaluation.as_ref().map(|e| e.severity) {
-        Some(Severity::Normal) => ("Healthy", BadgeTone::Good),
-        Some(Severity::Warning) => ("Warning", BadgeTone::Warn),
-        Some(Severity::Critical) => ("Critical", BadgeTone::Bad),
-        None => ("Standby", BadgeTone::Neutral),
-    };
+    let (status_word, status_tone) = power_guard_status(pg);
     let detail = pg
         .live
         .snapshot
         .as_ref()
         .map(format_headline_metrics)
-        .unwrap_or_else(|| "Polls at 1 Hz while PC is open or a game runs".into());
-
-    let mut out = col()
-        .w_full()
-        .child(menu_row(
-            "GPU power & thermal guard",
-            Some(detail),
-            pg.live
-                .snapshot
-                .as_ref()
-                .and_then(|sn| sn.capabilities().limitation_note),
-            status_badge(status_word.into(), status_tone),
-        ))
-        .child(menu_row(
-            "Alerts on sustained fault",
-            Some("Default on".into()),
-            None,
-            menu_switch(
-                "pg-menu-alerts".into(),
-                "Alerts on sustained fault",
-                pol.alerts_enabled,
-                false,
-            )
-            .on_press(|s: &mut AppState| s.toggle_power_guard_alerts()),
-        ))
-        .child(menu_row(
-            "1. Lower GPU power limit",
-            Some("Opt-in · restores original on clear, exit, or crash".into()),
-            None,
-            menu_switch(
-                "pg-menu-stage1".into(),
-                "Lower GPU power limit",
-                pol.opt_in_lower_power_limit,
-                false,
-            )
-            .on_press(|s: &mut AppState| s.toggle_power_guard_lower_power()),
-        ))
-        .child(menu_row(
-            "2. Close running game",
-            Some("Opt-in · second protective step".into()),
-            None,
-            menu_switch(
-                "pg-menu-stage2".into(),
-                "Close running game",
-                pol.opt_in_close_game,
-                false,
-            )
-            .on_press(|s: &mut AppState| s.toggle_power_guard_close_game()),
-        ))
-        .child(menu_row(
-            "3. Shut down PC",
-            Some("Opt-in · last resort (30 s cancelable countdown)".into()),
-            None,
-            menu_switch(
-                "pg-menu-stage3".into(),
-                "Shut down PC",
-                pol.opt_in_shutdown_pc,
-                false,
-            )
-            .on_press(|s: &mut AppState| s.toggle_power_guard_shutdown()),
-        ));
-
-    if let Some(stage) = pg.pending_confirm {
-        out = out.child(confirm_sheet_view(stage, "pg-menu"));
-    }
-    out
+        .filter(|m| !m.is_empty())
+        .unwrap_or_else(|| POWER_GUARD_PROMISE.into());
+    col().w_full().child(menu_row(
+        "Power guard",
+        Some(detail),
+        None,
+        status_badge(status_word.into(), status_tone),
+    ))
 }
 
 #[cfg(test)]
@@ -1157,7 +789,7 @@ mod tests {
     use exo_power_guard::per_pin::wireview::{
         decode_wireview_frame, encode_wireview_frame_for_test,
     };
-    use exo_power_guard::types::GpuVendor;
+    use exo_power_guard::types::{BackendKind, GpuVendor};
 
     fn make_snap(ts: u64, vendor: GpuVendor, backend: BackendKind, name: &str) -> GpuSnapshot {
         GpuSnapshot {
@@ -1216,52 +848,19 @@ mod tests {
     }
 
     #[test]
-    fn opt_in_toggles_require_plain_confirm_sheet_before_enabling() {
-        let mut s = AppState::with_demo_games();
-        s.pc.power_guard_ui.dev_mock_actions = true;
-
-        s.toggle_power_guard_lower_power();
-        assert!(!s.pc.power_guard_ui.live.policy.opt_in_lower_power_limit);
-        assert_eq!(
-            s.pc.power_guard_ui.pending_confirm,
-            Some(PendingOptInConfirm::LowerPowerLimit)
-        );
+    fn protection_is_on_by_default_without_switches() {
+        let s = AppState::with_demo_games();
+        let pol = &s.pc.power_guard_ui.live.policy;
+        assert!(pol.alerts_enabled);
+        assert!(pol.opt_in_lower_power_limit);
+        assert!(pol.opt_in_close_game);
+        assert!(!pol.opt_in_shutdown_pc);
         let _ = card_view(&s);
         let _ = view(&s);
-
-        s.cancel_power_guard_opt_in();
-        assert!(!s.pc.power_guard_ui.live.policy.opt_in_lower_power_limit);
-        assert_eq!(s.pc.power_guard_ui.pending_confirm, None);
-
-        s.toggle_power_guard_lower_power();
-        s.confirm_power_guard_opt_in();
-        assert!(s.pc.power_guard_ui.live.policy.opt_in_lower_power_limit);
-        assert_eq!(s.pc.power_guard_ui.pending_confirm, None);
-
-        s.toggle_power_guard_close_game();
-        assert!(!s.pc.power_guard_ui.live.policy.opt_in_close_game);
-        assert_eq!(
-            s.pc.power_guard_ui.pending_confirm,
-            Some(PendingOptInConfirm::CloseGame)
-        );
-        s.confirm_power_guard_opt_in();
-        assert!(s.pc.power_guard_ui.live.policy.opt_in_close_game);
-
-        s.toggle_power_guard_shutdown();
-        assert!(!s.pc.power_guard_ui.live.policy.opt_in_shutdown_pc);
-        assert_eq!(
-            s.pc.power_guard_ui.pending_confirm,
-            Some(PendingOptInConfirm::ShutdownPc)
-        );
-        s.confirm_power_guard_opt_in();
-        assert!(s.pc.power_guard_ui.live.policy.opt_in_shutdown_pc);
-
-        s.toggle_power_guard_shutdown();
-        assert!(!s.pc.power_guard_ui.live.policy.opt_in_shutdown_pc);
     }
 
     #[test]
-    fn default_opt_ins_are_off_and_dev_mock_escalates_restores_and_cancels_shutdown() {
+    fn dev_mock_escalates_restores_and_cancels_shutdown() {
         let jpath = temp_journal_path("escalate");
         let _ = std::fs::remove_file(&jpath);
 
@@ -1269,19 +868,7 @@ mod tests {
         s.pc.power_guard_ui.dev_mock_actions = true;
         s.pc.power_guard_ui.set_journal_path(jpath.clone());
 
-        let pol = &s.pc.power_guard_ui.live.policy;
-        assert!(pol.alerts_enabled);
-        assert!(!pol.opt_in_lower_power_limit);
-        assert!(!pol.opt_in_close_game);
-        assert!(!pol.opt_in_shutdown_pc);
-
-        s.toggle_power_guard_lower_power();
-        s.confirm_power_guard_opt_in();
-        s.toggle_power_guard_close_game();
-        s.confirm_power_guard_opt_in();
-        s.toggle_power_guard_shutdown();
-        s.confirm_power_guard_opt_in();
-
+        s.pc.power_guard_ui.live.policy.opt_in_shutdown_pc = true;
         s.pc.power_guard_ui.live.policy.alert_sustained_ms = 2_000;
         s.pc.power_guard_ui.live.policy.stage_step_ms = 5_000;
         let updated = s.pc.power_guard_ui.live.policy.clone();
@@ -1352,8 +939,6 @@ mod tests {
         let mut s = AppState::with_demo_games();
         s.pc.power_guard_ui.dev_mock_actions = true;
         s.pc.power_guard_ui.set_journal_path(jpath.clone());
-        s.toggle_power_guard_lower_power();
-        s.confirm_power_guard_opt_in();
         s.pc.power_guard_ui.live.policy.stage_step_ms = 2_000;
         let updated = s.pc.power_guard_ui.live.policy.clone();
         s.pc.power_guard_ui.controller.set_policy(updated);

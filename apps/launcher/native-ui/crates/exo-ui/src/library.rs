@@ -9,20 +9,20 @@ use crate::state::{
     library_chip_options, now_unix_ms, title_hue,
 };
 use exo_kit::{
-    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, exo_play_button,
-    fg_faint, fg_muted, glass_button, glass_button_opt, glass_icon_circle, glass_icon_circle_opt,
-    glass_panel_fill, glass_plate_fill, glass_rim, glass_rim_bottom, glass_rim_top,
-    glass_still_control_fill, good, hover_fill, icon_check, icon_chevron_left, icon_chevron_right,
-    icon_close, icon_download, icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus,
-    icon_search, popover_transition_for, pressed_fill, primary_button, progress_bar,
-    select_trigger, store_logo, surface_card, type_body, type_control, type_first_run,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
+    SPRING_FLIGHT, SPRING_MOVE, SPRING_PRESS, SPRING_QUICK, SPRING_SMOOTH, SelectTrigger,
+    TRANSPARENT, exo_play_button, fg_faint, fg_muted, glass_button, glass_button_opt,
+    glass_icon_circle, glass_icon_circle_opt, glass_panel_fill, glass_plate_fill, glass_rim,
+    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hover_fill, icon_check,
+    icon_chevron_left, icon_chevron_right, icon_close, icon_download, icon_filter, icon_grid,
+    icon_more_horiz, icon_play, icon_plus, icon_search, popover_transition_for, pressed_fill,
+    primary_button, select_trigger, surface_card, type_body, type_control, type_first_run,
     type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, InstallProgress};
 use rune::{
-    Align, Cursor, El, LiquidGlass, Side, SurfaceFit, TextStyle, Tx, col, edit_access, el, oklch,
-    row, text, text_input,
+    Align, Cursor, El, Side, SpringPair, SurfaceFit, TextStyle, Transition, Tx, col, edit_access,
+    el, oklch, row, text, text_input,
 };
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -32,8 +32,8 @@ const DECK_CARD_W: f32 = 224.0;
 const DECK_CARD_H: f32 = 336.0;
 pub const ALL_CARD_W: f32 = 163.63;
 pub const ALL_CARD_H: f32 = 245.45;
-const ALL_GRID_GAP: f32 = 10.0;
-const ALL_GRID_PAD_X: f32 = 10.0;
+const ALL_GRID_GAP: f32 = 14.0;
+const ALL_GRID_PAD_X: f32 = 24.0;
 
 pub fn all_grid_metrics(viewport_w: f32) -> (usize, f32, f32) {
     let usable = if viewport_w > 0.0 {
@@ -117,6 +117,7 @@ pub(crate) fn cover_surface(
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .fill(if dim { BG } else { surface_card() });
 
     let cover = if load_cover {
@@ -264,13 +265,19 @@ fn tile_plate(game: &Game) -> El {
     }
 
     let mut plate = col()
+        .key(format!("tile-plate-{}", game.id))
+        .transition(
+            Transition::offset(0.0, 6.0)
+                .combined(Transition::opacity())
+                .springs(SpringPair::new(SPRING_QUICK, SPRING_PRESS)),
+        )
         .pin(Some(6.0), None, Some(6.0), Some(6.0))
         .px(10.0)
         .py(8.0)
         .gap(2.0)
         .radius(RADIUS_CARD - 4.0)
         .fill(glass_plate_fill())
-        .border(1.0, glass_rim())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .inert()
         .child(
             text(game.title.clone())
@@ -325,12 +332,18 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
-        .press_scale(PRESS_SCALE)
+        .press_scale(0.975)
         .hover(hover_fill())
         .press(pressed_fill())
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .size(DECK_CARD_W, DECK_CARD_H)
         .radius(RADIUS_CARD)
         .continuous_corners()
+        .shadow(
+            if active || hovered { 10.0 } else { 4.0 },
+            if active || hovered { 24.0 } else { 12.0 },
+            BG.alpha(if active || hovered { 0.65 } else { 0.38 }),
+        )
         .opacity(if active || hovered { 1.0 } else { 0.88 })
         .offset(
             0.0,
@@ -374,9 +387,11 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .child(art);
 
     if active {
-        card = card.outline(2.0, 3.0, FG);
+        card = card
+            .border_gradient(1.5, FG.alpha(0.78), FG.alpha(0.24))
+            .shadow(12.0, 28.0, BG.alpha(0.86));
     } else if game.is_running {
-        card = card.outline(1.0, 2.0, good());
+        card = card.border(1.5, good().alpha(0.82));
     }
     card = card.focus_ring(2.0, 3.0, FG);
 
@@ -438,7 +453,7 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Popover, false))
         .transition(popover_transition_for(Side::Bottom, Align::End))
         .focus_group()
         .focus_return("all-games-filter")
@@ -537,12 +552,18 @@ fn all_games_poster_tile(game: &Game, card_w: f32, card_h: f32, s: &AppState, sc
         .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
-        .press_scale(PRESS_SCALE)
+        .press_scale(0.975)
         .size(card_w, card_h)
         .radius(RADIUS_CARD)
         .continuous_corners()
+        .shadow(
+            if hovered { 10.0 } else { 4.0 },
+            if hovered { 22.0 } else { 10.0 },
+            BG.alpha(if hovered { 0.62 } else { 0.36 }),
+        )
         .offset(0.0, if hovered { -3.0 } else { 0.0 })
         .offset_motion(SPRING_MOVE)
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_MOVE)
         .on_hover_change(move |s: &mut AppState, inside, _| {
             if inside {
@@ -610,68 +631,6 @@ fn all_games_poster_tile(game: &Game, card_w: f32, card_h: f32, s: &AppState, sc
     }
     tile = tile.focus_ring(2.0, 3.0, FG);
     tile
-}
-
-fn install_banner(s: &AppState) -> Option<El> {
-    let prog = s.install_progress.as_ref()?;
-    if !prog.is_active {
-        return None;
-    }
-    let gid = prog.game_id.clone().unwrap_or_default();
-    let found = s.games.iter().find(|g| g.id == gid);
-    let title = found
-        .map(|g| g.title.clone())
-        .unwrap_or_else(|| "Downloading".into());
-    let store_badge = found.and_then(|g| store_logo(&g.store, 15.0));
-    let pct = (prog.percent.clamp(0.0, 100.0)).round() as u32;
-    let status = prog
-        .status
-        .clone()
-        .unwrap_or_else(|| format!("{} · {pct}%", prog.phase));
-    let gid_pause = gid.clone();
-    let gid_cancel = gid;
-
-    Some(
-        row()
-            .w_full()
-            .px(14.0)
-            .py(10.0)
-            .justify_between()
-            .center_y()
-            .radius(RADIUS_PANEL)
-            .continuous_corners()
-            .liquid_glass(
-                ExoGlass::ClearMedia.to_liquid_glass(false, exo_kit::glass_accessibility()),
-            )
-            .child(
-                col()
-                    .gap(5.0)
-                    .child(
-                        row()
-                            .gap(8.0)
-                            .center_y()
-                            .children(store_badge)
-                            .child(text(title).font(type_control()).color(FG))
-                            .child(text(status).font(type_small()).color(fg_muted())),
-                    )
-                    .child(progress_bar(
-                        240.0,
-                        (prog.percent as f32 / 100.0).clamp(0.0, 1.0),
-                    )),
-            )
-            .child(
-                row()
-                    .gap(8.0)
-                    .child(
-                        glass_button("dl-pause", "Pause", None)
-                            .on_press(move |s: &mut AppState| s.pause_install(&gid_pause)),
-                    )
-                    .child(
-                        glass_button("dl-cancel", "Cancel", None)
-                            .on_press(move |s: &mut AppState| s.cancel_install(&gid_cancel)),
-                    ),
-            ),
-    )
 }
 
 fn library_refresh_notice(s: &AppState, empty: bool) -> Option<El> {
@@ -817,18 +776,23 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .or_else(|| deck_games.first());
     let active_id = active_game.map(|g| g.id.clone());
 
-    let mut hero_art = el()
+    let mut hero_layer = el()
+        .key(format!(
+            "hero-art-{}",
+            active_id.as_deref().unwrap_or("none")
+        ))
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG);
+        .fill(BG)
+        .transition(Transition::opacity().springs(SpringPair::new(SPRING_SMOOTH, SPRING_BASE)));
 
     if let Some(game) = active_game {
         if let Some(img) = s.hero_image(game, scale) {
-            hero_art = hero_art
+            hero_layer = hero_layer
                 .pixels_fit(img.pixels(), SurfaceFit::Fill)
                 .surface_anchor_fraction(0.5, 0.22);
         } else {
             let hue = title_hue(&game.title);
-            hero_art = hero_art.linear_gradient(
+            hero_layer = hero_layer.linear_gradient(
                 0.35,
                 [
                     (0.0, oklch(0.28, 0.12, hue)),
@@ -844,10 +808,11 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::PI,
             [
-                (0.0, BG.alpha(0.26)),
-                (0.18, BG.alpha(0.0)),
-                (0.48, BG.alpha(0.0)),
-                (0.78, BG.alpha(0.56)),
+                (0.0, BG.alpha(0.32)),
+                (0.16, BG.alpha(0.05)),
+                (0.42, BG.alpha(0.0)),
+                (0.68, BG.alpha(0.34)),
+                (0.88, BG.alpha(0.80)),
                 (1.0, BG),
             ],
         );
@@ -857,13 +822,17 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::FRAC_PI_2,
             [
-                (0.0, BG.alpha(0.62)),
-                (0.36, BG.alpha(0.20)),
-                (0.70, BG.alpha(0.0)),
+                (0.0, BG.alpha(0.56)),
+                (0.32, BG.alpha(0.18)),
+                (0.64, BG.alpha(0.0)),
             ],
         );
 
-    hero_art = hero_art.child(hero_vignette_v).child(hero_vignette_h);
+    let hero_art = el()
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .child(hero_layer)
+        .child(hero_vignette_v)
+        .child(hero_vignette_h);
 
     let hero_lockup = if let Some(game) = active_game {
         let transfer = active_transfer_for(s, game);
@@ -952,11 +921,39 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             s.open_game_page_from(&gid_more, Some(format!("deck:{gid_more}")), tx);
         });
 
-        col()
-            .gap(14.0)
+        let mut meta_parts: Vec<String> = Vec::new();
+        let store_lbl = game.store_display();
+        if !store_lbl.is_empty() {
+            meta_parts.push(store_lbl.to_string());
+        }
+        if let Some(pt) = format_playtime_short(game.playtime_minutes) {
+            meta_parts.push(format!("{pt} played"));
+        }
+        if let Some(sz) = game.size_bytes.filter(|&b| b > 0) {
+            meta_parts.push(format_bytes_short(sz));
+        } else if game.installed {
+            meta_parts.push("Installed".into());
+        }
+
+        let mut lockup = col()
+            .key(format!("hero-lockup-{}", game.id))
+            .transition(
+                Transition::offset(0.0, 10.0)
+                    .combined(Transition::opacity())
+                    .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
+            )
+            .gap(12.0)
             .max_w(600.0)
-            .child(identity)
-            .child(row().gap(10.0).center_y().child(play_btn).child(more_btn))
+            .child(identity);
+        if !meta_parts.is_empty() {
+            lockup = lockup.child(
+                text(meta_parts.join(" · "))
+                    .font(type_small())
+                    .color(FG.alpha(0.72))
+                    .truncate(),
+            );
+        }
+        lockup.child(row().gap(10.0).center_y().child(play_btn).child(more_btn))
     } else {
         col().gap(10.0)
     };
@@ -1069,12 +1066,12 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             col()
                 .w_full()
                 .h_full()
+                .pt(exo_kit::TITLEBAR_HEIGHT + 16.0)
                 .justify_end()
                 .children(
                     library_refresh_notice(s, false)
                         .map(|n| el().w_full().px(HOME_EDGE).pb(10.0).child(n)),
                 )
-                .children(install_banner(s).map(|b| el().w_full().px(HOME_EDGE).pb(12.0).child(b)))
                 .child(foot),
         );
 
@@ -1202,7 +1199,6 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             .key("library-home-deck")
             .w_full()
             .h_full()
-            .pt(70.0)
             .gap(8.0)
             .fill(BG)
             .child(stage)
@@ -1401,7 +1397,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
     let head = row()
         .w_full()
         .pt(7.0)
-        .px(10.0)
+        .px(ALL_GRID_PAD_X)
         .pb(15.0)
         .gap(16.0)
         .center_y()
@@ -1476,7 +1472,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                 row()
                     .w_full()
                     .mt(-8.0)
-                    .px(10.0)
+                    .px(ALL_GRID_PAD_X)
                     .pb(16.0)
                     .gap(6.0)
                     .center_y()
@@ -1490,7 +1486,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .w_full()
         .h(37.0)
         .pt(5.0)
-        .px(10.0)
+        .px(ALL_GRID_PAD_X)
         .pb(5.0)
         .center_y()
         .child(text(heading).font(type_title()).color(FG));
@@ -1517,7 +1513,14 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         }
         empty_col
     } else {
-        let (grid_cols, card_w, card_h) = all_grid_metrics(s.lib.grid_width);
+        let grid_vp = if s.lib.grid_width > 0.0 {
+            s.lib.grid_width
+        } else if s.chrome.top_bar_width > 0.0 {
+            s.chrome.top_bar_width
+        } else {
+            1440.0
+        };
+        let (grid_cols, card_w, card_h) = all_grid_metrics(grid_vp);
         let mut folder_counter = 0usize;
         let rendered: Vec<El> = visible
             .iter()
@@ -1563,7 +1566,6 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .children(
             library_refresh_notice(s, false).map(|n| el().w_full().px(10.0).pb(10.0).child(n)),
         )
-        .children(install_banner(s).map(|b| el().w_full().px(10.0).pb(12.0).child(b)))
         .child(shelf_head)
         .child(grid);
 

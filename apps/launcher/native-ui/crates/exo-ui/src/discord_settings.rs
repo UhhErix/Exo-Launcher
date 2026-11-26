@@ -18,9 +18,7 @@ use exo_rpc::{
     METHOD_DISCORD_MIC_MONITOR, METHOD_DISCORD_MIC_TEST, METHOD_DISCORD_MY_VOICE,
     METHOD_DISCORD_SET_STATUS, METHOD_DISCORD_SOUND, METHOD_DISCORD_USER_SETTINGS,
 };
-use rune::{
-    Cursor, El, LiquidGlass, ScrollSpec, TextEdit, col, edit_access, el, row, text, text_input,
-};
+use rune::{Cursor, El, ScrollSpec, TextEdit, col, edit_access, el, row, text, text_input};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
@@ -3252,7 +3250,7 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
         .modal(true, |s: &mut AppState| s.close_discord_settings_clean())
         .modal_live(["top-bar"])
         .modal_scrim(scrim_fill())
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false))
         .hit()
         .child(nav)
         .child(

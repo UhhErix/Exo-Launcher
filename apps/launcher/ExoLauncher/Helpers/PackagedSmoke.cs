@@ -14,7 +14,7 @@ internal static class PackagedSmoke
     internal static string InstanceKey { get; private set; } = "ExoLauncher.Main";
     private static int _started;
 
-    internal static void Configure(string[] args)
+    internal static string ResolveInstanceKey(string[] args, bool isDisposable, string appDataDir)
     {
         if (args.Contains("--smoke-test", StringComparer.Ordinal))
         {
@@ -23,17 +23,20 @@ internal static class PackagedSmoke
                 !Path.GetFileName(Path.TrimEndingDirectorySeparator(root)).StartsWith("exo-packaged-smoke-", StringComparison.Ordinal) ||
                 !File.Exists(Path.Combine(root, ".exo-smoke-owner")))
                 throw new InvalidOperationException("Packaged smoke requires an owned disposable test directory.");
-            Enabled = true;
-            InstanceKey = "ExoLauncher.Smoke." + Path.GetFileName(Path.TrimEndingDirectorySeparator(root));
-            return;
+            return "ExoLauncher.Smoke." + Path.GetFileName(Path.TrimEndingDirectorySeparator(root));
         }
-#if DEBUG
-        if (HostMode.IsDisposable)
+        if (isDisposable)
         {
-            var dir = Path.TrimEndingDirectorySeparator(PathHelper.AppDataDir);
-            InstanceKey = "ExoLauncher.Dev." + Path.GetFileName(dir);
+            var dir = Path.TrimEndingDirectorySeparator(appDataDir);
+            return "ExoLauncher.Dev." + Path.GetFileName(dir);
         }
-#endif
+        return "ExoLauncher.Main";
+    }
+
+    internal static void Configure(string[] args)
+    {
+        Enabled = args.Contains("--smoke-test", StringComparer.Ordinal);
+        InstanceKey = ResolveInstanceKey(args, HostMode.IsDisposable, PathHelper.AppDataDir);
     }
 
     internal static async Task RunAsync(CoreWebView2 core, MainWindow window)
@@ -44,7 +47,7 @@ internal static class PackagedSmoke
         try
         {
             VerifyRecoveryFixtures(checks);
-            await WaitForAsync(core, "!!document.querySelector('.exo-library-pane .exo-add-game-btn')");
+            await WaitForAsync(core, "!!document.querySelector('.exo-library-pane button[aria-label=\"Add\"]')");
             checks.Add("packaged-library");
             await core.ExecuteScriptAsync("document.querySelector('[aria-label=\"Open settings\"]').click()");
             await WaitForAsync(core, "!!document.querySelector('main.exo-settings')");
@@ -56,7 +59,7 @@ internal static class PackagedSmoke
             await core.ExecuteScriptAsync("document.querySelector('[aria-label=\"Home library\"]').click()");
             await WaitForAsync(core, "document.querySelector('[aria-label=\"Open settings\"]').getAttribute('aria-pressed')==='false'");
             checks.Add("return-to-library");
-            await core.ExecuteScriptAsync("document.querySelector('.exo-add-game-btn').click()");
+            await core.ExecuteScriptAsync("document.querySelector('.exo-library-pane button[aria-label=\"Add\"]').click()");
             await WaitForAsync(core, "Array.from(document.querySelectorAll('[role=menuitem]')).some(b=>b.textContent.includes('Activate key'))");
             await core.ExecuteScriptAsync("Array.from(document.querySelectorAll('[role=menuitem]')).find(b=>b.textContent.includes('Activate key')).click()");
             await WaitForAsync(core, "(() => { const p=document.querySelector('.exo-key-popover'); if(!p) return false; const r=p.getBoundingClientRect(); return r.left>=0 && r.top>=0 && r.right<=innerWidth && r.bottom<=innerHeight && p.parentElement===document.body; })()");

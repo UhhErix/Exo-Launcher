@@ -8,9 +8,7 @@ use exo_kit::{
     subtle_fill, type_body, type_control, type_section, type_small,
 };
 use exo_rpc::{ActionResult, KeyPreview, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW};
-use rune::{
-    Cursor, El, Key, LiquidGlass, Transition, Tx, col, edit_access, el, row, text, text_input,
-};
+use rune::{Cursor, El, Key, Transition, Tx, col, edit_access, el, row, text, text_input};
 use serde_json::json;
 
 const KEY_STORES: [(&str, &str); 3] = [("steam", "Steam"), ("epic", "Epic"), ("gog", "GOG")];
@@ -367,7 +365,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(true, |s: &mut AppState| s.close_key_modal())

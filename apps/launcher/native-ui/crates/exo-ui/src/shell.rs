@@ -9,19 +9,23 @@ use crate::{
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
     CAPTION_TRAILING_INSET, ExoGlass, FG, GAP, GLASS_CONTAINER_SPACING, GlassAccessibility,
-    PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_MOVE, SPRING_QUICK, TRANSPARENT,
-    apply_glass, bad, exo_mark, exo_titlebar, fg_muted, glass_capsule_opt, glass_enter,
-    glass_panel_opt, good, hover_fill, icon_camera, icon_chat, icon_close, icon_grid, icon_library,
-    icon_minimize, icon_mouse, icon_music, icon_settings, icon_sparkles, icon_store, icon_volume,
-    icon_volume_low, icon_volume_off, icon_win_maximize, icon_win_restore, modal_scrim_transition,
-    popover_transition_for, pressed_fill, scrim_fill, selected_fill, set_glass_accessibility,
-    set_text_scale, slider_track, type_body, type_section, type_small,
+    PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK,
+    TRANSPARENT, apply_glass, bad, exo_mark, exo_titlebar, fg_muted, glass_capsule_opt,
+    glass_enter, glass_panel_opt, good, hover_fill, icon_camera, icon_chat, icon_chat_filled,
+    icon_close, icon_grid, icon_grid_filled, icon_library, icon_library_filled, icon_minimize,
+    icon_mouse, icon_mouse_filled, icon_music, icon_music_filled, icon_settings,
+    icon_settings_filled, icon_sparkles, icon_sparkles_filled, icon_store, icon_store_filled,
+    icon_volume, icon_volume_low, icon_volume_off, icon_win_maximize, icon_win_restore,
+    modal_scrim_transition, popover_transition_for, pressed_fill, scrim_fill, selected_fill,
+    set_glass_accessibility, set_text_scale, slider_track, type_body, type_section, type_small,
 };
 use rune::{
     Align, Cursor, Cx, El, Phase, ScrollSpec, Side, SpringPair, TextStyle, Transition, col, el,
     row, text,
 };
 use serde_json::{Value, json};
+use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 #[derive(Debug, Clone)]
 pub struct ShellChromeState {
@@ -45,6 +49,7 @@ pub struct ShellChromeState {
     pub last_telemetry_room: Option<Room>,
     pub last_chrome_layout_key: Option<String>,
     pub top_bar_width: f32,
+    pub window_height: f32,
 }
 
 impl Default for ShellChromeState {
@@ -70,6 +75,7 @@ impl Default for ShellChromeState {
             last_telemetry_room: None,
             last_chrome_layout_key: None,
             top_bar_width: 0.0,
+            window_height: 0.0,
         }
     }
 }
@@ -463,6 +469,67 @@ impl AppState {
     }
 }
 
+const BAR_HIDE_DY: f32 = -64.0;
+const BAR_PEEK_ZONE: f32 = 60.0;
+const BAR_SCROLL_START: f32 = 24.0;
+
+struct AutoBar {
+    shift: rune::Live<[f32; 2]>,
+    scroll_hidden: AtomicBool,
+    peek: AtomicBool,
+    last_y: AtomicU32,
+}
+
+static AUTO_BAR: LazyLock<AutoBar> = LazyLock::new(|| AutoBar {
+    shift: rune::Live::new([0.0, 0.0]),
+    scroll_hidden: AtomicBool::new(false),
+    peek: AtomicBool::new(false),
+    last_y: AtomicU32::new(0),
+});
+
+thread_local! {
+    static BAR_ROOM: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+fn sync_auto_bar() {
+    let bar = &*AUTO_BAR;
+    let hide = bar.scroll_hidden.load(Ordering::Relaxed) && !bar.peek.load(Ordering::Relaxed);
+    bar.shift.set([0.0, if hide { BAR_HIDE_DY } else { 0.0 }]);
+}
+
+fn reset_auto_bar() {
+    let bar = &*AUTO_BAR;
+    bar.scroll_hidden.store(false, Ordering::Relaxed);
+    bar.last_y.store(0, Ordering::Relaxed);
+    sync_auto_bar();
+}
+
+pub fn follow_bar(scroller: El) -> El {
+    scroller.chain_scroll_offset(bar_scroll_watch)
+}
+
+pub fn bar_scroll_watch(at: rune::ScrollPos) {
+    {
+        let bar = &*AUTO_BAR;
+        let y = at.offset[1].max(0.0);
+        let last = f32::from_bits(bar.last_y.swap(y.to_bits(), Ordering::Relaxed));
+        let was = bar.scroll_hidden.load(Ordering::Relaxed);
+        let hidden = if y < BAR_SCROLL_START {
+            false
+        } else if y > last + 2.0 {
+            true
+        } else if y < last - 6.0 {
+            false
+        } else {
+            was
+        };
+        if hidden != was {
+            bar.scroll_hidden.store(hidden, Ordering::Relaxed);
+            sync_auto_bar();
+        }
+    }
+}
+
 fn mini_player_transition() -> Transition {
     let enter =
         Transition::offset(0.0, -8.0).combined(glass_enter(0.96, rune::Vec2::new(0.5, 0.5)));
@@ -471,9 +538,10 @@ fn mini_player_transition() -> Transition {
 }
 
 fn room_transition(dir: f32) -> Transition {
-    let enter = Transition::offset(12.0 * dir, 0.0).combined(Transition::opacity());
-    let exit = Transition::offset(-12.0 * dir, 0.0).combined(Transition::opacity());
-    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
+    // Calm room change: short slide in the travel direction plus fade; the old room just fades.
+    let enter = Transition::offset(10.0 * dir, 0.0).combined(Transition::opacity());
+    let exit = Transition::opacity();
+    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -534,15 +602,23 @@ impl BlurBudget {
 
 pub fn room_icon(room: Room, active: bool) -> El {
     let color = if active { PRIMARY_FG } else { FG };
-    match room {
-        Room::Library => icon_library(16.0, color),
-        Room::Store => icon_store(16.0, color),
-        Room::Discord => icon_chat(16.0, color),
-        Room::Music => icon_music(16.0, color),
-        Room::Devices => icon_mouse(16.0, color),
-        Room::ExoAi => icon_sparkles(16.0, color),
-        Room::Apps => icon_grid(16.0, color),
-        Room::Settings => icon_settings(16.0, color),
+    match (room, active) {
+        (Room::Library, true) => icon_library_filled(16.0, color),
+        (Room::Library, false) => icon_library(16.0, color),
+        (Room::Store, true) => icon_store_filled(16.0, color),
+        (Room::Store, false) => icon_store(16.0, color),
+        (Room::Discord, true) => icon_chat_filled(16.0, color),
+        (Room::Discord, false) => icon_chat(16.0, color),
+        (Room::Music, true) => icon_music_filled(16.0, color),
+        (Room::Music, false) => icon_music(16.0, color),
+        (Room::Devices, true) => icon_mouse_filled(16.0, color),
+        (Room::Devices, false) => icon_mouse(16.0, color),
+        (Room::ExoAi, true) => icon_sparkles_filled(16.0, color),
+        (Room::ExoAi, false) => icon_sparkles(16.0, color),
+        (Room::Apps, true) => icon_grid_filled(16.0, color),
+        (Room::Apps, false) => icon_grid(16.0, color),
+        (Room::Settings, true) => icon_settings_filled(16.0, color),
+        (Room::Settings, false) => icon_settings(16.0, color),
     }
 }
 
@@ -627,7 +703,7 @@ fn mini_volume_popover_layers(s: &AppState, blur: bool) -> Vec<El> {
         });
 
     let card = glass_panel_opt("mini-volume-popover", 216.0, blur)
-        .pin(None, Some(52.0), Some(212.0), None)
+        .anchored_fit("mini-mute", Side::Bottom, Align::End, 8.0)
         .focus_group()
         .radius(RADIUS_CARD)
         .px(10.0)
@@ -688,7 +764,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         return el().w_full().h_full().fill(BG).child(driver_screen);
     }
 
-    if let Some(gate) = boot::boot_splash_if_needed(s, budget.overlay) {
+    if matches!(s.status, HostStatus::Error(_))
+        && let Some(gate) = boot::boot_splash_if_needed(s, budget.overlay)
+    {
         return gate;
     }
 
@@ -813,7 +891,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                         .key("nav-active-pill")
                         .matched("nav-active-pill")
                         .matched_crop()
-                        .motion(SPRING_MOVE)
+                        .motion(SPRING_BASE)
                         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                         .h(30.0)
                         .px(nav_px)
@@ -915,6 +993,44 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             }))
     };
 
+    let active_dl = s.install_progress.as_ref().filter(|p| p.is_active);
+    let queued_dl = s
+        .install_queue
+        .as_ref()
+        .is_some_and(|q| !q.queued_game_ids.is_empty());
+    let downloads_btn = (active_dl.is_some() || queued_dl).then(|| {
+        let pct = active_dl.map(|p| p.percent.clamp(0.0, 100.0).round() as u32);
+        row()
+            .key("top-downloads-btn")
+            .role("button")
+            .label("Downloads")
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .h(28.0)
+            .px(9.0)
+            .gap(5.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(if s.downloads.open {
+                selected_fill()
+            } else {
+                TRANSPARENT
+            })
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press(|s: &mut AppState| {
+                s.close_context_menu();
+                s.capture_menu_open = false;
+                s.open_downloads();
+            })
+            .child(exo_kit::icon_download(15.0, FG))
+            .children(pct.map(|p| text(format!("{p}%")).font(type_small()).color(FG)))
+    });
+
     let settings_active = s.room == Room::Settings;
     let settings_btn = el()
         .key("nav-settings")
@@ -936,14 +1052,11 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .on_secondary_press(|s: &mut AppState, p, _| {
             s.open_context_menu(ContextMenuTarget::SettingsButton, p.x, p.y);
         })
-        .child(icon_settings(
-            16.0,
-            if settings_active {
-                PRIMARY_FG
-            } else {
-                fg_muted()
-            },
-        ));
+        .child(if settings_active {
+            icon_settings_filled(16.0, PRIMARY_FG)
+        } else {
+            icon_settings(16.0, fg_muted())
+        });
 
     let divider = el().size(1.0, 16.0).mx(3.0).fill(selected_fill());
 
@@ -956,6 +1069,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .gap(CAPTION_BUTTON_GAP)
             .center_y()
             .radius(RADIUS_PILL)
+            .children(downloads_btn)
             .child(capture_btn)
             .child(settings_btn)
             .child(divider),
@@ -1055,8 +1169,46 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         );
 
     let island_call = discord_voice::island_call_capsule(s, budget.top_bar_nav);
+    let immersive = s.room == Room::Music && s.media.music_immersion;
+    let bar_room = format!(
+        "{:?}:{:?}:{:?}:{immersive}",
+        s.room,
+        s.open_game_id,
+        s.store_has_page_open()
+    );
+    let room_changed = BAR_ROOM.with(|r| {
+        let mut r = r.borrow_mut();
+        if *r != bar_room {
+            *r = bar_room;
+            true
+        } else {
+            false
+        }
+    });
+    if room_changed {
+        reset_auto_bar();
+        if immersive {
+            AUTO_BAR.scroll_hidden.store(true, Ordering::Relaxed);
+            sync_auto_bar();
+        }
+    }
+    let bar_pinned = has_modal_scrim
+        || s.capture_menu_open
+        || s.chrome.mini_volume_open
+        || s.context_menu.is_some()
+        || s.island.person_menu.is_some()
+        || s.input_mode == InputMode::Gamepad
+        || s.settings.reduce_motion;
+    let bar_shift = || -> rune::live::Binding<[f32; 2]> {
+        if bar_pinned {
+            (&rune::Live::new([0.0, 0.0])).into()
+        } else {
+            AUTO_BAR.shift.smooth(SPRING_MOVE)
+        }
+    };
     let top_bar = el()
         .key("top-bar")
+        .live_offset(bar_shift())
         .window_drag()
         .glass_container(GLASS_CONTAINER_SPACING)
         .pin(Some(0.0), Some(0.0), Some(0.0), None)
@@ -1097,7 +1249,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .pin(None, Some(8.0), Some(right_pin), None)
                 .h(36.0)
                 .center_y()
-                .gap(8.0)
+                .gap(11.0)
                 .children(mini)
                 .child(tools),
         )
@@ -1125,10 +1277,16 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let full_bleed_home =
         s.room == Room::Library && s.open_game_id.is_none() && !s.library_all_games;
+    let hero_bleeds_top = full_bleed_home
+        || (s.room == Room::Library && s.open_game_id.is_some())
+        || (s.room == Room::Store && s.store_has_page_open())
+        || (s.room == Room::Music && s.media.music_immersion);
 
     let content = boot::render_room_guarded(s, s.room.label(), || {
         if s.room == Room::Discord {
             discord::view(s, scale, budget)
+        } else if s.room == Room::Music {
+            music::view(s, scale)
         } else if s.room == Room::Settings {
             settings::view(s)
         } else if matches!(s.room, Room::Devices | Room::ExoAi | Room::Apps) {
@@ -1151,22 +1309,16 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 Room::Discord => discord::view(s, scale, budget),
             };
 
-            let scrolled = col()
-                .key(format!("{room_key}-scroll"))
-                .w_full()
-                .h_full()
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(page);
-            if s.room == Room::Store && s.store_has_page_open() {
-                el().w_full()
+            follow_bar(
+                col()
+                    .key(format!("{room_key}-scroll"))
+                    .w_full()
                     .h_full()
-                    .pt(exo_kit::TITLEBAR_HEIGHT * 2.0)
-                    .child(scrolled)
-            } else {
-                scrolled
-            }
+                    .scroll(ScrollSpec {
+                        stick_bottom: false,
+                    })
+                    .child(page),
+            )
         }
     });
 
@@ -1175,13 +1327,26 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .transition(room_transition(s.room_dir))
         .child(content);
+    let top_fade = top_fade.live_offset(bar_shift());
 
     let mut root = el()
         .w_full()
         .h_full()
         .fill(BG)
+        .on_layout(|s: &mut AppState, r| {
+            if r[3] > 0.0 && (s.chrome.window_height - r[3]).abs() > 0.5 {
+                s.chrome.window_height = r[3];
+            }
+        })
+        .on_pointer_move_local(|_s: &mut AppState, p, tx| {
+            let peek = p.window_y <= BAR_PEEK_ZONE;
+            if AUTO_BAR.peek.swap(peek, Ordering::Relaxed) != peek {
+                sync_auto_bar();
+            }
+            tx.live_only();
+        })
         .child(room_stage)
-        .child(top_fade)
+        .children((!hero_bleeds_top).then_some(top_fade))
         .child(top_bar);
 
     if !s.media.captures_open && s.room == Room::Discord {
@@ -1294,7 +1459,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if !s.notices.is_empty() {
         root = root.child(notice::view(s, scale, budget.toast));
     }
-    root
+    root.children(boot::boot_splash_if_needed(s, budget.overlay))
 }
 
 #[cfg(test)]
@@ -1445,5 +1610,95 @@ mod tests {
         rt.update(|s, _| s.finish_tour());
         rt.frame(3.0 / 60.0);
         assert!(rt.state.setup.beat.is_none());
+    }
+
+    #[test]
+    fn all_rooms_glass_transitions_keep_layers_balanced() {
+        use rune::render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END};
+
+        let mut rt = Runtime::new(
+            AppState::with_demo_games(),
+            view,
+            (1920.0, 1080.0),
+            Env::new(false, 1.0),
+        );
+        rt.set_system_reduced_motion(false);
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+        rt.frame(0.0);
+
+        let rooms = [
+            Room::Library,
+            Room::Store,
+            Room::Discord,
+            Room::Music,
+            Room::Devices,
+            Room::ExoAi,
+            Room::Apps,
+            Room::Settings,
+        ];
+        let mut t = 0.0_f64;
+        for (idx, room) in rooms.iter().enumerate() {
+            rt.update(|s, _| s.switch_room(*room));
+            for _ in 0..4 {
+                t += 1.0 / 60.0;
+                rt.frame(t);
+            }
+            if idx % 2 == 0 {
+                rt.update(|s, _| {
+                    s.palette_open = true;
+                });
+                t += 1.0 / 60.0;
+                rt.frame(t);
+                assert!(rt.presented("cmd-palette-modal").is_some() || rt.state.palette_open);
+                rt.update(|s, _| {
+                    s.dismiss_top_layer();
+                });
+                t += 1.0 / 60.0;
+                rt.frame(t);
+            } else {
+                let target_room = *room;
+                rt.update(|s, _| {
+                    s.open_context_menu(ContextMenuTarget::NavTab(target_room), 860.0, 28.0);
+                });
+                t += 1.0 / 60.0;
+                rt.frame(t);
+                rt.update(|s, _| {
+                    s.dismiss_top_layer();
+                });
+                t += 1.0 / 60.0;
+                rt.frame(t);
+            }
+            rt.settle_all();
+            t += 1.0 / 60.0;
+            rt.frame(t);
+
+            assert!(rt.presented("nav-capsule").is_some());
+            if *room != Room::Settings {
+                assert!(rt.presented("nav-active-pill").is_some());
+            } else {
+                assert!(rt.presented("settings-shell").is_some());
+            }
+            let layers = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_LAYER)
+                .count();
+            let layer_ends = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_LAYER_END)
+                .count();
+            assert_eq!(layers, layer_ends, "unbalanced layers in room {room:?}");
+            let blurs = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+                .count();
+            assert!(
+                blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+                "room {room:?} exceeded blur cap: {blurs}"
+            );
+        }
     }
 }

@@ -380,7 +380,6 @@ public sealed class AppUpdateDeltaTests : IDisposable
     [InlineData("ignores ranges")]
     [InlineData("corrupt pack")]
     [InlineData("installer changed")]
-    [InlineData("game running")]
     [InlineData("no installer record")]
     [InlineData("another pack")]
     public async Task AnyDoubtUsesTheFullInstallerAndLeavesNothingBehind(string why)
@@ -409,6 +408,24 @@ public sealed class AppUpdateDeltaTests : IDisposable
         Assert.False(result.Installed);
         Assert.Equal(before, Tree(app));
         Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(app)!, "app.incoming-*"));
+    }
+
+    [Fact]
+    public async Task DeltaUpdateInstallsImmediatelyWhenAGameIsRunning()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v1 = Release("3.26.0", withOld: true);
+        var app = Install(v1, "3.26.0");
+        var v2 = Release("3.27.0", withNew: true);
+        using var server = new Server { Served = Publish(v2, "3.27.0"), Tag = "v3.27.0" };
+        var run = new Run();
+        var service = Service(server, app, run, game: true);
+
+        var result = await service.InstallAsync("3.26.0", null, ct);
+
+        Assert.True(result.Installed, result.Message);
+        Assert.True(result.ShouldExit);
+        Assert.NotNull(run.Applied);
     }
 
     [Fact]

@@ -57,7 +57,7 @@ impl ExoGallery {
         let mut toasts = SonnerState::new(ToastPosition::BottomRight);
         toasts.push(
             SonnerToast::new("Exo Native Kit")
-                .description("Void + Goeist + Liquid Glass on wgpu DX12")
+                .description("Void + Geist + Liquid Glass on wgpu DX12")
                 .variant(ToastVariant::Success),
             None,
             0.0,
@@ -131,7 +131,7 @@ fn view(s: &ExoGallery, _cx: &mut Cx<ExoGallery>) -> El {
                 .center_y()
                 .child(text("Exo Native Kit").font(type_page()).color(FG))
                 .child(
-                    UiBadge::new("Void + Goeist + Liquid Glass")
+                    UiBadge::new("Void + Geist + Liquid Glass")
                         .tone(Tone::Success)
                         .variant(UiBadgeVariant::Dot)
                         .build(&theme),
@@ -436,7 +436,7 @@ fn view(s: &ExoGallery, _cx: &mut Cx<ExoGallery>) -> El {
                     Marquee::new("emarq", 760.0, 520.0, 1.2, || {
                         [
                             "Void",
-                            "Goeist",
+                            "Geist",
                             "Liquid Glass",
                             "Radix",
                             "Vaul",

@@ -101,7 +101,6 @@ public sealed partial class WebHostBridge
         GameSettings.AppliedAgain += OnOptimizedAgain;
         AutopilotWatch.Reported += OnAutopilotReported;
         AutopilotWatch.Shared.LiveChanged += OnAutopilotLiveChanged;
-        FrameCapService.Shared.CapLabChanged += OnCapLabChanged;
         InitGpuAndDisplayCaches();
         GameSettings.WindowModeHeld += OnOptimizeHeld;
         Account.AccountSessionStore.Changed += OnAccountChanged;
@@ -299,6 +298,8 @@ public sealed partial class WebHostBridge
         _services.MousePanel.Attach(_queue, this);
         _services.HeadlessMusic.Attach(PostEvent, () => _services.MusicEngine.IsActive || App.MainAppWindow is not null);
         _services.HeadlessCapture.Attach(PostCaptureEvent);
+        Services.Achievements.AchievementWatch.Unlocked -= OnAchievementUnlocked;
+        Services.Achievements.AchievementWatch.Unlocked += OnAchievementUnlocked;
         if (Interlocked.Exchange(ref _transport, transport) is { } previous)
         {
             previous.MessageReceived -= OnMessage;
@@ -332,6 +333,7 @@ public sealed partial class WebHostBridge
         _services.MousePanel.Close();
         _services.HeadlessMusic.Detach();
         _services.HeadlessCapture.Detach();
+        Services.Achievements.AchievementWatch.Unlocked -= OnAchievementUnlocked;
         try { _bridgeLifetime.Cancel(); } catch { }
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
@@ -376,7 +378,6 @@ public sealed partial class WebHostBridge
         GameSettings.AppliedAgain -= OnOptimizedAgain;
         AutopilotWatch.Reported -= OnAutopilotReported;
         AutopilotWatch.Shared.LiveChanged -= OnAutopilotLiveChanged;
-        FrameCapService.Shared.CapLabChanged -= OnCapLabChanged;
         DetachGpuAndDisplayCaches();
         GameSettings.WindowModeHeld -= OnOptimizeHeld;
         Account.AccountSessionStore.Changed -= OnAccountChanged;
@@ -1026,9 +1027,6 @@ public sealed partial class WebHostBridge
                 "dlss.frameGen" => await DlssFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "dlss.frameGenSet" => await DlssFrameGenSetAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.frameGen" => await GameFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "game.frameCap" => await GameFrameCapAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "game.capLab.run" => await GameCapLabRunAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "game.capLab.cancel" => GameCapLabCancel(paramsEl, hasParams),
                 // Windows' administrator prompt blocks the thread that asks until it is answered.
                 "shaders.status" => await _rpcWork.RunAsync(method, token => ShadersStatusAsync(paramsEl, hasParams, token), requestToken).ConfigureAwait(false),
                 "shaders.prepare.games" => await _rpcWork.RunAsync(method, ShaderPrepareGamesAsync, requestToken, coalesceKey: method).ConfigureAwait(false),
@@ -2776,8 +2774,6 @@ public sealed partial class WebHostBridge
         if (hdrForGames is not null || hdrSdrGamma is not null) _services.HdrHost.SyncSoon();
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
         if (textSize is not null || reduceMotion is not null) _services.MousePanel.NotifySettingsChanged();
-        if (graphicsFeaturesBestSettings == true)
-            _ = Task.Run(() => GameGraphicsFeatures.ApplyBestSettingsSafe(_services.Library.PeekCachedLibrary(), GameSettings.ThisPc()));
         if (showLibraryTools is { } tools && tools != previousShowLibraryTools)
             RefreshLibraryAfterToolsToggle();
         ApplyDownloadSettings(p);

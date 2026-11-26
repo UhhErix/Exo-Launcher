@@ -47,7 +47,8 @@ public sealed class UpdateStartTests : IDisposable
         {
             GameRunningSignal.Update(true, GameRunningSignal.Generation, _ => { }, LeanSignal.Update, _ => { });
             Assert.Equal(UpdateFlow.State.Downloading, service.Move(UpdateFlow.Step.Install));
-            Assert.Equal(UpdateFlow.State.WaitingForGame, service.Move(UpdateFlow.Step.Verified));
+            Assert.Equal(UpdateFlow.State.Ready, service.Move(UpdateFlow.Step.Verified));
+            Assert.Equal(UpdateFlow.State.WaitingForGame, service.Move(UpdateFlow.Step.GameStarted));
             GameRunningSignal.Update(false, GameRunningSignal.Generation, _ => { }, LeanSignal.Update, _ => { });
             Assert.Equal(UpdateFlow.State.Ready, service.State);
         }

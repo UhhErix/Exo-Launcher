@@ -268,13 +268,19 @@ export function encodeFinalmouseTmrActuation(
   hystR?: number,
   hystL?: number,
 ): Uint8Array {
+  const hasHyst = hystR !== undefined || hystL !== undefined;
+  const minThr = hasHyst ? 0 : 1;
   for (const thr of [thrR, thrL]) {
-    if (!Number.isInteger(thr) || thr < 1 || thr > 40) {
-      throw new Error("Finalmouse actuation steps must be 1-40 (0.01-0.40 mm).");
+    if (!Number.isInteger(thr) || thr < minThr || thr > 40) {
+      throw new Error(
+        hasHyst
+          ? "Finalmouse actuation steps must be 0-40 when setting rapid trigger."
+          : "Finalmouse actuation steps must be 1-40 (0.01-0.40 mm).",
+      );
     }
   }
   const bytes = [...u16Bytes(thrR), ...u16Bytes(thrL)];
-  if (hystR !== undefined || hystL !== undefined) {
+  if (hasHyst) {
     if (hystR === undefined || hystL === undefined) {
       throw new Error("Finalmouse rapid-trigger sensitivity must be set for both switches together.");
     }

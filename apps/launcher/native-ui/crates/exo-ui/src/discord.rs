@@ -64,8 +64,9 @@ fn glassy_ring(node: El) -> El {
 fn panel_frame(node: El) -> El {
     glassy_ring(
         node.radius(RADIUS_PANEL)
+            .continuous_corners()
             .clip_rounded(RADIUS_PANEL)
-            .fill(BG),
+            .fill(exo_kit::surface_elevated()),
     )
 }
 
@@ -557,7 +558,7 @@ fn avatar_with_look(
         .size(size, size)
         .radius(radius)
         .clip_rounded(radius)
-        .fill(Color::WHITE.alpha(0.10))
+        .fill(monogram_fill(name))
         .center();
     let avatar_dim = if size <= 56.0 { 64.0 } else { 128.0 };
     if let Some(img) = url.and_then(|u| s.discord_remote_image_sized(u, avatar_dim, scale)) {
@@ -679,7 +680,7 @@ fn icon_btn(key: String, label: &'static str, active: bool, danger: bool, icon: 
 }
 
 fn card_surface() -> Color {
-    BG
+    exo_kit::surface_elevated_hi()
 }
 
 fn signed_out_view(s: &AppState) -> El {
@@ -1642,28 +1643,27 @@ fn dm_row(s: &AppState, dm: &DiscordDm, active: bool, sc: f32, scale: f32) -> El
     let row_h = 52.0 * sc;
     let is_unread = dm.unread && !dm.muted;
     let name_color = if active {
-        PRIMARY_FG
+        FG
     } else if dm.muted {
         fg_faint()
     } else {
         FG
     };
     let sub_color = if active {
-        PRIMARY_FG.alpha(0.68)
+        FG.alpha(0.76)
     } else if is_unread {
         FG
     } else {
         fg_muted()
     };
-    let time_color = if active {
-        PRIMARY_FG.alpha(0.62)
-    } else {
-        fg_faint()
-    };
+    let time_color = if active { FG.alpha(0.64) } else { fg_faint() };
 
     let mut body = col().grow(1.0).min_w(0.0).gap(1.0).child(
         text(dm.name.clone())
-            .font(font_px(13.0 * sc, if is_unread { 600.0 } else { 500.0 }))
+            .font(font_px(
+                13.0 * sc,
+                if active || is_unread { 600.0 } else { 500.0 },
+            ))
             .color(name_color)
             .truncate(),
     );
@@ -1687,7 +1687,7 @@ fn dm_row(s: &AppState, dm: &DiscordDm, active: bool, sc: f32, scale: f32) -> El
     if dm.mentions > 0 {
         meta = meta.child(mention_badge(dm.mentions, None, sc));
     } else if is_unread {
-        meta = meta.child(unread_dot_row(if active { PRIMARY_FG } else { FG }));
+        meta = meta.child(unread_dot_row(FG));
     }
 
     let dm_ctx = ContextMenuTarget::DiscordDm {
@@ -1715,10 +1715,19 @@ fn dm_row(s: &AppState, dm: &DiscordDm, active: bool, sc: f32, scale: f32) -> El
         .pr(14.0)
         .gap(12.0)
         .center_y()
-        .radius(RADIUS_PILL)
-        .fill(if active { FG } else { TRANSPARENT })
-        .hover(if active { FG } else { hover_fill() })
-        .press(if active { FG } else { pressed_fill() })
+        .radius(RADIUS_CARD)
+        .continuous_corners()
+        .fill(if active {
+            exo_kit::surface_elevated_hi()
+        } else {
+            TRANSPARENT
+        })
+        .hover(if active {
+            exo_kit::surface_elevated_hi()
+        } else {
+            hover_fill()
+        })
+        .press(pressed_fill())
         .motion(SPRING_QUICK)
         .hover_motion(Spring::NONE, SPRING_QUICK)
         .on_press(move |s: &mut AppState| s.open_discord_dm(&dm_id))
@@ -1734,10 +1743,17 @@ fn dm_row(s: &AppState, dm: &DiscordDm, active: bool, sc: f32, scale: f32) -> El
             18.0,
             if dm.group { None } else { dm.status.as_deref() },
             false,
-            if active { FG } else { BG },
+            if active {
+                exo_kit::surface_elevated_hi()
+            } else {
+                exo_kit::surface_elevated()
+            },
             scale,
         ))
         .child(body);
+    if active {
+        r = r.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+    }
 
     if dm.last_at.is_some() || dm.mentions > 0 || is_unread {
         r = r.child(meta);
@@ -2460,7 +2476,7 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
         .center_y()
         .hit()
         .on_press(move |s: &mut AppState| {
-            s.open_context_menu(srv_ctx_btn.clone(), 24.0, 178.0);
+            s.open_context_menu_at_element(srv_ctx_btn.clone(), "dc-server-head");
         })
         .on_secondary_press(move |s: &mut AppState, p, _| {
             s.open_context_menu(srv_ctx.clone(), p.x, p.y);
@@ -2695,8 +2711,14 @@ fn friend_card(s: &AppState, friend: &DiscordFriend, sc: f32, scale: f32) -> El 
         let user_more = friend.username.clone();
         card = card.child(
             row()
-                .gap(10.0)
+                .pin(None, Some(12.0), Some(10.0), None)
+                .px(4.0)
+                .py(2.0)
+                .gap(4.0)
                 .center_y()
+                .radius(RADIUS_PILL)
+                .fill(exo_kit::surface_elevated_hi().alpha(0.95))
+                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                 .group_opacity(0.0, 1.0)
                 .child(
                     icon_btn(
@@ -2704,7 +2726,7 @@ fn friend_card(s: &AppState, friend: &DiscordFriend, sc: f32, scale: f32) -> El 
                         "Message",
                         false,
                         false,
-                        icon_chat(16.0, fg_muted()),
+                        icon_chat(16.0, FG),
                     )
                     .on_press(move |s: &mut AppState| s.open_dm_with_friend(&uid_dm)),
                 )
@@ -2714,7 +2736,7 @@ fn friend_card(s: &AppState, friend: &DiscordFriend, sc: f32, scale: f32) -> El 
                         "More options",
                         false,
                         false,
-                        icon_more_horiz(16.0, fg_muted()),
+                        icon_more_horiz(16.0, FG),
                     )
                     .on_press({
                         let more_key = format!("dc-fr-more-{}", friend.id);
@@ -2991,7 +3013,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             || username.is_some_and(|u| u.to_lowercase().contains(&q))
     };
 
-    let cols = if sc > 1.15 { 4 } else { 5 };
+    let cols = if sc > 1.15 { 2 } else { 3 };
     let add_bar = if s.discord.add_friend_open {
         Some(
             glassy_ring(
@@ -3923,6 +3945,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                             .child(
                                 text_input(&s.discord.profile_note_input, type_small())
                                     .key("dc-dm-profile-note")
+                                    .label("Note")
                                     .placeholder("Click to add a note", fg_faint())
                                     .w_full()
                                     .min_h(32.0)
@@ -4330,11 +4353,14 @@ mod tests {
 
         assert!((c0[1] - c1[1]).abs() <= 1.0, "card 1 not on row 0");
         assert!((c0[1] - c2[1]).abs() <= 1.0, "card 2 not on row 0");
-        assert!((c0[1] - c3[1]).abs() <= 1.0, "card 3 not on row 0");
-        assert!((c0[1] - c4[1]).abs() <= 1.0, "card 4 not on row 0");
         assert!(
-            c0[2] >= 260.0,
-            "expected 5-column card width >= 260px, got {}",
+            c3[1] > c0[1] + 40.0,
+            "card 3 should wrap cleanly onto row 1"
+        );
+        assert!((c3[1] - c4[1]).abs() <= 1.0, "card 4 not on row 1");
+        assert!(
+            c0[2] >= 360.0,
+            "expected spacious 3-column card width >= 360px, got {}",
             c0[2]
         );
 

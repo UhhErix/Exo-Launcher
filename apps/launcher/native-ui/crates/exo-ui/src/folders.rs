@@ -16,8 +16,8 @@ use exo_kit::{
 };
 use exo_rpc::Game;
 use rune::{
-    Align, Cursor, El, FileDialogOptions, LiquidGlass, Phase, ScrollSpec, SurfaceFit, TextEdit,
-    TextStyle, col, edit_access, el, row, text, text_input,
+    Align, Cursor, El, FileDialogOptions, Phase, ScrollSpec, SurfaceFit, TextEdit, TextStyle, col,
+    edit_access, el, row, text, text_input,
 };
 use std::rc::Rc;
 
@@ -443,7 +443,7 @@ pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
         .transition(modal_card_transition())
         .child(head)
         .child(grid);
@@ -634,7 +634,7 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
         .transition(modal_card_transition())
         .modal_tx(true, |s: &mut AppState, tx| {
             if s.lib.folder_cropper.is_some() {
@@ -756,7 +756,10 @@ fn folder_sheet_body(
                 .color(FG)
                 .placeholder("Folder name", fg_muted())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s.lib.folder_sheet.as_mut().unwrap().name
+                    match s.lib.folder_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.name,
+                        None => &mut s.ui_discard_edit,
+                    }
                 }))
                 .on_submit(|s: &mut AppState, _| s.save_folder_sheet()),
         );
@@ -841,7 +844,10 @@ fn folder_sheet_body(
                 .color(FG)
                 .placeholder("Search your games", fg_muted())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s.lib.folder_sheet.as_mut().unwrap().search
+                    match s.lib.folder_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.search,
+                        None => &mut s.ui_discard_edit,
+                    }
                 })),
         );
 

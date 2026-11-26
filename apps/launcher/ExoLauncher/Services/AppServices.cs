@@ -285,6 +285,13 @@ public sealed class AppServices
         }, _lifetime.Token);
         _ = Task.Run(async () =>
         {
+            if (!_lifetime.IsCancellationRequested && Settings.Shared.StartupMigrationVersion < CurrentStartupMigrationVersion)
+            {
+                await RunOneTimeStartupMigrationsAsync(_lifetime.Token).ConfigureAwait(false);
+            }
+        }, _lifetime.Token);
+        _ = Task.Run(async () =>
+        {
             // Each migration runs on its own; one failing must not skip the rest.
             try
             {
@@ -295,10 +302,6 @@ public sealed class AppServices
             if (_lifetime.IsCancellationRequested) return;
             try { Settings.HandStartupToExo(); }
             catch (Exception ex) { AppLog.Warn("Startup hand-off failed: " + ex.GetType().Name); }
-            if (!_lifetime.IsCancellationRequested && Settings.Shared.StartupMigrationVersion < CurrentStartupMigrationVersion)
-            {
-                await RunOneTimeStartupMigrationsAsync(_lifetime.Token).ConfigureAwait(false);
-            }
         }, _lifetime.Token);
         _ = Task.Run(() =>
         {
@@ -390,7 +393,7 @@ public sealed class AppServices
         Helpers.Telemetry.Exit(clean: true);
     }
 
-    private const int CurrentStartupMigrationVersion = 1;
+    private const int CurrentStartupMigrationVersion = 2;
 
     private async Task RunOneTimeStartupMigrationsAsync(CancellationToken ct)
     {
@@ -400,6 +403,14 @@ public sealed class AppServices
         if (File.Exists(CompetitiveSync.StatePath)) completedCleanly = false;
         try { GpuProfileService.RetireGsync(); }
         catch (Exception ex) { completedCleanly = false; AppLog.Warn("GPU G-SYNC retire failed: " + ex.GetType().Name); }
+        try { GameGraphicsFeatures.RetireFrameCapOverrides(); }
+        catch (Exception ex) { completedCleanly = false; AppLog.Warn("Graphics features frame cap retire failed: " + ex.GetType().Name); }
+        try
+        {
+            if (Settings.Current.FrameCap.Count > 0 || Settings.Current.NvidiaGsync == true)
+                Settings.UpdateProfile(s => { s.FrameCap = new(StringComparer.OrdinalIgnoreCase); s.NvidiaGsync = false; });
+        }
+        catch (Exception ex) { completedCleanly = false; AppLog.Warn("Frame cap / G-SYNC settings cleanup failed: " + ex.GetType().Name); }
         try { LegacyProfileDataCleanup.Run(); }
         catch (Exception ex) { completedCleanly = false; AppLog.Debug("Legacy data cleanup failed: " + ex.GetType().Name); }
         try

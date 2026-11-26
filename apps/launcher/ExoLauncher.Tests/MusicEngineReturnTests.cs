@@ -358,4 +358,16 @@ public sealed class MusicEngineReturnTests
         Assert.Equal(TimeSpan.FromSeconds(60), MusicEngineService.InitRetryBackoff(4));
         Assert.Equal(TimeSpan.FromSeconds(60), MusicEngineService.InitRetryBackoff(20));
     }
+
+    [Fact]
+    public void AppleMusicNativeStartQueueEnsuresPlaybackAndPreservesStationIds()
+    {
+        var fullAct = AppleMusicNative.Act("play", "am:albums:1440935467", null, null, null, null, null, null, installed: false);
+        Assert.Contains("function startQueue(m, q)", fullAct);
+        Assert.Contains("Promise.resolve(m.setQueue(q)).catch", fullAct);
+        Assert.Contains("return m.setQueue(loadOnly);", fullAct);
+        Assert.Contains("Promise.resolve(m.play())", fullAct);
+        Assert.Contains("if (p.type === 'stations') return startQueue(mk(), { station: p.id, startPlaying: true });", fullAct);
+        Assert.True(AppleMusicNative.AdapterVersion >= 8);
+    }
 }

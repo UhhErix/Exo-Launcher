@@ -8,14 +8,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 pub fn default_journal_path() -> PathBuf {
-    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA")
-        && !local_app_data.trim().is_empty()
-    {
-        return PathBuf::from(local_app_data)
-            .join("ExoLauncher")
-            .join("native-autopilot-journal.json");
-    }
-    std::env::temp_dir().join("exo-native-autopilot-journal.json")
+    crate::app_data_dir().join("native-autopilot-journal.json")
 }
 
 pub fn recover_orphaned_session() -> usize {

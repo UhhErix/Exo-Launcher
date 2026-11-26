@@ -8,7 +8,7 @@ use exo_kit::{
     scrim_fill, switch_pill_keyed, track_fill, type_body, type_section, type_small, type_title,
 };
 use exo_rpc::{ActionResult, HostEvent, InstallProgress};
-use rune::{Cursor, El, LiquidGlass, ScrollSpec, Transition, col, el, row, text};
+use rune::{Cursor, El, ScrollSpec, Transition, col, el, row, text};
 use serde_json::{Value, json};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -611,7 +611,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(true, |s: &mut AppState| s.close_downloads())

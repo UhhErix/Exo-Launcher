@@ -8,12 +8,12 @@ use exo_kit::{
     amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, glass_rim_bottom,
     glass_rim_top, good, hairline, hover_fill, icon_chevron_left, icon_external, icon_gamepad,
     icon_headphones, icon_keyboard, icon_mic, icon_mouse, icon_refresh, icon_zap, pressed_fill,
-    primary_button, scaled, status_badge, surface_card, type_body, type_control, type_label,
-    type_section, type_small, type_title,
+    primary_button, scaled, status_badge, type_body, type_control, type_label, type_section,
+    type_small, type_title,
 };
 use exo_rpc::keyboard_layouts::{KeyCap, KeyKind, build_keyboard_layout, find_key};
 use exo_rpc::{KeyboardReadReply, PeripheralCard};
-use rune::{Cursor, El, LiquidGlass, Phase, ScrollSpec, SurfaceFit, TextStyle, col, el, row, text};
+use rune::{Cursor, El, Phase, ScrollSpec, SurfaceFit, TextStyle, col, el, row, text};
 
 fn connection_label(conn: Option<&str>) -> &'static str {
     match conn.unwrap_or("") {
@@ -38,13 +38,38 @@ fn device_fallback_icon_name(kind: &str, role: Option<&str>) -> &'static str {
 }
 
 fn device_fallback_icon(kind: &str, role: Option<&str>) -> El {
-    match device_fallback_icon_name(kind, role) {
-        "mouse" => icon_mouse(48.0, fg_faint()),
-        "keyboard" => icon_keyboard(48.0, fg_faint()),
-        "gamepad" => icon_gamepad(48.0, fg_faint()),
-        "mic" => icon_mic(48.0, fg_faint()),
-        _ => icon_headphones(48.0, fg_faint()),
-    }
+    let icon_el = match device_fallback_icon_name(kind, role) {
+        "mouse" => icon_mouse(44.0, FG.alpha(0.88)),
+        "keyboard" => icon_keyboard(44.0, FG.alpha(0.88)),
+        "gamepad" => icon_gamepad(44.0, FG.alpha(0.88)),
+        "mic" => icon_mic(44.0, FG.alpha(0.88)),
+        _ => icon_headphones(44.0, FG.alpha(0.88)),
+    };
+    let tint = match device_fallback_icon_name(kind, role) {
+        "mouse" => rune::oklch(0.32, 0.08, 250.0),
+        "keyboard" => rune::oklch(0.32, 0.08, 290.0),
+        "gamepad" => rune::oklch(0.32, 0.08, 165.0),
+        "mic" => rune::oklch(0.32, 0.08, 25.0),
+        _ => rune::oklch(0.32, 0.08, 210.0),
+    };
+    el().size(104.0, 104.0)
+        .radius(28.0)
+        .continuous_corners()
+        .linear_gradient(
+            std::f32::consts::PI,
+            [
+                (0.0, tint.alpha(0.45)),
+                (1.0, exo_kit::surface_elevated_hi()),
+            ],
+        )
+        .border_gradient(
+            1.0,
+            rune::Color::WHITE.alpha(0.18),
+            rune::Color::WHITE.alpha(0.04),
+        )
+        .shadow(0.0, 14.0, BG.alpha(0.55))
+        .center()
+        .child(icon_el)
 }
 
 fn clean_device_name(dev: &PeripheralCard, s: &AppState) -> String {
@@ -134,6 +159,36 @@ fn device_showcase_card_sized(
         _ => None,
     });
 
+    let kind_label = match (dev.kind.as_str(), dev.role.as_deref()) {
+        ("mouse", _) => "Mouse",
+        ("keyboard", _) => "Keyboard",
+        ("controller", _) => "Controller",
+        (_, Some("input")) => "Microphone",
+        _ => "Audio",
+    };
+
+    let status_pill = row()
+        .h(26.0)
+        .px(10.0)
+        .gap(6.0)
+        .center_y()
+        .radius(exo_kit::RADIUS_PILL)
+        .fill(exo_kit::surface_elevated_hi())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .child(el().size(6.0, 6.0).radius(3.0).fill(good()))
+        .child(text(sub.clone()).font(type_small()).color(FG.alpha(0.88)));
+
+    let top_bar = row()
+        .w_full()
+        .justify_between()
+        .center_y()
+        .child(
+            text(kind_label)
+                .font(TextStyle::new(scaled(11.0), 600.0).letter_spacing(0.04))
+                .color(fg_faint()),
+        )
+        .child(status_pill);
+
     let dev_id = dev.id.clone();
     let is_mouse = dev.kind == "mouse";
     let is_kb = dev.kind == "keyboard" && dev.lab;
@@ -147,20 +202,21 @@ fn device_showcase_card_sized(
         .focusable(true)
         .hit()
         .press_on_down()
-        .press_scale(0.99)
+        .press_scale(0.985)
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .pt(16.0)
-        .px(20.0)
-        .pb(18.0)
-        .gap(12.0)
+        .pt(18.0)
+        .px(22.0)
+        .pb(20.0)
+        .gap(14.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .liquid_glass(LiquidGlass::panel())
+        .fill(BG)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .hover(surface_card())
+        .hover(exo_kit::surface_elevated_hi())
+        .hover_motion(SPRING_QUICK, SPRING_MOVE)
         .motion(SPRING_MOVE)
         .on_press(move |s: &mut AppState| {
             if is_mouse {
@@ -182,6 +238,7 @@ fn device_showcase_card_sized(
                 }
             }
         })
+        .child(top_bar)
         .child(media)
         .child(
             col()
@@ -194,10 +251,19 @@ fn device_showcase_card_sized(
                         .justify_between()
                         .center_y()
                         .gap(12.0)
-                        .child(text(sub).font(type_body()).color(fg_muted()).truncate())
+                        .child(
+                            text(if port_warn.is_some() {
+                                "Optimization available"
+                            } else {
+                                "Ready to configure"
+                            })
+                            .font(type_small())
+                            .color(fg_muted())
+                            .truncate(),
+                        )
                         .children(port_warn.map(|w| {
                             text(w)
-                                .font(TextStyle::new(scaled(13.0), 600.0))
+                                .font(TextStyle::new(scaled(12.0), 600.0))
                                 .color(bad())
                         })),
                 ),
@@ -1294,6 +1360,7 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
+            .chain_scroll_offset(crate::shell::bar_scroll_watch)
             .pt(60.0)
             .px(16.0)
             .pb(36.0)
@@ -1504,17 +1571,63 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
         .fill(BG)
         .child(header);
 
-    if devices.is_empty() {
+    if let Some(ref err) = s.pc.devices_error
+        && !s.pc.devices_loading
+        && !devices.is_empty()
+    {
         page = page.child(
-            amoled_card(RADIUS_PANEL).w_full().grow(1.0).center().child(
-                text(if s.pc.devices_loading {
-                    "Scanning connected devices…"
-                } else {
-                    "No peripherals detected yet."
-                })
+            amoled_card(RADIUS_PANEL)
+                .key("devices-error-banner")
+                .w_full()
+                .px(16.0)
+                .py(12.0)
+                .child(
+                    row()
+                        .w_full()
+                        .justify_between()
+                        .center_y()
+                        .gap(12.0)
+                        .child(
+                            text(format!("Device scan failed: {err}"))
+                                .font(type_body())
+                                .color(fg_muted())
+                                .truncate(),
+                        )
+                        .child(
+                            device_btn("devices-retry", "Try again", false)
+                                .on_press(|s: &mut AppState| s.load_pc_devices()),
+                        ),
+                ),
+        );
+    }
+
+    if devices.is_empty() {
+        let empty_body = if s.pc.devices_loading {
+            text("Scanning connected devices…")
                 .font(type_section())
-                .color(fg_muted()),
-            ),
+                .color(fg_muted())
+        } else if let Some(ref err) = s.pc.devices_error {
+            col()
+                .center()
+                .gap(12.0)
+                .px(24.0)
+                .child(text("Could not load devices").font(type_title()).color(FG))
+                .child(text(err.clone()).font(type_body()).color(fg_muted()))
+                .child(
+                    device_btn("devices-retry", "Try again", false)
+                        .on_press(|s: &mut AppState| s.load_pc_devices()),
+                )
+        } else {
+            text("No peripherals detected yet.")
+                .font(type_section())
+                .color(fg_muted())
+        };
+        page = page.child(
+            amoled_card(RADIUS_PANEL)
+                .w_full()
+                .grow(1.0)
+                .center()
+                .child(empty_body),
         );
     } else {
         page = page.child(grid);

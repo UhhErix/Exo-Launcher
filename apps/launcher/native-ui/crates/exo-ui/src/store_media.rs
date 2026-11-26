@@ -195,7 +195,7 @@ pub fn media_wait() -> El {
     let stage = el()
         .key("sg-media-wait-stage")
         .w_full()
-        .h(830.0)
+        .h(520.0)
         .radius(RADIUS_CARD)
         .fill(glass_control_fill())
         .border(1.0, float_line());
@@ -203,11 +203,11 @@ pub fn media_wait() -> El {
         el().key(format!("sg-thumb-wait-{i}"))
             .grow(1.0)
             .min_w(0.0)
-            .h(78.0)
+            .h(72.0)
             .radius(RADIUS_SMALL)
             .fill(glass_control_fill())
     }));
-    col().w_full().gap(12.0).child(stage).child(strip)
+    col().w_full().gap(10.0).child(stage).child(strip)
 }
 
 pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
@@ -226,7 +226,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
     let mut stage = el()
         .key(format!("sg-banner-{}", game.app_id))
         .w_full()
-        .h(853.0)
+        .h(540.0)
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
@@ -309,8 +309,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
                             .gap(10.0)
                             .center_y()
                             .radius(RADIUS_PILL)
-                            .fill(BG.alpha(0.72))
-                            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                            .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::ClearMedia, true))
                             .child(
                                 glass_icon_circle_opt(
                                     "sg-trailer-play",
@@ -386,8 +385,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
                     .size(32.0, 32.0)
                     .radius(RADIUS_PILL)
                     .center()
-                    .fill(BG.alpha(0.64))
-                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                    .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::ClearMedia, true))
                     .child(icon_maximize(14.0, FG));
                 stage = stage
                     .role("button")
@@ -437,7 +435,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
             .cursor(Cursor::Pointer)
             .press_on_down()
             .press_scale(PRESS_SCALE)
-            .size(182.5, 102.66)
+            .size(144.0, 81.0)
             .radius(RADIUS_SMALL)
             .continuous_corners()
             .clip_rounded(RADIUS_SMALL)
@@ -491,7 +489,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
             .cursor(Cursor::Pointer)
             .press_on_down()
             .press_scale(PRESS_SCALE)
-            .size(182.5, 102.66)
+            .size(144.0, 81.0)
             .radius(RADIUS_SMALL)
             .continuous_corners()
             .clip_rounded(RADIUS_SMALL)

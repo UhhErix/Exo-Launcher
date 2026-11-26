@@ -61,7 +61,6 @@ pub enum HostEventKind {
     ExoAccountChanged,
     AutopilotReport,
     AutopilotLive,
-    GameCapLab,
     ShadersChanged,
     ShadersEvent,
     AccountsProgress,
@@ -146,7 +145,6 @@ impl HostEventKind {
             HostEvent::ExoAccountChanged => Self::ExoAccountChanged,
             HostEvent::AutopilotReport(_) => Self::AutopilotReport,
             HostEvent::AutopilotLive(_) => Self::AutopilotLive,
-            HostEvent::GameCapLab(_) => Self::GameCapLab,
             HostEvent::ShadersChanged => Self::ShadersChanged,
             HostEvent::ShadersEvent(_) => Self::ShadersEvent,
             HostEvent::AccountsProgress(_) => Self::AccountsProgress,
@@ -390,13 +388,6 @@ fn register_media(reg: &mut EventRegistry) {
             return false;
         };
         state.apply_capture_shrunk(*shrunk);
-        true
-    });
-    reg.on(HostEventKind::NotesOpen, |state, ev| {
-        let HostEvent::NotesOpen(note_ev) = ev else {
-            return false;
-        };
-        state.apply_notes_open(note_ev);
         true
     });
 }

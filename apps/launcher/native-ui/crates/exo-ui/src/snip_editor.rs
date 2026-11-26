@@ -164,6 +164,7 @@ pub struct SnipEditorState {
     pub canvas: ImageCanvasState,
     pub busy: bool,
     pub reading_text: bool,
+    pub vectorizing: bool,
     pub said: Option<String>,
     pub error: Option<String>,
 }
@@ -190,6 +191,7 @@ impl SnipEditorState {
             canvas,
             busy: false,
             reading_text: false,
+            vectorizing: false,
             said: None,
             error: None,
         }
@@ -346,11 +348,168 @@ impl AppState {
         self.media.snip_editor = None;
     }
 
+    pub fn tick_snip_editor_reload(&mut self) -> bool {
+        let Some(ref ed) = self.media.snip_editor else {
+            return false;
+        };
+        if ed.pixels.is_some() || self.status == HostStatus::Standalone {
+            return false;
+        }
+        let item_id = ed.item_id.clone();
+        let reloaded = self
+            .media
+            .capture_items
+            .iter()
+            .find(|c| c.id == item_id)
+            .and_then(|item| {
+                if let Some(path) = self.art_base.resolve_capture_file(&item.url)
+                    && let Ok(bytes) = std::fs::read(&path)
+                    && let Ok(px) = Pixels::from_png(&bytes)
+                {
+                    return Some(px);
+                }
+                self.capture_thumb_image(&item.url, 1.0)
+                    .map(|img| img.pixels().clone())
+            });
+        let Some(px) = reloaded else {
+            return false;
+        };
+        let mut next = SnipEditorState::new(item_id, Some(px));
+        if let Some(ref old) = self.media.snip_editor {
+            next.tab = old.tab;
+            next.markup = old.markup;
+            next.crop_shape = old.crop_shape;
+        }
+        next.sync_tool();
+        self.media.snip_editor = Some(next);
+        true
+    }
+
+    /// Traces the current snip locally into clean editable SVG using OpenVector (`openvector` CLI / `npx openvector`).
+    pub fn snip_export_svg(&mut self) {
+        let Some(ref mut ed) = self.media.snip_editor else {
+            return;
+        };
+        if ed.busy || ed.vectorizing || ed.pixels.is_none() {
+            return;
+        }
+        let png_bytes = match ed.export_png_bytes() {
+            Ok(b) => b,
+            Err(msg) => {
+                ed.error = Some(msg);
+                return;
+            }
+        };
+        let item_id = ed.item_id.clone();
+        ed.vectorizing = true;
+        ed.error = None;
+        ed.said = Some("Tracing clean SVG with OpenVector…".into());
+
+        if self.status == HostStatus::Standalone {
+            ed.vectorizing = false;
+            ed.said = Some("Exported clean SVG (standalone preview).".into());
+            return;
+        }
+
+        let target_svg = self
+            .media
+            .capture_items
+            .iter()
+            .find(|c| c.id == item_id)
+            .and_then(|item| self.art_base.resolve_capture_file(&item.url))
+            .map(|p| p.with_extension("svg"))
+            .unwrap_or_else(|| {
+                std::env::temp_dir().join(format!("exo-snip-{}.svg", item_id.replace(':', "-")))
+            });
+
+        #[cfg(windows)]
+        if let Some(handle) = self.handle.clone() {
+            std::thread::spawn(move || {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+                let tmp_in = std::env::temp_dir().join(format!(
+                    "exo-ov-in-{}.png",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_nanos())
+                        .unwrap_or(0)
+                ));
+                let result: Result<(String, String), String> = (|| {
+                    std::fs::write(&tmp_in, &png_bytes)
+                        .map_err(|e| format!("Could not write temporary PNG: {e}"))?;
+                    if let Some(parent) = target_svg.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let in_str = tmp_in.to_string_lossy().to_string();
+                    let out_str = target_svg.to_string_lossy().to_string();
+
+                    let direct = std::process::Command::new("openvector")
+                        .args(["vectorize", &in_str, "--output", &out_str])
+                        .creation_flags(CREATE_NO_WINDOW)
+                        .output();
+                    let ok = match direct {
+                        Ok(out) if out.status.success() => true,
+                        _ => std::process::Command::new("cmd")
+                            .args([
+                                "/C",
+                                "npx",
+                                "--yes",
+                                "openvector",
+                                "vectorize",
+                                &in_str,
+                                "--output",
+                                &out_str,
+                            ])
+                            .creation_flags(CREATE_NO_WINDOW)
+                            .output()
+                            .map(|o| o.status.success())
+                            .unwrap_or(false),
+                    };
+                    let _ = std::fs::remove_file(&tmp_in);
+                    if !ok {
+                        return Err(
+                            "Install OpenVector (`npm i -g openvector`) to trace snips to SVG locally."
+                                .into(),
+                        );
+                    }
+                    let svg = std::fs::read_to_string(&target_svg)
+                        .map_err(|e| format!("SVG output could not be read: {e}"))?;
+                    let kb = (svg.len() as f32) / 1024.0;
+                    let name = target_svg
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("snip.svg");
+                    Ok((svg, format!("Saved {name} ({kb:.1} KB) & copied SVG.")))
+                })();
+
+                handle.update(move |s, tx| {
+                    if let Some(ref mut ed) = s.media.snip_editor {
+                        ed.vectorizing = false;
+                        match result {
+                            Ok((svg, msg)) => {
+                                tx.copy(svg);
+                                ed.error = None;
+                                ed.said = Some(msg);
+                            }
+                            Err(err) => {
+                                ed.said = None;
+                                ed.error = Some(err);
+                            }
+                        }
+                    }
+                });
+            });
+        }
+        #[cfg(not(windows))]
+        let _ = (png_bytes, target_svg);
+    }
+
     pub fn snip_save(&mut self) {
         let Some(ref mut ed) = self.media.snip_editor else {
             return;
         };
-        if ed.busy || !ed.is_dirty() {
+        if ed.busy || ed.pixels.is_none() {
             return;
         }
         let item_id = ed.item_id.clone();
@@ -407,6 +566,34 @@ impl AppState {
         }
         #[cfg(not(windows))]
         let _ = (item_id, b64);
+    }
+
+    pub fn snip_copy(&mut self) {
+        let Some(ref ed) = self.media.snip_editor else {
+            return;
+        };
+        if ed.busy || ed.pixels.is_none() {
+            return;
+        }
+        if ed.is_dirty() {
+            self.snip_save();
+            return;
+        }
+        let id = ed.item_id.clone();
+        self.media.snip_editor = None;
+        self.capture_viewer_action(&id, "copy");
+    }
+
+    pub fn snip_delete(&mut self) {
+        let Some(ref ed) = self.media.snip_editor else {
+            return;
+        };
+        if ed.busy {
+            return;
+        }
+        let id = ed.item_id.clone();
+        self.media.snip_editor = None;
+        self.capture_viewer_action(&id, "delete");
     }
 
     pub fn snip_copy_text(&mut self, use_crop: bool) {
@@ -545,6 +732,10 @@ impl AppState {
             self.close_snip_editor();
             return true;
         }
+        if ev.is_command('s') || ev.key == Key::Enter {
+            self.snip_save();
+            return true;
+        }
         if ev.is_command('z') {
             if let Some(ref mut ed) = self.media.snip_editor {
                 if ev.mods.shift {
@@ -572,7 +763,7 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
     let dirty = ed.is_dirty();
     let can_undo = ed.canvas.can_undo();
     let can_redo = ed.canvas.can_redo();
-    let can_save = ed.pixels.is_some() && dirty && !ed.busy;
+    let can_save = ed.pixels.is_some() && !ed.busy;
 
     let top_bar = row()
         .w_full()
@@ -622,13 +813,43 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
         )
         .child(el().grow(1.0))
         .child(
-            device_btn("snip-cancel", "Cancel", ed.busy)
+            device_btn("snip-cancel", "Close", ed.busy)
                 .cursor(if ed.busy {
                     Cursor::NotAllowed
                 } else {
                     Cursor::Pointer
                 })
                 .on_press(|s: &mut AppState| s.close_snip_editor()),
+        )
+        .child(
+            exo_kit::danger_button("snip-delete", "Delete", None)
+                .on_press(|s: &mut AppState| s.snip_delete()),
+        )
+        .child(
+            device_btn("snip-copy", "Copy", !can_save)
+                .cursor(if can_save {
+                    Cursor::Pointer
+                } else {
+                    Cursor::NotAllowed
+                })
+                .on_press(|s: &mut AppState| s.snip_copy()),
+        )
+        .child(
+            device_btn(
+                "snip-export-svg",
+                if ed.vectorizing {
+                    "Tracing SVG…"
+                } else {
+                    "Trace SVG"
+                },
+                ed.pixels.is_none() || ed.busy || ed.vectorizing,
+            )
+            .cursor(if ed.pixels.is_some() && !ed.busy && !ed.vectorizing {
+                Cursor::Pointer
+            } else {
+                Cursor::NotAllowed
+            })
+            .on_press(|s: &mut AppState| s.snip_export_svg()),
         )
         .child(if can_save {
             primary_button("snip-save", "Save", None).on_press(|s: &mut AppState| s.snip_save())
@@ -957,5 +1178,35 @@ mod tests {
         assert!(!ed.is_dirty());
         assert!(ed.canvas.redo());
         assert!(ed.is_dirty());
+    }
+
+    #[test]
+    fn snip_can_save_immediately_without_edits_and_export_svg() {
+        let mut s = AppState::with_demo_games();
+        s.open_snip_editor("demo-snip-1");
+        let ed = s.media.snip_editor.as_ref().expect("snip editor opened");
+        assert!(ed.pixels.is_some());
+        assert!(!ed.is_dirty());
+
+        // OpenVector SVG trace action works on a fresh snip in standalone mode.
+        s.snip_export_svg();
+        assert!(
+            s.media
+                .snip_editor
+                .as_ref()
+                .and_then(|e| e.said.as_deref())
+                .is_some_and(|m| m.contains("SVG"))
+        );
+
+        // Fresh unedited snip saves immediately without needing edits.
+        s.snip_save();
+        assert!(
+            s.media.snip_editor.is_none(),
+            "snip_save should succeed and close editor on fresh snip"
+        );
+        assert_eq!(
+            s.media.viewer_note,
+            Some(("Saved and copied.".into(), false))
+        );
     }
 }

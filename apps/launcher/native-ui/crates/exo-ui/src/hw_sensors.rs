@@ -3,14 +3,14 @@ use std::thread;
 
 use exo_gpu::{GpuControlReadonlyOverview, read_gpu_control_overview};
 use exo_kit::{
-    BG, BadgeTone, FG, RADIUS_PANEL, bad, fg_muted, float_line, status_badge, type_control,
-    type_small, type_title, warn,
+    BadgeTone, FG, bad, fg_faint, fg_muted, float_line, good as good_color, icon_check,
+    status_badge, type_control, type_section, type_small, warn,
 };
 use exo_sensors::adaptive::{HardwareAudit, PollMode, run_full_hardware_audit};
-use exo_sensors::sentinel::SentinelSeverity;
-use rune::{El, col, row, text};
+use exo_sensors::sentinel::{SentinelFinding, SentinelKind, SentinelSeverity};
+use rune::{El, col, el, row, text};
 
-use crate::pc_menus::{menu_btn, menu_row};
+use crate::pc_menus::menu_row;
 use crate::state::{AppState, Room};
 
 #[derive(Default)]
@@ -97,199 +97,181 @@ impl AppState {
     }
 }
 
-pub(crate) fn card_view(s: &AppState) -> El {
-    let hw = &s.pc.hw_sensors_ui;
-
-    let (badge_word, badge_tone) = match hw.audit.as_ref() {
-        None if hw.busy => ("Scanning".into(), BadgeTone::Neutral),
-        None => ("Standby".into(), BadgeTone::Neutral),
-        Some(a) if a.findings.is_empty() => ("All clear".into(), BadgeTone::Good),
-        Some(a)
-            if a.findings
-                .iter()
-                .any(|f| f.severity == SentinelSeverity::Critical) =>
-        {
-            (format!("{} critical", a.findings.len()), BadgeTone::Bad)
+fn health_check_cell(
+    key: &'static str,
+    label: &'static str,
+    finding: Option<&SentinelFinding>,
+    good: String,
+) -> El {
+    let (mark, line, tone) = match finding {
+        Some(f) => {
+            let tone = if f.severity == SentinelSeverity::Critical {
+                bad()
+            } else {
+                warn()
+            };
+            let hint = if f.fix_hint.is_empty() {
+                f.title.clone()
+            } else {
+                format!("{} · {}", f.title, f.fix_hint)
+            };
+            (el().size(7.0, 7.0).radius(3.5).fill(tone), hint, tone)
         }
-        Some(a) => (format!("{} check(s)", a.findings.len()), BadgeTone::Warn),
+        None => (icon_check(13.0, good_color()), good, fg_muted()),
+    };
+    row()
+        .key(key)
+        .grow(1.0)
+        .min_w(0.0)
+        .py(6.0)
+        .gap(9.0)
+        .items_start()
+        .child(el().size(14.0, 16.0).center().child(mark))
+        .child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(1.0)
+                .child(text(label).font(type_control()).color(FG))
+                .child(text(line).font(type_small()).color(tone).wrap()),
+        )
+}
+
+pub(crate) fn health_view(s: &AppState) -> El {
+    let hw = &s.pc.hw_sensors_ui;
+    let Some(ref a) = hw.audit else {
+        return row()
+            .key("exo-ai-health-checking")
+            .w_full()
+            .pt(10.0)
+            .gap(8.0)
+            .center_y()
+            .child(el().size(6.0, 6.0).radius(3.0).fill(fg_faint()))
+            .child(
+                text("Checking memory, graphics link, drives and stability…")
+                    .font(type_small())
+                    .color(fg_muted()),
+            );
+    };
+    let find = |kinds: &[SentinelKind]| {
+        a.findings
+            .iter()
+            .filter(|f| kinds.contains(&f.kind))
+            .max_by_key(|f| f.severity)
     };
 
-    let audit_meta = hw
-        .audit
+    let memory_good = a
+        .smbios
         .as_ref()
-        .map(|a| format!("Audit {:.0} ms · read-only", a.audit_duration_ms))
-        .unwrap_or_else(|| "0 Hz while hidden".into());
-
-    let header = row()
-        .w_full()
-        .justify_between()
-        .center_y()
-        .gap(10.0)
-        .child(
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(
-                    text("Hardware sentinel")
-                        .key("exo-ai-sentinel-title")
-                        .font(type_title())
-                        .color(FG),
-                )
-                .child(status_badge(badge_word, badge_tone))
-                .child(text(audit_meta).font(type_small()).color(fg_muted())),
-        )
-        .child(
-            menu_btn(
-                "hw-sentinel-refresh".into(),
-                "Refresh",
-                false,
-                false,
-                hw.busy,
-            )
-            .on_press(|s: &mut AppState| s.refresh_hw_sensors_async()),
-        );
-
-    let mut left = col().grow(1.15).min_w(0.0).gap(5.0);
-    let mut right = col().grow(1.0).min_w(0.0).gap(5.0);
-
-    if let Some(ref a) = hw.audit {
-        if let Some(ref sb) = a.smbios {
-            let speed_txt = sb
+        .map(|sb| {
+            let speed = sb
                 .dimms
                 .first()
-                .map(|d| {
-                    if d.configured_mts > 0 {
-                        format!("{} {} MT/s", d.memory_type, d.configured_mts)
-                    } else {
-                        d.memory_type.clone()
-                    }
-                })
-                .unwrap_or_else(|| "RAM".into());
-            let ch_txt = if sb.is_single_channel_desktop() {
-                "Single-channel"
+                .filter(|d| d.configured_mts > 0)
+                .map(|d| format!(" at {} MT/s", d.configured_mts))
+                .unwrap_or_default();
+            let channel = if sb.is_single_channel_desktop() {
+                "single channel"
             } else {
-                "Dual-channel"
+                "dual channel"
             };
-            left = left.child(
-                text(format!(
-                    "Memory: {} GB · {} · {ch_txt} ({} DIMM)",
-                    sb.total_ram_gb(),
-                    speed_txt,
-                    sb.dimms.len()
-                ))
-                .font(type_small())
-                .color(FG),
-            );
-        }
-        if let Some(ref g) = a.gpu {
-            let pcie_txt = match (g.pcie_gen_current, g.pcie_width_current, g.pcie_width_max) {
-                (Some(pcie_gen), Some(cw), Some(mw)) => format!("PCIe Gen{pcie_gen} x{cw}/x{mw}"),
-                _ => "PCIe n/a".into(),
-            };
-            let pwr_txt = g
-                .board_power_w
-                .map(|w| format!("{w:.0} W"))
-                .unwrap_or_else(|| "n/a".into());
-            let tmp_txt = g
-                .core_temp_c
-                .map(|c| format!("{c:.0} °C"))
-                .unwrap_or_else(|| "n/a".into());
-            left = left.child(
-                text(format!(
-                    "GPU: {} · {pwr_txt} · {tmp_txt} · {pcie_txt}",
-                    g.name
-                ))
-                .font(type_small())
-                .color(fg_muted())
-                .truncate(),
-            );
-        }
-        if let Some(d) = a.drives.first() {
-            let t = d
-                .temp_c
-                .map(|c| format!("{c} °C"))
-                .unwrap_or_else(|| "n/a".into());
-            let life = d
-                .life_used_pct
-                .map(|l| format!("{}% wear", l))
-                .unwrap_or_else(|| "SMART ok".into());
-            left = left.child(
-                text(format!(
-                    "NVMe: {} · {t} · {life} · {} throttle events",
-                    d.model, d.throttle_events
-                ))
-                .font(type_small())
-                .color(fg_muted())
-                .truncate(),
-            );
-        }
-        left = left.child(
-            text(format!(
-                "24h stability: {} WHEA · {} GPU TDR · {}",
-                a.stability_24h.whea_errors, a.stability_24h.gpu_tdr_resets, a.pawnio.note
-            ))
-            .font(type_small())
-            .color(fg_muted())
-            .wrap(),
-        );
-
-        if a.findings.is_empty() {
-            right = right.child(
-                text("No hardware bottlenecks detected (XMP/EXPO, RAM channel, PCIe link, NVMe thermals, and WHEA all clear).")
-                    .font(type_small())
-                    .color(fg_muted())
-                    .wrap(),
-            );
-        } else {
-            for f in a.findings.iter().take(3) {
-                let col_tone = if f.severity == SentinelSeverity::Critical {
-                    bad()
-                } else {
-                    warn()
-                };
-                right = right.child(
-                    col()
-                        .w_full()
-                        .gap(1.0)
-                        .child(text(f.title.clone()).font(type_control()).color(col_tone))
-                        .child(
-                            text(format!("{} {}", f.detail, f.fix_hint))
-                                .font(type_small())
-                                .color(fg_muted())
-                                .wrap(),
-                        ),
-                );
+            format!("{} GB{speed} · {channel}", sb.total_ram_gb())
+        })
+        .unwrap_or_else(|| "Running at its rated speed".into());
+    let link_good = a
+        .gpu
+        .as_ref()
+        .and_then(|g| match (g.pcie_gen_current, g.pcie_width_current) {
+            (Some(pcie_gen), Some(w)) => Some(format!("Full speed · PCIe {pcie_gen}.0 x{w}")),
+            _ => None,
+        })
+        .unwrap_or_else(|| "Full speed".into());
+    let drive_good = a
+        .drives
+        .first()
+        .map(|d| {
+            let mut parts = Vec::new();
+            if let Some(t) = d.temp_c {
+                parts.push(format!("{t} °C"));
             }
-        }
+            if let Some(l) = d.life_used_pct {
+                parts.push(format!("{l}% worn"));
+            }
+            if parts.is_empty() {
+                "Healthy".to_string()
+            } else {
+                format!("Healthy · {}", parts.join(" · "))
+            }
+        })
+        .unwrap_or_else(|| "Healthy".into());
+    let stable_good = "No crashes or driver resets today".to_string();
+
+    let issues = a.findings.len();
+    let summary = if issues == 0 {
+        text("All good").font(type_small()).color(good_color())
     } else {
-        left = left.child(
-            text("Checks SMBIOS RAM speed & channels, GPU PCIe link width, NVMe SMART throttling, and 24h WHEA/TDR logs (100% read-only, zero WinRing0).")
-                .font(type_small())
-                .color(fg_muted())
-                .wrap(),
-        );
-    }
+        text(if issues == 1 {
+            "1 thing to check".to_string()
+        } else {
+            format!("{issues} things to check")
+        })
+        .font(type_small())
+        .color(warn())
+    };
 
     col()
-        .key("exo-ai-sentinel-card")
+        .key("exo-ai-health")
         .w_full()
-        .h_full()
-        .pt(16.0)
-        .px(24.0)
-        .pb(16.0)
-        .gap(10.0)
-        .radius(RADIUS_PANEL)
-        .continuous_corners()
-        .fill(BG)
-        .border(1.0, float_line())
-        .child(header)
+        .pt(6.0)
+        .child(el().w_full().h(1.0).fill(float_line()))
         .child(
             row()
                 .w_full()
-                .items_start()
+                .pt(10.0)
+                .pb(2.0)
+                .justify_between()
+                .center_y()
+                .child(text("Hardware check").font(type_section()).color(FG))
+                .child(summary),
+        )
+        .child(
+            row()
+                .w_full()
                 .gap(16.0)
-                .child(left)
-                .child(right),
+                .items_start()
+                .child(health_check_cell(
+                    "exo-ai-health-memory",
+                    "Memory",
+                    find(&[SentinelKind::XmpExpoOff, SentinelKind::SingleChannelRam]),
+                    memory_good,
+                ))
+                .child(health_check_cell(
+                    "exo-ai-health-link",
+                    "Graphics link",
+                    find(&[SentinelKind::PcieLinkDrop]),
+                    link_good,
+                )),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(16.0)
+                .items_start()
+                .child(health_check_cell(
+                    "exo-ai-health-drives",
+                    "Drives",
+                    find(&[
+                        SentinelKind::NvmeThrottling,
+                        SentinelKind::NvmeCriticalHealth,
+                    ]),
+                    drive_good,
+                ))
+                .child(health_check_cell(
+                    "exo-ai-health-stability",
+                    "Stability",
+                    find(&[SentinelKind::WheaErrors, SentinelKind::GpuTdrBurst]),
+                    stable_good,
+                )),
         )
 }
 
@@ -393,7 +375,7 @@ mod tests {
             },
             findings,
         });
-        let _ = card_view(&s);
+        let _ = health_view(&s);
         let _ = graphics_drs_view(&s);
     }
 }

@@ -3,19 +3,19 @@ use crate::game_actions::{
     install_verb, is_installing_game, is_noise_status, primary_cta_label, resolve_primary_action,
     transfer_for_game, transfer_meta_line, transfer_share, unavailable_reason,
 };
-use crate::game_perf::{graphics_features_card, performance_card};
+use crate::game_perf::performance_card;
 use crate::game_props::{artwork_tools, properties_card};
 use crate::state::{AppState, InputMode, title_hue};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_FLIGHT, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, float_line,
-    glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, hex, hover_fill,
-    icon_chevron_left, icon_download, icon_external, icon_folder, icon_pause, icon_play, icon_stop,
-    icon_users, pressed_fill, scaled, store_logo, store_logo_or_fallback, surface_card,
-    type_control, type_first_run, type_section, type_small, type_title, warn,
+    SPRING_FLIGHT, SPRING_QUICK, SPRING_SMOOTH, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted,
+    float_line, glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, hex,
+    hover_fill, icon_chevron_left, icon_download, icon_external, icon_folder, icon_pause,
+    icon_play, icon_stop, icon_users, pressed_fill, scaled, store_logo, store_logo_or_fallback,
+    surface_card, type_control, type_first_run, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, GameVariant, InstallProgress};
-use rune::{Cursor, El, LiquidGlass, SurfaceFit, TextStyle, col, el, oklch, row, text};
+use rune::{Cursor, El, SpringPair, SurfaceFit, TextStyle, Transition, col, el, oklch, row, text};
 
 const GAME_EDGE: f32 = 32.0;
 
@@ -467,9 +467,10 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::PI,
             [
-                (0.0, BG.alpha(0.30)),
-                (0.20, BG.alpha(0.0)),
-                (0.72, BG.alpha(0.48)),
+                (0.0, BG.alpha(0.0)),
+                (0.38, BG.alpha(0.04)),
+                (0.68, BG.alpha(0.46)),
+                (0.88, BG.alpha(0.84)),
                 (1.0, BG),
             ],
         );
@@ -479,9 +480,9 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::FRAC_PI_2,
             [
-                (0.0, BG.alpha(0.62)),
-                (0.42, BG.alpha(0.20)),
-                (0.76, BG.alpha(0.0)),
+                (0.0, BG.alpha(0.48)),
+                (0.36, BG.alpha(0.16)),
+                (0.68, BG.alpha(0.0)),
             ],
         );
 
@@ -548,8 +549,9 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .fill(surface_card())
-        .shadow(0.0, 20.0, BG.alpha(0.75));
+        .shadow(8.0, 26.0, BG.alpha(0.78));
     if let Some(ref img) = cover {
         poster = poster.pixels_fit(img.pixels(), SurfaceFit::Fill);
     } else {
@@ -629,7 +631,7 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
                     .key(format!("gp-stat-val-{label}"))
                     .h(25.0)
                     .center_y()
-                    .child(text(val).font(type_title()).color(FG)),
+                    .child(text(val).font(type_title().features("'tnum' 1")).color(FG)),
             )
             .child(
                 row().h(16.0).center_y().child(
@@ -687,7 +689,7 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
                     .radius(RADIUS_PANEL)
                     .continuous_corners()
                     .clip_rounded(RADIUS_PANEL)
-                    .liquid_glass(LiquidGlass::control())
+                    .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Control, false))
                     .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                     .children(stat_items),
             );
@@ -722,7 +724,7 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
 
     let stage = el()
         .w_full()
-        .min_h(460.0)
+        .min_h(420.0)
         .clip_rounded(0.0)
         .fill(BG)
         .child(hero_bg)
@@ -731,12 +733,12 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .child(
             col()
                 .w_full()
-                .min_h(460.0)
+                .min_h(420.0)
                 .pt(56.0)
                 .px(GAME_EDGE)
-                .pb(24.0)
+                .pb(20.0)
                 .justify_between()
-                .gap(20.0)
+                .gap(16.0)
                 .child(top_row)
                 .child(hero_bar),
         );
@@ -744,25 +746,29 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
     let mut page = col()
         .key(format!("game-page-{}", base_game.id))
         .w_full()
-        .gap(14.0)
-        .pb(24.0)
+        .gap(12.0)
+        .pb(20.0)
         .fill(BG)
         .child(stage);
 
     if installed_actions {
+        let card_enter =
+            Transition::opacity().springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK));
         let left_col = col()
+            .key("gp-lower-left")
+            .transition(card_enter)
             .grow(1.15)
             .min_w(0.0)
-            .gap(16.0)
-            .child(performance_card(s, &game))
-            .child(graphics_features_card(s, &game));
+            .gap(14.0)
+            .child(performance_card(s, &game));
+        let props_card = properties_card(s, &game).transition(card_enter);
         let lower_cards = row()
             .w_full()
             .px(GAME_EDGE)
-            .gap(16.0)
+            .gap(14.0)
             .items_start()
             .child(left_col)
-            .child(properties_card(s, &game));
+            .child(props_card);
         page = page.child(lower_cards);
     }
 
@@ -838,7 +844,7 @@ mod tests {
             "Game page exceeded EXO_MAX_BACKDROP_BLURS: {glass_shapes}"
         );
         assert!(
-            glass_shapes >= 8,
+            glass_shapes >= 7,
             "Game page should render real Liquid Glass across top bar and hero controls, got {glass_shapes}"
         );
 
@@ -848,9 +854,6 @@ mod tests {
         let (props_rect, _) = rt
             .presented("gp-props-card")
             .expect("gp-props-card presented");
-        let (gfx_rect, _) = rt
-            .presented("gp-graphics-features-card")
-            .expect("gp-graphics-features-card presented");
         assert!(
             (perf_rect[1] - props_rect[1]).abs() <= 1.0,
             "top cards not aligned: perf_y={} props_y={}",
@@ -858,14 +861,12 @@ mod tests {
             props_rect[1]
         );
         assert!(
-            (gfx_rect[0] - perf_rect[0]).abs() <= 1.0 && (gfx_rect[2] - perf_rect[2]).abs() <= 1.0,
-            "graphics features card must sit in left column under perf card: perf={perf_rect:?} gfx={gfx_rect:?}"
+            rt.presented("gp-graphics-features-card").is_none(),
+            "graphics features card should be folded into Optimize"
         );
-        let expected_gfx_y = perf_rect[1] + perf_rect[3] + 16.0;
         assert!(
-            (gfx_rect[1] - expected_gfx_y).abs() <= 1.0,
-            "graphics features card gap mismatch: gfx_y={} expected={expected_gfx_y}",
-            gfx_rect[1]
+            rt.presented("gp-fc-row").is_none(),
+            "frame cap row should be removed"
         );
 
         let stat_keys = [
@@ -1327,93 +1328,5 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert!(rt.presented("gp-art-replace").is_some());
         assert!(rt.presented("gp-art-refresh").is_some());
-    }
-
-    #[test]
-    fn game_page_graphics_features_card_renders_all_five_rows_and_controls() {
-        let mut state = AppState::with_demo_games();
-        state.open_game_page("demo:cyberpunk");
-        state.game_page.graphics_features = Some(exo_rpc::GameGraphicsFeaturesState {
-            ok: true,
-            message: None,
-            engine: Some("REDengine 4".into()),
-            running: Some(false),
-            anti_cheat: None,
-            features: Some(vec![
-                exo_rpc::GraphicsFeatureRow {
-                    id: "upscalers".into(),
-                    name: "Upscalers".into(),
-                    state: "inGame".into(),
-                    route: "DLSS / FSR / XeSS · NVIDIA DRS DLSS 4/4.5 override".into(),
-                    route_kind: "driver".into(),
-                    can_toggle: true,
-                    needs_anti_cheat_confirm: false,
-                    anti_cheat_warning: None,
-                    closest_option: None,
-                    details: None,
-                },
-                exo_rpc::GraphicsFeatureRow {
-                    id: "reflex".into(),
-                    name: "Reflex & low latency".into(),
-                    state: "on".into(),
-                    route: "NVIDIA Reflex + driver Low Latency Mode Ultra".into(),
-                    route_kind: "driver".into(),
-                    can_toggle: true,
-                    needs_anti_cheat_confirm: false,
-                    anti_cheat_warning: None,
-                    closest_option: None,
-                    details: None,
-                },
-                exo_rpc::GraphicsFeatureRow {
-                    id: "rayTracing".into(),
-                    name: "Ray tracing".into(),
-                    state: "off".into(),
-                    route: "REDengine UserSettings.json".into(),
-                    route_kind: "config".into(),
-                    can_toggle: true,
-                    needs_anti_cheat_confirm: false,
-                    anti_cheat_warning: None,
-                    closest_option: None,
-                    details: None,
-                },
-                exo_rpc::GraphicsFeatureRow {
-                    id: "pathTracing".into(),
-                    name: "Path tracing".into(),
-                    state: "off".into(),
-                    route: "REDengine RT Overdrive (UserSettings.json)".into(),
-                    route_kind: "config".into(),
-                    can_toggle: true,
-                    needs_anti_cheat_confirm: false,
-                    anti_cheat_warning: None,
-                    closest_option: None,
-                    details: None,
-                },
-                exo_rpc::GraphicsFeatureRow {
-                    id: "hiddenSettings".into(),
-                    name: "Hidden settings".into(),
-                    state: "off".into(),
-                    route: "Ultra decals, 16x AF & crowd (UserSettings.json)".into(),
-                    route_kind: "config".into(),
-                    can_toggle: true,
-                    needs_anti_cheat_confirm: false,
-                    anti_cheat_warning: None,
-                    closest_option: None,
-                    details: None,
-                },
-            ]),
-        });
-
-        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
-        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
-        rt.frame(0.0);
-        rt.settle_all();
-        rt.frame(1.0 / 60.0);
-
-        assert!(rt.presented("gp-graphics-features-card").is_some());
-        assert!(rt.presented("gp-gfx-switch-upscalers").is_some());
-        assert!(rt.presented("gp-gfx-switch-reflex").is_some());
-        assert!(rt.presented("gp-gfx-switch-rayTracing").is_some());
-        assert!(rt.presented("gp-gfx-switch-pathTracing").is_some());
-        assert!(rt.presented("gp-gfx-switch-hiddenSettings").is_some());
     }
 }

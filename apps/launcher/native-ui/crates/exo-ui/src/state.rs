@@ -18,17 +18,14 @@ use exo_kit::SPRING_MOVE;
 use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
-    CapLabActionReply, CapLabStatus, CaptureLiveState, CaptureSavedEvent, CaptureStatusReply,
-    DiscordFriend, ExoAccountState, FrameCapBackend, FrameCapStutter, FrameCapSuggestion,
-    FrameCapTier, FrameGenRoute, Game, GameExtras, GameFrameCap, GameFrameGen, GameProperties,
-    GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
-    LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
-    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_CAP_LAB_CANCEL, METHOD_GAME_CAP_LAB_RUN,
-    METHOD_GAME_FRAME_CAP, METHOD_GAME_FRAME_GEN, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH,
-    METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH,
-    METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback,
-    MusicVolumeEvent, ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame, StoreHome,
-    StoreOtherOffers, StoreShelf, StoreTile, remote_art,
+    CaptureLiveState, CaptureSavedEvent, CaptureStatusReply, DiscordFriend, ExoAccountState,
+    FrameGenRoute, Game, GameExtras, GameFrameGen, GameProperties, GameRunStateEvent, HostEvent,
+    InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
+    LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_FRAME_GEN,
+    METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL,
+    METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP,
+    METHOD_STORE_HOME, MusicPlayback, MusicVolumeEvent, ShellBootstrap, StoreArt,
+    StoreChangedEvent, StoreGame, StoreHome, StoreOtherOffers, StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -555,9 +552,6 @@ pub enum PaletteTarget {
     InstallSelected(String),
     OpenDownloads,
     OpenWhatsNew,
-    NoteNew,
-    NoteOpen,
-    NoteItem(String),
     DiscordDm(String),
     DiscordServer(String),
     DiscordChannel {
@@ -678,13 +672,8 @@ pub struct AppState {
     pub game_props: Option<GameProperties>,
     pub game_page: crate::game_actions::GamePageState,
     pub game_frame_gen: Option<GameFrameGen>,
-    pub frame_gen_menu_open: bool,
+    pub frame_gen_auto_tried: std::collections::HashSet<String>,
     pub frame_gen_busy: bool,
-    pub frame_gen_confirm: Option<(String, String, Option<String>)>,
-    pub game_frame_cap: Option<GameFrameCap>,
-    pub frame_cap_menu_open: bool,
-    pub frame_cap_busy: bool,
-    pub frame_cap_error: Option<String>,
     pub props_open: bool,
     pub game_props_tab: usize,
     pub props_launch_opts: TextEdit,
@@ -743,6 +732,7 @@ pub struct AppState {
     pub key_modal: KeyModalState,
     pub notice_runtime: NoticeRuntimeState,
     pub palette_extras: PaletteExtrasState,
+    pub ui_discard_edit: TextEdit,
     pub web_host: Box<crate::web_host::LazyWebHostState>,
     #[cfg(windows)]
     pub rpc: Option<Arc<RpcClient>>,
@@ -832,90 +822,8 @@ impl AppState {
                 }],
                 ..Default::default()
             }),
-            frame_gen_menu_open: false,
+            frame_gen_auto_tried: std::collections::HashSet::new(),
             frame_gen_busy: false,
-            frame_gen_confirm: None,
-            game_frame_cap: Some(GameFrameCap {
-                ok: true,
-                game_id: "steam:1091500".into(),
-                refresh_hz: 144.0,
-                vrr: true,
-                in_vrr_range: true,
-                vrr_floor_hz: 48,
-                fg_multiplier: 1,
-                vendor: "nvidia".into(),
-                backend: "nvidia_drs".into(),
-                backend_label: "NVIDIA Driver (DRS)".into(),
-                backend_available: true,
-                backends: vec![FrameCapBackend {
-                    id: "nvidia_drs".into(),
-                    vendor: "nvidia".into(),
-                    label: "NVIDIA Driver (DRS)".into(),
-                    available: true,
-                    per_game_native: true,
-                    latency_note: "Low latency per-game DRS Max Frame Rate.".into(),
-                    anti_cheat_note: "External driver profile; safe on every anti-cheat class."
-                        .into(),
-                    reason: None,
-                }],
-                selected_tier: "off".into(),
-                tiers: vec![
-                    FrameCapTier {
-                        id: "smooth".into(),
-                        label: "Smooth".into(),
-                        cap_fps: Some(102),
-                        output_fps: Some(102),
-                        predicted_variance_ms2: 0.25,
-                        predicted_std_dev_ms: 0.5,
-                        summary: "1% low · 102 fps".into(),
-                        ..Default::default()
-                    },
-                    FrameCapTier {
-                        id: "balanced".into(),
-                        label: "Balanced".into(),
-                        cap_fps: Some(120),
-                        output_fps: Some(120),
-                        predicted_variance_ms2: 0.9,
-                        predicted_std_dev_ms: 0.95,
-                        summary: "5% low · 120 fps".into(),
-                        ..Default::default()
-                    },
-                    FrameCapTier {
-                        id: "max".into(),
-                        label: "Max (VRR)".into(),
-                        cap_fps: Some(138),
-                        output_fps: Some(138),
-                        predicted_variance_ms2: 2.25,
-                        predicted_std_dev_ms: 1.5,
-                        summary: "VRR ceiling · 138 fps".into(),
-                        ..Default::default()
-                    },
-                ],
-                suggestion: FrameCapSuggestion {
-                    tier: "max".into(),
-                    cap_fps: Some(138),
-                    reason: "VRR is active at 144 Hz; 138 fps stays below the V-Sync ceiling."
-                        .into(),
-                },
-                stutter: FrameCapStutter {
-                    top_cause: "none".into(),
-                    top_cause_label: "None".into(),
-                    summary: "No gameplay frame trace recorded yet.".into(),
-                    ..Default::default()
-                },
-                ab: CapLabStatus {
-                    game_id: "steam:1091500".into(),
-                    status: "idle".into(),
-                    total_seconds: 20,
-                    noise_threshold_percent: 3.0,
-                    ..Default::default()
-                },
-                word: "Off · 138 fps VRR cap available".into(),
-                ..Default::default()
-            }),
-            frame_cap_menu_open: false,
-            frame_cap_busy: false,
-            frame_cap_error: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -986,6 +894,7 @@ impl AppState {
             key_modal: KeyModalState::default(),
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
+            ui_discard_edit: TextEdit::default(),
             web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,
@@ -997,7 +906,6 @@ impl AppState {
             inflight_discord_channel: None,
         };
         crate::library_state::register_library_wp2_events(&mut s);
-        crate::frame_cap_row::register_events(&mut s);
         crate::gpu_tuning::register_events(&mut s);
         crate::pc_hdr::register_events(&mut s);
         s.selected_game_id = s.home_deck_games().first().map(|g| g.id.clone());
@@ -1039,13 +947,8 @@ impl AppState {
             game_props: None,
             game_page: crate::game_actions::GamePageState::new(),
             game_frame_gen: None,
-            frame_gen_menu_open: false,
+            frame_gen_auto_tried: std::collections::HashSet::new(),
             frame_gen_busy: false,
-            frame_gen_confirm: None,
-            game_frame_cap: None,
-            frame_cap_menu_open: false,
-            frame_cap_busy: false,
-            frame_cap_error: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -1104,6 +1007,7 @@ impl AppState {
             key_modal: KeyModalState::default(),
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
+            ui_discard_edit: TextEdit::default(),
             web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,
@@ -1115,7 +1019,6 @@ impl AppState {
             inflight_discord_channel: None,
         };
         crate::library_state::register_library_wp2_events(&mut s);
-        crate::frame_cap_row::register_events(&mut s);
         crate::gpu_tuning::register_events(&mut s);
         crate::pc_hdr::register_events(&mut s);
         s
@@ -1868,7 +1771,7 @@ impl AppState {
     pub fn cover_image(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(384.0);
+        let dim = bucket_dim(480.0);
         let mut waiting_remote = false;
         for cand in game.portrait_art_candidates() {
             if cand.url.starts_with(COVER_CACHE_ORIGIN) {
@@ -1937,7 +1840,7 @@ impl AppState {
     fn hero_image_direct(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(1440.0);
+        let dim = bucket_dim(1920.0);
         let key = format!("hero:{}#{}", game.id, game.art_revision.unwrap_or(0));
         if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
             if let Some(ready) = existing.filter(|i| i.error().is_none()) {
@@ -1985,7 +1888,7 @@ impl AppState {
     pub fn device_image(&self, url: &str, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(640.0);
+        let dim = bucket_dim(720.0);
         let key = format!("dev:{url}");
         if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
             return existing;
@@ -2220,12 +2123,19 @@ impl AppState {
     }
 
     pub fn prune_inactive_rooms(&mut self, now: f64, rest: bool) -> bool {
-        let ttl = if rest { 10.0 } else { 30.0 };
+        let base_ttl = if rest { 10.0 } else { 30.0 };
         let active = self.current_cache_room();
         let due: Vec<CacheRoom> = self
             .room_left_at
             .iter()
-            .filter(|&(&room, &left_at)| room != active && now - left_at >= ttl)
+            .filter(|&(&room, &left_at)| {
+                let ttl = match room {
+                    CacheRoom::Library => f64::INFINITY,
+                    CacheRoom::Store => base_ttl * 6.0,
+                    _ => base_ttl,
+                };
+                room != active && now - left_at >= ttl
+            })
             .map(|(&room, _)| room)
             .collect();
         if due.is_empty() {
@@ -2295,12 +2205,7 @@ impl AppState {
         self.selected_game_id = Some(id.to_string());
         self.open_game_id = Some(id.to_string());
         self.props_open = false;
-        self.frame_gen_menu_open = false;
-        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
-        self.frame_cap_menu_open = false;
-        self.frame_cap_busy = false;
-        self.frame_cap_error = None;
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
@@ -2308,7 +2213,6 @@ impl AppState {
         self.game_page.selected_variant_id = None;
         if self.status != HostStatus::Standalone {
             self.game_frame_gen = None;
-            self.game_frame_cap = None;
         }
         self.load_game_page_data(id);
         #[cfg(windows)]
@@ -2331,27 +2235,7 @@ impl AppState {
                     h3.update(move |s, _| {
                         if s.open_game_id.as_deref() == Some(gid3.as_str()) {
                             s.game_frame_gen = Some(fg);
-                        }
-                    });
-                },
-            );
-
-            let gid4 = id.to_string();
-            let h4 = handle.clone();
-            rpc.call::<_, GameFrameCap>(
-                METHOD_GAME_FRAME_CAP,
-                &json!({ "id": gid4 }),
-                move |res| {
-                    let fc = res.unwrap_or_else(|_| GameFrameCap {
-                        ok: false,
-                        game_id: gid4.clone(),
-                        word: "Could not check".into(),
-                        bad: true,
-                        ..Default::default()
-                    });
-                    h4.update(move |s, _| {
-                        if s.open_game_id.as_deref() == Some(gid4.as_str()) {
-                            s.game_frame_cap = Some(fc);
+                            s.apply_best_frame_gen(&gid3);
                         }
                     });
                 },
@@ -2359,243 +2243,48 @@ impl AppState {
         }
     }
 
-    pub fn set_game_frame_gen(
-        &mut self,
-        id: &str,
-        route: Option<&str>,
-        xess_override: Option<&str>,
-    ) {
-        self.set_game_frame_gen_with_risk(id, route, xess_override, false, None);
+    pub fn apply_best_frame_gen(&mut self, id: &str) {
+        let Some(route) = self
+            .game_frame_gen
+            .as_ref()
+            .and_then(crate::frame_gen_row::auto_route)
+            .map(|r| r.id.clone())
+        else {
+            return;
+        };
+        if self.frame_gen_busy || !self.frame_gen_auto_tried.insert(format!("{id}:{route}")) {
+            return;
+        }
+        self.set_game_frame_gen(id, &route);
     }
 
-    pub fn set_game_frame_gen_with_risk(
-        &mut self,
-        id: &str,
-        route: Option<&str>,
-        xess_override: Option<&str>,
-        accept_risk: bool,
-        anti_cheat: Option<&str>,
-    ) {
-        self.frame_gen_confirm = None;
+    pub fn set_game_frame_gen(&mut self, id: &str, route: &str) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.frame_gen_busy = true;
             let gid = id.to_string();
-            let mut body = serde_json::Map::new();
-            body.insert("id".into(), json!(gid));
-            if let Some(r) = route {
-                body.insert("route".into(), json!(r));
-            }
-            if let Some(x) = xess_override {
-                body.insert("xessOverride".into(), json!(x));
-            }
-            if accept_risk {
-                body.insert("acceptRisk".into(), json!(true));
-                if let Some(ac) = anti_cheat {
-                    body.insert("antiCheat".into(), json!(ac));
-                }
-            }
             rpc.call::<_, GameFrameGen>(
                 METHOD_GAME_FRAME_GEN,
-                &serde_json::Value::Object(body),
+                &json!({ "id": gid, "route": route }),
                 move |res| {
                     handle.update(move |s, _| {
                         s.frame_gen_busy = false;
-                        if s.open_game_id.as_deref() == Some(gid.as_str()) {
-                            if let Ok(fg) = res {
-                                if !fg.routes.is_empty() {
-                                    s.game_frame_gen = Some(fg);
-                                } else if let Some(msg) = fg.message {
-                                    s.notice = Some(msg);
-                                }
-                            } else {
-                                s.notice = Some("Could not save frame generation route.".into());
-                            }
+                        if s.open_game_id.as_deref() == Some(gid.as_str())
+                            && let Ok(fg) = res
+                            && !fg.routes.is_empty()
+                        {
+                            s.game_frame_gen = Some(fg);
                         }
                     });
                 },
             );
             return;
         }
-        if let Some(ref mut fg) = self.game_frame_gen {
-            if let Some(r) = route
-                && let Some(found) = fg.routes.iter().find(|rt| rt.id == r)
-            {
-                fg.selected_route_id = found.id.clone();
-                fg.word = found.summary.clone();
-            }
-            if let Some(x) = xess_override
-                && let Some(rt) = fg
-                    .routes
-                    .iter_mut()
-                    .find(|rt| rt.kind == "driver_xess_override")
-            {
-                rt.choice_value = Some(x.to_string());
-                rt.active = x != "game";
-            }
-        }
-    }
-
-    pub fn set_game_frame_cap(
-        &mut self,
-        id: &str,
-        tier: Option<&str>,
-        cap_fps: Option<i32>,
-        backend: Option<&str>,
-    ) {
-        self.frame_cap_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.frame_cap_busy = true;
-            let gid = id.to_string();
-            let mut body = serde_json::Map::new();
-            body.insert("id".into(), json!(gid));
-            if let Some(t) = tier {
-                body.insert("tier".into(), json!(t));
-            }
-            if let Some(fps) = cap_fps {
-                body.insert("capFps".into(), json!(fps));
-            }
-            if let Some(b) = backend {
-                body.insert("backend".into(), json!(b));
-            }
-            rpc.call::<_, GameFrameCap>(
-                METHOD_GAME_FRAME_CAP,
-                &serde_json::Value::Object(body),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.frame_cap_busy = false;
-                        if s.open_game_id.as_deref() == Some(gid.as_str()) {
-                            if let Ok(fc) = res {
-                                let ok = fc.ok;
-                                let msg = fc.message.clone();
-                                if !fc.tiers.is_empty() {
-                                    s.game_frame_cap = Some(fc);
-                                }
-                                if !ok {
-                                    s.frame_cap_error = Some(
-                                        msg.unwrap_or_else(|| "Could not save frame cap.".into()),
-                                    );
-                                }
-                            } else {
-                                s.frame_cap_error = Some("Could not save frame cap.".into());
-                            }
-                        }
-                    });
-                },
-            );
-            return;
-        }
-        if let Some(ref mut fc) = self.game_frame_cap {
-            if let Some(t) = tier {
-                fc.selected_tier = t.to_string();
-                if t == "off" || t == "uncapped" {
-                    fc.active_cap_fps = None;
-                    fc.word = if t == "uncapped" {
-                        "Uncapped".into()
-                    } else {
-                        "Off".into()
-                    };
-                    fc.good = t == "uncapped";
-                } else if t == "refresh" {
-                    fc.active_cap_fps = cap_fps;
-                    fc.word = format!("{} fps · {}", cap_fps.unwrap_or(0), fc.backend_label);
-                    fc.good = true;
-                } else if let Some(found) = fc.tiers.iter().find(|ti| ti.id == t) {
-                    fc.active_cap_fps = found.cap_fps;
-                    fc.word = format!("{} fps · {}", found.cap_fps.unwrap_or(0), fc.backend_label);
-                    fc.good = true;
-                }
-            }
-            if let Some(fps) = cap_fps {
-                fc.active_cap_fps = Some(fps);
-            }
-            if let Some(b) = backend {
-                fc.backend = b.to_string();
-                if let Some(found) = fc.backends.iter().find(|bk| bk.id == b) {
-                    fc.backend_label = found.label.clone();
-                }
-            }
-        }
-    }
-
-    pub fn run_cap_lab(&mut self, id: &str, cap_a_fps: i32, cap_b_fps: i32) {
-        self.frame_cap_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.frame_cap_busy = true;
-            let gid = id.to_string();
-            rpc.call::<_, CapLabActionReply>(
-                METHOD_GAME_CAP_LAB_RUN,
-                &json!({ "id": gid, "capAFps": cap_a_fps, "capBFps": cap_b_fps }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.frame_cap_busy = false;
-                        if let Ok(reply) = res {
-                            if let Some(ref mut fc) = s.game_frame_cap {
-                                fc.ab = reply.ab;
-                            }
-                            if !reply.ok {
-                                s.frame_cap_error = Some(
-                                    reply
-                                        .message
-                                        .unwrap_or_else(|| "Could not start A/B test.".into()),
-                                );
-                            }
-                        } else {
-                            s.frame_cap_error = Some("Could not start A/B test.".into());
-                        }
-                    });
-                },
-            );
-            return;
-        }
-        if let Some(ref mut fc) = self.game_frame_cap {
-            fc.ab.status = "running".into();
-            fc.ab.cap_a_fps = cap_a_fps;
-            fc.ab.cap_b_fps = cap_b_fps;
-            fc.ab.current_arm = Some("A".into());
-            fc.ab.elapsed_seconds = 0;
-            fc.ab.total_seconds = 20;
-        }
-    }
-
-    pub fn cancel_cap_lab(&mut self, id: &str) {
-        self.frame_cap_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.frame_cap_busy = true;
-            let gid = id.to_string();
-            rpc.call::<_, CapLabActionReply>(
-                METHOD_GAME_CAP_LAB_CANCEL,
-                &json!({ "id": gid }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.frame_cap_busy = false;
-                        match res {
-                            Ok(reply) => {
-                                if let Some(ref mut fc) = s.game_frame_cap {
-                                    fc.ab = reply.ab;
-                                }
-                                if !reply.ok {
-                                    s.frame_cap_error =
-                                        Some(reply.message.unwrap_or_else(|| {
-                                            "Could not cancel A/B test.".into()
-                                        }));
-                                }
-                            }
-                            Err(_) => {
-                                s.frame_cap_error = Some("Could not cancel A/B test.".into());
-                            }
-                        }
-                    });
-                },
-            );
-            return;
-        }
-        if let Some(ref mut fc) = self.game_frame_cap {
-            fc.ab.status = "cancelled".into();
-            fc.ab.reason = Some("Cancelled by user.".into());
+        if let Some(ref mut fg) = self.game_frame_gen
+            && let Some(found) = fg.routes.iter().find(|rt| rt.id == route)
+        {
+            fg.selected_route_id = found.id.clone();
+            fg.word = found.summary.clone();
         }
     }
 
@@ -2607,12 +2296,7 @@ impl AppState {
     pub fn close_game_page(&mut self) {
         self.open_game_id = None;
         self.props_open = false;
-        self.frame_gen_menu_open = false;
-        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
-        self.frame_cap_menu_open = false;
-        self.frame_cap_busy = false;
-        self.frame_cap_error = None;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
         self.game_page.pending_choice = None;
@@ -2623,6 +2307,7 @@ impl AppState {
     pub fn close_store_game_tx(&mut self, tx: &mut Tx) {
         tx.unclipped_flights();
         self.store_close_game_full();
+        tx.scroll_to("room-store-scroll", 0.0, 0.0);
     }
 
     pub fn is_confirm_armed(&self, key: &str) -> bool {
@@ -3188,10 +2873,6 @@ impl AppState {
             self.media.clip_editor_open = false;
             return true;
         }
-        if self.media.notes.open {
-            self.close_notes_to_captures();
-            return true;
-        }
         if self.media.open_capture_id.is_some() {
             self.close_capture_item();
             return true;
@@ -3284,6 +2965,11 @@ impl AppState {
         action_label: Option<String>,
         action: Option<NoticeAction>,
     ) -> u64 {
+        if (tone != NoticeTone::Bad && action.is_none()) || self.notice_is_repeat(text.clone()) {
+            self.notice = Some(text.clone());
+            self.notice_last_synced = Some(text);
+            return 0;
+        }
         let id = self.next_notice_id;
         self.next_notice_id = self.next_notice_id.saturating_add(1);
         self.notices.push_back(NoticeItem {
@@ -3542,8 +3228,8 @@ impl AppState {
         self.palette_query.text.clear();
         self.palette_query.sync_invariants();
         self.load_palette_extras();
-        self.load_notes_list(None);
         self.sync_chrome_layout();
+        self.sync_mouse_panel_visibility();
         tx.focus("palette-input", false);
     }
 
@@ -3552,6 +3238,7 @@ impl AppState {
         self.palette_needs_focus = false;
         self.palette_index = 0;
         self.sync_chrome_layout();
+        self.sync_mouse_panel_visibility();
     }
 
     pub fn palette_results(&self) -> Vec<PaletteItem> {
@@ -4267,7 +3954,7 @@ impl AppState {
     pub fn apply_capture_saved(&mut self, ev: CaptureSavedEvent) {
         let id = ev.item.id.clone();
         let name = ev.item.name.clone();
-        let edit = ev.edit;
+        let edit = ev.edit || ev.item.kind == "image";
         self.media.capture_items.retain(|it| it.id != id);
         self.media.capture_items.insert(0, ev.item);
         if edit {
@@ -4390,7 +4077,6 @@ impl AppState {
                     s.apply_bootstrap(boot);
                     s.warm_discord();
                     s.load_capture_status();
-                    s.check_pending_notes_on_startup();
                     s.warm_store_on_startup();
                     s.wp4_warm_startup();
                     s.check_system_eq_health_on_launch();

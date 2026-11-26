@@ -849,7 +849,7 @@ impl AppState {
         self.store_ext.offer_errors.clear();
         self.store_ext.gg_opening = false;
         self.open_store_game(&tile.app_id);
-        tx.scroll_to("room-scroll", 0.0, 0.0);
+        tx.scroll_to("room-store-scroll", 0.0, 0.0);
     }
 
     pub fn store_load_game_full(&mut self, app_id: &str) {
@@ -1490,7 +1490,7 @@ fn hero_logo_slot(s: &AppState, app_id: &str, name: &str, scale: f32) -> El {
     } else {
         slot = slot.child(
             text(name.to_string())
-                .font(TextStyle::new(scaled(20.0), 650.0))
+                .font(exo_kit::type_first_run())
                 .color(FG)
                 .w_full()
                 .wrap(),
@@ -1505,14 +1505,15 @@ fn tag_pills_row(tags: Option<&[String]>) -> El {
         for tag in list.iter().take(8) {
             bar = bar.child(
                 el().h(26.0)
-                    .px(12.0)
+                    .px(11.0)
                     .center()
                     .radius(RADIUS_PILL)
-                    .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+                    .fill(exo_kit::surface_elevated_hi().alpha(0.85))
+                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                     .child(
                         text(tag.clone())
                             .font(TextStyle::new(scaled(12.0), 500.0))
-                            .color(FG),
+                            .color(FG.alpha(0.92)),
                     ),
             );
         }
@@ -1808,15 +1809,12 @@ fn buy_panel(
 }
 
 fn about_card(game: Option<&StoreGame>) -> El {
-    let mut card = col()
+    let mut card = exo_kit::amoled_card(RADIUS_CARD)
         .key("sg-about")
         .w_full()
         .px(20.0)
-        .py(16.0)
+        .py(18.0)
         .gap(10.0)
-        .radius(RADIUS_CARD)
-        .fill(exo_kit::BG)
-        .border(1.0, float_line())
         .child(
             text("About")
                 .font(TextStyle::new(scaled(13.0), 650.0).lh(scaled(18.0)))
@@ -1899,8 +1897,13 @@ fn facts_card(
         ("DRM", fact(|g| g.drm.clone().unwrap_or_default())),
     ];
 
-    let mut grid = col().w_full().gap(12.0);
-    for pair in cells.chunks(2) {
+    let visible_cells: Vec<(&str, Option<String>)> = cells
+        .into_iter()
+        .filter(|(_, v)| !matches!(v, Some(val) if val.is_empty()))
+        .collect();
+
+    let mut grid = col().w_full().gap(10.0);
+    for pair in visible_cells.chunks(2) {
         let mut r = row().w_full().gap(16.0).items_start();
         for (k, v) in pair {
             let mut cell = col().grow(1.0).min_w(0.0).gap(2.0);
@@ -1910,7 +1913,6 @@ fn facts_card(
                         .child(text(*k).font(type_small()).color(fg_muted()))
                         .child(el().w(96.0).h(14.0).radius(4.0).fill(glass_control_fill()));
                 }
-                Some(val) if val.is_empty() => {}
                 Some(val) => {
                     cell = cell
                         .child(text(*k).font(type_small()).color(fg_muted()))
@@ -1925,16 +1927,17 @@ fn facts_card(
             }
             r = r.child(cell);
         }
+        if pair.len() == 1 {
+            r = r.child(el().grow(1.0).min_w(0.0));
+        }
         grid = grid.child(r);
     }
 
-    el().key("sg-facts")
+    exo_kit::amoled_card(RADIUS_CARD)
+        .key("sg-facts")
         .w_full()
         .px(18.0)
-        .py(14.0)
-        .radius(RADIUS_CARD)
-        .fill(exo_kit::BG)
-        .border(1.0, float_line())
+        .py(16.0)
         .child(grid)
 }
 
@@ -1979,10 +1982,21 @@ fn specs_card(game: Option<&StoreGame>) -> El {
     }
 
     let mut rows = col().w_full();
+    let mut rendered_any = false;
     for part in SPEC_PARTS {
         let found = specs.and_then(|list| list.iter().find(|s| s.label == part));
-        let mut item = col().w_full().py(8.0).gap(2.0).border(0.0, TRANSPARENT);
-        item = item.child(el().w_full().h(1.0).mb(6.0).fill(float_line()));
+        if specs.is_some()
+            && found.is_none_or(|s| {
+                s.minimum.as_deref().is_none_or(str::is_empty)
+                    && s.recommended.as_deref().is_none_or(str::is_empty)
+                    && s.mine.as_deref().is_none_or(str::is_empty)
+            })
+        {
+            continue;
+        }
+        rendered_any = true;
+        let mut item = col().w_full().py(7.0).gap(2.0).border(0.0, TRANSPARENT);
+        item = item.child(el().w_full().h(1.0).mb(5.0).fill(float_line()));
 
         if specs.is_none() {
             item = item.child(
@@ -2027,29 +2041,33 @@ fn specs_card(game: Option<&StoreGame>) -> El {
                     ),
                 );
             }
-            let min_val = found.and_then(|s| s.minimum.as_deref()).unwrap_or("—");
+            let min_val = found
+                .and_then(|s| s.minimum.as_deref())
+                .filter(|v| !v.is_empty());
             let rec_val = found
-                .and_then(|s| s.recommended.as_deref().or(s.minimum.as_deref()))
-                .unwrap_or("—");
+                .and_then(|s| s.recommended.as_deref())
+                .filter(|v| !v.is_empty() && Some(*v) != min_val);
 
-            item = item
-                .child(top_line)
-                .child(
+            item = item.child(top_line);
+            if let Some(min_str) = min_val {
+                item = item.child(
                     row()
                         .w_full()
                         .gap(8.0)
                         .items_start()
                         .child(text("Minimum").font(type_small()).color(fg_faint()).w(92.0))
                         .child(
-                            text(min_val.to_string())
+                            text(min_str.to_string())
                                 .font(type_small())
                                 .color(fg_muted())
                                 .grow(1.0)
                                 .min_w(0.0)
                                 .wrap(),
                         ),
-                )
-                .child(
+                );
+            }
+            if let Some(rec_str) = rec_val {
+                item = item.child(
                     row()
                         .w_full()
                         .gap(8.0)
@@ -2061,7 +2079,7 @@ fn specs_card(game: Option<&StoreGame>) -> El {
                                 .w(92.0),
                         )
                         .child(
-                            text(rec_val.to_string())
+                            text(rec_str.to_string())
                                 .font(type_small())
                                 .color(fg_muted())
                                 .grow(1.0)
@@ -2069,19 +2087,26 @@ fn specs_card(game: Option<&StoreGame>) -> El {
                                 .wrap(),
                         ),
                 );
+            }
         }
         rows = rows.child(item);
     }
+    if specs.is_some() && !rendered_any {
+        rows = rows.child(
+            text("System requirements haven’t been announced yet.")
+                .font(type_small())
+                .color(fg_muted())
+                .pt(4.0)
+                .wrap(),
+        );
+    }
 
-    col()
+    exo_kit::amoled_card(RADIUS_CARD)
         .key("sg-specs")
         .w_full()
         .px(20.0)
-        .py(16.0)
+        .py(18.0)
         .gap(10.0)
-        .radius(RADIUS_CARD)
-        .fill(exo_kit::BG)
-        .border(1.0, float_line())
         .child(head)
         .child(rows)
 }
@@ -2113,20 +2138,95 @@ pub fn view(s: &AppState, scale: f32) -> El {
     let owned = find_owned_game(&s.games, app_id, name);
     let wished = s.store_is_wished(app_id, seed.wished);
 
-    let mut back_btn = glass_button("sg-back", "Store", Some(icon_chevron_left(16.0, FG)))
-        .h(34.0)
-        .on_press_tx(|s: &mut AppState, tx| {
-            s.input_mode = InputMode::Pointer;
-            s.close_store_game_tx(tx);
-        });
+    let mut back_btn = exo_kit::apply_glass(
+        row()
+            .key("sg-back")
+            .role("button")
+            .label("Store")
+            .cursor(Cursor::Pointer)
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .h(34.0)
+            .pl(10.0)
+            .pr(14.0)
+            .gap(6.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press_tx(|s: &mut AppState, tx| {
+                s.input_mode = InputMode::Pointer;
+                s.close_store_game_tx(tx);
+            })
+            .child(icon_chevron_left(16.0, FG))
+            .child(text("Store").font(type_control()).color(FG)),
+        ExoGlass::ClearMedia,
+        true,
+    );
     if gamepad {
         back_btn = back_btn.focus_ring(2.0, 3.0, FG);
     }
 
+    let hue = crate::state::title_hue(name);
+    let hero_candidates = [
+        game.and_then(|g| g.art.as_ref().and_then(StoreArt::best_hero))
+            .map(ToString::to_string),
+        seed.art
+            .as_ref()
+            .and_then(StoreArt::best_hero)
+            .map(ToString::to_string),
+        Some(StoreArt::steam_url(app_id, "hero")),
+        game.and_then(|g| g.header.clone()),
+        Some(StoreArt::steam_url(app_id, "header")),
+    ];
+    let hero_img = hero_candidates
+        .into_iter()
+        .flatten()
+        .find_map(|u| s.remote_image_sized(&u, 1920.0, scale));
+
+    let mut hero_bg = el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0));
+    if let Some(ref img) = hero_img {
+        hero_bg = hero_bg
+            .pixels_fit(img.pixels(), SurfaceFit::Fill)
+            .surface_anchor_fraction(0.5, 0.22);
+    } else {
+        hero_bg = hero_bg.linear_gradient(
+            0.3,
+            [
+                (0.0, rune::oklch(0.32, 0.14, hue).alpha(0.68)),
+                (1.0, exo_kit::BG),
+            ],
+        );
+    }
+
+    let hero_fade_v = el()
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .linear_gradient(
+            std::f32::consts::PI,
+            [
+                (0.0, exo_kit::BG.alpha(0.0)),
+                (0.36, exo_kit::BG.alpha(0.05)),
+                (0.68, exo_kit::BG.alpha(0.54)),
+                (0.90, exo_kit::BG.alpha(0.88)),
+                (1.0, exo_kit::BG),
+            ],
+        );
+
+    let hero_fade_h = el()
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .linear_gradient(
+            std::f32::consts::FRAC_PI_2,
+            [
+                (0.0, exo_kit::BG.alpha(0.46)),
+                (0.38, exo_kit::BG.alpha(0.14)),
+                (0.72, exo_kit::BG.alpha(0.0)),
+            ],
+        );
+
     let header = row()
         .w_full()
-        .px(10.0)
-        .pt(4.0)
         .gap(24.0)
         .items_end()
         .child(
@@ -2138,6 +2238,28 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .child(tag_pills_row(game.map(|g| g.tags.as_slice()))),
         )
         .child(buy_panel(s, &seed, game, owned, wished, gamepad));
+
+    let hero_h = (s.chrome.window_height * 0.5).clamp(360.0, 560.0);
+    let hero_stage = el()
+        .w_full()
+        .min_h(hero_h)
+        .clip_rounded(0.0)
+        .fill(exo_kit::BG)
+        .child(hero_bg)
+        .child(hero_fade_v)
+        .child(hero_fade_h)
+        .child(
+            col()
+                .w_full()
+                .min_h(hero_h)
+                .pt(exo_kit::TITLEBAR_HEIGHT + 10.0)
+                .px(20.0)
+                .pb(20.0)
+                .justify_between()
+                .gap(24.0)
+                .child(row().w_full().child(back_btn))
+                .child(header),
+        );
 
     let media_block = if let Some(g) = game {
         media_viewer(s, g, scale)
@@ -2190,8 +2312,8 @@ pub fn view(s: &AppState, scale: f32) -> El {
 
     let body = row()
         .w_full()
-        .px(10.0)
-        .gap(24.0)
+        .px(20.0)
+        .gap(20.0)
         .items_start()
         .child(left_col)
         .child(right_col);
@@ -2200,15 +2322,13 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .key(format!("store-game-page-{app_id}"))
         .w_full()
         .fill(exo_kit::BG)
-        .pt(4.0)
         .pb(34.0)
-        .gap(20.0)
+        .gap(16.0)
         .transition(
             Transition::opacity()
                 .springs(SpringPair::new(exo_kit::SPRING_MOVE, exo_kit::SPRING_MOVE)),
         )
-        .child(row().w_full().px(10.0).child(back_btn))
-        .child(header)
+        .child(hero_stage)
         .child(body);
 
     let more_items = more_like_this_items(s, app_id);

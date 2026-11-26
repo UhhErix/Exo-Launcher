@@ -232,8 +232,8 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
                 .checked(is_selected)
                 .focus_selected(is_selected)
                 .w_full()
-                .min_h(38.0)
-                .px(12.0)
+                .min_h(34.0)
+                .px(10.0)
                 .gap(10.0)
                 .center_y()
                 .radius(RADIUS_SMALL)
@@ -292,18 +292,19 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
 
     let dismiss_modal = Rc::clone(&on_dismiss);
     let _ = blur;
+    let panel_radius = RADIUS_CARD + 2.0;
     let panel = apply_glass(
         col()
             .key(format!("{id}-menu"))
             .role("listbox")
             .focus_group()
             .min_w(width)
-            .px(8.0)
-            .py(8.0)
+            .px(6.0)
+            .py(6.0)
             .gap(2.0)
-            .radius(RADIUS_CARD)
+            .radius(panel_radius)
             .continuous_corners()
-            .clip_rounded(RADIUS_CARD)
+            .clip_rounded(panel_radius)
             .hit()
             .cursor(Cursor::Default)
             .anchored_fit(trigger_key.clone(), Side::Bottom, align, 4.0)
