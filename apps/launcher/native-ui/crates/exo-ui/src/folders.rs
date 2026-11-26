@@ -3,21 +3,22 @@ use crate::library_state::{
     CROP_ASPECT, CROP_MAX_ZOOM, FolderView, LibraryDragPayload, add_to_folder, crop_size, fit_crop,
     folder_tile_id, move_folder, reorder_folder_games, sort_folder,
 };
+use crate::settings::set_btn;
 use crate::state::{AppState, ContextMenuTarget, InputMode, LibrarySort};
 use exo_kit::{
-    BG, ExoGlass, FG, FOLDER_COLOR_IDS, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
-    RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectOption,
-    SelectTrigger, TRANSPARENT, apply_glass, bad, danger_button, fg_muted, folder_color_label,
+    BG, FG, FOLDER_COLOR_IDS, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SHEET, SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectOption,
+    SelectTrigger, TRANSPARENT, bad, danger_button, fg_faint, fg_muted, folder_color_label,
     folder_color_mix_black, folder_color_swatch, glass_button, glass_control_fill,
-    glass_icon_circle, glass_panel_fill, glass_panel_opt, glass_rim, hover_fill, icon_check,
-    icon_edit, icon_image_upload, icon_search, icon_zoom_in, icon_zoom_out, modal_card_transition,
+    glass_icon_circle, glass_panel_fill, glass_rim, hover_fill, icon_check, icon_edit,
+    icon_image_upload, icon_search, icon_zoom_in, icon_zoom_out, modal_card_transition,
     modal_scrim_transition, primary_button, scrim_fill, select_menu_layers, select_trigger,
-    slider_track, type_body, type_control, type_section, type_small, type_title,
+    slider_track, subtle_fill, type_body, type_control, type_section, type_small, type_title,
 };
 use exo_rpc::Game;
 use rune::{
-    Align, Cursor, El, FileDialogOptions, Phase, ScrollSpec, SurfaceFit, TextEdit, TextStyle, col,
-    edit_access, el, row, text, text_input,
+    Align, Cursor, El, FileDialogOptions, LiquidGlass, Phase, ScrollSpec, SurfaceFit, TextEdit,
+    TextStyle, col, edit_access, el, row, text, text_input,
 };
 use std::rc::Rc;
 
@@ -426,7 +427,10 @@ pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .py(4.0)
         .children(rows);
 
-    let panel = glass_panel_opt("folder-panel", panel_w.min(1040.0), blur)
+    let _ = blur;
+    let panel = col()
+        .key("folder-panel")
+        .w(panel_w.min(1040.0))
         .max_h(720.0)
         .px(32.0)
         .pt(26.0)
@@ -434,17 +438,23 @@ pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .gap(20.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .transition(modal_card_transition())
         .child(head)
         .child(grid);
 
     let mut layers = vec![
         el().key("folder-panel-scrim")
-            .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
+            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            .pt(52.0)
             .fill(scrim_fill())
             .center()
             .transition(modal_scrim_transition())
             .modal_tx(true, |s: &mut AppState, _| s.close_folder_panel())
+            .modal_live(["top-bar"])
             .child(panel),
     ];
 
@@ -627,11 +637,15 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
                 s.request_close_folder_sheet(tx);
             }
         })
+        .modal_live(["top-bar"])
         .modal_scrim(scrim_fill())
+        .clip_rounded(RADIUS_SHEET)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .child(body);
 
     let _ = blur;
-    panel = apply_glass(panel, ExoGlass::Sheet, false);
 
     if s.lib.folder_cropper.is_none() {
         panel = panel
@@ -662,7 +676,8 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
 
     vec![
         el().key("folder-sheet-host")
-            .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
+            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            .pt(52.0)
             .center()
             .child(panel),
     ]
@@ -771,7 +786,7 @@ fn folder_sheet_body(
         "Add picture"
     };
     pic_row = pic_row.child(
-        glass_button(
+        set_btn(
             "folder-sheet-pick-pic",
             pic_btn_label,
             Some(icon_image_upload(15.0, FG)),
@@ -792,7 +807,7 @@ fn folder_sheet_body(
     );
     if sheet.art.is_some() {
         pic_row = pic_row.child(
-            glass_button("folder-sheet-remove-pic", "Remove picture", None).on_press(
+            set_btn("folder-sheet-remove-pic", "Remove picture", None).on_press(
                 |s: &mut AppState| {
                     if let Some(sh) = s.lib.folder_sheet.as_mut() {
                         sh.art = None;
@@ -941,18 +956,30 @@ fn folder_sheet_body(
     let cancel_btn = if cancel_armed {
         danger_button("folder-sheet-cancel", "Discard changes?", None)
     } else {
-        glass_button("folder-sheet-cancel", "Cancel", None)
+        set_btn("folder-sheet-cancel", "Cancel", None)
     }
     .on_press_tx(|s: &mut AppState, tx| s.request_close_folder_sheet(tx));
 
     let ready = sheet.is_ready();
     let save_label = if sheet.is_new { "Create" } else { "Save" };
-    let mut save_btn = primary_button("folder-sheet-save", save_label, None).disabled(!ready);
-    if ready {
-        save_btn = save_btn.on_press(|s: &mut AppState| s.save_folder_sheet());
+    let save_btn = if ready {
+        primary_button("folder-sheet-save", save_label, None)
+            .on_press(|s: &mut AppState| s.save_folder_sheet())
     } else {
-        save_btn = save_btn.opacity(0.42);
-    }
+        row()
+            .key("folder-sheet-save")
+            .role("button")
+            .label(save_label)
+            .disabled(true)
+            .hit()
+            .cursor(Cursor::NotAllowed)
+            .h(32.0)
+            .px(14.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(subtle_fill())
+            .child(text(save_label).font(type_control()).color(fg_faint()))
+    };
 
     let footer = row()
         .w_full()

@@ -1,11 +1,10 @@
 use crate::components::popover_transition_from;
-use crate::glass::{ExoGlass, apply_glass};
 use crate::icons::{icon_check, icon_chevron_right};
 use crate::tokens::{
     FG, RADIUS_CARD, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, hairline,
     hover_fill, pressed_fill, subtle_fill, type_control, type_label, type_small,
 };
-use rune::{Align, Cursor, El, Key, Side, Tx, Vec2, col, el, row, text};
+use rune::{Align, Cursor, El, Key, LiquidGlass, Side, Tx, Vec2, col, el, row, text};
 use std::rc::Rc;
 
 pub type MenuAction<S> = Rc<dyn Fn(&mut S, &mut Tx)>;
@@ -121,7 +120,7 @@ pub struct ContextMenuSpec<S: 'static> {
 }
 
 fn glass_menu_surface(key: String, width: f32, _blur: bool, origin: Vec2) -> El {
-    let panel = col()
+    col()
         .key(key)
         .min_w(width)
         .px(6.0)
@@ -132,8 +131,8 @@ fn glass_menu_surface(key: String, width: f32, _blur: bool, origin: Vec2) -> El 
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .transition(popover_transition_from(origin));
-    apply_glass(panel, ExoGlass::Menu, false)
+        .liquid_glass(LiquidGlass::panel())
+        .transition(popover_transition_from(origin))
 }
 
 fn keycap_badge(hint: String) -> El {
@@ -231,11 +230,7 @@ fn build_menu_rows<S: 'static>(
                     .hit()
                     .disabled(disabled)
                     .focusable(!disabled)
-                    .cursor(if disabled {
-                        Cursor::Default
-                    } else {
-                        Cursor::Pointer
-                    })
+                    .cursor(Cursor::Default)
                     .fill(if is_sub_open {
                         hover_fill()
                     } else {
@@ -345,7 +340,7 @@ fn build_menu_rows<S: 'static>(
 }
 
 pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
-    build_context_menu_layers(spec, &[])
+    build_context_menu_layers(spec, &["top-bar"])
 }
 
 pub fn context_menu_layers_live<S: 'static>(
@@ -406,7 +401,7 @@ fn build_context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>, live_keys: &[
     let mut main_menu = glass_menu_surface(format!("{id}-menu"), width, blur, origin)
         .role("menu")
         .focus_group()
-        .anchored_fit(anchor_key, side, align, gap)
+        .anchored_fit(anchor_key.clone(), side, align, gap)
         .children(rows);
 
     if let Some(ref rf) = return_focus {
@@ -439,18 +434,24 @@ fn build_context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>, live_keys: &[
     }
 
     let dismiss_modal = Rc::clone(&on_dismiss);
-    let root = if live_keys.is_empty() {
-        el().key(format!("{id}-root"))
-            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-            .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
-            .children(menu_nodes)
-    } else {
-        el().key(format!("{id}-root"))
-            .absolute(0.0, 0.0)
-            .size(0.0, 0.0)
-            .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
-            .modal_live(live_keys.iter().copied())
-            .children(menu_nodes)
-    };
+    let mut all_live: Vec<String> = live_keys.iter().map(|s| (*s).to_string()).collect();
+    if !all_live.iter().any(|k| k == "top-bar") {
+        all_live.push("top-bar".into());
+    }
+    if !anchor_key.ends_with("-anchor-pt") && !all_live.iter().any(|k| k == &anchor_key) {
+        all_live.push(anchor_key);
+    }
+    if let Some(rf) = return_focus
+        && !all_live.iter().any(|k| k == &rf)
+    {
+        all_live.push(rf);
+    }
+    let root = el()
+        .key(format!("{id}-root"))
+        .absolute(0.0, 0.0)
+        .size(0.0, 0.0)
+        .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
+        .modal_live(all_live)
+        .children(menu_nodes);
     vec![root]
 }

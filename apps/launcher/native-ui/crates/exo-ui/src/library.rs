@@ -4,6 +4,7 @@ use crate::library_state::{
     GameHold, GridTile, LibraryDragPayload, format_bytes_short, format_playtime_short,
     is_installing_game,
 };
+use crate::settings::set_btn;
 use crate::state::{
     AppState, ContextMenuTarget, InputMode, LibraryChip, OpenDropdown, friends_playing,
     library_chip_options, now_unix_ms, title_hue,
@@ -12,17 +13,17 @@ use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, exo_play_button,
     fg_faint, fg_muted, glass_button, glass_icon_circle, glass_icon_circle_opt, glass_panel_fill,
-    glass_panel_opt, glass_plate_fill, glass_rim, glass_rim_bottom, glass_rim_top,
-    glass_still_control_fill, good, hover_fill, icon_check, icon_chevron_left, icon_chevron_right,
-    icon_close, icon_download, icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus,
-    icon_search, icon_stop, popover_transition_for, pressed_fill, primary_button, progress_bar,
-    select_trigger, store_logo, surface_card, type_body, type_control, type_first_run,
-    type_section, type_small, type_title, warn,
+    glass_plate_fill, glass_rim, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good,
+    hover_fill, icon_check, icon_chevron_left, icon_chevron_right, icon_close, icon_download,
+    icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus, icon_search, icon_stop,
+    popover_transition_for, pressed_fill, primary_button, progress_bar, select_trigger, store_logo,
+    surface_card, type_body, type_control, type_first_run, type_section, type_small, type_title,
+    warn,
 };
 use exo_rpc::{Game, InstallProgress};
 use rune::{
-    Align, Cursor, El, Side, SurfaceFit, TextStyle, Tx, col, edit_access, el, oklch, row, text,
-    text_input,
+    Align, Cursor, El, LiquidGlass, Side, SurfaceFit, TextStyle, Tx, col, edit_access, el, oklch,
+    row, text, text_input,
 };
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -320,7 +321,6 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
-        .press_on_down()
         .press_scale(PRESS_SCALE)
         .hover(hover_fill())
         .size(DECK_CARD_W, DECK_CARD_H)
@@ -408,11 +408,21 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
     }
     if !s.filters.is_empty() {
         sections.push(
-            glass_button("library-filter-clear", "Clear all", None)
+            set_btn("library-filter-clear", "Clear all", None)
+                .role("option")
                 .on_press(|s: &mut AppState| s.filters.clear()),
         );
     }
-    let panel = glass_panel_opt("library-filter-pop", 420.0, blur)
+    let _ = blur;
+    let panel = col()
+        .key("library-filter-pop")
+        .w(420.0)
+        .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .hit()
+        .cursor(Cursor::Default)
+        .liquid_glass(LiquidGlass::panel())
         .transition(popover_transition_for(Side::Bottom, Align::End))
         .focus_group()
         .focus_return("all-games-filter")
@@ -423,10 +433,12 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
         .children(sections);
     vec![
         el().key("library-filter-root")
-            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            .absolute(0.0, 0.0)
+            .size(0.0, 0.0)
             .modal_tx(true, |s: &mut AppState, _: &mut Tx| {
                 s.library_filter_open = false
             })
+            .modal_live(["top-bar", "all-games-filter"])
             .child(panel),
     ]
 }
@@ -448,11 +460,7 @@ fn filter_chip(chip: &LibraryChip, active: bool, idle: bool) -> El {
         .focusable(!idle)
         .hit()
         .disabled(idle)
-        .cursor(if idle {
-            Cursor::NotAllowed
-        } else {
-            Cursor::Pointer
-        })
+        .cursor(Cursor::Pointer)
         .h(30.0)
         .px(13.0)
         .radius(RADIUS_PILL)
@@ -1520,7 +1528,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
     let mut page = col()
         .key("library-all-games")
         .w_full()
-        .pt(70.0)
+        .pt(74.0)
         .pb(if s.lib.selecting { 96.0 } else { 48.0 })
         .on_layout(|s: &mut AppState, rect| {
             if (s.lib.grid_width - rect[2]).abs() > 1.0 {

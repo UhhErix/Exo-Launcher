@@ -2431,25 +2431,13 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("library-folder-sheet", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.library_all_games = true;
-        let init: Vec<String> = s
-            .filtered_games()
-            .into_iter()
-            .take(2)
-            .map(|g| g.id.clone())
-            .collect();
-        s.open_new_folder_sheet(init);
+        s.open_new_folder_sheet(Vec::new());
     }),
     ("library-select", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
         s.enter_select_mode();
-        let picks: Vec<String> = s
-            .filtered_games()
-            .into_iter()
-            .take(2)
-            .map(|g| g.id.clone())
-            .collect();
-        for id in picks {
-            s.lib.picked.insert(id);
+        if let Some(first) = s.filtered_games().into_iter().next() {
+            s.lib.picked.insert(first.id.clone());
         }
     }),
     ("library-gifts", |s: &mut AppState| {
@@ -3383,6 +3371,7 @@ fn run_parity_probe(
         "command-palette",
         "pc-part-menu",
         "library-filter-pop",
+        "folder-sheet",
         "dc-golive-panel",
     ];
     let legacy_menu_prefixes = ["dc-status-menu", "dc-menu"];
@@ -4498,7 +4487,7 @@ mod tests {
         }
         assert_eq!(
             rt.cursor(),
-            rune::Cursor::Pointer,
+            rune::Cursor::Default,
             "menu item with submenu cursor"
         );
         let el = rt
@@ -4511,7 +4500,7 @@ mod tests {
         for _ in 0..90 {
             rt.frame(1.0 / 60.0);
         }
-        assert_eq!(rt.cursor(), rune::Cursor::Pointer, "menu item edge cursor");
+        assert_eq!(rt.cursor(), rune::Cursor::Default, "menu item edge cursor");
         let sub_key = rt
             .elements()
             .into_iter()

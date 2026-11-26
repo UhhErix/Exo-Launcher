@@ -683,7 +683,7 @@ export const STATES = [
         { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
         { type: 'wait', ms: 600 },
       ],
-      openSelector: '.exo-tile-hit',
+      openSelector: '.exo-folder-tile',
     },
     native: {
       scene: 'library-folders',
@@ -702,10 +702,10 @@ export const STATES = [
       steps: [
         { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
         { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-folder-tile .exo-tile-hit', optional: true },
+        { type: 'click', selector: '.exo-folder-tile .exo-tile-hit' },
         { type: 'wait', ms: 500 },
       ],
-      openSelector: '.exo-folder-panel, .exo-tile-hit',
+      openSelector: '.exo-folder-panel',
     },
     native: {
       scene: 'library-folder-open',
