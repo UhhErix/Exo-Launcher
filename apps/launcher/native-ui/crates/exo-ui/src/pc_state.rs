@@ -23,16 +23,18 @@ pub enum SettingsSection {
     Appearance,
     Graphics,
     Updates,
+    Capture,
     About,
 }
 
 impl SettingsSection {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::General,
         Self::Account,
         Self::Appearance,
         Self::Graphics,
         Self::Updates,
+        Self::Capture,
         Self::About,
     ];
 
@@ -43,6 +45,7 @@ impl SettingsSection {
             Self::Appearance => "set-sec-appearance",
             Self::Graphics => "set-sec-graphics",
             Self::Updates => "set-sec-updates",
+            Self::Capture => "set-sec-capture",
             Self::About => "set-sec-about",
         }
     }

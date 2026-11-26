@@ -491,18 +491,6 @@ impl AppState {
         }
     }
 
-    pub fn pc_wp9_tick(&mut self, now: f64) -> bool {
-        if self.room == Room::ExoAi
-            && !self.pc.exo_ai_storage_open
-            && self.status != HostStatus::Standalone
-            && !self.pc.gpu_processes_busy
-            && now - self.pc.gpu_processes_last_poll >= 3.0
-        {
-            self.load_gpu_processes();
-        }
-        false
-    }
-
     pub fn run_auto_tune_pipeline(&mut self) {
         if self.pc.auto_tune_running {
             return;

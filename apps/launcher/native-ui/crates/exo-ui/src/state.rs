@@ -18,15 +18,14 @@ use exo_kit::SPRING_MOVE;
 use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
-    CaptureLiveState, CaptureSavedEvent, CaptureStatusReply,
-    DiscordFriend, ExoAccountState, FrameGenRoute, Game, GameExtras, GameFrameGen, GameProperties,
-    GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
-    LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
-    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_FRAME_GEN, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH,
-    METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH,
-    METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback,
-    MusicVolumeEvent, ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame, StoreHome,
-    StoreOtherOffers, StoreShelf, StoreTile, remote_art,
+    CaptureLiveState, CaptureSavedEvent, CaptureStatusReply, DiscordFriend, ExoAccountState,
+    FrameGenRoute, Game, GameExtras, GameFrameGen, GameProperties, GameRunStateEvent, HostEvent,
+    InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
+    LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_FRAME_GEN,
+    METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL,
+    METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP,
+    METHOD_STORE_HOME, MusicPlayback, MusicVolumeEvent, ShellBootstrap, StoreArt,
+    StoreChangedEvent, StoreGame, StoreHome, StoreOtherOffers, StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -553,9 +552,6 @@ pub enum PaletteTarget {
     InstallSelected(String),
     OpenDownloads,
     OpenWhatsNew,
-    NoteNew,
-    NoteOpen,
-    NoteItem(String),
     DiscordDm(String),
     DiscordServer(String),
     DiscordChannel {
@@ -2915,10 +2911,6 @@ impl AppState {
             self.media.clip_editor_open = false;
             return true;
         }
-        if self.media.notes.open {
-            self.close_notes_to_captures();
-            return true;
-        }
         if self.media.open_capture_id.is_some() {
             self.close_capture_item();
             return true;
@@ -3274,7 +3266,6 @@ impl AppState {
         self.palette_query.text.clear();
         self.palette_query.sync_invariants();
         self.load_palette_extras();
-        self.load_notes_list(None);
         self.sync_chrome_layout();
         self.sync_mouse_panel_visibility();
         tx.focus("palette-input", false);
@@ -4001,7 +3992,7 @@ impl AppState {
     pub fn apply_capture_saved(&mut self, ev: CaptureSavedEvent) {
         let id = ev.item.id.clone();
         let name = ev.item.name.clone();
-        let edit = ev.edit;
+        let edit = ev.edit || ev.item.kind == "image";
         self.media.capture_items.retain(|it| it.id != id);
         self.media.capture_items.insert(0, ev.item);
         if edit {
@@ -4124,7 +4115,6 @@ impl AppState {
                     s.apply_bootstrap(boot);
                     s.warm_discord();
                     s.load_capture_status();
-                    s.check_pending_notes_on_startup();
                     s.warm_store_on_startup();
                     s.wp4_warm_startup();
                     s.check_system_eq_health_on_launch();

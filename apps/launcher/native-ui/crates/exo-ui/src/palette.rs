@@ -3,23 +3,16 @@ use crate::state::{AppState, PaletteItem, PaletteTarget, Room};
 use exo_kit::{
     FG, RADIUS_SHEET, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, fg_muted, hairline,
     hover_fill, icon_chat, icon_close, icon_download, icon_gamepad, icon_key, icon_minimize,
-    icon_music, icon_notes, icon_pause, icon_play, icon_plus, icon_refresh, icon_search,
-    icon_server, icon_settings, icon_skip_back, icon_skip_forward, icon_sparkles,
-    modal_card_transition, scaled, scrim_fill, type_body, type_control, type_small,
+    icon_music, icon_pause, icon_play, icon_refresh, icon_search, icon_server, icon_settings,
+    icon_skip_back, icon_skip_forward, icon_sparkles, modal_card_transition, scaled, scrim_fill,
+    type_body, type_control, type_small,
 };
 use exo_rpc::{DiscordChannels, DiscordHome};
 use rune::{
-    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, Transition, Tx, col, edit_access,
-    el, row, text, text_input,
+    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, Transition, Tx, col, edit_access, el, row, text,
+    text_input,
 };
-use serde_json::{Value, json};
-
-#[derive(Debug, Clone, Default)]
-pub struct PaletteNoteItem {
-    pub id: String,
-    pub title: String,
-    pub snippet: String,
-}
+use serde_json::json;
 
 #[derive(Debug, Clone, Default)]
 pub struct PaletteChannelItem {
@@ -31,7 +24,6 @@ pub struct PaletteChannelItem {
 
 #[derive(Debug, Clone, Default)]
 pub struct PaletteExtrasState {
-    pub notes: Vec<PaletteNoteItem>,
     pub dms: Vec<(String, String)>,
     pub servers: Vec<(String, String)>,
     pub channels: Vec<PaletteChannelItem>,
@@ -42,34 +34,6 @@ impl AppState {
         self.sync_palette_discord_from_cache();
         #[cfg(windows)]
         {
-            self.call_host_async("notes.list", json!({}), |s, res: Result<Value, String>| {
-                if let Ok(val) = res
-                    && val.get("ok").and_then(|v| v.as_bool()).unwrap_or(false)
-                    && let Some(arr) = val.get("notes").and_then(|v| v.as_array())
-                {
-                    s.palette_extras.notes = arr
-                        .iter()
-                        .map(|n| PaletteNoteItem {
-                            id: n
-                                .get("id")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            title: n
-                                .get("title")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            snippet: n
-                                .get("snippet")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                        })
-                        .filter(|n| !n.id.is_empty())
-                        .collect();
-                }
-            });
             self.call_host_async(
                 "discord.home",
                 json!({}),
@@ -211,50 +175,6 @@ impl AppState {
             }
         }
 
-        let note_actions: [(&str, &str, &[&str], PaletteTarget); 2] = [
-            (
-                "pal-note-new",
-                "New note",
-                &["notes", "write", "scratchpad"],
-                PaletteTarget::NoteNew,
-            ),
-            (
-                "pal-note-open",
-                "Notes",
-                &["note", "text", "markdown"],
-                PaletteTarget::NoteOpen,
-            ),
-        ];
-        for (id, title, keywords, target) in note_actions {
-            if query.is_empty()
-                || title.to_lowercase().contains(query)
-                || keywords.iter().any(|k| k.contains(query))
-            {
-                items.push(PaletteItem {
-                    id: id.into(),
-                    group: "Notes",
-                    title: title.into(),
-                    detail: None,
-                    target,
-                });
-            }
-        }
-        if !query.is_empty() {
-            for note in &self.palette_extras.notes {
-                if note.title.to_lowercase().contains(query)
-                    || note.snippet.to_lowercase().contains(query)
-                {
-                    items.push(PaletteItem {
-                        id: format!("pal-note-{}", note.id),
-                        group: "Notes",
-                        title: note.title.clone(),
-                        detail: (!note.snippet.trim().is_empty()).then(|| note.snippet.clone()),
-                        target: PaletteTarget::NoteItem(note.id.clone()),
-                    });
-                }
-            }
-        }
-
         for (id, name) in &self.palette_extras.dms {
             if query.is_empty()
                 || name.to_lowercase().contains(query)
@@ -352,9 +272,6 @@ impl AppState {
             PaletteTarget::InstallSelected(id) => self.install_game(&id),
             PaletteTarget::OpenDownloads => self.open_downloads(),
             PaletteTarget::OpenWhatsNew => self.open_whats_new_all(),
-            PaletteTarget::NoteNew => self.open_notes(None, true),
-            PaletteTarget::NoteOpen => self.open_notes(None, false),
-            PaletteTarget::NoteItem(id) => self.open_notes(Some(id), false),
             PaletteTarget::DiscordDm(dm_id) => {
                 self.switch_room(Room::Discord);
                 self.open_discord_dm(&dm_id);
@@ -400,8 +317,6 @@ fn palette_icon(target: &PaletteTarget) -> El {
         PaletteTarget::InstallSelected(_) | PaletteTarget::OpenDownloads => {
             icon_download(16.0, fg_muted())
         }
-        PaletteTarget::NoteNew => icon_plus(16.0, fg_muted()),
-        PaletteTarget::NoteOpen | PaletteTarget::NoteItem(_) => icon_notes(16.0, fg_muted()),
         PaletteTarget::DiscordDm(_) | PaletteTarget::DiscordChannel { .. } => {
             icon_chat(16.0, fg_muted())
         }
@@ -656,13 +571,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn palette_includes_selected_game_notes_discord_and_music_extras() {
+    fn palette_includes_selected_game_discord_and_music_extras_without_notes() {
         let mut s = AppState::default();
-        s.palette_extras.notes.push(PaletteNoteItem {
-            id: "n1".into(),
-            title: "Build notes".into(),
-            snippet: "FPS benchmark".into(),
-        });
         s.palette_extras.dms.push(("dm1".into(), "Alex".into()));
         s.palette_extras.servers.push(("g1".into(), "Squad".into()));
         s.palette_extras.channels.push(PaletteChannelItem {
@@ -678,8 +588,7 @@ mod tests {
         assert!(all.iter().any(|i| i.title == "Close window"));
         assert!(all.iter().any(|i| i.title.starts_with("Play ")));
         assert!(all.iter().any(|i| i.title.starts_with("Install ")));
-        assert!(all.iter().any(|i| i.title == "New note"));
-        assert!(all.iter().any(|i| i.title == "Notes"));
+        assert!(!all.iter().any(|i| i.title == "New note"));
         assert!(
             all.iter()
                 .any(|i| i.title == "Alex" && i.group == "Discord")
@@ -710,8 +619,7 @@ mod tests {
         );
 
         s.palette_query.text = "benchmark".into();
-        let note_filtered = s.palette_results();
-        assert!(note_filtered.iter().any(|i| i.title == "Build notes"));
+        assert!(!s.palette_results().iter().any(|i| i.group == "Notes"));
     }
 
     #[test]
@@ -745,8 +653,7 @@ mod tests {
         let pal_shape = shapes
             .iter()
             .find(|sh| {
-                (sh.rect[2] - rect[2] * 2.0).abs() < 8.0
-                    && (sh.rect[3] - rect[3] * 2.0).abs() < 8.0
+                (sh.rect[2] - rect[2] * 2.0).abs() < 8.0 && (sh.rect[3] - rect[3] * 2.0).abs() < 8.0
             })
             .expect("command-palette missing from liquid_glass shapes");
         assert!(

@@ -10,15 +10,15 @@ use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL,
     SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, SelectTrigger, TRANSPARENT, bad, exo_glass,
-    fg_muted, float_line,
-    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline, hover_fill,
-    icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_music, icon_search,
-    icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled, select_trigger, slider_track,
-    switch_pill, type_body, type_control, type_page, type_section, type_small,
+    fg_muted, float_line, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good,
+    hairline, hover_fill, icon_chevron_left, icon_close, icon_download, icon_info, icon_library,
+    icon_music, icon_search, icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled,
+    select_trigger, slider_track, switch_pill, type_body, type_control, type_page, type_section,
+    type_small,
 };
 use rune::{
-    Cursor, El, Phase, ScrollSpec, SpringPair, TextStyle, Transition, col,
-    edit_access, el, row, text, text_input,
+    Cursor, El, Phase, ScrollSpec, SpringPair, TextStyle, Transition, col, edit_access, el, row,
+    text, text_input,
 };
 
 pub(crate) fn settings_card() -> El {
@@ -122,6 +122,7 @@ fn nav_label(sec: SettingsSection) -> &'static str {
         SettingsSection::Appearance => "Downloads",
         SettingsSection::Graphics => "In game",
         SettingsSection::Updates => "Music",
+        SettingsSection::Capture => "Capture",
         SettingsSection::About => "About",
     }
 }
@@ -134,6 +135,7 @@ fn nav_icon(sec: SettingsSection, active: bool) -> El {
         SettingsSection::Appearance => icon_download(15.0, c),
         SettingsSection::Graphics => icon_trophy(15.0, c),
         SettingsSection::Updates => icon_music(15.0, c),
+        SettingsSection::Capture => exo_kit::icon_camera(15.0, c),
         SettingsSection::About => icon_info(15.0, c),
     }
 }
@@ -1015,6 +1017,7 @@ pub fn view(s: &AppState) -> El {
         SettingsSection::Appearance => section_downloads(s),
         SettingsSection::Graphics => section_in_game(s),
         SettingsSection::Updates => section_music(s),
+        SettingsSection::Capture => crate::captures::settings_body(s),
         SettingsSection::About => section_about(s),
     };
 

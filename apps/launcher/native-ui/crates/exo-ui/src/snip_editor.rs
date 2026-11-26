@@ -444,6 +444,34 @@ impl AppState {
         let _ = (item_id, b64);
     }
 
+    pub fn snip_copy(&mut self) {
+        let Some(ref ed) = self.media.snip_editor else {
+            return;
+        };
+        if ed.busy || ed.pixels.is_none() {
+            return;
+        }
+        if ed.is_dirty() {
+            self.snip_save();
+            return;
+        }
+        let id = ed.item_id.clone();
+        self.media.snip_editor = None;
+        self.capture_viewer_action(&id, "copy");
+    }
+
+    pub fn snip_delete(&mut self) {
+        let Some(ref ed) = self.media.snip_editor else {
+            return;
+        };
+        if ed.busy {
+            return;
+        }
+        let id = ed.item_id.clone();
+        self.media.snip_editor = None;
+        self.capture_viewer_action(&id, "delete");
+    }
+
     pub fn snip_copy_text(&mut self, use_crop: bool) {
         let Some(ref mut ed) = self.media.snip_editor else {
             return;
@@ -661,7 +689,7 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
         )
         .child(el().grow(1.0))
         .child(
-            device_btn("snip-cancel", "Cancel", ed.busy)
+            device_btn("snip-cancel", "Close", ed.busy)
                 .cursor(if ed.busy {
                     Cursor::NotAllowed
                 } else {
@@ -669,15 +697,24 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
                 })
                 .on_press(|s: &mut AppState| s.close_snip_editor()),
         )
+        .child(
+            exo_kit::danger_button("snip-delete", "Delete", None)
+                .on_press(|s: &mut AppState| s.snip_delete()),
+        )
+        .child(
+            device_btn("snip-copy", "Copy", !can_save)
+                .cursor(if can_save {
+                    Cursor::Pointer
+                } else {
+                    Cursor::NotAllowed
+                })
+                .on_press(|s: &mut AppState| s.snip_copy()),
+        )
         .child(if can_save {
-            primary_button("snip-save", "Save & Copy", None).on_press(|s: &mut AppState| s.snip_save())
+            primary_button("snip-save", "Save", None).on_press(|s: &mut AppState| s.snip_save())
         } else {
-            device_btn(
-                "snip-save",
-                if ed.busy { "Saving…" } else { "Save & Copy" },
-                true,
-            )
-            .cursor(Cursor::NotAllowed)
+            device_btn("snip-save", if ed.busy { "Saving…" } else { "Save" }, true)
+                .cursor(Cursor::NotAllowed)
         });
 
     let media_stage = if let Some(ref px) = ed.pixels {

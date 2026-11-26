@@ -44,7 +44,6 @@ mod music_pages;
 mod music_sound;
 mod native_autopilot;
 mod native_media;
-mod notes;
 mod notice;
 mod palette;
 mod pc;
@@ -457,11 +456,9 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let lib = s.tick_library(now);
     s.tick_audio_eq_polling(now);
     s.tick_controller_watch(now);
-    s.tick_notes_autosave(now);
     let store = s.store_tick(now);
     let wp4 = s.wp4_tick(now);
     let hb = s.tick_shell_heartbeat(now, tx);
-    let wp9 = s.pc_wp9_tick(now);
     let music = s.music_tick_with_tx(now, Some(tx));
     let snip = s.tick_snip_editor_reload();
     let pg = s.tick_power_guard(now);
@@ -476,7 +473,6 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
         || store
         || wp4
         || hb
-        || wp9
         || music
         || snip
         || pg
@@ -2104,34 +2100,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.media.capture_items = list.items;
             }
-            if let Ok(nl) = client.call_blocking::<_, exo_rpc::NotesListReply>(
-                exo_rpc::METHOD_NOTES_LIST,
-                &serde_json::json!({}),
-                Duration::from_secs(5),
-            ) {
-                state.hydrate_notes_list_reply(nl);
-                if let Some(active_id) = state.media.notes.active.clone()
-                    && let Ok(reply) = client.call_blocking::<_, exo_rpc::NotesReadReply>(
-                        exo_rpc::METHOD_NOTES_READ,
-                        &serde_json::json!({ "id": active_id }),
-                        Duration::from_secs(5),
-                    )
-                    && reply.ok
-                    && let Some(doc) = state.media.notes.docs.get_mut(&active_id)
-                {
-                    if let Some(txt) = reply.text {
-                        doc.edit.text = txt.clone();
-                        doc.edit.sync_invariants();
-                        doc.sent = txt;
-                    }
-                    if let Some(info) = reply.note {
-                        doc.info = info;
-                    }
-                    doc.reading = false;
-                    doc.loaded = true;
-                    doc.problem = None;
-                }
-            }
             if let Some(ref cache_dir) = state.remote_cache_dir {
                 let urls: Vec<String> = state
                     .home_deck_games()
@@ -3057,9 +3025,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.open_captures(None);
     }),
     ("captures-settings", |s: &mut AppState| {
-        s.switch_room(state::Room::Library);
-        s.open_captures(None);
-        s.media.captures_settings_open = true;
+        s.open_capture_settings();
     }),
     ("capture-clip", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
@@ -3067,10 +3033,6 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         if let Some(first) = s.media.capture_items.first().map(|c| c.id.clone()) {
             s.open_capture_item(&first);
         }
-    }),
-    ("captures-notes", |s: &mut AppState| {
-        s.switch_room(state::Room::Library);
-        s.open_notes(None, false);
     }),
     ("captures-clip-edit", |s: &mut AppState| {
         s.open_captures(None);
@@ -3663,7 +3625,6 @@ fn run_parity_probe(
         "paletteOpen": rt.state.palette_open,
         "captureMenuOpen": rt.state.capture_menu_open,
         "capturesOpen": rt.state.media.captures_open,
-        "capturesSettingsOpen": rt.state.media.captures_settings_open,
         "keyModalOpen": rt.state.key_modal_open,
         "downloadsOpen": rt.state.downloads.open,
         "whatsNewOpen": rt.state.whats_new.mode.is_some(),

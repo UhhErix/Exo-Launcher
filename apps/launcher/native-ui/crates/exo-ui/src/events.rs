@@ -390,13 +390,6 @@ fn register_media(reg: &mut EventRegistry) {
         state.apply_capture_shrunk(*shrunk);
         true
     });
-    reg.on(HostEventKind::NotesOpen, |state, ev| {
-        let HostEvent::NotesOpen(note_ev) = ev else {
-            return false;
-        };
-        state.apply_notes_open(note_ev);
-        true
-    });
 }
 
 fn register_discord(reg: &mut EventRegistry) {
