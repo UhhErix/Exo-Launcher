@@ -1,5 +1,15 @@
 [
   {
+    "version": "3.31.4",
+    "items": [
+      {
+        "icon": "Headphones",
+        "title": "No more Equalizer APO update popups",
+        "detail": "Silences Equalizer APO's broken update-check error dialog and turns off its background update checker automatically while keeping Exo EQ active."
+      }
+    ]
+  },
+  {
     "version": "3.31.3",
     "items": [
       {

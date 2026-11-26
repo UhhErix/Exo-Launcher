@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.31.4 — November 25, 2026
+- **Stops Equalizer APO update-check error popups.** Silences Equalizer APO's broken update-check dialog and disables its sign-in update checker task automatically when installing Exo EQ and on startup for existing installs, without affecting your audio or EQ. _Checked in code only._
+
 ## 3.31.3 — November 25, 2026
 - **Install updates immediately when triggered in-game.** Pressing Update now or Install update applies the update right away even while a game is running instead of holding it for after your game closes. _Checked in code only._
 
