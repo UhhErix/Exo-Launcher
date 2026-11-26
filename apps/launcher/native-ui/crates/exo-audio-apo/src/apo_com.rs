@@ -1,6 +1,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use crate::dsp::{DspConfig, DspEngine, MAX_CHANNELS};
+use crate::guard;
 use crate::shm_ipc::{ShmChannel, ShmScope};
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -86,6 +87,7 @@ pub struct ExoAudioApo {
     clsid: GUID,
     initialized: AtomicBool,
     effect_enabled: AtomicBool,
+    faulted: AtomicBool,
     lock_state: AtomicU8,
     channels: AtomicU32,
     processed_frames: AtomicU64,
@@ -112,6 +114,7 @@ impl ExoAudioApo {
             clsid,
             initialized: AtomicBool::new(false),
             effect_enabled: AtomicBool::new(true),
+            faulted: AtomicBool::new(false),
             lock_state: AtomicU8::new(STATE_UNLOCKED),
             channels: AtomicU32::new(2),
             processed_frames: AtomicU64::new(0),
@@ -161,216 +164,11 @@ impl ExoAudioApo {
         self.effect_enabled.load(Ordering::Acquire)
     }
 
-    fn validate_uncompressed_format(fmt: &UNCOMPRESSEDAUDIOFORMAT) -> bool {
-        fmt.guidFormatType == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
-            && fmt.dwBytesPerSampleContainer == 4
-            && fmt.dwValidBitsPerSample == 32
-            && fmt.dwSamplesPerFrame >= 1
-            && (fmt.dwSamplesPerFrame as usize) <= MAX_CHANNELS
-            && fmt.fFramesPerSecond >= 8_000.0
-            && fmt.fFramesPerSecond <= 384_000.0
+    pub fn is_faulted(&self) -> bool {
+        self.faulted.load(Ordering::Acquire)
     }
 
-    fn copy_wide_truncated(dst: &mut [u16; 256], text: &str) {
-        for (slot, unit) in dst.iter_mut().zip(text.encode_utf16().take(255)) {
-            *slot = unit;
-        }
-    }
-
-    fn check_format_supported(
-        requested: Ref<'_, IAudioMediaType>,
-    ) -> windows_core::Result<IAudioMediaType> {
-        let req = requested.ok()?;
-        let compressed = unsafe { req.IsCompressedFormat()? };
-        if compressed.as_bool() {
-            return Err(Error::from(APOERR_FORMAT_NOT_SUPPORTED));
-        }
-        let mut fmt = UNCOMPRESSEDAUDIOFORMAT::default();
-        unsafe { req.GetUncompressedAudioFormat(&mut fmt)? };
-        if !Self::validate_uncompressed_format(&fmt) {
-            return Err(Error::from(APOERR_FORMAT_NOT_SUPPORTED));
-        }
-        Ok(req.clone())
-    }
-}
-
-#[cfg(windows)]
-impl IAudioProcessingObject_Impl for ExoAudioApo_Impl {
-    fn Reset(&self) -> windows_core::Result<()> {
-        let state = self.lock_state.load(Ordering::Acquire);
-        if state == STATE_IN_PROCESS {
-            return Err(Error::from(APOERR_APO_LOCKED));
-        }
-        unsafe {
-            (*self.rt.get()).dsp.reset();
-        }
-        Ok(())
-    }
-
-    fn GetLatency(&self) -> windows_core::Result<i64> {
-        Ok(0)
-    }
-
-    fn GetRegistrationProperties(&self) -> windows_core::Result<*mut APO_REG_PROPERTIES> {
-        let size = std::mem::size_of::<APO_REG_PROPERTIES>() + std::mem::size_of::<GUID>() * 3;
-        let ptr = unsafe { CoTaskMemAlloc(size) as *mut APO_REG_PROPERTIES };
-        if ptr.is_null() {
-            return Err(Error::from(E_OUTOFMEMORY));
-        }
-        unsafe {
-            std::ptr::write_bytes(ptr as *mut u8, 0, size);
-            let props = &mut *ptr;
-            props.clsid = self.clsid;
-            props.Flags = APO_FLAG(APO_FLAG_DEFAULT.0 | APO_FLAG_INPLACE.0);
-            ExoAudioApo::copy_wide_truncated(&mut props.szFriendlyName, "Exo Audio EQ APO");
-            ExoAudioApo::copy_wide_truncated(
-                &mut props.szCopyrightInfo,
-                "Exo Launcher (MIT Clean-Room APO)",
-            );
-            props.u32MajorVersion = 1;
-            props.u32MinorVersion = 0;
-            props.u32MinInputConnections = 1;
-            props.u32MaxInputConnections = 1;
-            props.u32MinOutputConnections = 1;
-            props.u32MaxOutputConnections = 1;
-            props.u32MaxInstances = u32::MAX;
-            props.u32NumAPOInterfaces = 4;
-            let list = props.iidAPOInterfaceList.as_mut_ptr();
-            *list.add(0) = IAudioProcessingObject::IID;
-            *list.add(1) = IAudioProcessingObjectRT::IID;
-            *list.add(2) = IAudioProcessingObjectConfiguration::IID;
-            *list.add(3) = IAudioSystemEffects3::IID;
-        }
-        Ok(ptr)
-    }
-
-    fn Initialize(&self, cbdatasize: u32, pbydata: *const u8) -> windows_core::Result<()> {
-        if self.initialized.swap(true, Ordering::AcqRel) {
-            return Err(Error::from(APOERR_ALREADY_INITIALIZED));
-        }
-        if cbdatasize >= std::mem::size_of::<APOInitBaseStruct>() as u32 && !pbydata.is_null() {
-            let base = unsafe { &*(pbydata as *const APOInitBaseStruct) };
-            if base.cbSize < std::mem::size_of::<APOInitBaseStruct>() as u32 {
-                self.initialized.store(false, Ordering::Release);
-                return Err(Error::from(E_INVALIDARG));
-            }
-        }
-        unsafe {
-            let rt = &mut *self.rt.get();
-            if rt.shm.is_none()
-                && let Ok(ch) = ShmChannel::open_existing("default", ShmScope::Global)
-                    .or_else(|_| ShmChannel::open_existing("default", ShmScope::Local))
-            {
-                rt.shm = Some(ch);
-            }
-        }
-        Ok(())
-    }
-
-    fn IsInputFormatSupported(
-        &self,
-        _poppositeformat: Ref<'_, IAudioMediaType>,
-        prequestedinputformat: Ref<'_, IAudioMediaType>,
-    ) -> windows_core::Result<IAudioMediaType> {
-        ExoAudioApo::check_format_supported(prequestedinputformat)
-    }
-
-    fn IsOutputFormatSupported(
-        &self,
-        _poppositeformat: Ref<'_, IAudioMediaType>,
-        prequestedoutputformat: Ref<'_, IAudioMediaType>,
-    ) -> windows_core::Result<IAudioMediaType> {
-        ExoAudioApo::check_format_supported(prequestedoutputformat)
-    }
-
-    fn GetInputChannelCount(&self) -> windows_core::Result<u32> {
-        Ok(self.channels.load(Ordering::Acquire))
-    }
-}
-
-#[cfg(windows)]
-impl IAudioProcessingObjectConfiguration_Impl for ExoAudioApo_Impl {
-    fn LockForProcess(
-        &self,
-        u32numinputconnections: u32,
-        ppinputconnections: *const *const APO_CONNECTION_DESCRIPTOR,
-        u32numoutputconnections: u32,
-        ppoutputconnections: *const *const APO_CONNECTION_DESCRIPTOR,
-    ) -> windows_core::Result<()> {
-        if u32numinputconnections != 1 || u32numoutputconnections != 1 {
-            return Err(Error::from(APOERR_NUM_CONNECTIONS_INVALID));
-        }
-        if ppinputconnections.is_null() || ppoutputconnections.is_null() {
-            return Err(Error::from(E_POINTER));
-        }
-        let in_desc = unsafe { *ppinputconnections };
-        let out_desc = unsafe { *ppoutputconnections };
-        if in_desc.is_null() || out_desc.is_null() {
-            return Err(Error::from(E_POINTER));
-        }
-
-        let in_fmt = unsafe { (*in_desc).pFormat.as_ref() }
-            .ok_or_else(|| Error::from(APOERR_INVALID_CONNECTION_FORMAT))?;
-        let out_fmt = unsafe { (*out_desc).pFormat.as_ref() }
-            .ok_or_else(|| Error::from(APOERR_INVALID_CONNECTION_FORMAT))?;
-
-        let mut in_uncomp = UNCOMPRESSEDAUDIOFORMAT::default();
-        let mut out_uncomp = UNCOMPRESSEDAUDIOFORMAT::default();
-        unsafe {
-            in_fmt.GetUncompressedAudioFormat(&mut in_uncomp)?;
-            out_fmt.GetUncompressedAudioFormat(&mut out_uncomp)?;
-        }
-        if !ExoAudioApo::validate_uncompressed_format(&in_uncomp)
-            || !ExoAudioApo::validate_uncompressed_format(&out_uncomp)
-            || in_uncomp.dwSamplesPerFrame != out_uncomp.dwSamplesPerFrame
-            || (in_uncomp.fFramesPerSecond - out_uncomp.fFramesPerSecond).abs() > 0.5
-        {
-            return Err(Error::from(APOERR_INVALID_CONNECTION_FORMAT));
-        }
-
-        self.lock_state
-            .compare_exchange(
-                STATE_UNLOCKED,
-                STATE_CONFIGURING,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
-            .map_err(|_| Error::from(APOERR_APO_LOCKED))?;
-
-        let ch = in_uncomp.dwSamplesPerFrame;
-        let fs = in_uncomp.fFramesPerSecond as f64;
-        self.channels.store(ch, Ordering::Release);
-        unsafe {
-            let rt = &mut *self.rt.get();
-            rt.sample_rate_hz = fs.round() as u32;
-            rt.channels = ch;
-            rt.dsp.set_format(fs, ch as usize);
-            if let Some(ref shm) = rt.shm
-                && let Some(cfg) = shm.try_read_if_newer(&mut rt.last_gen)
-            {
-                rt.dsp.apply_config_immediate(&cfg);
-            }
-        }
-        self.lock_state.store(STATE_LOCKED, Ordering::Release);
-        Ok(())
-    }
-
-    fn UnlockForProcess(&self) -> windows_core::Result<()> {
-        self.lock_state
-            .compare_exchange(
-                STATE_LOCKED,
-                STATE_UNLOCKED,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
-            .map_err(|_| Error::from(APOERR_ALREADY_UNLOCKED))?;
-        Ok(())
-    }
-}
-
-#[cfg(windows)]
-impl IAudioProcessingObjectRT_Impl for ExoAudioApo_Impl {
-    fn APOProcess(
+    fn process_connections(
         &self,
         u32numinputconnections: u32,
         ppinputconnections: *const *const APO_CONNECTION_PROPERTY,
@@ -428,7 +226,7 @@ impl IAudioProcessingObjectRT_Impl for ExoAudioApo_Impl {
             }
         }
 
-        if !self.effect_enabled.load(Ordering::Relaxed) {
+        if !self.effect_enabled.load(Ordering::Relaxed) || self.faulted.load(Ordering::Relaxed) {
             return;
         }
 
@@ -471,6 +269,295 @@ impl IAudioProcessingObjectRT_Impl for ExoAudioApo_Impl {
         self.lock_state.store(STATE_LOCKED, Ordering::Release);
     }
 
+    fn fail_open(
+        &self,
+        u32numinputconnections: u32,
+        ppinputconnections: *const *const APO_CONNECTION_PROPERTY,
+        u32numoutputconnections: u32,
+        ppoutputconnections: *mut *mut APO_CONNECTION_PROPERTY,
+    ) {
+        self.faulted.store(true, Ordering::Release);
+        let _ = self.lock_state.compare_exchange(
+            STATE_IN_PROCESS,
+            STATE_LOCKED,
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        );
+        guard::panicked(|| {
+            if u32numinputconnections == 0
+                || u32numoutputconnections == 0
+                || ppinputconnections.is_null()
+                || ppoutputconnections.is_null()
+            {
+                return;
+            }
+            let in_prop = unsafe { *ppinputconnections };
+            let out_prop = unsafe { *ppoutputconnections };
+            if in_prop.is_null() || out_prop.is_null() {
+                return;
+            }
+            let in_conn = unsafe { &*in_prop };
+            let out_conn = unsafe { &mut *out_prop };
+            out_conn.u32ValidFrameCount = in_conn.u32ValidFrameCount;
+            out_conn.u32BufferFlags = in_conn.u32BufferFlags;
+            if in_conn.u32BufferFlags != BUFFER_VALID {
+                return;
+            }
+            let samples = (in_conn.u32ValidFrameCount as usize)
+                .saturating_mul(self.channels.load(Ordering::Relaxed) as usize);
+            unsafe {
+                guard::pass_through(
+                    in_conn.pBuffer as *const f32,
+                    out_conn.pBuffer as *mut f32,
+                    samples,
+                );
+            }
+        });
+    }
+
+    fn validate_uncompressed_format(fmt: &UNCOMPRESSEDAUDIOFORMAT) -> bool {
+        fmt.guidFormatType == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
+            && fmt.dwBytesPerSampleContainer == 4
+            && fmt.dwValidBitsPerSample == 32
+            && fmt.dwSamplesPerFrame >= 1
+            && (fmt.dwSamplesPerFrame as usize) <= MAX_CHANNELS
+            && fmt.fFramesPerSecond >= 8_000.0
+            && fmt.fFramesPerSecond <= 384_000.0
+    }
+
+    fn copy_wide_truncated(dst: &mut [u16; 256], text: &str) {
+        for (slot, unit) in dst.iter_mut().zip(text.encode_utf16().take(255)) {
+            *slot = unit;
+        }
+    }
+
+    fn check_format_supported(
+        requested: Ref<'_, IAudioMediaType>,
+    ) -> windows_core::Result<IAudioMediaType> {
+        let req = requested.ok()?;
+        let compressed = unsafe { req.IsCompressedFormat()? };
+        if compressed.as_bool() {
+            return Err(Error::from(APOERR_FORMAT_NOT_SUPPORTED));
+        }
+        let mut fmt = UNCOMPRESSEDAUDIOFORMAT::default();
+        unsafe { req.GetUncompressedAudioFormat(&mut fmt)? };
+        if !Self::validate_uncompressed_format(&fmt) {
+            return Err(Error::from(APOERR_FORMAT_NOT_SUPPORTED));
+        }
+        Ok(req.clone())
+    }
+}
+
+#[cfg(windows)]
+impl IAudioProcessingObject_Impl for ExoAudioApo_Impl {
+    fn Reset(&self) -> windows_core::Result<()> {
+        guard::guard_result(|| {
+            let state = self.lock_state.load(Ordering::Acquire);
+            if state == STATE_IN_PROCESS {
+                return Err(Error::from(APOERR_APO_LOCKED));
+            }
+            unsafe {
+                (*self.rt.get()).dsp.reset();
+            }
+            Ok(())
+        })
+    }
+
+    fn GetLatency(&self) -> windows_core::Result<i64> {
+        guard::guard_result(|| Ok(0))
+    }
+
+    fn GetRegistrationProperties(&self) -> windows_core::Result<*mut APO_REG_PROPERTIES> {
+        guard::guard_result(|| {
+            let size = std::mem::size_of::<APO_REG_PROPERTIES>() + std::mem::size_of::<GUID>() * 3;
+            let ptr = unsafe { CoTaskMemAlloc(size) as *mut APO_REG_PROPERTIES };
+            if ptr.is_null() {
+                return Err(Error::from(E_OUTOFMEMORY));
+            }
+            unsafe {
+                std::ptr::write_bytes(ptr as *mut u8, 0, size);
+                let props = &mut *ptr;
+                props.clsid = self.clsid;
+                props.Flags = APO_FLAG(APO_FLAG_DEFAULT.0 | APO_FLAG_INPLACE.0);
+                ExoAudioApo::copy_wide_truncated(&mut props.szFriendlyName, "Exo Audio EQ APO");
+                ExoAudioApo::copy_wide_truncated(
+                    &mut props.szCopyrightInfo,
+                    "Exo Launcher (MIT Clean-Room APO)",
+                );
+                props.u32MajorVersion = 1;
+                props.u32MinorVersion = 0;
+                props.u32MinInputConnections = 1;
+                props.u32MaxInputConnections = 1;
+                props.u32MinOutputConnections = 1;
+                props.u32MaxOutputConnections = 1;
+                props.u32MaxInstances = u32::MAX;
+                props.u32NumAPOInterfaces = 4;
+                let list = props.iidAPOInterfaceList.as_mut_ptr();
+                *list.add(0) = IAudioProcessingObject::IID;
+                *list.add(1) = IAudioProcessingObjectRT::IID;
+                *list.add(2) = IAudioProcessingObjectConfiguration::IID;
+                *list.add(3) = IAudioSystemEffects3::IID;
+            }
+            Ok(ptr)
+        })
+    }
+
+    fn Initialize(&self, cbdatasize: u32, pbydata: *const u8) -> windows_core::Result<()> {
+        guard::guard_result(|| {
+            if self.initialized.swap(true, Ordering::AcqRel) {
+                return Err(Error::from(APOERR_ALREADY_INITIALIZED));
+            }
+            if cbdatasize >= std::mem::size_of::<APOInitBaseStruct>() as u32 && !pbydata.is_null() {
+                let base = unsafe { &*(pbydata as *const APOInitBaseStruct) };
+                if base.cbSize < std::mem::size_of::<APOInitBaseStruct>() as u32 {
+                    self.initialized.store(false, Ordering::Release);
+                    return Err(Error::from(E_INVALIDARG));
+                }
+            }
+            unsafe {
+                let rt = &mut *self.rt.get();
+                if rt.shm.is_none()
+                    && let Ok(ch) = ShmChannel::open_existing("default", ShmScope::Global)
+                        .or_else(|_| ShmChannel::open_existing("default", ShmScope::Local))
+                {
+                    rt.shm = Some(ch);
+                }
+            }
+            Ok(())
+        })
+    }
+
+    fn IsInputFormatSupported(
+        &self,
+        _poppositeformat: Ref<'_, IAudioMediaType>,
+        prequestedinputformat: Ref<'_, IAudioMediaType>,
+    ) -> windows_core::Result<IAudioMediaType> {
+        guard::guard_result(|| ExoAudioApo::check_format_supported(prequestedinputformat))
+    }
+
+    fn IsOutputFormatSupported(
+        &self,
+        _poppositeformat: Ref<'_, IAudioMediaType>,
+        prequestedoutputformat: Ref<'_, IAudioMediaType>,
+    ) -> windows_core::Result<IAudioMediaType> {
+        guard::guard_result(|| ExoAudioApo::check_format_supported(prequestedoutputformat))
+    }
+
+    fn GetInputChannelCount(&self) -> windows_core::Result<u32> {
+        guard::guard_result(|| Ok(self.channels.load(Ordering::Acquire)))
+    }
+}
+
+#[cfg(windows)]
+impl IAudioProcessingObjectConfiguration_Impl for ExoAudioApo_Impl {
+    fn LockForProcess(
+        &self,
+        u32numinputconnections: u32,
+        ppinputconnections: *const *const APO_CONNECTION_DESCRIPTOR,
+        u32numoutputconnections: u32,
+        ppoutputconnections: *const *const APO_CONNECTION_DESCRIPTOR,
+    ) -> windows_core::Result<()> {
+        guard::guard_result(|| {
+            if u32numinputconnections != 1 || u32numoutputconnections != 1 {
+                return Err(Error::from(APOERR_NUM_CONNECTIONS_INVALID));
+            }
+            if ppinputconnections.is_null() || ppoutputconnections.is_null() {
+                return Err(Error::from(E_POINTER));
+            }
+            let in_desc = unsafe { *ppinputconnections };
+            let out_desc = unsafe { *ppoutputconnections };
+            if in_desc.is_null() || out_desc.is_null() {
+                return Err(Error::from(E_POINTER));
+            }
+
+            let in_fmt = unsafe { (*in_desc).pFormat.as_ref() }
+                .ok_or_else(|| Error::from(APOERR_INVALID_CONNECTION_FORMAT))?;
+            let out_fmt = unsafe { (*out_desc).pFormat.as_ref() }
+                .ok_or_else(|| Error::from(APOERR_INVALID_CONNECTION_FORMAT))?;
+
+            let mut in_uncomp = UNCOMPRESSEDAUDIOFORMAT::default();
+            let mut out_uncomp = UNCOMPRESSEDAUDIOFORMAT::default();
+            unsafe {
+                in_fmt.GetUncompressedAudioFormat(&mut in_uncomp)?;
+                out_fmt.GetUncompressedAudioFormat(&mut out_uncomp)?;
+            }
+            if !ExoAudioApo::validate_uncompressed_format(&in_uncomp)
+                || !ExoAudioApo::validate_uncompressed_format(&out_uncomp)
+                || in_uncomp.dwSamplesPerFrame != out_uncomp.dwSamplesPerFrame
+                || (in_uncomp.fFramesPerSecond - out_uncomp.fFramesPerSecond).abs() > 0.5
+            {
+                return Err(Error::from(APOERR_INVALID_CONNECTION_FORMAT));
+            }
+
+            self.lock_state
+                .compare_exchange(
+                    STATE_UNLOCKED,
+                    STATE_CONFIGURING,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .map_err(|_| Error::from(APOERR_APO_LOCKED))?;
+
+            let ch = in_uncomp.dwSamplesPerFrame;
+            let fs = in_uncomp.fFramesPerSecond as f64;
+            self.channels.store(ch, Ordering::Release);
+            unsafe {
+                let rt = &mut *self.rt.get();
+                rt.sample_rate_hz = fs.round() as u32;
+                rt.channels = ch;
+                rt.dsp.set_format(fs, ch as usize);
+                if let Some(ref shm) = rt.shm
+                    && let Some(cfg) = shm.try_read_if_newer(&mut rt.last_gen)
+                {
+                    rt.dsp.apply_config_immediate(&cfg);
+                }
+            }
+            self.lock_state.store(STATE_LOCKED, Ordering::Release);
+            Ok(())
+        })
+    }
+
+    fn UnlockForProcess(&self) -> windows_core::Result<()> {
+        guard::guard_result(|| {
+            self.lock_state
+                .compare_exchange(
+                    STATE_LOCKED,
+                    STATE_UNLOCKED,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .map_err(|_| Error::from(APOERR_ALREADY_UNLOCKED))?;
+            Ok(())
+        })
+    }
+}
+
+#[cfg(windows)]
+impl IAudioProcessingObjectRT_Impl for ExoAudioApo_Impl {
+    fn APOProcess(
+        &self,
+        u32numinputconnections: u32,
+        ppinputconnections: *const *const APO_CONNECTION_PROPERTY,
+        u32numoutputconnections: u32,
+        ppoutputconnections: *mut *mut APO_CONNECTION_PROPERTY,
+    ) {
+        if guard::panicked(|| {
+            self.process_connections(
+                u32numinputconnections,
+                ppinputconnections,
+                u32numoutputconnections,
+                ppoutputconnections,
+            )
+        }) {
+            self.fail_open(
+                u32numinputconnections,
+                ppinputconnections,
+                u32numoutputconnections,
+                ppoutputconnections,
+            );
+        }
+    }
+
     fn CalcInputFrames(&self, u32outputframecount: u32) -> u32 {
         u32outputframecount
     }
@@ -491,19 +578,21 @@ impl IAudioSystemEffects2_Impl for ExoAudioApo_Impl {
         pceffects: *mut u32,
         _event: HANDLE,
     ) -> windows_core::Result<()> {
-        if ppeffectsids.is_null() || pceffects.is_null() {
-            return Err(Error::from(E_POINTER));
-        }
-        let mem = unsafe { CoTaskMemAlloc(std::mem::size_of::<GUID>()) as *mut GUID };
-        if mem.is_null() {
-            return Err(Error::from(E_OUTOFMEMORY));
-        }
-        unsafe {
-            *mem = EFFECT_ID_EXO_EQ;
-            *ppeffectsids = mem;
-            *pceffects = 1;
-        }
-        Ok(())
+        guard::guard_result(|| {
+            if ppeffectsids.is_null() || pceffects.is_null() {
+                return Err(Error::from(E_POINTER));
+            }
+            let mem = unsafe { CoTaskMemAlloc(std::mem::size_of::<GUID>()) as *mut GUID };
+            if mem.is_null() {
+                return Err(Error::from(E_OUTOFMEMORY));
+            }
+            unsafe {
+                *mem = EFFECT_ID_EXO_EQ;
+                *ppeffectsids = mem;
+                *pceffects = 1;
+            }
+            Ok(())
+        })
     }
 }
 
@@ -515,30 +604,32 @@ impl IAudioSystemEffects3_Impl for ExoAudioApo_Impl {
         numeffects: *mut u32,
         _event: HANDLE,
     ) -> windows_core::Result<()> {
-        if effects.is_null() || numeffects.is_null() {
-            return Err(Error::from(E_POINTER));
-        }
-        let mem = unsafe {
-            CoTaskMemAlloc(std::mem::size_of::<AUDIO_SYSTEMEFFECT>()) as *mut AUDIO_SYSTEMEFFECT
-        };
-        if mem.is_null() {
-            return Err(Error::from(E_OUTOFMEMORY));
-        }
-        let state = if self.effect_enabled.load(Ordering::Acquire) {
-            AUDIO_SYSTEMEFFECT_STATE_ON
-        } else {
-            AUDIO_SYSTEMEFFECT_STATE_OFF
-        };
-        unsafe {
-            *mem = AUDIO_SYSTEMEFFECT {
-                id: EFFECT_ID_EXO_EQ,
-                canSetState: BOOL(1),
-                state,
+        guard::guard_result(|| {
+            if effects.is_null() || numeffects.is_null() {
+                return Err(Error::from(E_POINTER));
+            }
+            let mem = unsafe {
+                CoTaskMemAlloc(std::mem::size_of::<AUDIO_SYSTEMEFFECT>()) as *mut AUDIO_SYSTEMEFFECT
             };
-            *effects = mem;
-            *numeffects = 1;
-        }
-        Ok(())
+            if mem.is_null() {
+                return Err(Error::from(E_OUTOFMEMORY));
+            }
+            let state = if self.effect_enabled.load(Ordering::Acquire) {
+                AUDIO_SYSTEMEFFECT_STATE_ON
+            } else {
+                AUDIO_SYSTEMEFFECT_STATE_OFF
+            };
+            unsafe {
+                *mem = AUDIO_SYSTEMEFFECT {
+                    id: EFFECT_ID_EXO_EQ,
+                    canSetState: BOOL(1),
+                    state,
+                };
+                *effects = mem;
+                *numeffects = 1;
+            }
+            Ok(())
+        })
     }
 
     fn SetAudioSystemEffectState(
@@ -546,12 +637,14 @@ impl IAudioSystemEffects3_Impl for ExoAudioApo_Impl {
         effectid: &GUID,
         state: AUDIO_SYSTEMEFFECT_STATE,
     ) -> windows_core::Result<()> {
-        if *effectid != EFFECT_ID_EXO_EQ {
-            return Err(Error::from(E_INVALIDARG));
-        }
-        let enable = state == AUDIO_SYSTEMEFFECT_STATE_ON;
-        self.effect_enabled.store(enable, Ordering::Release);
-        Ok(())
+        guard::guard_result(|| {
+            if *effectid != EFFECT_ID_EXO_EQ {
+                return Err(Error::from(E_INVALIDARG));
+            }
+            let enable = state == AUDIO_SYSTEMEFFECT_STATE_ON;
+            self.effect_enabled.store(enable, Ordering::Release);
+            Ok(())
+        })
     }
 }
 
@@ -584,27 +677,31 @@ impl IClassFactory_Impl for ExoApoClassFactory_Impl {
         riid: *const GUID,
         ppvobject: *mut *mut core::ffi::c_void,
     ) -> windows_core::Result<()> {
-        if ppvobject.is_null() || riid.is_null() {
-            return Err(Error::from(E_POINTER));
-        }
-        unsafe {
-            *ppvobject = core::ptr::null_mut();
-        }
-        if punkouter.is_some() {
-            return Err(Error::from(CLASS_E_NOAGGREGATION));
-        }
-        let apo: IAudioProcessingObject = ExoAudioApo::new(self.clsid).into();
-        let hr = unsafe { apo.query(riid, ppvobject) };
-        hr.ok()
+        guard::guard_result(|| {
+            if ppvobject.is_null() || riid.is_null() {
+                return Err(Error::from(E_POINTER));
+            }
+            unsafe {
+                *ppvobject = core::ptr::null_mut();
+            }
+            if punkouter.is_some() {
+                return Err(Error::from(CLASS_E_NOAGGREGATION));
+            }
+            let apo: IAudioProcessingObject = ExoAudioApo::new(self.clsid).into();
+            let hr = unsafe { apo.query(riid, ppvobject) };
+            hr.ok()
+        })
     }
 
     fn LockServer(&self, flock: BOOL) -> windows_core::Result<()> {
-        if flock.as_bool() {
-            SERVER_LOCKS.fetch_add(1, Ordering::AcqRel);
-        } else {
-            SERVER_LOCKS.fetch_sub(1, Ordering::AcqRel);
-        }
-        Ok(())
+        guard::guard_result(|| {
+            if flock.as_bool() {
+                SERVER_LOCKS.fetch_add(1, Ordering::AcqRel);
+            } else {
+                SERVER_LOCKS.fetch_sub(1, Ordering::AcqRel);
+            }
+            Ok(())
+        })
     }
 }
 
@@ -796,5 +893,78 @@ mod tests {
         assert_ne!(samples, original);
         assert_eq!(unsafe { rt_iface.CalcInputFrames(480) }, 480);
         assert_eq!(unsafe { rt_iface.CalcOutputFrames(480) }, 480);
+    }
+
+    #[test]
+    fn com_apo_fail_open_passes_input_through_latches_fault_and_unlocks() {
+        let apo = ExoAudioApo::new(CLSID_EXO_AUDIO_APO_EFX);
+        let mut input = vec![0.25_f32; 480 * 2];
+        let mut output = vec![0.9_f32; 480 * 2];
+        let in_prop = APO_CONNECTION_PROPERTY {
+            pBuffer: input.as_mut_ptr() as usize,
+            u32ValidFrameCount: 480,
+            u32BufferFlags: BUFFER_VALID,
+            u32Signature: 0,
+        };
+        let mut out_prop = APO_CONNECTION_PROPERTY {
+            pBuffer: output.as_mut_ptr() as usize,
+            u32ValidFrameCount: 0,
+            u32BufferFlags: BUFFER_VALID,
+            u32Signature: 0,
+        };
+        let in_ptrs = [&in_prop as *const APO_CONNECTION_PROPERTY];
+        let mut out_ptrs = [&mut out_prop as *mut APO_CONNECTION_PROPERTY];
+
+        apo.lock_state.store(STATE_IN_PROCESS, Ordering::Release);
+        apo.fail_open(1, in_ptrs.as_ptr(), 1, out_ptrs.as_mut_ptr());
+
+        assert_eq!(output, input);
+        assert_eq!(out_prop.u32ValidFrameCount, 480);
+        assert!(apo.is_faulted());
+        assert_eq!(apo.lock_state.load(Ordering::Acquire), STATE_LOCKED);
+    }
+
+    #[test]
+    fn com_apo_faulted_instance_stays_pass_through_when_locked() {
+        let (writer, reader) = ShmChannel::in_memory("{com-faulted-ep}");
+        let inner = ExoAudioApo::new_with_shm(CLSID_EXO_AUDIO_APO_EFX, reader);
+        inner.faulted.store(true, Ordering::Release);
+        let apo: IAudioProcessingObject = inner.into();
+        let cfg_iface: IAudioProcessingObjectConfiguration = apo.cast().expect("config");
+        let rt_iface: IAudioProcessingObjectRT = apo.cast().expect("rt");
+
+        writer.publish(&DspConfig::from_bands(&[ParametricBand::low_shelf(
+            200.0, -12.0, 0.71,
+        )]));
+
+        let mut samples = vec![0.25_f32; 480 * 2];
+        let original = samples.clone();
+        let in_prop = APO_CONNECTION_PROPERTY {
+            pBuffer: samples.as_mut_ptr() as usize,
+            u32ValidFrameCount: 480,
+            u32BufferFlags: BUFFER_VALID,
+            u32Signature: 0,
+        };
+        let mut out_prop = in_prop;
+        let in_ptrs = [&in_prop as *const APO_CONNECTION_PROPERTY];
+        let mut out_ptrs = [&mut out_prop as *mut APO_CONNECTION_PROPERTY];
+
+        let fmt = TestAudioMediaType::ieee_float(48_000.0, 2);
+        let desc = APO_CONNECTION_DESCRIPTOR {
+            Type: APO_CONNECTION_BUFFER_TYPE_EXTERNAL,
+            pBuffer: samples.as_mut_ptr() as usize,
+            u32MaxFrameCount: 480,
+            pFormat: ManuallyDrop::new(Some(fmt.clone())),
+            u32Signature: 0,
+        };
+        let descs = [&desc as *const APO_CONNECTION_DESCRIPTOR];
+        unsafe {
+            cfg_iface
+                .LockForProcess(&descs, &descs)
+                .expect("lock for process");
+            rt_iface.APOProcess(1, in_ptrs.as_ptr(), 1, out_ptrs.as_mut_ptr());
+            cfg_iface.UnlockForProcess().expect("unlock");
+        }
+        assert_eq!(samples, original);
     }
 }

@@ -4,6 +4,7 @@ pub mod apo_com;
 pub mod autoeq_db;
 pub mod dsp;
 pub mod endpoint_reg;
+pub mod guard;
 pub mod shm_ipc;
 
 use autoeq_db::{
@@ -150,25 +151,28 @@ pub unsafe extern "system" fn DllGetClassObject(
     riid: *const windows_core::GUID,
     ppv: *mut *mut core::ffi::c_void,
 ) -> windows_core::HRESULT {
-    unsafe { apo_com::dll_get_class_object(rclsid, riid, ppv) }
+    guard::guard_hresult(|| unsafe { apo_com::dll_get_class_object(rclsid, riid, ppv) })
 }
 
 #[cfg(windows)]
 #[unsafe(no_mangle)]
 pub extern "system" fn DllCanUnloadNow() -> windows_core::HRESULT {
-    apo_com::dll_can_unload_now()
+    guard::guarded(
+        || windows::Win32::Foundation::S_FALSE,
+        apo_com::dll_can_unload_now,
+    )
 }
 
 #[cfg(windows)]
 #[unsafe(no_mangle)]
 pub extern "system" fn DllRegisterServer() -> windows_core::HRESULT {
-    windows::Win32::Foundation::S_OK
+    guard::guard_hresult(|| windows::Win32::Foundation::S_OK)
 }
 
 #[cfg(windows)]
 #[unsafe(no_mangle)]
 pub extern "system" fn DllUnregisterServer() -> windows_core::HRESULT {
-    windows::Win32::Foundation::S_OK
+    guard::guard_hresult(|| windows::Win32::Foundation::S_OK)
 }
 
 #[cfg(test)]
@@ -193,6 +197,7 @@ mod tests {
             include_str!("lib.rs"),
             include_str!("apo_com.rs"),
             include_str!("dsp.rs"),
+            include_str!("guard.rs"),
             include_str!("shm_ipc.rs"),
             include_str!("autoeq_db.rs"),
             include_str!("endpoint_reg.rs"),
