@@ -3011,7 +3011,7 @@ impl AppState {
         action_label: Option<String>,
         action: Option<NoticeAction>,
     ) -> u64 {
-        if self.notice_is_repeat(text.clone()) {
+        if tone != NoticeTone::Bad && action.is_none() && self.notice_is_repeat(text.clone()) {
             self.notice = Some(text.clone());
             self.notice_last_synced = Some(text);
             return 0;

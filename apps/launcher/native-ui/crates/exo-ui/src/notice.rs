@@ -511,6 +511,9 @@ impl AppState {
         });
         if !updates_existing
             && spec.progress.is_none()
+            && spec.tone != NoticeTone::Bad
+            && spec.action.is_none()
+            && !sticky
             && self.notice_is_repeat(format!(
                 "{}|{}",
                 spec.title.as_deref().unwrap_or(""),
