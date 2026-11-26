@@ -173,6 +173,7 @@ public sealed class DisposableHostGuardTests
         ("ExoLauncher/Services/DiscordClient/DiscordNotifier.cs", "private static bool Ensure()"),
         ("ExoLauncher/Services/GameRunningSignal.cs", "internal static EventWaitHandle? Open(string name)"),
         ("ExoLauncher/Services/Achievements/AchievementSource.cs", "internal static void Start()"),
+        ("ExoLauncher/Services/RuneHostTrim.cs", "IReadOnlyList<ManagedProcessGroup> ManagedGroups("),
     ];
 
     public static IEnumerable<object[]> GuardedWriterCases() =>

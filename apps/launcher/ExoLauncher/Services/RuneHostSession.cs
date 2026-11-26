@@ -321,6 +321,7 @@ internal sealed partial class RuneHostSession
         Console.CancelKeyPress += onCancel;
 
         Process? uiProcess = null;
+        RuneHostTrim? trim = null;
         var stderrLines = new Queue<string>(40);
         var stderrLock = new object();
         var jobHandle = IntPtr.Zero;
@@ -358,6 +359,8 @@ internal sealed partial class RuneHostSession
                 if (uiProcess.HasExited) TriggerStop("ui already exited");
                 services.StartDeferredServices();
                 StartGameServices();
+                trim = new RuneHostTrim(uiProcess.Id);
+                trim.Start();
             }
 
             stop.Wait();
@@ -369,6 +372,7 @@ internal sealed partial class RuneHostSession
             {
                 if (ReferenceEquals(_activeUiProcess, uiProcess)) _activeUiProcess = null;
             }
+            try { trim?.Dispose(); } catch { }
             Console.CancelKeyPress -= onCancel;
             DiscordClient.DiscordSession.BadgeChanged -= onDiscordBadge;
             try { bridge.Detach(); } catch { }

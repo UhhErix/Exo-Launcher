@@ -105,6 +105,7 @@ internal static class ManagedProcessResources
         {
             "exo" => policy.ShellHidden && !policy.LiveAudio,
             "webview" => policy.ShellHidden || hiddenRendererPids.Contains(identity.Pid),
+            "exo-ui" => policy.ShellHidden,
             _ => false,
         })).ToArray();
 
