@@ -17,7 +17,7 @@ use exo_kit::{
     switch_pill, type_body, type_control, type_page, type_section, type_small,
 };
 use rune::{
-    Cursor, El, LiquidGlass, Phase, ScrollSpec, SpringPair, TextStyle, Transition, col,
+    Cursor, El, Phase, ScrollSpec, SpringPair, TextStyle, Transition, col,
     edit_access, el, row, text, text_input,
 };
 
@@ -27,7 +27,7 @@ pub(crate) fn settings_card() -> El {
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
 }
 
 pub(crate) fn set_btn(key: impl Into<String>, label: impl Into<String>, icon: Option<El>) -> El {

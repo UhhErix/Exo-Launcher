@@ -2460,7 +2460,7 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
         .center_y()
         .hit()
         .on_press(move |s: &mut AppState| {
-            s.open_context_menu(srv_ctx_btn.clone(), 24.0, 178.0);
+            s.open_context_menu_at_element(srv_ctx_btn.clone(), "dc-server-head");
         })
         .on_secondary_press(move |s: &mut AppState, p, _| {
             s.open_context_menu(srv_ctx.clone(), p.x, p.y);

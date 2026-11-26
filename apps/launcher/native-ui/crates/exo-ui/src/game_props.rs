@@ -15,7 +15,7 @@ use exo_kit::{
 };
 use exo_rpc::{Game, GameProperties};
 use rune::{
-    Align, Cursor, El, LiquidGlass, TextStyle, Tx, col, edit_access, el, row, text, text_input,
+    Align, Cursor, El, TextStyle, Tx, col, edit_access, el, row, text, text_input,
 };
 use std::rc::Rc;
 
@@ -1233,7 +1233,7 @@ pub fn properties_card(s: &AppState, game: &Game) -> El {
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(head);
 

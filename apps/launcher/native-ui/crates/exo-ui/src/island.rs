@@ -675,13 +675,18 @@ pub fn person_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
             .child(mute_row);
     }
 
+    let pt_key = format!(
+        "island-person-pt-{}-{}",
+        menu.x.round() as i32,
+        menu.y.round() as i32
+    );
     let card = glass_panel_opt("island-person-menu", 204.0, blur)
         .role("menu")
         .label(menu.name.clone())
         .focus_group()
         .radius(RADIUS_CARD)
         .clip_rounded(RADIUS_CARD)
-        .absolute(menu.x.max(10.0), (menu.y + 6.0).max(56.0))
+        .anchored_fit(pt_key.clone(), rune::Side::Bottom, rune::Align::Start, 4.0)
         .transition(popover_transition_from(rune::Vec2::new(0.0, 0.0)))
         .child(body);
 
@@ -692,7 +697,11 @@ pub fn person_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
         .hit()
         .on_press(|s: &mut AppState| s.island_close_person_menu());
 
-    vec![scrim, card]
+    vec![
+        scrim,
+        el().key(pt_key).absolute(menu.x, menu.y).size(0.0, 0.0),
+        card,
+    ]
 }
 
 #[cfg(test)]

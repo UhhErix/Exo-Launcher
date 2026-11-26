@@ -14,7 +14,7 @@ use exo_kit::{
 };
 use exo_rpc::{AutopilotLive, AutopilotReport, DriverProgress, DriverState, OutputColor};
 use rune::{
-    Align, Cursor, El, Key, LiquidGlass, Phase, ScrollSpec, Side, TextStyle, col, el, row, text,
+    Align, Cursor, El, Key, Phase, ScrollSpec, Side, TextStyle, col, el, row, text,
 };
 use serde_json::json;
 
@@ -2633,7 +2633,7 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
             .hit()
             .cursor(Cursor::Default);
         if blur {
-            card = card.liquid_glass(LiquidGlass::panel());
+            card = card.liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false));
         } else {
             card = card.fill(BG);
         }

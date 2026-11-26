@@ -9,7 +9,7 @@ use exo_kit::{
 };
 use exo_rpc::{DiscordChannels, DiscordHome};
 use rune::{
-    Cursor, El, Key, KeyEvent, LiquidGlass, ScrollSpec, Spring, Transition, Tx, col, edit_access,
+    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, Transition, Tx, col, edit_access,
     el, row, text, text_input,
 };
 use serde_json::{Value, json};
@@ -623,7 +623,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .focus_return("search-capsule")

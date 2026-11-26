@@ -13,7 +13,7 @@ use exo_kit::{
 };
 use exo_rpc::keyboard_layouts::{KeyCap, KeyKind, build_keyboard_layout, find_key};
 use exo_rpc::{KeyboardReadReply, PeripheralCard};
-use rune::{Cursor, El, LiquidGlass, Phase, ScrollSpec, SurfaceFit, TextStyle, col, el, row, text};
+use rune::{Cursor, El, Phase, ScrollSpec, SurfaceFit, TextStyle, col, el, row, text};
 
 fn connection_label(conn: Option<&str>) -> &'static str {
     match conn.unwrap_or("") {
@@ -158,7 +158,7 @@ fn device_showcase_card_sized(
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .shadow(6.0, 18.0, BG.alpha(0.45))
         .hover(surface_card())

@@ -11,7 +11,7 @@ use exo_kit::{
     type_section, type_small, type_title,
 };
 use exo_rpc::{Game, GraphicsFeatureRow};
-use rune::{Cursor, El, LiquidGlass, Transition, col, el, row, text};
+use rune::{Cursor, El, Transition, col, el, row, text};
 
 fn panel_secondary() -> rune::Color {
     hex(0xdcdcdc, 1.0)
@@ -24,7 +24,7 @@ fn game_glass_card() -> El {
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
 }
 

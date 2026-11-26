@@ -1,10 +1,11 @@
 use crate::components::popover_transition_from;
+use crate::glass::{ExoGlass, exo_glass};
 use crate::icons::{icon_check, icon_chevron_right};
 use crate::tokens::{
     FG, RADIUS_CARD, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, float_line,
     hairline, hover_fill, pressed_fill, subtle_fill, type_control, type_small,
 };
-use rune::{Align, Cursor, El, Key, LiquidGlass, Side, Tx, Vec2, col, el, row, text};
+use rune::{Align, Cursor, El, Key, Side, Tx, Vec2, col, el, row, text};
 use std::rc::Rc;
 
 pub type MenuAction<S> = Rc<dyn Fn(&mut S, &mut Tx)>;
@@ -131,7 +132,7 @@ fn glass_menu_surface(key: String, width: f32, _blur: bool, origin: Vec2) -> El 
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_glass(ExoGlass::Menu, false))
         .transition(popover_transition_from(origin))
 }
 
@@ -413,7 +414,11 @@ fn build_context_menu_layers<S: 'static>(
 
     let (anchor_key, side, align, gap, origin) = match anchor {
         MenuAnchor::Point(x, y) => {
-            let pt_key = format!("{id}-anchor-pt");
+            let pt_key = format!(
+                "{id}-anchor-pt-{}-{}",
+                x.round() as i32,
+                y.round() as i32
+            );
             menu_nodes.push(el().key(pt_key.clone()).absolute(x, y).size(0.0, 0.0));
             (pt_key, Side::Bottom, Align::Start, 1.0, Vec2::new(0.0, 0.0))
         }
@@ -498,4 +503,70 @@ fn build_context_menu_layers<S: 'static>(
             .children(menu_nodes)
     };
     vec![root]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rune::{Cx, Env, Runtime};
+
+    struct MenuDemo {
+        point: Option<(f32, f32)>,
+    }
+
+    fn demo_view(s: &MenuDemo, _cx: &mut Cx<MenuDemo>) -> El {
+        let mut root = el().w_full().h_full();
+        if let Some((x, y)) = s.point {
+            let entries = vec![
+                MenuEntry::item(MenuItem::new("copy", "Copy")),
+                MenuEntry::item(MenuItem::new("open", "Open")),
+            ];
+            let layers = context_menu_layers(ContextMenuSpec {
+                id: "test-ctx".into(),
+                anchor: MenuAnchor::Point(x, y),
+                width: 200.0,
+                blur: true,
+                submenu_blur: false,
+                open_submenu: None,
+                return_focus: None,
+                gamepad_focus: false,
+                entries,
+                on_dismiss: Rc::new(|st: &mut MenuDemo, _| st.point = None),
+                on_submenu: Rc::new(|_: &mut MenuDemo, _, _| {}),
+            });
+            root = root.children(layers);
+        }
+        root
+    }
+
+    #[test]
+    fn point_menu_reopening_at_new_coords_anchors_to_new_position() {
+        let mut rt = Runtime::new(
+            MenuDemo {
+                point: Some((120.0, 140.0)),
+            },
+            demo_view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        let (first_rect, _) = rt.presented("test-ctx-menu").expect("first menu");
+        assert!(
+            (first_rect[0] - 120.0).abs() < 24.0 && (first_rect[1] - 140.0).abs() < 24.0,
+            "first menu should open at (120, 140), got {first_rect:?}"
+        );
+
+        // Immediately relocate the point menu without settling an exit frame first.
+        rt.update(|s, _| s.point = Some((980.0, 460.0)));
+        rt.frame(2.0 / 60.0);
+        rt.settle_all();
+        rt.frame(3.0 / 60.0);
+        let (second_rect, _) = rt.presented("test-ctx-menu").expect("second menu");
+        assert!(
+            (second_rect[0] - 980.0).abs() < 24.0 && (second_rect[1] - 460.0).abs() < 24.0,
+            "relocated menu should anchor at (980, 460), not stick to old point: {second_rect:?}"
+        );
+    }
 }

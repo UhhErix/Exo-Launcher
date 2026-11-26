@@ -692,6 +692,7 @@ pub struct MediaStateInner {
     pub music_lyrics_synced: bool,
     pub music_lyrics_loading: bool,
     pub music_lyrics_error: Option<String>,
+    pub music_lyrics_scrolled_idx: Option<usize>,
     pub music_related_uri: String,
     pub music_related_sections: Vec<PlayerSection>,
     pub music_related_loading: bool,
@@ -870,6 +871,7 @@ impl MediaState {
                 music_lyrics_synced: false,
                 music_lyrics_loading: false,
                 music_lyrics_error: None,
+                music_lyrics_scrolled_idx: None,
                 music_related_uri: String::new(),
                 music_related_sections: Vec::new(),
                 music_related_loading: false,
@@ -1894,7 +1896,12 @@ impl AppState {
         }
     }
 
+    #[cfg(test)]
     pub fn music_tick(&mut self, now_s: f64) -> bool {
+        self.music_tick_with_tx(now_s, None)
+    }
+
+    pub fn music_tick_with_tx(&mut self, now_s: f64, mut tx: Option<&mut rune::Tx>) -> bool {
         let prev_sec = self.media.music_clock_s.floor() as i64;
         self.media.music_clock_s = now_s;
         let mut redraw = false;
@@ -1966,12 +1973,39 @@ impl AppState {
         if self.room == Room::Music && self.media.music_room_state == MusicRoomState::Running {
             let cur_sec = now_s.floor() as i64;
             let playing = self.media.playback.as_ref().is_some_and(|p| p.is_playing());
-            if playing
-                && (self.media.music_immersion
-                    || self.media.music_panel == Some(MusicPanel::NowPlaying))
-                && (self.media.music_lyrics_synced || cur_sec != prev_sec)
-            {
-                redraw = true;
+            if playing && self.media.music_immersion {
+                if !self.settings.reduce_motion {
+                    redraw = true;
+                    if let Some(ref mut t) = tx {
+                        t.wake_after(std::time::Duration::from_millis(16));
+                    }
+                } else if self.media.music_lyrics_synced || cur_sec != prev_sec {
+                    redraw = true;
+                }
+                if self.media.music_lyrics_synced && !self.media.music_lyrics_lines.is_empty() {
+                    let active = lyrics_active_index(
+                        &self.media.music_lyrics_lines,
+                        true,
+                        self.media.current_position_ms(),
+                    );
+                    if active != self.media.music_lyrics_scrolled_idx {
+                        self.media.music_lyrics_scrolled_idx = active;
+                        if let (Some(idx), Some(t)) = (active, tx) {
+                            t.scroll_into_view(format!("music-lyric-{idx}"));
+                        }
+                        redraw = true;
+                    }
+                }
+            } else {
+                if !self.media.music_immersion && self.media.music_lyrics_scrolled_idx.is_some() {
+                    self.media.music_lyrics_scrolled_idx = None;
+                }
+                if playing
+                    && self.media.music_panel == Some(MusicPanel::NowPlaying)
+                    && (self.media.music_lyrics_synced || cur_sec != prev_sec)
+                {
+                    redraw = true;
+                }
             }
             if self.media.music_panel == Some(MusicPanel::Friends)
                 && now_s - self.media.music_friends_last_poll_s >= FRIENDS_POLL_S

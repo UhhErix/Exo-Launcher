@@ -1,4 +1,4 @@
-use crate::tokens::{glass_still_control_fill, glass_still_panel_fill};
+use crate::tokens::{glass_still_control_fill, glass_still_panel_fill, srgb};
 use rune::{Color, Cx, El, GlassPolicy, GlassTier, LiquidGlass};
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -131,13 +131,63 @@ impl ExoGlass {
     }
 
     pub fn to_liquid_glass(self, interactive: bool, a11y: GlassAccessibility) -> LiquidGlass {
+        const LIGHT_ANGLE: f32 = -std::f32::consts::FRAC_PI_4 * 3.0;
         let base = match self {
-            Self::Bar | Self::Control => LiquidGlass::control(),
+            Self::Bar => LiquidGlass::regular()
+                .frost(5.5)
+                .saturation(1.45)
+                .refraction(1.50)
+                .dispersion(0.04)
+                .rim(0.36, 0.15, 0.12)
+                .specular(1.38, LIGHT_ANGLE)
+                .sheen(0.08, 0.40)
+                .inner_shadow(1.0, 12.0, -6.0, Color::WHITE.alpha(0.07))
+                .tint(Color::WHITE.alpha(0.05))
+                .still(self.still_fill()),
+            Self::Control => LiquidGlass::regular()
+                .frost(4.5)
+                .saturation(1.48)
+                .refraction(1.55)
+                .dispersion(0.045)
+                .rim(0.36, 0.16, 0.12)
+                .specular(1.40, LIGHT_ANGLE)
+                .sheen(0.09, 0.42)
+                .inner_shadow(1.0, 10.0, -5.0, Color::WHITE.alpha(0.08))
+                .tint(Color::WHITE.alpha(0.055))
+                .still(self.still_fill()),
             Self::Menu | Self::Popover | Self::Panel | Self::Sheet | Self::Notice => {
-                LiquidGlass::panel()
+                LiquidGlass::clear()
+                    .frost(14.0)
+                    .saturation(1.45)
+                    .refraction(1.35)
+                    .dispersion(0.035)
+                    .rim(0.32, 0.14, 0.11)
+                    .specular(1.25, LIGHT_ANGLE)
+                    .sheen(0.07, 0.32)
+                    .inner_shadow(1.0, 14.0, -8.0, Color::WHITE.alpha(0.07))
+                    .tint(srgb(14, 15, 20, 0.42))
+                    .still(self.still_fill())
             }
-            Self::ClearMedia => LiquidGlass::immersive(),
-            Self::Tinted(color) => LiquidGlass::panel().tint(color).still(color.alpha(0.84)),
+            Self::ClearMedia => LiquidGlass::clear()
+                .frost(2.5)
+                .saturation(1.35)
+                .refraction(1.65)
+                .dispersion(0.048)
+                .rim(0.38, 0.16, 0.13)
+                .specular(1.45, LIGHT_ANGLE)
+                .sheen(0.10, 0.38)
+                .tint(Color::WHITE.alpha(0.04))
+                .still(self.still_fill()),
+            Self::Tinted(color) => LiquidGlass::clear()
+                .frost(9.0)
+                .saturation(1.35)
+                .refraction(1.35)
+                .dispersion(0.03)
+                .rim(0.32, 0.14, 0.11)
+                .specular(1.25, LIGHT_ANGLE)
+                .sheen(0.06, 0.34)
+                .tint(color)
+                .still(color.alpha(0.84)),
         };
         if interactive && a11y.allows_interactive_motion() {
             base.interactive()

@@ -25,7 +25,7 @@ use exo_rpc::{
 };
 use rune::color::oklch;
 use rune::{
-    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, LiquidGlass, Phase, ScrollSpec, Side,
+    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, Phase, ScrollSpec, Side,
     Spring, SurfaceFit, TextEdit, TextStyle, Tx, col, edit_access, el, lightbox, row, text,
     text_input,
 };
@@ -1199,7 +1199,7 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu, false))
         .transition(popover_transition_for(Side::Bottom, Align::End))
         .role("menu")
         .label("Capture")
@@ -3143,7 +3143,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .press_on_down()
                 .size(32.0, 32.0)
                 .radius(RADIUS_PILL)
-                .liquid_glass(LiquidGlass::control())
+                .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Control, true))
                 .hover(hover_fill())
                 .center()
                 .on_press(|s: &mut AppState| s.close_captures())
@@ -3490,7 +3490,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .continuous_corners()
                 .clip_rounded(RADIUS_SHEET)
                 .border(1.0, hairline())
-                .liquid_glass(LiquidGlass::panel())
+                .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu, false))
                 .child(sheet_inner),
         )
         .children(lb_overlay)
