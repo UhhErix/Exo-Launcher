@@ -232,6 +232,8 @@ function gitShow(launcher, rev, path) {
 /** Repos whose releases Exo may not redistribute, with the reason. Their pins stay in the Launcher until it drops them. */
 export const EXCLUDED_REPOS = new Map([
   ['sdli1995/dlssg_for_sm86', 'no licence file at its release; Exo may not redistribute it (owner decision, 2026-11-09)'],
+  ['optiscaler/OptiScaler', 'a third-party frame generation mod: players take it from GitHub and Exo does not re-host it (owner decision, 2026-11-26)'],
+  ['dashdogy/MFG-Unlocker', 'a third-party frame generation mod: players take it from GitHub and Exo does not re-host it (owner decision, 2026-11-26)'],
 ])
 
 export function planObjects({ vendor, tools: allTools, zips = [] }) {
