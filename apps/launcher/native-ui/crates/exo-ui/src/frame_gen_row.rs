@@ -103,7 +103,7 @@ pub fn auto_route(fg: &GameFrameGen) -> Option<&FrameGenRoute> {
         r.id == fg.best_route_id
             && r.selectable
             && !r.requires_risk_confirm
-            && (r.auto_enable || matches!(r.tier.as_str(), "native" | "driver"))
+            && matches!(r.tier.as_str(), "native" | "driver")
     })
 }
 
@@ -292,7 +292,7 @@ mod tests {
         fg.routes[0].tier = "mod".into();
         assert!(auto_route(&fg).is_none());
         fg.routes[0].auto_enable = true;
-        assert!(auto_route(&fg).is_some());
+        assert!(auto_route(&fg).is_none());
     }
 
     #[test]

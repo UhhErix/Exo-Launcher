@@ -583,9 +583,10 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         {
             var keys = StateOf(Settled()).Items
                 .Where(i => i.Blocked is null
+                    && !i.Off
+                    && !i.OptIn
                     && Keys.Contains(i.Key)
-                    && i.Key is not (VrrKey or MouseAccelKey or IntegrityKey)
-                    && (!i.OptIn || i.Key is ServicesKey or MemCompressionKey))
+                    && i.Key is not (VrrKey or MouseAccelKey or IntegrityKey))
                 .Select(i => i.Key)
                 .ToList();
             return Logged(await ApplyNowAsync(keys, includePlaybookExtras: true).ConfigureAwait(false));

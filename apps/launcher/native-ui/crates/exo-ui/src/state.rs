@@ -2244,6 +2244,9 @@ impl AppState {
     }
 
     pub fn apply_best_frame_gen(&mut self, id: &str) {
+        if !self.settings.frame_gen_everywhere {
+            return;
+        }
         let Some(route) = self
             .game_frame_gen
             .as_ref()

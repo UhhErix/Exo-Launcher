@@ -28,7 +28,7 @@ public sealed partial class WebHostBridge
             "chipset" => await Task.Run(StartChipsetUpdateAsync, ct).ConfigureAwait(false),
             "gpupref" => await Task.Run(UseFastGpuForGames, ct).ConfigureAwait(false),
             "gpupref-undo" => await Task.Run(UndoFastGpuForGames, ct).ConfigureAwait(false),
-            "network" => NetworkBusy(null) ?? await Task.Run(() => NetworkBest.Shared.Apply(NetworkBest.Keys), ct).ConfigureAwait(false),
+            "network" => NetworkBusy(null) ?? await Task.Run(() => NetworkBest.Shared.Apply(), ct).ConfigureAwait(false),
             "network-on" => ReadString(p, hasParams, "item") is { } on ? NetworkBusy(on) ?? await Task.Run(() => NetworkBest.Shared.Apply([on]), ct).ConfigureAwait(false) : "Exo doesn't know that setting.",
             "network-off" => ReadString(p, hasParams, "item") is { } off ? NetworkBusy(off) ?? await Task.Run(() => NetworkBest.Shared.TurnOff(off), ct).ConfigureAwait(false) : "Exo doesn't know that setting.",
             "netcheck" => await Task.Run(() => { NetworkBest.Shared.Measure(); return (string?)null; }, ct).ConfigureAwait(false),

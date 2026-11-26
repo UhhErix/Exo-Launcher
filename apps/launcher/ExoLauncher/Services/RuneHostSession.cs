@@ -284,11 +284,6 @@ internal sealed partial class RuneHostSession
         transport.Start();
         services.HdrHost.Start();
         bridge.StartBackgroundMonitors();
-        if (options.SpawnUi)
-        {
-            services.StartDeferredServices();
-            StartGameServices();
-        }
         Action<int> onDiscordBadge = count => bridge.PostFriendsBadge(count);
         DiscordClient.DiscordSession.BadgeChanged += onDiscordBadge;
         _ = Task.Run(DiscordClient.DiscordSession.Start);
@@ -337,6 +332,8 @@ internal sealed partial class RuneHostSession
                 uiProcess.EnableRaisingEvents = true;
                 uiProcess.Exited += (_, _) => TriggerStop("ui process exited");
                 if (uiProcess.HasExited) TriggerStop("ui already exited");
+                services.StartDeferredServices();
+                StartGameServices();
             }
 
             stop.Wait();

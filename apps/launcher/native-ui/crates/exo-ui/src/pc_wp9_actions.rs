@@ -441,28 +441,6 @@ impl AppState {
                 .as_ref()
                 .is_some_and(|d| d.fixes.iter().any(|f| !f.applied));
             let bloat_ids: Vec<String> = self.pc.bloat_apps.iter().map(|b| b.id.clone()).collect();
-            let app_bloat_ids: Vec<String> = self
-                .pc
-                .apps_list
-                .as_ref()
-                .map(|l| {
-                    l.programs
-                        .iter()
-                        .filter(|a| {
-                            a.bloat.is_some()
-                                && a.removable
-                                && a.uninstaller
-                                && a.replaces.is_none()
-                        })
-                        .map(|a| a.id.clone())
-                        .collect()
-                })
-                .unwrap_or_default();
-            let startup_can_go = self
-                .pc
-                .startup_list
-                .as_ref()
-                .is_some_and(|st| st.extras > 0 || st.items.iter().any(|i| i.unneeded));
             let branch = self.pc.gpu_driver_branch.clone();
 
             std::thread::spawn(move || {
@@ -650,38 +628,6 @@ impl AppState {
                                     Err(_) => problems.push("Interrupts could not finish".into()),
                                 }
                             }
-                            match call_sync::<QosState>(
-                                &rpc,
-                                METHOD_SYSTEM_QOS,
-                                &json!({ "action": "all" }),
-                            ) {
-                                Ok(q) => {
-                                    if !q.ok
-                                        && let Some(ref m) = q.message
-                                    {
-                                        problems.push(trim_stop(m));
-                                    }
-                                    handle.update(move |s, _| s.pc.qos_state = Some(q));
-                                }
-                                Err(_) => {
-                                    problems.push("Game network priority could not finish".into())
-                                }
-                            }
-                            match call_sync::<OverlayAdvisorState>(
-                                &rpc,
-                                METHOD_SYSTEM_OVERLAYS,
-                                &json!({ "action": "auto" }),
-                            ) {
-                                Ok(o) => {
-                                    if !o.ok
-                                        && let Some(ref m) = o.message
-                                    {
-                                        problems.push(trim_stop(m));
-                                    }
-                                    handle.update(move |s, _| s.pc.overlays_state = Some(o));
-                                }
-                                Err(_) => problems.push("Overlays could not finish".into()),
-                            }
                             {
                                 match call_sync::<PcHealth>(
                                     &rpc,
@@ -735,7 +681,7 @@ impl AppState {
                             }
                         }
                         AutoTuneStageId::Bloat => {
-                            let (bloat_status, mut bloat_detail) = if bloat_ids.is_empty() {
+                            let (bloat_status, bloat_detail) = if bloat_ids.is_empty() {
                                 (
                                     AutoTuneStageStatus::Done,
                                     "No bloat Store apps installed".into(),
@@ -798,19 +744,6 @@ impl AppState {
                                     ),
                                 }
                             };
-                            if !app_bloat_ids.is_empty() {
-                                let n = app_bloat_ids.len();
-                                let ids = app_bloat_ids.clone();
-                                handle.update(move |s, _| s.uninstall_many_apps(ids));
-                                bloat_detail = format!(
-                                    "{bloat_detail} · removing {n} app{} you didn’t ask for",
-                                    if n == 1 { "" } else { "s" }
-                                );
-                            }
-                            if startup_can_go {
-                                handle.update(|s, _| s.startup_clean_unneeded());
-                                bloat_detail = format!("{bloat_detail} · startup cleaned");
-                            }
                             (bloat_status, bloat_detail)
                         }
                         AutoTuneStageId::Cleanup => {
