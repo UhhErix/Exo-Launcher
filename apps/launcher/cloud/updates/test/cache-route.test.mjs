@@ -161,6 +161,10 @@ test('the third-party frame generation mods are never served, even when R2 still
     await bucket.put(key, 'mod bytes')
     assert.notEqual(await bucket.head(key), null, key)
     for (const method of ['GET', 'HEAD']) assert.equal((await get('/v1/' + key, { method })).status, 404, `${method} ${key}`)
+    assert.equal((await get('/v1/' + key, { headers: { range: 'bytes=0-3' } })).status, 404, `range ${key}`)
   }
+  assert.equal((await get('/v1/cache/%6Fptiscaler/OptiScaler/releases/download/v0.9.4/LICENSE')).status, 404)
+  assert.equal((await get('/v1/cache/OPTISCALER/optiscaler/releases/download/v0.9.4/LICENSE')).status, 404)
+  assert.equal((await get(`/v1/cache/dashdogy/MFG-Unlocker/contents/bin?ref=${COMMIT}`)).status, 404)
   assert.equal((await get(`/v1/cache/NVIDIA/DLSS/${COMMIT}/${FOLDER}/nvngx_dlss.dll`)).status, 200)
 })

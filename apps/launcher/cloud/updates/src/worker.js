@@ -382,7 +382,7 @@ async function fromMirror(key, request, env, { seconds = TAG_SECONDS, type, immu
   if (type) headers.set('content-type', type)
   if (!headers.has('content-type')) headers.set('content-type', 'application/octet-stream')
   // Set after writeHttpMetadata: cache metadata stored on the object itself can never stretch a release file's
-  // cache past its hour (the files never change under their tag).
+  // cache past a day (the files never change under their tag).
   headers.set('cache-control', `public, max-age=${seconds}${immutable ? ', immutable' : ''}`)
   headers.set('cdn-cache-control', `max-age=${seconds}`)
   if (!heading && !object.body) return new Response(null, { status: 304, headers })

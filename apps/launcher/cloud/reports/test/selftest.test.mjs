@@ -72,14 +72,24 @@ test('the reports Worker counts its routes by name', async () => {
   assert.equal(JSON.stringify(env.sent).includes('abc'), false)
 })
 
-test('the daily job runs the self-test even when GitHub is set up', async () => {
-  const env = { ...sink(), TELEMETRY: { prepare: () => ({ bind: () => ({ run: async () => ({}), first: async () => null, all: async () => ({ results: [] }) }), run: async () => ({}), first: async () => null, all: async () => ({ results: [] }) }), batch: async () => [] } }
+test('the daily job runs the self-test first, before any GitHub call, probing its own health in-process', async () => {
+  const events = []
+  const probed = []
+  const env = { SIGNAL: { writeDataPoint: (point) => events.push(point.blobs[0]) }, GITHUB_REPORTS_TOKEN: 'token', fetcher: async () => {
+    events.push('github')
+    return new Response('[]')
+  }, REPORTS: {}, TELEMETRY: { prepare: () => ({ bind: () => ({ run: async () => ({}), first: async () => null, all: async () => ({ results: [] }) }), run: async () => ({}), first: async () => null, all: async () => ({ results: [] }) }), batch: async () => [] } }
   const real = globalThis.fetch
-  globalThis.fetch = async () => new Response(null, { status: 200 })
+  globalThis.fetch = async (url) => {
+    probed.push(String(url))
+    return new Response(null, { status: 200 })
+  }
   try {
     await worker.scheduled({}, env)
   } finally {
     globalThis.fetch = real
   }
-  assert.deepEqual(env.sent.filter((point) => point.blobs[0] === 'selftest').map((point) => point.blobs[1]), ['updates', 'reports', 'covers', 'riot'])
+  assert.equal(events[0], 'selftest')
+  assert.deepEqual(probed, ['https://updates.getexo.app/health', 'https://covers.getexo.app/health', 'https://riot.getexo.app/health'])
+  assert.equal(events.filter((name) => name === 'selftest').length, 4)
 })

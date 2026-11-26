@@ -22,7 +22,7 @@ const ROUTES = [
   ['telemetry', /^\/v1\/telemetry$/], ['telemetry-delete', /^\/v1\/telemetry\/delete$/], ['health', /^\/health$/],
 ]
 
-export default counted('reports', ROUTES, {
+const worker = counted('reports', ROUTES, {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
     if (url.pathname === '/health') {
@@ -47,6 +47,7 @@ export default counted('reports', ROUTES, {
   },
 
   async scheduled(controller, env) {
+    await selfTest(env, (url, init) => (new URL(url).hostname === 'reports.getexo.app' ? worker.fetch(new Request(url, init), env, {}) : fetch(url, init)))
     if (!env.TELEMETRY) return
     const now = Date.now()
     const db = env.TELEMETRY
@@ -63,7 +64,6 @@ export default counted('reports', ROUTES, {
     for (const [name, step] of steps) {
       try { await step() } catch { failed.push(name) }
     }
-    await selfTest(env)
     if (gh) return
     let digest = null
     try { digest = await digestOf(db, now) } catch { failed.push('digest') }
@@ -72,6 +72,8 @@ export default counted('reports', ROUTES, {
     if (message) await tellTeam(env, message)
   },
 })
+
+export default worker
 
 async function triage(env, report, key, day) {
   if (!env.TELEMETRY) return
