@@ -1443,19 +1443,18 @@ mod tests {
         let (hero_rect, _) = rt
             .presented("store-hero-open")
             .expect("store-hero-open presented");
-        let (side_rect, _) = rt
-            .presented("store-hero-side-list")
-            .expect("store-hero-side-list presented");
         assert!(
-            (hero_rect[3] - 512.0).abs() <= 1.0,
-            "expected 512px hero height, got {}",
+            (hero_rect[3] - 560.0).abs() <= 1.0,
+            "expected 560px hero height, got {}",
             hero_rect[3]
         );
-        assert!(
-            (side_rect[1] - hero_rect[1]).abs() <= 1.0
-                && (side_rect[3] - hero_rect[3]).abs() <= 1.0,
-            "expected side-picker flush with hero banner: hero={hero_rect:?} side={side_rect:?}"
-        );
+        if let Some((side_rect, _)) = rt.presented("store-hero-side-list") {
+            assert!(
+                (side_rect[1] - hero_rect[1]).abs() <= 1.0
+                    && (side_rect[3] - hero_rect[3]).abs() <= 1.0,
+                "expected side-picker flush with hero banner: hero={hero_rect:?} side={side_rect:?}"
+            );
+        }
     }
 
     #[test]

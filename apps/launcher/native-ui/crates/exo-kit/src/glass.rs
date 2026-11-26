@@ -509,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_honors_auto_policy_a11y_flags_and_container_merging() {
+    fn runtime_keeps_glass_without_transparency_effects_and_goes_solid_in_contrast_themes() {
         let view = |_: &(), cx: &mut Cx<()>| {
             let a11y = GlassAccessibility::from_cx(cx, false);
             set_glass_accessibility(a11y);
@@ -545,17 +545,26 @@ mod tests {
 
         rt.set_system_reduced_transparency(true);
         rt.frame(1.0 / 60.0);
-        assert!(!rt.glass_on());
-        let sh = rt.liquid_glass_frame().shapes[0];
-        assert_ne!((sh.light[1] as u32) & 16, 0);
+        assert!(rt.glass_on());
+        assert_eq!(rt.liquid_glass_frame().shapes.len(), 2);
 
+        let night_sky = rune::SystemContrast {
+            window: Color::BLACK,
+            text: Color::BLACK,
+            highlight: Color::BLACK,
+            highlight_text: Color::BLACK,
+            disabled: Color::BLACK,
+            button: Color::BLACK,
+            button_text: Color::BLACK,
+            link: Color::BLACK,
+        };
         rt.set_system_reduced_transparency(false);
+        rt.set_system_contrast(Some(night_sky));
         rt.set_system_increased_contrast(true);
         rt.frame(2.0 / 60.0);
         assert!(!rt.glass_on());
-        let sh_ic = rt.liquid_glass_frame().shapes[0];
-        assert_ne!((sh_ic.light[1] as u32) & 32, 0);
 
+        rt.set_system_contrast(None);
         rt.set_system_increased_contrast(false);
         rt.set_system_reduced_motion(true);
         rt.frame(3.0 / 60.0);

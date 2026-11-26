@@ -402,10 +402,7 @@ mod tests {
         }));
         assert!(!s.key_modal_open);
         assert_eq!(s.open_game_id.as_deref(), Some(first_id.as_str()));
-        assert_eq!(
-            s.notices.back().map(|n| n.text.as_str()),
-            Some("Added to library")
-        );
+        assert!(s.notices.is_empty());
     }
 
     #[test]

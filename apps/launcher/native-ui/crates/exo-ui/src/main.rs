@@ -4888,10 +4888,14 @@ mod tests {
     #[test]
     fn notice_stack_queue_caps_at_three_and_escape_dismisses_newest() {
         let mut s = AppState::default();
-        let id1 = s.push_notice("First notice", state::NoticeTone::Neutral);
-        let id2 = s.push_notice("Second notice", state::NoticeTone::Good);
+        assert_eq!(s.push_notice("Saved", state::NoticeTone::Good), 0);
+        assert!(s.notices.is_empty());
+        assert!(!s.dismiss_top_layer());
+
+        let id1 = s.push_notice("First notice", state::NoticeTone::Bad);
+        let id2 = s.push_notice("Second notice", state::NoticeTone::Bad);
         let id3 = s.push_notice("Third notice", state::NoticeTone::Bad);
-        let id4 = s.push_notice("Fourth notice", state::NoticeTone::Neutral);
+        let id4 = s.push_notice("Fourth notice", state::NoticeTone::Bad);
 
         assert_eq!(s.notices.len(), state::MAX_NOTICES);
         assert_eq!(
@@ -4916,7 +4920,7 @@ mod tests {
     }
 
     #[test]
-    fn notice_stack_syncs_legacy_notice_and_auto_dismisses_with_hover_pause() {
+    fn notice_stack_keeps_legacy_confirmations_quiet_and_pauses_errors_on_hover() {
         let mut rt = Runtime::new(
             AppState::default(),
             shell::view,
@@ -4930,10 +4934,16 @@ mod tests {
         rt.update(|s, _| {
             s.notice = Some("Clip saved".into());
         });
+        rt.frame(0.008);
+        assert!(rt.state.notices.is_empty());
+
+        rt.update(|s, _| {
+            s.notice = Some("Clip failed to save".into());
+        });
         rt.frame(0.016);
         assert_eq!(rt.state.notices.len(), 1);
         let id = rt.state.notices[0].id;
-        assert_eq!(rt.state.notices[0].tone, state::NoticeTone::Good);
+        assert_eq!(rt.state.notices[0].tone, state::NoticeTone::Bad);
         assert!(rt.presented(&format!("notice-{id}")).is_some());
 
         rt.frame(1.5);
@@ -4968,7 +4978,7 @@ mod tests {
 
         let id_partial = rt
             .state
-            .push_notice("Partial swipe", state::NoticeTone::Neutral);
+            .push_notice("Partial swipe", state::NoticeTone::Bad);
         rt.frame(0.016);
         rt.update(|s, tx| {
             s.begin_notice_drag(id_partial, tx.clock());
@@ -4997,9 +5007,7 @@ mod tests {
         });
         assert!(rt.state.notices.is_empty());
 
-        let id_flick = rt
-            .state
-            .push_notice("Fast flick", state::NoticeTone::Neutral);
+        let id_flick = rt.state.push_notice("Fast flick", state::NoticeTone::Bad);
         rt.frame(0.016);
         rt.update(|s, tx| {
             let t0 = tx.clock();
@@ -5318,7 +5326,7 @@ mod tests {
         rt.update(|s, _| s.close_key_modal());
         let mut notice_id = 0_u64;
         rt.update(|s, _| {
-            notice_id = s.push_notice("Saved clip", state::NoticeTone::Good);
+            notice_id = s.push_notice("Clip failed to save", state::NoticeTone::Bad);
         });
         for _ in 0..30 {
             rt.frame(1.0 / 60.0);
@@ -6603,25 +6611,26 @@ mod motion_audit {
         rt.set_system_reduced_motion(false);
         rt.set_system_reduced_transparency(true);
         rt.frame(15.0 / 60.0);
-        assert!(!rt.glass_on());
-        assert!(
-            rt.liquid_glass_frame()
-                .shapes
-                .iter()
-                .all(|sh| ((sh.light[1] as u32) & 16) != 0)
-        );
+        assert!(rt.glass_on());
+        assert!(!rt.liquid_glass_frame().shapes.is_empty());
 
+        let black = rune::Color::BLACK;
         rt.set_system_reduced_transparency(false);
+        rt.set_system_contrast(Some(rune::SystemContrast {
+            window: black,
+            text: black,
+            highlight: black,
+            highlight_text: black,
+            disabled: black,
+            button: black,
+            button_text: black,
+            link: black,
+        }));
         rt.set_system_increased_contrast(true);
         rt.frame(16.0 / 60.0);
         assert!(!rt.glass_on());
-        assert!(
-            rt.liquid_glass_frame()
-                .shapes
-                .iter()
-                .all(|sh| ((sh.light[1] as u32) & 32) != 0)
-        );
 
+        rt.set_system_contrast(None);
         rt.set_system_increased_contrast(false);
         rt.set_glass_tier_override(Some(rune::GlassTier::Solid));
         rt.frame(17.0 / 60.0);

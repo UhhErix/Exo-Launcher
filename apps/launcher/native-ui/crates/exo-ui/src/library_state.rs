@@ -2847,10 +2847,11 @@ mod tests {
             })
         ));
         assert!(!s.lib.optimize_held_titles.contains("Cyberpunk 2077"));
+        assert!(s.notices.is_empty());
         assert!(
-            s.notices
-                .iter()
-                .any(|n| n.text.contains("optimized it again"))
+            s.notice
+                .as_deref()
+                .is_some_and(|t| t.contains("optimized it again"))
         );
     }
 

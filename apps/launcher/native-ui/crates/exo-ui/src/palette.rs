@@ -571,7 +571,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn palette_includes_selected_game_notes_discord_and_music_extras() {
+    fn palette_includes_selected_game_discord_and_music_extras() {
         let mut s = AppState::default();
         s.palette_extras.dms.push(("dm1".into(), "Alex".into()));
         s.palette_extras.servers.push(("g1".into(), "Squad".into()));
@@ -619,8 +619,7 @@ mod tests {
         );
 
         s.palette_query.text = "benchmark".into();
-        let note_filtered = s.palette_results();
-        assert!(note_filtered.iter().any(|i| i.title == "Build notes"));
+        assert!(!s.palette_results().iter().any(|i| i.title == "Build notes"));
     }
 
     #[test]

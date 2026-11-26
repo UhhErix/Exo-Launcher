@@ -2911,7 +2911,6 @@ impl AppState {
         if self.notice.is_some() {
             self.notice = None;
             self.notice_last_synced = None;
-            return true;
         }
         false
     }
