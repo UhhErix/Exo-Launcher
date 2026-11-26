@@ -88,6 +88,7 @@ impl AppState {
             "reduceMotion" => self.settings.reduce_motion = value,
             "startWithWindows" => self.settings.start_with_windows = value,
             "startMaximized" => self.settings.start_maximized = value,
+            "useClassicWebUi" => self.settings.use_classic_web_ui = value,
             "showLibraryTools" => self.settings.show_library_tools = value,
             "pauseDownloadsWhilePlaying" => self.settings.pause_downloads_while_playing = value,
             "keepAwakeDownloads" => self.settings.keep_awake_downloads = value,
@@ -105,6 +106,21 @@ impl AppState {
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let mut map = Map::new();
             map.insert(key.to_string(), Value::Bool(value));
+            rpc.call::<_, LauncherSettings>(METHOD_SETTINGS_SET, &Value::Object(map), move |res| {
+                if let Ok(set) = res {
+                    handle.update(move |s, _| s.settings = set);
+                }
+            });
+        }
+    }
+
+    pub fn relaunch_for_ui_switch(&mut self, use_classic: bool) {
+        self.settings.use_classic_web_ui = use_classic;
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let mut map = Map::new();
+            map.insert("useClassicWebUi".to_string(), Value::Bool(use_classic));
+            map.insert("relaunchForUiSwitch".to_string(), Value::Bool(true));
             rpc.call::<_, LauncherSettings>(METHOD_SETTINGS_SET, &Value::Object(map), move |res| {
                 if let Ok(set) = res {
                     handle.update(move |s, _| s.settings = set);

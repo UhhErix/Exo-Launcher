@@ -181,7 +181,7 @@ Copy-Item (Join-Path $repo 'capture\out\obs') $captureAddon -Recurse -Force
 $voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'exo_voice_ml.dll', 'onnxruntime.dll'
 $nativeAudio = $voice + 'exo_apo.dll'
 if (Test-Path (Join-Path $publish.FullName 'sherpa-onnx-c-api.dll')) { throw 'sherpa-onnx-c-api.dll must not ship; exo_voice_ml.dll replaces it.' }
-$parts = $nativeAudio + 'ExoLauncher.exe', 'exo-ui.exe', 'exo-apo-helper.exe', 'wwwroot\mouse\index.html', 'wwwroot\changelog.gz', 'steam-ipc\ExoLauncher.SteamIpc.exe',
+$parts = $nativeAudio + 'ExoLauncher.exe', 'exo-ui.exe', 'exo-apo-helper.exe', 'wwwroot\index.html', 'wwwroot\mouse\index.html', 'wwwroot\changelog.gz', 'steam-ipc\ExoLauncher.SteamIpc.exe',
     'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe'
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($missing) { throw "The app folder lacks $($missing -join ', ')." }

@@ -180,11 +180,9 @@
     <ItemGroup>
       <_UnusedLocaleMui Include="$(PublishDir)*\*.mui" Exclude="$(PublishDir)en-US\*.mui;$(PublishDir)en-us\*.mui" />
       <_UnusedPublishFiles Include="$(PublishDir)Microsoft.DiaSymReader.Native.amd64.dll;$(PublishDir)mscordaccore*.dll;$(PublishDir)mscordbi.dll;$(PublishDir)createdump.exe;$(PublishDir)DWriteCore.dll;$(PublishDir)WinUIEdit.dll;$(PublishDir)Microsoft.UI.Xaml.winmd;$(PublishDir)Microsoft.UI.winmd;$(PublishDir)Microsoft.UI.Designer.dll;$(PublishDir)Microsoft.WindowsAppRuntime.Bootstrap.dll" />
-      <_UnusedLegacyWebUi Include="$(PublishDir)wwwroot\**\*" Exclude="$(PublishDir)wwwroot\mouse\**\*;$(PublishDir)wwwroot\pay\**\*;$(PublishDir)wwwroot\changelog.gz" Condition="Exists('$(PublishDir)exo-ui.exe')" />
     </ItemGroup>
-    <Delete Files="@(_UnusedLocaleMui);@(_UnusedPublishFiles);@(_UnusedLegacyWebUi)" />
+    <Delete Files="@(_UnusedLocaleMui);@(_UnusedPublishFiles)" />
     <RemoveDir Directories="@(_UnusedLocaleMui->'%(RootDir)%(Directory)')" />
-    <RemoveDir Directories="$(PublishDir)wwwroot\assets;$(PublishDir)wwwroot\fonts;$(PublishDir)wwwroot\.vite;$(PublishDir)wwwroot\icons" Condition="Exists('$(PublishDir)exo-ui.exe')" />
   </Target>
 
   <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\capture\out\ExoCapture.exe')">
