@@ -16,7 +16,7 @@ use exo_kit::{
 };
 use exo_rpc::{PlayerCard, PlayerTrack, SpotifyAudio};
 use rune::{
-    Align, Color, El, Phase, ScrollSpec, Side, Span, TextStyle, col, edit_access, el, row, text,
+    Align, Cursor, El, Phase, ScrollSpec, Side, Span, TextStyle, col, edit_access, el, row, text,
     text_input,
 };
 use serde_json::json;
@@ -279,15 +279,16 @@ pub(crate) fn lyrics_view(s: &AppState, large: bool) -> El {
         Some("large") => 1.14,
         _ => 1.0,
     };
-    let active_large_font = TextStyle::new(28.0 * ts, 700.0).lh(28.0 * ts * 1.28);
-    let idle_large_font = TextStyle::new(24.0 * ts, 600.0).lh(24.0 * ts * 1.32);
+    let active_large_font = TextStyle::new(26.0 * ts, 700.0).lh(26.0 * ts * 1.32);
+    let idle_large_font = TextStyle::new(22.0 * ts, 600.0).lh(22.0 * ts * 1.35);
 
     let mut list = col()
         .key("music-lyrics-list")
         .w_full()
-        .gap(if large { 18.0 } else { 8.0 });
+        .min_w(0.0)
+        .gap(if large { 14.0 } else { 8.0 });
     if large {
-        list = list.py(72.0).px(8.0);
+        list = list.py(84.0).px(14.0);
     }
     for (i, line) in lines.iter().enumerate() {
         if let Some((from, to)) = gaps[i] {
@@ -383,9 +384,15 @@ pub(crate) fn lyrics_view(s: &AppState, large: bool) -> El {
                 spans.push(sp);
             }
             if full.is_empty() {
-                text(" ").font(font).color(color).wrap()
+                text(" ").font(font).color(color).w_full().min_w(0.0).wrap()
             } else {
-                text(full).font(font).color(color).spans(spans).wrap()
+                text(full)
+                    .font(font)
+                    .color(color)
+                    .spans(spans)
+                    .w_full()
+                    .min_w(0.0)
+                    .wrap()
             }
         } else {
             let display = if line.text.is_empty() {
@@ -393,7 +400,12 @@ pub(crate) fn lyrics_view(s: &AppState, large: bool) -> El {
             } else {
                 line.text.clone()
             };
-            text(display).font(font).color(color).wrap()
+            text(display)
+                .font(font)
+                .color(color)
+                .w_full()
+                .min_w(0.0)
+                .wrap()
         };
 
         if synced && !line.text.is_empty() {
@@ -404,29 +416,18 @@ pub(crate) fn lyrics_view(s: &AppState, large: bool) -> El {
                 .label(line.text.clone())
                 .focusable(true)
                 .hit()
+                .cursor(Cursor::Pointer)
                 .press_on_down()
                 .w_full()
-                .px(if large { 12.0 } else { 6.0 })
+                .min_w(0.0)
+                .px(if large { 14.0 } else { 6.0 })
                 .py(if large { 8.0 } else { 4.0 })
                 .radius(if large { RADIUS_CARD } else { RADIUS_SMALL })
-                .fill(if large && is_active {
-                    Color::WHITE.alpha(0.055)
-                } else {
-                    TRANSPARENT
-                })
+                .fill(TRANSPARENT)
                 .hover(hover_fill())
+                .motion(SPRING_SMOOTH)
                 .on_press(move |s: &mut AppState| s.music_seek_ms(start))
                 .child(line_el);
-            if large {
-                let s_val = if is_active {
-                    1.02
-                } else if dist == Some(1) {
-                    0.99
-                } else {
-                    0.97
-                };
-                btn = btn.scale(s_val).motion(SPRING_SMOOTH);
-            }
             if other_singer {
                 btn = btn.items_end();
             }

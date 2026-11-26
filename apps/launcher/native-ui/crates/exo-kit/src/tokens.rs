@@ -97,83 +97,83 @@ pub fn glass_plate_fill() -> Color {
 }
 
 pub fn glass_still_control_fill() -> Color {
-    srgb(19, 21, 26, 0.88)
+    srgb(8, 8, 8, 0.94)
 }
 
 pub fn glass_still_panel_fill() -> Color {
-    srgb(16, 18, 23, 0.94)
+    srgb(4, 4, 4, 0.97)
 }
 
 pub fn glass_panel_shadow_color() -> Color {
-    BG.alpha(0.56)
+    BG.alpha(0.64)
 }
 
 pub fn glass_rim_top() -> Color {
-    Color::WHITE.alpha(0.125)
+    Color::WHITE.alpha(0.11)
 }
 
 pub fn glass_rim_bottom() -> Color {
-    Color::WHITE.alpha(0.035)
+    Color::WHITE.alpha(0.03)
 }
 
 pub fn glass_rim() -> Color {
-    Color::WHITE.alpha(0.085)
-}
-
-pub fn card_border() -> Color {
-    Color::WHITE.alpha(0.09)
-}
-
-pub fn hairline() -> Color {
     Color::WHITE.alpha(0.075)
 }
 
-pub fn float_line() -> Color {
+pub fn card_border() -> Color {
+    Color::WHITE.alpha(0.08)
+}
+
+pub fn hairline() -> Color {
     Color::WHITE.alpha(0.065)
 }
 
+pub fn float_line() -> Color {
+    Color::WHITE.alpha(0.055)
+}
+
 pub fn hover_fill() -> Color {
-    Color::WHITE.alpha(0.10)
+    Color::WHITE.alpha(0.07)
 }
 
 pub fn pressed_fill() -> Color {
-    Color::WHITE.alpha(0.14)
+    Color::WHITE.alpha(0.10)
 }
 
 pub fn selected_fill() -> Color {
-    Color::WHITE.alpha(0.145)
+    Color::WHITE.alpha(0.105)
 }
 
 pub fn track_fill() -> Color {
-    Color::WHITE.alpha(0.17)
+    Color::WHITE.alpha(0.15)
 }
 
 pub fn scrim_fill() -> Color {
-    BG.alpha(0.68)
+    BG.alpha(0.76)
 }
 
 pub fn surface_card() -> Color {
-    Color::WHITE.alpha(0.04)
+    Color::WHITE.alpha(0.02)
 }
 
 pub fn surface_elevated() -> Color {
-    srgb(13, 14, 18, 1.0)
+    BG
 }
 
 pub fn surface_elevated_hi() -> Color {
-    srgb(20, 22, 28, 1.0)
+    srgb(10, 10, 10, 1.0)
 }
 
 pub fn surface_sidebar() -> Color {
-    srgb(9, 10, 13, 1.0)
+    BG
 }
 
 pub fn art_surface_fill() -> Color {
-    Color::WHITE.alpha(0.05)
+    Color::WHITE.alpha(0.03)
 }
 
 pub fn subtle_fill() -> Color {
-    Color::WHITE.alpha(0.06)
+    Color::WHITE.alpha(0.04)
 }
 
 pub const RADIUS_SMALL: f32 = 8.0;

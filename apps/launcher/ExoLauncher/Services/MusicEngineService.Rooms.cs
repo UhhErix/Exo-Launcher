@@ -315,11 +315,15 @@ internal sealed partial class MusicEngineService
             return new { ok = false, message = "Nothing to play." };
         var label = MusicWebPolicy.Label(service);
         if (!await MusicWebUpAsync(service)) return new { ok = false, message = label + " did not take that. Try again." };
+        var playAction = action is "play" or "station" or "skipTo";
         var reply = apple
-            ? await WebMusicAppleCallAsync(installed => AppleMusicNative.Act(action, uri, context, index, on, uid, query, text, installed), attempts: 1, click: true)
+            ? await WebMusicAppleCallAsync(installed => AppleMusicNative.Act(action, uri, context, index, on, uid, query, text, installed), attempts: playAction ? 2 : 1, click: true)
             : await WebMusicCallAsync(service, YouTubeMusicNative.Act(action, uri, context, index, on, uid, query, text), attempts: 1, click: false);
         if (reply is { ValueKind: JsonValueKind.Object } answer && answer.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True)
+        {
+            if (playAction) _musicNowPlaying?.Wake();
             return new { ok = true };
+        }
         if (reply is { ValueKind: JsonValueKind.Object } failed && failed.TryGetProperty("error", out var error))
             AppLog.Warn(label + " room " + action + ": " + error.GetString());
         return new { ok = false, message = label + " did not take that. Try again." };

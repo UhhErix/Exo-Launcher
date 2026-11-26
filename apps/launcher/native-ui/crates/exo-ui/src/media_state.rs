@@ -693,6 +693,7 @@ pub struct MediaStateInner {
     pub music_lyrics_loading: bool,
     pub music_lyrics_error: Option<String>,
     pub music_lyrics_scrolled_idx: Option<usize>,
+    pub music_last_play_request: Option<String>,
     pub music_related_uri: String,
     pub music_related_sections: Vec<PlayerSection>,
     pub music_related_loading: bool,
@@ -872,6 +873,7 @@ impl MediaState {
                 music_lyrics_loading: false,
                 music_lyrics_error: None,
                 music_lyrics_scrolled_idx: None,
+                music_last_play_request: None,
                 music_related_uri: String::new(),
                 music_related_sections: Vec::new(),
                 music_related_loading: false,
@@ -1797,6 +1799,24 @@ impl AppState {
                     let _ = write_music_snapshot(&snap, &path);
                 }
             });
+    }
+
+    pub fn load_music_playback(&mut self) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, MusicPlaybackReply>(METHOD_MUSIC_PLAYBACK, &json!({}), move |res| {
+                if let Ok(reply) = res {
+                    handle.update_if(move |s, _| {
+                        let changed = s.apply_music_playback(reply.playback);
+                        s.on_music_playback_changed();
+                        changed
+                    });
+                }
+            });
+        }
     }
 
     pub fn load_music_room(&mut self) {
@@ -3082,31 +3102,50 @@ impl AppState {
     }
 
     pub fn music_play_card(&mut self, card: &PlayerCard) {
+        if card.uri.is_empty() {
+            return;
+        }
         if card.kind == "track" {
             self.music_play_uri(&card.uri, None, None);
-        } else if card.kind == "station" && self.media.music_service.has_station() {
-            self.music_act_simple("station", json!({ "uri": card.uri }));
         } else {
             self.music_play_context(&card.uri);
         }
     }
 
     pub fn music_play_context(&mut self, context: &str) {
+        if context.is_empty() {
+            return;
+        }
+        self.media.music_last_play_request = Some(context.to_string());
         if self.status == HostStatus::Standalone {
             return;
         }
-        let Some(act_method) = self.media.music_service.act_method() else {
+        let service = self.media.music_service;
+        let Some(act_method) = service.act_method() else {
             return;
         };
         let body = json!({ "action": "play", "context": context });
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(act_method, &body, move |_| {
-                handle.update(|s, _| s.load_music_player_state());
+            rpc.call::<_, PlayerActReply>(act_method, &body, move |res| {
+                handle.update(move |s, _| {
+                    if let Ok(r) = res
+                        && r.ok
+                    {
+                        s.media.music_bar_failed = None;
+                        s.load_music_player_state();
+                        s.load_music_playback();
+                    } else {
+                        s.media.music_bar_failed = Some((
+                            format!("{} did not start playback. Try again.", service.label()),
+                            s.media.music_clock_s + 4.5,
+                        ));
+                    }
+                });
             });
         }
         #[cfg(not(windows))]
-        let _ = (act_method, body);
+        let _ = (service, act_method, body);
     }
 
     pub fn music_play_uri(&mut self, uri: &str, context: Option<&str>, index: Option<usize>) {
@@ -3120,10 +3159,15 @@ impl AppState {
         index: Option<usize>,
         query: Option<&str>,
     ) {
+        if uri.is_empty() {
+            return;
+        }
+        self.media.music_last_play_request = Some(uri.to_string());
         if self.status == HostStatus::Standalone {
             return;
         }
-        let Some(act_method) = self.media.music_service.act_method() else {
+        let service = self.media.music_service;
+        let Some(act_method) = service.act_method() else {
             return;
         };
         let mut body = json!({ "action": "play", "uri": uri });
@@ -3142,12 +3186,25 @@ impl AppState {
         }
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(act_method, &body, move |_| {
-                handle.update(|s, _| s.load_music_player_state());
+            rpc.call::<_, PlayerActReply>(act_method, &body, move |res| {
+                handle.update(move |s, _| {
+                    if let Ok(r) = res
+                        && r.ok
+                    {
+                        s.media.music_bar_failed = None;
+                        s.load_music_player_state();
+                        s.load_music_playback();
+                    } else {
+                        s.media.music_bar_failed = Some((
+                            format!("{} did not start playback. Try again.", service.label()),
+                            s.media.music_clock_s + 4.5,
+                        ));
+                    }
+                });
             });
         }
         #[cfg(not(windows))]
-        let _ = (act_method, body);
+        let _ = (service, act_method, body);
     }
 
     pub fn music_act_simple(&mut self, action: &str, body: Value) {
