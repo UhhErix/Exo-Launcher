@@ -529,7 +529,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
                 {
                     try
                     {
-                        await modeReady.Task.WaitAsync(TimeSpan.FromMilliseconds(5), ct).ConfigureAwait(false);
+                        await modeReady.Task.WaitAsync(TimeSpan.FromMilliseconds(250), ct).ConfigureAwait(false);
                     }
                     catch (TimeoutException)
                     {
@@ -538,6 +538,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
                     }
                 }
 
+                var binaryMode = Volatile.Read(ref _wireMode) == WireModeExoWireV1;
                 var sent = false;
                 var offset = 0;
 
@@ -546,6 +547,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
                     try
                     {
                         if (!pipe.IsConnected || ct.IsCancellationRequested) return;
+                        if (message.IsBinaryWire != binaryMode) continue;
                         var trailing = message.IsBinaryWire ? 0 : 1;
                         var byteCount = message.Length + trailing;
                         if (byteCount > batch.Length)
@@ -590,6 +592,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
                     try
                     {
                         if (!pipe.IsConnected || ct.IsCancellationRequested) return;
+                        if (frameMessage.IsBinaryWire != binaryMode) continue;
                         if (frameMessage.IsBinaryWire)
                         {
                             await pipe.WriteAsync(frameMessage.Buffer.AsMemory(0, frameMessage.Length), ct).ConfigureAwait(false);

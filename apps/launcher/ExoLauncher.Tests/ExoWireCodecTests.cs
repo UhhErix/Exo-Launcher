@@ -437,6 +437,48 @@ public sealed class ExoWireCodecTests
         Assert.Equal("system.about", doc.RootElement.GetProperty("method").GetString());
     }
 
+    [Fact]
+    public async Task PreHandshakeJsonEventsDoNotCorruptBinaryWireSession()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pipeName = $"exo-wire-prejson-{Guid.NewGuid():N}";
+        using var transport = new NamedPipeHostTransport(pipeName);
+        transport.WireRequestReceived += req =>
+        {
+            try
+            {
+                transport.PostWireResponse(req.ReqId, req.MethodId, ok: true, result: new { ok = true }, error: null);
+            }
+            finally
+            {
+                req.Dispose();
+            }
+        };
+        transport.Start();
+
+        transport.PostJson("""{"version":1,"event":"update.state","data":{"state":"Checking"}}""");
+        transport.PostJson("""{"version":1,"event":"friends.badge","data":{"count":2}}""");
+
+        using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await client.ConnectAsync(5000, ct);
+        await Task.Delay(25, ct);
+        var hello = BuildHelloFrame(ExoWireSchema.SchemaHash, ExoWireCodec.FlagUseSchemaIds | ExoWireCodec.FlagBinaryHotCodecs);
+        await client.WriteAsync(hello, ct);
+        await client.FlushAsync(ct);
+
+        var ack = new byte[ExoWireCodec.HeaderLen + ExoWireCodec.HelloPayloadLen];
+        await client.ReadExactlyAsync(ack, ct);
+        Assert.True(ExoWireFrameHeader.TryRead(ack.AsSpan(0, ExoWireCodec.HeaderLen), out var ackHdr));
+        Assert.Equal(ExoWireFrameKind.HelloAck, ackHdr.Kind);
+
+        await WriteClientFrameAsync(client, ExoWireFrameKind.Request, ExoWireSchema.GetMethodId("system.about"), 7, [(byte)ExoWireEncoding.Empty], ct);
+        var (hdr, body) = await ReadClientFrameAsync(client, ct);
+        Assert.Equal(ExoWireFrameKind.ResponseOk, hdr.Kind);
+        Assert.Equal(7UL, hdr.ReqId);
+        using var doc = JsonDocument.Parse(body.AsMemory(1));
+        Assert.True(doc.RootElement.GetProperty("ok").GetBoolean());
+    }
+
     private static byte[] BuildHelloFrame(ulong schemaHash, ushort flags)
     {
         var buf = new byte[ExoWireCodec.HeaderLen + ExoWireCodec.HelloPayloadLen];
