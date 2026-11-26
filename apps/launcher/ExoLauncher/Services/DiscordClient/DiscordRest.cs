@@ -48,11 +48,6 @@ internal sealed partial class DiscordRest : IDisposable
     {
         _token = token;
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
-        _http.DefaultRequestHeaders.Add("Origin", "https://discord.com");
-        _http.DefaultRequestHeaders.Referrer = new Uri("https://discord.com/channels/@me");
-        _http.DefaultRequestHeaders.Add("X-Discord-Locale", "en-US");
-        _http.DefaultRequestHeaders.Add("X-Discord-Timezone", TimeZoneName());
-        _http.DefaultRequestHeaders.Add("X-Debug-Options", "bugReporterEnabled");
         _http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
     }
 
@@ -698,6 +693,11 @@ internal sealed partial class DiscordRest : IDisposable
         string? mfaToken = null, string? contextLocation = null)
     {
         var request = new HttpRequestMessage(method, Api + path) { Version = HttpVersion.Version20, VersionPolicy = HttpVersionPolicy.RequestVersionOrLower };
+        request.Headers.TryAddWithoutValidation("Origin", "https://discord.com");
+        request.Headers.Referrer = new Uri("https://discord.com/channels/@me");
+        request.Headers.TryAddWithoutValidation("X-Discord-Locale", "en-US");
+        request.Headers.TryAddWithoutValidation("X-Discord-Timezone", TimeZoneName());
+        request.Headers.TryAddWithoutValidation("X-Debug-Options", "bugReporterEnabled");
         if (token is not null) request.Headers.TryAddWithoutValidation("Authorization", token);
         request.Headers.TryAddWithoutValidation("X-Super-Properties", SuperProperties());
         if (!string.IsNullOrWhiteSpace(contextLocation))

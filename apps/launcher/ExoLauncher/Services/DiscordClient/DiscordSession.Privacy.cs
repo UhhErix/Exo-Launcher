@@ -63,36 +63,4 @@ internal sealed partial class DiscordSession
 
     /// <summary>Discord's time format for this PC's: 24-hour when Windows writes hours with H, else 12-hour.</summary>
     internal static int HourCycleFor(string shortTimePattern) => shortTimePattern.Contains('H', StringComparison.Ordinal) ? 2 : 1;
-
-    private async Task KeepPrivacyAsync(JsonObject? prefetched = null)
-    {
-        try
-        {
-            var (values, error) = prefetched is not null
-                ? (prefetched, (string?)null)
-                : await UserSettingsAsync(null, _stop.Token).ConfigureAwait(false);
-            if (values is null) { AppLog.Info("Discord client: privacy defaults not checked (" + error + ")."); return; }
-            var changes = PrivacyChanges(values, CultureInfo.CurrentUICulture.Name, CultureInfo.CurrentCulture.DateTimeFormat.ShortTimePattern);
-            if (changes.Count > 0)
-            {
-                var (_, saveError) = await UserSettingsAsync(changes, _stop.Token).ConfigureAwait(false);
-                AppLog.Info(saveError is null
-                    ? "Discord client: kept off or set for this PC: " + string.Join(", ", changes.Keys) + "."
-                    : "Discord client: privacy defaults not saved (" + saveError + ").");
-            }
-            var consent = await Rest.ConsentAsync(_stop.Token).ConfigureAwait(false);
-            if (consent.Body is { ValueKind: JsonValueKind.Object } body)
-            {
-                var given = Consents.Where(kind => body.TryGetProperty(kind, out var c) && c.ValueKind == JsonValueKind.Object
-                    && c.TryGetProperty("consented", out var on) && on.ValueKind == JsonValueKind.True).ToList();
-                if (given.Count > 0)
-                {
-                    var revoked = await Rest.SetConsentAsync([], given, _stop.Token).ConfigureAwait(false);
-                    AppLog.Info(revoked.Error is null ? "Discord client: data use refused (" + string.Join(", ", given) + ")." : "Discord client: data use not refused (" + revoked.Error + ").");
-                }
-            }
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Info("Discord client: privacy defaults not kept (" + ex.GetType().Name + ")."); }
-    }
 }

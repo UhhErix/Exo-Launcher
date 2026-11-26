@@ -3056,6 +3056,7 @@ impl AppState {
         self.wp4.caches_busy = true;
         self.wp4.caches_done = false;
         self.wp4.caches_error = None;
+        let _ = exo_rpc::remote_art::clear_default_cache();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let rpc2 = rpc.clone();

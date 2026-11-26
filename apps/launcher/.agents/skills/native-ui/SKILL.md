@@ -12,7 +12,7 @@ The native UI is the default since 4.0.0 and replaces only the React/WebView2 UI
 - `crates/exo-rpc`: the pipe client (`pipe.rs`, `lib.rs`) and the DTOs the host sends (`types.rs`, `pc_types.rs`, `media_types.rs`, `discord_types.rs`, `remote_art.rs`). No Rune dependency. Its tests load `ui/contracts/host-v1.json` with `include_str!`; that file is the source of truth for every method and field.
 - `crates/exo-kit`: the shared look. `tokens.rs` (colours, type, springs, Geist embedded from `exo-kit/assets/fonts`), `glass.rs` (Liquid Glass tiers, `EXO_GLASS_POLICY`), `components.rs`, `menu.rs`, `select.rs`, `icons.rs` (Keyline Icons), `logos.rs`, `qr.rs`.
 - `crates/exo-ui`: the `exo-ui` binary. `main.rs` (app and routing), `state.rs` plus one `*_state.rs` per room for state, the room views (`library.rs`, `store.rs`, `game_page.rs`, `discord*.rs`, `music.rs`, `devices_*.rs`, `pc_ai.rs` (Exo AI), `pc_apps.rs` (Apps), `pc_menus.rs`, `pc_storage.rs`, `settings*.rs`, `shell.rs`, `palette.rs`, `tour.rs`, `key_modal.rs`), `captures.rs`, `video_decoder.rs` (Media Foundation), `gamepad.rs`.
-- The other crates (`exo-capture`, `exo-stores`, `exo-auth`, `exo-installer`, `exo-voice-ml`, `exo-macros-worker` and the rest) are Rust services the UI and installer use.
+- The other crates (`exo-capture`, `exo-stores`, `exo-auth`, `exo-installer`, `exo-voice-ml` and the rest) are Rust services the UI and installer use.
 
 ## Rune API
 

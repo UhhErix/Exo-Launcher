@@ -434,18 +434,11 @@ internal sealed partial class DiscordSession
         _lastGatewayClose = code;
         _lastGatewayNetworkFailure = networkFailure && code is null;
         if (code is not null) AppLog.Info($"Discord client: gateway closed {code}.");
-        var keyRefused = _keyInPresence is not null && KeyRefused(code, Environment.TickCount64 - Volatile.Read(ref _keySentAt));
-        if (keyRefused)
-        {
-            _keyRefused = true;
-            _keyInPresence = null;
-            AppLog.Info("Share my games: Discord refused the presence with the key; it isn't sent again this run.");
-        }
         switch (code)
         {
             case 4004: return ("signedOut", ready, false);
             case 4008: return (null, ready, true);
-            case 4002 when !keyRefused && Environment.TickCount64 - _subscribedAt < 5000:
+            case 4002 when Environment.TickCount64 - _subscribedAt < 5000:
                 _noSubscribe = true;
                 AppLog.Info("Discord client: the gateway refused a channel subscription; not sending more.");
                 break;
@@ -461,7 +454,6 @@ internal sealed partial class DiscordSession
     private void Dispatch(string type, JsonElement data)
     {
         OnSettingsDispatch(type, data);
-        if (type == "SESSIONS_REPLACE") LogKeyEcho(data);
         if (type == "READY")
         {
             _sessionId = data.GetProperty("session_id").GetString();
@@ -734,7 +726,6 @@ internal sealed partial class DiscordSession
             {
                 if (values["statusExpiresAtMs"] is JsonValue at && at.TryGetValue(out long until) && Cache.MyStatus != "online")
                     ExpireStatusAt(until);
-                await KeepPrivacyAsync(values).ConfigureAwait(false);
             }
             await reminders.ConfigureAwait(false);
         }
@@ -745,12 +736,6 @@ internal sealed partial class DiscordSession
     private CancellationTokenSource? _customExpiry;
     private readonly SemaphoreSlim _presenceGate = new(1, 1);
 
-    /// <summary>
-    /// This session's presence (op 3): the status and the account's custom status (as Discord's client always sends it,
-    /// so Exo being the active app never hides it), and the friend link's public key when Share my games wants it
-    /// (<see cref="FriendKeyCarrier"/>). Never a game or a song: those go to friends' Exo apps over the relay. One at a
-    /// time, read and sent together, so a presence read before sharing went off can't land after the one that says so.
-    /// </summary>
     private async Task SendPresenceAsync()
     {
         await _presenceGate.WaitAsync(_stop.Token).ConfigureAwait(false);
@@ -760,12 +745,8 @@ internal sealed partial class DiscordSession
             var settings = _userSettings ?? (await UserSettingsAsync(null, _stop.Token).ConfigureAwait(false)).Values;
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var custom = CustomActivity(settings?["customStatus"], now);
-            var key = KeyToPublish();
-            if (key is not null) custom = FriendKeyCarrier.Put(custom, key);
             if (custom is not null) activities.Add(custom);
-            if (key is not null) Volatile.Write(ref _keySentAt, Environment.TickCount64);
             await SendAsync(3, new JsonObject { ["status"] = Cache.MyStatus, ["since"] = 0, ["activities"] = activities.DeepClone(), ["afk"] = false }).ConfigureAwait(false);
-            _keyInPresence = key;
             foreach (var (name, payload) in Cache.SetMyActivities(activities)) Event?.Invoke(name, payload);
             var expiry = new CancellationTokenSource();
             Interlocked.Exchange(ref _customExpiry, expiry)?.Cancel();

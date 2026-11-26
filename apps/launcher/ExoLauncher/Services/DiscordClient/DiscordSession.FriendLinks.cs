@@ -25,39 +25,23 @@ internal sealed partial class DiscordSession
     private readonly Lock _linkGate = new();
     private FriendLinks? _links;
     private ECDiffieHellman? _linkKey;
-    private string? _linkKeyText;
     private Timer? _linkSync, _linkLapse;
     private int _linkSyncPending;
-    private volatile bool _gatewayUp, _keyRefused;
-    private volatile string? _keyInPresence;
-    private long _keySentAt = long.MinValue / 2;
-    private FriendKeyCarrier.Echo? _echoLogged;
+    private volatile bool _gatewayUp;
     private int _peersLogged = -1;
     private int _heardLogged;
 
-    private bool LinksWanted => LinksAllowed(_gatewayUp, _keyRefused, Cache.MyStatus, CallRelayClient.Endpoint is not null);
+    private bool LinksWanted => LinksAllowed(_gatewayUp, Cache.MyStatus, CallRelayClient.Endpoint is not null);
 
-    /// <summary>Every gate on the link: with any of them shut there is no key in the presence, no connection, and nothing sent or heard.</summary>
-    internal static bool LinksAllowed(bool gatewayUp, bool keyRefused, string status, bool hasRelay) =>
-        gatewayUp && !keyRefused && status != "invisible" && hasRelay;
-
-    /// <summary>The key to put in a presence now: none unless links are wanted and this account's key is loaded.</summary>
-    private string? KeyToPublish()
-    {
-        lock (_linkGate) return LinksWanted ? _linkKeyText : null;
-    }
-
-    /// <summary>Discord closed the connection just after a presence with the key: it may be what it refused.</summary>
-    internal static bool KeyRefused(int? closeCode, long msSinceKeySent) => closeCode is 4000 or 4002 && msSinceKeySent is >= 0 and < 5000;
+    internal static bool LinksAllowed(bool gatewayUp, string status, bool hasRelay) =>
+        gatewayUp && status != "invisible" && hasRelay;
 
     private void OnGatewayReady(bool freshSession)
     {
         _linkLapse?.Change(Timeout.Infinite, Timeout.Infinite);
         _gatewayUp = true;
-        // A new connection's presence starts empty, and its cache has no one's game: everything is said and heard afresh.
         if (freshSession)
         {
-            _keyInPresence = null;
             StopFriendLinks();
         }
         SyncLinksSoon();
@@ -71,7 +55,6 @@ internal sealed partial class DiscordSession
             _linkLapse ??= new Timer(_ =>
             {
                 _gatewayUp = false;
-                _keyInPresence = null;
                 SyncLinks();
             });
             _linkLapse.Change(LinkLapseMs, Timeout.Infinite);
@@ -88,7 +71,6 @@ internal sealed partial class DiscordSession
         }
     }
 
-    /// <summary>Brings the links and the key in the presence in line with what is wanted now.</summary>
     private void SyncLinks()
     {
         Interlocked.Exchange(ref _linkSyncPending, 0);
@@ -107,9 +89,8 @@ internal sealed partial class DiscordSession
                 var peers = Cache.LinkPeers();
                 links.SetPeers(peers);
                 if (Interlocked.Exchange(ref _peersLogged, peers.Count) != peers.Count)
-                    AppLog.Info("Share my games: " + peers.Count + " friends show a key; " + links.Count + " linked.");
+                    AppLog.Info("Share my games: " + peers.Count + " friends paired; " + links.Count + " linked.");
             }
-            if (_gatewayUp && KeyToPublish() != _keyInPresence) SendPresenceInBackground();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Info("Friend link: not worked out (" + ex.GetType().Name + ")."); }
     }
@@ -118,7 +99,6 @@ internal sealed partial class DiscordSession
     {
         if (_links is not null || Cache.Me?.Id is not { } me || FriendLinkKeys.ForAccount(me) is not { } key) return;
         _linkKey = key;
-        _linkKeyText = FriendLinkFormat.EncodeKey(key);
         var links = new FriendLinks(me, key, CallRelayClient.Endpoint);
         links.Heard += OnFriendHeard;
         links.Set(FriendGame.Section, FriendGame.Write(GamesOpened.Current));
@@ -145,7 +125,6 @@ internal sealed partial class DiscordSession
 
     private void OnFriendHeard(string friend, FriendLinkFormat.Message? message)
     {
-        // On a timer's or a socket's thread, where nothing would catch it.
         try
         {
             if (message is not null && Interlocked.Exchange(ref _heardLogged, 1) == 0) AppLog.Info("Share my games: heard from a friend's Exo.");
@@ -154,21 +133,6 @@ internal sealed partial class DiscordSession
             foreach (var (name, payload) in Cache.SetExoPrep(friend, FriendPrep.Read(message))) Event?.Invoke(name, payload);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Info("Friend link: a message not read (" + ex.GetType().Name + ")."); }
-    }
-
-    /// <summary>Said once per change: what the owner of an account looks for first when no friend ever sees them.</summary>
-    private void LogKeyEcho(JsonElement sessions)
-    {
-        if (_keyInPresence is not { } key) return;
-        var echo = FriendKeyCarrier.Find(sessions, key);
-        if (echo == _echoLogged) return;
-        _echoLogged = echo;
-        AppLog.Info(echo switch
-        {
-            FriendKeyCarrier.Echo.Shown => "Share my games: key in presence: yes.",
-            FriendKeyCarrier.Echo.Hidden => "Share my games: key in presence: yes, among hidden activities.",
-            _ => "Share my games: key in presence: no (a custom status came back with: " + FriendKeyCarrier.FieldsKept(sessions) + ").",
-        });
     }
 
     private void SendPresenceInBackground() => _ = Task.Run(async () =>

@@ -7,7 +7,7 @@ use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, SPRING_MOVE, SPRING_QUICK,
     amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, glass_rim_bottom,
     glass_rim_top, good, hairline, hover_fill, icon_chevron_left, icon_external, icon_gamepad,
-    icon_headphones, icon_keyboard, icon_mic, icon_mouse, icon_refresh, icon_zap, pressed_fill,
+    icon_headphones, icon_keyboard, icon_mic, icon_mouse, icon_refresh, pressed_fill,
     primary_button, scaled, status_badge, type_body, type_control, type_label, type_section,
     type_small, type_title,
 };
@@ -1305,10 +1305,6 @@ fn wooting_keyboard_page(
 }
 
 pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
-    if s.pc.macros_open {
-        return crate::macros::view(s, scale);
-    }
-
     if s.pc.mouse_panel_open {
         let mut slot = el()
             .key("mouse-panel-slot")
@@ -1483,17 +1479,10 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
         .center_y()
         .child(text("Devices").font(type_title()).color(FG))
         .child(
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(
-                    device_icon_btn("dev-macros", "Macros", Some(icon_zap(14.0, FG)), false)
-                        .on_press(|s: &mut AppState| s.pc.macros_open = true),
-                )
-                .child(
-                    device_icon_btn("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)), false)
-                        .on_press(|s: &mut AppState| s.load_pc_devices()),
-                ),
+            row().gap(8.0).center_y().child(
+                device_icon_btn("dev-rescan", "Rescan", Some(icon_refresh(14.0, FG)), false)
+                    .on_press(|s: &mut AppState| s.load_pc_devices()),
+            ),
         );
 
     let mut ordered: Vec<&PeripheralCard> = Vec::new();

@@ -51,6 +51,7 @@ internal sealed partial class DiscordRest
                 || !Uri.TryCreate(url.GetString(), UriKind.Absolute, out var target) || target.Scheme != Uri.UriSchemeHttps || target.Host != UploadHost)
                 return (null, "Discord didn't take the file.");
             using var put = new HttpRequestMessage(HttpMethod.Put, target) { Content = new ByteArrayContent(file.Data) };
+            put.Headers.TryAddWithoutValidation("Origin", "https://discord.com");
             put.Content.Headers.ContentType = MediaTypeHeaderValue.TryParse(file.Type, out var type) ? type : new MediaTypeHeaderValue("application/octet-stream");
             try
             {

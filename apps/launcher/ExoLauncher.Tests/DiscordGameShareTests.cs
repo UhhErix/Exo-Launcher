@@ -15,15 +15,14 @@ namespace ExoLauncher.Tests;
 public sealed class DiscordGameShareTests
 {
     [Theory]
-    [InlineData(true, false, "online", true, true)]
-    [InlineData(true, false, "dnd", true, true)]
-    [InlineData(true, false, "idle", true, true)]
-    [InlineData(true, false, "invisible", true, false)]
-    [InlineData(false, false, "online", true, false)] // Discord isn't connected
-    [InlineData(true, true, "online", true, false)]   // Discord refused the key this run
-    [InlineData(true, false, "online", false, false)] // no relay
-    public void TheLinkRunsOnlyWithEveryGateOpen(bool gatewayUp, bool keyRefused, string status, bool hasRelay, bool allowed) =>
-        Assert.Equal(allowed, DiscordSession.LinksAllowed(gatewayUp, keyRefused, status, hasRelay));
+    [InlineData(true, "online", true, true)]
+    [InlineData(true, "dnd", true, true)]
+    [InlineData(true, "idle", true, true)]
+    [InlineData(true, "invisible", true, false)]
+    [InlineData(false, "online", true, false)]
+    [InlineData(true, "online", false, false)]
+    public void TheLinkRunsOnlyWithEveryGateOpen(bool gatewayUp, string status, bool hasRelay, bool allowed) =>
+        Assert.Equal(allowed, DiscordSession.LinksAllowed(gatewayUp, status, hasRelay));
 
     [Theory]
     [InlineData(StoreKind.Steam, false, true)]

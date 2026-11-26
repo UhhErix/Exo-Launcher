@@ -328,7 +328,7 @@ impl LazyWebHostState {
                     *rect_slot.lock().unwrap() = ev.rect;
                     let mut guard = rt_slot.lock().unwrap();
                     if let Some(rt) = guard.as_mut() {
-                        rt.sync_bounds(ev.dcomp_device, ev.rect);
+                        rt.sync_bounds(ev.dcomp_device, ev.slot_visual, ev.rect);
                         return;
                     }
                     let rt = win_wv2::RuntimeHost::start(
@@ -727,12 +727,77 @@ mod win_wv2 {
         CreateCoreWebView2EnvironmentCompletedHandler, NavigationCompletedEventHandler,
         TrySuspendCompletedHandler,
     };
-    use windows::Win32::Foundation::{CloseHandle, HWND, POINT, RECT, WAIT_OBJECT_0};
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, POINT, RECT};
     use windows::Win32::Graphics::DirectComposition::IDCompositionDevice;
+    use windows::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+        SetInformationJobObject,
+    };
     use windows::Win32::System::Threading::{
-        OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
+        OpenProcess, PROCESS_SET_QUOTA, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, WaitForSingleObject,
     };
     use windows::core::{HSTRING, IUnknown, Interface, PCWSTR};
+
+    struct OwnedHandle(HANDLE);
+    unsafe impl Send for OwnedHandle {}
+    impl Drop for OwnedHandle {
+        fn drop(&mut self) {
+            if !self.0.is_invalid() {
+                unsafe {
+                    let _ = CloseHandle(self.0);
+                }
+            }
+        }
+    }
+
+    unsafe fn addref_unknown(raw: usize) -> Option<IUnknown> {
+        let ptr = raw as *mut core::ffi::c_void;
+        if ptr.is_null() {
+            return None;
+        }
+        unsafe { IUnknown::from_raw_borrowed(&ptr).cloned() }
+    }
+
+    unsafe fn assign_webview_job(pid: u32) -> (Option<OwnedHandle>, Option<OwnedHandle>) {
+        if pid == 0 {
+            return (None, None);
+        }
+        let Ok(proc) = (unsafe {
+            OpenProcess(
+                PROCESS_SET_QUOTA | PROCESS_TERMINATE | PROCESS_SYNCHRONIZE,
+                false,
+                pid,
+            )
+        }) else {
+            return (None, None);
+        };
+        let proc = OwnedHandle(proc);
+        let Ok(job) = (unsafe { CreateJobObjectW(None, None) }) else {
+            return (None, Some(proc));
+        };
+        let job = OwnedHandle(job);
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let ok_info = unsafe {
+            SetInformationJobObject(
+                job.0,
+                JobObjectExtendedLimitInformation,
+                (&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
+            .is_ok()
+        };
+        if !ok_info {
+            return (None, Some(proc));
+        }
+        let assigned = unsafe { AssignProcessToJobObject(job.0, proc.0).is_ok() };
+        if assigned {
+            (Some(job), Some(proc))
+        } else {
+            (None, Some(proc))
+        }
+    }
 
     enum PendingObj {
         Env(ICoreWebView2Environment),
@@ -745,8 +810,8 @@ mod win_wv2 {
 
     pub(super) struct RuntimeHost {
         hwnd: HWND,
-        dcomp_device_raw: usize,
-        slot_visual_raw: usize,
+        dcomp_device: Option<IDCompositionDevice>,
+        slot_visual: Option<IUnknown>,
         rect: [i32; 4],
         pending_url: String,
         env: Option<ICoreWebView2Environment>,
@@ -754,7 +819,8 @@ mod win_wv2 {
         ctrl: Option<ICoreWebView2Controller>,
         webview: Option<ICoreWebView2>,
         nav_token: Option<i64>,
-        browser_pid: u32,
+        browser_job: Option<OwnedHandle>,
+        browser_proc: Option<OwnedHandle>,
         pending: Arc<Mutex<SendPending>>,
         events: Arc<Mutex<VecDeque<WebEvent>>>,
         waker: Option<Waker>,
@@ -785,11 +851,14 @@ mod win_wv2 {
             events: Arc<Mutex<VecDeque<WebEvent>>>,
             waker: Option<Waker>,
         ) -> Self {
+            let dcomp_device = unsafe { addref_unknown(dcomp_device_raw) }
+                .and_then(|u| u.cast::<IDCompositionDevice>().ok());
+            let slot_visual = unsafe { addref_unknown(slot_visual_raw) };
             let pending = Arc::new(Mutex::new(SendPending(VecDeque::new())));
             let host = Self {
                 hwnd: HWND(hwnd_raw as *mut _),
-                dcomp_device_raw,
-                slot_visual_raw,
+                dcomp_device,
+                slot_visual,
                 rect,
                 pending_url: url,
                 env: None,
@@ -797,7 +866,8 @@ mod win_wv2 {
                 ctrl: None,
                 webview: None,
                 nav_token: None,
-                browser_pid: 0,
+                browser_job: None,
+                browser_proc: None,
                 pending: Arc::clone(&pending),
                 events: Arc::clone(&events),
                 waker: waker.clone(),
@@ -928,8 +998,7 @@ mod win_wv2 {
                 return;
             };
             unsafe {
-                let raw_ptr = self.slot_visual_raw as *mut core::ffi::c_void;
-                if let Some(v) = IUnknown::from_raw_borrowed(&raw_ptr) {
+                if let Some(ref v) = self.slot_visual {
                     let _ = comp.SetRootVisualTarget(v);
                 }
                 if let Ok(ctrl2) = comp.cast::<ICoreWebView2Controller2>() {
@@ -981,9 +1050,11 @@ mod win_wv2 {
                 let url_h = HSTRING::from(self.pending_url.as_str());
                 let _ = wv.Navigate(PCWSTR(url_h.as_ptr()));
             }
+            let (browser_job, browser_proc) = unsafe { assign_webview_job(browser_pid) };
             self.commit_dcomp();
             self.nav_token = Some(token);
-            self.browser_pid = browser_pid;
+            self.browser_job = browser_job;
+            self.browser_proc = browser_proc;
             self.comp = Some(comp);
             self.ctrl = Some(ctrl);
             self.webview = Some(wv);
@@ -994,19 +1065,38 @@ mod win_wv2 {
         }
 
         fn commit_dcomp(&self) {
-            unsafe {
-                let dev_ptr = self.dcomp_device_raw as *mut core::ffi::c_void;
-                if let Some(dev_unk) = IUnknown::from_raw_borrowed(&dev_ptr)
-                    && let Ok(dcomp) = dev_unk.cast::<IDCompositionDevice>()
-                {
+            if let Some(ref dcomp) = self.dcomp_device {
+                unsafe {
                     let _ = dcomp.Commit();
                 }
             }
         }
 
-        pub(super) fn sync_bounds(&mut self, dcomp_device_raw: usize, rect: [i32; 4]) {
-            self.dcomp_device_raw = dcomp_device_raw;
+        pub(super) fn sync_bounds(
+            &mut self,
+            dcomp_device_raw: usize,
+            slot_visual_raw: usize,
+            rect: [i32; 4],
+        ) {
+            if let Some(dev) = unsafe { addref_unknown(dcomp_device_raw) }
+                .and_then(|u| u.cast::<IDCompositionDevice>().ok())
+            {
+                self.dcomp_device = Some(dev);
+            }
+            let next_visual = unsafe { addref_unknown(slot_visual_raw) };
+            let visual_changed = next_visual.as_ref().map(|v| v.as_raw())
+                != self.slot_visual.as_ref().map(|v| v.as_raw());
+            if next_visual.is_some() {
+                self.slot_visual = next_visual;
+            }
             self.rect = rect;
+            if visual_changed
+                && let (Some(comp), Some(v)) = (self.comp.as_ref(), self.slot_visual.as_ref())
+            {
+                unsafe {
+                    let _ = comp.SetRootVisualTarget(v);
+                }
+            }
             if let Some(ref ctrl) = self.ctrl {
                 unsafe {
                     let _ = ctrl.SetBounds(RECT {
@@ -1081,8 +1171,8 @@ mod win_wv2 {
         }
 
         pub(super) fn destroy(&mut self) {
-            let pid = self.browser_pid;
-            self.browser_pid = 0;
+            let job = self.browser_job.take();
+            let proc = self.browser_proc.take();
             if let Some(ref wv) = self.webview {
                 unsafe {
                     if let Some(tok) = self.nav_token.take() {
@@ -1110,18 +1200,19 @@ mod win_wv2 {
             self.webview = None;
             self.env = None;
             self.commit_dcomp();
-            if pid != 0 {
+            self.slot_visual = None;
+            self.dcomp_device = None;
+            if job.is_some() || proc.is_some() {
                 let _ = std::thread::Builder::new()
                     .name("exo-wv2-reclaim".into())
-                    .spawn(move || unsafe {
-                        if let Ok(h) =
-                            OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_TERMINATE, false, pid)
-                        {
-                            if WaitForSingleObject(h, 3000) != WAIT_OBJECT_0 {
-                                let _ = TerminateProcess(h, 0);
+                    .spawn(move || {
+                        if let Some(ref p) = proc {
+                            unsafe {
+                                WaitForSingleObject(p.0, 3000);
                             }
-                            let _ = CloseHandle(h);
                         }
+                        drop(proc);
+                        drop(job);
                     });
             }
         }

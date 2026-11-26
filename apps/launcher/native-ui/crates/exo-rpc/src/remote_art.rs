@@ -2,26 +2,31 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 
-const ALLOWED_IMAGE_HOSTS: &[&str] = &[
+const ALLOWED_EXACT_IMAGE_HOSTS: &[&str] = &[
+    "steamcdn-a.akamaihd.net",
+    "store.steampowered.com",
+    "cdn.discordapp.com",
+    "i.imgur.com",
+    "images.gog.com",
+    "store-images.s-microsoft.com",
+    "images-eds-ssl.xboxlive.com",
+    "img.openmouse.app",
+];
+
+const ALLOWED_SUFFIX_IMAGE_HOSTS: &[&str] = &[
     "steamstatic.com",
-    "akamaihd.net",
-    "steampowered.com",
-    "steamgriddb.com",
     "epicgames.com",
+    "unrealengine.com",
     "gog-statics.com",
-    "igdb.com",
-    "discordapp.com",
     "discordapp.net",
     "ytimg.com",
     "mzstatic.com",
     "scdn.co",
+    "spotifycdn.com",
+    "googleusercontent.com",
     "tenor.com",
     "giphy.com",
-    "klipy.co",
     "klipy.com",
-    "imgur.com",
-    "redd.it",
-    "gfycat.com",
 ];
 
 /// Converts Tenor / Giphy / Klipy video-variant GIF URLs (`.mp4` / `.webm`)
@@ -42,8 +47,7 @@ pub fn normalize_gif_image_url(url: &str) -> String {
     let stem = &base[..base.len() - ext_len];
 
     let is_tenor = lower.contains("tenor.com/");
-    let is_giphy_or_klipy =
-        lower.contains("giphy.com/") || lower.contains("klipy.co/") || lower.contains("klipy.com/");
+    let is_giphy_or_klipy = lower.contains("giphy.com/") || lower.contains("klipy.com/");
 
     if !is_tenor && !is_giphy_or_klipy {
         return trimmed.to_string();
@@ -95,13 +99,62 @@ pub fn parse_allowed_https(url: &str) -> Option<(String, String)> {
         return None;
     }
     let host = authority.to_ascii_lowercase();
-    let allowed = ALLOWED_IMAGE_HOSTS
-        .iter()
-        .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}")));
+    let allowed = ALLOWED_EXACT_IMAGE_HOSTS.contains(&host.as_str())
+        || ALLOWED_SUFFIX_IMAGE_HOSTS
+            .iter()
+            .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}")));
     if !allowed {
         return None;
     }
     Some((host, path_and_query.to_string()))
+}
+
+pub fn resolve_redirect_target(
+    current_host: &str,
+    current_path: &str,
+    location: &str,
+) -> Option<(String, String)> {
+    let loc = location.trim();
+    if loc.is_empty() {
+        return None;
+    }
+    if loc.starts_with("https://") {
+        return parse_allowed_https(loc);
+    }
+    if loc.starts_with("//") {
+        return parse_allowed_https(&format!("https:{loc}"));
+    }
+    if loc.contains("://") || loc.starts_with("http:") {
+        return None;
+    }
+    let next_path = if loc.starts_with('/') {
+        loc.to_string()
+    } else {
+        let base = current_path.split('?').next().unwrap_or("/");
+        let dir = match base.rfind('/') {
+            Some(i) => &base[..=i],
+            None => "/",
+        };
+        format!("{dir}{loc}")
+    };
+    parse_allowed_https(&format!("https://{current_host}{next_path}"))
+}
+
+pub fn clear_default_cache() -> usize {
+    let Some(dir) = default_cache_dir() else {
+        return 0;
+    };
+    let Ok(read_dir) = std::fs::read_dir(&dir) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        if path.is_file() && std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
 }
 
 pub fn canonical_cache_key(url: &str) -> String {
@@ -261,8 +314,8 @@ fn shared_winhttp_session() -> Option<*mut std::ffi::c_void> {
         WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_DECOMPRESSION_FLAG_DEFLATE,
         WINHTTP_DECOMPRESSION_FLAG_GZIP, WINHTTP_OPTION_DECOMPRESSION,
         WINHTTP_OPTION_ENABLE_HTTP_PROTOCOL, WINHTTP_OPTION_REDIRECT_POLICY,
-        WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP, WINHTTP_PROTOCOL_FLAG_HTTP2,
-        WinHttpOpen, WinHttpSetOption, WinHttpSetTimeouts,
+        WINHTTP_OPTION_REDIRECT_POLICY_NEVER, WINHTTP_PROTOCOL_FLAG_HTTP2, WinHttpOpen,
+        WinHttpSetOption, WinHttpSetTimeouts,
     };
 
     static SESSION: OnceLock<Option<SharedSession>> = OnceLock::new();
@@ -285,7 +338,7 @@ fn shared_winhttp_session() -> Option<*mut std::ffi::c_void> {
         }
         unsafe {
             WinHttpSetTimeouts(raw, 4000, 4000, 4000, 8000);
-            let policy = WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
+            let policy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
             WinHttpSetOption(
                 raw,
                 WINHTTP_OPTION_REDIRECT_POLICY,
@@ -318,10 +371,13 @@ fn winhttp_get(host: &str, path: &str) -> Option<Vec<u8>> {
     use std::os::windows::ffi::OsStrExt;
     use std::ptr::null;
     use windows_sys::Win32::Networking::WinHttp::{
-        WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
-        WinHttpCloseHandle, WinHttpConnect, WinHttpOpenRequest, WinHttpQueryDataAvailable,
-        WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest,
+        WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_LOCATION,
+        WINHTTP_QUERY_STATUS_CODE, WinHttpCloseHandle, WinHttpConnect, WinHttpOpenRequest,
+        WinHttpQueryDataAvailable, WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse,
+        WinHttpSendRequest,
     };
+
+    const MAX_REDIRECTS: usize = 3;
 
     fn to_wide(s: &str) -> Vec<u16> {
         OsStr::new(s).encode_wide().chain(Some(0)).collect()
@@ -339,86 +395,135 @@ fn winhttp_get(host: &str, path: &str) -> Option<Vec<u8>> {
     }
 
     let session = shared_winhttp_session()?;
-    let host_w = to_wide(host);
-    let conn = Handle(unsafe { WinHttpConnect(session, host_w.as_ptr(), 443, 0) });
-    if conn.0.is_null() {
-        return None;
-    }
-
     let get_w = to_wide("GET");
-    let path_w = to_wide(path);
-    let req = Handle(unsafe {
-        WinHttpOpenRequest(
-            conn.0,
-            get_w.as_ptr(),
-            path_w.as_ptr(),
-            null(),
-            null(),
-            null(),
-            WINHTTP_FLAG_SECURE,
-        )
-    });
-    if req.0.is_null() {
-        return None;
-    }
+    let mut cur_host = host.to_string();
+    let mut cur_path = path.to_string();
 
-    let sent = unsafe { WinHttpSendRequest(req.0, null(), 0, std::ptr::null(), 0, 0, 0) };
-    if sent == 0 {
-        return None;
-    }
-    if unsafe { WinHttpReceiveResponse(req.0, std::ptr::null_mut()) } == 0 {
-        return None;
-    }
-
-    let mut status: u32 = 0;
-    let mut status_len = std::mem::size_of::<u32>() as u32;
-    let queried = unsafe {
-        WinHttpQueryHeaders(
-            req.0,
-            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-            null(),
-            (&mut status as *mut u32).cast(),
-            &mut status_len,
-            std::ptr::null_mut(),
-        )
-    };
-    if queried == 0 || status != 200 {
-        return None;
-    }
-
-    let mut out = Vec::new();
-    loop {
-        let mut avail: u32 = 0;
-        if unsafe { WinHttpQueryDataAvailable(req.0, &mut avail) } == 0 {
+    for hop in 0..=MAX_REDIRECTS {
+        let host_w = to_wide(&cur_host);
+        let conn = Handle(unsafe { WinHttpConnect(session, host_w.as_ptr(), 443, 0) });
+        if conn.0.is_null() {
             return None;
         }
-        if avail == 0 {
-            break;
-        }
-        let chunk_len = (avail as usize).min(64 * 1024);
-        if out.len() + chunk_len > MAX_IMAGE_BYTES {
-            return None;
-        }
-        let start = out.len();
-        out.resize(start + chunk_len, 0);
-        let mut read: u32 = 0;
-        if unsafe {
-            WinHttpReadData(
-                req.0,
-                out[start..].as_mut_ptr().cast(),
-                chunk_len as u32,
-                &mut read,
+
+        let path_w = to_wide(&cur_path);
+        let req = Handle(unsafe {
+            WinHttpOpenRequest(
+                conn.0,
+                get_w.as_ptr(),
+                path_w.as_ptr(),
+                null(),
+                null(),
+                null(),
+                WINHTTP_FLAG_SECURE,
             )
-        } == 0
-        {
+        });
+        if req.0.is_null() {
             return None;
         }
-        out.truncate(start + read as usize);
-        if read == 0 {
-            break;
+
+        let sent = unsafe { WinHttpSendRequest(req.0, null(), 0, std::ptr::null(), 0, 0, 0) };
+        if sent == 0 {
+            return None;
         }
+        if unsafe { WinHttpReceiveResponse(req.0, std::ptr::null_mut()) } == 0 {
+            return None;
+        }
+
+        let mut status: u32 = 0;
+        let mut status_len = std::mem::size_of::<u32>() as u32;
+        let queried = unsafe {
+            WinHttpQueryHeaders(
+                req.0,
+                WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                null(),
+                (&mut status as *mut u32).cast(),
+                &mut status_len,
+                std::ptr::null_mut(),
+            )
+        };
+        if queried == 0 {
+            return None;
+        }
+        if matches!(status, 301 | 302 | 303 | 307 | 308) {
+            if hop == MAX_REDIRECTS {
+                return None;
+            }
+            let mut loc_bytes: u32 = 0;
+            unsafe {
+                WinHttpQueryHeaders(
+                    req.0,
+                    WINHTTP_QUERY_LOCATION,
+                    null(),
+                    std::ptr::null_mut(),
+                    &mut loc_bytes,
+                    std::ptr::null_mut(),
+                );
+            }
+            if loc_bytes == 0 || loc_bytes > 8192 {
+                return None;
+            }
+            let mut buf = vec![0u16; (loc_bytes as usize).div_ceil(2)];
+            let ok = unsafe {
+                WinHttpQueryHeaders(
+                    req.0,
+                    WINHTTP_QUERY_LOCATION,
+                    null(),
+                    buf.as_mut_ptr().cast(),
+                    &mut loc_bytes,
+                    std::ptr::null_mut(),
+                )
+            };
+            if ok == 0 {
+                return None;
+            }
+            let len = (loc_bytes as usize) / 2;
+            let location = String::from_utf16_lossy(&buf[..len.min(buf.len())]);
+            let (next_host, next_path) =
+                resolve_redirect_target(&cur_host, &cur_path, location.trim_end_matches('\0'))?;
+            cur_host = next_host;
+            cur_path = next_path;
+            continue;
+        }
+        if status != 200 {
+            return None;
+        }
+
+        let mut out = Vec::new();
+        loop {
+            let mut avail: u32 = 0;
+            if unsafe { WinHttpQueryDataAvailable(req.0, &mut avail) } == 0 {
+                return None;
+            }
+            if avail == 0 {
+                break;
+            }
+            let chunk_len = (avail as usize).min(64 * 1024);
+            if out.len() + chunk_len > MAX_IMAGE_BYTES {
+                return None;
+            }
+            let start = out.len();
+            out.resize(start + chunk_len, 0);
+            let mut read: u32 = 0;
+            if unsafe {
+                WinHttpReadData(
+                    req.0,
+                    out[start..].as_mut_ptr().cast(),
+                    chunk_len as u32,
+                    &mut read,
+                )
+            } == 0
+            {
+                return None;
+            }
+            out.truncate(start + read as usize);
+            if read == 0 {
+                break;
+            }
+        }
+        return Some(out);
     }
-    Some(out)
+    None
 }
 
 #[cfg(test)]
@@ -431,10 +536,75 @@ mod tests {
         assert!(parse_allowed_https("https://media.tenor.com/abcAAAAC/wave.gif").is_some());
         assert!(parse_allowed_https("https://media1.giphy.com/media/xyz/giphy.gif").is_some());
         assert!(parse_allowed_https("https://static.klipy.com/ii/1/a.gif").is_some());
+        assert!(
+            parse_allowed_https("https://steamcdn-a.akamaihd.net/steam/apps/1/header.jpg")
+                .is_some()
+        );
+        assert!(parse_allowed_https("https://cdn.discordapp.com/avatars/1/a.png").is_some());
+        assert!(parse_allowed_https("https://i.imgur.com/abc.gif").is_some());
         assert!(parse_allowed_https("http://shared.fastly.steamstatic.com/a.jpg").is_none());
         assert!(parse_allowed_https("https://127.0.0.1/secret.png").is_none());
         assert!(parse_allowed_https("https://evil.example/a.png").is_none());
+        assert!(parse_allowed_https("https://evil.akamaihd.net/a.png").is_none());
+        assert!(parse_allowed_https("https://gfycat.com/a.gif").is_none());
+        assert!(parse_allowed_https("https://cdn.steamgriddb.com/a.png").is_none());
+        assert!(parse_allowed_https("https://images.igdb.com/a.png").is_none());
+        assert!(parse_allowed_https("https://i.redd.it/a.png").is_none());
+        assert!(parse_allowed_https("https://klipy.co/a.gif").is_none());
+        assert!(parse_allowed_https("https://evil.discordapp.com/a.png").is_none());
+        assert!(parse_allowed_https("https://evil.imgur.com/a.png").is_none());
         assert!(parse_allowed_https("https://shared.fastly.steamstatic.com:8443/a.jpg").is_none());
+    }
+
+    #[test]
+    fn redirect_target_revalidates_host_and_scheme_on_every_hop() {
+        assert_eq!(
+            resolve_redirect_target(
+                "cdn.discordapp.com",
+                "/attachments/1/a.png",
+                "https://media.discordapp.net/attachments/1/a.png"
+            ),
+            Some((
+                "media.discordapp.net".to_string(),
+                "/attachments/1/a.png".to_string()
+            ))
+        );
+        assert_eq!(
+            resolve_redirect_target("cdn.discordapp.com", "/attachments/1/a.png", "/v2/a.png"),
+            Some(("cdn.discordapp.com".to_string(), "/v2/a.png".to_string()))
+        );
+        assert!(
+            resolve_redirect_target(
+                "cdn.discordapp.com",
+                "/attachments/1/a.png",
+                "https://evil.example/track.png"
+            )
+            .is_none()
+        );
+        assert!(
+            resolve_redirect_target(
+                "cdn.discordapp.com",
+                "/attachments/1/a.png",
+                "https://127.0.0.1/internal"
+            )
+            .is_none()
+        );
+        assert!(
+            resolve_redirect_target(
+                "cdn.discordapp.com",
+                "/attachments/1/a.png",
+                "http://cdn.discordapp.com/a.png"
+            )
+            .is_none()
+        );
+        assert!(
+            resolve_redirect_target(
+                "cdn.discordapp.com",
+                "/attachments/1/a.png",
+                "//evil.example/track.png"
+            )
+            .is_none()
+        );
     }
 
     #[test]

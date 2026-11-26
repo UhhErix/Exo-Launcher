@@ -1550,7 +1550,7 @@ internal sealed partial class DiscordCache
         var rich = all.FirstOrDefault();
         // Discord's line: the custom status, else Spotify's artist, else the activity's name.
         var line = custom ?? (rich is null ? null : rich.Type == 2 && rich.State is { Length: > 0 } artist ? artist : rich.Name);
-        return new Presence(Str(p, "status") ?? "offline", line, custom is not null ? 4 : rich?.Type, rich, all, FriendKeyCarrier.Read(p));
+        return new Presence(Str(p, "status") ?? "offline", line, custom is not null ? 4 : rich?.Type, rich, all, null);
     }
 
     /// <summary>A game a friend's Exo said they play.</summary>

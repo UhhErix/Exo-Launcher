@@ -255,73 +255,28 @@ public sealed class FriendLinkTests
         Assert.Equal(new string('x', 127), cut);
     }
 
-    // ---- the carrier ----
-
     internal const string Key = "A7Sx1n" + "Q2oXJ0" + "m3yV5f" + "G8hK2d" + "L4sP6t" + "U9wE1r" + "T3yU5i" + "O7";
 
     [Fact]
-    public void TheKeyGoesOnARealCustomStatusAndChangesNothingElseOfIt()
+    public void CustomStatusCarriesNoFriendLinkKeyOrFabricatedActivity()
     {
+        Assert.Null(DiscordSession.CustomActivity(null, 0));
         var custom = DiscordSession.CustomActivity(JsonNode.Parse("{\"text\":\"brb\",\"emojiName\":\"\U0001F600\"}"), 0)!;
-        var before = custom.DeepClone().AsObject();
-        var sent = FriendKeyCarrier.Put(custom, Key);
-        Assert.Equal(Key, sent["party"]!["id"]!.GetValue<string>());
-        sent.Remove("party");
-        Assert.True(JsonNode.DeepEquals(before, sent));
+        Assert.Equal(4, custom["type"]!.GetValue<int>());
+        Assert.False(custom.ContainsKey("party"));
     }
 
     [Fact]
-    public void WithNoStatusTheKeyGoesOnACustomStatusThatSaysNothing()
+    public void DiscordApiHeadersStayOnDiscordApiRequests()
     {
-        var sent = FriendKeyCarrier.Put(null, Key);
-        Assert.Equal(4, sent["type"]!.GetValue<int>());
-        Assert.False(sent.ContainsKey("state"));
-        Assert.False(sent.ContainsKey("emoji"));
-        Assert.Equal(Key, sent["party"]!["id"]!.GetValue<string>());
+        using var req = DiscordRest.BuildRequest(HttpMethod.Get, "users/@me", null);
+        Assert.True(req.Headers.Contains("Origin"));
+        Assert.NotNull(req.Headers.Referrer);
+        Assert.True(req.Headers.Contains("X-Discord-Locale"));
+        Assert.True(req.Headers.Contains("X-Discord-Timezone"));
+        Assert.True(req.Headers.Contains("X-Debug-Options"));
+        Assert.True(req.Headers.Contains("X-Super-Properties"));
     }
-
-    [Theory]
-    [InlineData($"{{\"activities\":[{{\"type\":4,\"party\":{{\"id\":\"{Key}\"}}}}]}}", true)]
-    [InlineData($"{{\"hidden_activities\":[{{\"type\":4,\"party\":{{\"id\":\"{Key}\"}}}}]}}", true)]
-    [InlineData($"{{\"activities\":[{{\"type\":0,\"party\":{{\"id\":\"{Key}\"}}}}]}}", false)] // a game's party, whatever it says
-    [InlineData("{\"activities\":[{\"type\":4,\"party\":{\"id\":\"spotify:1\"}}]}", false)]
-    [InlineData("{\"activities\":[{\"type\":4,\"party\":{\"id\":42}}]}", false)]
-    [InlineData("{\"activities\":[{\"type\":4,\"party\":\"x\"}]}", false)]
-    [InlineData("{\"activities\":[{\"type\":\"4\"}]}", false)]
-    [InlineData("{\"activities\":[1,null,\"x\"]}", false)]
-    [InlineData("{\"activities\":{}}", false)]
-    [InlineData("{}", false)]
-    [InlineData("[]", false)]
-    public void AKeyIsReadOnlyFromWhereItGoes(string presence, bool found)
-    {
-        using var document = JsonDocument.Parse(presence);
-        Assert.Equal(found ? Key : null, FriendKeyCarrier.Read(document.RootElement));
-    }
-
-    [Fact]
-    public void TheEchoSaysWhetherTheKeyCameBackAndWhichFieldsDid()
-    {
-        JsonElement Sessions(string json) { using var d = JsonDocument.Parse(json); return d.RootElement.Clone(); }
-        var kept = Sessions($"[{{\"session_id\":\"all\",\"activities\":[{{\"type\":4,\"name\":\"Custom Status\",\"party\":{{\"id\":\"{Key}\"}}}}]}}]");
-        Assert.Equal(FriendKeyCarrier.Echo.Shown, FriendKeyCarrier.Find(kept, Key));
-        Assert.Equal("name, party, type", FriendKeyCarrier.FieldsKept(kept));
-        var stripped = Sessions("[{\"session_id\":\"all\",\"activities\":[{\"type\":4,\"name\":\"Custom Status\"}]}]");
-        Assert.Equal(FriendKeyCarrier.Echo.Absent, FriendKeyCarrier.Find(stripped, Key));
-        Assert.Equal("name, type", FriendKeyCarrier.FieldsKept(stripped));
-        Assert.Equal(FriendKeyCarrier.Echo.Hidden, FriendKeyCarrier.Find(Sessions($"[{{\"hidden_activities\":[{{\"type\":4,\"party\":{{\"id\":\"{Key}\"}}}}]}}]"), Key));
-        Assert.Equal(FriendKeyCarrier.Echo.Absent, FriendKeyCarrier.Find(Sessions("[]"), Key));
-        Assert.Equal("none", FriendKeyCarrier.FieldsKept(Sessions("{}")));
-    }
-
-    [Theory]
-    [InlineData(4002, 100, true)]
-    [InlineData(4000, 4999, true)]
-    [InlineData(4002, 5000, false)] // long after: not the key's doing
-    [InlineData(1000, 100, false)]
-    [InlineData(4004, 100, false)]
-    [InlineData(null, 100, false)]
-    public void OnlyACloseRightAfterTheKeyBlamesIt(int? code, long ms, bool blamed) =>
-        Assert.Equal(blamed, DiscordSession.KeyRefused(code, ms));
 
     // ---- no switch (3.26.0) ----
 
@@ -400,16 +355,10 @@ public sealed class FriendLinkTests
     }
 
     [Fact]
-    public void OnlyAnActualFriendWhoIsOnlineWithAKeyIsLinked()
+    public void PresencePartyIdKeysAreIgnoredByLinkPeers()
     {
         var cache = CacheWithFriends();
-        Assert.Equal((B, Key), Assert.Single(cache.LinkPeers()));
-        Assert.True(cache.TakeLinkPeersChanged());
-        Assert.False(cache.TakeLinkPeersChanged());
-        using var offline = JsonDocument.Parse($"{{\"user\":{{\"id\":\"{B}\"}},\"status\":\"offline\",\"activities\":[]}}");
-        cache.Apply("PRESENCE_UPDATE", offline.RootElement);
         Assert.Empty(cache.LinkPeers());
-        Assert.True(cache.TakeLinkPeersChanged());
     }
 
     [Fact]
