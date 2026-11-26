@@ -8,9 +8,7 @@ use exo_kit::{
     subtle_fill, type_body, type_control, type_section, type_small,
 };
 use exo_rpc::{ActionResult, KeyPreview, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW};
-use rune::{
-    Cursor, El, Key, Transition, Tx, col, edit_access, el, row, text, text_input,
-};
+use rune::{Cursor, El, Key, Transition, Tx, col, edit_access, el, row, text, text_input};
 use serde_json::json;
 
 const KEY_STORES: [(&str, &str); 3] = [("steam", "Steam"), ("epic", "Epic"), ("gog", "GOG")];

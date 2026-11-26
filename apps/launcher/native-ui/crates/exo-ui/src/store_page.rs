@@ -2041,7 +2041,9 @@ fn specs_card(game: Option<&StoreGame>) -> El {
                     ),
                 );
             }
-            let min_val = found.and_then(|s| s.minimum.as_deref()).filter(|v| !v.is_empty());
+            let min_val = found
+                .and_then(|s| s.minimum.as_deref())
+                .filter(|v| !v.is_empty());
             let rec_val = found
                 .and_then(|s| s.recommended.as_deref())
                 .filter(|v| !v.is_empty() && Some(*v) != min_val);
@@ -2237,9 +2239,10 @@ pub fn view(s: &AppState, scale: f32) -> El {
         )
         .child(buy_panel(s, &seed, game, owned, wished, gamepad));
 
+    let hero_h = (s.chrome.window_height * 0.5).clamp(360.0, 560.0);
     let hero_stage = el()
         .w_full()
-        .min_h(360.0)
+        .min_h(hero_h)
         .clip_rounded(0.0)
         .fill(exo_kit::BG)
         .child(hero_bg)
@@ -2248,7 +2251,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .child(
             col()
                 .w_full()
-                .min_h(360.0)
+                .min_h(hero_h)
                 .pt(exo_kit::TITLEBAR_HEIGHT + 10.0)
                 .px(20.0)
                 .pb(20.0)

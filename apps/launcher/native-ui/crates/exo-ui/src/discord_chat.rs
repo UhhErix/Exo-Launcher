@@ -14,10 +14,10 @@ use exo_kit::{
     SPRING_BASE, SPRING_FLIGHT, SPRING_QUICK, bad, fg_faint, fg_muted, glass_button, glass_rim,
     glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_arrow_up, icon_bell_off,
     icon_bookmark, icon_bookmark_filled, icon_check, icon_close, icon_copy, icon_download,
-    icon_edit, icon_external, icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply,
-    icon_search, icon_smile, icon_sparkles, icon_trash, popover_transition_from, pressed_fill,
-    primary_button, scrim_fill, subtle_fill, type_body, type_control, type_label, type_page,
-    type_section, type_small,
+    icon_edit, icon_external, icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin,
+    icon_plus, icon_reply, icon_search, icon_smile, icon_sparkles, icon_trash,
+    popover_transition_from, pressed_fill, primary_button, scrim_fill, subtle_fill, type_body,
+    type_control, type_label, type_page, type_section, type_small,
 };
 use exo_rpc::{DiscordAppComponent, DiscordAttachment, DiscordEmbed, DiscordMessage};
 use rune::{

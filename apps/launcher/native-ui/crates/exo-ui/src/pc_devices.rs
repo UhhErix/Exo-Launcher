@@ -1356,6 +1356,7 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
+            .chain_scroll_offset(crate::shell::bar_scroll_watch)
             .pt(60.0)
             .px(16.0)
             .pb(36.0)

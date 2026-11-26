@@ -39,9 +39,8 @@ pub fn normalize_gif_image_url(url: &str) -> String {
     let stem = &base[..base.len() - ext_len];
 
     let is_tenor = lower.contains("tenor.com/");
-    let is_giphy_or_klipy = lower.contains("giphy.com/")
-        || lower.contains("klipy.co/")
-        || lower.contains("klipy.com/");
+    let is_giphy_or_klipy =
+        lower.contains("giphy.com/") || lower.contains("klipy.co/") || lower.contains("klipy.com/");
 
     if !is_tenor && !is_giphy_or_klipy {
         return trimmed.to_string();

@@ -9,20 +9,20 @@ use crate::state::{
     library_chip_options, now_unix_ms, title_hue,
 };
 use exo_kit::{
-    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_PRESS, SPRING_QUICK, SPRING_SMOOTH,
-    SelectTrigger, TRANSPARENT, exo_play_button, fg_faint, fg_muted, glass_button,
-    glass_button_opt, glass_icon_circle, glass_icon_circle_opt, glass_panel_fill, glass_plate_fill,
-    glass_rim, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hover_fill,
-    icon_check, icon_chevron_left, icon_chevron_right, icon_close, icon_download, icon_filter,
-    icon_grid, icon_more_horiz, icon_play, icon_plus, icon_search, popover_transition_for,
-    pressed_fill, primary_button, select_trigger, store_logo, surface_card,
-    type_body, type_control, type_first_run, type_section, type_small, type_title, warn,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
+    SPRING_FLIGHT, SPRING_MOVE, SPRING_PRESS, SPRING_QUICK, SPRING_SMOOTH, SelectTrigger,
+    TRANSPARENT, exo_play_button, fg_faint, fg_muted, glass_button, glass_button_opt,
+    glass_icon_circle, glass_icon_circle_opt, glass_panel_fill, glass_plate_fill, glass_rim,
+    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hover_fill, icon_check,
+    icon_chevron_left, icon_chevron_right, icon_close, icon_download, icon_filter, icon_grid,
+    icon_more_horiz, icon_play, icon_plus, icon_search, popover_transition_for, pressed_fill,
+    primary_button, select_trigger, surface_card, type_body, type_control, type_first_run,
+    type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, InstallProgress};
 use rune::{
-    Align, Color, Cursor, El, Side, SpringPair, SurfaceFit, TextStyle, Transition, Tx, col,
-    edit_access, el, oklch, row, text, text_input,
+    Align, Cursor, El, Side, SpringPair, SurfaceFit, TextStyle, Transition, Tx, col, edit_access,
+    el, oklch, row, text, text_input,
 };
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -633,92 +633,6 @@ fn all_games_poster_tile(game: &Game, card_w: f32, card_h: f32, s: &AppState, sc
     tile
 }
 
-fn install_banner(s: &AppState) -> Option<El> {
-    let prog = s.install_progress.as_ref()?;
-    if !prog.is_active {
-        return None;
-    }
-    let gid = prog.game_id.clone().unwrap_or_default();
-    let found = s.games.iter().find(|g| g.id == gid);
-    let title = found
-        .map(|g| g.title.clone())
-        .unwrap_or_else(|| "Downloading".into());
-    let store_badge = found.and_then(|g| store_logo(&g.store, 15.0));
-    let pct = (prog.percent.clamp(0.0, 100.0)).round() as u32;
-    let status = prog
-        .status
-        .clone()
-        .unwrap_or_else(|| format!("{} · {pct}%", prog.phase));
-    let gid_pause = gid.clone();
-    let gid_cancel = gid;
-
-    let frac = (prog.percent as f32 / 100.0).clamp(0.0, 1.0);
-
-    Some(
-        row()
-            .key("library-install-banner")
-            .w(540.0)
-            .max_w(560.0)
-            .px(16.0)
-            .py(11.0)
-            .gap(16.0)
-            .justify_between()
-            .center_y()
-            .radius(RADIUS_PANEL)
-            .continuous_corners()
-            .liquid_glass(
-                ExoGlass::ClearMedia.to_liquid_glass(false, exo_kit::glass_accessibility()),
-            )
-            .child(
-                col()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .gap(6.0)
-                    .child(
-                        row()
-                            .w_full()
-                            .gap(8.0)
-                            .center_y()
-                            .children(store_badge)
-                            .child(
-                                text(title)
-                                    .font(type_control())
-                                    .color(FG)
-                                    .truncate()
-                                    .grow(1.0)
-                                    .min_w(0.0),
-                            )
-                            .child(text(status).font(type_small()).color(fg_muted())),
-                    )
-                    .child(
-                        el().w_full()
-                            .h(4.0)
-                            .radius(RADIUS_PILL)
-                            .fill(Color::WHITE.alpha(0.14))
-                            .child(
-                                el().h(4.0)
-                                    .w_frac(frac)
-                                    .radius(RADIUS_PILL)
-                                    .fill(FG),
-                            ),
-                    ),
-            )
-            .child(
-                row()
-                    .gap(6.0)
-                    .center_y()
-                    .child(
-                        glass_button("dl-pause", "Pause", None)
-                            .on_press(move |s: &mut AppState| s.pause_install(&gid_pause)),
-                    )
-                    .child(
-                        glass_button("dl-cancel", "Cancel", None)
-                            .on_press(move |s: &mut AppState| s.cancel_install(&gid_cancel)),
-                    ),
-            ),
-    )
-}
-
 fn library_refresh_notice(s: &AppState, empty: bool) -> Option<El> {
     if empty {
         return None;
@@ -1158,7 +1072,6 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
                     library_refresh_notice(s, false)
                         .map(|n| el().w_full().px(HOME_EDGE).pb(10.0).child(n)),
                 )
-                .children(install_banner(s).map(|b| el().w_full().px(HOME_EDGE).pb(12.0).child(b)))
                 .child(foot),
         );
 
@@ -1653,7 +1566,6 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .children(
             library_refresh_notice(s, false).map(|n| el().w_full().px(10.0).pb(10.0).child(n)),
         )
-        .children(install_banner(s).map(|b| el().w_full().px(10.0).pb(12.0).child(b)))
         .child(shelf_head)
         .child(grid);
 

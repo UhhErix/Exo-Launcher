@@ -24,6 +24,7 @@ use rune::{
     row, text,
 };
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 #[derive(Debug, Clone)]
 pub struct ShellChromeState {
@@ -467,6 +468,68 @@ impl AppState {
     }
 }
 
+const BAR_HIDE_DY: f32 = -64.0;
+const BAR_PEEK_ZONE: f32 = 60.0;
+const BAR_SCROLL_START: f32 = 24.0;
+
+struct AutoBar {
+    shift: rune::Live<[f32; 2]>,
+    scroll_hidden: AtomicBool,
+    peek: AtomicBool,
+    last_y: AtomicU32,
+}
+
+thread_local! {
+    static AUTO_BAR: AutoBar = AutoBar {
+        shift: rune::Live::new([0.0, 0.0]),
+        scroll_hidden: AtomicBool::new(false),
+        peek: AtomicBool::new(false),
+        last_y: AtomicU32::new(0),
+    };
+    static BAR_ROOM: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+fn sync_auto_bar() {
+    AUTO_BAR.with(|bar| {
+        let hide = bar.scroll_hidden.load(Ordering::Relaxed) && !bar.peek.load(Ordering::Relaxed);
+        bar.shift.set([0.0, if hide { BAR_HIDE_DY } else { 0.0 }]);
+    });
+}
+
+fn reset_auto_bar() {
+    AUTO_BAR.with(|bar| {
+        bar.scroll_hidden.store(false, Ordering::Relaxed);
+        bar.last_y.store(0, Ordering::Relaxed);
+    });
+    sync_auto_bar();
+}
+
+pub fn follow_bar(scroller: El) -> El {
+    scroller.chain_scroll_offset(bar_scroll_watch)
+}
+
+pub fn bar_scroll_watch(at: rune::ScrollPos) {
+    let changed = AUTO_BAR.with(|bar| {
+        let y = at.offset[1].max(0.0);
+        let last = f32::from_bits(bar.last_y.swap(y.to_bits(), Ordering::Relaxed));
+        let was = bar.scroll_hidden.load(Ordering::Relaxed);
+        let hidden = if y < BAR_SCROLL_START {
+            false
+        } else if y > last + 2.0 {
+            true
+        } else if y < last - 6.0 {
+            false
+        } else {
+            was
+        };
+        bar.scroll_hidden.store(hidden, Ordering::Relaxed);
+        hidden != was
+    });
+    if changed {
+        sync_auto_bar();
+    }
+}
+
 fn mini_player_transition() -> Transition {
     let enter =
         Transition::offset(0.0, -8.0).combined(glass_enter(0.96, rune::Vec2::new(0.5, 0.5)));
@@ -701,7 +764,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         return el().w_full().h_full().fill(BG).child(driver_screen);
     }
 
-    if let Some(gate) = boot::boot_splash_if_needed(s, budget.overlay) {
+    if matches!(s.status, HostStatus::Error(_))
+        && let Some(gate) = boot::boot_splash_if_needed(s, budget.overlay)
+    {
         return gate;
     }
 
@@ -928,6 +993,44 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             }))
     };
 
+    let active_dl = s.install_progress.as_ref().filter(|p| p.is_active);
+    let queued_dl = s
+        .install_queue
+        .as_ref()
+        .is_some_and(|q| !q.queued_game_ids.is_empty());
+    let downloads_btn = (active_dl.is_some() || queued_dl).then(|| {
+        let pct = active_dl.map(|p| p.percent.clamp(0.0, 100.0).round() as u32);
+        row()
+            .key("top-downloads-btn")
+            .role("button")
+            .label("Downloads")
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .h(28.0)
+            .px(9.0)
+            .gap(5.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(if s.downloads.open {
+                selected_fill()
+            } else {
+                TRANSPARENT
+            })
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press(|s: &mut AppState| {
+                s.close_context_menu();
+                s.capture_menu_open = false;
+                s.open_downloads();
+            })
+            .child(exo_kit::icon_download(15.0, FG))
+            .children(pct.map(|p| text(format!("{p}%")).font(type_small()).color(FG)))
+    });
+
     let settings_active = s.room == Room::Settings;
     let settings_btn = el()
         .key("nav-settings")
@@ -966,6 +1069,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .gap(CAPTION_BUTTON_GAP)
             .center_y()
             .radius(RADIUS_PILL)
+            .children(downloads_btn)
             .child(capture_btn)
             .child(settings_btn)
             .child(divider),
@@ -1065,8 +1169,46 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         );
 
     let island_call = discord_voice::island_call_capsule(s, budget.top_bar_nav);
+    let immersive = s.room == Room::Music && s.media.music_immersion;
+    let bar_room = format!(
+        "{:?}:{:?}:{:?}:{immersive}",
+        s.room,
+        s.open_game_id,
+        s.store_has_page_open()
+    );
+    let room_changed = BAR_ROOM.with(|r| {
+        let mut r = r.borrow_mut();
+        if *r != bar_room {
+            *r = bar_room;
+            true
+        } else {
+            false
+        }
+    });
+    if room_changed {
+        reset_auto_bar();
+        if immersive {
+            AUTO_BAR.with(|bar| bar.scroll_hidden.store(true, Ordering::Relaxed));
+            sync_auto_bar();
+        }
+    }
+    let bar_pinned = has_modal_scrim
+        || s.capture_menu_open
+        || s.chrome.mini_volume_open
+        || s.context_menu.is_some()
+        || s.island.person_menu.is_some()
+        || s.input_mode == InputMode::Gamepad
+        || s.settings.reduce_motion;
+    let bar_shift = || -> rune::live::Binding<[f32; 2]> {
+        if bar_pinned {
+            (&rune::Live::new([0.0, 0.0])).into()
+        } else {
+            AUTO_BAR.with(|bar| bar.shift.smooth(SPRING_MOVE))
+        }
+    };
     let top_bar = el()
         .key("top-bar")
+        .live_offset(bar_shift())
         .window_drag()
         .glass_container(GLASS_CONTAINER_SPACING)
         .pin(Some(0.0), Some(0.0), Some(0.0), None)
@@ -1167,14 +1309,16 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 Room::Discord => discord::view(s, scale, budget),
             };
 
-            col()
-                .key(format!("{room_key}-scroll"))
-                .w_full()
-                .h_full()
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(page)
+            follow_bar(
+                col()
+                    .key(format!("{room_key}-scroll"))
+                    .w_full()
+                    .h_full()
+                    .scroll(ScrollSpec {
+                        stick_bottom: false,
+                    })
+                    .child(page),
+            )
         }
     });
 
@@ -1183,6 +1327,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .transition(room_transition(s.room_dir))
         .child(content);
+    let top_fade = top_fade.live_offset(bar_shift());
 
     let mut root = el()
         .w_full()
@@ -1192,6 +1337,13 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             if r[3] > 0.0 && (s.chrome.window_height - r[3]).abs() > 0.5 {
                 s.chrome.window_height = r[3];
             }
+        })
+        .on_pointer_move_local(|_s: &mut AppState, p, tx| {
+            let peek = p.window_y <= BAR_PEEK_ZONE;
+            if AUTO_BAR.with(|bar| bar.peek.swap(peek, Ordering::Relaxed)) != peek {
+                sync_auto_bar();
+            }
+            tx.live_only();
         })
         .child(room_stage)
         .children((!hero_bleeds_top).then_some(top_fade))
@@ -1307,7 +1459,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if !s.notices.is_empty() {
         root = root.child(notice::view(s, scale, budget.toast));
     }
-    root
+    root.children(boot::boot_splash_if_needed(s, budget.overlay))
 }
 
 #[cfg(test)]

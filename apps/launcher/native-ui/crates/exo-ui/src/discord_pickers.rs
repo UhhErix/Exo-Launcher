@@ -8,8 +8,8 @@ use exo_kit::{
     RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted, glass_button,
     glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill,
     icon_check, icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_star_filled,
-    icon_trash, modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, switch_pill,
-    type_body, type_control, type_label, type_section, type_small,
+    icon_trash, modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill,
+    switch_pill, type_body, type_control, type_label, type_section, type_small,
 };
 use exo_rpc::{DiscordMessage, DiscordReaction};
 use rune::{

@@ -16,8 +16,8 @@ use exo_kit::{
 };
 use exo_rpc::Game;
 use rune::{
-    Align, Cursor, El, FileDialogOptions, Phase, ScrollSpec, SurfaceFit, TextEdit,
-    TextStyle, col, edit_access, el, row, text, text_input,
+    Align, Cursor, El, FileDialogOptions, Phase, ScrollSpec, SurfaceFit, TextEdit, TextStyle, col,
+    edit_access, el, row, text, text_input,
 };
 use std::rc::Rc;
 

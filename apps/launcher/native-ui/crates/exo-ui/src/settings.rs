@@ -1027,6 +1027,7 @@ pub fn view(s: &AppState) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
+        .chain_scroll_offset(crate::shell::bar_scroll_watch)
         .child(
             col()
                 .key(format!("settings-pane-{:?}", s.pc.settings_section))

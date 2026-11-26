@@ -18,8 +18,8 @@ use exo_rpc::{
     DiscordChannel, DiscordGoLiveStatsEvent, DiscordSoundItem, DiscordVoiceMember, GoLiveSource,
 };
 use rune::{
-    Color, Cursor, El, ScrollSpec, SpringPair, SurfaceFit, TextEdit, Transition, col,
-    edit_access, el, row, text, text_input,
+    Color, Cursor, El, ScrollSpec, SpringPair, SurfaceFit, TextEdit, Transition, col, edit_access,
+    el, row, text, text_input,
 };
 use serde_json::json;
 

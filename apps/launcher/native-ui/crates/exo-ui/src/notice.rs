@@ -16,6 +16,7 @@ pub const SWIPE_DISMISS_DX: f32 = 106.0;
 pub const SWIPE_DISMISS_VX: f32 = 420.0;
 const SWIPE_MIN_DX: f32 = -24.0;
 pub const QUEUE_MAX: usize = 8;
+pub const NOTICE_REPEAT_SECS: f64 = 45.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NoticeActionKind {
@@ -81,6 +82,7 @@ pub struct RichNoticeSpec {
 #[derive(Debug, Clone, Default)]
 pub struct NoticeRuntimeState {
     pub queue: VecDeque<NoticeItem>,
+    pub recent: HashMap<String, f64>,
     pub said_outages: HashSet<String>,
     pub shown_discord_notices: HashMap<String, String>,
 }
@@ -481,10 +483,42 @@ impl AppState {
         true
     }
 
+    pub fn notice_is_repeat(&mut self, fingerprint: String) -> bool {
+        let now = self.clock_secs();
+        self.notice_runtime
+            .recent
+            .retain(|_, at| now - *at < NOTICE_REPEAT_SECS);
+        if self.notice_runtime.recent.contains_key(&fingerprint) {
+            return true;
+        }
+        self.notice_runtime.recent.insert(fingerprint, now);
+        false
+    }
+
     pub fn push_rich_notice(&mut self, spec: RichNoticeSpec) -> u64 {
         let sticky = spec.sticky.unwrap_or_else(|| {
             spec.tone == NoticeTone::Bad || spec.action.is_some() || spec.progress.is_some()
         });
+        let updates_existing = spec.key_id.as_ref().is_some_and(|k| {
+            self.notices
+                .iter()
+                .any(|n| n.key_id.as_deref() == Some(k.as_str()))
+                || self
+                    .notice_runtime
+                    .queue
+                    .iter()
+                    .any(|n| n.key_id.as_deref() == Some(k.as_str()))
+        });
+        if !updates_existing
+            && spec.progress.is_none()
+            && self.notice_is_repeat(format!(
+                "{}|{}",
+                spec.title.as_deref().unwrap_or(""),
+                spec.text
+            ))
+        {
+            return 0;
+        }
         let remaining = stay_for_secs(
             spec.title.as_deref(),
             spec.where_label.as_deref(),

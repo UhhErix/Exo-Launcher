@@ -2130,12 +2130,19 @@ impl AppState {
     }
 
     pub fn prune_inactive_rooms(&mut self, now: f64, rest: bool) -> bool {
-        let ttl = if rest { 10.0 } else { 30.0 };
+        let base_ttl = if rest { 10.0 } else { 30.0 };
         let active = self.current_cache_room();
         let due: Vec<CacheRoom> = self
             .room_left_at
             .iter()
-            .filter(|&(&room, &left_at)| room != active && now - left_at >= ttl)
+            .filter(|&(&room, &left_at)| {
+                let ttl = match room {
+                    CacheRoom::Library => f64::INFINITY,
+                    CacheRoom::Store => base_ttl * 6.0,
+                    _ => base_ttl,
+                };
+                room != active && now - left_at >= ttl
+            })
             .map(|(&room, _)| room)
             .collect();
         if due.is_empty() {
@@ -3004,6 +3011,11 @@ impl AppState {
         action_label: Option<String>,
         action: Option<NoticeAction>,
     ) -> u64 {
+        if self.notice_is_repeat(text.clone()) {
+            self.notice = Some(text.clone());
+            self.notice_last_synced = Some(text);
+            return 0;
+        }
         let id = self.next_notice_id;
         self.next_notice_id = self.next_notice_id.saturating_add(1);
         self.notices.push_back(NoticeItem {

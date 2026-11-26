@@ -297,24 +297,31 @@ pub(crate) fn lyrics_view(s: &AppState, large: bool) -> El {
                 .map(|p| ((p - from) / (to - from).max(1.0)).clamp(0.0, 1.0) as f32)
                 .unwrap_or(0.0);
             let dot_sz = if large { 8.0 } else { 6.0 };
-            let dots = row().gap(if large { 8.0 } else { 6.0 }).py(6.0).children((0..3).map(|d| {
-                let threshold = d as f32 / 3.0;
-                let pulse = if active_gap {
-                    ((share - threshold) * 3.0).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let dot_alpha = if active_gap {
-                    0.22 + 0.78 * pulse
-                } else {
-                    0.18
-                };
-                el().size(dot_sz, dot_sz)
-                    .radius(dot_sz * 0.5)
-                    .fill(FG.alpha(dot_alpha))
-                    .scale(if active_gap { 0.85 + 0.30 * pulse } else { 0.85 })
-                    .motion(SPRING_SMOOTH)
-            }));
+            let dots = row()
+                .gap(if large { 8.0 } else { 6.0 })
+                .py(6.0)
+                .children((0..3).map(|d| {
+                    let threshold = d as f32 / 3.0;
+                    let pulse = if active_gap {
+                        ((share - threshold) * 3.0).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    let dot_alpha = if active_gap {
+                        0.22 + 0.78 * pulse
+                    } else {
+                        0.18
+                    };
+                    el().size(dot_sz, dot_sz)
+                        .radius(dot_sz * 0.5)
+                        .fill(FG.alpha(dot_alpha))
+                        .scale(if active_gap {
+                            0.85 + 0.30 * pulse
+                        } else {
+                            0.85
+                        })
+                        .motion(SPRING_SMOOTH)
+                }));
             list = list.child(dots);
         }
         let is_active = active == Some(i);
@@ -345,7 +352,10 @@ pub(crate) fn lyrics_view(s: &AppState, large: bool) -> El {
         let other_singer =
             lead_agent.is_some() && line.agent.as_deref().is_some_and(|a| Some(a) != lead_agent);
 
-        let mut line_el = if large && synced && is_active && !line.words.is_empty()
+        let mut line_el = if large
+            && synced
+            && is_active
+            && !line.words.is_empty()
             && let Some(pos) = pos_ms
         {
             let mut full = String::new();
@@ -363,7 +373,8 @@ pub(crate) fn lyrics_view(s: &AppState, large: bool) -> El {
                 let word_color = if pos >= w.end {
                     if w.bg { FG.alpha(0.76) } else { FG }
                 } else if pos >= w.start {
-                    let frac = ((pos - w.start) / (w.end - w.start).max(40.0)).clamp(0.0, 1.0) as f32;
+                    let frac =
+                        ((pos - w.start) / (w.end - w.start).max(40.0)).clamp(0.0, 1.0) as f32;
                     let a = if w.bg {
                         0.32 + 0.44 * frac
                     } else {
