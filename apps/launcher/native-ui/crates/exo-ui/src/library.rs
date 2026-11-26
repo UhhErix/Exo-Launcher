@@ -16,12 +16,12 @@ use exo_kit::{
     glass_rim, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hover_fill,
     icon_check, icon_chevron_left, icon_chevron_right, icon_close, icon_download, icon_filter,
     icon_grid, icon_more_horiz, icon_play, icon_plus, icon_search, popover_transition_for,
-    pressed_fill, primary_button, progress_bar, select_trigger, store_logo, surface_card,
+    pressed_fill, primary_button, select_trigger, store_logo, surface_card,
     type_body, type_control, type_first_run, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, InstallProgress};
 use rune::{
-    Align, Cursor, El, LiquidGlass, Side, SpringPair, SurfaceFit, TextStyle, Transition, Tx, col,
+    Align, Color, Cursor, El, Side, SpringPair, SurfaceFit, TextStyle, Transition, Tx, col,
     edit_access, el, oklch, row, text, text_input,
 };
 use std::borrow::Cow;
@@ -451,7 +451,7 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Popover, false))
         .transition(popover_transition_for(Side::Bottom, Align::End))
         .focus_group()
         .focus_return("all-games-filter")
@@ -650,11 +650,16 @@ fn install_banner(s: &AppState) -> Option<El> {
     let gid_pause = gid.clone();
     let gid_cancel = gid;
 
+    let frac = (prog.percent as f32 / 100.0).clamp(0.0, 1.0);
+
     Some(
         row()
-            .w_full()
-            .px(14.0)
-            .py(10.0)
+            .key("library-install-banner")
+            .w(540.0)
+            .max_w(560.0)
+            .px(16.0)
+            .py(11.0)
+            .gap(16.0)
             .justify_between()
             .center_y()
             .radius(RADIUS_PANEL)
@@ -664,23 +669,42 @@ fn install_banner(s: &AppState) -> Option<El> {
             )
             .child(
                 col()
-                    .gap(5.0)
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .gap(6.0)
                     .child(
                         row()
+                            .w_full()
                             .gap(8.0)
                             .center_y()
                             .children(store_badge)
-                            .child(text(title).font(type_control()).color(FG))
+                            .child(
+                                text(title)
+                                    .font(type_control())
+                                    .color(FG)
+                                    .truncate()
+                                    .grow(1.0)
+                                    .min_w(0.0),
+                            )
                             .child(text(status).font(type_small()).color(fg_muted())),
                     )
-                    .child(progress_bar(
-                        240.0,
-                        (prog.percent as f32 / 100.0).clamp(0.0, 1.0),
-                    )),
+                    .child(
+                        el().w_full()
+                            .h(4.0)
+                            .radius(RADIUS_PILL)
+                            .fill(Color::WHITE.alpha(0.14))
+                            .child(
+                                el().h(4.0)
+                                    .w_frac(frac)
+                                    .radius(RADIUS_PILL)
+                                    .fill(FG),
+                            ),
+                    ),
             )
             .child(
                 row()
-                    .gap(8.0)
+                    .gap(6.0)
+                    .center_y()
                     .child(
                         glass_button("dl-pause", "Pause", None)
                             .on_press(move |s: &mut AppState| s.pause_install(&gid_pause)),
@@ -868,10 +892,10 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::PI,
             [
-                (0.0, BG.alpha(0.28)),
-                (0.20, BG.alpha(0.0)),
-                (0.46, BG.alpha(0.04)),
-                (0.76, BG.alpha(0.62)),
+                (0.0, BG.alpha(0.0)),
+                (0.40, BG.alpha(0.0)),
+                (0.66, BG.alpha(0.28)),
+                (0.86, BG.alpha(0.76)),
                 (1.0, BG),
             ],
         );
@@ -881,9 +905,9 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::FRAC_PI_2,
             [
-                (0.0, BG.alpha(0.68)),
-                (0.34, BG.alpha(0.24)),
-                (0.68, BG.alpha(0.0)),
+                (0.0, BG.alpha(0.46)),
+                (0.30, BG.alpha(0.14)),
+                (0.62, BG.alpha(0.0)),
             ],
         );
 

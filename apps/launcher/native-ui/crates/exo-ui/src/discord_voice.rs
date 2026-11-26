@@ -18,7 +18,7 @@ use exo_rpc::{
     DiscordChannel, DiscordGoLiveStatsEvent, DiscordSoundItem, DiscordVoiceMember, GoLiveSource,
 };
 use rune::{
-    Color, Cursor, El, LiquidGlass, ScrollSpec, SpringPair, SurfaceFit, TextEdit, Transition, col,
+    Color, Cursor, El, ScrollSpec, SpringPair, SurfaceFit, TextEdit, Transition, col,
     edit_access, el, row, text, text_input,
 };
 use serde_json::json;
@@ -667,7 +667,7 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         .radius(22.0)
         .continuous_corners()
         .transition(overlay_transition())
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
         .hit();
     let _ = blur;
 
@@ -2433,7 +2433,7 @@ pub fn voice_stage_view(
                 )
                 .on_press(move |s: &mut AppState| {
                     if is_golive {
-                        s.open_context_menu(ContextMenuTarget::DiscordGoLiveMenu, 952.0, 940.0);
+                        s.open_context_menu(ContextMenuTarget::DiscordGoLiveMenu, 0.0, 0.0);
                     } else {
                         s.open_voice_panel(VoicePanel::GoLive);
                     }

@@ -393,6 +393,7 @@ fn render_inline_text(
         .color(color)
         .w_full()
         .wrap()
+        .selectable(true)
         .span_radius(4.0);
     if !parsed.spans.is_empty() {
         t = t.spans(parsed.spans);
@@ -473,7 +474,8 @@ pub fn render_markdown_with_channels(
                     .color(hex(0xe4e4eb, 1.0))
                     .spans(vec![mono_sp])
                     .w_full()
-                    .wrap(),
+                    .wrap()
+                    .selectable(true),
             );
             blocks = blocks.child(slab);
             continue;

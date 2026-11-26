@@ -463,7 +463,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let wp4 = s.wp4_tick(now);
     let hb = s.tick_shell_heartbeat(now, tx);
     let wp9 = s.pc_wp9_tick(now);
-    let music = s.music_tick(now);
+    let music = s.music_tick_with_tx(now, Some(tx));
+    let snip = s.tick_snip_editor_reload();
     let pg = s.tick_power_guard(now);
     let hw = s.tick_hw_sensors(now);
     let web = s.poll_web_host();
@@ -478,6 +479,7 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
         || hb
         || wp9
         || music
+        || snip
         || pg
         || hw
         || web
@@ -3866,7 +3868,7 @@ fn main() {
 
     let mut app = App::new(spec)
         .args(rune_args)
-        .glass(exo_kit::EXO_GLASS_POLICY)
+        .glass(rune::GlassPolicy::Glass)
         .max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS)
         .titlebar(exo_titlebar())
         .on_rest(AppState::on_rest)

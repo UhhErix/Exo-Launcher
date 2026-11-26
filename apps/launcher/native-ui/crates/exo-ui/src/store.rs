@@ -1090,8 +1090,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
         .child(icon_search(14.0, fg_muted()))
         .child(search_input);
 

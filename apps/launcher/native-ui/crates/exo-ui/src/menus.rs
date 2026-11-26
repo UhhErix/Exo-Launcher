@@ -403,11 +403,15 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
         ),
         ContextMenuTarget::DiscordAudioQuick { input } => (
             "dc-audio-quick-menu".to_string(),
-            MenuAnchor::Element {
-                key: if *input { "dc-me-mute" } else { "dc-me-deafen" }.to_string(),
-                side: Side::Top,
-                align: Align::Start,
-                gap: 8.0,
+            if cm.x > 0.0 || cm.y > 0.0 {
+                MenuAnchor::Point(cm.x, cm.y)
+            } else {
+                MenuAnchor::Element {
+                    key: if *input { "dc-me-mute" } else { "dc-me-deafen" }.to_string(),
+                    side: Side::Top,
+                    align: Align::Start,
+                    gap: 8.0,
+                }
             },
             240.0,
         ),
@@ -424,12 +428,19 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
         _ => (
             "exo-ctx".to_string(),
             match cm.anchor_key.clone() {
-                Some(key) => MenuAnchor::Element {
-                    key,
-                    side: Side::Bottom,
-                    align: Align::End,
-                    gap: 6.0,
-                },
+                Some(key) => {
+                    let align = if key == "dc-server-head" {
+                        Align::Start
+                    } else {
+                        Align::End
+                    };
+                    MenuAnchor::Element {
+                        key,
+                        side: Side::Bottom,
+                        align,
+                        gap: 6.0,
+                    }
+                }
                 None => MenuAnchor::Point(cm.x, cm.y),
             },
             240.0,

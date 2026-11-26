@@ -16,7 +16,7 @@ use exo_kit::{
 };
 use exo_rpc::{Game, GameVariant, InstallProgress};
 use rune::{
-    Cursor, El, LiquidGlass, SpringPair, SurfaceFit, TextStyle, Transition, col, el, oklch, row,
+    Cursor, El, SpringPair, SurfaceFit, TextStyle, Transition, col, el, oklch, row,
     text,
 };
 
@@ -470,10 +470,10 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::PI,
             [
-                (0.0, BG.alpha(0.32)),
-                (0.18, BG.alpha(0.0)),
-                (0.48, BG.alpha(0.12)),
-                (0.76, BG.alpha(0.62)),
+                (0.0, BG.alpha(0.0)),
+                (0.38, BG.alpha(0.04)),
+                (0.68, BG.alpha(0.46)),
+                (0.88, BG.alpha(0.84)),
                 (1.0, BG),
             ],
         );
@@ -483,9 +483,9 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::FRAC_PI_2,
             [
-                (0.0, BG.alpha(0.62)),
-                (0.42, BG.alpha(0.20)),
-                (0.76, BG.alpha(0.0)),
+                (0.0, BG.alpha(0.48)),
+                (0.36, BG.alpha(0.16)),
+                (0.68, BG.alpha(0.0)),
             ],
         );
 
@@ -692,7 +692,7 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
                     .radius(RADIUS_PANEL)
                     .continuous_corners()
                     .clip_rounded(RADIUS_PANEL)
-                    .liquid_glass(LiquidGlass::control())
+                    .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Control, false))
                     .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                     .children(stat_items),
             );

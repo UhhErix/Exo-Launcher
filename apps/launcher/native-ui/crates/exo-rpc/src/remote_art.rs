@@ -15,7 +15,67 @@ const ALLOWED_IMAGE_HOSTS: &[&str] = &[
     "ytimg.com",
     "mzstatic.com",
     "scdn.co",
+    "tenor.com",
+    "giphy.com",
+    "klipy.co",
+    "klipy.com",
+    "imgur.com",
+    "redd.it",
+    "gfycat.com",
 ];
+
+/// Converts Tenor / Giphy / Klipy video-variant GIF URLs (`.mp4` / `.webm`)
+/// into their animated `.gif` counterparts so Rune's image decoder can fetch
+/// and animate them natively.
+pub fn normalize_gif_image_url(url: &str) -> String {
+    let trimmed = url.trim();
+    let (base, query) = match trimmed.split_once('?') {
+        Some((b, q)) => (b, Some(q)),
+        None => (trimmed, None),
+    };
+    let lower = base.to_ascii_lowercase();
+    let is_video_ext = lower.ends_with(".mp4") || lower.ends_with(".webm");
+    if !is_video_ext {
+        return trimmed.to_string();
+    }
+    let ext_len = if lower.ends_with(".webm") { 5 } else { 4 };
+    let stem = &base[..base.len() - ext_len];
+
+    let is_tenor = lower.contains("tenor.com/");
+    let is_giphy_or_klipy = lower.contains("giphy.com/")
+        || lower.contains("klipy.co/")
+        || lower.contains("klipy.com/");
+
+    if !is_tenor && !is_giphy_or_klipy {
+        return trimmed.to_string();
+    }
+
+    let mut out = if is_tenor {
+        // Tenor embeds encode format in the last 5 chars of the media-id path
+        // segment (e.g. `...AAAPo/name.mp4`, `...AAAP1/name.mp4`, `...AAAP3/name.mp4`).
+        // Switching that suffix to `AAAAC` returns the animated `.gif`.
+        let mut converted = format!("{stem}.gif");
+        for code in [
+            "AAAPo/", "AAAP1/", "AAAP3/", "AAAPs/", "AAAP0/", "AAAP2/", "AAAP4/", "AAAPv/",
+        ] {
+            if let Some(pos) = converted.find(code) {
+                converted.replace_range(pos..pos + code.len(), "AAAAC/");
+                break;
+            }
+        }
+        converted
+    } else {
+        format!("{stem}.gif")
+    };
+
+    if let Some(q) = query
+        && !q.is_empty()
+    {
+        out.push('?');
+        out.push_str(q);
+    }
+    out
+}
 
 const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CACHE_BYTES: u64 = 150 * 1024 * 1024;
@@ -369,10 +429,37 @@ mod tests {
     #[test]
     fn allowlist_accepts_steam_cdn_and_rejects_local_or_arbitrary_hosts() {
         assert!(parse_allowed_https("https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1091500/header.jpg").is_some());
+        assert!(parse_allowed_https("https://media.tenor.com/abcAAAAC/wave.gif").is_some());
+        assert!(parse_allowed_https("https://media1.giphy.com/media/xyz/giphy.gif").is_some());
+        assert!(parse_allowed_https("https://static.klipy.com/ii/1/a.gif").is_some());
         assert!(parse_allowed_https("http://shared.fastly.steamstatic.com/a.jpg").is_none());
         assert!(parse_allowed_https("https://127.0.0.1/secret.png").is_none());
         assert!(parse_allowed_https("https://evil.example/a.png").is_none());
         assert!(parse_allowed_https("https://shared.fastly.steamstatic.com:8443/a.jpg").is_none());
+    }
+
+    #[test]
+    fn normalize_gif_image_url_rewrites_tenor_and_giphy_video_variants() {
+        assert_eq!(
+            normalize_gif_image_url("https://media.tenor.com/abc123AAAPo/cat-dance.mp4"),
+            "https://media.tenor.com/abc123AAAAC/cat-dance.gif"
+        );
+        assert_eq!(
+            normalize_gif_image_url("https://media.tenor.com/abc123AAAP3/cat-dance.webm?c=1"),
+            "https://media.tenor.com/abc123AAAAC/cat-dance.gif?c=1"
+        );
+        assert_eq!(
+            normalize_gif_image_url("https://media.giphy.com/media/123/giphy.mp4"),
+            "https://media.giphy.com/media/123/giphy.gif"
+        );
+        assert_eq!(
+            normalize_gif_image_url("https://media.tenor.com/abc123AAAAM/cat-dance.gif"),
+            "https://media.tenor.com/abc123AAAAM/cat-dance.gif"
+        );
+        assert_eq!(
+            normalize_gif_image_url("https://cdn.discordapp.com/attachments/1/2/clip.mp4"),
+            "https://cdn.discordapp.com/attachments/1/2/clip.mp4"
+        );
     }
 
     #[test]

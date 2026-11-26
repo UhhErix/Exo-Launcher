@@ -17,7 +17,7 @@ use exo_rpc::{
     NotesReadReply, NotesSaveAsReply, NotesSaveReply, NotesSpellReply, NotesTextFilesReply,
 };
 use rune::{
-    Color, Cursor, El, Key, KeyEvent, LiquidGlass, ScrollSpec, SurfaceFit, TextEdit, TextStyle, Tx,
+    Color, Cursor, El, Key, KeyEvent, ScrollSpec, SurfaceFit, TextEdit, TextStyle, Tx,
     col, edit_access, el, row, text, text_input,
 };
 use serde_json::json;
@@ -1956,7 +1956,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         .press_on_down()
                         .size(32.0, 32.0)
                         .radius(RADIUS_PILL)
-                        .liquid_glass(LiquidGlass::control())
+                        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Control, true))
                         .hover(hover_fill())
                         .center()
                         .on_press(|s: &mut AppState| {

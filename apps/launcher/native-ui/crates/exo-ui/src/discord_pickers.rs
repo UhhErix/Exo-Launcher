@@ -576,9 +576,10 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
             .gif_favorites
             .iter()
             .map(|g| {
+                let anim = exo_rpc::remote_art::normalize_gif_image_url(&g.src);
                 (
                     g.url.clone(),
-                    g.src.clone(),
+                    anim,
                     "Favorite GIF".into(),
                     g.width,
                     g.height,
@@ -592,11 +593,13 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
             .gifs
             .iter()
             .map(|g| {
-                let thumb = g
-                    .preview
-                    .clone()
-                    .or_else(|| g.gif_src.clone())
-                    .unwrap_or_else(|| g.src.clone());
+                let raw = g
+                    .gif_src
+                    .as_deref()
+                    .filter(|u| !u.is_empty())
+                    .or_else(|| g.preview.as_deref().filter(|u| !u.is_empty()))
+                    .unwrap_or(&g.src);
+                let thumb = exo_rpc::remote_art::normalize_gif_image_url(raw);
                 (
                     g.url.clone(),
                     thumb,

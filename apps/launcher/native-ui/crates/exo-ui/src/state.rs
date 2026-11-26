@@ -2626,6 +2626,7 @@ impl AppState {
     pub fn close_store_game_tx(&mut self, tx: &mut Tx) {
         tx.unclipped_flights();
         self.store_close_game_full();
+        tx.scroll_to("room-store-scroll", 0.0, 0.0);
     }
 
     pub fn is_confirm_armed(&self, key: &str) -> bool {

@@ -8,19 +8,19 @@ use crate::music_pages::{
 use crate::music_sound::{lyrics_view, music_menus_overlay, side_panel, song_artists_row};
 use crate::state::{AppState, Room};
 use exo_kit::{
-    BG, ExoGlass, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted,
-    glass_button, glass_capsule, glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top,
-    good, hover_fill, icon_back, icon_chevron_left, icon_compass, icon_folder,
-    icon_four_point_sparkle, icon_home, icon_list_music, icon_maximize, icon_more_horiz,
-    icon_music, icon_pause, icon_pin, icon_play, icon_plus, icon_radio, icon_search,
-    icon_skip_back, icon_skip_forward, icon_video, icon_volume, icon_volume_low, icon_volume_off,
-    pressed_fill, slider_track,
+    BG, ExoGlass, FG, GAP, GLASS_CONTAINER_SPACING, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
+    RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, SPRING_SMOOTH, TITLEBAR_HEIGHT,
+    TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, glass_button, glass_capsule, glass_rim,
+    good, hover_fill, icon_back,
+    icon_chevron_left, icon_compass, icon_folder, icon_four_point_sparkle, icon_home,
+    icon_list_music, icon_maximize, icon_more_horiz, icon_music, icon_pause, icon_pin, icon_play,
+    icon_plus, icon_radio, icon_search, icon_skip_back, icon_skip_forward, icon_video,
+    icon_volume, icon_volume_low, icon_volume_off, pressed_fill, slider_track,
 };
 use exo_rpc::{PlayerCard, PlayerLink, PlayerSection};
 use rune::{
-    Color, Cursor, El, Key, KeyEvent, Phase, ScrollSpec, Shape, SurfaceFit, TextStyle, Tx, canvas,
-    col, edit_access, el, row, text, text_input,
+    Color, Cursor, El, Key, KeyEvent, Phase, ScrollSpec, SpringPair, SurfaceFit, TextStyle,
+    Transition, Tx, col, edit_access, el, oklch, row, text, text_input,
 };
 
 const SIDEBAR_W: f32 = 272.0;
@@ -63,139 +63,69 @@ pub(crate) fn track_bg_fill() -> Color {
     Color::WHITE.alpha(0.18)
 }
 
-fn strokes(size: f32, lines: &[&[[f32; 2]]], color: Color) -> El {
-    let width = if size <= 16.0 { 1.8 } else { 2.0 };
-    let mut shape = Shape::new().view_box(24.0, 24.0);
-    for pts in lines {
-        shape = shape.stroke(pts.to_vec(), width, color);
-    }
-    canvas(shape).size(size, size)
-}
-
-fn circle_pts(cx: f32, cy: f32, r: f32, steps: usize) -> Vec<[f32; 2]> {
-    (0..=steps)
-        .map(|i| {
-            let a = (i as f32 / steps as f32) * std::f32::consts::TAU;
-            [cx + r * a.cos(), cy + r * a.sin()]
-        })
-        .collect()
-}
-
 fn icon_shuffle(size: f32, color: Color) -> El {
-    strokes(
-        size,
-        &[
-            &[[4.0, 17.0], [8.0, 17.0], [16.0, 7.0], [20.0, 7.0]],
-            &[[17.0, 4.5], [20.0, 7.0], [17.0, 9.5]],
-            &[[4.0, 7.0], [8.0, 7.0], [10.5, 10.2]],
-            &[[13.5, 13.8], [16.0, 17.0], [20.0, 17.0]],
-            &[[17.0, 14.5], [20.0, 17.0], [17.0, 19.5]],
-        ],
-        color,
-    )
+    exo_kit::icon_shuffle(size, color)
 }
 
 fn icon_repeat(size: f32, color: Color) -> El {
-    strokes(
-        size,
-        &[
-            &[[17.0, 3.0], [20.0, 6.0], [17.0, 9.0]],
-            &[[4.0, 11.0], [4.0, 8.0], [6.0, 6.0], [20.0, 6.0]],
-            &[[7.0, 21.0], [4.0, 18.0], [7.0, 15.0]],
-            &[[20.0, 13.0], [20.0, 16.0], [18.0, 18.0], [4.0, 18.0]],
-        ],
-        color,
-    )
+    exo_kit::icon_repeat(size, color)
 }
 
+const ICON_REPEAT_ONE_SVG: rune::Icon = rune::Icon {
+    name: "exo-repeat-one-130",
+    view: 24.0,
+    body: r#"<g fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V9C3 7.34315 4.34315 6 6 6H21M18 3L21 6L18 9M21 12V15C21 16.65685 19.65685 18 18 18H3M6 21L3 18L6 15M12 9.5V14.5M10.7 10.6L12 9.5"/></g>"#,
+};
+
 fn icon_repeat_one(size: f32, color: Color) -> El {
-    strokes(
-        size,
-        &[
-            &[[17.0, 3.0], [20.0, 6.0], [17.0, 9.0]],
-            &[[4.0, 11.0], [4.0, 8.0], [6.0, 6.0], [20.0, 6.0]],
-            &[[7.0, 21.0], [4.0, 18.0], [7.0, 15.0]],
-            &[[20.0, 13.0], [20.0, 16.0], [18.0, 18.0], [4.0, 18.0]],
-            &[[12.0, 9.5], [12.0, 14.5]],
-        ],
-        color,
-    )
+    rune::icon(&ICON_REPEAT_ONE_SVG, size).color(color)
 }
 
 fn icon_disc(size: f32, color: Color) -> El {
-    let shape = Shape::new()
-        .view_box(24.0, 24.0)
-        .stroke(circle_pts(12.0, 12.0, 9.0, 20), 1.8, color)
-        .stroke(circle_pts(12.0, 12.0, 2.5, 12), 1.8, color);
-    canvas(shape).size(size, size)
+    exo_kit::icon_disc(size, color)
 }
 
 fn icon_queue(size: f32, color: Color) -> El {
-    strokes(
-        size,
-        &[
-            &[[9.0, 6.0], [20.0, 6.0]],
-            &[[9.0, 12.0], [20.0, 12.0]],
-            &[[9.0, 18.0], [20.0, 18.0]],
-            &[[4.0, 6.0], [5.5, 6.0]],
-            &[[4.0, 12.0], [5.5, 12.0]],
-            &[[4.0, 18.0], [5.5, 18.0]],
-        ],
-        color,
-    )
+    exo_kit::icon_queue(size, color)
 }
 
 pub(crate) fn icon_chevron_up(size: f32, color: Color) -> El {
-    strokes(size, &[&[[6.0, 15.0], [12.0, 9.0], [18.0, 15.0]]], color)
+    exo_kit::icon_chevron_up(size, color)
 }
+
+const ICON_HEART_OUTLINE_SVG: rune::Icon = rune::Icon {
+    name: "exo-heart-outline-130",
+    view: 24.0,
+    body: r#"<g fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.2C12 20.2 3.5 14.9 3.5 8.9C3.5 6.1 5.7 4 8.3 4C10 4 11.4 4.9 12 6.2C12.6 4.9 14 4 15.7 4C18.3 4 20.5 6.1 20.5 8.9C20.5 14.9 12 20.2 12 20.2Z"/></g>"#,
+};
 
 pub(crate) fn icon_heart(size: f32, color: Color, filled: bool) -> El {
-    let pts = vec![
-        [12.0, 20.0],
-        [5.0, 13.5],
-        [4.0, 9.5],
-        [5.5, 6.0],
-        [8.5, 5.0],
-        [12.0, 7.5],
-        [15.5, 5.0],
-        [18.5, 6.0],
-        [20.0, 9.5],
-        [19.0, 13.5],
-        [12.0, 20.0],
-    ];
-    let shape = if filled {
-        Shape::new().view_box(24.0, 24.0).fill(pts, color)
+    if filled {
+        exo_kit::icon_heart(size, color)
     } else {
-        Shape::new().view_box(24.0, 24.0).stroke(pts, 1.8, color)
-    };
-    canvas(shape).size(size, size)
+        rune::icon(&ICON_HEART_OUTLINE_SVG, size).color(color)
+    }
 }
 
+const ICON_THUMBS_DOWN_OUTLINE_SVG: rune::Icon = rune::Icon {
+    name: "exo-thumbs-down-outline-130",
+    view: 24.0,
+    body: r#"<g fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V4H8.2C7.2 4 6.3 4.6 6 5.6L4.2 11.4C3.8 12.7 4.8 14 6.1 14H11L10.3 18.4C10.1 19.3 10.8 20.2 11.7 20.2C12.3 20.2 12.8 19.9 13.1 19.4L17 14ZM20 4V14"/></g>"#,
+};
+
+const ICON_THUMBS_DOWN_SOLID_SVG: rune::Icon = rune::Icon {
+    name: "exo-thumbs-down-solid",
+    view: 24.0,
+    body: r#"<g fill="currentColor" stroke="none"><path d="M17 14V4H8.2C7.2 4 6.3 4.6 6 5.6L4.2 11.4C3.8 12.7 4.8 14 6.1 14H11L10.3 18.4C10.1 19.3 10.8 20.2 11.7 20.2C12.3 20.2 12.8 19.9 13.1 19.4L17 14Z"/><path d="M19.2 4C19.2 3.55 19.55 3.2 20 3.2C20.45 3.2 20.8 3.55 20.8 4V14C20.8 14.45 20.45 14.8 20 14.8C19.55 14.8 19.2 14.45 19.2 14V4Z"/></g>"#,
+};
+
 fn icon_thumbs_down(size: f32, color: Color, filled: bool) -> El {
-    let pts = vec![
-        [17.0, 14.0],
-        [17.0, 4.0],
-        [7.0, 4.0],
-        [4.5, 11.5],
-        [6.0, 14.0],
-        [11.0, 14.0],
-        [10.0, 19.5],
-        [12.5, 20.5],
-        [17.0, 14.0],
-    ];
-    let shape = if filled {
-        Shape::new().view_box(24.0, 24.0).fill(pts, color).stroke(
-            vec![[20.0, 4.0], [20.0, 14.0]],
-            2.0,
-            color,
-        )
+    let glyph = if filled {
+        &ICON_THUMBS_DOWN_SOLID_SVG
     } else {
-        Shape::new()
-            .view_box(24.0, 24.0)
-            .stroke(pts, 1.8, color)
-            .stroke(vec![[20.0, 4.0], [20.0, 14.0]], 1.8, color)
+        &ICON_THUMBS_DOWN_OUTLINE_SVG
     };
-    canvas(shape).size(size, size)
+    rune::icon(glyph, size).color(color)
 }
 
 pub(crate) fn render_art(
@@ -1512,6 +1442,7 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
     )
     .on_press(|s: &mut AppState| {
         s.media.music_immersion = !s.media.music_immersion;
+        s.media.music_lyrics_scrolled_idx = None;
         if s.media.music_immersion && !s.media.music_track_uri.is_empty() {
             let uri = s.media.music_track_uri.clone();
             s.load_music_lyrics(&uri);
@@ -1599,32 +1530,168 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         .child(pill)
 }
 
+fn immersion_eq_bars(playing: bool, t: f32, reduce_motion: bool) -> El {
+    const PHASES: [(f32, f32); 4] = [(4.8, 0.0), (6.3, 1.4), (5.5, 2.7), (7.1, 0.9)];
+    row()
+        .key("music-immersion-eq")
+        .h(16.0)
+        .gap(3.0)
+        .items_end()
+        .children(PHASES.into_iter().enumerate().map(|(i, (freq, phase))| {
+            let bar_h = if playing && !reduce_motion {
+                let wave = 0.5 + 0.5 * (t * freq + phase).sin();
+                let harm = 0.5 + 0.5 * (t * (freq * 1.61) + phase * 1.7).cos();
+                4.0 + 12.0 * (0.65 * wave + 0.35 * harm)
+            } else if playing {
+                match i {
+                    0 => 9.0,
+                    1 => 14.0,
+                    2 => 11.0,
+                    _ => 7.0,
+                }
+            } else {
+                3.5
+            };
+            el().w(3.0)
+                .h(bar_h)
+                .radius(1.5)
+                .fill(if playing { FG.alpha(0.90) } else { fg_faint() })
+                .motion(SPRING_QUICK)
+        }))
+}
+
 fn immersion_view(s: &AppState, scale: f32) -> El {
     let pb = s.media.playback.as_ref().filter(|p| p.has_track());
+    let playing = pb.is_some_and(|p| p.is_playing());
+    let reduce_motion = s.settings.reduce_motion;
+    let t = s.media.music_clock_s as f32;
     let title = s
         .media
         .music_player_title
         .as_deref()
         .or_else(|| pb.map(|p| p.title.as_str()))
         .unwrap_or("Nothing playing");
+    let track_key = if !s.media.music_track_uri.is_empty() {
+        s.media.music_track_uri.as_str()
+    } else {
+        title
+    };
     let pos_ms = s.media.current_position_ms();
     let dur_ms = pb.and_then(|p| p.duration_ms);
     let can_seek = pb.is_some_and(|p| p.can_seek);
     let has_lyrics = !s.media.music_track_uri.is_empty()
         && (!s.media.music_lyrics_lines.is_empty() || s.media.music_lyrics_loading);
 
-    let art_size: f32 = if has_lyrics { 520.0 } else { 560.0 };
-    let title_font = TextStyle::new(28.0 * text_scale(s), 600.0).lh(28.0 * text_scale(s) * 1.2);
+    let art_size: f32 = if has_lyrics { 440.0 } else { 496.0 };
+    let title_font = TextStyle::new(28.0 * text_scale(s), 700.0).lh(28.0 * text_scale(s) * 1.22);
+    let hue = crate::state::title_hue(title);
+    let art_img = s.current_playback_art(scale);
+
+    // Living full-bleed backdrop: artwork wash + 3 slowly orbiting radial color fields (zero backdrop-blur cost).
+    let (orb1_x, orb1_y, orb1_s) = if playing && !reduce_motion {
+        (
+            (t * 0.34).sin() * 110.0,
+            (t * 0.25).cos() * 75.0,
+            1.0 + 0.08 * (t * 0.42).sin(),
+        )
+    } else {
+        (-40.0, -30.0, 1.0)
+    };
+    let (orb2_x, orb2_y, orb2_s) = if playing && !reduce_motion {
+        (
+            (t * 0.28 + 2.1).cos() * 130.0,
+            (t * 0.36 + 1.2).sin() * 85.0,
+            1.0 + 0.09 * (t * 0.35 + 1.6).cos(),
+        )
+    } else {
+        (60.0, 40.0, 1.0)
+    };
+    let (orb3_x, orb3_y) = if playing && !reduce_motion {
+        ((t * 0.22 + 4.0).sin() * 90.0, (t * 0.31 + 3.0).cos() * 60.0)
+    } else {
+        (0.0, 20.0)
+    };
+
+    let mut art_bg = el()
+        .key(format!("music-immerse-bg-{track_key}"))
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .transition(Transition::opacity().springs(SpringPair::new(SPRING_SMOOTH, SPRING_SMOOTH)));
+    if let Some(ref img) = art_img {
+        art_bg = art_bg
+            .pixels_fit(img.pixels(), SurfaceFit::Fill)
+            .opacity(if playing { 0.36 } else { 0.24 })
+            .scale(if playing { 1.08 } else { 1.03 })
+            .motion(SPRING_SMOOTH);
+    } else {
+        art_bg = art_bg.linear_gradient(
+            0.35,
+            [
+                (0.0, oklch(0.32, 0.14, hue).alpha(0.70)),
+                (1.0, BG),
+            ],
+        );
+    }
+
+    let orb1 = el()
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .offset(orb1_x, orb1_y)
+        .scale(orb1_s)
+        .radial_gradient(
+            [420.0, 320.0],
+            [680.0, 560.0],
+            [
+                (0.0, oklch(0.56, 0.20, hue).alpha(if playing { 0.44 } else { 0.26 })),
+                (0.52, oklch(0.38, 0.14, (hue + 24.0) % 360.0).alpha(if playing { 0.22 } else { 0.12 })),
+                (1.0, TRANSPARENT),
+            ],
+        );
+    let orb2 = el()
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .offset(orb2_x, orb2_y)
+        .scale(orb2_s)
+        .radial_gradient(
+            [1380.0, 680.0],
+            [740.0, 600.0],
+            [
+                (0.0, oklch(0.50, 0.19, (hue + 56.0) % 360.0).alpha(if playing { 0.38 } else { 0.20 })),
+                (0.55, oklch(0.32, 0.12, (hue + 88.0) % 360.0).alpha(if playing { 0.16 } else { 0.08 })),
+                (1.0, TRANSPARENT),
+            ],
+        );
+    let orb3 = el()
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .offset(orb3_x, orb3_y)
+        .radial_gradient(
+            [920.0, 180.0],
+            [560.0, 440.0],
+            [
+                (0.0, oklch(0.46, 0.16, (hue + 306.0) % 360.0).alpha(if playing { 0.28 } else { 0.14 })),
+                (1.0, TRANSPARENT),
+            ],
+        );
+    let scrim = el()
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .linear_gradient(
+            std::f32::consts::PI,
+            [
+                (0.0, BG.alpha(0.24)),
+                (0.48, BG.alpha(0.46)),
+                (1.0, BG.alpha(0.84)),
+            ],
+        );
 
     let leave_btn = bar_icon_btn(
         "music-immersion-close",
         "Leave full window",
-        icon_maximize(16.0, fg_muted()),
-        32.0,
+        icon_maximize(16.0, FG.alpha(0.82)),
+        34.0,
         false,
         false,
     )
-    .on_press(|s: &mut AppState| s.media.music_immersion = false);
+    .on_press(|s: &mut AppState| {
+        s.media.music_immersion = false;
+        s.media.music_lyrics_scrolled_idx = None;
+    });
 
     let progress = row()
         .w_full()
@@ -1633,7 +1700,7 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         .child(
             text(format_time_clock(pos_ms))
                 .font(scaled_small(s))
-                .color(fg_muted())
+                .color(FG.alpha(0.72))
                 .w(40.0),
         )
         .child(seek_slider(
@@ -1646,7 +1713,7 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         .child(
             text(format_time_clock(dur_ms.map(|d| d as f64)))
                 .font(scaled_small(s))
-                .color(fg_muted())
+                .color(FG.alpha(0.72))
                 .w(40.0),
         );
 
@@ -1659,78 +1726,117 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
             (s.media.music_volume * 100.0).round() as i32
         }
     );
-    let vol = row()
-        .h(34.0)
-        .pl(8.0)
-        .pr(12.0)
-        .gap(8.0)
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .center_y()
-        .child(
-            bar_icon_btn(
-                "music-immersion-mute",
-                if muted { "Unmute music" } else { "Mute music" },
-                if muted {
-                    icon_volume_off(16.0, fg_muted())
-                } else {
-                    icon_volume(16.0, FG)
-                },
-                26.0,
-                false,
-                false,
+    let vol = apply_glass(
+        row()
+            .h(36.0)
+            .pl(8.0)
+            .pr(14.0)
+            .gap(8.0)
+            .radius(RADIUS_PILL)
+            .center_y()
+            .child(
+                bar_icon_btn(
+                    "music-immersion-mute",
+                    if muted { "Unmute music" } else { "Mute music" },
+                    if muted {
+                        icon_volume_off(16.0, fg_muted())
+                    } else {
+                        icon_volume(16.0, FG)
+                    },
+                    26.0,
+                    false,
+                    false,
+                )
+                .on_press(|s: &mut AppState| s.music_toggle_mute()),
             )
-            .on_press(|s: &mut AppState| s.music_toggle_mute()),
-        )
-        .child(volume_slider(
-            "music-immersion",
-            112.0,
-            s.media.music_volume,
-            muted,
-        ))
-        .child(text(vol_pct).font(scaled_small(s)).color(fg_muted()));
+            .child(volume_slider(
+                "music-immersion",
+                124.0,
+                s.media.music_volume,
+                muted,
+            ))
+            .child(text(vol_pct).font(scaled_small(s)).color(FG.alpha(0.75))),
+        ExoGlass::ClearMedia,
+        false,
+    );
 
-    let controls_row = row()
+    let controls_dock = apply_glass(
+        row()
+            .key("music-immersion-controls")
+            .w_full()
+            .h(52.0)
+            .px(12.0)
+            .gap(8.0)
+            .radius(RADIUS_PILL)
+            .center_y()
+            .child(
+                row()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .child(verdict_controls(s, "music-immersion")),
+            )
+            .child(playback_controls(s, "music-immersion"))
+            .child(row().grow(1.0).min_w(0.0).justify_end().child(leave_btn)),
+        ExoGlass::Bar,
+        false,
+    );
+
+    // Living album art card: breathes gently between playing (1.0 + deep shadow) and paused (0.90 settled).
+    let art_card = el()
+        .key(format!("music-immerse-art-{track_key}"))
+        .size(art_size, art_size)
+        .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .border(1.0, Color::WHITE.alpha(0.14))
+        .shadow(
+            0.0,
+            if playing { 30.0 } else { 12.0 },
+            Color::BLACK.alpha(if playing { 0.62 } else { 0.36 }),
+        )
+        .scale(if playing { 1.0 } else { 0.91 })
+        .motion(SPRING_SMOOTH)
+        .transition(
+            Transition::scale(0.94)
+                .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
+        )
+        .child(render_art_image(
+            art_img,
+            Some(art_size),
+            RADIUS_PANEL,
+            false,
+        ));
+
+    let title_row = row()
         .w_full()
-        .gap(8.0)
+        .gap(12.0)
+        .justify_between()
         .center_y()
         .child(
-            row()
+            col()
                 .grow(1.0)
                 .min_w(0.0)
-                .child(verdict_controls(s, "music-immersion")),
+                .gap(3.0)
+                .child(text(title).font(title_font).color(FG).truncate())
+                .child(song_artists_row(s, pb, false)),
         )
-        .child(playback_controls(s, "music-immersion"))
-        .child(row().grow(1.0).min_w(0.0).justify_end().child(leave_btn));
+        .child(immersion_eq_bars(playing, t, reduce_motion));
 
     let song_col = col()
         .w(art_size)
         .items_center()
-        .gap(16.0)
-        .child(render_art_image(
-            s.current_playback_art(scale),
-            Some(art_size),
-            RADIUS_PANEL,
-            false,
-        ))
-        .child(
-            col()
-                .w_full()
-                .items_center()
-                .gap(4.0)
-                .child(text(title).font(title_font).color(FG).truncate())
-                .child(song_artists_row(s, pb, true)),
-        )
+        .gap(18.0)
+        .glass_container(GLASS_CONTAINER_SPACING)
+        .child(art_card)
+        .child(title_row)
         .child(progress)
-        .child(controls_row)
+        .child(controls_dock)
         .child(vol);
 
     let mut stage = row()
         .w_full()
         .h_full()
         .pt(TITLEBAR_HEIGHT + 24.0)
-        .pb(48.0)
+        .pb(40.0)
         .px(64.0)
         .gap(64.0)
         .center()
@@ -1740,7 +1846,7 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         stage = stage.child(
             col()
                 .key("music-immersion-lyrics")
-                .w(520.0)
+                .w(540.0)
                 .max_h(760.0)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
@@ -1753,6 +1859,15 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         .w_full()
         .h_full()
         .fill(BG)
+        .transition(
+            Transition::scale(0.97)
+                .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
+        )
+        .child(art_bg)
+        .child(orb1)
+        .child(orb2)
+        .child(orb3)
+        .child(scrim)
         .child(stage)
 }
 
@@ -2627,6 +2742,82 @@ mod tests {
         assert_eq!(
             rt.state.pc.settings_section,
             crate::pc_state::SettingsSection::Updates
+        );
+    }
+
+    #[test]
+    fn immersion_view_renders_living_eq_karaoke_and_zero_backdrop_blur() {
+        use exo_rpc::{LyricsLine, LyricsWord, MusicPlayback};
+        use rune::render::KIND_BACKDROP_BLUR;
+
+        let mut state = AppState::default();
+        state.room = Room::Music;
+        state.media.music_room_state = MusicRoomState::Running;
+        state.media.music_immersion = true;
+        state.media.music_track_uri = "am:songs:1".into();
+        state.media.music_player_title = Some("Starlight".into());
+        state.media.music_clock_s = 1.5;
+        state.media.music_playback_anchor_s = 0.0;
+        state.media.playback = Some(MusicPlayback {
+            title: "Starlight".into(),
+            artist: "Muse".into(),
+            status: "playing".into(),
+            position_ms: Some(2500),
+            duration_ms: Some(240_000),
+            can_seek: true,
+            can_play: true,
+            can_pause: true,
+            ..Default::default()
+        });
+        state.media.music_lyrics_synced = true;
+        state.media.music_lyrics_lines = vec![
+            LyricsLine {
+                start: 1000.0,
+                text: "Far away".into(),
+                words: vec![
+                    LyricsWord {
+                        start: 1000.0,
+                        end: 2000.0,
+                        text: "Far".into(),
+                        bg: false,
+                    },
+                    LyricsWord {
+                        start: 2000.0,
+                        end: 3500.0,
+                        text: "away".into(),
+                        bg: false,
+                    },
+                ],
+                agent: None,
+            },
+            LyricsLine {
+                start: 6000.0,
+                text: "This ship is taking me".into(),
+                words: vec![],
+                agent: None,
+            },
+        ];
+
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        assert!(rt.presented("music-immersion-room").is_some());
+        assert!(rt.presented("music-immersion-eq").is_some());
+        assert!(rt.presented("music-immersion-controls").is_some());
+        assert!(rt.presented("music-lyric-0").is_some());
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert_eq!(blurs, 0, "immersive music player should use zero backdrop blurs");
+        let glass_count = rt.liquid_glass_frame().shapes.len();
+        assert!(
+            (2..=exo_kit::EXO_MAX_BACKDROP_BLURS).contains(&glass_count),
+            "expected real Liquid Glass controls in immersive mode, got {glass_count}"
         );
     }
 }

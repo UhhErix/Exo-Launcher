@@ -639,7 +639,7 @@ fn mini_volume_popover_layers(s: &AppState, blur: bool) -> Vec<El> {
         });
 
     let card = glass_panel_opt("mini-volume-popover", 216.0, blur)
-        .pin(None, Some(52.0), Some(212.0), None)
+        .anchored_fit("mini-mute", Side::Bottom, Align::End, 8.0)
         .focus_group()
         .radius(RADIUS_CARD)
         .px(10.0)
@@ -1134,6 +1134,10 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let full_bleed_home =
         s.room == Room::Library && s.open_game_id.is_none() && !s.library_all_games;
+    let hero_bleeds_top = full_bleed_home
+        || (s.room == Room::Library && s.open_game_id.is_some())
+        || (s.room == Room::Store && s.store_has_page_open())
+        || (s.room == Room::Music && s.media.music_immersion);
 
     let content = boot::render_room_guarded(s, s.room.label(), || {
         if s.room == Room::Discord {
@@ -1160,22 +1164,14 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 Room::Discord => discord::view(s, scale, budget),
             };
 
-            let scrolled = col()
+            col()
                 .key(format!("{room_key}-scroll"))
                 .w_full()
                 .h_full()
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(page);
-            if s.room == Room::Store && s.store_has_page_open() {
-                el().w_full()
-                    .h_full()
-                    .pt(exo_kit::TITLEBAR_HEIGHT * 2.0)
-                    .child(scrolled)
-            } else {
-                scrolled
-            }
+                .child(page)
         }
     });
 
@@ -1190,7 +1186,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .h_full()
         .fill(BG)
         .child(room_stage)
-        .child(top_fade)
+        .children((!hero_bleeds_top).then_some(top_fade))
         .child(top_bar);
 
     if !s.media.captures_open && s.room == Room::Discord {

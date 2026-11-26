@@ -12,7 +12,7 @@ use exo_kit::{
     type_small, type_title,
 };
 use exo_rpc::{HostEvent, UpdateProgress};
-use rune::{Cursor, El, LiquidGlass, ScrollSpec, TextStyle, Transition, col, el, row, text};
+use rune::{Cursor, El, ScrollSpec, TextStyle, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::sync::OnceLock;
 
@@ -1146,7 +1146,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(false, |s: &mut AppState| s.close_whats_new())

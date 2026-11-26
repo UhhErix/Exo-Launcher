@@ -1578,8 +1578,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
     let mut auto_tune_card = col()
         .key("exo-ai-auto-tune-card")
         .w_full()
-        .pt(16.0)
-        .px(24.0)
+        .pt(14.0)
+        .px(20.0)
         .pb(6.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
@@ -1588,8 +1588,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(
             row()
                 .w_full()
-                .min_h(32.0)
-                .pb(10.0)
+                .min_h(30.0)
+                .pb(8.0)
                 .justify_between()
                 .center_y()
                 .child(
@@ -1603,60 +1603,71 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(el().w_full().h(1.0).fill(float_line()));
 
     let mut stages_col = col().w_full();
-    for (i, stage) in stages.iter().enumerate() {
-        if i > 0 {
+    for (row_idx, pair) in stages.chunks(2).enumerate() {
+        if row_idx > 0 {
             stages_col = stages_col.child(el().w_full().h(1.0).fill(float_line()));
         }
-        let eff_status = if is_complete && stage.status == AutoTuneStageStatus::Idle {
-            AutoTuneStageStatus::Done
-        } else {
-            stage.status
-        };
-        let marker = match eff_status {
-            AutoTuneStageStatus::Done => el()
-                .size(16.0, 16.0)
-                .center()
-                .child(icon_check(14.0, good())),
-            AutoTuneStageStatus::Warn => el()
-                .size(16.0, 16.0)
-                .center()
-                .child(el().size(8.0, 8.0).radius(4.0).fill(warn())),
-            AutoTuneStageStatus::Active => el()
-                .size(16.0, 16.0)
-                .center()
-                .child(el().size(8.0, 8.0).radius(4.0).fill(FG)),
-            AutoTuneStageStatus::Idle => el()
-                .size(16.0, 16.0)
-                .center()
-                .child(el().size(6.0, 6.0).radius(3.0).fill(fg_faint())),
-        };
-        stages_col = stages_col.child(
-            row()
-                .key(format!("auto-tune-stage-{}", stage.id.key()))
-                .w_full()
-                .min_h(46.0)
-                .py(8.0)
-                .gap(10.0)
-                .center_y()
-                .child(marker)
-                .child(
-                    col()
-                        .gap(2.0)
-                        .min_w(0.0)
-                        .grow(1.0)
-                        .child(text(stage.label).font(type_section()).color(FG))
-                        .child(
-                            text(stage.detail.clone())
-                                .font(type_small())
-                                .color(if eff_status == AutoTuneStageStatus::Warn {
-                                    warn()
-                                } else {
-                                    fg_muted()
-                                })
-                                .wrap(),
-                        ),
-                ),
-        );
+        let mut pair_row = row().w_full().gap(16.0).items_start();
+        for stage in pair {
+            let eff_status = if is_complete && stage.status == AutoTuneStageStatus::Idle {
+                AutoTuneStageStatus::Done
+            } else {
+                stage.status
+            };
+            let marker = match eff_status {
+                AutoTuneStageStatus::Done => el()
+                    .size(16.0, 16.0)
+                    .mt(2.0)
+                    .center()
+                    .child(icon_check(14.0, good())),
+                AutoTuneStageStatus::Warn => el()
+                    .size(16.0, 16.0)
+                    .mt(2.0)
+                    .center()
+                    .child(el().size(8.0, 8.0).radius(4.0).fill(warn())),
+                AutoTuneStageStatus::Active => el()
+                    .size(16.0, 16.0)
+                    .mt(2.0)
+                    .center()
+                    .child(el().size(8.0, 8.0).radius(4.0).fill(FG)),
+                AutoTuneStageStatus::Idle => el()
+                    .size(16.0, 16.0)
+                    .mt(2.0)
+                    .center()
+                    .child(el().size(6.0, 6.0).radius(3.0).fill(fg_faint())),
+            };
+            pair_row = pair_row.child(
+                row()
+                    .key(format!("auto-tune-stage-{}", stage.id.key()))
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .py(8.0)
+                    .gap(9.0)
+                    .items_start()
+                    .child(marker)
+                    .child(
+                        col()
+                            .gap(2.0)
+                            .min_w(0.0)
+                            .grow(1.0)
+                            .child(text(stage.label).font(type_section()).color(FG))
+                            .child(
+                                text(stage.detail.clone())
+                                    .font(type_small())
+                                    .color(if eff_status == AutoTuneStageStatus::Warn {
+                                        warn()
+                                    } else {
+                                        fg_muted()
+                                    })
+                                    .wrap(),
+                            ),
+                    ),
+            );
+        }
+        if pair.len() == 1 {
+            pair_row = pair_row.child(el().grow(1.0).min_w(0.0));
+        }
+        stages_col = stages_col.child(pair_row);
     }
 
     auto_tune_card = auto_tune_card.child(stages_col);
@@ -2209,17 +2220,17 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
     });
     let shader_summary = rebuild_summary.unwrap_or(base_shader_summary);
 
-    let mut shader_rows = col().w_full().pt(16.0).gap(20.0);
+    let mut shader_rows = col().w_full().pt(12.0).gap(12.0);
     for chunk in shader_list.chunks(4) {
-        let mut r = row().w_full().gap(12.0).items_start();
+        let mut r = row().w_full().gap(10.0).items_start();
         for (id, title, est, game_opt, is_queued, is_prepare) in chunk {
             let hue = title_hue(title);
             let mut art = el()
                 .w_full()
-                .h(228.0)
-                .radius(12.0)
+                .h(148.0)
+                .radius(10.0)
                 .continuous_corners()
-                .clip_rounded(12.0);
+                .clip_rounded(10.0);
             if let Some(img) = game_opt.and_then(|g| s.cover_image(g, scale)) {
                 art = art.pixels_fit(img.pixels(), SurfaceFit::Fill);
             } else {
@@ -2488,10 +2499,10 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         let mut gpu_card = col()
             .key("exo-ai-gpu-usage-card")
             .w_full()
-            .pt(18.0)
-            .px(24.0)
-            .pb(18.0)
-            .gap(8.0)
+            .pt(14.0)
+            .px(20.0)
+            .pb(12.0)
+            .gap(6.0)
             .radius(RADIUS_PANEL)
             .continuous_corners()
             .fill(BG)
@@ -2499,7 +2510,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             .child(
                 row()
                     .w_full()
-                    .min_h(36.0)
+                    .min_h(32.0)
                     .justify_between()
                     .center_y()
                     .child(text("GPU activity").font(type_title()).color(FG))
@@ -2524,15 +2535,15 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             && !d.processes.is_empty()
         {
             let mut list = col().w_full();
-            for proc in d.processes.iter().take(6) {
+            for proc in d.processes.iter().take(5) {
                 let sub = format_gpu_process_subtitle(proc, multi_adapter);
                 let metrics = format_gpu_process_metrics(proc);
                 list = list.child(el().w_full().h(1.0).fill(float_line())).child(
                     row()
                         .key(format!("gpu-proc-{}-{}", proc.pid, proc.adapter_luid))
                         .w_full()
-                        .min_h(50.0)
-                        .py(8.0)
+                        .min_h(38.0)
+                        .py(6.0)
                         .gap(12.0)
                         .justify_between()
                         .center_y()
