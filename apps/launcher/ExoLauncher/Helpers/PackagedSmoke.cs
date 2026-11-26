@@ -27,8 +27,12 @@ internal static class PackagedSmoke
         }
         if (isDisposable)
         {
-            var dir = Path.TrimEndingDirectorySeparator(appDataDir);
-            return "ExoLauncher.Dev." + Path.GetFileName(dir);
+            var dir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(appDataDir));
+            var installed = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ExoLauncher")));
+            if (string.Equals(dir, installed, StringComparison.OrdinalIgnoreCase) || PathHelper.IsUnderRoot(dir, installed))
+                throw new InvalidOperationException("A test instance's data folder must not be the installed Exo's.");
+            var path = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(dir.ToUpperInvariant()));
+            return "ExoLauncher.Dev." + Path.GetFileName(dir) + "." + Convert.ToHexString(path)[..8];
         }
         return "ExoLauncher.Main";
     }

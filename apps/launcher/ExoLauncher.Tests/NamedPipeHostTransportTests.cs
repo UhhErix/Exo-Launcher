@@ -445,7 +445,13 @@ public sealed class NamedPipeHostTransportTests
         Assert.True(psi.RedirectStandardError);
 
         Assert.Equal("ExoLauncher.Main", PackagedSmoke.ResolveInstanceKey([], isDisposable: false, @"C:\Users\Test\AppData\Local\ExoLauncher"));
-        Assert.Equal("ExoLauncher.Dev.data", PackagedSmoke.ResolveInstanceKey([], isDisposable: true, @"C:\Users\Test\Exo-Rune-Local\data"));
+        var dev = PackagedSmoke.ResolveInstanceKey([], isDisposable: true, @"C:\Users\Test\Exo-Rune-Local\data");
+        Assert.StartsWith("ExoLauncher.Dev.data.", dev);
+        Assert.Equal(dev, PackagedSmoke.ResolveInstanceKey([], isDisposable: true, @"C:\USERS\Test\Exo-Rune-Local\data\"));
+        Assert.NotEqual(dev, PackagedSmoke.ResolveInstanceKey([], isDisposable: true, @"C:\Users\Test\Other\data"));
+        var installed = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ExoLauncher");
+        Assert.Throws<InvalidOperationException>(() => PackagedSmoke.ResolveInstanceKey([], isDisposable: true, installed));
+        Assert.Throws<InvalidOperationException>(() => PackagedSmoke.ResolveInstanceKey([], isDisposable: true, Path.Combine(installed, "test")));
     }
 
     [Fact]

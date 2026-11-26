@@ -343,7 +343,7 @@ internal sealed partial class RuneHostSession
                 try
                 {
                     if (!uiProcess.HasExited) uiProcess.WaitForExit(1500);
-                    if (uiProcess.HasExited) uiProcess.WaitForExit();
+                    if (uiProcess.HasExited) uiProcess.WaitForExit(2000);
                 }
                 catch { }
             }

@@ -3792,7 +3792,6 @@ fn install_panic_hook() {
             .unwrap_or_else(|| "unknown".into());
         let bt = std::backtrace::Backtrace::force_capture();
         let summary = format!("exo-ui panic at {loc}: {payload}");
-        eprintln!("{summary}\n{bt}");
         let logs = app_data_dir().join("logs");
         if std::fs::create_dir_all(&logs).is_ok()
             && let Ok(mut f) = std::fs::OpenOptions::new()
@@ -3802,6 +3801,10 @@ fn install_panic_hook() {
         {
             use std::io::Write;
             let _ = writeln!(f, "{summary}\n{bt}\n---");
+        }
+        {
+            use std::io::Write;
+            let _ = writeln!(std::io::stderr(), "{summary}\n{bt}");
         }
         default_hook(info);
     }));
