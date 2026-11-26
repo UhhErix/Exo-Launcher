@@ -6634,9 +6634,9 @@ mod motion_audit {
             .iter()
             .find(|sh| sh.rect[0] < 30.0 && sh.rect[1] < 20.0)
             .expect("search-capsule liquid glass shape");
-        assert!(
-            search_shape_live.glow[3] > 0.0,
-            "interactive search-capsule must emit touch glow on press"
+        assert_eq!(
+            search_shape_live.glow[3], 0.0,
+            "glass never draws a cursor-follow touch glow"
         );
         rt.pointer_up(sx, sy);
         rt.frame(7.0 / 60.0);

@@ -130,72 +130,56 @@ impl ExoGlass {
         }
     }
 
-    pub fn to_liquid_glass(self, interactive: bool, a11y: GlassAccessibility) -> LiquidGlass {
+    /// Exo Liquid Glass: thin clear frost, strong bevel lensing + dispersion at the edges, a fixed
+    /// top-left specular rim, and no cursor-follow light or touch glow. Content stays visible
+    /// through the glass; only the edges bend it.
+    pub fn to_liquid_glass(self, _interactive: bool, _a11y: GlassAccessibility) -> LiquidGlass {
         const LIGHT_ANGLE: f32 = -std::f32::consts::FRAC_PI_4 * 3.0;
         let base = match self {
-            Self::Bar => LiquidGlass::regular()
-                .frost(5.5)
-                .saturation(1.45)
-                .refraction(1.50)
-                .dispersion(0.04)
-                .rim(0.36, 0.15, 0.12)
-                .specular(1.38, LIGHT_ANGLE)
-                .sheen(0.08, 0.40)
-                .inner_shadow(1.0, 12.0, -6.0, Color::WHITE.alpha(0.07))
-                .tint(Color::WHITE.alpha(0.05))
-                .still(self.still_fill()),
-            Self::Control => LiquidGlass::regular()
-                .frost(4.5)
-                .saturation(1.48)
-                .refraction(1.55)
-                .dispersion(0.045)
-                .rim(0.36, 0.16, 0.12)
-                .specular(1.40, LIGHT_ANGLE)
-                .sheen(0.09, 0.42)
-                .inner_shadow(1.0, 10.0, -5.0, Color::WHITE.alpha(0.08))
-                .tint(Color::WHITE.alpha(0.055))
+            Self::Bar | Self::Control => LiquidGlass::clear()
+                .frost(1.6)
+                .saturation(1.6)
+                .refraction(2.6)
+                .bevel(14.0)
+                .dispersion(0.06)
+                .rim(0.30, 0.10, 0.14)
+                .specular(1.1, LIGHT_ANGLE)
+                .tint(srgb(8, 8, 10, 0.18))
                 .still(self.still_fill()),
             Self::Menu | Self::Popover | Self::Panel | Self::Sheet | Self::Notice => {
                 LiquidGlass::clear()
-                    .frost(14.0)
-                    .saturation(1.45)
-                    .refraction(1.35)
-                    .dispersion(0.035)
-                    .rim(0.32, 0.14, 0.11)
-                    .specular(1.25, LIGHT_ANGLE)
-                    .sheen(0.07, 0.32)
-                    .inner_shadow(1.0, 14.0, -8.0, Color::WHITE.alpha(0.07))
-                    .tint(srgb(14, 15, 20, 0.42))
+                    .frost(7.0)
+                    .saturation(1.7)
+                    .refraction(2.2)
+                    .bevel(16.0)
+                    .dispersion(0.05)
+                    .rim(0.26, 0.09, 0.12)
+                    .specular(1.0, LIGHT_ANGLE)
+                    .tint(srgb(6, 6, 8, 0.38))
                     .still(self.still_fill())
             }
             Self::ClearMedia => LiquidGlass::clear()
-                .frost(2.5)
-                .saturation(1.35)
-                .refraction(1.65)
-                .dispersion(0.048)
-                .rim(0.38, 0.16, 0.13)
-                .specular(1.45, LIGHT_ANGLE)
-                .sheen(0.10, 0.38)
-                .tint(Color::WHITE.alpha(0.04))
+                .frost(0.8)
+                .saturation(1.4)
+                .refraction(3.0)
+                .bevel(16.0)
+                .dispersion(0.07)
+                .rim(0.32, 0.10, 0.14)
+                .specular(1.15, LIGHT_ANGLE)
+                .tint(srgb(0, 0, 0, 0.10))
                 .still(self.still_fill()),
             Self::Tinted(color) => LiquidGlass::clear()
-                .frost(9.0)
-                .saturation(1.35)
-                .refraction(1.35)
-                .dispersion(0.03)
-                .rim(0.32, 0.14, 0.11)
-                .specular(1.25, LIGHT_ANGLE)
-                .sheen(0.06, 0.34)
+                .frost(4.0)
+                .saturation(1.5)
+                .refraction(2.2)
+                .bevel(12.0)
+                .dispersion(0.05)
+                .rim(0.28, 0.10, 0.12)
+                .specular(1.0, LIGHT_ANGLE)
                 .tint(color)
                 .still(color.alpha(0.84)),
         };
-        if interactive && a11y.allows_interactive_motion() {
-            base.interactive()
-        } else if !a11y.allows_interactive_motion() {
-            base.cursor_light(false)
-        } else {
-            base
-        }
+        base.cursor_light(false)
     }
 }
 
@@ -330,18 +314,21 @@ mod tests {
         assert_eq!(ExoGlass::Tinted(bad()).variant(), ExoGlassVariant::Tinted);
         assert_eq!(ExoGlass::Tinted(good()).variant(), ExoGlassVariant::Tinted);
 
-        let bar_interactive = ExoGlass::Bar.to_liquid_glass(true, normal);
-        assert!(bar_interactive.is_interactive());
-        assert!(!bar_interactive.is_identity());
+        let bar = ExoGlass::Bar.to_liquid_glass(true, normal);
+        assert!(
+            !bar.is_interactive(),
+            "no cursor-follow shine or touch glow"
+        );
+        assert!(!bar.is_identity());
 
         let panel_static = ExoGlass::Panel.to_liquid_glass(false, normal);
         assert!(!panel_static.is_interactive());
 
         let clear = ExoGlass::ClearMedia.to_liquid_glass(true, normal);
-        assert!(clear.is_interactive());
+        assert!(!clear.is_interactive());
 
         let tinted = ExoGlass::Tinted(bad()).to_liquid_glass(true, normal);
-        assert!(tinted.is_interactive());
+        assert!(!tinted.is_interactive());
     }
 
     #[test]

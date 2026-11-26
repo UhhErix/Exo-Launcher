@@ -2,9 +2,9 @@ use crate::glass::{ExoGlass, apply_glass, apply_glass_opt};
 use crate::icons::{icon_close, icon_minimize, icon_win_maximize, icon_win_restore};
 use crate::tokens::{
     BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
-    SPRING_POPOVER, SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, TITLEBAR_HEIGHT, TRANSPARENT, bad, fg_muted, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline,
-    hover_fill, pressed_fill, subtle_fill, track_fill, type_control, type_section, type_small,
-    warn,
+    SPRING_POPOVER, SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, TITLEBAR_HEIGHT, TRANSPARENT, bad,
+    fg_muted, glass_rim, glass_rim_bottom, glass_rim_top, good, hover_fill, pressed_fill,
+    subtle_fill, track_fill, type_control, type_section, type_small, warn,
 };
 use rune::{
     Align, CaptionGlyph, CaptionStyle, Color, Cursor, Effect, El, Side, SpringPair, Titlebar,
@@ -608,7 +608,6 @@ pub fn section_card(title: &'static str, subtitle: Option<String>) -> El {
         .gap(12.0)
         .radius(RADIUS_PANEL)
         .fill(subtle_fill())
-        .border(1.0, hairline())
         .child(header)
 }
 

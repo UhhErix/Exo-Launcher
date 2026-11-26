@@ -10,14 +10,14 @@ use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
     CAPTION_TRAILING_INSET, ExoGlass, FG, GAP, GLASS_CONTAINER_SPACING, GlassAccessibility,
     PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK,
-    SPRING_SMOOTH, TRANSPARENT, apply_glass, bad, exo_mark, exo_titlebar, fg_muted, glass_capsule_opt, glass_enter,
-    glass_panel_opt, good, hover_fill, icon_camera, icon_chat, icon_chat_filled, icon_close,
-    icon_grid, icon_grid_filled, icon_library, icon_library_filled, icon_minimize, icon_mouse,
-    icon_mouse_filled, icon_music, icon_music_filled, icon_settings, icon_settings_filled,
-    icon_sparkles, icon_sparkles_filled, icon_store, icon_store_filled, icon_volume,
-    icon_volume_low, icon_volume_off, icon_win_maximize, icon_win_restore, modal_scrim_transition,
-    popover_transition_for, pressed_fill, scrim_fill, selected_fill, set_glass_accessibility,
-    set_text_scale, slider_track, type_body, type_section, type_small,
+    TRANSPARENT, apply_glass, bad, exo_mark, exo_titlebar, fg_muted, glass_capsule_opt,
+    glass_enter, glass_panel_opt, good, hover_fill, icon_camera, icon_chat, icon_chat_filled,
+    icon_close, icon_grid, icon_grid_filled, icon_library, icon_library_filled, icon_minimize,
+    icon_mouse, icon_mouse_filled, icon_music, icon_music_filled, icon_settings,
+    icon_settings_filled, icon_sparkles, icon_sparkles_filled, icon_store, icon_store_filled,
+    icon_volume, icon_volume_low, icon_volume_off, icon_win_maximize, icon_win_restore,
+    modal_scrim_transition, popover_transition_for, pressed_fill, scrim_fill, selected_fill,
+    set_glass_accessibility, set_text_scale, slider_track, type_body, type_section, type_small,
 };
 use rune::{
     Align, Cursor, Cx, El, Phase, ScrollSpec, Side, SpringPair, TextStyle, Transition, col, el,
@@ -473,11 +473,10 @@ fn mini_player_transition() -> Transition {
 }
 
 fn room_transition(dir: f32) -> Transition {
-    let enter = Transition::offset(18.0 * dir, 0.0)
-        .combined(Transition::scale(0.992))
-        .combined(Transition::opacity());
-    let exit = Transition::offset(-14.0 * dir, 0.0).combined(Transition::opacity());
-    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK))
+    // Calm room change: short slide in the travel direction plus fade; the old room just fades.
+    let enter = Transition::offset(10.0 * dir, 0.0).combined(Transition::opacity());
+    let exit = Transition::opacity();
+    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

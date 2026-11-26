@@ -11,11 +11,11 @@ use exo_kit::{
     BG, ExoGlass, FG, GAP, GLASS_CONTAINER_SPACING, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
     RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, SPRING_SMOOTH, TITLEBAR_HEIGHT,
     TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, glass_button, glass_capsule, glass_rim,
-    good, hover_fill, icon_back,
-    icon_chevron_left, icon_compass, icon_folder, icon_four_point_sparkle, icon_home,
-    icon_list_music, icon_maximize, icon_more_horiz, icon_music, icon_pause, icon_pin, icon_play,
-    icon_plus, icon_radio, icon_search, icon_skip_back, icon_skip_forward, icon_video,
-    icon_volume, icon_volume_low, icon_volume_off, pressed_fill, slider_track,
+    good, hover_fill, icon_back, icon_chevron_left, icon_compass, icon_folder,
+    icon_four_point_sparkle, icon_home, icon_list_music, icon_maximize, icon_more_horiz,
+    icon_music, icon_pause, icon_pin, icon_play, icon_plus, icon_radio, icon_search,
+    icon_skip_back, icon_skip_forward, icon_video, icon_volume, icon_volume_low, icon_volume_off,
+    pressed_fill, slider_track,
 };
 use exo_rpc::{PlayerCard, PlayerLink, PlayerSection};
 use rune::{
@@ -596,6 +596,26 @@ fn folder_name_row(s: &AppState, key: &str) -> El {
         )
 }
 
+/// Round play button revealed when the card is hovered or focused (Spotify-style).
+fn card_play_button(key: String, card: &PlayerCard, size: f32) -> El {
+    let play = card.clone();
+    el().key(key)
+        .role("button")
+        .label(format!("Play {}", card.title))
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .size(size, size)
+        .radius(RADIUS_PILL)
+        .fill(FG)
+        .shadow(0.0, 10.0, Color::BLACK.alpha(0.45))
+        .center()
+        .group_opacity(0.0, 1.0)
+        .on_press(move |s: &mut AppState| s.music_play_card(&play))
+        .child(icon_play(size * 0.42, PRIMARY_FG))
+}
+
 fn recent_grid(s: &AppState, scale: f32) -> El {
     let svc = s.media.music_service;
     let items: Vec<&PlayerCard> = s.media.music_recent.iter().take(8).collect();
@@ -616,6 +636,7 @@ fn recent_grid(s: &AppState, scale: f32) -> El {
             let title = card.title.clone();
             row()
                 .key(format!("music-recent-{i}"))
+                .hover_group()
                 .role("button")
                 .label(card.title.clone())
                 .focusable(true)
@@ -653,6 +674,14 @@ fn recent_grid(s: &AppState, scale: f32) -> El {
                         .truncate()
                         .grow(1.0)
                         .min_w(0.0),
+                )
+                .child(
+                    el().pin(None, Some(8.0), Some(8.0), None)
+                        .child(card_play_button(
+                            format!("music-recent-play-{i}"),
+                            card,
+                            36.0,
+                        )),
                 )
         }))
 }
@@ -771,6 +800,7 @@ fn shelf_card(s: &AppState, idx: usize, j: usize, card: &PlayerCard, scale: f32)
     };
     let mut card_col = col()
         .key(format!("music-card-{idx}-{j}"))
+        .hover_group()
         .role("button")
         .label(card.title.clone())
         .focusable(true)
@@ -783,14 +813,19 @@ fn shelf_card(s: &AppState, idx: usize, j: usize, card: &PlayerCard, scale: f32)
         .on_press(move |s: &mut AppState| {
             s.music_open_card(uri.clone(), kind.clone(), title.clone());
         })
-        .child(el().w_full().mb(8.0).child(render_art(
-            s,
-            &card.image,
-            None,
-            art_r,
-            is_liked,
-            scale,
-        )))
+        .child(
+            el().w_full()
+                .mb(8.0)
+                .child(render_art(s, &card.image, None, art_r, is_liked, scale))
+                .child(
+                    el().pin(None, None, Some(10.0), Some(10.0))
+                        .child(card_play_button(
+                            format!("music-card-play-{idx}-{j}"),
+                            card,
+                            44.0,
+                        )),
+                ),
+        )
         .child(
             text(card.title.clone())
                 .font(scaled_body(s))
@@ -1224,6 +1259,11 @@ fn playback_controls(s: &AppState, prefix: &str) -> El {
     )
     .on_press(|s: &mut AppState| s.music_control("previous"));
 
+    let play_size = if prefix == "music-immersion" {
+        48.0
+    } else {
+        40.0
+    };
     let mut play_btn = el()
         .key(format!("{prefix}-toggle"))
         .role("button")
@@ -1232,16 +1272,16 @@ fn playback_controls(s: &AppState, prefix: &str) -> El {
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .size(40.0, 40.0)
+        .size(play_size, play_size)
         .radius(RADIUS_PILL)
         .fill(FG)
         .center()
         .motion(SPRING_QUICK)
         .on_press(|s: &mut AppState| s.music_control("toggle"))
         .child(if playing {
-            icon_pause(18.0, PRIMARY_FG)
+            icon_pause(play_size * 0.45, PRIMARY_FG)
         } else {
-            icon_play(18.0, PRIMARY_FG)
+            icon_play(play_size * 0.45, PRIMARY_FG)
         });
     if !has_track {
         play_btn = play_btn.opacity(0.35);
@@ -1587,98 +1627,19 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
     let hue = crate::state::title_hue(title);
     let art_img = s.current_playback_art(scale);
 
-    // Living full-bleed backdrop: artwork wash + 3 slowly orbiting radial color fields (zero backdrop-blur cost).
-    let (orb1_x, orb1_y, orb1_s) = if playing && !reduce_motion {
-        (
-            (t * 0.34).sin() * 110.0,
-            (t * 0.25).cos() * 75.0,
-            1.0 + 0.08 * (t * 0.42).sin(),
-        )
-    } else {
-        (-40.0, -30.0, 1.0)
-    };
-    let (orb2_x, orb2_y, orb2_s) = if playing && !reduce_motion {
-        (
-            (t * 0.28 + 2.1).cos() * 130.0,
-            (t * 0.36 + 1.2).sin() * 85.0,
-            1.0 + 0.09 * (t * 0.35 + 1.6).cos(),
-        )
-    } else {
-        (60.0, 40.0, 1.0)
-    };
-    let (orb3_x, orb3_y) = if playing && !reduce_motion {
-        ((t * 0.22 + 4.0).sin() * 90.0, (t * 0.31 + 3.0).cos() * 60.0)
-    } else {
-        (0.0, 20.0)
-    };
-
-    let mut art_bg = el()
+    // Calm gradient backdrop tinted by the track: no artwork wash, no moving orbs.
+    let backdrop = el()
         .key(format!("music-immerse-bg-{track_key}"))
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .transition(Transition::opacity().springs(SpringPair::new(SPRING_SMOOTH, SPRING_SMOOTH)));
-    if let Some(ref img) = art_img {
-        art_bg = art_bg
-            .pixels_fit(img.pixels(), SurfaceFit::Fill)
-            .opacity(if playing { 0.36 } else { 0.24 })
-            .scale(if playing { 1.08 } else { 1.03 })
-            .motion(SPRING_SMOOTH);
-    } else {
-        art_bg = art_bg.linear_gradient(
-            0.35,
+        .linear_gradient(
+            std::f32::consts::PI * 0.72,
             [
-                (0.0, oklch(0.32, 0.14, hue).alpha(0.70)),
+                (0.0, oklch(0.34, 0.12, hue)),
+                (0.55, oklch(0.18, 0.07, (hue + 40.0) % 360.0)),
                 (1.0, BG),
             ],
-        );
-    }
-
-    let orb1 = el()
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .offset(orb1_x, orb1_y)
-        .scale(orb1_s)
-        .radial_gradient(
-            [420.0, 320.0],
-            [680.0, 560.0],
-            [
-                (0.0, oklch(0.56, 0.20, hue).alpha(if playing { 0.44 } else { 0.26 })),
-                (0.52, oklch(0.38, 0.14, (hue + 24.0) % 360.0).alpha(if playing { 0.22 } else { 0.12 })),
-                (1.0, TRANSPARENT),
-            ],
-        );
-    let orb2 = el()
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .offset(orb2_x, orb2_y)
-        .scale(orb2_s)
-        .radial_gradient(
-            [1380.0, 680.0],
-            [740.0, 600.0],
-            [
-                (0.0, oklch(0.50, 0.19, (hue + 56.0) % 360.0).alpha(if playing { 0.38 } else { 0.20 })),
-                (0.55, oklch(0.32, 0.12, (hue + 88.0) % 360.0).alpha(if playing { 0.16 } else { 0.08 })),
-                (1.0, TRANSPARENT),
-            ],
-        );
-    let orb3 = el()
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .offset(orb3_x, orb3_y)
-        .radial_gradient(
-            [920.0, 180.0],
-            [560.0, 440.0],
-            [
-                (0.0, oklch(0.46, 0.16, (hue + 306.0) % 360.0).alpha(if playing { 0.28 } else { 0.14 })),
-                (1.0, TRANSPARENT),
-            ],
-        );
-    let scrim = el()
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .linear_gradient(
-            std::f32::consts::PI,
-            [
-                (0.0, BG.alpha(0.24)),
-                (0.48, BG.alpha(0.46)),
-                (1.0, BG.alpha(0.84)),
-            ],
-        );
+        )
+        .transition(Transition::opacity().springs(SpringPair::new(SPRING_SMOOTH, SPRING_SMOOTH)));
 
     let leave_btn = bar_icon_btn(
         "music-immersion-close",
@@ -1795,10 +1756,7 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         )
         .scale(if playing { 1.0 } else { 0.91 })
         .motion(SPRING_SMOOTH)
-        .transition(
-            Transition::scale(0.94)
-                .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
-        )
+        .transition(Transition::scale(0.94).springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)))
         .child(render_art_image(
             art_img,
             Some(art_size),
@@ -1859,15 +1817,8 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         .w_full()
         .h_full()
         .fill(BG)
-        .transition(
-            Transition::scale(0.97)
-                .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
-        )
-        .child(art_bg)
-        .child(orb1)
-        .child(orb2)
-        .child(orb3)
-        .child(scrim)
+        .transition(Transition::scale(0.97).springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)))
+        .child(backdrop)
         .child(stage)
 }
 
@@ -2813,7 +2764,10 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert_eq!(blurs, 0, "immersive music player should use zero backdrop blurs");
+        assert_eq!(
+            blurs, 0,
+            "immersive music player should use zero backdrop blurs"
+        );
         let glass_count = rt.liquid_glass_frame().shapes.len();
         assert!(
             (2..=exo_kit::EXO_MAX_BACKDROP_BLURS).contains(&glass_count),
