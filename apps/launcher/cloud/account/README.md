@@ -164,6 +164,10 @@ before that check so the time does not.
 **No human holds the keyring.** It was generated once, at the first deploy, and given to Wrangler on standard input, so it
 was never printed, typed or stored outside the Worker's secrets. It is never generated again (see [Redeploy](#redeploy)).
 
+**Dev copy.** `exo-account-dev` needs its own throwaway keyring before it answers: `npx wrangler@4.165.0 secret put ACCOUNT_SECRETS --env dev`
+(a new `id:hex` key as above, never a live one). Without it every route answers 503 `not-configured`. The `--env dev` flag is
+what keeps it off the live Worker: the same command without it replaces the live keyring.
+
 ## Tests
 
 ```bash
@@ -248,7 +252,6 @@ schema), the secret `ACCOUNT_SECRETS`, the `SESSION_TRIES` rate limit (namespace
 The dev copy `exo-account-dev` (workers.dev, its own D1, `[env.dev]` in `wrangler.toml`) is the same code, but it is not
 deployed: on 2026-11-26 the Cloudflare account listed no `exo-account-dev` Worker and no `exo-account-dev` D1. Step 3 and
 CLIENT.md section 0 need it created first (`d1 create exo-account-dev`, put its id in `[env.dev]`, `deploy --env dev`, then give it its own throwaway keyring with
-a `wrangler secret put` of the key name `ACCOUNT_SECRETS` with `--env dev` (see [Keys](#keys) for the format): without one
-every route answers 503 `not-configured`. The `--env dev` flag is required; without it the command replaces the live keyring).
+its own throwaway keyring, see [Keys](#keys) › Dev copy: without one every route answers 503 `not-configured`).
 Once it exists it is deployed before live, as in step 3, and gets its migrations the same way. The apps' rows in PRIVACY.md and `ExoLauncher/NetworkDestinations.cs` describe the account service as live; an
 app that signs in sends the device token and stores the one each answer gives (CLIENT.md, Device token).
