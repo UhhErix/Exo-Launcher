@@ -14,7 +14,7 @@ namespace ExoLauncher.Tests;
 /// - Image Sharpening is left on, or V-Sync is forced on or off for every game instead of left to each game (Fluid
 ///   Motion Frames needs it off in the game);
 /// - the frame cap is not NVIDIA's G-SYNC cap with FreeSync, stays on without FreeSync, or falls
-///   outside the driver's range; a capable screen is left without FreeSync;
+///   outside the driver's range; FreeSync is written for any screen;
 /// - FSR 4 for FSR 3.1 games goes on for a GPU the driver can't run it on (RX 5000, RX 6000 before
 ///   26.10.1, an APU), or stays off on RX 9000/7000;
 /// - Fluid Motion Frames is written by the profile (it follows each game Exo launches);
@@ -108,8 +108,7 @@ public sealed class RadeonProfileTests : IDisposable
         Assert.Equal(0, values[Keys.Sharpening]);
         Assert.Equal(GpuProfile.VSyncGameDecides, values[Keys.VSync]);   // WFVR_OFF_UNLESS_APP_SPECIFIES
         Assert.Equal(1, values[Keys.AntiLag]);   // always on: the user's choice
-        Assert.Equal(0, values[Keys.FreeSync + "LG ULTRAGEAR"]);
-        Assert.Equal(0, values[Keys.FreeSync + "DELL P2419H"]);
+        Assert.DoesNotContain(keys, key => key.StartsWith(Keys.FreeSync, StringComparison.Ordinal));
         Assert.Equal(1, values[Keys.Fsr]);
 
         // An old driver with the base 3D settings only: nothing else is written.
@@ -396,7 +395,7 @@ public sealed class RadeonProfileTests : IDisposable
     {
         var writes = GpuProfile.Radeon(FakeDriver.Current().Read()!);
         Assert.Equal("FSR 4 for FSR 3.1 games, Anti-Lag on, V-Sync as each game sets it; "
-            + "Chill, Boost, Super Resolution, Image Sharpening, Enhanced Sync and FreeSync off",
+            + "Chill, Boost, Super Resolution, Image Sharpening and Enhanced Sync off",
             GpuProfile.RadeonSummary(writes));
     }
 

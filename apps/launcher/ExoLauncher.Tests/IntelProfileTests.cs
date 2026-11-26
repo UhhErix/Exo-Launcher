@@ -267,12 +267,12 @@ public sealed class IntelProfileTests : IDisposable
     public void ProfileWritesInOrderAndOnlyWhatTheDriverHas()
     {
         var writes = GpuProfile.IntelWrites(FakeDriver.Current().Read()!, GpuProfile.LowLatencyOn);
-        Assert.Equal(new[] { Keys.Endurance, Keys.Sharpening, Keys.LowLatency, Keys.AdaptiveSync, Keys.ShaderDownload }, writes.Select(write => write.Key));
+        Assert.Equal(new[] { Keys.Endurance, Keys.Sharpening, Keys.LowLatency, Keys.ShaderDownload }, writes.Select(write => write.Key));
         var values = writes.ToDictionary();
         Assert.Equal(0, values[Keys.Endurance]);
         Assert.Equal(0, values[Keys.Sharpening]);
         Assert.Equal(1, values[Keys.LowLatency]);      // On, not boost
-        Assert.Equal(0, values[Keys.AdaptiveSync]);
+        Assert.DoesNotContain(Keys.AdaptiveSync, values.Keys);
         Assert.DoesNotContain(Keys.FrameLimit, values.Keys);   // no cap from Exo
         Assert.Equal(1, values[Keys.ShaderDownload]);
         Assert.DoesNotContain(Keys.FrameGen, values.Keys);   // the player's, per game
@@ -306,7 +306,7 @@ public sealed class IntelProfileTests : IDisposable
     public void SummarySaysWhatTheProfileDoes()
     {
         var writes = GpuProfile.IntelWrites(FakeDriver.Current().Read()!, GpuProfile.LowLatencyBoost);
-        Assert.Equal("Low latency with boost, Intel's prebuilt shaders; Adaptive Sync and Endurance Gaming and sharpening off",
+        Assert.Equal("Low latency with boost, Intel's prebuilt shaders; Endurance Gaming and sharpening off",
             GpuProfile.IntelSummary(writes, GpuProfile.LowLatencyBoost));
     }
 

@@ -55,40 +55,6 @@ internal static class GpuProfileService
     }
 
     /// <summary>
-    /// As Exo starts, once: a PC still on the G-SYNC profile Exo used to write (its backup says "gsync":true, with its driver
-    /// V-Sync and frame cap in the global profile) gets the profile as it is now, which sets no cap and leaves V-Sync to
-    /// games. What it held before Exo stays in the backup for Undo. A backup without that mark isn't touched.
-    /// </summary>
-    internal static void RetireGsync()
-    {
-        try
-        {
-            lock (Gate)
-            {
-                if (!File.Exists(BackupPath) || GraphicsService.Vendor() != "nvidia") return;
-                var wasLegacyGsync = WasGsync(File.ReadAllText(BackupPath));
-                var liveGsyncOn = NvidiaProfiles.Available
-                    && NvidiaProfiles.Read([GpuProfile.GsyncFeature]) is { Ok: true } state
-                    && state.Values.GetValueOrDefault(GpuProfile.GsyncFeature) == 1u;
-                if (!wasLegacyGsync && !liveGsyncOn) return;
-                AppLog.Info($"GPU profile: G-SYNC turned off ({(wasLegacyGsync ? "legacy backup" : "live profile")}): {Apply().Status}.");
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Warn("GPU profile, leaving G-SYNC: " + ex.GetType().Name); }
-    }
-
-    /// <summary>Whether a backup comes from the G-SYNC profile.</summary>
-    internal static bool WasGsync(string backup)
-    {
-        try
-        {
-            using var json = JsonDocument.Parse(backup);
-            return json.RootElement.TryGetProperty("gsync", out var gsync) && gsync.ValueKind == JsonValueKind.True;
-        }
-        catch (JsonException) { return false; }
-    }
-
-    /// <summary>
     /// Applies Exo's profile to the global profile (on a Radeon, its profile; on Intel/NVIDIA, with Low latency and VRR choices),
     /// backing up what it replaces first.
     /// </summary>

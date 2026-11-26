@@ -48,6 +48,7 @@ public sealed class GpuProfileTests
     private const uint LowLatency = 0x0005F543, UltraLowLatency = 0x10835000, PreRendered = 0x007BA09E;
 
     private static readonly Dictionary<uint, uint?> Nothing = [];
+    private static readonly uint[] Gsync = [GpuProfile.GsyncFeature, GpuProfile.GsyncGlobalMode, GpuProfile.GsyncAppMode, GpuProfile.VrrControl, GpuProfile.GsyncAppState, GpuProfile.GsyncAppRequest];
 
     private static IReadOnlyDictionary<uint, uint?> Profile(int series, long freeGb = 500, IReadOnlySet<uint>? known = null, Dictionary<uint, uint?>? current = null) =>
         GpuProfile.Nvidia(new GpuProfile.Variant(series), freeGb, known ?? Every, current ?? Nothing);
@@ -74,13 +75,6 @@ public sealed class GpuProfileTests
     [InlineData("AMD Radeon RX 7900 XTX", null)]
     public void ReadsTheSeriesFromTheName(string adapter, int? series) => Assert.Equal(series, GpuProfile.NvidiaSeries(adapter));
 
-    [Theory]
-    [InlineData("""{"driver":61742,"gsync":true,"before":{}}""", true)]
-    [InlineData("""{"driver":61742,"gsync":false,"before":{}}""", false)]
-    [InlineData("""{"driver":61742,"before":{}}""", false)]
-    [InlineData("not json", false)]
-    public void OnlyABackupFromTheGsyncProfileIsMovedOff(string backup, bool gsync) => Assert.Equal(gsync, GpuProfileService.WasGsync(backup));
-
     [Fact]
     public void EverySettingOfARealGlobalProfileIsDecided()
     {
@@ -94,13 +88,10 @@ public sealed class GpuProfileTests
     }
 
     [Fact]
-    public void GsyncIsOffAndSyncAndCapAreLeftToGames()
+    public void GsyncIsLeftToThePlayerAndSyncAndCapToGames()
     {
         var writes = Profile(30);
-        Assert.Equal(0u, writes[GpuProfile.GsyncFeature]);
-        Assert.Equal(0u, writes[GpuProfile.GsyncGlobalMode]);
-        Assert.Equal(0u, writes[GpuProfile.GsyncAppMode]);
-        Assert.Equal(0u, writes[GpuProfile.VrrControl]);
+        Assert.All(Gsync, id => Assert.DoesNotContain(id, writes.Keys));
         Assert.Null(writes[GpuProfile.VSync]);
         Assert.Null(writes[GpuProfile.FrameRateLimit]);
         Assert.Null(writes[GpuProfile.FrameRateLimitSlider]);
@@ -175,8 +166,8 @@ public sealed class GpuProfileTests
         Assert.Equal("applied", GpuProfile.Status(writes, held, applied: true));
         Assert.Equal("applied", GpuProfile.Status(writes, held, applied: false));
 
-        // A driver update turned G-SYNC back on.
-        var moved = new Dictionary<uint, uint?>(held) { [GpuProfile.GsyncFeature] = 1u };
+        // A driver update moved power management.
+        var moved = new Dictionary<uint, uint?>(held) { [GpuProfile.PowerManagement] = 1u };
         Assert.Equal("changed", GpuProfile.Status(writes, moved, applied: true));
         Assert.Equal("ready", GpuProfile.Status(writes, moved, applied: false));
 
@@ -226,13 +217,10 @@ public sealed class GpuProfileTests
     }
 
     [Fact]
-    public void GsyncAlwaysStaysOffAndSupportsLowLatencyChoicesAndDetails()
+    public void GsyncIsNeverWrittenAndLowLatencyChoicesAndDetailsHold()
     {
         var vrrWrites = GpuProfile.Nvidia(new GpuProfile.Variant(30, Vrr: true, LowLatency: GpuProfile.LowLatencyUltra), 40, Every, Nothing);
-        Assert.Equal(0u, vrrWrites[GpuProfile.GsyncFeature]);
-        Assert.Equal(0u, vrrWrites[GpuProfile.GsyncGlobalMode]);
-        Assert.Equal(0u, vrrWrites[GpuProfile.GsyncAppMode]);
-        Assert.Equal(0u, vrrWrites[GpuProfile.VrrControl]);
+        Assert.All(Gsync, id => Assert.DoesNotContain(id, vrrWrites.Keys));
         Assert.Equal(2u, vrrWrites[LowLatency]);
         Assert.Equal(1u, vrrWrites[UltraLowLatency]);
         Assert.Equal(1u, vrrWrites[PreRendered]);
@@ -250,6 +238,6 @@ public sealed class GpuProfileTests
         var details = GpuProfile.NvidiaDetails(new GpuProfile.Variant(30, Vrr: true, LowLatency: GpuProfile.LowLatencyOn), 40, vrrWrites, vrrWrites, [], rebar: true);
         Assert.Equal("On", details.Single(d => d.Key == "rebar").Value);
         Assert.Contains("Less than 50 GB free", details.Single(d => d.Key == "shaderCache").Note);
-        Assert.Equal("Off", details.Single(d => d.Key == "gsync").Value);
+        Assert.DoesNotContain(details, d => d.Key == "gsync");
     }
 }

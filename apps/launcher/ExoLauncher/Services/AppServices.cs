@@ -401,8 +401,6 @@ public sealed class AppServices
         try { CompetitiveSync.RestoreLeftovers(); }
         catch (Exception ex) { completedCleanly = false; AppLog.Warn("G-SYNC competitive sync restore failed: " + ex.GetType().Name); }
         if (File.Exists(CompetitiveSync.StatePath)) completedCleanly = false;
-        try { GpuProfileService.RetireGsync(); }
-        catch (Exception ex) { completedCleanly = false; AppLog.Warn("GPU G-SYNC retire failed: " + ex.GetType().Name); }
         try { GameGraphicsFeatures.RetireFrameCapOverrides(); }
         catch (Exception ex) { completedCleanly = false; AppLog.Warn("Graphics features frame cap retire failed: " + ex.GetType().Name); }
         try

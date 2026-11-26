@@ -9,7 +9,7 @@ namespace ExoLauncher.Helpers;
 ///   Radeon Chill does; sharpening every game adds halos to what each game already sharpens).
 /// - Low latency mode: On by default (one queued frame, as NVIDIA's Low latency On); "On with boost" (also keeps the
 ///   GPU's clock up while the CPU limits, which costs power) and Off are the user's other choices.
-/// - Adaptive Sync on. The frame limit is never written: no cap from Exo.
+/// - Adaptive Sync stays as the player set it. The frame limit is never written: no cap from Exo.
 /// - Prebuilt shader downloads on: the driver fetches Intel's compiled shaders for games it has them for, so they
 ///   don't compile on the PC while you play.
 /// - XeSS frame generation's override is never written here: it stays the player's, per game.
@@ -48,7 +48,6 @@ internal static partial class GpuProfile
         Write(Keys.Endurance, 0);
         Write(Keys.Sharpening, 0);
         Write(Keys.LowLatency, LowLatencyValue(lowLatency));
-        Write(Keys.AdaptiveSync, 0);
         Write(Keys.ShaderDownload, 1);
         return writes;
     }
@@ -61,7 +60,7 @@ internal static partial class GpuProfile
         if (Has(Keys.LowLatency))
             on.Add(lowLatency switch { LowLatencyBoost => "Low latency with boost", LowLatencyOff => "Low latency off", _ => "Low latency on" });
         if (Has(Keys.ShaderDownload)) on.Add("Intel's prebuilt shaders");
-        var off = new (string Key, string Name)[] { (Keys.AdaptiveSync, "Adaptive Sync"), (Keys.Endurance, "Endurance Gaming"), (Keys.Sharpening, "sharpening") }
+        var off = new (string Key, string Name)[] { (Keys.Endurance, "Endurance Gaming"), (Keys.Sharpening, "sharpening") }
             .Where(item => Has(item.Key)).Select(item => item.Name).ToList();
         var parts = new List<string>();
         if (on.Count > 0) parts.Add(string.Join(", ", on));

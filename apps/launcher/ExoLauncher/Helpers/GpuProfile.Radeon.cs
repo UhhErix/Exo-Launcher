@@ -11,7 +11,7 @@ namespace ExoLauncher.Helpers;
 ///   what each game already sharpens; Enhanced Sync is known to stutter).
 /// - Wait for Vertical Refresh "Off, unless application specifies" (AMD's default): V-Sync stays each game's,
 ///   as Fluid Motion Frames needs it off.
-/// - FreeSync on for every screen that can run it. The frame rate target is never written: no cap from Exo.
+/// - FreeSync stays as the player set it on each screen. The frame rate target is never written: no cap from Exo.
 /// - FSR 4 for FSR 3.1 games (the driver's FSR Upscaling override) on RX 9000 and RX 7000, and on
 ///   RX 6000 from AMD Software 26.10.1, the first driver with FSR 4 there.
 /// - Anti-Lag on, always, with no choice: the user chose it. Globally on, the driver also hooks Windows' own apps
@@ -89,8 +89,6 @@ internal static partial class GpuProfile
         Write(Keys.EnhancedSync, 0);
         Write(Keys.VSync, VSyncGameDecides);
         Write(Keys.AntiLag, 1);
-        foreach (var screen in state.Values.Keys.Where(key => key.StartsWith(Keys.FreeSync, StringComparison.Ordinal)).Order(StringComparer.Ordinal))
-            writes.Add(new(screen, 0));
         if (FsrUpgrade(state.Gpu, state.Software, state.Values.ContainsKey(Keys.Fsr))) Write(Keys.Fsr, 1);
         return writes;
     }
@@ -109,7 +107,6 @@ internal static partial class GpuProfile
                 (Keys.EnhancedSync, "Enhanced Sync"),
             }
             .Where(item => Has(item.Key)).Select(item => item.Name).ToList();
-        if (writes.Any(write => write.Key.StartsWith(Keys.FreeSync, StringComparison.Ordinal))) off.Add("FreeSync");
         var parts = new List<string>();
         if (on.Count > 0) parts.Add(string.Join(", ", on));
         if (off.Count > 0) parts.Add((off.Count == 1 ? off[0] : string.Join(", ", off.Take(off.Count - 1)) + " and " + off[^1]) + " off");
