@@ -5,7 +5,6 @@ import { transferForGame } from '../lib/library'
 import { useJustFinished } from '../lib/useJustFinished'
 import { installProgressLabel, transferPercent } from '../lib/utils'
 import { CoverArt, HeroWash } from './CoverArt'
-import { FrameCapRow } from './game/FrameCapRow'
 import { FrameGenRow } from './game/FrameGenRow'
 import { GamePropertiesPanel } from './game/GameProperties'
 import { GraphicsFeaturesBlock } from './game/GraphicsFeaturesBlock'
@@ -92,7 +91,6 @@ function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames
           </>
         )}
         <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
-        <FrameCapRow key={'framecap' + details.selectionKey} gameId={selected.id} />
         <HdrRow key={'hdr' + details.selectionKey} gameId={selected.id} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
         <OptimizeLine key={'optimize' + details.selectionKey} gameId={selected.id} />
       </div>

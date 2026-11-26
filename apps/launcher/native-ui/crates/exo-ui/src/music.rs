@@ -620,8 +620,8 @@ fn folder_name_row(s: &AppState, key: &str) -> El {
         )
 }
 
-/// Round play button overlaid on album/playlist art and recent tiles — clearly visible at rest
-/// with a refined obsidian disc and crisp bright highlight on hover.
+/// Round play button overlaid on album/playlist art and recent tiles — rendered as a sibling above
+/// the card open button so pressing Play always starts playback instead of opening the card.
 fn card_play_button(key: String, card: &PlayerCard, size: f32) -> El {
     let play = card.clone();
     el().key(key)
@@ -634,12 +634,11 @@ fn card_play_button(key: String, card: &PlayerCard, size: f32) -> El {
         .press_scale(PRESS_SCALE)
         .size(size, size)
         .radius(RADIUS_PILL)
-        .fill(Color::BLACK.alpha(0.68))
-        .hover(Color::BLACK.alpha(0.84))
-        .border_gradient(1.0, Color::WHITE.alpha(0.28), Color::WHITE.alpha(0.08))
-        .shadow(0.0, 10.0, Color::BLACK.alpha(0.55))
+        .fill(Color::BLACK.alpha(0.76))
+        .hover(Color::BLACK.alpha(0.92))
+        .border_gradient(1.0, Color::WHITE.alpha(0.30), Color::WHITE.alpha(0.10))
         .center()
-        .group_opacity(0.90, 1.0)
+        .group_opacity(0.92, 1.0)
         .motion(SPRING_QUICK)
         .on_press(move |s: &mut AppState| s.music_play_card(&play))
         .child(el().pl(1.5).child(icon_play(size * 0.40, FG)))
@@ -663,48 +662,53 @@ fn recent_grid(s: &AppState, scale: f32) -> El {
             let uri = card.uri.clone();
             let kind = card.kind.clone();
             let title = card.title.clone();
-            row()
-                .key(format!("music-recent-{i}"))
-                .hover_group()
-                .role("button")
-                .label(card.title.clone())
-                .focusable(true)
-                .hit()
-                .cursor(Cursor::Pointer)
-                .press_on_down()
-                .press_scale(PRESS_SCALE)
+            el().hover_group()
                 .w_full()
                 .min_w(0.0)
                 .h(56.0)
-                .pl(6.0)
-                .pr(46.0)
-                .py(6.0)
-                .gap(12.0)
-                .radius(RADIUS_CARD)
-                .continuous_corners()
-                .fill(exo_kit::surface_elevated_hi())
-                .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
-                .hover(hover_fill())
-                .center_y()
-                .motion(SPRING_QUICK)
-                .on_press(move |s: &mut AppState| {
-                    s.music_open_card(uri.clone(), kind.clone(), title.clone());
-                })
-                .child(render_art(
-                    s,
-                    &card.image,
-                    Some(44.0),
-                    art_r,
-                    is_liked,
-                    scale,
-                ))
                 .child(
-                    text(card.title.clone())
-                        .font(scaled_body(s))
-                        .color(FG)
-                        .truncate()
-                        .grow(1.0)
-                        .min_w(0.0),
+                    row()
+                        .key(format!("music-recent-{i}"))
+                        .role("button")
+                        .label(card.title.clone())
+                        .focusable(true)
+                        .hit()
+                        .cursor(Cursor::Pointer)
+                        .press_on_down()
+                        .press_scale(PRESS_SCALE)
+                        .w_full()
+                        .min_w(0.0)
+                        .h(56.0)
+                        .pl(6.0)
+                        .pr(50.0)
+                        .py(6.0)
+                        .gap(12.0)
+                        .radius(RADIUS_CARD)
+                        .continuous_corners()
+                        .fill(exo_kit::surface_elevated_hi())
+                        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
+                        .hover(hover_fill())
+                        .center_y()
+                        .motion(SPRING_QUICK)
+                        .on_press(move |s: &mut AppState| {
+                            s.music_open_card(uri.clone(), kind.clone(), title.clone());
+                        })
+                        .child(render_art(
+                            s,
+                            &card.image,
+                            Some(44.0),
+                            art_r,
+                            is_liked,
+                            scale,
+                        ))
+                        .child(
+                            text(card.title.clone())
+                                .font(scaled_body(s))
+                                .color(FG)
+                                .truncate()
+                                .grow(1.0)
+                                .min_w(0.0),
+                        ),
                 )
                 .child(
                     el().pin(None, Some(12.0), Some(10.0), None)
@@ -824,6 +828,9 @@ fn shelf_card(s: &AppState, idx: usize, j: usize, card: &PlayerCard, scale: f32)
     let uri = card.uri.clone();
     let kind = card.kind.clone();
     let title = card.title.clone();
+    let uri_meta = card.uri.clone();
+    let kind_meta = card.kind.clone();
+    let title_meta = card.title.clone();
     let sub = if !card.subtitle.is_empty() {
         card.subtitle.as_str()
     } else if is_artist {
@@ -831,25 +838,51 @@ fn shelf_card(s: &AppState, idx: usize, j: usize, card: &PlayerCard, scale: f32)
     } else {
         ""
     };
-    let mut card_col = col()
-        .key(format!("music-card-{idx}-{j}"))
-        .hover_group()
+    let mut meta = col()
         .role("button")
         .label(card.title.clone())
-        .focusable(true)
+        .focusable(false)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .w_full()
         .min_w(0.0)
         .gap(4.0)
-        .radius(RADIUS_CARD)
         .on_press(move |s: &mut AppState| {
-            s.music_open_card(uri.clone(), kind.clone(), title.clone());
+            s.music_open_card(uri_meta.clone(), kind_meta.clone(), title_meta.clone());
         })
+        .child(
+            text(card.title.clone())
+                .font(scaled_body(s))
+                .color(FG)
+                .truncate(),
+        );
+    if !sub.is_empty() {
+        meta = meta.child(text(sub).font(scaled_small(s)).color(fg_muted()).truncate());
+    }
+    col()
+        .key(format!("music-card-{idx}-{j}"))
+        .hover_group()
+        .w_full()
+        .min_w(0.0)
+        .gap(4.0)
+        .radius(RADIUS_CARD)
         .child(
             el().w_full()
                 .mb(8.0)
-                .child(render_art(s, &card.image, None, art_r, is_liked, scale))
+                .child(
+                    el().role("button")
+                        .label(card.title.clone())
+                        .focusable(true)
+                        .hit()
+                        .cursor(Cursor::Pointer)
+                        .press_on_down()
+                        .w_full()
+                        .on_press(move |s: &mut AppState| {
+                            s.music_open_card(uri.clone(), kind.clone(), title.clone());
+                        })
+                        .child(render_art(s, &card.image, None, art_r, is_liked, scale)),
+                )
                 .child(
                     el().pin(None, None, Some(10.0), Some(10.0))
                         .child(card_play_button(
@@ -859,16 +892,7 @@ fn shelf_card(s: &AppState, idx: usize, j: usize, card: &PlayerCard, scale: f32)
                         )),
                 ),
         )
-        .child(
-            text(card.title.clone())
-                .font(scaled_body(s))
-                .color(FG)
-                .truncate(),
-        );
-    if !sub.is_empty() {
-        card_col = card_col.child(text(sub).font(scaled_small(s)).color(fg_muted()).truncate());
-    }
-    card_col
+        .child(meta)
 }
 
 fn main_panel_body(s: &AppState, scale: f32) -> El {
@@ -1295,7 +1319,7 @@ fn playback_controls(s: &AppState, prefix: &str) -> El {
     .on_press(|s: &mut AppState| s.music_control("previous"));
 
     let play_size = if prefix == "music-immersion" {
-        48.0
+        44.0
     } else {
         40.0
     };
@@ -1689,26 +1713,68 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
     let has_lyrics = !s.media.music_track_uri.is_empty()
         && (!s.media.music_lyrics_lines.is_empty() || s.media.music_lyrics_loading);
 
-    let art_size: f32 = if has_lyrics { 356.0 } else { 384.0 };
-    let control_w: f32 = if has_lyrics { 468.0 } else { 540.0 };
-    let title_font = TextStyle::new(26.0 * text_scale(s), 700.0)
+    // Responsive sizing from the live viewport so album art, controls, volume, and lyrics never
+    // clip or collide on 720p, scaled 1080p, or ultrawide windows.
+    let vp_w = if s.chrome.top_bar_width > 0.0 {
+        s.chrome.top_bar_width
+    } else {
+        1280.0
+    };
+    let vp_h = if s.chrome.window_height > 0.0 {
+        s.chrome.window_height
+    } else {
+        720.0
+    };
+    let stacked = has_lyrics && vp_w < 880.0;
+    let stage_px = if vp_w < 1100.0 { 28.0 } else { 56.0 };
+    let stage_gap = if vp_w < 1100.0 { 32.0 } else { 56.0 };
+    let stage_pt = TITLEBAR_HEIGHT + 20.0;
+    let stage_pb = 28.0;
+    let avail_h = (vp_h - stage_pt - stage_pb).max(360.0);
+    // Reserve ~220 pt vertically for title/artist + seek + primary controls + volume pill + gaps.
+    let max_art_for_h = (avail_h - 224.0).max(160.0);
+    let art_size: f32 = if stacked {
+        (avail_h * 0.28).clamp(140.0, 200.0)
+    } else if has_lyrics {
+        max_art_for_h
+            .min(vp_w * 0.27)
+            .clamp(180.0, 360.0)
+    } else {
+        max_art_for_h
+            .min(vp_w * 0.34)
+            .clamp(200.0, 420.0)
+    };
+    let control_w: f32 = if stacked {
+        (vp_w - stage_px * 2.0).clamp(340.0, 460.0)
+    } else if has_lyrics {
+        ((vp_w - stage_px * 2.0 - stage_gap) * 0.44)
+            .clamp(368.0, 460.0)
+            .max(art_size)
+    } else {
+        (vp_w - stage_px * 2.0)
+            .min(500.0)
+            .max(art_size.max(380.0))
+    };
+
+    let title_sz = if avail_h < 580.0 { 22.0 } else { 26.0 } * text_scale(s);
+    let title_font = TextStyle::new(title_sz, 700.0)
         .letter_spacing(-0.025)
-        .lh(26.0 * text_scale(s) * 1.2);
+        .lh(title_sz * 1.2);
     let time_font = TextStyle::new(12.0 * text_scale(s), 500.0).features("'tnum' 1");
     let hue = crate::state::title_hue(title);
     let art_img = s.current_playback_art(scale);
 
-    // Rich calm gradient backdrop tinted by the track: deep atmospheric harmony, no artwork wash, no moving orbs.
+    // True-AMOLED dark atmospheric backdrop tinted softly by the track.
     let backdrop = el()
         .key(format!("music-immerse-bg-{track_key}"))
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .linear_gradient(
             std::f32::consts::PI * 0.78,
             [
-                (0.0, oklch(0.32, 0.13, hue)),
-                (0.38, oklch(0.21, 0.09, (hue + 22.0) % 360.0)),
-                (0.74, oklch(0.11, 0.045, (hue + 48.0) % 360.0)),
-                (1.0, exo_kit::srgb(5, 6, 9, 1.0)),
+                (0.0, oklch(0.14, 0.065, hue)),
+                (0.38, oklch(0.08, 0.035, (hue + 22.0) % 360.0)),
+                (0.72, oklch(0.035, 0.015, (hue + 48.0) % 360.0)),
+                (1.0, BG),
             ],
         )
         .child(
@@ -1716,9 +1782,9 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
                 .linear_gradient(
                     std::f32::consts::PI,
                     [
-                        (0.0, oklch(0.46, 0.14, hue).alpha(0.22)),
+                        (0.0, oklch(0.24, 0.08, hue).alpha(0.14)),
                         (0.45, TRANSPARENT),
-                        (1.0, BG.alpha(0.54)),
+                        (1.0, BG.alpha(0.78)),
                     ],
                 ),
         )
@@ -1749,7 +1815,7 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         )
         .child(seek_slider(
             "music-immersion-seek",
-            (control_w - 104.0).max(200.0),
+            (control_w - 104.0).max(160.0),
             pos_ms,
             dur_ms,
             can_seek,
@@ -1770,67 +1836,79 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
             (s.media.music_volume * 100.0).round() as i32
         }
     );
-    let vol_slider_w = if has_lyrics { 58.0 } else { 78.0 };
-    let vol_cluster = row()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(6.0)
-        .center_y()
-        .child(
-            bar_icon_btn(
-                "music-immersion-mute",
-                if muted { "Unmute music" } else { "Mute music" },
-                if muted {
-                    icon_volume_off(15.0, fg_muted())
-                } else {
-                    icon_volume(15.0, FG.alpha(0.88))
-                },
-                28.0,
-                false,
-                false,
-            )
-            .on_press(|s: &mut AppState| s.music_toggle_mute()),
-        )
-        .child(volume_slider(
-            "music-immersion",
-            vol_slider_w,
-            s.media.music_volume,
-            muted,
-        ))
-        .child(
-            text(vol_pct)
-                .font(time_font)
-                .color(FG.alpha(0.68))
-                .w(30.0),
-        );
 
-    // Single unified floating Liquid Glass control dock: volume + playback + verdicts + exit.
+    // Primary floating Liquid Glass transport pill: verdicts on the left, dead-center playback
+    // controls in the middle, and exit on the right — guaranteed breathing room at every width.
     let controls_dock = apply_glass(
         row()
             .key("music-immersion-controls")
             .w(control_w)
             .h(56.0)
             .px(14.0)
-            .gap(10.0)
+            .gap(8.0)
             .radius(RADIUS_PILL)
             .center_y()
-            .child(vol_cluster)
+            .child(
+                row()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .center_y()
+                    .child(verdict_controls(s, "music-immersion")),
+            )
             .child(playback_controls(s, "music-immersion"))
             .child(
                 row()
                     .grow(1.0)
                     .min_w(0.0)
                     .justify_end()
-                    .gap(4.0)
                     .center_y()
-                    .child(verdict_controls(s, "music-immersion"))
                     .child(leave_btn),
             ),
         ExoGlass::ClearMedia,
         false,
     );
 
-    // Living album art card: elevated with crisp rim and soft studio shadow.
+    // Dedicated compact Liquid Glass volume capsule centered beneath the transport dock.
+    let volume_dock = apply_glass(
+        row()
+            .key("music-immersion-volume")
+            .h(36.0)
+            .px(12.0)
+            .gap(8.0)
+            .radius(RADIUS_PILL)
+            .center_y()
+            .child(
+                bar_icon_btn(
+                    "music-immersion-mute",
+                    if muted { "Unmute music" } else { "Mute music" },
+                    if muted {
+                        icon_volume_off(15.0, fg_muted())
+                    } else {
+                        icon_volume(15.0, FG.alpha(0.88))
+                    },
+                    26.0,
+                    false,
+                    false,
+                )
+                .on_press(|s: &mut AppState| s.music_toggle_mute()),
+            )
+            .child(volume_slider(
+                "music-immersion",
+                116.0,
+                s.media.music_volume,
+                muted,
+            ))
+            .child(
+                text(vol_pct)
+                    .font(time_font)
+                    .color(FG.alpha(0.72))
+                    .w(34.0),
+            ),
+        ExoGlass::ClearMedia,
+        false,
+    );
+
+    // Living album art card: elevated with crisp hairline rim and zero muddy drop shadow.
     let art_radius = exo_kit::RADIUS_SHEET;
     let art_content = if art_img.is_some() {
         render_art_image(art_img, Some(art_size), art_radius, false)
@@ -1841,9 +1919,9 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
             .linear_gradient(
                 std::f32::consts::PI * 0.85,
                 [
-                    (0.0, oklch(0.30, 0.11, hue)),
-                    (0.65, oklch(0.16, 0.06, (hue + 28.0) % 360.0)),
-                    (1.0, exo_kit::srgb(12, 14, 19, 1.0)),
+                    (0.0, oklch(0.20, 0.08, hue)),
+                    (0.65, oklch(0.09, 0.035, (hue + 28.0) % 360.0)),
+                    (1.0, BG),
                 ],
             )
             .center()
@@ -1855,13 +1933,8 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         .radius(art_radius)
         .continuous_corners()
         .clip_rounded(art_radius)
-        .border_gradient(1.0, Color::WHITE.alpha(0.24), Color::WHITE.alpha(0.06))
-        .shadow(
-            0.0,
-            if playing { 32.0 } else { 14.0 },
-            Color::BLACK.alpha(if playing { 0.68 } else { 0.42 }),
-        )
-        .scale(if playing { 1.0 } else { 0.93 })
+        .border_gradient(1.0, Color::WHITE.alpha(0.22), Color::WHITE.alpha(0.06))
+        .scale(if playing { 1.0 } else { 0.94 })
         .motion(SPRING_SMOOTH)
         .transition(Transition::scale(0.95).springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)))
         .child(art_content);
@@ -1884,34 +1957,68 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
     let song_col = col()
         .w(control_w)
         .items_center()
-        .gap(22.0)
+        .gap(if avail_h < 580.0 { 14.0 } else { 18.0 })
         .glass_container(GLASS_CONTAINER_SPACING)
         .child(art_card)
-        .child(col().w_full().gap(14.0).child(title_row).child(progress))
-        .child(controls_dock);
+        .child(col().w_full().gap(10.0).child(title_row).child(progress))
+        .child(controls_dock)
+        .child(volume_dock);
 
-    let mut stage = row()
-        .w_full()
-        .h_full()
-        .pt(TITLEBAR_HEIGHT + 28.0)
-        .pb(44.0)
-        .px(64.0)
-        .gap(72.0)
-        .center()
-        .child(song_col);
-
-    if has_lyrics {
-        stage = stage.child(
-            col()
-                .key("music-immersion-lyrics")
-                .w(520.0)
-                .max_h(680.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(lyrics_view(s, true)),
-        );
-    }
+    let stage = if stacked {
+        let mut stacked_stage = col()
+            .w_full()
+            .h_full()
+            .pt(stage_pt)
+            .pb(stage_pb)
+            .px(stage_px)
+            .gap(20.0)
+            .items_center()
+            .child(song_col);
+        if has_lyrics {
+            stacked_stage = stacked_stage.child(
+                col()
+                    .key("music-immersion-lyrics")
+                    .w_full()
+                    .max_w(640.0)
+                    .grow(1.0)
+                    .min_h(0.0)
+                    .clip_fade(0.0, 36.0, 0.0, 36.0)
+                    .scroll(ScrollSpec {
+                        stick_bottom: false,
+                    })
+                    .child(lyrics_view(s, true)),
+            );
+        }
+        stacked_stage
+    } else {
+        let mut wide_stage = row()
+            .w_full()
+            .h_full()
+            .pt(stage_pt)
+            .pb(stage_pb)
+            .px(stage_px)
+            .gap(stage_gap)
+            .justify_center()
+            .center_y()
+            .child(song_col);
+        if has_lyrics {
+            wide_stage = wide_stage.child(
+                col()
+                    .key("music-immersion-lyrics")
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .max_w(640.0)
+                    .h_full()
+                    .min_h(0.0)
+                    .clip_fade(0.0, 56.0, 0.0, 56.0)
+                    .scroll(ScrollSpec {
+                        stick_bottom: false,
+                    })
+                    .child(lyrics_view(s, true)),
+            );
+        }
+        wide_stage
+    };
 
     el().key("music-immersion-room")
         .w_full()
@@ -2875,5 +2982,382 @@ mod tests {
             (2..=exo_kit::EXO_MAX_BACKDROP_BLURS).contains(&glass_count),
             "expected real Liquid Glass controls in immersive mode, got {glass_count}"
         );
+    }
+
+    #[test]
+    fn home_card_play_buttons_play_without_opening_card() {
+        let mut state = AppState::default();
+        state.room = Room::Music;
+        state.media.music_room_state = MusicRoomState::Running;
+        state.media.music_nav = MusicNav::Home;
+        state.media.music_recent = vec![PlayerCard {
+            uri: "am:playlists:pl.recent-0".into(),
+            kind: "playlist".into(),
+            title: "Midnight Focus".into(),
+            subtitle: "Playlist".into(),
+            image: String::new(),
+            ..Default::default()
+        }];
+        state.media.music_home_sections = vec![PlayerSection {
+            title: "Made For You".into(),
+            more: None,
+            items: vec![
+                PlayerCard {
+                    uri: "am:albums:1440935467".into(),
+                    kind: "album".into(),
+                    title: "Currents".into(),
+                    subtitle: "Tame Impala".into(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+                PlayerCard {
+                    uri: "am:stations:ra.12345".into(),
+                    kind: "station".into(),
+                    title: "Discovery Station".into(),
+                    subtitle: "Station".into(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+            ],
+        }];
+
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        // Clicking the recent tile's play button must trigger playback and stay on Home.
+        let (rx, ry) = rt
+            .find("music-recent-play-0")
+            .expect("music-recent-play-0 button");
+        rt.pointer_move(rx, ry);
+        rt.pointer_down(rx, ry);
+        rt.pointer_up(rx, ry);
+        rt.frame(2.0 / 60.0);
+        assert_eq!(rt.state.media.music_nav, MusicNav::Home);
+        assert_eq!(
+            rt.state.media.music_last_play_request.as_deref(),
+            Some("am:playlists:pl.recent-0")
+        );
+
+        // Clicking a shelf card's play button must trigger playback and stay on Home.
+        let (cx, cy) = rt
+            .find("music-card-play-0-0")
+            .expect("music-card-play-0-0 button");
+        rt.pointer_move(cx, cy);
+        rt.pointer_down(cx, cy);
+        rt.pointer_up(cx, cy);
+        rt.frame(3.0 / 60.0);
+        assert_eq!(rt.state.media.music_nav, MusicNav::Home);
+        assert_eq!(
+            rt.state.media.music_last_play_request.as_deref(),
+            Some("am:albums:1440935467")
+        );
+
+        // Clicking a station card's play button routes via music_play_context with station URI.
+        let (sx, sy) = rt
+            .find("music-card-play-0-1")
+            .expect("music-card-play-0-1 button");
+        rt.pointer_move(sx, sy);
+        rt.pointer_down(sx, sy);
+        rt.pointer_up(sx, sy);
+        rt.frame(4.0 / 60.0);
+        assert_eq!(rt.state.media.music_nav, MusicNav::Home);
+        assert_eq!(
+            rt.state.media.music_last_play_request.as_deref(),
+            Some("am:stations:ra.12345")
+        );
+
+        // Clicking the left side of the recent tile body opens the collection page.
+        let (rect, _) = rt.presented("music-recent-0").expect("music-recent-0 rect");
+        let open_x = rect[0] + 24.0;
+        let open_y = rect[1] + rect[3] * 0.5;
+        rt.pointer_move(open_x, open_y);
+        rt.pointer_down(open_x, open_y);
+        rt.pointer_up(open_x, open_y);
+        rt.frame(5.0 / 60.0);
+        assert!(
+            matches!(rt.state.media.music_nav, MusicNav::Collection { ref uri, .. } if uri == "am:playlists:pl.recent-0"),
+            "clicking recent tile body should open collection, got {:?}",
+            rt.state.media.music_nav
+        );
+    }
+
+    #[test]
+    fn immersion_view_never_clips_buttons_or_lyrics_at_720p_and_1080p() {
+        use exo_rpc::{LyricsLine, MusicPlayback};
+
+        for (w, h) in [(1280.0f32, 720.0f32), (1920.0f32, 1080.0f32)] {
+            let mut state = AppState::default();
+            state.room = Room::Music;
+            state.media.music_service = MusicService::YouTube;
+            state.media.music_room_state = MusicRoomState::Running;
+            state.media.music_immersion = true;
+            state.media.music_can_shuffle = true;
+            state.media.music_can_repeat = true;
+            state.media.music_track_uri = "yt:video:abc123".into();
+            state.media.music_player_title = Some("A Very Long Immersive Track Title".into());
+            state.media.playback = Some(MusicPlayback {
+                title: "A Very Long Immersive Track Title".into(),
+                artist: "Artist Name".into(),
+                status: "playing".into(),
+                position_ms: Some(15_000),
+                duration_ms: Some(210_000),
+                can_seek: true,
+                can_play: true,
+                can_pause: true,
+                can_prev: true,
+                can_next: true,
+                ..Default::default()
+            });
+            state.media.music_lyrics_synced = true;
+            state.media.music_lyrics_lines = (0..18)
+                .map(|i| LyricsLine {
+                    start: (i as f64) * 4000.0,
+                    text: format!(
+                        "Line {i}: This is a longer lyric line that wraps cleanly inside the lyrics column without clipping"
+                    ),
+                    words: vec![],
+                    agent: None,
+                })
+                .collect();
+
+            let mut rt = Runtime::new(state, shell::view, (w, h), Env::new(true, 1.0));
+            rt.frame(0.0);
+            rt.frame(1.0 / 60.0);
+            rt.settle_all();
+            rt.frame(2.0 / 60.0);
+
+            let (controls, _) = rt
+                .presented("music-immersion-controls")
+                .expect("controls dock");
+            let (volume, _) = rt
+                .presented("music-immersion-volume")
+                .expect("volume dock");
+            let (lyrics, _) = rt
+                .presented("music-immersion-lyrics")
+                .expect("lyrics viewport");
+
+            // Docks and lyrics viewport must stay cleanly inside the live viewport.
+            assert!(
+                controls[0] >= 0.0
+                    && controls[0] + controls[2] <= w + 0.5
+                    && controls[1] + controls[3] <= h + 0.5,
+                "{w}x{h}: controls dock clipped outside viewport: {controls:?}"
+            );
+            assert!(
+                volume[0] >= 0.0
+                    && volume[0] + volume[2] <= w + 0.5
+                    && volume[1] + volume[3] <= h + 0.5,
+                "{w}x{h}: volume dock clipped outside viewport: {volume:?}"
+            );
+            assert!(
+                volume[1] >= controls[1] + controls[3] - 0.5,
+                "{w}x{h}: volume dock overlaps controls dock: controls={controls:?} volume={volume:?}"
+            );
+            assert!(
+                lyrics[0] >= controls[0] + controls[2] - 0.5
+                    && lyrics[0] + lyrics[2] <= w + 0.5
+                    && lyrics[1] >= TITLEBAR_HEIGHT
+                    && lyrics[1] + lyrics[3] <= h + 0.5
+                    && lyrics[3] >= 360.0,
+                "{w}x{h}: lyrics viewport mis-sized or clipped: lyrics={lyrics:?} controls={controls:?}"
+            );
+
+            // Every control button inside the transport pill must fit strictly inside the pill with zero horizontal overlap.
+            let button_keys = [
+                "music-immersion-like",
+                "music-immersion-dislike",
+                "music-immersion-shuffle",
+                "music-immersion-prev",
+                "music-immersion-toggle",
+                "music-immersion-next",
+                "music-immersion-repeat",
+                "music-immersion-close",
+            ];
+            let mut rects = Vec::new();
+            for key in button_keys {
+                let (r, _) = rt
+                    .presented(key)
+                    .unwrap_or_else(|| panic!("{w}x{h}: missing button {key}"));
+                assert!(
+                    r[0] >= controls[0] - 0.5
+                        && r[0] + r[2] <= controls[0] + controls[2] + 0.5
+                        && r[1] >= controls[1] - 0.5
+                        && r[1] + r[3] <= controls[1] + controls[3] + 0.5,
+                    "{w}x{h}: button {key} clipped outside controls pill: btn={r:?} pill={controls:?}"
+                );
+                rects.push((key, r));
+            }
+            for pair in rects.windows(2) {
+                let (k0, r0) = pair[0];
+                let (k1, r1) = pair[1];
+                assert!(
+                    r0[0] + r0[2] <= r1[0] + 0.5,
+                    "{w}x{h}: buttons overlap: {k0}={r0:?} vs {k1}={r1:?}"
+                );
+            }
+
+            // Lyric rows must fit inside the lyrics column width (never horizontally clipped).
+            let (lyric0, _) = rt.presented("music-lyric-0").expect("music-lyric-0");
+            assert!(
+                lyric0[0] >= lyrics[0] - 0.5 && lyric0[0] + lyric0[2] <= lyrics[0] + lyrics[2] + 0.5,
+                "{w}x{h}: lyric row clipped horizontally: row={lyric0:?} viewport={lyrics:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "writes real GPU proof PNGs to EXO_PROOF_DIR when requested"]
+    fn render_visual_proof_screenshots() {
+        use exo_rpc::{LyricsLine, LyricsWord, MusicPlayback};
+        use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer};
+        use std::path::PathBuf;
+
+        let out_dir = PathBuf::from(
+            std::env::var("EXO_PROOF_DIR")
+                .unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into_owned()),
+        );
+        std::fs::create_dir_all(&out_dir).expect("create EXO_PROOF_DIR");
+
+        let gpu = Gpu::headless();
+        let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
+
+        let mut capture = |name: &str, state: AppState, w: u32, h: u32| {
+            let mut rt = Runtime::new(state, shell::view, (w as f32, h as f32), Env::new(true, 1.0));
+            rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+            rt.set_glass_policy(rune::GlassPolicy::Glass);
+            rt.frame(0.0);
+            rt.frame(1.0 / 60.0);
+            rt.settle_all();
+            rt.frame(2.0 / 60.0);
+
+            renderer.set_srgb_blend(rt.srgb_blend());
+            renderer.set_fade_stops(rt.fade_stops());
+            renderer.set_max_backdrop_blurs(rt.max_backdrop_blurs());
+            renderer.set_liquid_glass(rt.liquid_glass_frame());
+            renderer.prepare(
+                &gpu.device,
+                &gpu.queue,
+                &mut rt.text.atlas,
+                &rt.instances,
+                (w, h),
+            );
+            let target = Offscreen::with_format(&gpu.device, w, h, renderer.format());
+            let mut enc = gpu.device.create_command_encoder(&Default::default());
+            renderer.draw(&mut enc, &target.view, rt.clear_color());
+            target.copy(&mut enc);
+            gpu.queue.submit([enc.finish()]);
+            let pixels = target.read(&gpu.device);
+            image::save_buffer(out_dir.join(name), &pixels, w, h, image::ColorType::Rgba8)
+                .expect("save proof png");
+        };
+
+        // 1. Library Home: pure #000000 AMOLED + shadow-free upgraded Liquid Glass top pills
+        capture("proof-v4-library-home.png", AppState::with_demo_games(), 1280, 720);
+
+        // 2. Game Page: Optimize (with Graphics Features integrated), zero Frame Cap, zero standalone Graphics Features card
+        let mut game_state = AppState::with_demo_games();
+        game_state.games[0].last_played_utc = Some("2026-11-25T18:00:00Z".into());
+        game_state.open_game_page("demo:cyberpunk");
+        capture("proof-v4-game-page.png", game_state, 1280, 900);
+
+        // 3. Music Home: working sibling Play buttons on Recent tiles + Shelf cards
+        let mut music_home = AppState::default();
+        music_home.room = Room::Music;
+        music_home.media.music_room_state = MusicRoomState::Running;
+        music_home.media.music_nav = MusicNav::Home;
+        music_home.media.playback = Some(MusicPlayback {
+            title: "Starlight".into(),
+            artist: "Muse".into(),
+            status: "playing".into(),
+            position_ms: Some(48_000),
+            duration_ms: Some(240_000),
+            can_seek: true,
+            can_play: true,
+            can_pause: true,
+            can_prev: true,
+            can_next: true,
+            ..Default::default()
+        });
+        capture("proof-v4-music-home.png", music_home, 1280, 720);
+
+        // 4 & 5. Music Immersive Mode with synced lyrics at both 720p and 1080p
+        let make_immersion = || {
+            let mut st = AppState::default();
+            st.room = Room::Music;
+            st.media.music_service = MusicService::YouTube;
+            st.media.music_room_state = MusicRoomState::Running;
+            st.media.music_immersion = true;
+            st.media.music_can_shuffle = true;
+            st.media.music_can_repeat = true;
+            st.media.music_track_uri = "yt:video:starlight".into();
+            st.media.music_player_title = Some("Starlight".into());
+            st.media.music_clock_s = 1.5;
+            st.media.music_playback_anchor_s = 0.0;
+            st.media.playback = Some(MusicPlayback {
+                title: "Starlight".into(),
+                artist: "Muse".into(),
+                status: "playing".into(),
+                position_ms: Some(12_500),
+                duration_ms: Some(240_000),
+                can_seek: true,
+                can_play: true,
+                can_pause: true,
+                can_prev: true,
+                can_next: true,
+                ..Default::default()
+            });
+            st.media.music_lyrics_synced = true;
+            st.media.music_lyrics_lines = vec![
+                LyricsLine {
+                    start: 2000.0,
+                    text: "Far away, this ship is taking me far away".into(),
+                    words: vec![],
+                    agent: None,
+                },
+                LyricsLine {
+                    start: 7000.0,
+                    text: "Far away from the memories of the people who care if I live or die".into(),
+                    words: vec![],
+                    agent: None,
+                },
+                LyricsLine {
+                    start: 11_000.0,
+                    text: "Starlight, I will be chasing a starlight".into(),
+                    words: vec![
+                        LyricsWord { start: 11_000.0, end: 12_000.0, text: "Starlight,".into(), bg: false },
+                        LyricsWord { start: 12_000.0, end: 12_400.0, text: "I".into(), bg: false },
+                        LyricsWord { start: 12_400.0, end: 12_800.0, text: "will".into(), bg: false },
+                        LyricsWord { start: 12_800.0, end: 13_100.0, text: "be".into(), bg: false },
+                        LyricsWord { start: 13_100.0, end: 13_800.0, text: "chasing".into(), bg: false },
+                        LyricsWord { start: 13_800.0, end: 14_100.0, text: "a".into(), bg: false },
+                        LyricsWord { start: 14_100.0, end: 15_000.0, text: "starlight".into(), bg: false },
+                    ],
+                    agent: None,
+                },
+                LyricsLine {
+                    start: 16_000.0,
+                    text: "Until the end of my life, I don't know if it's worth it anymore".into(),
+                    words: vec![],
+                    agent: None,
+                },
+                LyricsLine {
+                    start: 22_000.0,
+                    text: "Hold you in my arms, I just wanted to hold you in my arms".into(),
+                    words: vec![],
+                    agent: None,
+                },
+                LyricsLine {
+                    start: 28_000.0,
+                    text: "My life, you electrify my life".into(),
+                    words: vec![],
+                    agent: None,
+                },
+            ];
+            st
+        };
+        capture("proof-v4-music-immersion-720p.png", make_immersion(), 1280, 720);
+        capture("proof-v4-music-immersion-1080p.png", make_immersion(), 1920, 1080);
     }
 }

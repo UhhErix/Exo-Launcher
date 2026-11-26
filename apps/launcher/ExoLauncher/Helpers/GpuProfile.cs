@@ -85,13 +85,12 @@ internal static partial class GpuProfile
         new(GraphicsCatalog.PreRenderedFrames, v => v.LowLatency == LowLatencyOff ? null : 1u),
         Default(0x10111133),                                       // VR pre-rendered frames
 
-        // G-SYNC / variable refresh: full screen on VRR-capable displays so desktop apps stay tear-free without
-        // flickering on OLED/VA, or Off on fixed-refresh displays.
-        new(GsyncFeature, v => v.Vrr ? 1u : 0u),
-        new(GsyncGlobalMode, v => v.Vrr ? 1u : 0u),
-        new(GsyncAppMode, v => v.Vrr ? 1u : 0u),
-        new(VrrControl, v => v.Vrr ? 1u : 0u),
-        Default(GsyncAppState), Default(GsyncAppRequest),          // Allow: games may use it
+        // G-SYNC / variable refresh: always off for lowest input latency and zero VRR flicker.
+        Set(GsyncFeature, 0),
+        Set(GsyncGlobalMode, 0),
+        Set(GsyncAppMode, 0),
+        Set(VrrControl, 0),
+        Default(GsyncAppState), Default(GsyncAppRequest),
         Set(0x1095F16F, 0),                                        // VRR overlay indicator off
 
         // V-Sync and the frame cap.
@@ -293,7 +292,7 @@ internal static partial class GpuProfile
                 values.TryGetValue(ShaderCacheSize, out var sc) ? (sc == CacheUnlimited ? "Unlimited" : sc is null ? "Driver default" : GraphicsCatalog.ValueOf(ShaderCacheSize, sc.Value)) : null,
                 StateOf(ShaderCacheSize),
                 limitedCache ? $"Less than {UnlimitedMinFreeGb} GB free on cache drive ({cacheDriveFreeGb} GB free); left at driver default" : null),
-            new("gsync", "G-SYNC / VRR", variant.Vrr ? "Full screen" : "Off",
+            new("gsync", "G-SYNC / VRR", "Off",
                 values.TryGetValue(GsyncFeature, out var gs) ? (gs == 1 ? "On" : gs == 0 ? "Off" : null) : null,
                 StateOf(GsyncFeature, GsyncGlobalMode, GsyncAppMode, VrrControl)),
             new("dlss", "DLSS overrides", variant.Rtx ? (variant.Fp8 ? "Latest · Recommended" : "Latest · Preset K / F / A") : "Driver default (GTX)", null,
@@ -326,7 +325,7 @@ internal static partial class GpuProfile
         return
         [
             new("antiLag", "Anti-Lag", "On", "The CPU waits for the GPU instead of queueing frames: less input lag in every game, however it starts. Games with Anti-Lag 2 use their own.", Now("Anti-Lag")),
-            new("freeSync", "FreeSync", "On", "If the screen has it: no tearing and no V-Sync lag. Set it in AMD Software > Display."),
+            new("freeSync", "FreeSync", "Off", "Variable refresh adds input latency and can cause VRR flicker. Set it in AMD Software > Display."),
             new("chill", "Radeon Chill", "Off", "Chill lowers the frame rate to save power, which costs frames and responsiveness.", Now("Radeon Chill")),
             new("boost", "Radeon Boost", "Off", "Boost drops the resolution while you move, which blurs motion.", Now("Radeon Boost")),
             new("enhancedSync", "Enhanced Sync", "Off", "Known to stutter."),
@@ -341,7 +340,7 @@ internal static partial class GpuProfile
     internal static IReadOnlyList<Item> Intel() =>
         [
             new("lowLatency", "Low latency mode", "On", "Fewer frames wait for the GPU: less input lag. On with boost also keeps the GPU's clock up, which costs power."),
-            new("vrr", "Adaptive Sync", "On", "If the screen has it: no tearing and no V-Sync lag."),
+            new("vrr", "Adaptive Sync", "Off", "Variable refresh adds input latency and can cause VRR flicker."),
             new("endurance", "Endurance Gaming", "Off", "Caps frames on battery to save power, which costs frames and responsiveness."),
             new("sharpening", "Sharpening filter", "Off", "Sharpens every game on top of its own sharpening, which adds halos."),
             new("shaders", "Download prebuilt shaders", "On", "The driver fetches Intel's compiled shaders, so games don't compile them while you play."),

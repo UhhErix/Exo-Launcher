@@ -90,7 +90,7 @@ internal static partial class GpuProfile
         Write(Keys.VSync, VSyncGameDecides);
         Write(Keys.AntiLag, 1);
         foreach (var screen in state.Values.Keys.Where(key => key.StartsWith(Keys.FreeSync, StringComparison.Ordinal)).Order(StringComparer.Ordinal))
-            writes.Add(new(screen, 1));
+            writes.Add(new(screen, 0));
         if (FsrUpgrade(state.Gpu, state.Software, state.Values.ContainsKey(Keys.Fsr))) Write(Keys.Fsr, 1);
         return writes;
     }
@@ -100,7 +100,6 @@ internal static partial class GpuProfile
     {
         bool Has(string key) => writes.Any(write => write.Key == key);
         var on = new List<string>();
-        if (writes.Any(write => write.Key.StartsWith(Keys.FreeSync, StringComparison.Ordinal))) on.Add("FreeSync on");
         if (Has(Keys.Fsr)) on.Add("FSR 4 for FSR 3.1 games");
         if (Has(Keys.AntiLag)) on.Add("Anti-Lag on");
         if (Has(Keys.VSync)) on.Add("V-Sync as each game sets it");
@@ -110,6 +109,7 @@ internal static partial class GpuProfile
                 (Keys.EnhancedSync, "Enhanced Sync"),
             }
             .Where(item => Has(item.Key)).Select(item => item.Name).ToList();
+        if (writes.Any(write => write.Key.StartsWith(Keys.FreeSync, StringComparison.Ordinal))) off.Add("FreeSync");
         var parts = new List<string>();
         if (on.Count > 0) parts.Add(string.Join(", ", on));
         if (off.Count > 0) parts.Add((off.Count == 1 ? off[0] : string.Join(", ", off.Take(off.Count - 1)) + " and " + off[^1]) + " off");

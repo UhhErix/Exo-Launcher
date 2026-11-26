@@ -47,6 +47,7 @@ pub struct ShellChromeState {
     pub last_telemetry_room: Option<Room>,
     pub last_chrome_layout_key: Option<String>,
     pub top_bar_width: f32,
+    pub window_height: f32,
 }
 
 impl Default for ShellChromeState {
@@ -72,6 +73,7 @@ impl Default for ShellChromeState {
             last_telemetry_room: None,
             last_chrome_layout_key: None,
             top_bar_width: 0.0,
+            window_height: 0.0,
         }
     }
 }
@@ -1141,6 +1143,8 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let content = boot::render_room_guarded(s, s.room.label(), || {
         if s.room == Room::Discord {
             discord::view(s, scale, budget)
+        } else if s.room == Room::Music {
+            music::view(s, scale)
         } else if s.room == Room::Settings {
             settings::view(s)
         } else if matches!(s.room, Room::Devices | Room::ExoAi | Room::Apps) {
@@ -1184,6 +1188,11 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .w_full()
         .h_full()
         .fill(BG)
+        .on_layout(|s: &mut AppState, r| {
+            if r[3] > 0.0 && (s.chrome.window_height - r[3]).abs() > 0.5 {
+                s.chrome.window_height = r[3];
+            }
+        })
         .child(room_stage)
         .children((!hero_bleeds_top).then_some(top_fade))
         .child(top_bar);

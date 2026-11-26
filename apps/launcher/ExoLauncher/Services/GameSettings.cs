@@ -148,11 +148,7 @@ internal static partial class GameSettings
         return UnrealHdr(game, pc.HdrPeak);
     }
 
-    internal static int? VrrFrameCap(Pc pc)
-    {
-        if (!pc.Vrr || pc.TopRefresh < 40 || pc.TopRefresh > 1800) return null;
-        return Math.Max(30, (int)Math.Floor(pc.TopRefresh - (pc.TopRefresh * (double)pc.TopRefresh) / 3600.0));
-    }
+    internal static int? VrrFrameCap(Pc pc) => null;
 
     internal static bool IsX3dCpu(MouseCore.Topology topology, string? cpuName) =>
         (cpuName?.Contains("X3D", StringComparison.OrdinalIgnoreCase) ?? false)

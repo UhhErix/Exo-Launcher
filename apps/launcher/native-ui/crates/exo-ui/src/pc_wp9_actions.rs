@@ -1380,7 +1380,6 @@ impl AppState {
     pub fn run_gpu_profile_action(&mut self, action: &str) {
         self.pc.gpu_profile_error = None;
         let vendor = self.pc.gpu_profile.as_ref().and_then(|p| p.vendor.clone());
-        let vrr = self.pc.gpu_profile.as_ref().is_some_and(|p| p.screen.vrr);
         let chosen_ll = self.pc.gpu_low_latency_choice.take();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
@@ -1390,9 +1389,6 @@ impl AppState {
                 match vendor.as_deref() {
                     Some("nvidia") => {
                         body.insert("lowLatency".into(), json!("on"));
-                        if vrr {
-                            body.insert("vrr".into(), json!(true));
-                        }
                     }
                     Some("intel") => {
                         let ll = chosen_ll

@@ -273,6 +273,8 @@ internal sealed partial class RuneHostSession
         transport.Start();
         services.HdrHost.Start();
         bridge.StartBackgroundMonitors();
+        if (options.SpawnUi)
+            services.StartDeferredServices();
         Action<int> onDiscordBadge = count => bridge.PostFriendsBadge(count);
         DiscordClient.DiscordSession.BadgeChanged += onDiscordBadge;
         _ = Task.Run(DiscordClient.DiscordSession.Start);

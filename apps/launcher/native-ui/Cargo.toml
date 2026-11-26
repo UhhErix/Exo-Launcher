@@ -39,20 +39,20 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-rune = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7", default-features = false, features = ["accessibility"] }
-rune-kit = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7", default-features = false }
-rune-media = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7", default-features = false }
-rune-ui = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7" }
+rune = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522", default-features = false, features = ["accessibility"] }
+rune-kit = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522", default-features = false }
+rune-media = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522", default-features = false }
+rune-ui = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 
 [patch.crates-io]
-wgpu-hal = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7" }
-winit = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7" }
-sctk-adwaita = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7" }
-parley_engine = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7" }
-accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7" }
-accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "986d513027fd19257534790bad76284a5d6b7df7" }
+wgpu-hal = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522" }
+winit = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522" }
+sctk-adwaita = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522" }
+parley_engine = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522" }
+accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522" }
+accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "be38cbbc608ea16d6ce9a60b7c89f98d272e4522" }
 
 [profile.dev.package."*"]
 opt-level = 2
