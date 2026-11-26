@@ -15,6 +15,7 @@ try {
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.cs', '.css', '.ps1', '.psm1'])
 const EXCLUDED_PREFIXES = [
   'mouse/vendor/',
+  'cloud/account-deployed/',
   'capture/third_party/',
   'ExoLauncher/wwwroot/',
   'ui/dist/',
