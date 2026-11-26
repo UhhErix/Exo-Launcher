@@ -458,20 +458,72 @@ internal sealed partial class DiscordCache
                     if (Str(d, "guild_id") is { } eg && _guilds.TryGetValue(eg, out var eguild))
                         eguild.Emojis = ReadEmojis(d);
                     break;
+                case "MESSAGE_REACTION_ADD_MANY":
+                    if (Str(d, "channel_id") is { } rmc && Visible(rmc))
+                    {
+                        var rmsg = Str(d, "message_id");
+                        foreach (var item in Array(d, "reactions"))
+                        {
+                            if (!item.TryGetProperty("emoji", out var remoji)) continue;
+                            foreach (var uidEl in Array(item, "users"))
+                            {
+                                if (uidEl.ValueKind != JsonValueKind.String || uidEl.GetString() is not { } ruid) continue;
+                                events.Add(("discord.reaction", new
+                                {
+                                    channelId = rmc,
+                                    messageId = rmsg,
+                                    add = true,
+                                    me = ruid == Me?.Id,
+                                    userId = ruid,
+                                    emoji = new { id = Str(remoji, "id"), name = Str(remoji, "name"), animated = Bool(remoji, "animated") },
+                                    burst = false,
+                                    burstColors = System.Array.Empty<string>(),
+                                }));
+                            }
+                        }
+                    }
+                    break;
+                case "PASSIVE_UPDATE_V2":
+                    if (Str(d, "guild_id") is { } pg && _guilds.TryGetValue(pg, out var pguild))
+                    {
+                        var voiceChanged = false;
+                        foreach (var uidEl in Array(d, "removed_voice_states"))
+                            if (uidEl.ValueKind == JsonValueKind.String && uidEl.GetString() is { } remId && pguild.Voice.Remove(remId)) voiceChanged = true;
+                        foreach (var vs in Array(d, "updated_voice_states"))
+                        {
+                            if (Str(vs, "user_id") is not { } vsUid) continue;
+                            if (ReadVoice(vs) is { } vm) { pguild.Voice[vsUid] = vm; voiceChanged = true; }
+                            else if (pguild.Voice.Remove(vsUid)) voiceChanged = true;
+                        }
+                        if (voiceChanged) events.Add(("discord.changed", new { guildId = pg, voice = true }));
+                    }
+                    break;
                 case "READY_SUPPLEMENTAL":
                     {
                         if (d.TryGetProperty("merged_presences", out var mp)) ApplyMergedPresences(mp);
                         foreach (var suppGuild in Array(d, "guilds"))
                         {
                             if (Str(suppGuild, "id") is not { } suppGuildId || !_guilds.TryGetValue(suppGuildId, out var suppGuildObj)) continue;
-                            if (!suppGuild.TryGetProperty("embedded_activities", out _)) continue;
-                            var suppPrev = suppGuildObj.VoiceActivities.Count > 0 ? new Dictionary<string, string>(suppGuildObj.VoiceActivities) : null;
-                            suppGuildObj.VoiceActivities.Clear();
-                            foreach (var suppAct in Array(suppGuild, "embedded_activities")) ApplyEmbeddedActivity(suppGuildObj, suppAct);
-                            var suppChanged = suppPrev is null
-                                ? suppGuildObj.VoiceActivities.Count > 0
-                                : suppPrev.Count != suppGuildObj.VoiceActivities.Count || suppPrev.Any(kv => !suppGuildObj.VoiceActivities.TryGetValue(kv.Key, out var cur) || cur != kv.Value);
-                            if (suppChanged) events.Add(("discord.changed", new { guildId = suppGuildId, voice = true }));
+                            var suppVoiceChanged = false;
+                            if (suppGuild.TryGetProperty("voice_states", out _))
+                            {
+                                suppGuildObj.Voice = Array(suppGuild, "voice_states")
+                                    .Select(v => (Id: Str(v, "user_id"), Member: ReadVoice(v)))
+                                    .Where(v => v.Id is not null && v.Member is not null)
+                                    .ToDictionary(v => v.Id!, v => v.Member!);
+                                suppVoiceChanged = suppGuildObj.Voice.Count > 0;
+                            }
+                            if (suppGuild.TryGetProperty("embedded_activities", out _))
+                            {
+                                var suppPrev = suppGuildObj.VoiceActivities.Count > 0 ? new Dictionary<string, string>(suppGuildObj.VoiceActivities) : null;
+                                suppGuildObj.VoiceActivities.Clear();
+                                foreach (var suppAct in Array(suppGuild, "embedded_activities")) ApplyEmbeddedActivity(suppGuildObj, suppAct);
+                                var actChanged = suppPrev is null
+                                    ? suppGuildObj.VoiceActivities.Count > 0
+                                    : suppPrev.Count != suppGuildObj.VoiceActivities.Count || suppPrev.Any(kv => !suppGuildObj.VoiceActivities.TryGetValue(kv.Key, out var cur) || cur != kv.Value);
+                                suppVoiceChanged |= actChanged;
+                            }
+                            if (suppVoiceChanged) events.Add(("discord.changed", new { guildId = suppGuildId, voice = true }));
                         }
                         events.Add(("discord.changed", new { guildId = (string?)null, friends = true }));
                         break;
@@ -2170,6 +2222,7 @@ internal sealed partial class DiscordCache
 
     private ulong Perms(Channel channel)
     {
+        if ((channel.Flags & (1 << 17)) != 0) return 0;
         if (channel.GuildId is null || !_guilds.TryGetValue(channel.GuildId, out var guild) || Me is null) return All;
         if (guild.OwnerId == Me.Id) return All;
         var perms = guild.Roles.GetValueOrDefault(guild.Id);

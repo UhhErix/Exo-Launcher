@@ -32,7 +32,7 @@ internal sealed partial class DiscordSession
     private static string _state = "signedOut";
     private static string? _message;
 
-    private readonly string _token;
+    private string _token;
     private readonly CancellationTokenSource _stop = new();
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private readonly GatewaySendLimit _sendLimit = new();
@@ -350,6 +350,7 @@ internal sealed partial class DiscordSession
     private async Task<(string? Fatal, bool Ready, bool Limited)> ConnectOnceAsync()
     {
         using var ws = new ClientWebSocket();
+        ws.Options.Cookies = Rest.Cookies;
         ws.Options.SetRequestHeader("Origin", "https://discord.com");
         ws.Options.SetRequestHeader("User-Agent", DiscordRest.UserAgent);
         _ws = ws;
@@ -458,6 +459,13 @@ internal sealed partial class DiscordSession
         {
             _sessionId = data.GetProperty("session_id").GetString();
             _resumeUrl = data.TryGetProperty("resume_gateway_url", out var url) ? url.GetString() : null;
+            if (data.TryGetProperty("auth_token", out var rotatedEl) && rotatedEl.ValueKind == JsonValueKind.String
+                && rotatedEl.GetString() is { Length: > 0 } rotated && rotated != _token)
+            {
+                _token = rotated;
+                Rest.UpdateToken(rotated);
+                DiscordToken.Save(rotated);
+            }
             Cache.LoadReady(data);
             AskForMyRoles();
             AskVoiceMembers();
@@ -669,10 +677,12 @@ internal sealed partial class DiscordSession
         Cache.SetMyStatus(status);
         await SendPresenceAsync().ConfigureAwait(false);
         SyncLinks();
-        var reply = await Rest.SetStatusAsync(status, ct).ConfigureAwait(false);
         Event?.Invoke("discord.presence", new { userId = Cache.Me?.Id, status, activity = (string?)null, until });
-        if (reply.Error is not null) return reply.Error;
-        var (_, error) = await UserSettingsAsync(new Dictionary<string, JsonElement> { ["statusExpiresAtMs"] = JsonSerializer.SerializeToElement(until) }, ct).ConfigureAwait(false);
+        var (_, error) = await UserSettingsAsync(new Dictionary<string, JsonElement>
+        {
+            ["status"] = JsonSerializer.SerializeToElement(status),
+            ["statusExpiresAtMs"] = JsonSerializer.SerializeToElement(until),
+        }, ct).ConfigureAwait(false);
         ExpireStatusAt(until);
         return error;
     }
@@ -820,6 +830,7 @@ internal sealed partial class DiscordSession
         ["properties"] = DiscordRest.Properties(),
         ["presence"] = new JsonObject { ["status"] = "unknown", ["since"] = 0, ["activities"] = new JsonArray(), ["afk"] = false },
         ["compress"] = false,
+        ["client_state"] = new JsonObject { ["guild_versions"] = new JsonObject() },
     };
 
     private async Task HeartbeatAsync(ClientWebSocket ws, int interval, CancellationToken ct)

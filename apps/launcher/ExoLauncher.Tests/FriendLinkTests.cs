@@ -269,13 +269,97 @@ public sealed class FriendLinkTests
     [Fact]
     public void DiscordApiHeadersStayOnDiscordApiRequests()
     {
-        using var req = DiscordRest.BuildRequest(HttpMethod.Get, "users/@me", null);
-        Assert.True(req.Headers.Contains("Origin"));
-        Assert.NotNull(req.Headers.Referrer);
-        Assert.True(req.Headers.Contains("X-Discord-Locale"));
-        Assert.True(req.Headers.Contains("X-Discord-Timezone"));
-        Assert.True(req.Headers.Contains("X-Debug-Options"));
-        Assert.True(req.Headers.Contains("X-Super-Properties"));
+        ExoLauncher.Services.HostWindow.SetNativeState((nint)0x42, true);
+        try
+        {
+            using var req = DiscordRest.BuildRequest(HttpMethod.Get, "users/@me", null);
+            Assert.True(req.Headers.Contains("Origin"));
+            Assert.NotNull(req.Headers.Referrer);
+            Assert.True(req.Headers.Contains("X-Discord-Locale"));
+            Assert.True(req.Headers.Contains("X-Discord-Timezone"));
+            Assert.True(req.Headers.Contains("X-Debug-Options"));
+            Assert.True(req.Headers.Contains("X-Super-Properties"));
+            Assert.Equal("empty", req.Headers.GetValues("Sec-Fetch-Dest").Single());
+            Assert.Equal("cors", req.Headers.GetValues("Sec-Fetch-Mode").Single());
+            Assert.Equal("same-origin", req.Headers.GetValues("Sec-Fetch-Site").Single());
+            Assert.Equal("?0", req.Headers.GetValues("sec-ch-ua-mobile").Single());
+            Assert.Equal("\"Windows\"", req.Headers.GetValues("sec-ch-ua-platform").Single());
+            Assert.Contains("Google Chrome", req.Headers.GetValues("sec-ch-ua").Single(), StringComparison.Ordinal);
+            Assert.Equal("focused", DiscordRest.Properties()["client_app_state"]!.GetValue<string>());
+
+            ExoLauncher.Services.HostWindow.SetNativeState((nint)0x42, false);
+            Assert.Equal("unfocused", DiscordRest.Properties()["client_app_state"]!.GetValue<string>());
+        }
+        finally
+        {
+            ExoLauncher.Services.HostWindow.ClearNativeState();
+        }
+    }
+
+    [Fact]
+    public void DiscordStatusRoundTripsThroughPreloadedUserSettingsProto()
+    {
+        var patch = new Dictionary<string, JsonElement> { ["status"] = JsonSerializer.SerializeToElement("dnd") };
+        var encoded = DiscordUserSettings.Patch([], patch);
+        Assert.NotNull(encoded);
+        var decoded = DiscordUserSettings.Decode(encoded!);
+        Assert.Equal("dnd", decoded["status"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void CacheHandlesSupplementalVoicePassiveUpdateV2ReactionManyAndObfuscatedChannels()
+    {
+        var cache = new DiscordCache();
+        using var ready = JsonDocument.Parse("""
+            {
+              "user": { "id": "1", "username": "me" },
+              "users": [{ "id": "2", "username": "friend" }],
+              "guilds": [{
+                "id": "10",
+                "properties": { "name": "Srv", "owner_id": "99" },
+                "roles": [{ "id": "10", "permissions": "1024", "position": 0, "color": 0, "name": "@everyone" }],
+                "channels": [
+                  { "id": "100", "type": 0, "name": "general", "flags": 0 },
+                  { "id": "101", "type": 0, "name": "___hidden___", "flags": 131072 },
+                  { "id": "102", "type": 2, "name": "Voice", "flags": 0 }
+                ]
+              }]
+            }
+            """);
+        cache.LoadReady(ready.RootElement);
+        Assert.True(cache.CanSee("100"));
+        Assert.False(cache.CanSee("101"));
+
+        using var supp = JsonDocument.Parse("""
+            {
+              "guilds": [{
+                "id": "10",
+                "voice_states": [{ "user_id": "2", "channel_id": "102", "self_mute": false, "self_deaf": false }]
+              }]
+            }
+            """);
+        var suppEvents = cache.Apply("READY_SUPPLEMENTAL", supp.RootElement);
+        Assert.Contains(suppEvents, e => e.Name == "discord.changed");
+
+        using var passive = JsonDocument.Parse("""
+            {
+              "guild_id": "10",
+              "removed_voice_states": ["2"],
+              "updated_voice_states": []
+            }
+            """);
+        var passiveEvents = cache.Apply("PASSIVE_UPDATE_V2", passive.RootElement);
+        Assert.Contains(passiveEvents, e => e.Name == "discord.changed");
+
+        using var many = JsonDocument.Parse("""
+            {
+              "channel_id": "100",
+              "message_id": "500",
+              "reactions": [{ "emoji": { "name": "🔥" }, "users": ["1", "2"] }]
+            }
+            """);
+        var reactEvents = cache.Apply("MESSAGE_REACTION_ADD_MANY", many.RootElement);
+        Assert.Equal(2, reactEvents.Count(e => e.Name == "discord.reaction"));
     }
 
     // ---- no switch (3.26.0) ----

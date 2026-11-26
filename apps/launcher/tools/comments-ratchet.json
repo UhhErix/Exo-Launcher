@@ -822,7 +822,7 @@
     "ExoLauncher/Services/DiscordClient/DiscordRest.Pages.cs": 17,
     "ExoLauncher/Services/DiscordClient/DiscordRest.Settings.cs": 11,
     "ExoLauncher/Services/DiscordClient/DiscordRest.Shop.cs": 34,
-    "ExoLauncher/Services/DiscordClient/DiscordRest.cs": 108,
+    "ExoLauncher/Services/DiscordClient/DiscordRest.cs": 104,
     "ExoLauncher/Services/DiscordClient/DiscordSession.Apps.cs": 16,
     "ExoLauncher/Services/DiscordClient/DiscordSession.CallSongs.cs": 15,
     "ExoLauncher/Services/DiscordClient/DiscordSession.FriendLinks.cs": 15,

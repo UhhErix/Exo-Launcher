@@ -812,7 +812,7 @@ public sealed partial class WebHostBridge
         switch (ReadString(p, hasParams, "action"))
         {
             case "join" when InviteCode(ReadString(p, hasParams, "invite")) is { } code:
-                reply = await session.Rest.JoinInviteAsync(code, ct).ConfigureAwait(false);
+                reply = await session.Rest.JoinInviteAsync(code, ct, session.SessionId).ConfigureAwait(false);
                 // The invite's server and channel (a group DM's invite has no server), which the room opens as Discord's app does.
                 var accepted = reply.Body is { ValueKind: JsonValueKind.Object } body ? body : default;
                 var guild = accepted.ValueKind == JsonValueKind.Object && accepted.TryGetProperty("guild", out var g) && g.TryGetProperty("id", out var gid) ? gid.GetString() : null;

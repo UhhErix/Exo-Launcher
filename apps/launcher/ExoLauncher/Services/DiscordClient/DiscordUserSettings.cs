@@ -94,6 +94,7 @@ internal static class DiscordUserSettings
         new("hideFriendRequestNotes", Kind.Bool, [8, 33], false),
         // Server Web Pages (SWP): true keeps what you send in Discoverable channels off them.
         new("swpMessagePromotionOptedOut", Kind.Bool, [8, 35], false),
+        new("status", Kind.Text, [11, 1], "online", Texts: ["online", "idle", "dnd", "invisible"]),
         // 12 localization
         new("locale", Kind.Text, [12, 1], "", Texts: Locales),
         // 13 appearance
