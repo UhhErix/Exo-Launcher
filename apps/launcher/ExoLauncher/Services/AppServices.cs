@@ -420,6 +420,8 @@ public sealed class AppServices
             }
         }
         catch (Exception ex) { completedCleanly = false; AppLog.Warn("Frame cap / G-SYNC settings cleanup failed: " + ex.GetType().Name); }
+        try { NoteTextFiles.Withdraw(); }
+        catch (Exception ex) { completedCleanly = false; AppLog.Warn("Notes text file withdraw failed: " + ex.GetType().Name); }
         try { LegacyProfileDataCleanup.Run(); }
         catch (Exception ex) { completedCleanly = false; AppLog.Debug("Legacy data cleanup failed: " + ex.GetType().Name); }
         try

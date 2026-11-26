@@ -3992,7 +3992,7 @@ impl AppState {
     pub fn apply_capture_saved(&mut self, ev: CaptureSavedEvent) {
         let id = ev.item.id.clone();
         let name = ev.item.name.clone();
-        let edit = ev.edit || ev.item.kind == "image";
+        let edit = ev.edit;
         self.media.capture_items.retain(|it| it.id != id);
         self.media.capture_items.insert(0, ev.item);
         if edit {
