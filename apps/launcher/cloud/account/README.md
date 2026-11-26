@@ -248,7 +248,7 @@ schema), the secret `ACCOUNT_SECRETS`, the `SESSION_TRIES` rate limit (namespace
 The dev copy `exo-account-dev` (workers.dev, its own D1, `[env.dev]` in `wrangler.toml`) is the same code, but it is not
 deployed: on 2026-11-26 the Cloudflare account listed no `exo-account-dev` Worker and no `exo-account-dev` D1. Step 3 and
 CLIENT.md section 0 need it created first (`d1 create exo-account-dev`, put its id in `[env.dev]`, `deploy --env dev`, then give it its own throwaway keyring with
-`npx wrangler@4.165.0 secret put ACCOUNT_SECRETS --env dev`: without one every route answers 503 `not-configured`. The
-`--env dev` flag is required; never run that command without it, because it would replace the live keyring).
+a `wrangler secret put` of the key name `ACCOUNT_SECRETS` with `--env dev` (see [Keys](#keys) for the format): without one
+every route answers 503 `not-configured`. The `--env dev` flag is required; without it the command replaces the live keyring).
 Once it exists it is deployed before live, as in step 3, and gets its migrations the same way. The apps' rows in PRIVACY.md and `ExoLauncher/NetworkDestinations.cs` describe the account service as live; an
 app that signs in sends the device token and stores the one each answer gives (CLIENT.md, Device token).
