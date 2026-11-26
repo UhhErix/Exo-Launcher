@@ -1,5 +1,5 @@
 pub const HOST_CONTRACT_VERSION: u32 = 1;
-pub const SCHEMA_HASH: u64 = 0x10c27abab755d112;
+pub const SCHEMA_HASH: u64 = 0x3f1fc53d9fb49b40;
 pub const METHOD_ID_UNKNOWN: u16 = 0;
 pub const EVENT_ID_UNKNOWN: u16 = 0;
 
@@ -10,9 +10,9 @@ pub const METHOD_ID_GAME_EXTRAS: u16 = 198;
 pub const METHOD_ID_SHELL_BOOTSTRAP: u16 = 307;
 pub const METHOD_ID_RPC_CANCEL: u16 = 65535;
 
-pub const EVENT_ID_AUTOPILOT_LIVE: u16 = 7;
-pub const EVENT_ID_INSTALL_PROGRESS: u16 = 65;
-pub const EVENT_ID_LIBRARY_UPDATED: u16 = 69;
+pub const EVENT_ID_AUTOPILOT_LIVE: u16 = 8;
+pub const EVENT_ID_INSTALL_PROGRESS: u16 = 66;
+pub const EVENT_ID_LIBRARY_UPDATED: u16 = 70;
 
 pub const METHODS: &[&str] = &[
     "accounts.add",
@@ -387,6 +387,7 @@ pub const METHODS: &[&str] = &[
 
 pub const EVENTS: &[&str] = &[
     "accounts.progress",
+    "achievement.unlocked",
     "anticheat.missing",
     "app.open",
     "app.updateProgress",

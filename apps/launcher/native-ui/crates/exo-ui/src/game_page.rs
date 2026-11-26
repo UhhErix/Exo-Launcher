@@ -15,10 +15,7 @@ use exo_kit::{
     surface_card, type_control, type_first_run, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, GameVariant, InstallProgress};
-use rune::{
-    Cursor, El, SpringPair, SurfaceFit, TextStyle, Transition, col, el, oklch, row,
-    text,
-};
+use rune::{Cursor, El, SpringPair, SurfaceFit, TextStyle, Transition, col, el, oklch, row, text};
 
 const GAME_EDGE: f32 = 32.0;
 

@@ -4,13 +4,12 @@ use exo_rpc::{
     ActionResult, ArtworkMutationResponse, CompressProgressEvent, CompressState,
     CompressStateReply, DequeueReply, DlssNewerItem, DlssNewerReply, DlssRunResult, DlssStatus,
     DlssStatusItem, FrameGenMod, Game, GameAchievementsEvent, GameContent, GameExtras,
-    GameGetReply, GameOptimizeEvent, GameProperties,
-    GamePropertySetReply, GameSettingsState, GpuGame, HdrGame, HdrState, InstallProgress,
-    InstallResponse, KeepStatus, LauncherSettings, METHOD_ART_REFETCH, METHOD_ART_REPLACE,
-    METHOD_ART_RESET, METHOD_COMPRESS_ACT, METHOD_COMPRESS_STATE, METHOD_DLSS_CONSENT,
-    METHOD_DLSS_DOWNLOAD_NEWER, METHOD_DLSS_FRAME_GEN, METHOD_DLSS_NEWER, METHOD_DLSS_RESTORE,
-    METHOD_DLSS_STATUS, METHOD_GAME_DEQUEUE, METHOD_GAME_EXTRAS, METHOD_GAME_GET,
-    METHOD_GAME_OPEN_FOLDER,
+    GameGetReply, GameOptimizeEvent, GameProperties, GamePropertySetReply, GameSettingsState,
+    GpuGame, HdrGame, HdrState, InstallProgress, InstallResponse, KeepStatus, LauncherSettings,
+    METHOD_ART_REFETCH, METHOD_ART_REPLACE, METHOD_ART_RESET, METHOD_COMPRESS_ACT,
+    METHOD_COMPRESS_STATE, METHOD_DLSS_CONSENT, METHOD_DLSS_DOWNLOAD_NEWER, METHOD_DLSS_FRAME_GEN,
+    METHOD_DLSS_NEWER, METHOD_DLSS_RESTORE, METHOD_DLSS_STATUS, METHOD_DLSS_UPDATE_ALL,
+    METHOD_GAME_DEQUEUE, METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_OPEN_FOLDER,
     METHOD_GAME_PROGRESS, METHOD_GAME_PROPERTIES, METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR,
     METHOD_GAME_RESUME_DOWNLOAD, METHOD_GAME_SETTINGS, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
     METHOD_GPU_GAME, METHOD_HDR_GAME, METHOD_HDR_STATE, METHOD_KEEP_STATUS, METHOD_SETTINGS_SET,
@@ -132,6 +131,7 @@ pub struct GamePageState {
     pub dlss_cache: HashMap<String, DlssStatus>,
     pub dlss_cached_at: HashMap<String, f64>,
     pub dlss_inflight: HashSet<String>,
+    pub dlss_auto_tried: HashSet<String>,
     pub dlss_preloaded: bool,
     pub dlss_preload_pending: bool,
     pub dlss_preload_due: Option<f64>,
@@ -1711,6 +1711,7 @@ impl AppState {
                 if s.game_page.generation == epoch || matches_open {
                     s.game_page.dlss_loading = false;
                     s.game_page.dlss = Some(st);
+                    s.auto_update_upscalers(&gid);
                 }
             });
         });
@@ -2409,6 +2410,47 @@ impl AppState {
         }
         #[cfg(not(windows))]
         let _ = (id, fallback, epoch);
+    }
+
+    pub fn auto_update_upscalers(&mut self, game_id: &str) {
+        if !self.settings.auto_update_upscalers || self.status == HostStatus::Standalone {
+            return;
+        }
+        let view = upscaler_view(self.game_page.dlss.as_ref());
+        if view.locked || view.updatable == 0 {
+            return;
+        }
+        if self.games.iter().any(|g| g.id == game_id && g.is_running) {
+            return;
+        }
+        if !self.game_page.dlss_auto_tried.insert(game_id.to_string()) {
+            return;
+        }
+        let epoch = self.game_page.generation;
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let gid = game_id.to_string();
+            rpc.call::<_, DlssRunResult>(
+                METHOD_DLSS_UPDATE_ALL,
+                &json!({ "id": gid }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.game_page.dlss_invalidate(&gid);
+                        if s.game_page.generation == epoch {
+                            s.fetch_game_dlss_rpc(&gid, true, epoch);
+                            if let Ok(r) = res
+                                && !r.ok
+                                && let Some(msg) = r.message
+                            {
+                                s.game_page.set_note("restore", msg, true);
+                            }
+                        }
+                    });
+                },
+            );
+        }
+        #[cfg(not(windows))]
+        let _ = epoch;
     }
 
     pub fn dlss_restore_game(&mut self, id: &str) {

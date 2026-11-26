@@ -298,6 +298,8 @@ public sealed partial class WebHostBridge
         _services.MousePanel.Attach(_queue, this);
         _services.HeadlessMusic.Attach(PostEvent, () => _services.MusicEngine.IsActive || App.MainAppWindow is not null);
         _services.HeadlessCapture.Attach(PostCaptureEvent);
+        Services.Achievements.AchievementWatch.Unlocked -= OnAchievementUnlocked;
+        Services.Achievements.AchievementWatch.Unlocked += OnAchievementUnlocked;
         if (Interlocked.Exchange(ref _transport, transport) is { } previous)
         {
             previous.MessageReceived -= OnMessage;
@@ -331,6 +333,7 @@ public sealed partial class WebHostBridge
         _services.MousePanel.Close();
         _services.HeadlessMusic.Detach();
         _services.HeadlessCapture.Detach();
+        Services.Achievements.AchievementWatch.Unlocked -= OnAchievementUnlocked;
         try { _bridgeLifetime.Cancel(); } catch { }
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));

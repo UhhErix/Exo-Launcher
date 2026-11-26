@@ -1380,13 +1380,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.pc.drives = Some(drv);
             }
-            if let Ok(gp) = client.call_blocking::<_, exo_rpc::GpuProcessesState>(
-                exo_rpc::METHOD_GPU_PROCESSES,
-                &serde_json::json!({ "limit": 8 }),
-                Duration::from_secs(6),
-            ) {
-                state.pc.gpu_processes = Some(gp);
-            }
             if let Ok(qos) = client.call_blocking::<_, exo_rpc::QosState>(
                 exo_rpc::METHOD_SYSTEM_QOS,
                 &serde_json::json!({}),

@@ -672,9 +672,8 @@ pub struct AppState {
     pub game_props: Option<GameProperties>,
     pub game_page: crate::game_actions::GamePageState,
     pub game_frame_gen: Option<GameFrameGen>,
-    pub frame_gen_menu_open: bool,
+    pub frame_gen_auto_tried: std::collections::HashSet<String>,
     pub frame_gen_busy: bool,
-    pub frame_gen_confirm: Option<(String, String, Option<String>)>,
     pub props_open: bool,
     pub game_props_tab: usize,
     pub props_launch_opts: TextEdit,
@@ -823,9 +822,8 @@ impl AppState {
                 }],
                 ..Default::default()
             }),
-            frame_gen_menu_open: false,
+            frame_gen_auto_tried: std::collections::HashSet::new(),
             frame_gen_busy: false,
-            frame_gen_confirm: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -949,9 +947,8 @@ impl AppState {
             game_props: None,
             game_page: crate::game_actions::GamePageState::new(),
             game_frame_gen: None,
-            frame_gen_menu_open: false,
+            frame_gen_auto_tried: std::collections::HashSet::new(),
             frame_gen_busy: false,
-            frame_gen_confirm: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -2208,8 +2205,6 @@ impl AppState {
         self.selected_game_id = Some(id.to_string());
         self.open_game_id = Some(id.to_string());
         self.props_open = false;
-        self.frame_gen_menu_open = false;
-        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
@@ -2240,6 +2235,7 @@ impl AppState {
                     h3.update(move |s, _| {
                         if s.open_game_id.as_deref() == Some(gid3.as_str()) {
                             s.game_frame_gen = Some(fg);
+                            s.apply_best_frame_gen(&gid3);
                         }
                     });
                 },
@@ -2247,80 +2243,48 @@ impl AppState {
         }
     }
 
-    pub fn set_game_frame_gen(
-        &mut self,
-        id: &str,
-        route: Option<&str>,
-        xess_override: Option<&str>,
-    ) {
-        self.set_game_frame_gen_with_risk(id, route, xess_override, false, None);
+    pub fn apply_best_frame_gen(&mut self, id: &str) {
+        let Some(route) = self
+            .game_frame_gen
+            .as_ref()
+            .and_then(crate::frame_gen_row::auto_route)
+            .map(|r| r.id.clone())
+        else {
+            return;
+        };
+        if self.frame_gen_busy || !self.frame_gen_auto_tried.insert(format!("{id}:{route}")) {
+            return;
+        }
+        self.set_game_frame_gen(id, &route);
     }
 
-    pub fn set_game_frame_gen_with_risk(
-        &mut self,
-        id: &str,
-        route: Option<&str>,
-        xess_override: Option<&str>,
-        accept_risk: bool,
-        anti_cheat: Option<&str>,
-    ) {
-        self.frame_gen_confirm = None;
+    pub fn set_game_frame_gen(&mut self, id: &str, route: &str) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.frame_gen_busy = true;
             let gid = id.to_string();
-            let mut body = serde_json::Map::new();
-            body.insert("id".into(), json!(gid));
-            if let Some(r) = route {
-                body.insert("route".into(), json!(r));
-            }
-            if let Some(x) = xess_override {
-                body.insert("xessOverride".into(), json!(x));
-            }
-            if accept_risk {
-                body.insert("acceptRisk".into(), json!(true));
-                if let Some(ac) = anti_cheat {
-                    body.insert("antiCheat".into(), json!(ac));
-                }
-            }
             rpc.call::<_, GameFrameGen>(
                 METHOD_GAME_FRAME_GEN,
-                &serde_json::Value::Object(body),
+                &json!({ "id": gid, "route": route }),
                 move |res| {
                     handle.update(move |s, _| {
                         s.frame_gen_busy = false;
-                        if s.open_game_id.as_deref() == Some(gid.as_str()) {
-                            if let Ok(fg) = res {
-                                if !fg.routes.is_empty() {
-                                    s.game_frame_gen = Some(fg);
-                                } else if let Some(msg) = fg.message {
-                                    s.notice = Some(msg);
-                                }
-                            } else {
-                                s.notice = Some("Could not save frame generation route.".into());
-                            }
+                        if s.open_game_id.as_deref() == Some(gid.as_str())
+                            && let Ok(fg) = res
+                            && !fg.routes.is_empty()
+                        {
+                            s.game_frame_gen = Some(fg);
                         }
                     });
                 },
             );
             return;
         }
-        if let Some(ref mut fg) = self.game_frame_gen {
-            if let Some(r) = route
-                && let Some(found) = fg.routes.iter().find(|rt| rt.id == r)
-            {
-                fg.selected_route_id = found.id.clone();
-                fg.word = found.summary.clone();
-            }
-            if let Some(x) = xess_override
-                && let Some(rt) = fg
-                    .routes
-                    .iter_mut()
-                    .find(|rt| rt.kind == "driver_xess_override")
-            {
-                rt.choice_value = Some(x.to_string());
-                rt.active = x != "game";
-            }
+        if let Some(ref mut fg) = self.game_frame_gen
+            && let Some(found) = fg.routes.iter().find(|rt| rt.id == route)
+        {
+            fg.selected_route_id = found.id.clone();
+            fg.word = found.summary.clone();
         }
     }
 
@@ -2332,8 +2296,6 @@ impl AppState {
     pub fn close_game_page(&mut self) {
         self.open_game_id = None;
         self.props_open = false;
-        self.frame_gen_menu_open = false;
-        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
         self.uninstall_confirm = false;
         self.armed_confirm = None;

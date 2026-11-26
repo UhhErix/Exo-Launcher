@@ -16,7 +16,7 @@ public sealed partial class WebHostBridge
         var message = action switch
         {
             "apply" => await Task.Run(() => SystemTuning.Shared.ApplyAsync(), ct).ConfigureAwait(false),
-            "playbook" => await Task.Run(SystemTuning.Shared.ApplyPlaybookAsync, ct).ConfigureAwait(false),
+            "playbook" => await Task.Run(SystemTuning.Shared.ApplyAutoAsync, ct).ConfigureAwait(false),
             "migrate" => await Task.Run(SystemTuning.Shared.MigrateAsync, ct).ConfigureAwait(false),
             "on" => item is null ? "Exo doesn't know that setting." : await Task.Run(() => SystemTuning.Shared.ApplyAsync([item]), ct).ConfigureAwait(false),
             "latency" => await Task.Run(SystemTuning.Shared.LatencyAsync, ct).ConfigureAwait(false),

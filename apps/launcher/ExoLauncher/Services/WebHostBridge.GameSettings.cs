@@ -53,7 +53,7 @@ public sealed partial class WebHostBridge
             if (profile is null)
             {
                 var gfxGroup = GameGraphicsFeatures.OptimizeGroupState(game, gfxCtx, driverOnly: false);
-                if (gfxGroup is null)
+                if (gfxGroup is null || !gfxGroup.Exo)
                     return new { ok = true, supported = false, note = GameSettings.AntiCheatNote(game, pc) };
 
                 if ((all || string.Equals(group, "graphicsFeatures", StringComparison.OrdinalIgnoreCase)) && on is { } turnGfxOn)

@@ -2372,6 +2372,7 @@ export interface HostEventMap {
   'controller.state': ControllerState
   /** Exo Capture's state changed: buffering, recording, hotkeys, or it stopped. */
   'capture.state': CaptureState
+  'achievement.unlocked': { game: string; name: string; description: string; icon?: string | null; tier: string; percent?: number | null; unlocked: number; total: number }
   /** A clip, recording, snip, trim or export was saved; edit: a snip to open in the editor, Exo in front (not one taken over a game). */
   'capture.saved': { item: CaptureItem; edit?: boolean }
   /** A recording Exo was asked to make smaller (or found smaller by itself) finished: the new item and the sizes, or message when it was left as it was. */
