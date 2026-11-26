@@ -3,8 +3,7 @@ use rune::{Color, Spring, TextStyle};
 use std::cell::Cell;
 
 pub const GEIST_FONT: &[u8] = include_bytes!("../assets/fonts/Geist-Variable.ttf");
-pub const GEIST_ITALIC_FONT: &[u8] =
-    include_bytes!("../assets/fonts/Geist-Italic-Variable.ttf");
+pub const GEIST_ITALIC_FONT: &[u8] = include_bytes!("../assets/fonts/Geist-Italic-Variable.ttf");
 pub const GEIST_MONO_FONT: &[u8] = include_bytes!("../assets/fonts/GeistMono-Variable.ttf");
 pub const GEIST_MONO_ITALIC_FONT: &[u8] =
     include_bytes!("../assets/fonts/GeistMono-Italic-Variable.ttf");
@@ -110,11 +109,11 @@ pub fn glass_panel_shadow_color() -> Color {
 }
 
 pub fn glass_rim_top() -> Color {
-    Color::WHITE.alpha(0.17)
+    Color::WHITE.alpha(0.09)
 }
 
 pub fn glass_rim_bottom() -> Color {
-    Color::WHITE.alpha(0.03)
+    Color::WHITE.alpha(0.04)
 }
 
 pub fn glass_rim() -> Color {
