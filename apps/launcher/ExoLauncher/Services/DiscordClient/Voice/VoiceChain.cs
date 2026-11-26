@@ -38,6 +38,8 @@ internal sealed class VoiceChain : IDisposable
     private Task<NeuralNoiseSuppressor?>? _neuralLoading;
     private VoiceModelTier _neuralTier = VoiceModelTier.FallbackDfn3;
     private int _neuralRetryIn;
+    private bool _hqOverBudget;
+    private string? _lastVoiceTierPref;
     private readonly VoiceShape _shape = new();
     /// <summary>The level the leveler brings a voice to (dBFS, its frames' mean), and a kept tuning's gain toward.</summary>
     internal const float SpeakingDb = -22f;
@@ -421,6 +423,11 @@ internal sealed class VoiceChain : IDisposable
     private NeuralNoiseSuppressor? NeuralSuppressor(VoiceProcessing processing)
     {
         if (Offline || !ExoVoiceMl.EnsureLoaded()) return null;
+        if (!string.Equals(_lastVoiceTierPref, processing.VoiceTier, StringComparison.Ordinal))
+        {
+            _lastVoiceTierPref = processing.VoiceTier;
+            _hqOverBudget = false;
+        }
         var gameInForeground = GameRunningNow();
         var want = VoiceTierPolicy.SelectTier(
             processing.Suppressor,
@@ -432,6 +439,8 @@ internal sealed class VoiceChain : IDisposable
             gameInForeground,
             gpuHeadroomMs: gameInForeground ? 0.0 : 1.0,
             cpuLogicalCores: Environment.ProcessorCount);
+        if (_hqOverBudget && want == VoiceModelTier.DpdfNet48kHr && VoiceModels.BaselineReady())
+            want = VoiceModelTier.DpdfNetBaseline;
         if (want == VoiceModelTier.FallbackDfn3)
         {
             if (_neural is not null)
@@ -448,6 +457,7 @@ internal sealed class VoiceChain : IDisposable
             {
                 if (_neuralTier == VoiceModelTier.DpdfNet48kHr && _neural.MeasuredMsPer10Ms > 0 && !VoiceTierPolicy.MeetsCpuBudget(_neural.MeasuredMsPer10Ms) && VoiceModels.BaselineReady())
                 {
+                    _hqOverBudget = true;
                     _neural.Dispose();
                     _neural = null;
                     _neuralTier = VoiceModelTier.FallbackDfn3;

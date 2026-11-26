@@ -314,7 +314,7 @@ internal sealed unsafe class NoiseSuppressor : IDisposable
 /// </summary>
 internal sealed class DelayTracker
 {
-    internal const int Hop = 480, MostHops = 4, Start = 2 * Hop;
+    internal const int Hop = 480, MostHops = 6, Start = 2 * Hop;
     private const int Frame = Opus.FrameSamples, Votes = 10;
     private const float Loud = 1e-5f; // -50 dBFS mean power
 
