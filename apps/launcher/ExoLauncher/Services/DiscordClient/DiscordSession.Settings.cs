@@ -63,7 +63,7 @@ internal sealed partial class DiscordSession
         finally { _settingsGate.Release(); }
     }
 
-    private void RememberSettings(JsonObject values)
+    private void RememberSettings(JsonObject values, bool announcePresence = true)
     {
         var customBefore = _userSettings?["customStatus"]?.ToJsonString();
         // A person's volume or mute changed here and not saved yet stays as chosen over what Discord had.
@@ -82,7 +82,7 @@ internal sealed partial class DiscordSession
         _userSettings = (JsonObject)values.DeepClone();
         Event?.Invoke("discord.userSettings", values.DeepClone());
         // The custom status changed here or in another Discord app: this session's presence says so.
-        if (customBefore != _userSettings["customStatus"]?.ToJsonString())
+        if (announcePresence && customBefore != _userSettings["customStatus"]?.ToJsonString())
             _ = SendPresenceAsync();
     }
 
@@ -176,6 +176,16 @@ internal sealed partial class DiscordSession
             case "READY":
                 AuthSessionIdHash = d.TryGetProperty("auth_session_id_hash", out var hash) ? hash.GetString() : null;
                 Rest.ForgetFrecency();
+                if (d.TryGetProperty("user_settings_proto", out var readyProtoEl) && readyProtoEl.ValueKind == JsonValueKind.String
+                    && readyProtoEl.GetString() is { Length: > 0 } readyProtoStr)
+                {
+                    try
+                    {
+                        var decoded = DiscordUserSettings.Decode(Convert.FromBase64String(readyProtoStr));
+                        RememberSettings(decoded, announcePresence: false);
+                    }
+                    catch (Exception ex) when (ex is FormatException or InvalidDataException) { }
+                }
                 break;
             case "USER_SETTINGS_UPDATE" or "USER_SETTINGS_PROTO_UPDATE" when _userSettings is not null:
                 RefreshSettingsSoon();

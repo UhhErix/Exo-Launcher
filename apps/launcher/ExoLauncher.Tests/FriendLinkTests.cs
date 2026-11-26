@@ -450,4 +450,105 @@ public sealed class FriendLinkTests
         Assert.NotEmpty(cache.ClearExoGames());
         Assert.DoesNotContain("Hades II", JsonSerializer.Serialize(cache.Friends()));
     }
+
+    [Fact]
+    public void EvaluateKeptMetaParsesBuildAndCapabilities()
+    {
+        var both = DiscordRest.EvaluateKeptMeta("681034 1767421", TimeSpan.FromHours(2));
+        Assert.Equal(681034, both.Build);
+        Assert.Equal(1767421, both.Capabilities);
+        Assert.False(both.Stale);
+
+        var legacy = DiscordRest.EvaluateKeptMeta("681034", TimeSpan.FromDays(2));
+        Assert.Equal(681034, legacy.Build);
+        Assert.Null(legacy.Capabilities);
+        Assert.True(legacy.Stale);
+    }
+
+    [Fact]
+    public void QosHeartbeatMatchesWebClientShape()
+    {
+        var active = DiscordSession.BuildQosHeartbeat(42, foregrounded: true, rtcConnected: true);
+        Assert.Equal(42, active["seq"]!.GetValue<long>());
+        Assert.Equal(31, active["qos"]!["ver"]!.GetValue<int>());
+        Assert.True(active["qos"]!["active"]!.GetValue<bool>());
+        Assert.Equal(["foregrounded", "rtc_connected"], active["qos"]!["reasons"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray());
+
+        var idle = DiscordSession.BuildQosHeartbeat(null, foregrounded: false, rtcConnected: false);
+        Assert.Equal(0, idle["seq"]!.GetValue<long>());
+        Assert.False(idle["qos"]!["active"]!.GetValue<bool>());
+        Assert.Empty(idle["qos"]!["reasons"]!.AsArray());
+    }
+
+    [Fact]
+    public void ReadyAndProtoUpdateDecodeStatusAndGuildFolders()
+    {
+        var changes = new Dictionary<string, JsonElement>
+        {
+            ["status"] = JsonDocument.Parse("\"dnd\"").RootElement.Clone(),
+            ["guildFolders"] = JsonDocument.Parse("""[{"id":"99","name":"Squad","color":16711680,"guildIds":["200","100"]}]""").RootElement.Clone(),
+        };
+        var proto = DiscordUserSettings.Patch([], changes);
+        Assert.NotNull(proto);
+        Assert.Equal("dnd", DiscordUserSettings.DecodeStatus(proto!));
+        var decodedFolders = DiscordUserSettings.DecodeFolders(proto!);
+        Assert.NotNull(decodedFolders);
+        Assert.Single(decodedFolders!);
+        Assert.Equal("99", decodedFolders[0].Id);
+        Assert.Equal("Squad", decodedFolders[0].Name);
+        Assert.Equal(16711680, decodedFolders[0].Color);
+        Assert.Equal(["200", "100"], decodedFolders[0].Guilds);
+
+        var b64 = Convert.ToBase64String(proto!);
+        var cache = new DiscordCache();
+        using var ready = JsonDocument.Parse($$"""
+            {
+              "user": { "id": "{{A}}", "username": "me" },
+              "guilds": [
+                { "id": "100", "name": "One", "roles": [], "channels": [] },
+                { "id": "200", "name": "Two", "roles": [], "channels": [] }
+              ],
+              "private_channels": [],
+              "user_settings_proto": "{{b64}}"
+            }
+            """);
+        cache.LoadReady(ready.RootElement);
+        Assert.Equal("dnd", cache.MyStatus);
+
+        var proto2 = DiscordUserSettings.Patch(proto!, new Dictionary<string, JsonElement>
+        {
+            ["status"] = JsonDocument.Parse("\"idle\"").RootElement.Clone(),
+        });
+        using var upd = JsonDocument.Parse($$$"""{"settings":{"type":1,"proto":"{{{Convert.ToBase64String(proto2!)}}}"}}""");
+        var evs = cache.Apply("USER_SETTINGS_PROTO_UPDATE", upd.RootElement);
+        Assert.Equal("idle", cache.MyStatus);
+        Assert.Contains(evs, e => e.Name == "discord.presence");
+    }
+
+    [Fact]
+    public void ChannelUnreadAndPinsDispatchesUpdateCache()
+    {
+        var cache = new DiscordCache();
+        using var ready = JsonDocument.Parse($$"""
+            {
+              "user": { "id": "{{A}}", "username": "me" },
+              "guilds": [
+                { "id": "100", "owner_id": "{{A}}", "name": "One", "roles": [], "channels": [
+                  { "id": "500", "type": 0, "name": "general", "last_message_id": "10" }
+                ]}
+              ],
+              "private_channels": [],
+              "read_state": { "version": 1, "entries": [{ "id": "500", "last_message_id": "10", "mention_count": 0 }] }
+            }
+            """);
+        cache.LoadReady(ready.RootElement);
+
+        using var unread = JsonDocument.Parse("""{"guild_id":"100","channel_unread_updates":[{"id":"500","last_message_id":"20"}]}""");
+        var uEvents = cache.Apply("CHANNEL_UNREAD_UPDATE", unread.RootElement);
+        Assert.Contains(uEvents, e => e.Name == "discord.unread");
+
+        using var pins = JsonDocument.Parse("""{"guild_id":"100","channel_id":"500"}""");
+        var pEvents = cache.Apply("CHANNEL_PINS_UPDATE", pins.RootElement);
+        Assert.Contains(pEvents, e => e.Name == "discord.changed");
+    }
 }

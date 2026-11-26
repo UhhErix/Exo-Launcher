@@ -289,6 +289,66 @@ internal static class DiscordUserSettings
         return folders;
     }
 
+    internal static string? DecodeStatus(byte[] proto)
+    {
+        var leaf = Leaf(proto, [11, 1]);
+        if (leaf.Count == 0) return null;
+        var (wire, value) = leaf[^1];
+        if (wire != 2) return null;
+        var inner = Fields(value).LastOrDefault(f => f.Number == 1);
+        var text = inner.Value is { } t && inner.Wire == 2 ? System.Text.Encoding.UTF8.GetString(t) : "";
+        return text is "online" or "idle" or "dnd" or "invisible" ? text : null;
+    }
+
+    internal static List<GuildFolder>? DecodeFolders(byte[] proto)
+    {
+        var section = Embedded(proto, 14);
+        if (section.Length == 0) return null;
+        var folders = new List<GuildFolder>();
+        var positions = new List<string>();
+        foreach (var (number, wire, value) in Fields(section))
+        {
+            if (number == 1 && wire == 2)
+            {
+                var guilds = new List<string>();
+                string? folderId = null, name = null;
+                int? color = null;
+                foreach (var (fn, fw, fv) in Fields(value))
+                {
+                    if (fn == 1)
+                    {
+                        foreach (var gid in Ids(fw, fv)) guilds.Add(gid.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    }
+                    else if (fn == 2 && fw == 2)
+                    {
+                        var inner = Fields(fv).LastOrDefault(f => f.Number == 1);
+                        var rawId = inner.Value is { } b && inner.Wire == 0 ? (long)Varint(b) : 0L;
+                        folderId = rawId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                    else if (fn == 3 && fw == 2)
+                    {
+                        var inner = Fields(fv).LastOrDefault(f => f.Number == 1);
+                        var s = inner.Value is { } b && inner.Wire == 2 ? System.Text.Encoding.UTF8.GetString(b) : "";
+                        if (s.Length > 0) name = s;
+                    }
+                    else if (fn == 4 && fw == 2)
+                    {
+                        var inner = Fields(fv).LastOrDefault(f => f.Number == 1);
+                        var rawColor = inner.Value is { } b && inner.Wire == 0 ? Varint(b) : 0UL;
+                        if (rawColor <= int.MaxValue) color = (int)rawColor;
+                    }
+                }
+                if (guilds.Count > 0) folders.Add(new GuildFolder(folderId, name, color, guilds));
+            }
+            else if (number == 2)
+            {
+                foreach (var gid in Ids(wire, value)) positions.Add(gid.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+        }
+        if (folders.Count > 0) return folders;
+        return positions.Count > 0 ? [.. positions.Select(id => new GuildFolder(null, null, null, [id]))] : [];
+    }
+
     // guild_folders (14) > folders (1), each a GuildFolder {1 packed fixed64 guild_ids, 2 Int64Value id, 3 StringValue name,
     // 4 UInt64Value color}, as Discord's client writes them (a server on its own is just its id). guild_positions (2) stays.
     private static byte[] FoldersPatch(List<GuildFolder> folders)

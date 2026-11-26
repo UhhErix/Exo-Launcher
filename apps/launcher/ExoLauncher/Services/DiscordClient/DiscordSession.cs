@@ -286,7 +286,6 @@ internal sealed partial class DiscordSession
                     // The server's open threads and which you're in (THREAD_LIST_SYNC), as Discord's client asks: the
                     // sidebar lists the joined ones under their channel.
                     ["threads"] = true,
-                    ["activities"] = false,
                     ["member_updates"] = false,
                     ["channels"] = new JsonObject { [channelId] = new JsonArray([.. ranges.Select(r => (JsonNode)new JsonArray(r.From, r.To))]) },
                 },
@@ -387,7 +386,7 @@ internal sealed partial class DiscordSession
                         _acked = true;
                         break;
                     case 1:
-                        await SendAsync(1, _seq is { } s ? JsonValue.Create(s) : null).ConfigureAwait(false);
+                        await SendHeartbeatAsync().ConfigureAwait(false);
                         break;
                     case 7:
                         return (null, ready, false);
@@ -823,15 +822,37 @@ internal sealed partial class DiscordSession
     private JsonObject Identify() => new()
     {
         ["token"] = _token,
-        // DEDUPE_USER_OBJECTS: READY carries users[], recipient_ids and merged_members (the user's own roles per server).
-        // AUTO_CALL_CONNECT: a DM call already on as Exo connects (one joined from a phone, one that outlived Exo's
-        // restart) comes as its CALL_CREATE, as in Discord's own client; without it Exo never knew of it, so no Join.
-        ["capabilities"] = (1 << 4) | (1 << 12),
+        ["capabilities"] = DiscordRest.Capabilities,
         ["properties"] = DiscordRest.Properties(),
         ["presence"] = new JsonObject { ["status"] = "unknown", ["since"] = 0, ["activities"] = new JsonArray(), ["afk"] = false },
         ["compress"] = false,
         ["client_state"] = new JsonObject { ["guild_versions"] = new JsonObject() },
     };
+
+    internal static JsonObject BuildQosHeartbeat(long? seq, bool foregrounded, bool rtcConnected)
+    {
+        var reasons = new JsonArray();
+        if (foregrounded) reasons.Add("foregrounded");
+        if (rtcConnected) reasons.Add("rtc_connected");
+        return new JsonObject
+        {
+            ["seq"] = seq ?? 0,
+            ["qos"] = new JsonObject
+            {
+                ["ver"] = 31,
+                ["active"] = reasons.Count > 0,
+                ["reasons"] = reasons,
+            },
+        };
+    }
+
+    private Task SendHeartbeatAsync()
+    {
+        var focused = App.MainAppWindow is not null || HostWindow.HasNativeState ? HostWindow.IsActive : true;
+        bool rtc;
+        lock (_voiceGate) rtc = _voiceState == "connected";
+        return SendAsync(40, BuildQosHeartbeat(_seq, focused, rtc));
+    }
 
     private async Task HeartbeatAsync(ClientWebSocket ws, int interval, CancellationToken ct)
     {
@@ -842,7 +863,7 @@ internal sealed partial class DiscordSession
             {
                 if (!_acked) { ws.Abort(); return; }
                 _acked = false;
-                await SendAsync(1, _seq is { } s ? JsonValue.Create(s) : null).ConfigureAwait(false);
+                await SendHeartbeatAsync().ConfigureAwait(false);
                 await Task.Delay(interval, ct).ConfigureAwait(false);
             }
         }
@@ -854,7 +875,7 @@ internal sealed partial class DiscordSession
         if (_ws is not { State: WebSocketState.Open } ws) return;
         // Heartbeats, identify and resume always go; the rest keep under Discord's limit. A member request
         // over it is dropped (the room asks again later); anything else waits its turn.
-        if (op is not (1 or 2 or 6))
+        if (op is not (1 or 2 or 6 or 40))
             for (var wait = _sendLimit.Take(Environment.TickCount64); wait > 0; wait = _sendLimit.Take(Environment.TickCount64))
             {
                 if (op == 8) { AppLog.Debug("Discord client: member request held back (gateway send limit)."); return; }

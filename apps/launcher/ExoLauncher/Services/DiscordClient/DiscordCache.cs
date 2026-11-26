@@ -261,8 +261,18 @@ internal sealed partial class DiscordCache
             foreach (var p in Array(d, "presences")) ApplyPresence(p);
             // DEDUPE_USER_OBJECTS: presences arrive in READY's merged_presences, friends' and each server's.
             if (d.TryGetProperty("merged_presences", out var mergedPresences)) ApplyMergedPresences(mergedPresences);
-            if (d.TryGetProperty("user_settings", out var us) && Str(us, "status") is { } status) _myStatus = status;
-            SetRail(d.TryGetProperty("user_settings", out var settings) ? ReadRail(settings) : []);
+            byte[]? readySettingsProto = null;
+            if (Str(d, "user_settings_proto") is { Length: > 0 } rawProto)
+            {
+                try { readySettingsProto = Convert.FromBase64String(rawProto); }
+                catch (FormatException) { }
+            }
+            if (readySettingsProto is not null && DiscordUserSettings.DecodeStatus(readySettingsProto) is { } protoStatus)
+                _myStatus = protoStatus;
+            else if (d.TryGetProperty("user_settings", out var us) && Str(us, "status") is { } status)
+                _myStatus = status;
+            var protoRail = readySettingsProto is not null ? DiscordUserSettings.DecodeFolders(readySettingsProto) : null;
+            SetRail(protoRail ?? (d.TryGetProperty("user_settings", out var settings) ? ReadRail(settings) : []));
             _usersTrimAt = Math.Max(UserCap, _users.Count * 2);
         }
     }
@@ -578,6 +588,60 @@ internal sealed partial class DiscordCache
                 case "USER_NOTE_UPDATE":
                     if (Str(d, "id") is { } noteUser)
                         StoreNote(noteUser, Str(d, "note") is { Length: > 0 } nv ? nv : null);
+                    break;
+                case "CHANNEL_UNREAD_UPDATE":
+                    foreach (var cu in Array(d, "channel_unread_updates"))
+                    {
+                        if (Str(cu, "id") is not { } ucid || Find(ucid) is not { } uchan) continue;
+                        if (Str(cu, "last_message_id") is { } ulast) uchan.LastMessageId = ulast;
+                        events.Add(("discord.unread", UnreadNow(ucid)));
+                    }
+                    break;
+                case "CHANNEL_PINS_UPDATE":
+                    if (Str(d, "channel_id") is { } pinnedChan && Visible(pinnedChan))
+                        events.Add(("discord.changed", new { guildId = Str(d, "guild_id") }));
+                    break;
+                case "GUILD_MEMBER_ADD":
+                    if (Str(d, "guild_id") is { } addMg && _guilds.TryGetValue(addMg, out var addMguild))
+                    {
+                        RememberMember(addMguild, d);
+                        events.Add(("discord.colors", new GuildChanged(addMg)));
+                    }
+                    break;
+                case "GUILD_MEMBER_REMOVE":
+                case "GUILD_BAN_ADD":
+                case "GUILD_BAN_REMOVE":
+                    if (Str(d, "guild_id") is { } remMg && _guilds.TryGetValue(remMg, out var remMguild))
+                    {
+                        if (d.TryGetProperty("user", out var remUser) && Str(remUser, "id") is { } remUid)
+                        {
+                            remMguild.Members.Remove(remUid);
+                            remMguild.Voice.Remove(remUid);
+                        }
+                        events.Add(("discord.changed", new { guildId = remMg }));
+                    }
+                    break;
+                case "USER_SETTINGS_PROTO_UPDATE":
+                    if (d.TryGetProperty("settings", out var protoWrap) && protoWrap.ValueKind == JsonValueKind.Object
+                        && Int(protoWrap, "type") == 1 && Str(protoWrap, "proto") is { Length: > 0 } protoB64)
+                    {
+                        try
+                        {
+                            var protoBytes = Convert.FromBase64String(protoB64);
+                            if (DiscordUserSettings.DecodeFolders(protoBytes) is { } updatedRail)
+                            {
+                                SetRail(updatedRail);
+                                events.Add(("discord.changed", new { guildId = (string?)null }));
+                            }
+                            if (DiscordUserSettings.DecodeStatus(protoBytes) is { } updatedStatus && updatedStatus != _myStatus)
+                            {
+                                _myStatus = updatedStatus;
+                                _linkPeersChanged = true;
+                                events.Add(("discord.presence", new { userId = Me?.Id, status = updatedStatus, activity = (string?)null }));
+                            }
+                        }
+                        catch (FormatException) { }
+                    }
                     break;
                 case "USER_SETTINGS_UPDATE":
                     // The server list changed here or in another Discord app.

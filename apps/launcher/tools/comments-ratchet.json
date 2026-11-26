@@ -833,7 +833,7 @@
     "ExoLauncher/Services/DiscordClient/DiscordSession.Settings.cs": 35,
     "ExoLauncher/Services/DiscordClient/DiscordSession.Video.cs": 67,
     "ExoLauncher/Services/DiscordClient/DiscordSession.Voice.cs": 64,
-    "ExoLauncher/Services/DiscordClient/DiscordSession.cs": 105,
+    "ExoLauncher/Services/DiscordClient/DiscordSession.cs": 102,
     "ExoLauncher/Services/DiscordClient/DiscordSounds.cs": 12,
     "ExoLauncher/Services/DiscordClient/DiscordToken.cs": 6,
     "ExoLauncher/Services/DiscordClient/DiscordUserSettings.cs": 54,
