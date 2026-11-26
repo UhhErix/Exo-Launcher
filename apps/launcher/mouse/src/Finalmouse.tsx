@@ -237,7 +237,7 @@ function Switches({ status, client, apply, busy }: Section) {
           setModes(modeNum(v), modeNum(v), relL, relL, nextInt, nextInt)
         },
         thr: v => smartRtAlwaysOn ? tmr(v, v) : tmr(v, v, left.rt, left.rt),
-        rt: v => tmr(0, 0, v, v),
+        rt: v => tmr(left.thr, left.thr, v, v),
         rel: v => setModes(left.mode, left.mode, v, v, left.intent, left.intent),
         intent: on => setModes(left.mode, left.mode, relL, relL, intentBit(on), intentBit(on)),
       }) : (
@@ -245,14 +245,14 @@ function Switches({ status, client, apply, busy }: Section) {
           {rows('Left', left, {
             click: v => setModes(modeNum(v), modeR, relL, relR, nextIntentForChoice(v, left.intent), right.intent),
             thr: v => smartRtAlwaysOn ? tmr(v, right.thr) : tmr(v, right.thr, left.rt, right.rt),
-            rt: v => tmr(0, 0, v, right.rt),
+            rt: v => tmr(left.thr, right.thr, v, right.rt),
             rel: v => setModes(modeL, modeR, v, relR, intL, intR),
             intent: on => setModes(modeL, modeR, relL, relR, intentBit(on), right.intent),
           })}
           {rows('Right', right, {
             click: v => setModes(modeL, modeNum(v), relL, relR, left.intent, nextIntentForChoice(v, right.intent)),
             thr: v => smartRtAlwaysOn ? tmr(left.thr, v) : tmr(left.thr, v, left.rt, right.rt),
-            rt: v => tmr(0, 0, left.rt, v),
+            rt: v => tmr(left.thr, right.thr, left.rt, v),
             rel: v => setModes(modeL, modeR, relL, v, intL, intR),
             intent: on => setModes(modeL, modeR, relL, relR, left.intent, intentBit(on)),
           })}

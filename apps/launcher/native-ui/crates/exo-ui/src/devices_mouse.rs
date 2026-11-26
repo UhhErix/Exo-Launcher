@@ -340,7 +340,7 @@ fn default_cpu_cores() -> Vec<CpuCoreDescriptor> {
 impl AppState {
     pub fn open_mouse_page(&mut self, dev_id: String) {
         self.pc.selected_device_id = Some(dev_id.clone());
-        let use_host_panel = self.status != HostStatus::Standalone;
+        let use_host_panel = self.status == HostStatus::Connected;
         self.pc.mouse_panel_open = use_host_panel;
         self.pc.mouse_panel_loading = use_host_panel;
         self.pc.mouse_panel_error = None;
