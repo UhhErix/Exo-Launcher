@@ -270,3 +270,37 @@ pub fn folder_color_label(color: &str) -> &'static str {
         _ => "Gray",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rune::text::{TextLayout, TextSystem, resolved_family_of};
+    use rune::tok::Family;
+
+    #[test]
+    fn probe_goeist_resolution_and_weights() {
+        let mut ts = TextSystem::for_window(FONTS, FONT_FAMILIES);
+        eprintln!("sans={:?}", ts.resolved_family(Family::Sans));
+        eprintln!("mono={:?}", ts.resolved_family(Family::Mono));
+        for (name, style) in [
+            ("body400", type_body()),
+            ("ctrl500", type_control()),
+            ("sect600", type_section()),
+            ("page650", type_page()),
+            ("bold700", type_first_run()),
+            ("italic", type_body().italic()),
+            ("mono", type_body().mono()),
+        ] {
+            let layout = ts.layout_rich("Library 0123", &[], style, 1.0, None);
+            let fam = resolved_family_of(&TextLayout::Single(layout.clone()));
+            let mut run_info = Vec::new();
+            for line in layout.lines() {
+                for run in line.runs() {
+                    let coords = run.normalized_coords().to_vec();
+                    run_info.push((coords, run.synthesis().skew(), run.synthesis().embolden()));
+                }
+            }
+            eprintln!("{name}: fam={fam:?} runs={run_info:?}");
+        }
+    }
+}
