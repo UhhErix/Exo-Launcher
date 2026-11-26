@@ -18,14 +18,10 @@ fn panel_secondary() -> rune::Color {
 }
 
 fn game_glass_card() -> El {
-    col()
+    exo_kit::amoled_card(RADIUS_PANEL)
         .w_full()
         .min_w(0.0)
-        .radius(RADIUS_PANEL)
-        .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
 }
 
 fn word_color(word: &LineWord) -> rune::Color {

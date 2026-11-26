@@ -452,7 +452,11 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
         .gap(scaled(12.0))
         .center_y()
         .radius(RADIUS_SMALL + 2.0)
-        .fill(if selected { hover_fill() } else { TRANSPARENT })
+        .fill(if selected {
+            exo_kit::selected_fill()
+        } else {
+            TRANSPARENT
+        })
         .hover(hover_fill())
         .hover_motion(Spring::NONE, SPRING_QUICK)
         .on_press_tx(move |s: &mut AppState, tx| {
@@ -562,7 +566,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .child(icon_search(16.0, fg_muted()))
         .child(input);
 
-    let max_palette_h = 820.8;
+    let max_palette_h = 580.0;
     let body = if items.is_empty() {
         el().w_full().h(72.0).center().child(
             text("No matching games or commands")
@@ -638,7 +642,8 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 
     let host = col()
         .key("palette-host")
-        .pin(Some(0.0), Some(130.0), Some(0.0), None)
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .pt(88.0)
         .items_center()
         .transition(Transition::none())
         .child(card);
@@ -707,5 +712,51 @@ mod tests {
         s.palette_query.text = "benchmark".into();
         let note_filtered = s.palette_results();
         assert!(note_filtered.iter().any(|i| i.title == "Build notes"));
+    }
+
+    #[test]
+    fn palette_renders_visible_liquid_glass_sheet_geometry() {
+        let mut s = AppState::with_demo_games();
+        s.palette_open = true;
+        s.palette_needs_focus = true;
+        let mut rt = rune::Runtime::new(
+            s,
+            crate::shell::view,
+            (1440.0, 900.0),
+            rune::Env::new(true, 2.0),
+        );
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+        // Simulate startup poll focusing the palette input before frame 0 paints:
+        // initial glass shapes must still land materialized (1.0) on the first frame.
+        rt.update(|s, tx| {
+            s.palette_needs_focus = false;
+            tx.focus("palette-input", false);
+        });
+        rt.frame(0.0);
+        let rect = rt
+            .presented("command-palette")
+            .map(|(r, _)| r)
+            .expect("command-palette presented");
+        let shapes = &rt.liquid_glass_frame().shapes;
+        assert!(
+            rect[2] > 500.0 && rect[3] > 200.0,
+            "command-palette collapsed: {rect:?}"
+        );
+        let pal_shape = shapes
+            .iter()
+            .find(|sh| {
+                (sh.rect[2] - rect[2] * 2.0).abs() < 8.0
+                    && (sh.rect[3] - rect[3] * 2.0).abs() < 8.0
+            })
+            .expect("command-palette missing from liquid_glass shapes");
+        assert!(
+            pal_shape.extra[3] > 0.99,
+            "command-palette should be fully materialized on frame 0, got {}",
+            pal_shape.extra[3]
+        );
+        assert!(
+            shapes.iter().all(|sh| sh.extra[3] > 0.99),
+            "all initial liquid_glass shapes must land materialized on frame 0"
+        );
     }
 }

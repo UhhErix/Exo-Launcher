@@ -22,12 +22,9 @@ use rune::{
 };
 
 pub(crate) fn settings_card() -> El {
-    col()
+    exo_kit::amoled_card(RADIUS_CARD)
         .w_full()
-        .radius(RADIUS_CARD)
-        .continuous_corners()
         .clip_rounded(RADIUS_CARD)
-        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
 }
 
 pub(crate) fn set_btn(key: impl Into<String>, label: impl Into<String>, icon: Option<El>) -> El {

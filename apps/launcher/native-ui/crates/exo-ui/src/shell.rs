@@ -1105,7 +1105,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .pin(None, Some(8.0), Some(right_pin), None)
                 .h(36.0)
                 .center_y()
-                .gap(8.0)
+                .gap(11.0)
                 .children(mini)
                 .child(tools),
         )

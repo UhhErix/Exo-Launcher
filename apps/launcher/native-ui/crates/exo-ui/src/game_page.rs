@@ -848,7 +848,7 @@ mod tests {
             "Game page exceeded EXO_MAX_BACKDROP_BLURS: {glass_shapes}"
         );
         assert!(
-            glass_shapes >= 8,
+            glass_shapes >= 7,
             "Game page should render real Liquid Glass across top bar and hero controls, got {glass_shapes}"
         );
 

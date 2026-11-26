@@ -5,7 +5,7 @@ use exo_kit::{
     RADIUS_SMALL, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted,
     glass_button, glass_control_fill, glass_icon_circle_opt, glass_rim_bottom, glass_rim_top, good,
     hover_fill, icon_arrow_right, icon_bookmark_filled, icon_check, icon_chevron_left,
-    icon_chevron_right, icon_close, icon_refresh, icon_search, pressed_fill, scaled, selected_fill,
+    icon_chevron_right, icon_close, icon_refresh, icon_search, pressed_fill, scaled,
     type_body, type_control, type_section, type_small, type_title,
 };
 use exo_rpc::{StoreArt, StoreTile, types::format_cents};
@@ -256,9 +256,9 @@ fn tile_meta_row(tile: &StoreTile) -> Option<El> {
 
 fn store_grid_card_width(viewport_w: f32) -> f32 {
     let usable = if viewport_w > 0.0 {
-        (viewport_w - 20.0).max(160.0)
+        (viewport_w - 48.0).max(160.0)
     } else {
-        1900.0
+        1392.0
     };
     let gap = 16.0_f32;
     let cols = (((usable + gap) / (156.0 + gap)).floor() as usize).max(1);
@@ -471,8 +471,8 @@ pub fn store_shelf_row(
 
     let mut header = row()
         .w_full()
-        .pt(4.0)
-        .px(10.0)
+        .pt(8.0)
+        .px(24.0)
         .pb(6.0)
         .justify_between()
         .center_y()
@@ -536,7 +536,7 @@ pub fn store_shelf_row(
         .key(track_key)
         .w_full()
         .pt(8.0)
-        .px(10.0)
+        .px(24.0)
         .pb(4.0)
         .gap(16.0)
         .scroll_x()
@@ -824,12 +824,19 @@ fn search_view(s: &AppState, scale: f32) -> El {
         );
     }
 
-    let grid_card_w = store_grid_card_width(s.lib.grid_width);
+    let grid_vp = if s.lib.grid_width > 0.0 {
+        s.lib.grid_width
+    } else if s.chrome.top_bar_width > 0.0 {
+        s.chrome.top_bar_width
+    } else {
+        1440.0
+    };
+    let grid_card_w = store_grid_card_width(grid_vp);
     body.child(
         row()
             .w_full()
             .pt(8.0)
-            .px(10.0)
+            .px(24.0)
             .flex_wrap()
             .gap(16.0)
             .children(
@@ -886,19 +893,47 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
         );
     }
 
+    main_banner = main_banner
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .child(
+            el().key("store-hero-scrim-v")
+                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .linear_gradient(
+                    std::f32::consts::PI,
+                    [
+                        (0.0, BG.alpha(0.0)),
+                        (0.45, BG.alpha(0.08)),
+                        (0.76, BG.alpha(0.58)),
+                        (1.0, BG.alpha(0.90)),
+                    ],
+                ),
+        )
+        .child(
+            el().key("store-hero-scrim-h")
+                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .linear_gradient(
+                    std::f32::consts::FRAC_PI_2,
+                    [
+                        (0.0, BG.alpha(0.68)),
+                        (0.42, BG.alpha(0.24)),
+                        (0.75, BG.alpha(0.0)),
+                    ],
+                ),
+        );
+
     let mut copy_col = col()
-        .pin(Some(32.0), None, None, Some(24.0))
-        .gap(16.0)
+        .pin(Some(32.0), None, None, Some(28.0))
+        .gap(12.0)
         .items_start();
 
     if hero.soon || hero_wished {
-        let mut tags = row().gap(6.0).center_y();
+        let mut tags = row().gap(8.0).center_y();
         if hero.soon {
             tags = tags.child(
                 el().px(12.0)
                     .py(4.0)
                     .radius(RADIUS_PILL)
-                    .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+                    .liquid_glass(exo_kit::exo_glass(ExoGlass::ClearMedia, false))
                     .child(
                         text(hero_when(hero.when.as_deref()))
                             .font(type_small())
@@ -914,7 +949,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                     .gap(6.0)
                     .center_y()
                     .radius(RADIUS_PILL)
-                    .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+                    .liquid_glass(exo_kit::exo_glass(ExoGlass::ClearMedia, false))
                     .child(icon_bookmark_filled(12.0, FG))
                     .child(text("On your wishlist").font(type_small()).color(FG)),
             );
@@ -931,18 +966,33 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
         );
     } else {
         copy_col = copy_col.child(
+            text(hero.name.clone())
+                .font(TextStyle::new(scaled(30.0), 700.0).letter_spacing(-0.025))
+                .color(FG)
+                .max_w(640.0)
+                .wrap(),
+        );
+    }
+
+    if let Some(price_el) = render_price(
+        hero.free,
+        hero.final_cents.or(hero.final_price),
+        hero.initial,
+        hero.discount,
+        hero.currency.as_deref(),
+        hero.price_text.as_deref(),
+        hero.was_text.as_deref(),
+        false,
+    ) {
+        copy_col = copy_col.child(
             row()
-                .pt(7.0)
-                .pb(8.0)
+                .h(32.0)
                 .px(14.0)
+                .gap(8.0)
                 .center_y()
-                .radius(12.0)
-                .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
-                .child(
-                    text(hero.name.clone())
-                        .font(TextStyle::new(scaled(20.0), 650.0))
-                        .color(FG),
-                ),
+                .radius(RADIUS_PILL)
+                .liquid_glass(exo_kit::exo_glass(ExoGlass::ClearMedia, false))
+                .child(price_el),
         );
     }
 
@@ -951,7 +1001,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
     let mut hero_row = row()
         .key("store-hero-section")
         .w_full()
-        .px(10.0)
+        .px(24.0)
         .gap(16.0)
         .items_start()
         .on_hover_change(|s: &mut AppState, inside, _tx| {
@@ -964,19 +1014,45 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
         let progress = (s.store_ext.hero_elapsed / HERO_ROTATE_SECS).clamp(0.0, 1.0) as f32;
         let side_list = col()
             .key("store-hero-side-list")
-            .w(300.0)
+            .w(316.0)
             .h(512.0)
-            .gap(6.4)
+            .padding(8.0)
+            .gap(6.0)
+            .radius(RADIUS_PANEL)
+            .continuous_corners()
+            .clip_rounded(RADIUS_PANEL)
+            .fill(exo_kit::surface_elevated())
+            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+            .child(
+                row()
+                    .w_full()
+                    .px(8.0)
+                    .pt(4.0)
+                    .pb(2.0)
+                    .justify_between()
+                    .center_y()
+                    .child(
+                        text("Featured")
+                            .font(TextStyle::new(scaled(11.0), 600.0).letter_spacing(0.04))
+                            .color(fg_faint()),
+                    )
+                    .child(
+                        text(format!("{}/{}", active_idx + 1, count))
+                            .font(TextStyle::new(scaled(11.0), 500.0).features("'tnum' 1"))
+                            .color(fg_faint()),
+                    ),
+            )
             .children(hero_items.iter().take(6).enumerate().map(|(i, item)| {
                 let is_on = i == active_idx;
                 let item_hue = title_hue(&item.name);
                 let thumb_img = best_pick_image(s, item, scale);
                 let mut thumb = el()
                     .key(format!("hero-thumb-{i}"))
-                    .size(115.0, 68.0)
+                    .size(106.0, 62.0)
                     .radius(RADIUS_SMALL)
                     .continuous_corners()
-                    .clip_rounded(RADIUS_SMALL);
+                    .clip_rounded(RADIUS_SMALL)
+                    .border(1.0, exo_kit::glass_rim());
                 if let Some(img) = thumb_img {
                     thumb = thumb.pixels_fit(img.pixels(), SurfaceFit::Fill);
                 } else {
@@ -987,6 +1063,33 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                             (1.0, oklch(0.12, 0.03, item_hue)),
                         ],
                     );
+                }
+
+                let mut meta_col = col().grow(1.0).min_w(0.0).gap(4.0).child(
+                    text(item.name.clone())
+                        .font(TextStyle::new(scaled(13.0), if is_on { 600.0 } else { 500.0 }))
+                        .color(if is_on { FG } else { fg_muted() })
+                        .w_full()
+                        .wrap(),
+                );
+                let sub_price = item.display_price();
+                if !sub_price.is_empty() {
+                    let mut p_row = row().gap(6.0).center_y();
+                    if item.discount > 0 {
+                        p_row = p_row.child(
+                            el().px(5.0)
+                                .py(1.0)
+                                .radius(RADIUS_PILL)
+                                .fill(good().alpha(0.18))
+                                .child(
+                                    text(format!("-{}%", item.discount))
+                                        .font(type_small())
+                                        .color(good()),
+                                ),
+                        );
+                    }
+                    p_row = p_row.child(text(sub_price).font(type_small()).color(fg_faint()));
+                    meta_col = meta_col.child(p_row);
                 }
 
                 let item_tile = item.clone();
@@ -1001,16 +1104,24 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
                     .w_full()
-                    .h(80.0)
+                    .h(77.0)
                     .px(8.0)
-                    .py(6.0)
+                    .py(7.0)
                     .gap(12.0)
                     .center_y()
                     .radius(RADIUS_CARD)
                     .continuous_corners()
                     .clip_rounded(RADIUS_CARD)
-                    .fill(if is_on { selected_fill() } else { TRANSPARENT })
-                    .hover(if is_on { selected_fill() } else { hover_fill() })
+                    .fill(if is_on {
+                        exo_kit::surface_elevated_hi()
+                    } else {
+                        TRANSPARENT
+                    })
+                    .hover(if is_on {
+                        exo_kit::surface_elevated_hi()
+                    } else {
+                        hover_fill()
+                    })
                     .press(pressed_fill())
                     .motion(SPRING_QUICK)
                     .on_press_tx(move |s: &mut AppState, tx| {
@@ -1027,17 +1138,13 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                         }
                     })
                     .child(thumb)
-                    .child(
-                        text(item.name.clone())
-                            .font(TextStyle::new(scaled(13.0), 500.0))
-                            .color(if is_on { FG } else { fg_muted() })
-                            .grow(1.0)
-                            .min_w(0.0)
-                            .wrap(),
-                    );
+                    .child(meta_col);
+                if is_on {
+                    pick = pick.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+                }
                 if is_on && turns {
                     pick = pick.child(
-                        el().pin(Some(8.0), None, Some(8.0), Some(0.0))
+                        el().pin(Some(10.0), None, Some(10.0), Some(0.0))
                             .h(2.0)
                             .radius(RADIUS_PILL)
                             .fill(TRANSPARENT)
@@ -1045,7 +1152,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                                 el().h(2.0)
                                     .w_frac(progress)
                                     .radius(RADIUS_PILL)
-                                    .fill(FG.alpha(0.45)),
+                                    .fill(FG.alpha(0.50)),
                             ),
                     );
                 }
@@ -1190,9 +1297,9 @@ pub fn view(s: &AppState, scale: f32) -> El {
 
     let sub_bar = row()
         .w_full()
-        .pt(10.0)
-        .px(10.0)
-        .pb(14.0)
+        .pt(12.0)
+        .px(24.0)
+        .pb(16.0)
         .gap(12.0)
         .justify_between()
         .center_y()
@@ -1375,6 +1482,9 @@ mod tests {
                             || f.element.contains("store-hero-open")
                             || f.element.contains("sg-banner-"))
                     {
+                        return false;
+                    }
+                    if f.kind == "jiggle" && f.element.contains("store-hero-scrim-") {
                         return false;
                     }
                     if reduce_motion

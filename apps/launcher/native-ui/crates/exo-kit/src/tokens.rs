@@ -97,39 +97,39 @@ pub fn glass_plate_fill() -> Color {
 }
 
 pub fn glass_still_control_fill() -> Color {
-    BG.alpha(0.80)
+    srgb(19, 21, 26, 0.88)
 }
 
 pub fn glass_still_panel_fill() -> Color {
-    BG.alpha(0.92)
+    srgb(16, 18, 23, 0.94)
 }
 
 pub fn glass_panel_shadow_color() -> Color {
-    BG.alpha(0.50)
+    BG.alpha(0.56)
 }
 
 pub fn glass_rim_top() -> Color {
-    Color::WHITE.alpha(0.09)
+    Color::WHITE.alpha(0.125)
 }
 
 pub fn glass_rim_bottom() -> Color {
-    Color::WHITE.alpha(0.04)
+    Color::WHITE.alpha(0.035)
 }
 
 pub fn glass_rim() -> Color {
-    Color::WHITE.alpha(0.07)
+    Color::WHITE.alpha(0.085)
 }
 
 pub fn card_border() -> Color {
-    Color::WHITE.alpha(0.08)
+    Color::WHITE.alpha(0.09)
 }
 
 pub fn hairline() -> Color {
-    Color::WHITE.alpha(0.07)
+    Color::WHITE.alpha(0.075)
 }
 
 pub fn float_line() -> Color {
-    Color::WHITE.alpha(0.055)
+    Color::WHITE.alpha(0.065)
 }
 
 pub fn hover_fill() -> Color {
@@ -137,11 +137,11 @@ pub fn hover_fill() -> Color {
 }
 
 pub fn pressed_fill() -> Color {
-    Color::WHITE.alpha(0.133)
+    Color::WHITE.alpha(0.14)
 }
 
 pub fn selected_fill() -> Color {
-    Color::WHITE.alpha(0.15)
+    Color::WHITE.alpha(0.145)
 }
 
 pub fn track_fill() -> Color {
@@ -149,11 +149,23 @@ pub fn track_fill() -> Color {
 }
 
 pub fn scrim_fill() -> Color {
-    BG.alpha(0.72)
+    BG.alpha(0.68)
 }
 
 pub fn surface_card() -> Color {
-    Color::WHITE.alpha(0.035)
+    Color::WHITE.alpha(0.04)
+}
+
+pub fn surface_elevated() -> Color {
+    srgb(13, 14, 18, 1.0)
+}
+
+pub fn surface_elevated_hi() -> Color {
+    srgb(20, 22, 28, 1.0)
+}
+
+pub fn surface_sidebar() -> Color {
+    srgb(9, 10, 13, 1.0)
 }
 
 pub fn art_surface_fill() -> Color {

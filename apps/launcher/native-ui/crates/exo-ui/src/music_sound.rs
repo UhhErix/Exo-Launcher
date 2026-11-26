@@ -66,9 +66,10 @@ pub(crate) fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
         .min_h(0.0)
         .padding(16.0)
         .radius(RADIUS_PANEL)
+        .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .fill(BG)
-        .border(1.0, glass_rim());
+        .fill(exo_kit::surface_elevated())
+        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom());
 
     if let Some(heading) = title {
         panel_col = panel_col.child(

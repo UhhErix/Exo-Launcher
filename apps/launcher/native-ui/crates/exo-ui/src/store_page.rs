@@ -1490,7 +1490,7 @@ fn hero_logo_slot(s: &AppState, app_id: &str, name: &str, scale: f32) -> El {
     } else {
         slot = slot.child(
             text(name.to_string())
-                .font(TextStyle::new(scaled(20.0), 650.0))
+                .font(exo_kit::type_first_run())
                 .color(FG)
                 .w_full()
                 .wrap(),
@@ -1505,14 +1505,15 @@ fn tag_pills_row(tags: Option<&[String]>) -> El {
         for tag in list.iter().take(8) {
             bar = bar.child(
                 el().h(26.0)
-                    .px(12.0)
+                    .px(11.0)
                     .center()
                     .radius(RADIUS_PILL)
-                    .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+                    .fill(exo_kit::surface_elevated_hi().alpha(0.85))
+                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                     .child(
                         text(tag.clone())
                             .font(TextStyle::new(scaled(12.0), 500.0))
-                            .color(FG),
+                            .color(FG.alpha(0.92)),
                     ),
             );
         }
@@ -1808,15 +1809,12 @@ fn buy_panel(
 }
 
 fn about_card(game: Option<&StoreGame>) -> El {
-    let mut card = col()
+    let mut card = exo_kit::amoled_card(RADIUS_CARD)
         .key("sg-about")
         .w_full()
         .px(20.0)
-        .py(16.0)
+        .py(18.0)
         .gap(10.0)
-        .radius(RADIUS_CARD)
-        .fill(exo_kit::BG)
-        .border(1.0, float_line())
         .child(
             text("About")
                 .font(TextStyle::new(scaled(13.0), 650.0).lh(scaled(18.0)))
@@ -1935,13 +1933,11 @@ fn facts_card(
         grid = grid.child(r);
     }
 
-    el().key("sg-facts")
+    exo_kit::amoled_card(RADIUS_CARD)
+        .key("sg-facts")
         .w_full()
         .px(18.0)
-        .py(14.0)
-        .radius(RADIUS_CARD)
-        .fill(exo_kit::BG)
-        .border(1.0, float_line())
+        .py(16.0)
         .child(grid)
 }
 
@@ -2103,15 +2099,12 @@ fn specs_card(game: Option<&StoreGame>) -> El {
         );
     }
 
-    col()
+    exo_kit::amoled_card(RADIUS_CARD)
         .key("sg-specs")
         .w_full()
         .px(20.0)
-        .py(16.0)
+        .py(18.0)
         .gap(10.0)
-        .radius(RADIUS_CARD)
-        .fill(exo_kit::BG)
-        .border(1.0, float_line())
         .child(head)
         .child(rows)
 }

@@ -121,15 +121,16 @@ pub struct ContextMenuSpec<S: 'static> {
 }
 
 fn glass_menu_surface(key: String, width: f32, _blur: bool, origin: Vec2) -> El {
+    let radius = RADIUS_CARD + 2.0;
     col()
         .key(key)
         .min_w(width)
         .px(6.0)
         .py(6.0)
-        .gap(1.0)
-        .radius(RADIUS_CARD)
+        .gap(2.0)
+        .radius(radius)
         .continuous_corners()
-        .clip_rounded(RADIUS_CARD)
+        .clip_rounded(radius)
         .hit()
         .cursor(Cursor::Default)
         .liquid_glass(exo_glass(ExoGlass::Menu, false))
@@ -230,7 +231,7 @@ fn build_menu_rows<S: 'static>(
                     .role("menuitem")
                     .label(label.clone())
                     .w_full()
-                    .min_h(32.0)
+                    .min_h(34.0)
                     .px(10.0)
                     .gap(10.0)
                     .center_y()

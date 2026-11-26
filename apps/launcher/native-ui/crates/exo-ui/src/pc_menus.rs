@@ -14,7 +14,7 @@ use exo_kit::{
 };
 use exo_rpc::{AutopilotLive, AutopilotReport, DriverProgress, DriverState, OutputColor};
 use rune::{
-    Align, Cursor, El, Key, Phase, ScrollSpec, Side, TextStyle, col, el, row, text,
+    Cursor, El, Key, Phase, ScrollSpec, TextStyle, col, el, row, text,
 };
 use serde_json::json;
 
@@ -2616,35 +2616,38 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
         let body = col()
             .key("pc-part-menu-scroll")
             .w_full()
-            .max_h(692.0)
+            .max_h(620.0)
             .px(20.0)
-            .pb(10.0)
+            .pb(20.0)
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
+            .clip_fade_linear(0.0, 0.0, 0.0, 24.0)
             .child(body_inner);
         let mut card = col()
             .key("pc-part-menu")
-            .w(560.0)
+            .w(580.0)
             .radius(RADIUS_PANEL)
             .continuous_corners()
             .clip_rounded(RADIUS_PANEL)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .hit()
             .cursor(Cursor::Default);
         if blur {
-            card = card.liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false));
+            card = card.liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false));
         } else {
-            card = card.fill(BG);
+            card = card
+                .fill(exo_kit::surface_elevated())
+                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
         }
         let card = card
             .role("dialog")
             .label(title)
-            .transition(popover_transition_from(rune::Vec2::new(0.0, 1.0)))
+            .transition(popover_transition_from(rune::Vec2::new(0.5, 1.0)))
             .modal(true, |s: &mut AppState| {
                 s.pc.part_menu = None;
                 s.pc.armed_confirm = None;
             })
+            .modal_scrim(exo_kit::scrim_fill())
             .modal_live(["top-bar"])
             .on_key(|s: &mut AppState, ev, _| {
                 if ev.key == Key::Escape {
@@ -2660,22 +2663,15 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
             })
             .child(head)
             .child(body);
-        if which == PcPartMenu::Display {
-            layers.push(
-                row()
-                    .w_full()
-                    .h_full()
-                    .pt(64.0)
-                    .px(12.0)
-                    .pb(12.0)
-                    .items_end()
-                    .child(el().grow(1.22).min_w(0.0))
-                    .child(card)
-                    .child(el().grow(1.0).min_w(0.0)),
-            );
-        } else {
-            layers.push(card.anchored_fit(anchor_key, Side::Top, Align::Start, 10.0));
-        }
+        let _ = anchor_key;
+        layers.push(
+            col()
+                .key("pc-part-menu-host")
+                .pin(Some(0.0), Some(exo_kit::TITLEBAR_HEIGHT + 16.0), Some(0.0), Some(20.0))
+                .px(24.0)
+                .center()
+                .child(card),
+        );
     }
 
     if let Some(cine) = auto_tune_cinema_layer(s, blur) {

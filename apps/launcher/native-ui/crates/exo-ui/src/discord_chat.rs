@@ -42,11 +42,11 @@ fn send_with_launch(s: &mut AppState, tx: &mut Tx) {
 }
 
 fn pane_surface() -> Color {
-    BG
+    exo_kit::surface_elevated()
 }
 
 fn card_surface() -> Color {
-    BG
+    exo_kit::surface_elevated_hi()
 }
 
 fn format_bytes(bytes: u64) -> String {

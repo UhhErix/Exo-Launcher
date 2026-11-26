@@ -130,52 +130,71 @@ impl ExoGlass {
         }
     }
 
-    /// Exo Liquid Glass: thin clear frost, strong bevel lensing + dispersion at the edges, a fixed
-    /// top-left specular rim, and no cursor-follow light or touch glow. Content stays visible
-    /// through the glass; only the edges bend it.
+    /// Exo Liquid Glass: smooth physical convex-bevel lensing, subtle clean dispersion,
+    /// luminous continuous dual-lobe specular rim with silky curved bevel meniscus, smoked dark
+    /// obsidian body separation over AMOLED black and bright artwork, and zero cursor-follow shine
+    /// or touch glow.
     pub fn to_liquid_glass(self, _interactive: bool, _a11y: GlassAccessibility) -> LiquidGlass {
         const LIGHT_ANGLE: f32 = -std::f32::consts::FRAC_PI_4 * 3.0;
         let base = match self {
-            Self::Bar | Self::Control => LiquidGlass::clear()
-                .frost(1.6)
-                .saturation(1.6)
-                .refraction(2.6)
-                .bevel(14.0)
-                .dispersion(0.06)
-                .rim(0.30, 0.10, 0.14)
-                .specular(1.1, LIGHT_ANGLE)
-                .tint(srgb(8, 8, 10, 0.18))
+            Self::Bar => LiquidGlass::clear()
+                .frost(6.5)
+                .saturation(1.65)
+                .refraction(1.55)
+                .bevel(11.0)
+                .dispersion(0.032)
+                .rim(0.42, 0.14, 0.18)
+                .specular(1.25, LIGHT_ANGLE)
+                .tint(srgb(24, 26, 32, 0.42))
                 .still(self.still_fill()),
-            Self::Menu | Self::Popover | Self::Panel | Self::Sheet | Self::Notice => {
-                LiquidGlass::clear()
-                    .frost(7.0)
-                    .saturation(1.7)
-                    .refraction(2.2)
-                    .bevel(16.0)
-                    .dispersion(0.05)
-                    .rim(0.26, 0.09, 0.12)
-                    .specular(1.0, LIGHT_ANGLE)
-                    .tint(srgb(6, 6, 8, 0.38))
-                    .still(self.still_fill())
-            }
-            Self::ClearMedia => LiquidGlass::clear()
-                .frost(0.8)
-                .saturation(1.4)
-                .refraction(3.0)
-                .bevel(16.0)
-                .dispersion(0.07)
-                .rim(0.32, 0.10, 0.14)
+            Self::Control => LiquidGlass::clear()
+                .frost(5.0)
+                .saturation(1.60)
+                .refraction(1.45)
+                .bevel(10.0)
+                .dispersion(0.030)
+                .rim(0.40, 0.12, 0.16)
+                .specular(1.20, LIGHT_ANGLE)
+                .tint(srgb(26, 28, 35, 0.44))
+                .still(self.still_fill()),
+            Self::Menu | Self::Popover => LiquidGlass::clear()
+                .frost(14.0)
+                .saturation(1.55)
+                .refraction(1.35)
+                .bevel(13.0)
+                .dispersion(0.028)
+                .rim(0.38, 0.14, 0.14)
                 .specular(1.15, LIGHT_ANGLE)
-                .tint(srgb(0, 0, 0, 0.10))
+                .tint(srgb(22, 24, 30, 0.72))
+                .still(self.still_fill()),
+            Self::Panel | Self::Sheet | Self::Notice => LiquidGlass::clear()
+                .frost(18.0)
+                .saturation(1.50)
+                .refraction(1.25)
+                .bevel(14.0)
+                .dispersion(0.025)
+                .rim(0.38, 0.14, 0.14)
+                .specular(1.15, LIGHT_ANGLE)
+                .tint(srgb(20, 22, 28, 0.78))
+                .still(self.still_fill()),
+            Self::ClearMedia => LiquidGlass::clear()
+                .frost(4.0)
+                .saturation(1.70)
+                .refraction(1.65)
+                .bevel(12.0)
+                .dispersion(0.035)
+                .rim(0.46, 0.12, 0.18)
+                .specular(1.30, LIGHT_ANGLE)
+                .tint(srgb(20, 22, 28, 0.34))
                 .still(self.still_fill()),
             Self::Tinted(color) => LiquidGlass::clear()
-                .frost(4.0)
-                .saturation(1.5)
-                .refraction(2.2)
-                .bevel(12.0)
-                .dispersion(0.05)
-                .rim(0.28, 0.10, 0.12)
-                .specular(1.0, LIGHT_ANGLE)
+                .frost(8.0)
+                .saturation(1.45)
+                .refraction(1.35)
+                .bevel(10.0)
+                .dispersion(0.028)
+                .rim(0.36, 0.12, 0.14)
+                .specular(1.10, LIGHT_ANGLE)
                 .tint(color)
                 .still(color.alpha(0.84)),
         };

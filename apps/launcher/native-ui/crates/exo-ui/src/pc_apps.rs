@@ -1933,15 +1933,11 @@ pub(crate) fn apps_room(s: &AppState) -> El {
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .gap(18.0)
+            .gap(14.0)
             .pb(20.0)
             .scroll(ScrollSpec {
                 stick_bottom: false,
             });
-
-        if !searching && !s.pc.apps_only_unused {
-            list_col = list_col.child(ready_section(s, programs));
-        }
 
         if s.pc.apps_only_unused {
             list_col = list_col.child(
@@ -2040,11 +2036,11 @@ pub(crate) fn apps_room(s: &AppState) -> El {
             list_col = list_col.child(parts_sec);
         }
 
-        col()
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .gap(12.0)
+        let mut table_block = col().w_full().grow(1.0).min_h(0.0).gap(12.0);
+        if !searching && !s.pc.apps_only_unused {
+            table_block = table_block.child(ready_section(s, programs));
+        }
+        table_block
             .child(table_head)
             .children(s.pc.apps_errors.get("many").map(|err| {
                 el().w_full()
@@ -2062,10 +2058,10 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         .pt(20.0)
         .px(24.0)
         .pb(8.0)
-        .gap(12.0)
+        .gap(14.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(BG)
+        .fill(exo_kit::surface_elevated())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(header)
         .child(body);
@@ -2075,7 +2071,7 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         .w_full()
         .h_full()
         .pt(64.0)
-        .px(10.0)
+        .px(24.0)
         .pb(20.0)
         .fill(BG)
         .on_key(|s: &mut AppState, ev, _| {
