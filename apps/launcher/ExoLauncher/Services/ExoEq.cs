@@ -103,6 +103,20 @@ internal static class ExoEq
         }
         Refresh();
         lock (Gate) WatchNight(_store ??= Load());
+        if (!HostMode.IsDisposable)
+        {
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    if (EqualizerApo.InstallFolder() is not null) EqualizerApo.SilenceUpdateChecker();
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    AppLog.Debug("Exo EQ: Equalizer APO update checker silence pass failed: " + ex.GetType().Name);
+                }
+            });
+        }
     }
 
     /// <summary>A game started or ended: its automatic sound goes on, or the output's studio reference comes back.</summary>

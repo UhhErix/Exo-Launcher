@@ -113,4 +113,62 @@ public sealed class EqualizerApoTests
         // Without APO on endpoint, never asks to restart.
         Assert.False(EqualizerApo.NeedsRestart(apo: false, audioStart.AddMinutes(5), bootStale, audioStart));
     }
+
+    [Fact]
+    public void Silence_update_checker_sets_flag_and_disables_task_once_then_skips_unless_forced()
+    {
+        string? flag = null;
+        var taskDisables = 0;
+
+        using var live = ExoLauncher.Helpers.HostMode.ForceForTest(false);
+        // Existing install with unset flag: writes hideFailureMessage="true" and disables \EqualizerAPOUpdateChecker.
+        Assert.True(EqualizerApo.SilenceUpdateCheckerCore(
+            forceTaskDisable: false,
+            readFlag: () => flag,
+            writeFlag: v => flag = v,
+            disableTask: () => { taskDisables++; return true; }));
+        Assert.Equal("true", flag);
+        Assert.Equal(1, taskDisables);
+
+        // Subsequent startup pass: already silenced, does not spawn schtasks again.
+        Assert.False(EqualizerApo.SilenceUpdateCheckerCore(
+            forceTaskDisable: false,
+            readFlag: () => flag,
+            writeFlag: _ => Assert.Fail("should not rewrite flag"),
+            disableTask: () => { taskDisables++; return true; }));
+        Assert.Equal(1, taskDisables);
+
+        // Fresh install path (forceTaskDisable: true): disables the newly created task even if HKCU flag existed.
+        Assert.True(EqualizerApo.SilenceUpdateCheckerCore(
+            forceTaskDisable: true,
+            readFlag: () => "TRUE",
+            writeFlag: _ => Assert.Fail("flag already true"),
+            disableTask: () => { taskDisables++; return true; }));
+        Assert.Equal(2, taskDisables);
+    }
+
+    [Fact]
+    public void Silence_update_checker_still_disables_task_if_registry_fails_and_respects_disposable_host()
+    {
+        var taskDisables = 0;
+        using (ExoLauncher.Helpers.HostMode.ForceForTest(false))
+        {
+            Assert.True(EqualizerApo.SilenceUpdateCheckerCore(
+                forceTaskDisable: false,
+                readFlag: () => null,
+                writeFlag: _ => throw new UnauthorizedAccessException("denied"),
+                disableTask: () => { taskDisables++; return true; }));
+            Assert.Equal(1, taskDisables);
+        }
+
+        using (ExoLauncher.Helpers.HostMode.ForceForTest(true))
+        {
+            Assert.False(EqualizerApo.SilenceUpdateCheckerCore(
+                forceTaskDisable: true,
+                readFlag: () => null,
+                writeFlag: _ => Assert.Fail("disposable host must not write registry"),
+                disableTask: () => { taskDisables++; return true; }));
+            Assert.Equal(1, taskDisables);
+        }
+    }
 }

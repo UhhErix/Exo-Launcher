@@ -26,6 +26,10 @@ internal static class EqualizerApo
     private const string Adapter = "{b3f8fa53-0004-438e-9003-51a46e139bfc},6";    // PKEY_DeviceInterface_FriendlyName
     private const string NoEffects = "{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5";  // PKEY_AudioEndpoint_Disable_SysFx
 
+    internal const string UpdateCheckerTask = @"\EqualizerAPOUpdateChecker";
+    internal const string UpdateCheckerRegKey = @"Software\EqualizerAPO\Update Checker";
+    internal const string HideFailureMessageValue = "hideFailureMessage";
+
     /// <summary>The installer Exo fetches: Equalizer APO 1.4.2 for x64, as SourceForge lists it.</summary>
     internal static readonly Pin Installer = new(
         "1.4.2",
@@ -288,7 +292,9 @@ internal static class EqualizerApo
             }
             AppLog.Info("Exo EQ: Equalizer APO " + Installer.Version + " installed.");
             Volatile.Write(ref _selectorTriggeredTicks, DateTime.UtcNow.Ticks);
-            return InstallFolder() is null ? "Equalizer APO's installer finished, but Equalizer APO isn't there. Try again." : null;
+            if (InstallFolder() is null) return "Equalizer APO's installer finished, but Equalizer APO isn't there. Try again.";
+            SilenceUpdateChecker(forceTaskDisable: true);
+            return null;
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or UnauthorizedAccessException or TaskCanceledException or Win32Exception)
         {
@@ -298,6 +304,90 @@ internal static class EqualizerApo
         finally
         {
             try { DeletionGate.DeleteDirectory(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    /// <summary>
+    /// Silences Equalizer APO's broken Qt6 UpdateChecker.exe popup ("Error while reading response of update check:
+    /// illegal value") by setting its HKCU hideFailureMessage flag and disabling the \EqualizerAPOUpdateChecker
+    /// scheduled task without requesting UAC. Safe to call both immediately after install and once at startup for
+    /// existing Equalizer APO installs.
+    /// </summary>
+    internal static bool SilenceUpdateChecker(bool forceTaskDisable = false)
+    {
+        if (HostMode.IsDisposable) return false;
+        return SilenceUpdateCheckerCore(
+            forceTaskDisable,
+            ReadHideFailureFlag,
+            WriteHideFailureFlag,
+            DisableUpdateCheckerTask);
+    }
+
+    internal static bool SilenceUpdateCheckerCore(
+        bool forceTaskDisable,
+        Func<string?> readFlag,
+        Action<string> writeFlag,
+        Func<bool> disableTask)
+    {
+        if (HostMode.IsDisposable) return false;
+        var alreadyHidden = string.Equals(readFlag(), "true", StringComparison.OrdinalIgnoreCase);
+        if (alreadyHidden && !forceTaskDisable) return false;
+        var changed = false;
+        if (!alreadyHidden)
+        {
+            try { writeFlag("true"); changed = true; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                AppLog.Warn("Exo EQ: couldn't silence Equalizer APO update checker flag: " + ex.GetType().Name);
+            }
+        }
+        if (disableTask()) changed = true;
+        return changed;
+    }
+
+    private static string? ReadHideFailureFlag()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(UpdateCheckerRegKey);
+            return key?.GetValue(HideFailureMessageValue)?.ToString();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return null; }
+    }
+
+    private static void WriteHideFailureFlag(string value)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(UpdateCheckerRegKey);
+        key?.SetValue(HideFailureMessageValue, value, RegistryValueKind.String);
+    }
+
+    private static bool DisableUpdateCheckerTask()
+    {
+        try
+        {
+            var info = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "schtasks.exe"))
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            info.ArgumentList.Add("/change");
+            info.ArgumentList.Add("/tn");
+            info.ArgumentList.Add(UpdateCheckerTask);
+            info.ArgumentList.Add("/disable");
+            var result = ProcessOutput.RunCaptureBytes(info, TimeSpan.FromSeconds(5));
+            if (result.Completed && result.ExitCode == 0)
+            {
+                AppLog.Info("Exo EQ: disabled Equalizer APO UpdateChecker scheduled task.");
+                return true;
+            }
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or Win32Exception or InvalidOperationException)
+        {
+            AppLog.Debug("Exo EQ: couldn't disable Equalizer APO UpdateChecker task: " + ex.GetType().Name);
+            return false;
         }
     }
 }

@@ -58,6 +58,8 @@ public sealed class DisposableHostGuardTests
         ("ExoLauncher/Services/ExoEq.cs", "string? LucidOff()"),
         ("ExoLauncher/Services/ExoEq.cs", "void Remove()"),
         ("ExoLauncher/Services/EqualizerApo.cs", "Task<string?> InstallAsync("),
+        ("ExoLauncher/Services/EqualizerApo.cs", "bool SilenceUpdateChecker("),
+        ("ExoLauncher/Services/EqualizerApo.cs", "bool SilenceUpdateCheckerCore("),
         ("ExoLauncher/Services/LucidRetire.cs", "internal static void Once()"),
         ("ExoLauncher/Adapters/SteamOverlayConfig.cs", "void WriteFile(string path, string text)"),
         ("ExoLauncher/Adapters/SteamClientUpdate.cs", "void JoinBeta(string root)"),
