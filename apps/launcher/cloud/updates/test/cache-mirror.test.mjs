@@ -378,3 +378,18 @@ test('a zip already recorded is present: it is not downloaded again', async () =
   assert.ok(!fake.calls.fetched.includes(ZIP_URL), 'the zip is not fetched again')
   assert.ok(done.some(([s, k]) => s === 'present' && k === ZIP_KEY))
 })
+
+test('the plan leaves out the third-party frame generation mods and their licences', () => {
+  const asset = (owner, repo, tag, name) => ({ kind: 'asset', owner, repo, tag, asset: name, size: 1, sha256: '0'.repeat(64) })
+  const plan = planObjects({
+    vendor: [],
+    tools: [
+      asset('optiscaler', 'OptiScaler', 'v0.9.4', 'Optiscaler_0.9.4.7z'),
+      asset('dashdogy', 'MFG-Unlocker', 'v1.7.0', 'MFGUnlocker-v1.7.0.zip'),
+      asset('sdli1995', 'dlssg_for_sm86', '0.4.2', 'dlssg.zip'),
+      asset('derrod', 'legendary', '0.21.1', 'legendary.exe'),
+    ],
+  })
+  assert.deepEqual(plan.binaries.map((object) => object.key), ['cache/derrod/legendary/releases/download/0.21.1/legendary.exe'])
+  assert.deepEqual(plan.assetLicences.map((licence) => licence.repo), ['legendary'])
+})

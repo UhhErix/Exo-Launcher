@@ -28,3 +28,8 @@ simple = { limit = 10, period = 60 }
 name = "RIOT_UPSTREAM_LIMIT"
 namespace_id = "5103"
 simple = { limit = 200, period = 60 }
+
+# Error counters (src/signal.js): one Analytics Engine data point per counted request (Worker, route, status class), no logs and no identifier. README.md in cloud/updates, "Error counters".
+[[analytics_engine_datasets]]
+binding = "SIGNAL"
+dataset = "exo_signal"
