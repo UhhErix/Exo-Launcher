@@ -8,8 +8,8 @@ The account for Exo's apps (Cinema, Launcher): email and password, a recovery co
 items each app syncs. A Cloudflare Worker over one D1 database (`src/worker.js`, plain JavaScript, no build step), for
 `accounts.getexo.app`.
 
-**Live at `accounts.getexo.app`.** `wrangler.toml` is the live Worker; `[env.dev]` is its dev copy (`exo-account-dev`, the
-same code). `npm run dev` is `wrangler dev --local` and touches nothing remote. The steps for a change to the deployed
+**Live at `accounts.getexo.app`.** `wrangler.toml` is the live Worker; `[env.dev]` defines a dev copy (`exo-account-dev`, the
+same code) that is not deployed today. `npm run dev` is `wrangler dev --local` and touches nothing remote. The steps for a change to the deployed
 Worker or its database are in [Before deploy](#before-deploy).
 
 **Which deployed version this is.** Copied on 2026-11-10 from `exo-accounts-wt` (branch `feature/accounts`, commit
@@ -245,7 +245,8 @@ schema), the secret `ACCOUNT_SECRETS`, the `SESSION_TRIES` rate limit (namespace
    stay unreadable. Stop and tell the owner; the way back is in [Keys](#keys) › Owed).
 7. **Record it**: the deployed version id in the paragraph "Which deployed version this is" at the top of this file.
 
-The dev copy `exo-account-dev` (workers.dev, its own D1, `[env.dev]` in `wrangler.toml`) runs the same code. It is
-deployed with `--env dev` before live, as in step 3, and gets its migrations the same way; test accounts follow CLIENT.md
-section 0. The apps' rows in PRIVACY.md and `ExoLauncher/NetworkDestinations.cs` describe the account service as live; an
+The dev copy `exo-account-dev` (workers.dev, its own D1, `[env.dev]` in `wrangler.toml`) is the same code, but it is not
+deployed: on 2026-11-26 the Cloudflare account listed no `exo-account-dev` Worker and no `exo-account-dev` D1. Step 3 and
+CLIENT.md section 0 need it created first (`d1 create exo-account-dev`, put its id in `[env.dev]`, then `deploy --env dev`).
+Once it exists it is deployed before live, as in step 3, and gets its migrations the same way. The apps' rows in PRIVACY.md and `ExoLauncher/NetworkDestinations.cs` describe the account service as live; an
 app that signs in sends the device token and stores the one each answer gives (CLIENT.md, Device token).
