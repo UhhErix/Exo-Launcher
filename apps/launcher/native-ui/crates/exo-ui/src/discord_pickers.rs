@@ -594,10 +594,10 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
             .iter()
             .map(|g| {
                 let raw = g
-                    .gif_src
+                    .preview
                     .as_deref()
                     .filter(|u| !u.is_empty())
-                    .or_else(|| g.preview.as_deref().filter(|u| !u.is_empty()))
+                    .or_else(|| g.gif_src.as_deref().filter(|u| !u.is_empty()))
                     .unwrap_or(&g.src);
                 let thumb = exo_rpc::remote_art::normalize_gif_image_url(raw);
                 (

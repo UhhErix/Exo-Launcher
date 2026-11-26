@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const MUSIC_SNAPSHOT_FILENAME: &str = "rune-music-snapshot.json";
+static MUSIC_SNAPSHOT_WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn read_music_snapshot(path: &Path) -> Option<MusicDiskSnapshot> {
     let bytes = std::fs::read(path).ok()?;
@@ -1750,7 +1751,7 @@ impl AppState {
         true
     }
 
-    pub(crate) fn save_music_snapshot(&self) {
+    pub(crate) fn save_music_snapshot(&self, include_library: bool) {
         if self.status == HostStatus::Standalone {
             return;
         }
@@ -1775,11 +1776,23 @@ impl AppState {
         let _ = std::thread::Builder::new()
             .name("exo-music-snap".into())
             .spawn(move || {
+                let _writer = MUSIC_SNAPSHOT_WRITER.lock();
                 let mut snap = read_music_snapshot(&path).unwrap_or(MusicDiskSnapshot {
                     version: MUSIC_SNAPSHOT_VERSION,
                     services: HashMap::new(),
                 });
                 snap.version = MUSIC_SNAPSHOT_VERSION;
+                let mut entry = entry;
+                if !include_library {
+                    let kept = snap.services.get(&service_id);
+                    entry.library = kept.map(|k| k.library.clone()).unwrap_or_default();
+                    entry.library_filters =
+                        kept.map(|k| k.library_filters.clone()).unwrap_or_default();
+                    entry.library_top_filters = kept
+                        .map(|k| k.library_top_filters.clone())
+                        .unwrap_or_default();
+                    entry.library_sorts = kept.map(|k| k.library_sorts.clone()).unwrap_or_default();
+                }
                 snap.services.insert(service_id, entry);
                 let _ = write_music_snapshot(&snap, &path);
             });
@@ -1793,6 +1806,7 @@ impl AppState {
         let _ = std::thread::Builder::new()
             .name("exo-music-snap-clear".into())
             .spawn(move || {
+                let _writer = MUSIC_SNAPSHOT_WRITER.lock();
                 if let Some(mut snap) = read_music_snapshot(&path)
                     && snap.services.remove(&service_id).is_some()
                 {
@@ -2176,7 +2190,7 @@ impl AppState {
                     if let Some(sections) = sections {
                         s.media.music_home_sections = sections;
                         s.media.music_home_loading = false;
-                        s.save_music_snapshot();
+                        s.save_music_snapshot(false);
                         return;
                     }
                     if retry < 2
@@ -2226,7 +2240,7 @@ impl AppState {
                                     s.media.music_home_loading = false;
                                 }
                                 s.media.music_recent = data.items;
-                                s.save_music_snapshot();
+                                s.save_music_snapshot(false);
                             });
                         }
                     },
@@ -2288,7 +2302,7 @@ impl AppState {
                                 }
                                 s.media.music_folder_ref = data.folder;
                                 if unfiltered {
-                                    s.save_music_snapshot();
+                                    s.save_music_snapshot(true);
                                 }
                             }
                         }

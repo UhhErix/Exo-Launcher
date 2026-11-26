@@ -17,11 +17,8 @@ const ALLOWED_IMAGE_HOSTS: &[&str] = &[
     "scdn.co",
     "tenor.com",
     "giphy.com",
-    "klipy.co",
     "klipy.com",
-    "imgur.com",
-    "redd.it",
-    "gfycat.com",
+    "i.imgur.com",
 ];
 
 /// Converts Tenor / Giphy / Klipy video-variant GIF URLs (`.mp4` / `.webm`)

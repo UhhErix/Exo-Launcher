@@ -3868,7 +3868,7 @@ fn main() {
 
     let mut app = App::new(spec)
         .args(rune_args)
-        .glass(rune::GlassPolicy::Glass)
+        .glass(exo_kit::EXO_GLASS_POLICY)
         .max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS)
         .titlebar(exo_titlebar())
         .on_rest(AppState::on_rest)

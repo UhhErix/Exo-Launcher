@@ -2915,12 +2915,12 @@ mod tests {
         state.media.music_room_state = MusicRoomState::Running;
         state.media.music_immersion = true;
         state.media.music_track_uri = "am:songs:1".into();
-        state.media.music_player_title = Some("Starlight".into());
+        state.media.music_player_title = Some("Paper Lanterns".into());
         state.media.music_clock_s = 1.5;
         state.media.music_playback_anchor_s = 0.0;
         state.media.playback = Some(MusicPlayback {
-            title: "Starlight".into(),
-            artist: "Muse".into(),
+            title: "Paper Lanterns".into(),
+            artist: "Exo Test Band".into(),
             status: "playing".into(),
             position_ms: Some(2500),
             duration_ms: Some(240_000),
@@ -2933,18 +2933,18 @@ mod tests {
         state.media.music_lyrics_lines = vec![
             LyricsLine {
                 start: 1000.0,
-                text: "Far away".into(),
+                text: "Paper lanterns drifting over the quiet bay".into(),
                 words: vec![
                     LyricsWord {
                         start: 1000.0,
                         end: 2000.0,
-                        text: "Far".into(),
+                        text: "Paper".into(),
                         bg: false,
                     },
                     LyricsWord {
                         start: 2000.0,
                         end: 3500.0,
-                        text: "away".into(),
+                        text: "boats".into(),
                         bg: false,
                     },
                 ],
@@ -2952,7 +2952,7 @@ mod tests {
             },
             LyricsLine {
                 start: 6000.0,
-                text: "This ship is taking me".into(),
+                text: "Every window on the hill is glowing gold tonight".into(),
                 words: vec![],
                 agent: None,
             },
@@ -3268,8 +3268,8 @@ mod tests {
         music_home.media.music_room_state = MusicRoomState::Running;
         music_home.media.music_nav = MusicNav::Home;
         music_home.media.playback = Some(MusicPlayback {
-            title: "Starlight".into(),
-            artist: "Muse".into(),
+            title: "Paper Lanterns".into(),
+            artist: "Exo Test Band".into(),
             status: "playing".into(),
             position_ms: Some(48_000),
             duration_ms: Some(240_000),
@@ -3291,13 +3291,13 @@ mod tests {
             st.media.music_immersion = true;
             st.media.music_can_shuffle = true;
             st.media.music_can_repeat = true;
-            st.media.music_track_uri = "yt:video:starlight".into();
-            st.media.music_player_title = Some("Starlight".into());
+            st.media.music_track_uri = "yt:video:lanterns".into();
+            st.media.music_player_title = Some("Paper Lanterns".into());
             st.media.music_clock_s = 1.5;
             st.media.music_playback_anchor_s = 0.0;
             st.media.playback = Some(MusicPlayback {
-                title: "Starlight".into(),
-                artist: "Muse".into(),
+                title: "Paper Lanterns".into(),
+                artist: "Exo Test Band".into(),
                 status: "playing".into(),
                 position_ms: Some(12_500),
                 duration_ms: Some(240_000),
@@ -3312,45 +3312,45 @@ mod tests {
             st.media.music_lyrics_lines = vec![
                 LyricsLine {
                     start: 2000.0,
-                    text: "Far away, this ship is taking me far away".into(),
+                    text: "Paper lanterns drifting over the quiet bay".into(),
                     words: vec![],
                     agent: None,
                 },
                 LyricsLine {
                     start: 7000.0,
-                    text: "Far away from the memories of the people who care if I live or die".into(),
+                    text: "Every window on the hill is glowing gold tonight".into(),
                     words: vec![],
                     agent: None,
                 },
                 LyricsLine {
                     start: 11_000.0,
-                    text: "Starlight, I will be chasing a starlight".into(),
+                    text: "Lanterns, we keep on chasing the lanterns".into(),
                     words: vec![
-                        LyricsWord { start: 11_000.0, end: 12_000.0, text: "Starlight,".into(), bg: false },
-                        LyricsWord { start: 12_000.0, end: 12_400.0, text: "I".into(), bg: false },
-                        LyricsWord { start: 12_400.0, end: 12_800.0, text: "will".into(), bg: false },
-                        LyricsWord { start: 12_800.0, end: 13_100.0, text: "be".into(), bg: false },
-                        LyricsWord { start: 13_100.0, end: 13_800.0, text: "chasing".into(), bg: false },
-                        LyricsWord { start: 13_800.0, end: 14_100.0, text: "a".into(), bg: false },
-                        LyricsWord { start: 14_100.0, end: 15_000.0, text: "starlight".into(), bg: false },
+                        LyricsWord { start: 11_000.0, end: 12_000.0, text: "Paper".into(), bg: false },
+                        LyricsWord { start: 12_000.0, end: 12_400.0, text: "boats".into(), bg: false },
+                        LyricsWord { start: 12_400.0, end: 12_800.0, text: "drift".into(), bg: false },
+                        LyricsWord { start: 12_800.0, end: 13_100.0, text: "over".into(), bg: false },
+                        LyricsWord { start: 13_100.0, end: 13_800.0, text: "the".into(), bg: false },
+                        LyricsWord { start: 13_800.0, end: 14_100.0, text: "quiet".into(), bg: false },
+                        LyricsWord { start: 14_100.0, end: 15_000.0, text: "bay".into(), bg: false },
                     ],
                     agent: None,
                 },
                 LyricsLine {
                     start: 16_000.0,
-                    text: "Until the end of my life, I don't know if it's worth it anymore".into(),
+                    text: "The tide comes in and carries every word we said".into(),
                     words: vec![],
                     agent: None,
                 },
                 LyricsLine {
                     start: 22_000.0,
-                    text: "Hold you in my arms, I just wanted to hold you in my arms".into(),
+                    text: "Count the lights until the morning finds the shore".into(),
                     words: vec![],
                     agent: None,
                 },
                 LyricsLine {
                     start: 28_000.0,
-                    text: "My life, you electrify my life".into(),
+                    text: "Slow and bright, the harbour hums along".into(),
                     words: vec![],
                     agent: None,
                 },

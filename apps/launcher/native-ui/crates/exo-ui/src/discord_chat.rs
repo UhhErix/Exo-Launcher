@@ -184,7 +184,7 @@ fn embed_card(
         let video_gif = embed
             .video
             .as_ref()
-            .and_then(|v| v.url.as_deref().or(v.proxy_url.as_deref()))
+            .and_then(|v| v.proxy_url.as_deref().or(v.url.as_deref()))
             .map(exo_rpc::remote_art::normalize_gif_image_url)
             .filter(|u| {
                 let lower = u.split('?').next().unwrap_or(u).to_ascii_lowercase();
