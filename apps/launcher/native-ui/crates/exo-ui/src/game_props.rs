@@ -7,16 +7,13 @@ use crate::state::{AppState, HostStatus, InputMode, OpenDropdown};
 use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
     SPRING_MOVE, SPRING_QUICK, SPRING_SNAPPY, SelectDismissCb, SelectMenuSpec, SelectOption,
-    SelectTrigger,
-    TRANSPARENT, bad, fg_faint, fg_muted, glass_rim_bottom, glass_rim_top,
+    SelectTrigger, TRANSPARENT, bad, fg_faint, fg_muted, glass_rim_bottom, glass_rim_top,
     glass_still_control_fill, good, hairline, hex, hover_fill, icon_refresh, icon_rotate_ccw,
     icon_upload, pressed_fill, progress_bar, scaled, select_menu_layers, select_trigger,
     status_badge, switch_pill, track_fill, type_body, type_control, type_small, type_title,
 };
 use exo_rpc::{Game, GameProperties};
-use rune::{
-    Align, Cursor, El, TextStyle, Tx, col, edit_access, el, row, text, text_input,
-};
+use rune::{Align, Cursor, El, TextStyle, Tx, col, edit_access, el, row, text, text_input};
 use std::rc::Rc;
 
 fn switch_pill_owned(key: String, label: String, on: bool) -> El {
@@ -463,30 +460,28 @@ fn general_section(s: &AppState, game: &Game, props: &GameProperties) -> Vec<El>
     }
 
     if let Some(overlay_on) = props.steam_overlay {
-        let gid = game.id.clone();
-        let mut sw = switch_pill("props-overlay-switch", "Steam overlay", overlay_on);
-        if busy.is_none() {
-            sw = sw.on_press(move |st: &mut AppState| {
-                st.set_game_property_ex(
-                    &gid,
-                    "steamOverlay",
-                    if overlay_on { "off" } else { "on" },
-                    None,
-                    "steamOverlay",
-                );
-            });
-        }
-        let mut right = row().gap(8.0).center_y();
-        if busy == Some("steamOverlay") {
-            right = right.child(text("Saving…").font(type_small()).color(fg_muted()));
-        }
-        right = right.child(sw);
+        let note = if overlay_on {
+            "Kept on because this game uses Steam for purchases, friends or controller input."
+        } else {
+            "Off. Exo's own overlay shows instead."
+        };
         rows.push(props_row(
             "Steam overlay",
-            props.steam_overlay_note.as_deref(),
+            Some(props.steam_overlay_note.as_deref().unwrap_or(note)),
             s.game_page.props_notes.get("steamOverlay"),
             None,
-            right,
+            row().child(exo_kit::status_badge(
+                if overlay_on {
+                    "On".into()
+                } else {
+                    "Off".into()
+                },
+                if overlay_on {
+                    exo_kit::BadgeTone::Neutral
+                } else {
+                    exo_kit::BadgeTone::Good
+                },
+            )),
         ));
     }
 

@@ -2,7 +2,7 @@ use crate::tokens::{BG, glass_still_control_fill, glass_still_panel_fill};
 use rune::{Color, Cx, El, GlassPolicy, GlassTier, LiquidGlass};
 use std::sync::atomic::{AtomicU8, Ordering};
 
-pub const EXO_GLASS_POLICY: GlassPolicy = GlassPolicy::Auto;
+pub const EXO_GLASS_POLICY: GlassPolicy = GlassPolicy::Glass;
 pub const GLASS_DOWNGRADE_STREAK: u32 = 6;
 
 const FLAG_REDUCE_TRANSPARENCY: u8 = 1 << 0;

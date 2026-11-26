@@ -16,10 +16,7 @@ use exo_kit::{
     scaled, scrim_fill, store_logo_or_fallback, subtle_fill, type_body, type_control, type_page,
     type_small, type_title,
 };
-use rune::{
-    Align, Color, Cursor, El, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row,
-    text,
-};
+use rune::{Align, Color, Cursor, El, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row, text};
 use serde_json::json;
 use std::collections::VecDeque;
 

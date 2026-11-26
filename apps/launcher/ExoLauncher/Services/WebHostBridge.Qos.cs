@@ -10,7 +10,12 @@ public sealed partial class WebHostBridge
         var gameId = ReadString(p, hasParams, "gameId");
         string? message = null;
 
-        if (action is "on" or "off")
+        if (action == "all")
+        {
+            var installed = _services.Library.PeekCachedLibrary();
+            message = await Task.Run(() => GameQosPolicy.Shared.EnableAllAsync(installed, ct), ct).ConfigureAwait(false);
+        }
+        else if (action is "on" or "off")
         {
             var game = await FindGameAsync(gameId, ct).ConfigureAwait(false);
             if (game is null)

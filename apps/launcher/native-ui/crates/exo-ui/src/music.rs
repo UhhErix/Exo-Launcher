@@ -453,7 +453,14 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
             el().size(36.0, 36.0)
                 .radius(art_r)
                 .clip_rounded(art_r)
-                .child(render_art(s, &card.image, Some(36.0), art_r, is_liked, scale))
+                .child(render_art(
+                    s,
+                    &card.image,
+                    Some(36.0),
+                    art_r,
+                    is_liked,
+                    scale,
+                ))
                 .child(
                     el().key(format!("music-lib-play-{i}"))
                         .role("button")
@@ -1098,6 +1105,7 @@ fn main_panel(s: &AppState, scale: f32) -> El {
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
+                .chain_scroll_offset(crate::shell::bar_scroll_watch)
                 .child(head)
                 .child(main_panel_body(s, scale)),
         )
@@ -1463,7 +1471,13 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
                 .color(fg_muted())
                 .w(34.0),
         )
-        .child(seek_slider("music-bar-seek", 240.0, pos_ms, dur_ms, can_seek))
+        .child(seek_slider(
+            "music-bar-seek",
+            240.0,
+            pos_ms,
+            dur_ms,
+            can_seek,
+        ))
         .child(
             text(format_time_clock(dur_ms.map(|d| d as f64)))
                 .font(time_font)
@@ -1736,13 +1750,9 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
     let art_size: f32 = if stacked {
         (avail_h * 0.28).clamp(140.0, 200.0)
     } else if has_lyrics {
-        max_art_for_h
-            .min(vp_w * 0.27)
-            .clamp(180.0, 360.0)
+        max_art_for_h.min(vp_w * 0.27).clamp(180.0, 360.0)
     } else {
-        max_art_for_h
-            .min(vp_w * 0.34)
-            .clamp(200.0, 420.0)
+        max_art_for_h.min(vp_w * 0.34).clamp(200.0, 420.0)
     };
     let control_w: f32 = if stacked {
         (vp_w - stage_px * 2.0).clamp(340.0, 460.0)
@@ -1751,9 +1761,7 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
             .clamp(368.0, 460.0)
             .max(art_size)
     } else {
-        (vp_w - stage_px * 2.0)
-            .min(500.0)
-            .max(art_size.max(380.0))
+        (vp_w - stage_px * 2.0).min(500.0).max(art_size.max(380.0))
     };
 
     let title_sz = if avail_h < 580.0 { 22.0 } else { 26.0 } * text_scale(s);
@@ -1777,14 +1785,24 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
                 (1.0, BG),
             ],
         )
+        .children(art_img.as_ref().map(|img| {
+            let drift = if reduce_motion || !playing { 0.0 } else { t };
+            el().key(format!("music-immerse-art-glow-{track_key}"))
+                .pin(Some(-80.0), Some(-80.0), Some(-80.0), Some(-80.0))
+                .pixels_fit(img.pixels(), SurfaceFit::Fill)
+                .scale(1.18 + 0.04 * (drift * 0.09).sin())
+                .offset(36.0 * (drift * 0.05).sin(), 24.0 * (drift * 0.04).cos())
+                .blur(64.0)
+                .opacity(0.42)
+        }))
         .child(
             el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                 .linear_gradient(
                     std::f32::consts::PI,
                     [
                         (0.0, oklch(0.24, 0.08, hue).alpha(0.14)),
-                        (0.45, TRANSPARENT),
-                        (1.0, BG.alpha(0.78)),
+                        (0.45, BG.alpha(0.22)),
+                        (1.0, BG.alpha(0.82)),
                     ],
                 ),
         )
@@ -1898,12 +1916,7 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
                 s.media.music_volume,
                 muted,
             ))
-            .child(
-                text(vol_pct)
-                    .font(time_font)
-                    .color(FG.alpha(0.72))
-                    .w(34.0),
-            ),
+            .child(text(vol_pct).font(time_font).color(FG.alpha(0.72)).w(34.0)),
         ExoGlass::ClearMedia,
         false,
     );
@@ -3131,9 +3144,7 @@ mod tests {
             let (controls, _) = rt
                 .presented("music-immersion-controls")
                 .expect("controls dock");
-            let (volume, _) = rt
-                .presented("music-immersion-volume")
-                .expect("volume dock");
+            let (volume, _) = rt.presented("music-immersion-volume").expect("volume dock");
             let (lyrics, _) = rt
                 .presented("music-immersion-lyrics")
                 .expect("lyrics viewport");
@@ -3201,7 +3212,8 @@ mod tests {
             // Lyric rows must fit inside the lyrics column width (never horizontally clipped).
             let (lyric0, _) = rt.presented("music-lyric-0").expect("music-lyric-0");
             assert!(
-                lyric0[0] >= lyrics[0] - 0.5 && lyric0[0] + lyric0[2] <= lyrics[0] + lyrics[2] + 0.5,
+                lyric0[0] >= lyrics[0] - 0.5
+                    && lyric0[0] + lyric0[2] <= lyrics[0] + lyrics[2] + 0.5,
                 "{w}x{h}: lyric row clipped horizontally: row={lyric0:?} viewport={lyrics:?}"
             );
         }
@@ -3224,7 +3236,12 @@ mod tests {
         let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
 
         let mut capture = |name: &str, state: AppState, w: u32, h: u32| {
-            let mut rt = Runtime::new(state, shell::view, (w as f32, h as f32), Env::new(true, 1.0));
+            let mut rt = Runtime::new(
+                state,
+                shell::view,
+                (w as f32, h as f32),
+                Env::new(true, 1.0),
+            );
             rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
             rt.set_glass_policy(rune::GlassPolicy::Glass);
             rt.frame(0.0);
@@ -3254,7 +3271,12 @@ mod tests {
         };
 
         // 1. Library Home: pure #000000 AMOLED + shadow-free upgraded Liquid Glass top pills
-        capture("proof-v4-library-home.png", AppState::with_demo_games(), 1280, 720);
+        capture(
+            "proof-v4-library-home.png",
+            AppState::with_demo_games(),
+            1280,
+            720,
+        );
 
         // 2. Game Page: Optimize (with Graphics Features integrated), zero Frame Cap, zero standalone Graphics Features card
         let mut game_state = AppState::with_demo_games();
@@ -3318,7 +3340,8 @@ mod tests {
                 },
                 LyricsLine {
                     start: 7000.0,
-                    text: "Far away from the memories of the people who care if I live or die".into(),
+                    text: "Far away from the memories of the people who care if I live or die"
+                        .into(),
                     words: vec![],
                     agent: None,
                 },
@@ -3326,13 +3349,48 @@ mod tests {
                     start: 11_000.0,
                     text: "Starlight, I will be chasing a starlight".into(),
                     words: vec![
-                        LyricsWord { start: 11_000.0, end: 12_000.0, text: "Starlight,".into(), bg: false },
-                        LyricsWord { start: 12_000.0, end: 12_400.0, text: "I".into(), bg: false },
-                        LyricsWord { start: 12_400.0, end: 12_800.0, text: "will".into(), bg: false },
-                        LyricsWord { start: 12_800.0, end: 13_100.0, text: "be".into(), bg: false },
-                        LyricsWord { start: 13_100.0, end: 13_800.0, text: "chasing".into(), bg: false },
-                        LyricsWord { start: 13_800.0, end: 14_100.0, text: "a".into(), bg: false },
-                        LyricsWord { start: 14_100.0, end: 15_000.0, text: "starlight".into(), bg: false },
+                        LyricsWord {
+                            start: 11_000.0,
+                            end: 12_000.0,
+                            text: "Starlight,".into(),
+                            bg: false,
+                        },
+                        LyricsWord {
+                            start: 12_000.0,
+                            end: 12_400.0,
+                            text: "I".into(),
+                            bg: false,
+                        },
+                        LyricsWord {
+                            start: 12_400.0,
+                            end: 12_800.0,
+                            text: "will".into(),
+                            bg: false,
+                        },
+                        LyricsWord {
+                            start: 12_800.0,
+                            end: 13_100.0,
+                            text: "be".into(),
+                            bg: false,
+                        },
+                        LyricsWord {
+                            start: 13_100.0,
+                            end: 13_800.0,
+                            text: "chasing".into(),
+                            bg: false,
+                        },
+                        LyricsWord {
+                            start: 13_800.0,
+                            end: 14_100.0,
+                            text: "a".into(),
+                            bg: false,
+                        },
+                        LyricsWord {
+                            start: 14_100.0,
+                            end: 15_000.0,
+                            text: "starlight".into(),
+                            bg: false,
+                        },
                     ],
                     agent: None,
                 },
@@ -3357,7 +3415,17 @@ mod tests {
             ];
             st
         };
-        capture("proof-v4-music-immersion-720p.png", make_immersion(), 1280, 720);
-        capture("proof-v4-music-immersion-1080p.png", make_immersion(), 1920, 1080);
+        capture(
+            "proof-v4-music-immersion-720p.png",
+            make_immersion(),
+            1280,
+            720,
+        );
+        capture(
+            "proof-v4-music-immersion-1080p.png",
+            make_immersion(),
+            1920,
+            1080,
+        );
     }
 }

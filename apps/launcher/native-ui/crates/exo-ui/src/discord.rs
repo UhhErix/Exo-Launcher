@@ -1656,15 +1656,14 @@ fn dm_row(s: &AppState, dm: &DiscordDm, active: bool, sc: f32, scale: f32) -> El
     } else {
         fg_muted()
     };
-    let time_color = if active {
-        FG.alpha(0.64)
-    } else {
-        fg_faint()
-    };
+    let time_color = if active { FG.alpha(0.64) } else { fg_faint() };
 
     let mut body = col().grow(1.0).min_w(0.0).gap(1.0).child(
         text(dm.name.clone())
-            .font(font_px(13.0 * sc, if active || is_unread { 600.0 } else { 500.0 }))
+            .font(font_px(
+                13.0 * sc,
+                if active || is_unread { 600.0 } else { 500.0 },
+            ))
             .color(name_color)
             .truncate(),
     );
@@ -4354,7 +4353,10 @@ mod tests {
 
         assert!((c0[1] - c1[1]).abs() <= 1.0, "card 1 not on row 0");
         assert!((c0[1] - c2[1]).abs() <= 1.0, "card 2 not on row 0");
-        assert!(c3[1] > c0[1] + 40.0, "card 3 should wrap cleanly onto row 1");
+        assert!(
+            c3[1] > c0[1] + 40.0,
+            "card 3 should wrap cleanly onto row 1"
+        );
         assert!((c3[1] - c4[1]).abs() <= 1.0, "card 4 not on row 1");
         assert!(
             c0[2] >= 360.0,

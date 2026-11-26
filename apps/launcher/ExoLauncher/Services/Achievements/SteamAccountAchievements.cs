@@ -131,10 +131,13 @@ internal static class SteamAccountAchievements
                                    ex is TaskCanceledException && !ct.IsCancellationRequested)
         {
             var reason = ex is SteamAuthException ? "sign-in required" : ex.GetType().Name;
-            AppLog.Warn("Steam achievements: the signed-in read was not used (" + reason + "); the local cache answers.");
+            if (SaidReasons.TryAdd(reason, 0))
+                AppLog.Warn("Steam achievements: the signed-in read was not used (" + reason + "); the local cache answers.");
             return null;
         }
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> SaidReasons = new(StringComparer.Ordinal);
 
     private static string? ReadString(JsonElement item, string name) =>
         item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;

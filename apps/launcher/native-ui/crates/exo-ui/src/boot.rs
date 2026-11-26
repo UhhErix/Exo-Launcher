@@ -1,12 +1,12 @@
 use crate::events::{EventRegistry, HostEventKind};
 use crate::state::{AppState, HostStatus, NoticeTone};
 use exo_kit::{
-    BG, FG, RADIUS_PANEL, RADIUS_PILL, bad, exo_mark, fg_muted, glass_button, glass_panel_opt,
-    good, icon_alert, icon_check, icon_cpu, icon_monitor, primary_button, progress_bar, scaled,
-    track_fill, type_body, type_small, type_title,
+    BG, FG, RADIUS_PANEL, RADIUS_PILL, SPRING_FLIGHT, SPRING_INTRO, SPRING_MOVE, bad, exo_app_icon,
+    fg_muted, glass_button, glass_panel_opt, good, icon_alert, icon_check, icon_cpu, icon_monitor,
+    primary_button, progress_bar, scaled, track_fill, type_body, type_small, type_title,
 };
 use exo_rpc::HostEvent;
-use rune::{Color, El, Transition, col, el, row, text};
+use rune::{Color, El, SpringPair, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -591,29 +591,50 @@ pub fn boot_splash_if_needed(s: &AppState, blur: bool) -> Option<El> {
         } else {
             "Preparing library and game tools"
         };
-        let mark_transition = if s.settings.reduce_motion {
-            Transition::none()
+        let (root_t, glow_t, mark_t) = if s.settings.reduce_motion {
+            (Transition::none(), Transition::none(), Transition::none())
         } else {
-            Transition::blur_replace()
+            (
+                Transition::asymmetric(Transition::none(), Transition::opacity())
+                    .springs(SpringPair::new(SPRING_FLIGHT, SPRING_FLIGHT)),
+                Transition::asymmetric(Transition::opacity(), Transition::opacity())
+                    .springs(SpringPair::new(SPRING_FLIGHT, SPRING_MOVE)),
+                Transition::asymmetric(
+                    Transition::offset(0.0, 8.0)
+                        .combined(Transition::scale(0.94))
+                        .combined(Transition::opacity()),
+                    Transition::offset(0.0, -6.0)
+                        .combined(Transition::scale(0.86))
+                        .combined(Transition::opacity()),
+                )
+                .springs(SpringPair::new(SPRING_INTRO, SPRING_FLIGHT)),
+            )
         };
         return Some(
             col()
                 .key("boot-splash")
                 .role("status")
                 .label(aria)
-                .w_full()
-                .h_full()
+                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                 .fill(BG)
-                .radial_gradient(
-                    [0.5, 0.5],
-                    260.0,
-                    [(0.0, FG.alpha(0.08)), (1.0, Color::TRANSPARENT)],
-                )
+                .hit()
                 .center()
+                .transition(root_t)
+                .child(
+                    el().key("boot-splash-glow")
+                        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                        .radial_gradient(
+                            [0.5, 0.5],
+                            320.0,
+                            [(0.0, FG.alpha(0.086)), (1.0, Color::TRANSPARENT)],
+                        )
+                        .enter_delay(0.12)
+                        .transition(glow_t),
+                )
                 .child(
                     el().key("boot-splash-mark")
-                        .transition(mark_transition)
-                        .child(exo_mark(128.0, FG)),
+                        .transition(mark_t)
+                        .child(exo_app_icon(128.0)),
                 ),
         );
     }

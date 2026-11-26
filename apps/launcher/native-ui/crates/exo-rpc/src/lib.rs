@@ -219,6 +219,7 @@ pub const METHOD_DLSS_DOWNLOAD_NEWER: &str = "dlss.downloadNewer";
 pub const METHOD_DLSS_FRAME_GEN: &str = "dlss.frameGen";
 pub const METHOD_DLSS_NEWER: &str = "dlss.newer";
 pub const METHOD_DLSS_RESTORE: &str = "dlss.restore";
+pub const METHOD_DLSS_UPDATE_ALL: &str = "dlss.updateAll";
 pub const METHOD_DLSS_STATUS: &str = "dlss.status";
 pub const METHOD_GPU_GAME: &str = "gpu.game";
 pub const METHOD_HDR_GAME: &str = "hdr.game";
@@ -561,6 +562,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DLSS_NEWER,
     METHOD_DLSS_RESTORE,
     METHOD_DLSS_STATUS,
+    METHOD_DLSS_UPDATE_ALL,
     METHOD_GPU_GAME,
     METHOD_HDR_GAME,
     METHOD_KEEP_STATUS,

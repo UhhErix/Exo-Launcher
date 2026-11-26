@@ -1,6 +1,5 @@
 use crate::devices_audio::{device_btn, device_icon_btn, device_panel, device_row, device_switch};
 use crate::media_state::CaptureFilter;
-use crate::notes;
 use crate::pc_state::format_bytes;
 use crate::snip_editor;
 use crate::state::{AppState, HostStatus, InputMode};
@@ -9,9 +8,9 @@ use exo_kit::{
     RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, danger_button, exo_glass, fg_faint,
     fg_muted, filter_pill, glass_control_fill, glass_panel_fill, glass_rim, good, hairline,
     hover_fill, icon_back, icon_camera, icon_check, icon_close, icon_external, icon_film,
-    icon_folder, icon_gallery, icon_more_horiz, icon_notes, icon_pause, icon_play, icon_plus,
-    icon_record_dot, icon_replay, icon_scissors, icon_settings, icon_sparkles, icon_star,
-    icon_star_filled, icon_trash, icon_volume, icon_volume_off, popover_transition_for, pressed_fill, primary_button,
+    icon_folder, icon_gallery, icon_more_horiz, icon_pause, icon_play, icon_record_dot,
+    icon_replay, icon_scissors, icon_settings, icon_sparkles, icon_star, icon_star_filled,
+    icon_trash, icon_volume, icon_volume_off, popover_transition_for, pressed_fill, primary_button,
     progress_bar, scaled, scrim_fill, slider_track, status_badge, type_body, type_control,
     type_page, type_section, type_small, type_title, warn,
 };
@@ -25,9 +24,8 @@ use exo_rpc::{
 };
 use rune::color::oklch;
 use rune::{
-    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, Phase, ScrollSpec, Side,
-    Spring, SurfaceFit, TextEdit, TextStyle, Tx, col, edit_access, el, lightbox, row, text,
-    text_input,
+    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, Phase, ScrollSpec, Side, Spring,
+    SurfaceFit, TextEdit, TextStyle, Tx, col, edit_access, el, lightbox, row, text, text_input,
 };
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -367,7 +365,7 @@ impl AppState {
                     let name = item.name.clone();
                     self.media.capture_items.retain(|it| it.id != id);
                     self.media.capture_items.insert(0, item);
-                    if self.media.captures_open && !self.media.notes.open {
+                    if self.media.captures_open {
                         self.open_capture_item(&id);
                     } else if !name.is_empty() {
                         self.notice = Some(format!("{name} is ready."));
@@ -1020,9 +1018,6 @@ impl AppState {
         if !self.media.captures_open {
             return false;
         }
-        if self.media.notes.open {
-            return self.handle_notes_key(ev, tx);
-        }
         if self.media.snip_editor.is_some() {
             return self.handle_snip_editor_key(ev, tx);
         }
@@ -1266,34 +1261,6 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
             .child(divider)
             .child(
                 popover_row(
-                    "cap-menu-note",
-                    "New note",
-                    icon_plus(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_notes(None, true);
-                }),
-            )
-            .child(
-                popover_row(
-                    "cap-menu-notes",
-                    "Notes",
-                    icon_notes(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_notes(None, false);
-                }),
-            )
-            .child(
-                popover_row(
                     "cap-menu-captures",
                     "Captures",
                     icon_gallery(16.0, FG),
@@ -1303,56 +1270,24 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
                 )
                 .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
-                    s.media.notes.open = false;
                     s.open_captures(None);
-                }),
-            )
-            .child(
-                popover_row(
-                    "cap-menu-settings",
-                    "Capture settings",
-                    icon_settings(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.media.notes.open = false;
-                    s.open_captures(None);
-                    s.media.captures_settings_open = true;
                 }),
             );
     } else {
-        menu = menu
-            .child(
-                popover_row(
-                    "cap-menu-note",
-                    "New note",
-                    icon_plus(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_notes(None, true);
-                }),
+        menu = menu.child(
+            popover_row(
+                "cap-menu-captures",
+                "Captures",
+                icon_gallery(16.0, FG),
+                None,
+                false,
+                gamepad_focus,
             )
-            .child(
-                popover_row(
-                    "cap-menu-notes",
-                    "Notes",
-                    icon_notes(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_notes(None, false);
-                }),
-            );
+            .on_press(|s: &mut AppState| {
+                s.capture_menu_open = false;
+                s.open_captures(None);
+            }),
+        );
     }
 
     vec![menu]
@@ -2534,7 +2469,7 @@ fn empty_state(s: &AppState) -> El {
                     Some(icon_settings(14.0, FG)),
                     false,
                 )
-                .on_press(|s: &mut AppState| s.media.captures_settings_open = true)
+                .on_press(|s: &mut AppState| s.open_capture_settings())
             }),
         )
         .child(
@@ -2634,7 +2569,7 @@ fn settings_choice_rows(
     out
 }
 
-fn settings_body(s: &AppState) -> El {
+pub(crate) fn settings_body(s: &AppState) -> El {
     let status = s.media.capture_status.as_ref();
     let live = status.and_then(|st| st.state.as_ref());
     let cfg = status.and_then(|st| st.settings.as_ref());
@@ -3013,18 +2948,14 @@ fn reel_banner(s: &AppState) -> Option<El> {
 }
 
 pub fn view(s: &AppState, scale: f32) -> El {
-    let sheet_inner = if s.media.notes.open {
-        notes::view(s, scale)
-    } else if let Some(item) = s
+    let sheet_inner = if let Some(item) = s
         .media
         .open_capture_id
         .as_deref()
         .and_then(|id| s.media.capture_items.iter().find(|c| c.id == id))
-        && !s.media.captures_settings_open
     {
         viewer_view(s, item, scale)
     } else {
-        let setting = s.media.captures_settings_open;
         let ui = &s.media.captures_ui;
         let present = s
             .media
@@ -3043,17 +2974,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
             .map(month_title);
 
         let mut head_actions = row().gap(8.0).center_y();
-        if setting {
-            head_actions = head_actions.child(
-                device_icon_btn(
-                    "cap-settings-back",
-                    "All captures",
-                    Some(icon_back(14.0, FG)),
-                    false,
-                )
-                .on_press(|s: &mut AppState| s.media.captures_settings_open = false),
-            );
-        } else if let Some(sel) = selecting {
+        if let Some(sel) = selecting {
             let picked_videos = reel_of_picked(&s.media.capture_items, sel);
             let reel_n = picked_videos.len();
             let reel_disabled = reel_n < 2 || ui.bulk_deleting || ui.reel.phase != ReelPhase::Idle;
@@ -3112,13 +3033,9 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         Some(icon_settings(14.0, FG)),
                         false,
                     )
-                    .on_press(|s: &mut AppState| s.media.captures_settings_open = true),
+                    .on_press(|s: &mut AppState| s.open_capture_settings()),
                 );
             }
-            head_actions = head_actions.child(
-                device_icon_btn("cap-open-notes", "Notes", Some(icon_notes(14.0, FG)), false)
-                    .on_press(|s: &mut AppState| s.open_notes(None, false)),
-            );
             if present {
                 head_actions = head_actions.child(
                     primary_button(
@@ -3161,36 +3078,16 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 row()
                     .gap(10.0)
                     .center_y()
-                    .child(
-                        text(if setting {
-                            "Capture settings"
-                        } else {
-                            "Captures"
-                        })
-                        .font(type_page())
-                        .color(FG),
-                    )
+                    .child(text("Captures").font(type_page()).color(FG))
                     .children(
-                        (!setting && any_items)
+                        any_items
                             .then(|| top_month.map(|m| status_badge(m, BadgeTone::Neutral)))
                             .flatten(),
                     ),
             )
             .child(head_actions);
 
-        let body = if setting {
-            col()
-                .key("cap-settings-scroll")
-                .grow(1.0)
-                .w_full()
-                .min_h(0.0)
-                .px(20.0)
-                .pb(20.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(settings_body(s))
-        } else if s.media.capture_items.is_empty() && !ui.list_failed {
+        let body = if s.media.capture_items.is_empty() && !ui.list_failed {
             empty_state(s)
         } else {
             let mut game_groups: Vec<(String, String)> = Vec::new();

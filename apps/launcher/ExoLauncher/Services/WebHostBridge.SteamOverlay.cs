@@ -21,6 +21,8 @@ namespace ExoLauncher.Services;
 /// </summary>
 public sealed partial class WebHostBridge
 {
+    private static string? _lastOverlayWaitLine;
+
     private readonly SemaphoreSlim _overlayGate = new(1, 1);
 
     /// <summary>1 while a pass left something in the record for Steam to take: the 30 s check runs only then.</summary>
@@ -185,7 +187,9 @@ public sealed partial class WebHostBridge
                 // Steam holds both files in memory and writes them as it exits: whatever was asked for, and however
                 // it was asked for, it waits. Said in the log too: a change that waits looks, from the page, like one
                 // that did nothing.
-                AppLog.Info($"Steam overlay: {writes.Count} change(s) and Steam Input: {input.Writes.Count}{(quiet > 0 ? $", and {quiet} file(s) of Steam's notifications and dialogs," : "")} wait. Steam is running; they go in as it next closes.");
+                var waitLine = $"Steam overlay: {writes.Count} change(s) and Steam Input: {input.Writes.Count}{(quiet > 0 ? $", and {quiet} file(s) of Steam's notifications and dialogs," : "")} wait. Steam is running; they go in as it next closes.";
+                if (!string.Equals(Interlocked.Exchange(ref _lastOverlayWaitLine, waitLine), waitLine, StringComparison.Ordinal))
+                    AppLog.Info(waitLine);
                 SaveOverlayRecord(record);
                 if (shortcuts is { } waiting) SaveShortcuts(waiting.Record, waiting.Dropped, playersInput, input.Choices);
                 SaveSteamInput(input.Record);

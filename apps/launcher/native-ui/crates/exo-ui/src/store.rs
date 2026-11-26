@@ -5,8 +5,8 @@ use exo_kit::{
     RADIUS_SMALL, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted,
     glass_button, glass_control_fill, glass_icon_circle_opt, glass_rim_bottom, glass_rim_top, good,
     hover_fill, icon_arrow_right, icon_bookmark_filled, icon_check, icon_chevron_left,
-    icon_chevron_right, icon_close, icon_refresh, icon_search, pressed_fill, scaled,
-    type_body, type_control, type_section, type_small, type_title,
+    icon_chevron_right, icon_close, icon_refresh, icon_search, pressed_fill, scaled, type_body,
+    type_control, type_section, type_small, type_title,
 };
 use exo_rpc::{StoreArt, StoreTile, types::format_cents};
 use rune::{
@@ -858,6 +858,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
     let logo_url = StoreArt::steam_url(&hero.app_id, "logo");
     let logo_img = s.remote_image_sized(&logo_url, 640.0, scale);
 
+    let hero_h = (s.chrome.window_height * 0.52).clamp(380.0, 560.0);
     let hero_tile = hero.clone();
     let hero_flight = format!("store:hero:{}", hero.app_id);
     let mut main_banner = el()
@@ -870,7 +871,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
         .press_on_down()
         .grow(1.0)
         .min_w(0.0)
-        .h(512.0)
+        .h(hero_h)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
@@ -997,6 +998,26 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
     }
 
     main_banner = main_banner.child(copy_col);
+    let hero_dots = (2..4).contains(&count).then(|| {
+        row()
+            .key("store-hero-dots")
+            .pin(None, None, Some(28.0), Some(30.0))
+            .gap(6.0)
+            .center_y()
+            .children((0..count).map(|i| {
+                let on = i == active_idx;
+                el().key(format!("hero-pip-{i}"))
+                    .role("button")
+                    .label(format!("Featured {}", i + 1))
+                    .hit()
+                    .cursor(Cursor::Pointer)
+                    .size(if on { 22.0 } else { 8.0 }, 8.0)
+                    .radius(RADIUS_PILL)
+                    .fill(if on { FG } else { FG.alpha(0.38) })
+                    .motion(SPRING_QUICK)
+                    .on_press(move |s: &mut AppState| s.store_select_hero(i))
+            }))
+    });
 
     let mut hero_row = row()
         .key("store-hero-section")
@@ -1007,15 +1028,20 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
         .on_hover_change(|s: &mut AppState, inside, _tx| {
             s.store_ext.hero_hovered = inside;
         })
-        .child(main_banner);
+        .child(
+            el().grow(1.0)
+                .min_w(0.0)
+                .child(main_banner.w_full())
+                .children(hero_dots),
+        );
 
-    if count > 1 {
+    if count >= 4 {
         let turns = !s.settings.reduce_motion;
         let progress = (s.store_ext.hero_elapsed / HERO_ROTATE_SECS).clamp(0.0, 1.0) as f32;
         let side_list = col()
             .key("store-hero-side-list")
             .w(316.0)
-            .h(512.0)
+            .h(hero_h)
             .padding(8.0)
             .gap(6.0)
             .radius(RADIUS_PANEL)
@@ -1067,7 +1093,10 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
 
                 let mut meta_col = col().grow(1.0).min_w(0.0).gap(4.0).child(
                     text(item.name.clone())
-                        .font(TextStyle::new(scaled(13.0), if is_on { 600.0 } else { 500.0 }))
+                        .font(TextStyle::new(
+                            scaled(13.0),
+                            if is_on { 600.0 } else { 500.0 },
+                        ))
                         .color(if is_on { FG } else { fg_muted() })
                         .w_full()
                         .wrap(),

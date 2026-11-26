@@ -8,8 +8,8 @@ use exo_kit::{
     amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, glass_rim_bottom,
     glass_rim_top, good, hairline, hover_fill, icon_chevron_left, icon_external, icon_gamepad,
     icon_headphones, icon_keyboard, icon_mic, icon_mouse, icon_refresh, icon_zap, pressed_fill,
-    primary_button, scaled, status_badge, type_body, type_control, type_label,
-    type_section, type_small, type_title,
+    primary_button, scaled, status_badge, type_body, type_control, type_label, type_section,
+    type_small, type_title,
 };
 use exo_rpc::keyboard_layouts::{KeyCap, KeyKind, build_keyboard_layout, find_key};
 use exo_rpc::{KeyboardReadReply, PeripheralCard};
@@ -62,7 +62,11 @@ fn device_fallback_icon(kind: &str, role: Option<&str>) -> El {
                 (1.0, exo_kit::surface_elevated_hi()),
             ],
         )
-        .border_gradient(1.0, rune::Color::WHITE.alpha(0.18), rune::Color::WHITE.alpha(0.04))
+        .border_gradient(
+            1.0,
+            rune::Color::WHITE.alpha(0.18),
+            rune::Color::WHITE.alpha(0.04),
+        )
         .shadow(0.0, 14.0, BG.alpha(0.55))
         .center()
         .child(icon_el)
@@ -1356,6 +1360,7 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
+            .chain_scroll_offset(crate::shell::bar_scroll_watch)
             .pt(60.0)
             .px(16.0)
             .pb(36.0)

@@ -1,6 +1,6 @@
 use crate::pc_state::{
     AutoTuneStageStatus, PcPartMenu, any_restart_required, autopilot_active_summary,
-    best_steps_list, bios_vendor_hints, trim_stop,
+    best_steps_list, bios_vendor_hints, is_playbook_item, trim_stop,
 };
 use crate::state::{AppState, Room};
 use exo_kit::{
@@ -13,9 +13,7 @@ use exo_kit::{
     type_title, warn,
 };
 use exo_rpc::{AutopilotLive, AutopilotReport, DriverProgress, DriverState, OutputColor};
-use rune::{
-    Cursor, El, Key, Phase, ScrollSpec, TextStyle, col, el, row, text,
-};
+use rune::{Cursor, El, Key, Phase, ScrollSpec, TextStyle, col, el, row, text};
 use serde_json::json;
 
 const NVIDIA_LICENSE: &str = "https://www.nvidia.com/en-us/drivers/nvidia-license/";
@@ -1173,6 +1171,14 @@ fn autopilot_report_view(item: &AutopilotReport, expanded: bool) -> El {
     col().w_full().child(head).child(det)
 }
 
+fn auto_badge(on: bool) -> El {
+    if on {
+        status_badge("On".into(), BadgeTone::Good)
+    } else {
+        status_badge("Next Auto Tune".into(), BadgeTone::Neutral)
+    }
+}
+
 fn board_menu_body(s: &AppState) -> El {
     let mut body = col().w_full();
     let about = s.pc.system_about.as_ref();
@@ -1729,13 +1735,6 @@ fn board_menu_body(s: &AppState) -> El {
             body = body.child(group_head("Network"));
             let net_busy = s.pc.network_busy.is_some();
             for item in net_items {
-                let api_item = match item.key.as_str() {
-                    "net-adapter" => "adapter",
-                    "net-dns" => "dns",
-                    _ => "tcp",
-                };
-                let key_c = item.key.clone();
-                let next_on = !item.applied;
                 let err =
                     s.pc.network_error
                         .as_ref()
@@ -1743,17 +1742,9 @@ fn board_menu_body(s: &AppState) -> El {
                         .map(|(_, e)| e.clone());
                 body = body.child(menu_row(
                     item.label.clone(),
-                    (!item.off && !item.detail.is_empty()).then(|| item.detail.clone()),
+                    (!item.detail.is_empty()).then(|| item.detail.clone()),
                     err,
-                    menu_switch(
-                        format!("net-sw-{}", item.key),
-                        item.label.clone(),
-                        item.applied,
-                        net_busy,
-                    )
-                    .on_press(move |s: &mut AppState| {
-                        s.run_network_item_toggle(&key_c, api_item, next_on)
-                    }),
+                    auto_badge(item.applied),
                 ));
             }
             let check_detail = hp.check.as_ref().map(|chk| {
@@ -1800,113 +1791,62 @@ fn board_menu_body(s: &AppState) -> El {
     if let Some(ref qos) = s.pc.qos_state
         && !qos.games.is_empty()
     {
-        body = body.child(group_head("Per-game QoS (DSCP 46)"));
-        if !qos.note.is_empty() {
-            body = body.child(
-                el().w_full().pb(6.0).child(
-                    text(qos.note.clone())
-                        .font(type_small())
-                        .color(fg_muted())
-                        .wrap(),
-                ),
-            );
-        }
-        let qbusy = s.pc.qos_busy.is_some();
-        for game in &qos.games {
-            let gid = game.game_id.clone();
-            let next_on = !game.enabled;
-            let det = if game.enabled {
-                format!("DSCP 46 active for {}", game.exe_name)
-            } else {
-                format!("Opt-in DSCP 46 policy for {}", game.exe_name)
-            };
-            let err =
-                s.pc.qos_error
-                    .as_ref()
-                    .filter(|(k, _)| k == &game.game_id)
-                    .map(|(_, e)| e.clone());
-            body = body.child(menu_row(
-                game.title.clone(),
-                Some(det),
-                err,
-                menu_switch(
-                    format!("pc-best-qos-{}", game.game_id),
-                    game.title.clone(),
-                    game.enabled,
-                    qbusy,
-                )
-                .on_press(move |s: &mut AppState| s.toggle_system_qos(&gid, next_on)),
-            ));
-        }
+        let on = qos.games.iter().filter(|g| g.enabled).count();
+        let total = qos.games.len();
+        let err = s.pc.qos_error.as_ref().map(|(_, e)| e.clone());
+        body = body.child(group_head("Game network priority"));
+        body = body.child(menu_row(
+            "Every game first on your network",
+            Some(format!(
+                "{on} of {total} games tag their traffic for priority (DSCP 46). Routers with QoS or Wi-Fi WMM put it first."
+            )),
+            err,
+            auto_badge(on == total),
+        ));
     }
 
     if let Some(ref ov) = s.pc.overlays_state
         && !ov.items.is_empty()
     {
         body = body.child(group_head("Overlays"));
-        let obusy = s.pc.overlays_busy.is_some();
+        body = body.child(menu_row(
+            "Exo's overlay",
+            Some("The only overlay over your games: FPS, captures and achievements.".into()),
+            None,
+            status_badge("On".into(), BadgeTone::Good),
+        ));
         for item in &ov.items {
-            let mut det_parts = Vec::new();
-            if !item.cost.is_empty() {
-                det_parts.push(item.cost.as_str());
-            }
-            if !item.detail.is_empty() {
-                det_parts.push(item.detail.as_str());
-            }
-            if let Some(ref steps) = item.manual_steps
-                && !steps.is_empty()
-            {
-                det_parts.push(steps.as_str());
-            }
-            let detail = (!det_parts.is_empty()).then(|| det_parts.join(" · "));
             let err =
                 s.pc.overlays_error
                     .as_ref()
                     .filter(|(k, _)| k == &item.id)
                     .map(|(_, e)| e.clone());
-            let mut ctrl = row().gap(6.0).center_y();
-            if item.enabled && item.can_toggle {
-                let oid = item.id.clone();
-                ctrl = ctrl.child(
-                    menu_btn(
-                        format!("ov-off-{}", item.id),
-                        "Turn off",
-                        false,
-                        false,
-                        obusy,
-                    )
-                    .on_press(move |s: &mut AppState| s.run_system_overlay_action(&oid, "off")),
-                );
-            }
-            if !item.enabled && item.can_undo {
-                let oid = item.id.clone();
-                ctrl = ctrl.child(
-                    menu_btn(
-                        format!("ov-restore-{}", item.id),
-                        "Put back",
-                        false,
-                        false,
-                        obusy,
-                    )
-                    .on_press(move |s: &mut AppState| s.run_system_overlay_action(&oid, "restore")),
-                );
-            }
-            let badge_label = if item.enabled {
-                "On"
-            } else if item.status == "unknown" {
-                "Check"
+            let (detail, badge) = if item.id == "steam" {
+                (
+                    "Kept only for games that need it for purchases, friends or Steam Input, like Rocket League.".to_string(),
+                    status_badge("Per game".into(), BadgeTone::Neutral),
+                )
+            } else if !item.enabled {
+                (
+                    item.cost.clone(),
+                    status_badge("Off".into(), BadgeTone::Good),
+                )
+            } else if !item.can_toggle {
+                (
+                    item.manual_steps
+                        .clone()
+                        .unwrap_or_else(|| item.detail.clone()),
+                    status_badge("Turn off".into(), BadgeTone::Warn),
+                )
             } else {
-                "Off"
+                (item.cost.clone(), auto_badge(false))
             };
-            ctrl = ctrl.child(status_badge(
-                badge_label.into(),
-                if !item.enabled {
-                    BadgeTone::Good
-                } else {
-                    BadgeTone::Neutral
-                },
+            body = body.child(menu_row(
+                item.name.clone(),
+                (!detail.is_empty()).then_some(detail),
+                err,
+                badge,
             ));
-            body = body.child(menu_row(item.name.clone(), detail, err, ctrl));
         }
     }
 
@@ -1948,50 +1888,35 @@ fn board_menu_body(s: &AppState) -> El {
                 );
             }
         }
-        for item in tuning.items.iter().filter(|i| {
-            i.key != "integrity" && i.key != "mouseAccel" && (i.key != "vrr" || i.can_undo)
-        }) {
-            let det = if item.off {
-                "Off: Use best settings leaves it as it is.".to_string()
-            } else if item.opt_in && !item.on && item.blocked.is_none() {
-                format!("{} Only this switch sets it.", item.detail)
-            } else {
-                item.detail.clone()
-            };
+        for item in tuning
+            .items
+            .iter()
+            .filter(|i| is_playbook_item(i) || (i.on && i.can_undo && i.key != "integrity"))
+        {
             let err =
                 s.pc.tuning_error
                     .as_ref()
                     .filter(|(k, _)| k == &item.key)
                     .map(|(_, e)| e.clone());
-            let mut ctrl = row().gap(6.0).center_y();
-            if item.on && item.can_undo {
+            let ctrl = if is_playbook_item(item) {
+                auto_badge(item.on)
+            } else {
                 let k_undo = item.key.clone();
-                ctrl = ctrl.child(
-                    menu_btn(
-                        format!("tune-undo-{}", item.key),
-                        "Put back",
-                        false,
-                        false,
-                        busy,
-                    )
-                    .on_press(move |s: &mut AppState| s.run_system_tuning_item(&k_undo, false)),
-                );
-            }
-            if item.key != "vrr" {
-                let k_sw = item.key.clone();
-                let next_on = !item.on;
-                let sw_disabled = busy || (!item.on && item.blocked.is_some());
-                ctrl = ctrl.child(
-                    menu_switch(
-                        format!("tune-sw-{}", item.key),
-                        item.label.clone(),
-                        item.on,
-                        sw_disabled,
-                    )
-                    .on_press(move |s: &mut AppState| s.run_system_tuning_item(&k_sw, next_on)),
-                );
-            }
-            body = body.child(menu_row(item.label.clone(), Some(det), err, ctrl));
+                menu_btn(
+                    format!("tune-undo-{}", item.key),
+                    "Put back",
+                    false,
+                    false,
+                    busy,
+                )
+                .on_press(move |s: &mut AppState| s.run_system_tuning_item(&k_undo, false))
+            };
+            body = body.child(menu_row(
+                item.label.clone(),
+                Some(item.detail.clone()),
+                err,
+                ctrl,
+            ));
         }
 
         let lat_detail = match tuning.latency.as_ref().and_then(|l| l.after.as_ref()) {
@@ -2635,9 +2560,11 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
         if blur {
             card = card.liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false));
         } else {
-            card = card
-                .fill(exo_kit::surface_elevated())
-                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+            card = card.fill(exo_kit::surface_elevated()).border_gradient(
+                1.0,
+                glass_rim_top(),
+                glass_rim_bottom(),
+            );
         }
         let card = card
             .role("dialog")
@@ -2667,7 +2594,12 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
         layers.push(
             col()
                 .key("pc-part-menu-host")
-                .pin(Some(0.0), Some(exo_kit::TITLEBAR_HEIGHT + 16.0), Some(0.0), Some(20.0))
+                .pin(
+                    Some(0.0),
+                    Some(exo_kit::TITLEBAR_HEIGHT + 16.0),
+                    Some(0.0),
+                    Some(20.0),
+                )
                 .px(24.0)
                 .center()
                 .child(card),

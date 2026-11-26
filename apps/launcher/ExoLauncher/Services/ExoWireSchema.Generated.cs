@@ -7,7 +7,7 @@ namespace ExoLauncher.Services;
 internal static class ExoWireSchema
 {
     internal const int HostContractVersion = 1;
-    internal const ulong SchemaHash = 0x10c27abab755d112UL;
+    internal const ulong SchemaHash = 0x3f1fc53d9fb49b40UL;
     internal const ushort UnknownId = 0;
 
     internal const ushort MethodLibraryGet = 256;
@@ -17,9 +17,9 @@ internal static class ExoWireSchema
     internal const ushort MethodShellBootstrap = 307;
     internal const ushort MethodRpcCancel = 65535;
 
-    internal const ushort EventAutopilotLive = 7;
-    internal const ushort EventInstallProgress = 65;
-    internal const ushort EventLibraryUpdated = 69;
+    internal const ushort EventAutopilotLive = 8;
+    internal const ushort EventInstallProgress = 66;
+    internal const ushort EventLibraryUpdated = 70;
 
     internal static readonly string[] Methods =
     [
@@ -396,6 +396,7 @@ internal static class ExoWireSchema
     internal static readonly string[] Events =
     [
         "accounts.progress",
+        "achievement.unlocked",
         "anticheat.missing",
         "app.open",
         "app.updateProgress",

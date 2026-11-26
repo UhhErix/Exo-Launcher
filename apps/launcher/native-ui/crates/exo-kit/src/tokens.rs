@@ -198,6 +198,19 @@ pub const SPRING_POPOVER: Spring = Spring::new(0.19, 0.08);
 pub const SPRING_MOVE: Spring = Spring::new(0.22, 0.0);
 pub const SPRING_SMOOTH: Spring = Spring::new(0.26, 0.0);
 pub const SPRING_FLIGHT: Spring = Spring::new(0.30, 0.0);
+pub const SPRING_INTRO: Spring = Spring::new(0.32, 0.12);
+
+pub fn app_icon_top() -> Color {
+    hex(0x222226, 1.0)
+}
+
+pub fn app_icon_mid() -> Color {
+    hex(0x0c0c0e, 1.0)
+}
+
+pub fn app_icon_bottom() -> Color {
+    hex(0x040405, 1.0)
+}
 
 pub fn type_label() -> TextStyle {
     TextStyle::new(scaled(10.0), 500.0)

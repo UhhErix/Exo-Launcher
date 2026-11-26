@@ -18,15 +18,14 @@ use exo_kit::SPRING_MOVE;
 use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
-    CaptureLiveState, CaptureSavedEvent, CaptureStatusReply,
-    DiscordFriend, ExoAccountState, FrameGenRoute, Game, GameExtras, GameFrameGen, GameProperties,
-    GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
-    LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
-    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_FRAME_GEN, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH,
-    METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH,
-    METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback,
-    MusicVolumeEvent, ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame, StoreHome,
-    StoreOtherOffers, StoreShelf, StoreTile, remote_art,
+    CaptureLiveState, CaptureSavedEvent, CaptureStatusReply, DiscordFriend, ExoAccountState,
+    FrameGenRoute, Game, GameExtras, GameFrameGen, GameProperties, GameRunStateEvent, HostEvent,
+    InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
+    LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_FRAME_GEN,
+    METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL,
+    METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP,
+    METHOD_STORE_HOME, MusicPlayback, MusicVolumeEvent, ShellBootstrap, StoreArt,
+    StoreChangedEvent, StoreGame, StoreHome, StoreOtherOffers, StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -553,9 +552,6 @@ pub enum PaletteTarget {
     InstallSelected(String),
     OpenDownloads,
     OpenWhatsNew,
-    NoteNew,
-    NoteOpen,
-    NoteItem(String),
     DiscordDm(String),
     DiscordServer(String),
     DiscordChannel {
@@ -676,9 +672,8 @@ pub struct AppState {
     pub game_props: Option<GameProperties>,
     pub game_page: crate::game_actions::GamePageState,
     pub game_frame_gen: Option<GameFrameGen>,
-    pub frame_gen_menu_open: bool,
+    pub frame_gen_auto_tried: std::collections::HashSet<String>,
     pub frame_gen_busy: bool,
-    pub frame_gen_confirm: Option<(String, String, Option<String>)>,
     pub props_open: bool,
     pub game_props_tab: usize,
     pub props_launch_opts: TextEdit,
@@ -827,9 +822,8 @@ impl AppState {
                 }],
                 ..Default::default()
             }),
-            frame_gen_menu_open: false,
+            frame_gen_auto_tried: std::collections::HashSet::new(),
             frame_gen_busy: false,
-            frame_gen_confirm: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -953,9 +947,8 @@ impl AppState {
             game_props: None,
             game_page: crate::game_actions::GamePageState::new(),
             game_frame_gen: None,
-            frame_gen_menu_open: false,
+            frame_gen_auto_tried: std::collections::HashSet::new(),
             frame_gen_busy: false,
-            frame_gen_confirm: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -2130,12 +2123,19 @@ impl AppState {
     }
 
     pub fn prune_inactive_rooms(&mut self, now: f64, rest: bool) -> bool {
-        let ttl = if rest { 10.0 } else { 30.0 };
+        let base_ttl = if rest { 10.0 } else { 30.0 };
         let active = self.current_cache_room();
         let due: Vec<CacheRoom> = self
             .room_left_at
             .iter()
-            .filter(|&(&room, &left_at)| room != active && now - left_at >= ttl)
+            .filter(|&(&room, &left_at)| {
+                let ttl = match room {
+                    CacheRoom::Library => f64::INFINITY,
+                    CacheRoom::Store => base_ttl * 6.0,
+                    _ => base_ttl,
+                };
+                room != active && now - left_at >= ttl
+            })
             .map(|(&room, _)| room)
             .collect();
         if due.is_empty() {
@@ -2205,8 +2205,6 @@ impl AppState {
         self.selected_game_id = Some(id.to_string());
         self.open_game_id = Some(id.to_string());
         self.props_open = false;
-        self.frame_gen_menu_open = false;
-        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
@@ -2237,6 +2235,7 @@ impl AppState {
                     h3.update(move |s, _| {
                         if s.open_game_id.as_deref() == Some(gid3.as_str()) {
                             s.game_frame_gen = Some(fg);
+                            s.apply_best_frame_gen(&gid3);
                         }
                     });
                 },
@@ -2244,80 +2243,48 @@ impl AppState {
         }
     }
 
-    pub fn set_game_frame_gen(
-        &mut self,
-        id: &str,
-        route: Option<&str>,
-        xess_override: Option<&str>,
-    ) {
-        self.set_game_frame_gen_with_risk(id, route, xess_override, false, None);
+    pub fn apply_best_frame_gen(&mut self, id: &str) {
+        let Some(route) = self
+            .game_frame_gen
+            .as_ref()
+            .and_then(crate::frame_gen_row::auto_route)
+            .map(|r| r.id.clone())
+        else {
+            return;
+        };
+        if self.frame_gen_busy || !self.frame_gen_auto_tried.insert(format!("{id}:{route}")) {
+            return;
+        }
+        self.set_game_frame_gen(id, &route);
     }
 
-    pub fn set_game_frame_gen_with_risk(
-        &mut self,
-        id: &str,
-        route: Option<&str>,
-        xess_override: Option<&str>,
-        accept_risk: bool,
-        anti_cheat: Option<&str>,
-    ) {
-        self.frame_gen_confirm = None;
+    pub fn set_game_frame_gen(&mut self, id: &str, route: &str) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.frame_gen_busy = true;
             let gid = id.to_string();
-            let mut body = serde_json::Map::new();
-            body.insert("id".into(), json!(gid));
-            if let Some(r) = route {
-                body.insert("route".into(), json!(r));
-            }
-            if let Some(x) = xess_override {
-                body.insert("xessOverride".into(), json!(x));
-            }
-            if accept_risk {
-                body.insert("acceptRisk".into(), json!(true));
-                if let Some(ac) = anti_cheat {
-                    body.insert("antiCheat".into(), json!(ac));
-                }
-            }
             rpc.call::<_, GameFrameGen>(
                 METHOD_GAME_FRAME_GEN,
-                &serde_json::Value::Object(body),
+                &json!({ "id": gid, "route": route }),
                 move |res| {
                     handle.update(move |s, _| {
                         s.frame_gen_busy = false;
-                        if s.open_game_id.as_deref() == Some(gid.as_str()) {
-                            if let Ok(fg) = res {
-                                if !fg.routes.is_empty() {
-                                    s.game_frame_gen = Some(fg);
-                                } else if let Some(msg) = fg.message {
-                                    s.notice = Some(msg);
-                                }
-                            } else {
-                                s.notice = Some("Could not save frame generation route.".into());
-                            }
+                        if s.open_game_id.as_deref() == Some(gid.as_str())
+                            && let Ok(fg) = res
+                            && !fg.routes.is_empty()
+                        {
+                            s.game_frame_gen = Some(fg);
                         }
                     });
                 },
             );
             return;
         }
-        if let Some(ref mut fg) = self.game_frame_gen {
-            if let Some(r) = route
-                && let Some(found) = fg.routes.iter().find(|rt| rt.id == r)
-            {
-                fg.selected_route_id = found.id.clone();
-                fg.word = found.summary.clone();
-            }
-            if let Some(x) = xess_override
-                && let Some(rt) = fg
-                    .routes
-                    .iter_mut()
-                    .find(|rt| rt.kind == "driver_xess_override")
-            {
-                rt.choice_value = Some(x.to_string());
-                rt.active = x != "game";
-            }
+        if let Some(ref mut fg) = self.game_frame_gen
+            && let Some(found) = fg.routes.iter().find(|rt| rt.id == route)
+        {
+            fg.selected_route_id = found.id.clone();
+            fg.word = found.summary.clone();
         }
     }
 
@@ -2329,8 +2296,6 @@ impl AppState {
     pub fn close_game_page(&mut self) {
         self.open_game_id = None;
         self.props_open = false;
-        self.frame_gen_menu_open = false;
-        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
@@ -2908,10 +2873,6 @@ impl AppState {
             self.media.clip_editor_open = false;
             return true;
         }
-        if self.media.notes.open {
-            self.close_notes_to_captures();
-            return true;
-        }
         if self.media.open_capture_id.is_some() {
             self.close_capture_item();
             return true;
@@ -3004,6 +2965,11 @@ impl AppState {
         action_label: Option<String>,
         action: Option<NoticeAction>,
     ) -> u64 {
+        if (tone != NoticeTone::Bad && action.is_none()) || self.notice_is_repeat(text.clone()) {
+            self.notice = Some(text.clone());
+            self.notice_last_synced = Some(text);
+            return 0;
+        }
         let id = self.next_notice_id;
         self.next_notice_id = self.next_notice_id.saturating_add(1);
         self.notices.push_back(NoticeItem {
@@ -3262,7 +3228,6 @@ impl AppState {
         self.palette_query.text.clear();
         self.palette_query.sync_invariants();
         self.load_palette_extras();
-        self.load_notes_list(None);
         self.sync_chrome_layout();
         self.sync_mouse_panel_visibility();
         tx.focus("palette-input", false);
@@ -3989,7 +3954,7 @@ impl AppState {
     pub fn apply_capture_saved(&mut self, ev: CaptureSavedEvent) {
         let id = ev.item.id.clone();
         let name = ev.item.name.clone();
-        let edit = ev.edit;
+        let edit = ev.edit || ev.item.kind == "image";
         self.media.capture_items.retain(|it| it.id != id);
         self.media.capture_items.insert(0, ev.item);
         if edit {
@@ -4112,7 +4077,6 @@ impl AppState {
                     s.apply_bootstrap(boot);
                     s.warm_discord();
                     s.load_capture_status();
-                    s.check_pending_notes_on_startup();
                     s.warm_store_on_startup();
                     s.wp4_warm_startup();
                     s.check_system_eq_health_on_launch();

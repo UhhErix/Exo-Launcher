@@ -372,6 +372,7 @@
   },
   "events": {
     "accounts.progress": "{ store: SwitchStore; line: string }",
+    "achievement.unlocked": "{ game: string; name: string; description: string; icon?: string | null; tier: string; percent?: number | null; unlocked: number; total: number }",
     "anticheat.missing": "{ gameId: string; title: string; removed: string; dependencyId: string; name: string }",
     "app.open": "{ room: 'pc' | 'library' | null; part: string | null }",
     "app.updateProgress": "{ status: string; percent: number | null }",

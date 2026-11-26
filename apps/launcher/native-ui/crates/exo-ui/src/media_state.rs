@@ -577,7 +577,6 @@ pub enum CaptureFilter {
 }
 
 pub struct MediaState {
-    pub notes: crate::notes::NotesState,
     inner: Box<MediaStateInner>,
 }
 
@@ -755,7 +754,6 @@ pub struct MediaStateInner {
     pub music_start_time_s: f64,
 
     pub captures_open: bool,
-    pub captures_settings_open: bool,
     pub capture_popover_open: bool,
     pub capture_filter: CaptureFilter,
     pub capture_game_filter: Option<String>,
@@ -780,7 +778,6 @@ impl MediaState {
     #[inline(never)]
     fn default_extra_music() -> Self {
         Self {
-            notes: crate::notes::NotesState::default(),
             inner: Box::new(MediaStateInner {
                 music_service: MusicService::Spotify,
                 music_room_state: MusicRoomState::Loading,
@@ -926,7 +923,6 @@ impl MediaState {
                 music_signed_in_services: [false; 3],
                 music_start_time_s: 0.0,
                 captures_open: false,
-                captures_settings_open: false,
                 capture_popover_open: false,
                 capture_filter: CaptureFilter::All,
                 capture_game_filter: None,
@@ -1148,7 +1144,6 @@ impl MediaState {
                 call_voices: false,
             }),
         });
-        s.notes = crate::notes::NotesState::demo();
         s.capture_items = vec![
             CaptureItem {
                 id: "cap0000000000001".into(),
@@ -4723,9 +4718,15 @@ impl AppState {
         let _ = (svc, generation);
     }
 
+    pub fn open_capture_settings(&mut self) {
+        self.capture_menu_open = false;
+        self.close_captures();
+        self.switch_room(crate::state::Room::Settings);
+        self.pc.settings_section = crate::pc_state::SettingsSection::Capture;
+    }
+
     pub fn open_captures(&mut self, game_id: Option<String>) {
         self.media.captures_open = true;
-        self.media.captures_settings_open = false;
         self.media.capture_popover_open = false;
         self.media.capture_game_filter = game_id;
         self.media.open_capture_id = None;
@@ -4736,13 +4737,11 @@ impl AppState {
 
     pub fn close_captures(&mut self) {
         self.media.captures_open = false;
-        self.media.captures_settings_open = false;
         self.media.open_capture_id = None;
         self.media.clip_editor_open = false;
         self.media.snip_editor = None;
         self.media.captures_ui.send_dialog.open = false;
         self.media.captures_ui.selection = None;
-        self.media.notes.open = false;
         self.media.lightbox.close();
         self.media.lightbox_urls.clear();
         self.media.clip_player = None;

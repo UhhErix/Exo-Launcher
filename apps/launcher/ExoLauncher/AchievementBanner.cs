@@ -26,6 +26,12 @@ internal static class AchievementBanner
     private static DateTimeOffset _closeAt;
     private static readonly Queue<Unlock> Waiting = new();
 
+    internal static void PlayTierSound(string tier, int volume)
+    {
+        if (volume > 0 && tier is "common" or "rare" or "epic" or "legendary" or "completion")
+            _ = Task.Run(() => Overlay.Play(tier, volume));
+    }
+
     internal static bool ShouldPrewarm(bool bannersEnabled, bool gameRunning, bool hasOverlay) =>
         bannersEnabled && gameRunning && !hasOverlay;
 
@@ -357,7 +363,7 @@ internal static class AchievementBanner
             catch (Exception ex) when (ex is JsonException or InvalidOperationException) { AppLog.Debug("Achievements: no sound: " + ex.Message); }
         }
 
-        private static void Play(string name, int volume)
+        internal static void Play(string name, int volume)
         {
             try
             {

@@ -21,6 +21,31 @@ pub fn exo_mark(size: f32, color: Color) -> El {
     canvas(shape).size(size, size)
 }
 
+pub fn exo_app_icon(size: f32) -> El {
+    let r = size * 0.3;
+    let full = || rune::el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0));
+    rune::el()
+        .size(size, size)
+        .radius(r)
+        .continuous_corners()
+        .clip_rounded(r)
+        .linear_gradient(
+            std::f32::consts::PI,
+            [
+                (0.0, crate::app_icon_top()),
+                (0.45, crate::app_icon_mid()),
+                (1.0, crate::app_icon_bottom()),
+            ],
+        )
+        .border_gradient(1.0, Color::WHITE.alpha(0.47), Color::WHITE.alpha(0.16))
+        .child(full().radial_gradient(
+            [0.5, -0.1],
+            size * 0.75,
+            [(0.0, Color::WHITE.alpha(0.12)), (1.0, Color::TRANSPARENT)],
+        ))
+        .child(full().center().child(exo_mark(size, Color::WHITE)))
+}
+
 const ICON_MICROPHONE_SM: Icon = Icon {
     name: "kl-mic-165",
     view: 24.0,

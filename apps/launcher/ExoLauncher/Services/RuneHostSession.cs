@@ -238,6 +238,17 @@ internal sealed partial class RuneHostSession
         return null;
     }
 
+    private static void StartGameServices()
+    {
+        GameSettings.StartKeeping();
+        DriveHeat.Start();
+        _ = Task.Run(ExoLinks.Register);
+        _ = Task.Run(GpuPreference.WindowedGamesOptimized);
+        Achievements.AchievementWatch.Start();
+        FpsCounter.Start();
+        Achievements.AchievementSource.Start();
+    }
+
     internal static int Run(Options options)
     {
         SystemSpecs.WarmInBackground();
@@ -274,7 +285,10 @@ internal sealed partial class RuneHostSession
         services.HdrHost.Start();
         bridge.StartBackgroundMonitors();
         if (options.SpawnUi)
+        {
             services.StartDeferredServices();
+            StartGameServices();
+        }
         Action<int> onDiscordBadge = count => bridge.PostFriendsBadge(count);
         DiscordClient.DiscordSession.BadgeChanged += onDiscordBadge;
         _ = Task.Run(DiscordClient.DiscordSession.Start);
