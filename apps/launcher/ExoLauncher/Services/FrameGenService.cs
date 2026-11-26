@@ -70,6 +70,7 @@ internal static class FrameGenService
         bool acceptRisk = false,
         string? shownAntiCheat = null)
     {
+        if (HostMode.IsDisposable) return new RouteResult(false, null, HostMode.Refusal);
         var gpu = await Task.Run(ReadGpu, ct).ConfigureAwait(false);
         var current = await ResolveAsync(game, dlss, settings, ct).ConfigureAwait(false);
 

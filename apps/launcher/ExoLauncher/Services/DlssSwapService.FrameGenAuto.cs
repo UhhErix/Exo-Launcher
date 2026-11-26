@@ -33,6 +33,7 @@ public sealed partial class DlssSwapService
         IEnumerable<GameEntry> games, string? gpu, Func<GameEntry, bool> busy, Func<string, bool> keptOff, CancellationToken ct,
         Action<string>? keepOff = null)
     {
+        if (HostMode.IsDisposable) return 0;
         if (FrameGenEverywhereCard(gpu) is null) return 0;
         var added = 0;
         foreach (var game in games)
@@ -104,6 +105,7 @@ public sealed partial class DlssSwapService
     /// <summary>Best settings' switch is off: Exo's frame generation comes out of every game it can (a running one, next round).</summary>
     internal void FrameGenEverywhereOff(IEnumerable<GameEntry> games, Func<GameEntry, bool> busy)
     {
+        if (HostMode.IsDisposable) return;
         foreach (var game in games)
         {
             if (DropSessionHeldFrameGen(game.Id)) AppLog.Info($"Frame generation for {game.Title}: Best settings turned it off; what Exo held for its sessions is let go.");
@@ -118,6 +120,7 @@ public sealed partial class DlssSwapService
 
     internal static bool ApplyWuWaNativeFrameGenConfig(GameEntry game, string? gpu, string? routeId = null)
     {
+        if (HostMode.IsDisposable) return false;
         var root = ResolveInstallRoot(game.Path);
         if (root is null) return false;
         var clientRoot = Directory.Exists(Path.Combine(root, "Wuthering Waves Game", "Client"))

@@ -137,7 +137,7 @@ public static class Program
             AppDomain.CurrentDomain.SetData("REGEX_DEFAULT_MATCH_TIMEOUT", TimeSpan.FromSeconds(5));
             PackagedSmoke.Configure(args);
 
-            try { SetCurrentProcessExplicitAppUserModelID(AppUserModelId); } catch { }
+            try { SetCurrentProcessExplicitAppUserModelID(HostMode.IsDisposable ? AppUserModelId + ".Test" : AppUserModelId); } catch { }
 
             // Custom-main WinUI apps must initialize WinRT wrappers before the
             // first Windows App SDK API, including AppInstance.

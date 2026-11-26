@@ -166,6 +166,7 @@ public sealed partial class DlssSwapService
     /// <param name="keepOff">Keeps a game off for good where Exo couldn't save what it learned there (<see cref="PutRemovedBack"/>).</param>
     internal void ForSessionAtLaunch(GameEntry game, string? gpu, bool bestSettings, Func<string, bool> keptOff, Action<string>? keepOff = null)
     {
+        if (HostMode.IsDisposable) return;
         if (AntiCheatCheck.WithoutAntiCheatLaunch(game) is null) return;
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
         try
@@ -219,6 +220,7 @@ public sealed partial class DlssSwapService
     /// </summary>
     internal async Task<string?> PutInForSession(GameEntry game, CancellationToken ct)
     {
+        if (HostMode.IsDisposable) return HostMode.Refusal;
         if (SessionHeldFor(game.Id) is not { } held) return null;
         if (ResolveInstallRoot(game.Path) is not { } root) return "The install folder is unavailable.";
         string? problem = null;
@@ -298,6 +300,7 @@ public sealed partial class DlssSwapService
     /// </summary>
     internal async Task<string?> TakeOutAfterSession(GameEntry game, CancellationToken ct)
     {
+        if (HostMode.IsDisposable) return null;
         if (ResolveInstallRoot(game.Path) is not { } root) return null;
         if (GameItselfRunning(root)) return "running";
         var held = SessionHeldFor(game.Id) ?? new SessionHeld(game.Id, null, false);
@@ -400,6 +403,7 @@ public sealed partial class DlssSwapService
     /// </summary>
     internal async Task<int> TakeOutWhereIdle(IEnumerable<GameEntry> games, Func<GameEntry, bool> inExoSession, Func<GameEntry, bool> busy, CancellationToken ct)
     {
+        if (HostMode.IsDisposable) return 0;
         var taken = 0;
         foreach (var game in games)
         {

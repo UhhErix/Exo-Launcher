@@ -25,6 +25,7 @@ internal static class GameRunningSignal
     /// </summary>
     internal static EventWaitHandle? Open(string name)
     {
+        if (HostMode.IsDisposable) return null;
         try
         {
             var handle = new EventWaitHandle(false, EventResetMode.ManualReset, name, out var created);

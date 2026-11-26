@@ -62,6 +62,7 @@ internal static class AchievementSource
 
     internal static void Start()
     {
+        if (HostMode.IsDisposable) return;
         var listener = new TcpListener(IPAddress.Loopback, Port);
         try { listener.Start(); }
         catch (SocketException ex)

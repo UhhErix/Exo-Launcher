@@ -3703,6 +3703,10 @@ fn run_parity_probe(
     );
 }
 
+pub(crate) fn is_test_instance() -> bool {
+    std::env::var("EXO_LAUNCHER_DATA_DIR").is_ok_and(|dir| !dir.trim().is_empty())
+}
+
 pub(crate) fn app_data_dir() -> std::path::PathBuf {
     if let Ok(overridden) = std::env::var("EXO_LAUNCHER_DATA_DIR")
         && !overridden.trim().is_empty()

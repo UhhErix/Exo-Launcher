@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using ExoLauncher.Helpers;
 
 namespace ExoLauncher.Services;
 
@@ -300,6 +301,7 @@ internal sealed class ExoAiFans : IDisposable
 
         public FanApplyResult SetFanPercent(int index, int percent)
         {
+            if (HostMode.IsDisposable) return new(false, false, false, HostMode.Refusal);
             if (!IsAvailable) return new(false, true, false, UnavailableReason);
             if (!NativeLibrary.TryGetExport(_library, "nvmlDeviceSetFanSpeed_v2", out var setSpeed))
                 return new(false, true, false, "This NVIDIA driver doesn't support custom fan speeds.");
@@ -323,6 +325,7 @@ internal sealed class ExoAiFans : IDisposable
 
         public void RestoreAuto(int index)
         {
+            if (HostMode.IsDisposable) return;
             if (!IsAvailable) return;
             if (NativeLibrary.TryGetExport(_library, "nvmlDeviceSetDefaultFanSpeed_v2", out var reset))
                 ((delegate* unmanaged[Cdecl]<nint, uint, int>)reset)(_device, (uint)index);

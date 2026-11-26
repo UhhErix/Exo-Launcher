@@ -414,7 +414,7 @@ internal static partial class PcHealth
                 : null;
         }
 
-        public bool SetActive(Guid scheme) => PowerSetActiveScheme(IntPtr.Zero, in scheme) == 0;
+        public bool SetActive(Guid scheme) => !HostMode.IsDisposable && PowerSetActiveScheme(IntPtr.Zero, in scheme) == 0;
 
         public uint? AcValue(Guid scheme, Guid subgroup, Guid setting) =>
             PowerReadACValueIndex(IntPtr.Zero, in scheme, in subgroup, in setting, out var value) == 0 ? value : null;
@@ -425,6 +425,7 @@ internal static partial class PcHealth
         public uint Duplicate(Guid source, out Guid made)
         {
             made = Guid.Empty;
+            if (HostMode.IsDisposable) return 5u;
             var pointer = IntPtr.Zero;
             var code = PowerDuplicateScheme(IntPtr.Zero, in source, ref pointer);
             if (pointer == IntPtr.Zero) return code == 0 ? 13u /* ERROR_INVALID_DATA: no plan came back */ : code;
@@ -435,6 +436,7 @@ internal static partial class PcHealth
 
         public bool Rename(Guid scheme, string name, string description)
         {
+            if (HostMode.IsDisposable) return false;
             var nameBytes = System.Text.Encoding.Unicode.GetBytes(name + "\0");
             var descriptionBytes = System.Text.Encoding.Unicode.GetBytes(description + "\0");
             return PowerWriteFriendlyName(IntPtr.Zero, in scheme, IntPtr.Zero, IntPtr.Zero, nameBytes, (uint)nameBytes.Length) == 0
@@ -442,12 +444,13 @@ internal static partial class PcHealth
         }
 
         public bool Write(Guid scheme, Guid subgroup, Guid setting, uint value, bool dc) =>
-            (dc ? PowerWriteDCValueIndex(IntPtr.Zero, in scheme, in subgroup, in setting, value) : PowerWriteACValueIndex(IntPtr.Zero, in scheme, in subgroup, in setting, value)) == 0;
+            !HostMode.IsDisposable && (dc ? PowerWriteDCValueIndex(IntPtr.Zero, in scheme, in subgroup, in setting, value) : PowerWriteACValueIndex(IntPtr.Zero, in scheme, in subgroup, in setting, value)) == 0;
 
-        public bool Show(Guid subgroup, Guid setting) => PowerWriteSettingAttributes(in subgroup, in setting, 2) == 0;
+        public bool Show(Guid subgroup, Guid setting) => !HostMode.IsDisposable && PowerWriteSettingAttributes(in subgroup, in setting, 2) == 0;
 
         public bool SetOverlay(Guid overlay)
         {
+            if (HostMode.IsDisposable) return false;
             try { return PowerSetActiveOverlayScheme(overlay) == 0; }
             catch (EntryPointNotFoundException) { return false; }
         }

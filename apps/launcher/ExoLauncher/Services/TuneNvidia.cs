@@ -110,6 +110,7 @@ internal sealed unsafe class TuneNvidia : ITunePart, IDisposable
 
     public void Apply(int depth)
     {
+        if (HostMode.IsDisposable) throw new InvalidOperationException(HostMode.Refusal);
         Limits.Check(depth);
         // The lock first: the offset never meets an uncapped card, even for a moment.
         if (_cap > 0) Answer(((delegate* unmanaged[Cdecl]<nint, uint, uint, int>)Export(_library, "nvmlDeviceSetGpuLockedClocks"))(_device, 0, (uint)_cap));
@@ -120,6 +121,7 @@ internal sealed unsafe class TuneNvidia : ITunePart, IDisposable
 
     public void Stock()
     {
+        if (HostMode.IsDisposable) throw new InvalidOperationException(HostMode.Refusal);
         SetOffset(0);
         Answer(((delegate* unmanaged[Cdecl]<nint, int>)Export(_library, "nvmlDeviceResetGpuLockedClocks"))(_device));
     }
@@ -155,6 +157,7 @@ internal sealed class TuneRadeon(string mode, int? hotC, Func<bool> stop) : ITun
 
     public void Apply(int depth)
     {
+        if (HostMode.IsDisposable) throw new InvalidOperationException(HostMode.Refusal);
         Limits.Check(depth);
         if (_on) return;
         if (!AmdAdlx.StartAutoTune(mode == "faster", TimeSpan.FromMinutes(45), stop)) throw new TuneDriverException("AMD's tuning didn't finish, so you're back at stock.");
@@ -165,6 +168,7 @@ internal sealed class TuneRadeon(string mode, int? hotC, Func<bool> stop) : ITun
 
     public void Stock()
     {
+        if (HostMode.IsDisposable) throw new InvalidOperationException(HostMode.Refusal);
         if (!AmdAdlx.ResetTuning()) throw new TuneDriverException("AMD's driver didn't reset its tuning.");
         _on = false;
     }

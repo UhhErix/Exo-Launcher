@@ -196,6 +196,7 @@ internal sealed unsafe class NvidiaNvApiManualTuningBackend : IGpuTuningBackend
 
     public GpuApplyResult Apply(GpuManualProfile profile)
     {
+        if (HostMode.IsDisposable) return new(false, false, HostMode.Refusal, "nvml");
         if (profile.Mode != "manual") return ResetToFactory();
         lock (_gate)
         {
@@ -248,6 +249,7 @@ internal sealed unsafe class NvidiaNvApiManualTuningBackend : IGpuTuningBackend
 
     public GpuApplyResult ResetToFactory()
     {
+        if (HostMode.IsDisposable) return new(false, false, HostMode.Refusal, "nvml");
         lock (_gate)
         {
             if (!TryGetPrimaryGpu(out var gpu, out _))
@@ -272,6 +274,7 @@ internal sealed unsafe class NvidiaNvApiManualTuningBackend : IGpuTuningBackend
 
     internal bool SetFanSpeed(int fanIndex, int speedPercent)
     {
+        if (HostMode.IsDisposable) return false;
         lock (_gate)
         {
             if (!TryGetPrimaryGpu(out var gpu, out _)) return false;
@@ -770,6 +773,7 @@ internal sealed unsafe class NvidiaNvmlManualTuningBackend : IGpuTuningBackend
 
     public GpuApplyResult Apply(GpuManualProfile profile)
     {
+        if (HostMode.IsDisposable) return new(false, false, HostMode.Refusal, "nvml");
         if (profile.Mode != "manual") return ResetToFactory();
         if (!TryOpen(out var lib, out var dev))
             return new(false, false, "NVIDIA NVML driver library did not answer.", "nvml");
@@ -813,6 +817,7 @@ internal sealed unsafe class NvidiaNvmlManualTuningBackend : IGpuTuningBackend
 
     public GpuApplyResult ResetToFactory()
     {
+        if (HostMode.IsDisposable) return new(false, false, HostMode.Refusal, "nvml");
         if (!TryOpen(out var lib, out var dev))
             return new(false, false, "NVIDIA NVML driver library did not answer.", "nvml");
         try
@@ -839,6 +844,7 @@ internal sealed unsafe class NvidiaNvmlManualTuningBackend : IGpuTuningBackend
 
     internal static bool SetFanSpeed(int fanIndex, int speedPercent)
     {
+        if (HostMode.IsDisposable) return false;
         if (!TryOpen(out var lib, out var dev)) return false;
         try
         {

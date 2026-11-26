@@ -67,7 +67,9 @@ impl Default for PowerGuardUiState {
             mock_game_closes: 0,
             mock_alert_sounds: 0,
             mock_pc_shutdowns: 0,
-            journal: PowerLimitJournal::new(PowerLimitJournal::default_path()),
+            journal: PowerLimitJournal::new(
+                crate::app_data_dir().join("power-guard-limit.journal"),
+            ),
             journal_recovered: false,
             controller: PowerGuardController::new(exo_guard_policy()),
         }
@@ -114,6 +116,9 @@ impl AppState {
     }
 
     pub fn tick_power_guard(&mut self, now: f64) -> bool {
+        if crate::is_test_instance() {
+            return false;
+        }
         let mut changed = self.recover_power_guard_journal_if_needed();
         let any_game_running = self.games.iter().any(|g| g.is_running);
 

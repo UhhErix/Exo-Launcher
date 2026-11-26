@@ -304,6 +304,7 @@ public sealed partial class DlssSwapService
     /// </param>
     public async Task<UpdateResult> ApplyAsync(GameEntry game, string? fileKey, string? release, Func<string?> consent, CancellationToken ct)
     {
+        if (HostMode.IsDisposable) return Fail(HostMode.Refusal);
         ct.ThrowIfCancellationRequested();
         var root = ResolveInstallRoot(game.Path);
         if (root is null) return Fail("The install folder is unavailable.");
@@ -1742,6 +1743,7 @@ public sealed partial class DlssSwapService
     /// the old marker naming other bytes.</param>
     internal static void WriteWithBackup(string destination, string source, string? sha)
     {
+        if (HostMode.IsDisposable) throw new IOException(HostMode.Refusal);
         if (!IsSha256(sha))
             throw new IOException("Exo could not verify the vendor's file.");
         var dest = Path.GetFullPath(destination);

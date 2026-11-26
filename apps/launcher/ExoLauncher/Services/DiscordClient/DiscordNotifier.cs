@@ -140,6 +140,7 @@ internal static class DiscordNotifier
 
     private static bool Ensure()
     {
+        if (HostMode.IsDisposable) return false;
         lock (Gate)
         {
             if (_registered) return true;

@@ -1225,6 +1225,7 @@ public sealed partial class DlssSwapService
     /// </summary>
     internal async Task<(bool Ok, string Message)> FrameGenOnAsync(GameEntry game, string? gpu, CancellationToken ct, bool auto = true, string? acceptedAntiCheat = null)
     {
+        if (HostMode.IsDisposable) return (false, HostMode.Refusal);
         var root = ResolveInstallRoot(game.Path);
         if (root is null) return (false, "The install folder is unavailable.");
         if (IsWindowsAppsPath(root)) return (false, StoreLockedMessage);
@@ -1366,6 +1367,7 @@ public sealed partial class DlssSwapService
     /// <summary>Takes Exo's frame generation out of the game and puts its NVIDIA profile's frame cap back.</summary>
     public (bool Ok, string Message) FrameGenOff(GameEntry game)
     {
+        if (HostMode.IsDisposable) return (false, HostMode.Refusal);
         var root = ResolveInstallRoot(game.Path);
         if (root is null) return (false, "The install folder is unavailable.");
         (bool Ok, string Message) result;

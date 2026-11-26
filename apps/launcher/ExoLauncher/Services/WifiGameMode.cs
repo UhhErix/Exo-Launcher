@@ -143,6 +143,7 @@ internal static class WifiGameMode
 
     private static bool Set(Guid adapter, uint opcode, bool on)
     {
+        if (HostMode.IsDisposable) return false;
         var value = Marshal.AllocHGlobal(4);
         try
         {

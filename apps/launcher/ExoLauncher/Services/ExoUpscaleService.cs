@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using ExoLauncher.Models;
+using ExoLauncher.Helpers;
 
 namespace ExoLauncher.Services;
 
@@ -135,6 +136,7 @@ internal static class ExoUpscaleService
 
     internal static bool RecoverOrphanedSessionsOnStartup(string stateDir, string backupDir)
     {
+        if (HostMode.IsDisposable) return false;
         var exe = FindExePath();
         if (exe is null || !Directory.Exists(stateDir))
             return false;

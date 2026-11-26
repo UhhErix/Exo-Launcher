@@ -207,6 +207,7 @@ internal static class TuneSignIn
     /// <summary>Makes the script and task match the record: what holds is re-applied, and with nothing left both go.</summary>
     internal static void Renew(TuneStore store)
     {
+        if (HostMode.IsDisposable) return;
         var parts = store.Load();
         int[]? Values(string id) => parts.GetValueOrDefault(id) is { Applied: > 0, SignIn: { } values } ? values : null;
         var (nvidia, ryzen) = (Values("nvidia"), Values("ryzen"));
@@ -510,6 +511,7 @@ internal static class AutoTuneService
 
     private static string? Launch(string arguments, bool wait)
     {
+        if (HostMode.IsDisposable) return HostMode.Refusal;
         if (Environment.ProcessPath is not { } exo) return "Exo couldn't start this.";
         try
         {
