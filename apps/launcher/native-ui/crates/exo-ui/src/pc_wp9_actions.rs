@@ -25,9 +25,9 @@ use exo_rpc::{
     METHOD_GPU_PROFILE, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN, METHOD_KEEP_STATUS,
     METHOD_REPLACED_REMOVE, METHOD_RUNTIMES_CANCEL, METHOD_RUNTIMES_INSTALL, METHOD_RUNTIMES_LIST,
     METHOD_SETTINGS_SET, METHOD_SHADERS_CALL, METHOD_SHADERS_PREPARE_CANCEL,
-    METHOD_SHADERS_REBUILD, METHOD_STARTUP_CLEAN, METHOD_STARTUP_RESTORE, METHOD_SYSTEM_DRIVERS,
-    METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_HEALTH, METHOD_SYSTEM_INTERRUPTS, METHOD_SYSTEM_OVERLAYS,
-    METHOD_SYSTEM_QOS, METHOD_SYSTEM_TUNE, METHOD_SYSTEM_TUNING, METHOD_WEB_PREFERENCES_GET,
+    METHOD_SHADERS_REBUILD, METHOD_STARTUP_RESTORE, METHOD_SYSTEM_DRIVERS, METHOD_SYSTEM_DRIVES,
+    METHOD_SYSTEM_HEALTH, METHOD_SYSTEM_INTERRUPTS, METHOD_SYSTEM_OVERLAYS, METHOD_SYSTEM_QOS,
+    METHOD_SYSTEM_TUNE, METHOD_SYSTEM_TUNING, METHOD_WEB_PREFERENCES_GET,
     METHOD_WEB_PREFERENCES_SET, OverlayAdvisorState, PcHealth, QosState, RestorePointReply,
     RuntimesInstallReply, RuntimesListReply, RuntimesProgress, ShaderRebuild, StartupListReply,
     SystemTuningState, WebClientOptions,
@@ -2560,34 +2560,6 @@ impl AppState {
                     });
                 },
             );
-        }
-    }
-
-    pub fn startup_clean_unneeded(&mut self) {
-        self.pc.startup_errors.remove("clean");
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, StartupListReply>(METHOD_STARTUP_CLEAN, &json!({}), move |res| {
-                handle.update(move |s, _| match res {
-                    Ok(list) => {
-                        if !list.ok {
-                            s.pc.startup_errors.insert(
-                                "clean".into(),
-                                list.message.clone().unwrap_or_else(|| {
-                                    "Startup wasn’t cleaned up. Try again.".into()
-                                }),
-                            );
-                        }
-                        s.pc.startup_list = Some(list);
-                    }
-                    Err(_) => {
-                        s.pc.startup_errors.insert(
-                            "clean".into(),
-                            "Startup wasn’t cleaned up. Try again.".into(),
-                        );
-                    }
-                });
-            });
         }
     }
 

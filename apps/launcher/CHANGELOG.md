@@ -6,6 +6,7 @@
 - **Upgraded Exo Voice and system-wide audio controls.** Introduces a faster native voice cleanup engine with automatic gaming tuning, voice isolation, echo cancellation, and optional system-wide equalizer support in Settings › Voice and Devices › Audio. _Checked in code only._
 - **Built-in frame generation and live performance overlay.** Adds frame generation controls for supported games alongside an in-game frame-time and sensor overlay, power protection, and automatic fan-curve safety limits in the PC room. _Checked in code only._
 - **Native game capture, mouse controls, and display calibration.** Rebuilds game recording and instant replay with faster GPU capture and per-app audio isolation, brings gaming mouse tuning directly into Devices › Mouse, and adds monitor calibration and brightness controls in PC › Display. _Checked in code only._
+- **Update now works during a game.** Pressing Update now while you play puts the update in at once and reopens Exo, instead of waiting until after your game. _Checked in code only._
 - **Optional passkey sign-in and safer account connections.** Adds Windows Hello passkey sign-in for Exo accounts and opens supported sign-ins in your regular browser. _Checked in code only._
 - **Includes all 3.31.x fixes and stability improvements.** Carries forward every 3.30.x and 3.31.x fix—including smaller installs, faster startup, Reduce motion sync, smoother controls during heavy background work, crash protection, and safer helper timeouts and report scrubbing. _Verified: end-to-end._
 

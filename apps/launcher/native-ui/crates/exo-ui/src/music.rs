@@ -3340,8 +3340,7 @@ mod tests {
                 },
                 LyricsLine {
                     start: 7000.0,
-                    text: "Every window on the hill is glowing gold tonight"
-                        .into(),
+                    text: "Every window on the hill is glowing gold tonight".into(),
                     words: vec![],
                     agent: None,
                 },
