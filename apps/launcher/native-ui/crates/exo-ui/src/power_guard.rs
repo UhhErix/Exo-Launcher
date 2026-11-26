@@ -4,7 +4,7 @@ use std::process::Command;
 
 use exo_kit::{
     BG, BadgeTone, FG, RADIUS_CARD, RADIUS_PANEL, bad, fg_muted, float_line, status_badge,
-    subtle_fill, track_fill, type_control, type_section, type_small, warn,
+    subtle_fill, track_fill, type_control, type_section, type_small, type_title, warn,
 };
 use exo_power_guard::backends::nvidia::try_set_nvidia_power_limit_w;
 use exo_power_guard::guard::{
@@ -846,7 +846,7 @@ pub(crate) fn card_view(s: &AppState) -> El {
                 .child(
                     text("Power guard")
                         .key("exo-ai-power-guard-title")
-                        .font(type_section())
+                        .font(type_title())
                         .color(FG),
                 )
                 .child(status_badge(status_word.into(), status_tone))
@@ -1049,9 +1049,10 @@ pub(crate) fn card_view(s: &AppState) -> El {
     col()
         .key("exo-ai-power-guard-card")
         .w_full()
-        .pt(14.0)
+        .h_full()
+        .pt(16.0)
         .px(24.0)
-        .pb(14.0)
+        .pb(16.0)
         .gap(10.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
@@ -1062,7 +1063,7 @@ pub(crate) fn card_view(s: &AppState) -> El {
             row()
                 .w_full()
                 .items_start()
-                .gap(20.0)
+                .gap(16.0)
                 .child(left_info)
                 .child(right_controls),
         )
