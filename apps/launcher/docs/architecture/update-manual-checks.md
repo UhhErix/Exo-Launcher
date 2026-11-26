@@ -23,13 +23,9 @@ anything else is a fail. Write down the date, the build and the result of each s
 ## 2. Update now during a game
 
 1. Open N-1, start the windowed game, alt-tab back to Exo, press Update now on the sheet.
-2. Seen: the download finishes, Exo stays open, the game keeps running, and one notice says "Your update is ready and goes
-   in after your game, the next time Exo opens." Nothing closes.
-3. Close the game, then quit Exo from its tray icon, then open Exo.
-4. Seen: a plain black window that says Updating Exo, then Setup's Updating Exo window, then Exo N. No Exo N-1 main window
-   in between.
-5. Repeat step 1 to 3, but open Exo while the game still runs: Exo N-1 opens as usual (no Updating Exo), and the update is
-   still kept.
+2. Seen: the download finishes, Exo N-1 closes, Setup's Updating Exo window shows, and Exo N opens. The game keeps
+   running the whole time and is not closed or paused.
+3. Close the game. Seen: Exo N is still open and shows the new version in Settings › About.
 
 ## 3. A launch while the update goes in
 

@@ -6,8 +6,8 @@ using ExoLauncher.Helpers;
 namespace ExoLauncher.Services;
 
 /// <summary>
-/// The update's state (UpdateFlow), never applying while a game runs, the free-space check before a download, and the verified
-/// installer kept for after a game: staged-update.json in the updates folder names it (version, SHA-256, size, file, and how
+/// The update's state (UpdateFlow), the free-space check before a download, and the verified
+/// installer kept for the next start: staged-update.json in the updates folder names it (version, SHA-256, size, file, and how
 /// many times it was started), and the next start runs it while Exo shows its Updating Exo window, checked again first
 /// (ApplyKeptAtStartAsync).
 ///

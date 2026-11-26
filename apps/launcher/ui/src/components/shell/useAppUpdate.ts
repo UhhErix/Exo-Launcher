@@ -140,9 +140,9 @@ export function useAppUpdate(): AppUpdate {
       if (r.notNow) setNotNow(true)
       take(r.state)
       if (r.ok && r.staged) {
-        // A game is running: the update is downloaded and kept, and the sheet goes; the notice says when it goes in.
+        // The update is downloaded and kept for the next start, and the sheet goes; the notice says when it goes in.
         setSheet(false)
-        setMessage(r.message || 'Your update is ready and goes in after your game, the next time Exo opens.')
+        setMessage(r.message || 'Your update is ready and goes in the next time Exo opens.')
       } else if (r.ok && (r.shouldExit || r.installed)) {
         setPercent(null)
         setStatus('Restarting…')
@@ -197,7 +197,7 @@ export function useAppUpdate(): AppUpdate {
     error: phase === 'failed' && !dismissed ? message ?? 'The update didn’t install. Try again.' : null,
     problem,
     dismissProblem: () => setProblem(null),
-    waiting: phase === 'waiting' && !dismissed ? message ?? 'Your update is ready and goes in after your game, the next time Exo opens.' : null,
+    waiting: phase === 'waiting' && !dismissed ? message ?? 'Your update is ready and goes in the next time Exo opens.' : null,
     checking: bootHold && phase === 'checking',
     pending: phase === 'checking',
     latest,

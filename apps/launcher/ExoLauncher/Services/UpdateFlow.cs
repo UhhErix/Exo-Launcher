@@ -2,9 +2,9 @@ namespace ExoLauncher.Services;
 
 /// <summary>
 /// Exo's own update as one table (AppUpdateService moves through it). A step the table has no row for leaves the state as it
-/// is. Every state has a way out, and the only rows into Applying are the ones taken with no game running: an update never
-/// goes in while a game runs. A download that finishes during a game waits (WaitingForGame), goes back to Ready when the game
-/// ends, and is applied by the next Update now or at the next start (AppUpdateService.ApplyKeptAtStartAsync). The host
+/// is. Every state has a way out. Update now goes in at once, a game running or not: Exo closes and Setup runs, and the game
+/// keeps running. A kept update (WaitingForGame while a game runs, else Ready) is applied by the next Update now or at the
+/// next start (AppUpdateService.ApplyKeptAtStartAsync), which still waits for no game at start. The host
 /// sends each state to the UI (app.updateState and the update answers' state), which draws only from it.
 /// </summary>
 internal static class UpdateFlow

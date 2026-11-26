@@ -290,7 +290,7 @@ impl WhatsNewState {
     pub fn waiting_text(&self) -> Option<String> {
         if self.phase() == UpdatePhase::Waiting && !self.dismissed_notice {
             Some(self.message.clone().unwrap_or_else(|| {
-                "Your update is ready and goes in after your game, the next time Exo opens.".into()
+                "Your update is ready and goes in the next time Exo opens.".into()
             }))
         } else {
             None
@@ -759,8 +759,7 @@ impl AppState {
                         if r.ok && r.staged {
                             s.whats_new.sheet_open = false;
                             s.whats_new.message = Some(r.message.unwrap_or_else(|| {
-                                "Your update is ready and goes in after your game, the next time Exo opens."
-                                    .into()
+                                "Your update is ready and goes in the next time Exo opens.".into()
                             }));
                         } else if r.ok && (r.should_exit || r.installed) {
                             s.whats_new.percent = None;
@@ -772,10 +771,10 @@ impl AppState {
                             s.whats_new.latest = None;
                             s.whats_new.sheet_open = false;
                         } else {
-                            s.whats_new.message = Some(
-                                r.message
-                                    .unwrap_or_else(|| "The update didn’t install. Try again.".into()),
-                            );
+                            s.whats_new.message =
+                                Some(r.message.unwrap_or_else(|| {
+                                    "The update didn’t install. Try again.".into()
+                                }));
                         }
                     }
                     Err(e) => {

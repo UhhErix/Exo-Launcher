@@ -392,13 +392,13 @@ public sealed partial class AppUpdateService
             }
             var hasRecord = ReadStaged(_updatesDirectory) is not null;
 
-            // Never while a game runs: the verified installer waits, and goes in at the next start or the next Update now.
+            // When the flow refuses Apply, the verified installer is kept and goes in at the next start or the next Update now.
             if (Move(UpdateFlow.Step.Apply) != UpdateFlow.State.Applying)
             {
                 // Kept only with its record: without one the next start would not know of it.
                 if (!hasRecord) throw new IOException("The kept-update record could not be written.");
                 keepStaged = true;
-                AppLog.Info($"Update {offeredVersion}: verified and kept; a game is running, so it goes in later.");
+                AppLog.Info($"Update {offeredVersion}: verified and kept; it goes in later.");
                 return new CheckResult
                 {
                     UpdateAvailable = true,
