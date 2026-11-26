@@ -408,7 +408,16 @@ public sealed class AppServices
         try
         {
             if (Settings.Current.FrameCap.Count > 0 || Settings.Current.NvidiaGsync == true)
-                Settings.UpdateProfile(s => { s.FrameCap = new(StringComparer.OrdinalIgnoreCase); s.NvidiaGsync = false; });
+            {
+                var caps = Settings.Current.FrameCap;
+                var kept = FrameCapRetire.Run(caps, Library.Find).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (kept.Count > 0) completedCleanly = false;
+                Settings.UpdateProfile(s =>
+                {
+                    s.FrameCap = new(caps.Where(c => kept.Contains(c.Key)), StringComparer.OrdinalIgnoreCase);
+                    s.NvidiaGsync = false;
+                });
+            }
         }
         catch (Exception ex) { completedCleanly = false; AppLog.Warn("Frame cap / G-SYNC settings cleanup failed: " + ex.GetType().Name); }
         try { LegacyProfileDataCleanup.Run(); }
