@@ -158,6 +158,30 @@ fn days_from_civil(y: i32, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
+fn format_capture_day(raw: &str) -> String {
+    let Some((y, m, d)) = parse_iso_ymd(raw) else {
+        return raw.to_string();
+    };
+    const MONTHS: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    match MONTHS.get(m.saturating_sub(1) as usize) {
+        Some(month) => format!("{month} {d}, {y}"),
+        None => raw.to_string(),
+    }
+}
+
 pub fn on_this_day_items(
     items: &[CaptureItem],
     now_ymd: (i32, u32, u32),
@@ -3308,10 +3332,11 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 );
             } else {
                 for (day, list) in days {
-                    let mut day_col = col()
-                        .w_full()
-                        .gap(8.0)
-                        .child(text(day).font(type_section()).color(fg_muted()));
+                    let mut day_col = col().w_full().gap(8.0).child(
+                        text(format_capture_day(&day))
+                            .font(type_section())
+                            .color(fg_muted()),
+                    );
                     for chunk in list.chunks(5) {
                         let mut r = row().w_full().gap(6.0);
                         for it in chunk {

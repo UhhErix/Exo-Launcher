@@ -53,6 +53,7 @@
       "hdrSdrGamma": true,
       "discordNoiseSuppression": true,
       "discordQuietWhilePlaying": true,
+      "discordLayout": "exo",
       "pauseDownloadsWhilePlaying": true,
       "autoUpdateGames": true,
       "autoUpdateChipset": true,

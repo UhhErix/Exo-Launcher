@@ -1801,7 +1801,7 @@ fn night_panel(s: &AppState) -> Option<El> {
     let on = night.on;
     let sync = night.sync;
     let mut rows = vec![device_row(
-        "Night Shift",
+        "Softer highs at night",
         (night.on && night.now).then(|| "On now".into()),
         eq_error_for(s, "night"),
         Some(

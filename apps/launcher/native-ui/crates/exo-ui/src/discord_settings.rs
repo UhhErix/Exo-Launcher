@@ -2349,10 +2349,26 @@ fn chat_page(s: &AppState) -> El {
     let streamer = ext.streamer_mode;
     let reduce_motion = ext.reduce_motion;
 
+    let layout_val = s
+        .settings
+        .discord_layout
+        .as_deref()
+        .unwrap_or("exo")
+        .to_string();
+
     col()
         .w_full()
         .gap(4.0)
         .child(text("Chat").font(type_title()).color(FG).pb(6.0))
+        .child(section_head("Layout"))
+        .child(choice_row(
+            "dc-set-layout",
+            "Discord layout",
+            Some("Switch between Exo's top server bar and classic Discord's left server rail."),
+            layout_val,
+            vec![("exo".into(), "Exo"), ("classic".into(), "Classic Discord")],
+            |s, v| s.set_discord_layout(&v),
+        ))
         .child(section_head("Messages"))
         .child(toggle_row(
             "dc-set-inline-embed",

@@ -250,6 +250,25 @@ fn is_highlighted(s: &AppState, id: &str) -> bool {
 fn section_general(s: &AppState) -> El {
     let set = &s.settings;
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
+    let discord_classic = set.discord_layout.as_deref() == Some("classic");
+    let layout_pills = row()
+        .gap(6.0)
+        .center_y()
+        .child(if !discord_classic {
+            set_primary_btn("set-discord-layout-exo", "Exo", None)
+                .on_press(|s: &mut AppState| s.set_discord_layout("exo"))
+        } else {
+            set_btn("set-discord-layout-exo", "Exo", None)
+                .on_press(|s: &mut AppState| s.set_discord_layout("exo"))
+        })
+        .child(if discord_classic {
+            set_primary_btn("set-discord-layout-classic", "Classic Discord", None)
+                .on_press(|s: &mut AppState| s.set_discord_layout("classic"))
+        } else {
+            set_btn("set-discord-layout-classic", "Classic Discord", None)
+                .on_press(|s: &mut AppState| s.set_discord_layout("classic"))
+        });
+
     let main_card = settings_card()
         .child(set_row(
             "Text size",
@@ -267,6 +286,14 @@ fn section_general(s: &AppState) -> El {
                 .gamepad_focus(gamepad_focus),
                 |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::TextSize),
             ),
+        ))
+        .child(el().w_full().h(1.0).fill(hairline()))
+        .child(set_row(
+            "Discord layout",
+            Some("Exo's top server bar or classic Discord's left server rail."),
+            None,
+            false,
+            layout_pills,
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(toggle_row(

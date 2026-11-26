@@ -522,6 +522,7 @@ public sealed class SettingsService
         bool? hdrSdrGamma = null,
         bool? discordNoiseSuppression = null,
         bool? discordQuietWhilePlaying = null,
+        string? discordLayout = null,
         string? whatsNewSeen = null,
         bool? frameGenEverywhere = null,
         bool? graphicsFeaturesBestSettings = null)
@@ -564,6 +565,8 @@ public sealed class SettingsService
                 settings.DiscordNoiseSuppression = discordNoiseSuppression.Value;
             if (discordQuietWhilePlaying is not null)
                 settings.DiscordQuietWhilePlaying = discordQuietWhilePlaying.Value;
+            if (discordLayout is not null)
+                settings.DiscordLayout = string.Equals(discordLayout, "classic", StringComparison.OrdinalIgnoreCase) ? "classic" : "exo";
             if (preferredGameSources is not null)
             {
                 foreach (var pair in preferredGameSources)
@@ -1140,6 +1143,7 @@ public sealed class SettingsService
         DiscordVoiceTargetLufs = Math.Clamp(source.DiscordVoiceTargetLufs, (int)DiscordClient.Voice.VoiceLeveling.MinTargetLufs, (int)DiscordClient.Voice.VoiceLeveling.MaxTargetLufs),
         DiscordMicAutoGain = source.DiscordMicAutoGain,
         DiscordQuietWhilePlaying = source.DiscordQuietWhilePlaying,
+        DiscordLayout = string.Equals(source.DiscordLayout, "classic", StringComparison.OrdinalIgnoreCase) ? "classic" : "exo",
         DiscordInputDevice = source.DiscordInputDevice is { Length: > 0 and <= 512 } input ? input : null,
         DiscordOutputDevice = source.DiscordOutputDevice is { Length: > 0 and <= 512 } output ? output : null,
         DiscordInputVolume = Math.Clamp(source.DiscordInputVolume, 0, 200),

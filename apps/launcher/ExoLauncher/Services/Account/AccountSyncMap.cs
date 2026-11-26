@@ -18,7 +18,7 @@ internal static class AccountSyncMap
     internal static readonly string[] SyncedSettings =
     [
         "AchievementBanners", "AchievementVolume", "AntiCheatSafeMode", "AutoInstallRedistributables", "AutoUpdateGames",
-        "Background", "CloseStoreClientsAfterLaunch", "ControllerSound", "DownloadHoursEnd", "DownloadHoursStart", "FpsCounter",
+        "Background", "CloseStoreClientsAfterLaunch", "ControllerSound", "DiscordLayout", "DownloadHoursEnd", "DownloadHoursStart", "FpsCounter",
         "FpsCounterHideOverBuiltIn", "FpsCounterItems", "HiddenGames", "KeepAwakeDownloads", "LibraryShowInstalled", "LibraryShowOwned",
         "MinimizeWhilePlaying", "PauseDownloadsWhilePlaying", "ReduceMotion", "ShowLibraryTools", "SortMode",
         "StoreClientsQuiet", "TextColour", "TextSize", "UiPrefs",

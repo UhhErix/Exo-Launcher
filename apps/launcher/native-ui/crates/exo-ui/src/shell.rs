@@ -743,7 +743,7 @@ fn mini_volume_popover_layers(s: &AppState, blur: bool) -> Vec<El> {
 
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     cx.reduced_motion(s.settings.reduce_motion);
-    cx.focus_ring(2.0, 2.0, FG.alpha(0.75));
+    cx.focus_ring(1.5, 1.5, FG.alpha(0.45));
     set_glass_accessibility(GlassAccessibility::from_cx(cx, s.settings.reduce_motion));
     set_text_scale(s.text_scale());
     let has_modal_scrim = s.palette_open

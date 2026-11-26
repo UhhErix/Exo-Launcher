@@ -477,9 +477,9 @@ fn general_section(s: &AppState, game: &Game, props: &GameProperties) -> Vec<El>
                     "Off".into()
                 },
                 if overlay_on {
-                    exo_kit::BadgeTone::Neutral
-                } else {
                     exo_kit::BadgeTone::Good
+                } else {
+                    exo_kit::BadgeTone::Neutral
                 },
             )),
         ));

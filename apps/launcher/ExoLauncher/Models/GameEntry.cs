@@ -444,6 +444,7 @@ public sealed class AppSettings
     public bool DiscordMicAutoGain { get; set; }
     /// <summary>Game focus: no Discord notifications while a game runs (the unread badge still counts).</summary>
     public bool DiscordQuietWhilePlaying { get; set; } = true;
+    public string DiscordLayout { get; set; } = "exo";
     /// <summary>Exo's Discord calls: the microphone and speakers chosen (Windows endpoint ids; none is Windows' default) and their volume, 0-200 like Discord's.</summary>
     public string? DiscordInputDevice { get; set; }
     public string? DiscordOutputDevice { get; set; }

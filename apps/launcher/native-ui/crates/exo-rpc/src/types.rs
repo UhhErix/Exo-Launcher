@@ -1594,6 +1594,8 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub text_size: Option<String>,
     #[serde(default)]
+    pub discord_layout: Option<String>,
+    #[serde(default)]
     pub riot_id: Option<String>,
     #[serde(default)]
     pub riot_baseline: Option<crate::settings_types::RiotBaseline>,

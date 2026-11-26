@@ -1557,6 +1557,27 @@ impl AppState {
         }
     }
 
+    pub fn set_discord_layout(&mut self, layout: &str) {
+        let normalized = if layout.eq_ignore_ascii_case("classic") {
+            "classic"
+        } else {
+            "exo"
+        };
+        self.settings.discord_layout = Some(normalized.to_string());
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, LauncherSettings>(
+                METHOD_SETTINGS_SET,
+                &json!({ "discordLayout": normalized }),
+                move |res| {
+                    if let Ok(set) = res {
+                        handle.update(move |s, _| s.settings = set);
+                    }
+                },
+            );
+        }
+    }
+
     pub fn set_music_service(&mut self, id: &str) {
         let svc = crate::media_state::MusicService::from_pref(Some(id));
         self.media.music_service = svc;

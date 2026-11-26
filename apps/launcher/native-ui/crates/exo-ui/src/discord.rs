@@ -62,12 +62,11 @@ fn glassy_ring(node: El) -> El {
 }
 
 fn panel_frame(node: El) -> El {
-    glassy_ring(
-        node.radius(RADIUS_PANEL)
-            .continuous_corners()
-            .clip_rounded(RADIUS_PANEL)
-            .fill(exo_kit::surface_elevated()),
-    )
+    node.radius(RADIUS_PANEL)
+        .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .fill(exo_kit::surface_card())
+        .border(1.0, exo_kit::card_border())
 }
 
 pub(crate) fn status_color(status: &str) -> Color {
@@ -925,14 +924,15 @@ fn band_guild_button(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) ->
     if active {
         btn = btn
             .pl(4.0)
-            .pr(18.0)
+            .pr(16.0)
             .gap(10.0)
-            .fill(FG)
+            .fill(selected_fill())
+            .border(1.0, exo_kit::card_border())
             .child(guild_face(s, guild, face_sz, sc, scale))
             .child(
                 text(guild.name.clone())
                     .font(font_px(13.0 * sc, 600.0))
-                    .color(PRIMARY_FG)
+                    .color(FG)
                     .max_w(180.0 * sc)
                     .truncate(),
             );
@@ -945,7 +945,7 @@ fn band_guild_button(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) ->
             .child(guild_face(s, guild, face_sz, sc, scale));
     }
 
-    let badge_border = if active { FG } else { BG };
+    let badge_border = BG;
     if guild.mentions > 0 {
         btn = btn.child(
             el().pin(Some(4.0 + face_sz - 14.0), Some(1.0), None, None)
@@ -1137,9 +1137,10 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
     if home_active {
         home_btn = home_btn
             .pl(4.0)
-            .pr(18.0)
+            .pr(16.0)
             .gap(10.0)
-            .fill(FG)
+            .fill(selected_fill())
+            .border(1.0, exo_kit::card_border())
             .child(
                 el().size(face_sz, face_sz)
                     .radius(face_sz * 0.5)
@@ -1147,11 +1148,7 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
                     .center()
                     .child(icon_home(20.0, FG)),
             )
-            .child(
-                text("Home")
-                    .font(font_px(13.0 * sc, 600.0))
-                    .color(PRIMARY_FG),
-            );
+            .child(text("Home").font(font_px(13.0 * sc, 600.0)).color(FG));
     } else {
         home_btn = home_btn
             .padding(4.0)
@@ -1168,7 +1165,7 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
             );
     }
 
-    let home_badge_border = if home_active { FG } else { BG };
+    let home_badge_border = BG;
     if dm_mentions > 0 {
         home_btn = home_btn.child(
             el().pin(Some(4.0 + face_sz - 14.0), Some(1.0), None, None)
@@ -1206,9 +1203,10 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
     if shop_active {
         shop_btn = shop_btn
             .pl(4.0)
-            .pr(18.0)
+            .pr(16.0)
             .gap(10.0)
-            .fill(FG)
+            .fill(selected_fill())
+            .border(1.0, exo_kit::card_border())
             .child(
                 el().size(face_sz, face_sz)
                     .radius(face_sz * 0.5)
@@ -1216,11 +1214,7 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
                     .center()
                     .child(icon_shop(20.0, FG)),
             )
-            .child(
-                text("Shop")
-                    .font(font_px(13.0 * sc, 600.0))
-                    .color(PRIMARY_FG),
-            );
+            .child(text("Shop").font(font_px(13.0 * sc, 600.0)).color(FG));
     } else {
         shop_btn = shop_btn
             .padding(4.0)
@@ -1365,6 +1359,433 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
             .child(scroll_right_btn)
             .child(inbox_btn),
     )
+}
+
+fn classic_rail_pill(active: bool, unread: bool) -> Option<El> {
+    if active {
+        Some(
+            el().pin(Some(0.0), None, None, None)
+                .size(3.5, 32.0)
+                .radius(2.0)
+                .fill(FG)
+                .inert(),
+        )
+    } else if unread {
+        Some(
+            el().pin(Some(0.0), None, None, None)
+                .size(3.5, 8.0)
+                .radius(2.0)
+                .fill(FG.alpha(0.75))
+                .inert(),
+        )
+    } else {
+        None
+    }
+}
+
+fn classic_guild_button(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> El {
+    let face_sz = 44.0 * sc;
+    let active = s.discord.place == DiscordPlace::Servers
+        && s.discord.active_guild_id.as_deref() == Some(guild.id.as_str());
+    let unread = guild.unread && !guild.muted;
+    let gid = guild.id.clone();
+    let srv_ctx = ContextMenuTarget::DiscordServer {
+        guild_id: guild.id.clone(),
+        name: guild.name.clone(),
+        muted: guild.muted,
+        owner: false,
+        icon: guild.icon.clone(),
+    };
+
+    let radius = if active { 14.0 } else { face_sz * 0.5 };
+    let mut face = el()
+        .size(face_sz, face_sz)
+        .radius(radius)
+        .continuous_corners()
+        .clip_rounded(radius)
+        .fill(if active {
+            selected_fill()
+        } else {
+            monogram_fill(&guild.name)
+        })
+        .border(
+            1.0,
+            if active {
+                FG.alpha(0.28)
+            } else {
+                exo_kit::card_border()
+            },
+        )
+        .center();
+    if let Some(img) = guild
+        .icon
+        .as_deref()
+        .and_then(|u| s.discord_remote_image_sized(u, 96.0, scale))
+    {
+        face = face.pixels_fit(img.pixels(), SurfaceFit::Fill);
+    } else {
+        face = face.child(
+            text(initials(&guild.name))
+                .font(font_px(13.0 * sc, 600.0))
+                .color(FG),
+        );
+    }
+
+    let mut btn = el()
+        .key(format!("dc-guild-tile-{}", guild.id))
+        .role("button")
+        .label(guild.name.clone())
+        .cursor(Cursor::Pointer)
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .size(face_sz, face_sz)
+        .radius(radius)
+        .opacity(if guild.muted && !active { 0.55 } else { 1.0 })
+        .motion(SPRING_QUICK)
+        .on_press(move |s: &mut AppState| s.open_discord_guild(&gid))
+        .on_secondary_press(move |s: &mut AppState, p, _| {
+            s.open_context_menu(srv_ctx.clone(), p.x, p.y);
+        })
+        .child(face);
+
+    if guild.mentions > 0 {
+        btn = btn.child(
+            el().pin(None, Some(-2.0), Some(-2.0), None)
+                .child(mention_badge(guild.mentions, Some(BG), sc)),
+        );
+    }
+    let my_voice_here = s.discord.voice.state != "off"
+        && s.discord.voice.guild_id.as_deref() == Some(guild.id.as_str());
+    if guild.in_voice > 0 || my_voice_here {
+        btn = btn.child(
+            el().pin(None, None, Some(-2.0), Some(-2.0))
+                .size(18.0, 18.0)
+                .radius(9.0)
+                .fill(good())
+                .border(2.0, BG)
+                .center()
+                .child(icon_volume(10.0, PRIMARY_FG)),
+        );
+    }
+
+    row()
+        .w_full()
+        .h(face_sz + 4.0)
+        .center()
+        .children(classic_rail_pill(active, unread))
+        .child(btn)
+}
+
+fn classic_folder_tile(
+    s: &AppState,
+    item: &DiscordRailItem,
+    guilds: &[&DiscordGuild],
+    idx: usize,
+    sc: f32,
+    scale: f32,
+) -> El {
+    let face_sz = 44.0 * sc;
+    let folder_key = item.id.clone().unwrap_or_else(|| format!("folder-{idx}"));
+    let contains_active = s.discord.place == DiscordPlace::Servers
+        && s.discord
+            .active_guild_id
+            .as_deref()
+            .is_some_and(|aid| guilds.iter().any(|g| g.id == aid));
+    let expanded = contains_active || s.discord.expanded_folders.contains(&folder_key);
+
+    if expanded {
+        let fk = folder_key.clone();
+        let mut group = col()
+            .key(format!("dc-folder-open-{folder_key}"))
+            .w(54.0)
+            .py(4.0)
+            .gap(4.0)
+            .items_center()
+            .radius(RADIUS_PANEL)
+            .fill(Color::WHITE.alpha(0.04))
+            .border(1.0, hairline())
+            .child(
+                el().key(format!("dc-folder-toggle-{folder_key}"))
+                    .role("button")
+                    .label(item.name.clone().unwrap_or_else(|| "Folder".into()))
+                    .cursor(Cursor::Pointer)
+                    .focusable(true)
+                    .hit()
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .size(40.0, 32.0)
+                    .radius(RADIUS_SMALL)
+                    .hover(hover_fill())
+                    .center()
+                    .on_press(move |s: &mut AppState| s.toggle_discord_folder(&fk))
+                    .child(icon_folder(16.0, fg_muted())),
+            );
+        for g in guilds {
+            group = group.child(classic_guild_button(s, g, sc, scale));
+        }
+        return group;
+    }
+
+    let mentions: i32 = guilds.iter().map(|g| g.mentions).sum();
+    let unread = guilds.iter().any(|g| g.unread && !g.muted);
+    let all_muted = guilds.iter().all(|g| g.muted);
+    let mini_sz = ((face_sz - 12.0) * 0.5).floor().max(12.0);
+    let mut mini_grid = el().w(mini_sz * 2.0 + 2.0).equal_columns(2).gaps(2.0, 2.0);
+    for g in guilds.iter().take(4) {
+        let mut cell = el()
+            .size(mini_sz, mini_sz)
+            .radius(mini_sz * 0.5)
+            .clip_rounded(mini_sz * 0.5)
+            .fill(monogram_fill(&g.name))
+            .center();
+        if let Some(img) = g
+            .icon
+            .as_deref()
+            .and_then(|u| s.discord_remote_image_sized(u, 64.0, scale))
+        {
+            cell = cell.pixels_fit(img.pixels(), SurfaceFit::Fill);
+        } else {
+            cell = cell.child(
+                text(initials(&g.name))
+                    .font(font_px(7.5 * sc, 600.0))
+                    .color(FG),
+            );
+        }
+        mini_grid = mini_grid.child(cell);
+    }
+
+    let fk = folder_key.clone();
+    let mut btn = el()
+        .key(format!("dc-folder-tile-{folder_key}"))
+        .role("button")
+        .label(item.name.clone().unwrap_or_else(|| "Folder".into()))
+        .cursor(Cursor::Pointer)
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .size(face_sz, face_sz)
+        .radius(14.0)
+        .fill(subtle_fill())
+        .border(1.0, exo_kit::card_border())
+        .hover(hover_fill())
+        .opacity(if all_muted { 0.55 } else { 1.0 })
+        .center()
+        .motion(SPRING_QUICK)
+        .on_press(move |s: &mut AppState| s.toggle_discord_folder(&fk))
+        .child(mini_grid);
+
+    if mentions > 0 {
+        btn = btn.child(
+            el().pin(None, Some(-2.0), Some(-2.0), None)
+                .child(mention_badge(mentions, Some(BG), sc)),
+        );
+    }
+
+    row()
+        .w_full()
+        .h(face_sz + 4.0)
+        .center()
+        .children(classic_rail_pill(false, unread))
+        .child(btn)
+}
+
+fn classic_server_rail(s: &AppState, sc: f32, scale: f32) -> El {
+    let face_sz = 44.0 * sc;
+    let home_active = s.discord.place != DiscordPlace::Servers && !s.discord.shop_open;
+    let shop_active = s.discord.shop_open;
+    let dm_mentions = s.discord.total_dm_mentions();
+    let dm_unread = s.discord.unread_dm_count() > 0;
+
+    let home_r = if home_active { 14.0 } else { face_sz * 0.5 };
+    let mut home_btn = el()
+        .key("dc-place-home")
+        .role("button")
+        .label("Home")
+        .cursor(Cursor::Pointer)
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .size(face_sz, face_sz)
+        .radius(home_r)
+        .continuous_corners()
+        .fill(if home_active {
+            selected_fill()
+        } else {
+            subtle_fill()
+        })
+        .border(
+            1.0,
+            if home_active {
+                FG.alpha(0.28)
+            } else {
+                exo_kit::card_border()
+            },
+        )
+        .hover(hover_fill())
+        .center()
+        .motion(SPRING_QUICK)
+        .on_press(|s: &mut AppState| s.open_discord_place(DiscordPlace::Home))
+        .child(icon_home(20.0, FG));
+    if dm_mentions > 0 {
+        home_btn = home_btn.child(
+            el().pin(None, Some(-2.0), Some(-2.0), None)
+                .child(mention_badge(dm_mentions, Some(BG), sc)),
+        );
+    }
+    let home_slot = row()
+        .w_full()
+        .h(face_sz + 4.0)
+        .center()
+        .children(classic_rail_pill(home_active, dm_unread))
+        .child(home_btn);
+
+    let shop_r = if shop_active { 14.0 } else { face_sz * 0.5 };
+    let shop_slot = row()
+        .w_full()
+        .h(face_sz + 4.0)
+        .center()
+        .children(classic_rail_pill(shop_active, false))
+        .child(
+            el().key("dc-band-shop")
+                .role("button")
+                .label("Shop")
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .press_scale(PRESS_SCALE)
+                .size(face_sz, face_sz)
+                .radius(shop_r)
+                .continuous_corners()
+                .fill(if shop_active {
+                    selected_fill()
+                } else {
+                    TRANSPARENT
+                })
+                .border(
+                    1.0,
+                    if shop_active {
+                        FG.alpha(0.28)
+                    } else {
+                        exo_kit::card_border()
+                    },
+                )
+                .hover(hover_fill())
+                .center()
+                .motion(SPRING_QUICK)
+                .on_press(|s: &mut AppState| {
+                    s.discord.shop_open = !s.discord.shop_open;
+                    if s.discord.shop_open {
+                        s.discord.place = DiscordPlace::Home;
+                        s.discord.active_guild_id = None;
+                        s.load_discord_shop(false);
+                    }
+                })
+                .child(icon_shop(19.0, if shop_active { FG } else { fg_muted() })),
+        );
+
+    let guild_map: HashMap<&str, &DiscordGuild> = s
+        .discord
+        .home
+        .guilds
+        .iter()
+        .map(|g| (g.id.as_str(), g))
+        .collect();
+    let mut placed: HashSet<&str> = HashSet::new();
+    let mut list = col()
+        .key("dc-classic-server-list")
+        .grow(1.0)
+        .w_full()
+        .min_h(0.0)
+        .py(4.0)
+        .gap(6.0)
+        .items_center()
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        });
+
+    for (idx, item) in s.discord.home.rail.iter().enumerate() {
+        let members: Vec<&DiscordGuild> = item
+            .guild_ids
+            .iter()
+            .filter_map(|id| guild_map.get(id.as_str()).copied())
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        for g in &members {
+            placed.insert(g.id.as_str());
+        }
+        if item.id.is_some() && members.len() > 1 {
+            list = list.child(classic_folder_tile(s, item, &members, idx, sc, scale));
+        } else {
+            for g in members {
+                list = list.child(classic_guild_button(s, g, sc, scale));
+            }
+        }
+    }
+    for g in &s.discord.home.guilds {
+        if !placed.contains(g.id.as_str()) {
+            list = list.child(classic_guild_button(s, g, sc, scale));
+        }
+    }
+
+    let add_btn = el()
+        .key("dc-band-add-server")
+        .role("button")
+        .label("Add a server")
+        .cursor(Cursor::Pointer)
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .size(40.0, 40.0)
+        .radius(20.0)
+        .fill(subtle_fill())
+        .border(1.0, exo_kit::card_border())
+        .hover(hover_fill())
+        .center()
+        .motion(SPRING_QUICK)
+        .on_press(|s: &mut AppState| {
+            s.notice = Some("Join or create a server in Discord.".into());
+        })
+        .child(icon_plus(18.0, fg_muted()));
+
+    let inbox_btn = icon_btn(
+        "dc-band-inbox".into(),
+        "Inbox",
+        s.discord.inbox_open,
+        false,
+        icon_inbox(18.0, if s.discord.inbox_open { FG } else { fg_muted() }),
+    )
+    .on_press(|s: &mut AppState| {
+        if s.discord.inbox_open {
+            s.discord.inbox_open = false;
+        } else {
+            s.open_discord_inbox(crate::discord_chat_state::InboxTab::ForYou);
+        }
+    });
+
+    panel_frame(
+        col()
+            .key("dc-classic-rail")
+            .w(68.0)
+            .h_full()
+            .py(10.0)
+            .gap(6.0)
+            .items_center(),
+    )
+    .child(home_slot)
+    .child(shop_slot)
+    .child(el().w(32.0).h(1.0).my(2.0).fill(hairline()))
+    .child(list)
+    .child(el().w(32.0).h(1.0).my(2.0).fill(hairline()))
+    .child(add_btn)
+    .child(inbox_btn)
 }
 
 fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
@@ -1991,7 +2412,7 @@ fn guild_channel_row(
     let is_unread = ch.unread && !ch.muted;
 
     let name_color = if active {
-        PRIMARY_FG
+        FG
     } else if in_this_voice {
         good()
     } else if ch.muted {
@@ -2003,7 +2424,7 @@ fn guild_channel_row(
     };
 
     let icon_color = if active {
-        PRIMARY_FG
+        FG
     } else if in_this_voice {
         good()
     } else if is_unread {
@@ -2017,10 +2438,10 @@ fn guild_channel_row(
         } else {
             icon_volume(
                 15.0,
-                if active {
-                    PRIMARY_FG
-                } else if in_this_voice {
+                if in_this_voice {
                     good()
+                } else if active {
+                    FG
                 } else {
                     fg_muted()
                 },
@@ -2033,7 +2454,7 @@ fn guild_channel_row(
     } else if ch.channel_type == 5 {
         icon_sparkles(14.0, icon_color)
     } else if ch.locked {
-        icon_lock(14.0, if active { PRIMARY_FG } else { fg_muted() })
+        icon_lock(14.0, if active { FG } else { fg_muted() })
     } else {
         icon_hash(15.0, icon_color)
     };
@@ -2057,13 +2478,21 @@ fn guild_channel_row(
         .focusable(true)
         .w_full()
         .h(34.0 * sc)
-        .px(8.0)
+        .px(10.0)
         .gap(8.0)
         .center_y()
-        .radius(RADIUS_PILL)
-        .fill(if active { FG } else { TRANSPARENT })
-        .hover(if active { FG } else { hover_fill() })
-        .press(if active { FG } else { pressed_fill() })
+        .radius(RADIUS_SMALL)
+        .fill(if active { selected_fill() } else { TRANSPARENT })
+        .hover(if active {
+            selected_fill()
+        } else {
+            hover_fill()
+        })
+        .press(if active {
+            selected_fill()
+        } else {
+            pressed_fill()
+        })
         .hover_motion(Spring::NONE, SPRING_QUICK)
         .hit()
         .press_on_down()
@@ -2096,17 +2525,13 @@ fn guild_channel_row(
             head = head.child(
                 text(format!("{count}/{lim}"))
                     .font(font_px_tnum(11.0 * sc, 500.0))
-                    .color(if active {
-                        PRIMARY_FG.alpha(0.7)
-                    } else {
-                        fg_faint()
-                    }),
+                    .color(if active { fg_muted() } else { fg_faint() }),
             );
         } else if count > 0 {
             head = head.child(
                 text(count.to_string())
                     .font(font_px_tnum(11.0 * sc, 600.0))
-                    .color(if active { PRIMARY_FG } else { good() }),
+                    .color(good()),
             );
         }
     } else if ch.mentions > 0 {
@@ -4164,8 +4589,12 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
     }
 
     let sc = ui_scale(s);
+    let classic_layout = s.settings.discord_layout.as_deref() == Some("classic");
 
     let mut body = row().key("dc-body").grow(1.0).w_full().min_h(0.0).gap(GAP);
+    if classic_layout {
+        body = body.child(classic_server_rail(s, sc, scale));
+    }
 
     if s.discord.place == DiscordPlace::Servers
         && let Some(guild) = s.discord.active_guild()
@@ -4243,7 +4672,11 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
                 ),
         );
     }
-    room_col.child(server_band(s, sc, scale)).child(body)
+    if classic_layout {
+        room_col.child(body)
+    } else {
+        room_col.child(server_band(s, sc, scale)).child(body)
+    }
 }
 
 pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
@@ -4269,6 +4702,28 @@ mod tests {
     use rune::motion_gate::Run;
     use rune::render::KIND_BACKDROP_BLUR;
     use rune::{Env, Runtime};
+
+    #[test]
+    fn discord_classic_layout_switches_to_vertical_left_rail() {
+        let mut state = demo_discord_state(false);
+        state.settings.discord_layout = Some("classic".into());
+        state.switch_room(Room::Discord);
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let (rail_rect, _) = rt.presented("dc-classic-rail").expect("dc-classic-rail");
+        assert!(
+            (rail_rect[0] - 10.0).abs() <= 1.0 && (rail_rect[2] - 68.0).abs() <= 1.0,
+            "expected 68px vertical classic server rail at x=10, got {:?}",
+            rail_rect
+        );
+        assert!(
+            rt.presented("dc-server-band").is_none(),
+            "classic layout must hide the top horizontal server band"
+        );
+    }
 
     fn demo_discord_state(reduce_motion: bool) -> AppState {
         let mut state = AppState::default();

@@ -2659,6 +2659,7 @@ public sealed partial class WebHostBridge
             hdrSdrGamma = s.HdrSdrGamma,
             discordNoiseSuppression = s.DiscordNoiseSuppression,
             discordQuietWhilePlaying = s.DiscordQuietWhilePlaying,
+            discordLayout = s.DiscordLayout,
             pauseDownloadsWhilePlaying = s.PauseDownloadsWhilePlaying,
             downloadHoursStart = s.DownloadHoursStart,
             downloadHoursEnd = s.DownloadHoursEnd,
@@ -2757,6 +2758,7 @@ public sealed partial class WebHostBridge
             textColour = tc.GetString();
         if (p.TryGetProperty("textSize", out var tsz) && tsz.ValueKind == JsonValueKind.String)
             textSize = tsz.GetString();
+        string? discordLayout = p.TryGetProperty("discordLayout", out var dl) && dl.ValueKind == JsonValueKind.String ? dl.GetString() : null;
         string? whatsNewSeen = p.TryGetProperty("whatsNewSeen", out var wn) && wn.ValueKind == JsonValueKind.String ? wn.GetString() : null;
         var previousShowLibraryTools = _services.Settings.Current.ShowLibraryTools;
         // Settings validate and commit first; a rejected patch must not leave
@@ -2777,6 +2779,7 @@ public sealed partial class WebHostBridge
             hdrSdrGamma: hdrSdrGamma,
             discordNoiseSuppression: discordNoiseSuppression,
             discordQuietWhilePlaying: discordQuietWhilePlaying,
+            discordLayout: discordLayout,
             whatsNewSeen: whatsNewSeen,
             frameGenEverywhere: frameGenEverywhere,
             graphicsFeaturesBestSettings: graphicsFeaturesBestSettings);
