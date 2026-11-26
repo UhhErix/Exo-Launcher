@@ -34,18 +34,18 @@ public sealed class GameProfilesTests
         Encoding.Latin1.GetBytes(File.ReadAllText(Repo.PathOf("ExoLauncher.Tests", "Fixtures", folder, file)).ReplaceLineEndings(lineEnding));
 
     [Theory]
-    [InlineData(60, true, 59)]
-    [InlineData(120, true, 116)]
-    [InlineData(144, true, 138)]
-    [InlineData(165, true, 157)]
-    [InlineData(240, true, 224)]
-    [InlineData(360, true, 324)]
-    [InlineData(240, false, null)]
-    [InlineData(0, true, null)]
-    public void VrrFrameCapUsesReflexFormulaOnlyWhenVrrIsOn(int refresh, bool vrr, int? expected)
+    [InlineData(60, true)]
+    [InlineData(120, true)]
+    [InlineData(144, true)]
+    [InlineData(165, true)]
+    [InlineData(240, true)]
+    [InlineData(360, true)]
+    [InlineData(240, false)]
+    [InlineData(0, true)]
+    public void VrrFrameCapIsAlwaysDisabled(int refresh, bool vrr)
     {
         var pc = new GameSettings.Pc("nvidia", 7, 8, TopRefresh: refresh, Vrr: vrr);
-        Assert.Equal(expected, GameSettings.VrrFrameCap(pc));
+        Assert.Null(GameSettings.VrrFrameCap(pc));
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class GameProfilesTests
         Assert.Contains("VideoMemoryScale@0;1;38 = 0.700000", afterText, StringComparison.Ordinal);
         Assert.Contains("ShaderPreload@0;1;44 = true", afterText, StringComparison.Ordinal);
         Assert.Contains("Upscaling@0;1;36 = NVIDIA DLSS", afterText, StringComparison.Ordinal);
-        Assert.Contains("GameplayCustomFramerateLimit@0;7723;12213 = 157", afterText, StringComparison.Ordinal);
+        Assert.DoesNotContain("GameplayCustomFramerateLimit@0;7723;12213 = 157", afterText, StringComparison.Ordinal);
         Assert.Contains("PlayerCustomKeybind@0;99;99 = Space", afterText, StringComparison.Ordinal);
 
         Assert.True(GameSettings.SetKey(profile, "TextureDownload", false));
@@ -102,7 +102,7 @@ public sealed class GameProfilesTests
 
         var nvidiaGroups = GameSettings.CallOfDutyGroups(NvidiaMidVrr, codFile);
         Assert.Contains(nvidiaGroups, g => g.Id == "streaming");
-        Assert.Contains(nvidiaGroups, g => g.Id == "framecap");
+        Assert.DoesNotContain(nvidiaGroups, g => g.Id == "framecap");
         Assert.Contains(nvidiaGroups.Single(g => g.Id == "upscaler").Changes, c => c.Key == "Upscaling" && c.Value == "NVIDIA DLSS");
 
         var amdGroups = GameSettings.CallOfDutyGroups(AmdMidNoVrr, amdFile);
@@ -155,7 +155,7 @@ public sealed class GameProfilesTests
             Assert.Contains("TAARenderScaling=100\r\n", text, StringComparison.Ordinal);
             Assert.Contains("ShadowQuality=1\r\n", text, StringComparison.Ordinal);
             Assert.Contains("LODQuality=3\r\n", text, StringComparison.Ordinal);
-            Assert.Contains("FPSLimit=224\r\n", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("FPSLimit=224\r\n", text, StringComparison.Ordinal);
             Assert.Contains("CustomUnknownKey=KeepMeExact\r\n", text, StringComparison.Ordinal);
         }
 
@@ -229,7 +229,7 @@ public sealed class GameProfilesTests
         var after = File.ReadAllText(ini);
         Assert.Contains("DynamicShadows=False\r\n", after, StringComparison.Ordinal);
         Assert.Contains("bAllowD3D9MSAA=False\r\n", after, StringComparison.Ordinal);
-        Assert.Contains("CustomFPS=157\r\n", after, StringComparison.Ordinal);
+        Assert.DoesNotContain("CustomFPS=157\r\n", after, StringComparison.Ordinal);
         Assert.Contains("MaxAnisotropy=16\r\n", after, StringComparison.Ordinal);
 
         Assert.True(GameSettings.Set(profile, null, false));
@@ -277,7 +277,7 @@ public sealed class GameProfilesTests
         Assert.DoesNotContain(GameSettings.ApexLegendsGroups(AmdMidNoVrr).SelectMany(g => g.Changes),
             c => c.Key == "setting.nv_reflex");
         Assert.Contains(GameSettings.ApexLegendsAdvice(NvidiaMidVrr, "+exec autoexec"), line => line.Contains("autoexec.cfg", StringComparison.Ordinal));
-        Assert.Contains(GameSettings.ApexLegendsAdvice(NvidiaMidVrr), line => line.Contains("+fps_max 157", StringComparison.Ordinal));
+        Assert.DoesNotContain(GameSettings.ApexLegendsAdvice(NvidiaMidVrr), line => line.Contains("+fps_max 157", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -325,7 +325,7 @@ public sealed class GameProfilesTests
         Assert.Contains("ReflexMode = \"2\"", after, StringComparison.Ordinal);
         Assert.Contains("ReducedBuffering = \"1\"", after, StringComparison.Ordinal);
         Assert.Contains("DynamicRenderScale = \"0\"", after, StringComparison.Ordinal);
-        Assert.Contains("FrameRateCap = \"157\"", after, StringComparison.Ordinal);
+        Assert.DoesNotContain("FrameRateCap = \"157\"", after, StringComparison.Ordinal);
         Assert.Contains("LocalReflections = \"0\"", after, StringComparison.Ordinal);
         Assert.Contains("LocalFogDetail = \"1\"", after, StringComparison.Ordinal);
         Assert.Contains("CustomUserSetting = \"preserve-me\"", after, StringComparison.Ordinal);
@@ -466,7 +466,7 @@ public sealed class GameProfilesTests
         Assert.True(GameSettings.Set(profile, null, true));
         var afterOptions = File.ReadAllText(Path.Combine(vanillaDir, "options.txt"));
         Assert.Contains("enableVsync:false\n", afterOptions, StringComparison.Ordinal);
-        Assert.Contains("maxFps:157\n", afterOptions, StringComparison.Ordinal);
+        Assert.DoesNotContain("maxFps:157\n", afterOptions, StringComparison.Ordinal);
         Assert.Contains("renderClouds:\"false\"\n", afterOptions, StringComparison.Ordinal);
         Assert.Contains("customUnknownOption:keep_exact\n", afterOptions, StringComparison.Ordinal);
         Assert.True(GameSettings.Set(profile, null, false));

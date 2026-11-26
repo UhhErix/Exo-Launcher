@@ -4,13 +4,13 @@ use exo_rpc::{
     ActionResult, ArtworkMutationResponse, CompressProgressEvent, CompressState,
     CompressStateReply, DequeueReply, DlssNewerItem, DlssNewerReply, DlssRunResult, DlssStatus,
     DlssStatusItem, FrameGenMod, Game, GameAchievementsEvent, GameContent, GameExtras,
-    GameGetReply, GameGraphicsFeaturesState, GameOptimizeEvent, GameProperties,
+    GameGetReply, GameOptimizeEvent, GameProperties,
     GamePropertySetReply, GameSettingsState, GpuGame, HdrGame, HdrState, InstallProgress,
     InstallResponse, KeepStatus, LauncherSettings, METHOD_ART_REFETCH, METHOD_ART_REPLACE,
     METHOD_ART_RESET, METHOD_COMPRESS_ACT, METHOD_COMPRESS_STATE, METHOD_DLSS_CONSENT,
     METHOD_DLSS_DOWNLOAD_NEWER, METHOD_DLSS_FRAME_GEN, METHOD_DLSS_NEWER, METHOD_DLSS_RESTORE,
     METHOD_DLSS_STATUS, METHOD_GAME_DEQUEUE, METHOD_GAME_EXTRAS, METHOD_GAME_GET,
-    METHOD_GAME_GRAPHICS_FEATURES, METHOD_GAME_GRAPHICS_FEATURES_SET, METHOD_GAME_OPEN_FOLDER,
+    METHOD_GAME_OPEN_FOLDER,
     METHOD_GAME_PROGRESS, METHOD_GAME_PROPERTIES, METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR,
     METHOD_GAME_RESUME_DOWNLOAD, METHOD_GAME_SETTINGS, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
     METHOD_GPU_GAME, METHOD_HDR_GAME, METHOD_HDR_STATE, METHOD_KEEP_STATUS, METHOD_SETTINGS_SET,
@@ -127,10 +127,6 @@ pub struct GamePageState {
     pub settings_working: bool,
     pub settings_work_on: bool,
     pub settings_work_failed: bool,
-    pub graphics_features: Option<GameGraphicsFeaturesState>,
-    pub graphics_features_cache: HashMap<String, GameGraphicsFeaturesState>,
-    pub graphics_features_busy: Option<String>,
-    pub graphics_features_errors: HashMap<String, String>,
     pub keep_status: Option<KeepStatus>,
     pub dlss: Option<DlssStatus>,
     pub dlss_cache: HashMap<String, DlssStatus>,
@@ -329,9 +325,6 @@ impl GamePageState {
         self.settings_working = false;
         self.settings_work_on = false;
         self.settings_work_failed = false;
-        self.graphics_features = self.graphics_features_cache.get(id).cloned();
-        self.graphics_features_busy = None;
-        self.graphics_features_errors.clear();
         self.dlss = self.dlss_peek(id);
         self.dlss_loading = self.dlss.is_none();
         self.frame_gen = self.frame_gen_cache.get(id).cloned();
@@ -1594,7 +1587,6 @@ impl AppState {
 
         self.fetch_game_dlss_rpc(game_id, false, epoch);
         self.fetch_game_settings_rpc(game_id, epoch);
-        self.fetch_game_graphics_features_rpc(game_id, epoch);
         self.fetch_game_shaders_rpc(game_id, epoch);
 
         {
@@ -1756,106 +1748,6 @@ impl AppState {
                 });
             }
         });
-    }
-
-    #[cfg(windows)]
-    pub fn fetch_game_graphics_features_rpc(&self, game_id: &str, epoch: u64) {
-        let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) else {
-            return;
-        };
-        let gid = game_id.to_string();
-        rpc.call::<_, GameGraphicsFeaturesState>(
-            METHOD_GAME_GRAPHICS_FEATURES,
-            &json!({ "id": gid }),
-            move |res| {
-                handle.update(move |s, _| {
-                    if s.game_page.generation != epoch {
-                        return;
-                    }
-                    let next = res.unwrap_or_else(|_| GameGraphicsFeaturesState {
-                        ok: false,
-                        message: Some("Could not check graphics features.".into()),
-                        ..Default::default()
-                    });
-                    if next.ok {
-                        GamePageState::cache_put(
-                            &mut s.game_page.graphics_features_cache,
-                            gid,
-                            next.clone(),
-                        );
-                    }
-                    s.game_page.graphics_features = Some(next);
-                });
-            },
-        );
-    }
-
-    pub fn toggle_game_graphics_feature(
-        &mut self,
-        game_id: &str,
-        feature: &str,
-        on: bool,
-        accept_risk: bool,
-    ) {
-        self.game_page.graphics_features_busy = Some(feature.to_string());
-        self.game_page.graphics_features_errors.remove(feature);
-        #[cfg(windows)]
-        {
-            let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) else {
-                self.game_page.graphics_features_busy = None;
-                return;
-            };
-            let gid = game_id.to_string();
-            let feat = feature.to_string();
-            let epoch = self.game_page.generation;
-            rpc.call::<_, GameGraphicsFeaturesState>(
-                METHOD_GAME_GRAPHICS_FEATURES_SET,
-                &json!({
-                    "id": gid,
-                    "feature": feat,
-                    "on": on,
-                    "acceptAntiCheatRisk": accept_risk,
-                }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        if s.game_page.generation != epoch {
-                            return;
-                        }
-                        s.game_page.graphics_features_busy = None;
-                        match res {
-                            Ok(next) if next.ok => {
-                                GamePageState::cache_put(
-                                    &mut s.game_page.graphics_features_cache,
-                                    gid,
-                                    next.clone(),
-                                );
-                                s.game_page.graphics_features = Some(next);
-                            }
-                            Ok(next) => {
-                                let msg = next
-                                    .message
-                                    .clone()
-                                    .unwrap_or_else(|| "Could not save. Try again.".into());
-                                s.game_page.graphics_features_errors.insert(feat, msg);
-                                if next.features.as_ref().is_some_and(|v| !v.is_empty()) {
-                                    s.game_page.graphics_features = Some(next);
-                                }
-                            }
-                            Err(_) => {
-                                s.game_page
-                                    .graphics_features_errors
-                                    .insert(feat, "Could not save. Try again.".into());
-                            }
-                        }
-                    });
-                },
-            );
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (game_id, on, accept_risk);
-            self.game_page.graphics_features_busy = None;
-        }
     }
 
     #[cfg(windows)]

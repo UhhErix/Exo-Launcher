@@ -21,7 +21,6 @@ mod discord_voice_state;
 mod downloads;
 mod events;
 mod folders;
-mod frame_cap_row;
 mod frame_gen_row;
 mod game_actions;
 mod game_page;
@@ -968,20 +967,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     Duration::from_secs(6),
                 ) {
                     state.game_frame_gen = Some(fg);
-                }
-                if let Ok(fc) = client.call_blocking::<_, exo_rpc::GameFrameCap>(
-                    exo_rpc::METHOD_GAME_FRAME_CAP,
-                    &serde_json::json!({ "id": gid }),
-                    Duration::from_secs(6),
-                ) {
-                    state.game_frame_cap = Some(fc);
-                }
-                if let Ok(gf) = client.call_blocking::<_, exo_rpc::GameGraphicsFeaturesState>(
-                    exo_rpc::METHOD_GAME_GRAPHICS_FEATURES,
-                    &serde_json::json!({ "id": gid }),
-                    Duration::from_secs(6),
-                ) {
-                    state.game_page.graphics_features = Some(gf);
                 }
                 if let Ok(gs) = client.call_blocking::<_, exo_rpc::GameSettingsState>(
                     exo_rpc::METHOD_GAME_SETTINGS,

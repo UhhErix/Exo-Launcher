@@ -226,13 +226,13 @@ public sealed class GpuProfileTests
     }
 
     [Fact]
-    public void GsyncStaysOnForVrrDisplaysAndSupportsLowLatencyChoicesAndDetails()
+    public void GsyncAlwaysStaysOffAndSupportsLowLatencyChoicesAndDetails()
     {
         var vrrWrites = GpuProfile.Nvidia(new GpuProfile.Variant(30, Vrr: true, LowLatency: GpuProfile.LowLatencyUltra), 40, Every, Nothing);
-        Assert.Equal(1u, vrrWrites[GpuProfile.GsyncFeature]);
-        Assert.Equal(1u, vrrWrites[GpuProfile.GsyncGlobalMode]);
-        Assert.Equal(1u, vrrWrites[GpuProfile.GsyncAppMode]);
-        Assert.Equal(1u, vrrWrites[GpuProfile.VrrControl]);
+        Assert.Equal(0u, vrrWrites[GpuProfile.GsyncFeature]);
+        Assert.Equal(0u, vrrWrites[GpuProfile.GsyncGlobalMode]);
+        Assert.Equal(0u, vrrWrites[GpuProfile.GsyncAppMode]);
+        Assert.Equal(0u, vrrWrites[GpuProfile.VrrControl]);
         Assert.Equal(2u, vrrWrites[LowLatency]);
         Assert.Equal(1u, vrrWrites[UltraLowLatency]);
         Assert.Equal(1u, vrrWrites[PreRendered]);
@@ -250,6 +250,6 @@ public sealed class GpuProfileTests
         var details = GpuProfile.NvidiaDetails(new GpuProfile.Variant(30, Vrr: true, LowLatency: GpuProfile.LowLatencyOn), 40, vrrWrites, vrrWrites, [], rebar: true);
         Assert.Equal("On", details.Single(d => d.Key == "rebar").Value);
         Assert.Contains("Less than 50 GB free", details.Single(d => d.Key == "shaderCache").Note);
-        Assert.Equal("Full screen", details.Single(d => d.Key == "gsync").Value);
+        Assert.Equal("Off", details.Single(d => d.Key == "gsync").Value);
     }
 }

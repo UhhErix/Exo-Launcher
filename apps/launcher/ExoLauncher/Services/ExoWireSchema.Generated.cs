@@ -7,19 +7,19 @@ namespace ExoLauncher.Services;
 internal static class ExoWireSchema
 {
     internal const int HostContractVersion = 1;
-    internal const ulong SchemaHash = 0x729891a3fdfe3441UL;
+    internal const ulong SchemaHash = 0x10c27abab755d112UL;
     internal const ushort UnknownId = 0;
 
-    internal const ushort MethodLibraryGet = 259;
-    internal const ushort MethodLibraryRefresh = 260;
-    internal const ushort MethodGameGet = 203;
-    internal const ushort MethodGameExtras = 200;
-    internal const ushort MethodShellBootstrap = 310;
+    internal const ushort MethodLibraryGet = 256;
+    internal const ushort MethodLibraryRefresh = 257;
+    internal const ushort MethodGameGet = 200;
+    internal const ushort MethodGameExtras = 198;
+    internal const ushort MethodShellBootstrap = 307;
     internal const ushort MethodRpcCancel = 65535;
 
     internal const ushort EventAutopilotLive = 7;
-    internal const ushort EventInstallProgress = 66;
-    internal const ushort EventLibraryUpdated = 70;
+    internal const ushort EventInstallProgress = 65;
+    internal const ushort EventLibraryUpdated = 69;
 
     internal static readonly string[] Methods =
     [
@@ -219,11 +219,8 @@ internal static class ExoWireSchema
         "friends.badge",
         "game.autoUpdate",
         "game.cancelInstall",
-        "game.capLab.cancel",
-        "game.capLab.run",
         "game.dequeue",
         "game.extras",
-        "game.frameCap",
         "game.frameGen",
         "game.get",
         "game.graphicsFeatures",
@@ -450,7 +447,6 @@ internal static class ExoWireSchema
         "drivers.step",
         "exoAccount.changed",
         "game.achievements",
-        "game.capLab",
         "game.optimizeHeld",
         "game.optimizedAgain",
         "game.runState",

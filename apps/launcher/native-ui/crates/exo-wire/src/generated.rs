@@ -1,18 +1,18 @@
 pub const HOST_CONTRACT_VERSION: u32 = 1;
-pub const SCHEMA_HASH: u64 = 0x729891a3fdfe3441;
+pub const SCHEMA_HASH: u64 = 0x10c27abab755d112;
 pub const METHOD_ID_UNKNOWN: u16 = 0;
 pub const EVENT_ID_UNKNOWN: u16 = 0;
 
-pub const METHOD_ID_LIBRARY_GET: u16 = 259;
-pub const METHOD_ID_LIBRARY_REFRESH: u16 = 260;
-pub const METHOD_ID_GAME_GET: u16 = 203;
-pub const METHOD_ID_GAME_EXTRAS: u16 = 200;
-pub const METHOD_ID_SHELL_BOOTSTRAP: u16 = 310;
+pub const METHOD_ID_LIBRARY_GET: u16 = 256;
+pub const METHOD_ID_LIBRARY_REFRESH: u16 = 257;
+pub const METHOD_ID_GAME_GET: u16 = 200;
+pub const METHOD_ID_GAME_EXTRAS: u16 = 198;
+pub const METHOD_ID_SHELL_BOOTSTRAP: u16 = 307;
 pub const METHOD_ID_RPC_CANCEL: u16 = 65535;
 
 pub const EVENT_ID_AUTOPILOT_LIVE: u16 = 7;
-pub const EVENT_ID_INSTALL_PROGRESS: u16 = 66;
-pub const EVENT_ID_LIBRARY_UPDATED: u16 = 70;
+pub const EVENT_ID_INSTALL_PROGRESS: u16 = 65;
+pub const EVENT_ID_LIBRARY_UPDATED: u16 = 69;
 
 pub const METHODS: &[&str] = &[
     "accounts.add",
@@ -211,11 +211,8 @@ pub const METHODS: &[&str] = &[
     "friends.badge",
     "game.autoUpdate",
     "game.cancelInstall",
-    "game.capLab.cancel",
-    "game.capLab.run",
     "game.dequeue",
     "game.extras",
-    "game.frameCap",
     "game.frameGen",
     "game.get",
     "game.graphicsFeatures",
@@ -441,7 +438,6 @@ pub const EVENTS: &[&str] = &[
     "drivers.step",
     "exoAccount.changed",
     "game.achievements",
-    "game.capLab",
     "game.optimizeHeld",
     "game.optimizedAgain",
     "game.runState",

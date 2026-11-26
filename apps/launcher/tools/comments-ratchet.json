@@ -600,7 +600,7 @@
     "ExoLauncher/Helpers/GpuDriver.cs": 9,
     "ExoLauncher/Helpers/GpuProfile.Intel.cs": 23,
     "ExoLauncher/Helpers/GpuProfile.Radeon.cs": 33,
-    "ExoLauncher/Helpers/GpuProfile.cs": 121,
+    "ExoLauncher/Helpers/GpuProfile.cs": 119,
     "ExoLauncher/Helpers/GpuSensors.cs": 5,
     "ExoLauncher/Helpers/GpuStats.cs": 18,
     "ExoLauncher/Helpers/GraphicsCatalog.cs": 39,

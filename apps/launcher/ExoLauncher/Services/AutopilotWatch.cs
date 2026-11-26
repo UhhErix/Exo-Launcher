@@ -29,10 +29,7 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
     internal const double ReportSeconds = 60;
     internal static readonly TimeSpan StandbyPurgeCooldown = TimeSpan.FromSeconds(60);
 
-    internal static AutopilotWatch Shared { get; } = new(AutopilotSampler.Open, report => AutopilotReports.Add(AutopilotReports.DefaultPath, report, DateTime.UtcNow), () => DateTime.UtcNow, StandbyPurger.TryPurge, () => Autopilot.Settings.On)
-    {
-        OnSecond = FrameCapService.Shared.RecordSecond,
-    };
+    internal static AutopilotWatch Shared { get; } = new(AutopilotSampler.Open, report => AutopilotReports.Add(AutopilotReports.DefaultPath, report, DateTime.UtcNow), () => DateTime.UtcNow, StandbyPurger.TryPurge, () => Autopilot.Settings.On);
 
     /// <summary>A report was kept; the bridge tells the page.</summary>
     internal static event Action<AutopilotReport>? Reported;

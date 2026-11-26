@@ -209,16 +209,8 @@ fn device_showcase_card_sized(
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .linear_gradient(
-            std::f32::consts::PI,
-            [
-                (0.0, exo_kit::srgb(19, 21, 27, 1.0)),
-                (0.55, exo_kit::surface_elevated()),
-                (1.0, exo_kit::srgb(10, 11, 14, 1.0)),
-            ],
-        )
+        .fill(BG)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(6.0, 20.0, BG.alpha(0.50))
         .hover(exo_kit::surface_elevated_hi())
         .hover_motion(SPRING_QUICK, SPRING_MOVE)
         .motion(SPRING_MOVE)

@@ -33,6 +33,13 @@ internal static partial class GameGraphicsFeatures
         FeatureHiddenSettings,
     ];
 
+    internal static readonly string[] OptimizeFeatureIds =
+    [
+        FeatureUpscalers,
+        FeatureReflex,
+        FeatureHiddenSettings,
+    ];
+
     internal enum EngineKind
     {
         Generic,
@@ -331,29 +338,120 @@ internal static partial class GameGraphicsFeatures
         return Inspect(game, ctx);
     }
 
-    internal static int ApplyBestSettingsSafe(IEnumerable<GameEntry> games, GameSettings.Pc pc, string? stateRoot = null)
+    internal static IReadOnlyList<FeatureRow> OptimizeEligibleFeatures(
+        GameEntry game,
+        RuntimeContext ctx,
+        bool driverOnly)
     {
-        var applied = 0;
-        var root = stateRoot ?? DefaultStateRoot;
-        foreach (var game in games)
-        {
-            if (!game.Installed || string.IsNullOrEmpty(game.Path)) continue;
-            var ac = AntiCheatCheck.Cached(game);
-            if (!AllowsConfigOrDriver(game, ac)) continue;
-            var ctx = new RuntimeContext(pc, ac, null, false, root);
-            var snapshot = Inspect(game, ctx);
-            foreach (var row in snapshot.Features)
-            {
-                if (row.Id != FeatureReflex) continue;
-                if (!row.CanToggle || row.State != StateOff) continue;
-                if (row.RouteKind == RouteDll && ac.Kind != AntiCheatCheck.Kind.None) continue;
-                if (row.RouteKind == RouteDll) continue;
-                var res = Set(game, row.Id, true, false, null, ctx);
-                if (res.Ok) applied++;
-            }
-        }
-        return applied;
+        if (!game.Installed || string.IsNullOrEmpty(game.Path)) return [];
+        if (!AllowsConfigOrDriver(game, ctx.AntiCheat)) return [];
+        var snapshot = Inspect(game, ctx);
+        return snapshot.Features
+            .Where(row => OptimizeFeatureIds.Contains(row.Id, StringComparer.OrdinalIgnoreCase)
+                && row.CanToggle
+                && (driverOnly ? row.RouteKind == RouteDriver : row.RouteKind is RouteConfig or RouteDriver))
+            .ToList();
     }
+
+    internal static GameSettings.GroupState? OptimizeGroupState(
+        GameEntry game,
+        RuntimeContext ctx,
+        bool driverOnly)
+    {
+        var eligible = OptimizeEligibleFeatures(game, ctx, driverOnly);
+        if (eligible.Count == 0) return null;
+        PersistedState state;
+        lock (Gate) state = LoadState(ctx.StateRoot);
+        state.Games.TryGetValue(game.Id, out var record);
+        var on = eligible.All(row => row.State == StateOn);
+        var exo = record is not null && eligible.Any(row => record.EnabledFeatures.Contains(row.Id));
+        var label = "Graphics features: " + string.Join(", ", eligible.Select(row => row.Name));
+        var changes = eligible
+            .Select(row => new GameSettings.ChangePreview(
+                row.Name,
+                row.State == StateOn ? "On" : "Off",
+                row.Route,
+                row.State == StateOn,
+                record?.EnabledFeatures.Contains(row.Id) == true))
+            .ToList();
+        return new GameSettings.GroupState("graphicsFeatures", label, on, exo, changes);
+    }
+
+    internal static string? ApplyOptimizeFeatures(
+        GameEntry game,
+        bool on,
+        RuntimeContext ctx,
+        bool driverOnly)
+    {
+        var eligible = OptimizeEligibleFeatures(game, ctx, driverOnly);
+        if (eligible.Count == 0 && on) return null;
+        if (ctx.Running) return $"Close {game.Title} first.";
+        var detected = Detect(game);
+        lock (Gate)
+        {
+            var state = LoadState(ctx.StateRoot);
+            if (!state.Games.TryGetValue(game.Id, out var record))
+            {
+                if (!on) return null;
+                record = new GameRecord();
+                state.Games[game.Id] = record;
+            }
+            var updatedSet = new HashSet<string>(record.EnabledFeatures, StringComparer.OrdinalIgnoreCase);
+            if (on)
+            {
+                foreach (var row in eligible) updatedSet.Add(row.Id);
+            }
+            else
+            {
+                foreach (var id in OptimizeFeatureIds) updatedSet.Remove(id);
+            }
+            var error = ReconcileGameChanges(game, detected, ctx, record, updatedSet);
+            if (error is not null) return error;
+            record.EnabledFeatures = updatedSet;
+            if (record.EnabledFeatures.Count == 0 && record.FileBackups.Count == 0 && record.NvidiaSet.Count == 0)
+                state.Games.Remove(game.Id);
+            SaveState(ctx.StateRoot, state);
+        }
+        return null;
+    }
+
+    internal static int RetireFrameCapOverrides(string? stateRoot = null)
+    {
+        var root = stateRoot ?? DefaultStateRoot;
+        var cleared = 0;
+        lock (Gate)
+        {
+            var state = LoadState(root);
+            var dirty = false;
+            foreach (var (gameId, record) in state.Games.ToList())
+            {
+                if (!record.NvidiaSet.ContainsKey(GraphicsCatalog.FrameRateLimit)) continue;
+                if (!string.IsNullOrEmpty(record.NvidiaProgramExe) && NvidiaProfiles.GameProfilesUsable)
+                {
+                    var before = record.NvidiaBefore.GetValueOrDefault(GraphicsCatalog.FrameRateLimit);
+                    var program = MakeGameProgram(record.NvidiaProgramExe, record.NvidiaTitle ?? Path.GetFileNameWithoutExtension(record.NvidiaProgramExe));
+                    var res = NvidiaProfiles.ForGameLive(
+                        program,
+                        [GraphicsCatalog.FrameRateLimit],
+                        new Dictionary<uint, uint?> { [GraphicsCatalog.FrameRateLimit] = before });
+                    if (!res.Ok)
+                    {
+                        AppLog.Warn($"Graphics features cap retire failed for {gameId}: {res.Message}");
+                        continue;
+                    }
+                    AppLog.Info($"Graphics features: retired legacy NVIDIA frame cap for {record.NvidiaTitle ?? gameId}.");
+                }
+                record.NvidiaSet.Remove(GraphicsCatalog.FrameRateLimit);
+                record.NvidiaBefore.Remove(GraphicsCatalog.FrameRateLimit);
+                dirty = true;
+                cleared++;
+            }
+            if (dirty) SaveState(root, state);
+        }
+        return cleared;
+    }
+
+    internal static int ApplyBestSettingsSafe(IEnumerable<GameEntry> games, GameSettings.Pc pc, string? stateRoot = null) => 0;
 
     internal static RuntimeContext CreateLiveContext(GameEntry game, SettingsService? settings)
     {

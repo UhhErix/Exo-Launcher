@@ -18,13 +18,11 @@ use exo_kit::SPRING_MOVE;
 use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
-    CapLabActionReply, CapLabStatus, CaptureLiveState, CaptureSavedEvent, CaptureStatusReply,
-    DiscordFriend, ExoAccountState, FrameCapBackend, FrameCapStutter, FrameCapSuggestion,
-    FrameCapTier, FrameGenRoute, Game, GameExtras, GameFrameCap, GameFrameGen, GameProperties,
+    CaptureLiveState, CaptureSavedEvent, CaptureStatusReply,
+    DiscordFriend, ExoAccountState, FrameGenRoute, Game, GameExtras, GameFrameGen, GameProperties,
     GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
     LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
-    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_CAP_LAB_CANCEL, METHOD_GAME_CAP_LAB_RUN,
-    METHOD_GAME_FRAME_CAP, METHOD_GAME_FRAME_GEN, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH,
+    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_FRAME_GEN, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH,
     METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH,
     METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback,
     MusicVolumeEvent, ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame, StoreHome,
@@ -681,10 +679,6 @@ pub struct AppState {
     pub frame_gen_menu_open: bool,
     pub frame_gen_busy: bool,
     pub frame_gen_confirm: Option<(String, String, Option<String>)>,
-    pub game_frame_cap: Option<GameFrameCap>,
-    pub frame_cap_menu_open: bool,
-    pub frame_cap_busy: bool,
-    pub frame_cap_error: Option<String>,
     pub props_open: bool,
     pub game_props_tab: usize,
     pub props_launch_opts: TextEdit,
@@ -836,87 +830,6 @@ impl AppState {
             frame_gen_menu_open: false,
             frame_gen_busy: false,
             frame_gen_confirm: None,
-            game_frame_cap: Some(GameFrameCap {
-                ok: true,
-                game_id: "steam:1091500".into(),
-                refresh_hz: 144.0,
-                vrr: true,
-                in_vrr_range: true,
-                vrr_floor_hz: 48,
-                fg_multiplier: 1,
-                vendor: "nvidia".into(),
-                backend: "nvidia_drs".into(),
-                backend_label: "NVIDIA Driver (DRS)".into(),
-                backend_available: true,
-                backends: vec![FrameCapBackend {
-                    id: "nvidia_drs".into(),
-                    vendor: "nvidia".into(),
-                    label: "NVIDIA Driver (DRS)".into(),
-                    available: true,
-                    per_game_native: true,
-                    latency_note: "Low latency per-game DRS Max Frame Rate.".into(),
-                    anti_cheat_note: "External driver profile; safe on every anti-cheat class."
-                        .into(),
-                    reason: None,
-                }],
-                selected_tier: "off".into(),
-                tiers: vec![
-                    FrameCapTier {
-                        id: "smooth".into(),
-                        label: "Smooth".into(),
-                        cap_fps: Some(102),
-                        output_fps: Some(102),
-                        predicted_variance_ms2: 0.25,
-                        predicted_std_dev_ms: 0.5,
-                        summary: "1% low · 102 fps".into(),
-                        ..Default::default()
-                    },
-                    FrameCapTier {
-                        id: "balanced".into(),
-                        label: "Balanced".into(),
-                        cap_fps: Some(120),
-                        output_fps: Some(120),
-                        predicted_variance_ms2: 0.9,
-                        predicted_std_dev_ms: 0.95,
-                        summary: "5% low · 120 fps".into(),
-                        ..Default::default()
-                    },
-                    FrameCapTier {
-                        id: "max".into(),
-                        label: "Max (VRR)".into(),
-                        cap_fps: Some(138),
-                        output_fps: Some(138),
-                        predicted_variance_ms2: 2.25,
-                        predicted_std_dev_ms: 1.5,
-                        summary: "VRR ceiling · 138 fps".into(),
-                        ..Default::default()
-                    },
-                ],
-                suggestion: FrameCapSuggestion {
-                    tier: "max".into(),
-                    cap_fps: Some(138),
-                    reason: "VRR is active at 144 Hz; 138 fps stays below the V-Sync ceiling."
-                        .into(),
-                },
-                stutter: FrameCapStutter {
-                    top_cause: "none".into(),
-                    top_cause_label: "None".into(),
-                    summary: "No gameplay frame trace recorded yet.".into(),
-                    ..Default::default()
-                },
-                ab: CapLabStatus {
-                    game_id: "steam:1091500".into(),
-                    status: "idle".into(),
-                    total_seconds: 20,
-                    noise_threshold_percent: 3.0,
-                    ..Default::default()
-                },
-                word: "Off · 138 fps VRR cap available".into(),
-                ..Default::default()
-            }),
-            frame_cap_menu_open: false,
-            frame_cap_busy: false,
-            frame_cap_error: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -999,7 +912,6 @@ impl AppState {
             inflight_discord_channel: None,
         };
         crate::library_state::register_library_wp2_events(&mut s);
-        crate::frame_cap_row::register_events(&mut s);
         crate::gpu_tuning::register_events(&mut s);
         crate::pc_hdr::register_events(&mut s);
         s.selected_game_id = s.home_deck_games().first().map(|g| g.id.clone());
@@ -1044,10 +956,6 @@ impl AppState {
             frame_gen_menu_open: false,
             frame_gen_busy: false,
             frame_gen_confirm: None,
-            game_frame_cap: None,
-            frame_cap_menu_open: false,
-            frame_cap_busy: false,
-            frame_cap_error: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -1118,7 +1026,6 @@ impl AppState {
             inflight_discord_channel: None,
         };
         crate::library_state::register_library_wp2_events(&mut s);
-        crate::frame_cap_row::register_events(&mut s);
         crate::gpu_tuning::register_events(&mut s);
         crate::pc_hdr::register_events(&mut s);
         s
@@ -2301,9 +2208,6 @@ impl AppState {
         self.frame_gen_menu_open = false;
         self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
-        self.frame_cap_menu_open = false;
-        self.frame_cap_busy = false;
-        self.frame_cap_error = None;
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
@@ -2311,7 +2215,6 @@ impl AppState {
         self.game_page.selected_variant_id = None;
         if self.status != HostStatus::Standalone {
             self.game_frame_gen = None;
-            self.game_frame_cap = None;
         }
         self.load_game_page_data(id);
         #[cfg(windows)]
@@ -2334,27 +2237,6 @@ impl AppState {
                     h3.update(move |s, _| {
                         if s.open_game_id.as_deref() == Some(gid3.as_str()) {
                             s.game_frame_gen = Some(fg);
-                        }
-                    });
-                },
-            );
-
-            let gid4 = id.to_string();
-            let h4 = handle.clone();
-            rpc.call::<_, GameFrameCap>(
-                METHOD_GAME_FRAME_CAP,
-                &json!({ "id": gid4 }),
-                move |res| {
-                    let fc = res.unwrap_or_else(|_| GameFrameCap {
-                        ok: false,
-                        game_id: gid4.clone(),
-                        word: "Could not check".into(),
-                        bad: true,
-                        ..Default::default()
-                    });
-                    h4.update(move |s, _| {
-                        if s.open_game_id.as_deref() == Some(gid4.as_str()) {
-                            s.game_frame_cap = Some(fc);
                         }
                     });
                 },
@@ -2439,169 +2321,6 @@ impl AppState {
         }
     }
 
-    pub fn set_game_frame_cap(
-        &mut self,
-        id: &str,
-        tier: Option<&str>,
-        cap_fps: Option<i32>,
-        backend: Option<&str>,
-    ) {
-        self.frame_cap_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.frame_cap_busy = true;
-            let gid = id.to_string();
-            let mut body = serde_json::Map::new();
-            body.insert("id".into(), json!(gid));
-            if let Some(t) = tier {
-                body.insert("tier".into(), json!(t));
-            }
-            if let Some(fps) = cap_fps {
-                body.insert("capFps".into(), json!(fps));
-            }
-            if let Some(b) = backend {
-                body.insert("backend".into(), json!(b));
-            }
-            rpc.call::<_, GameFrameCap>(
-                METHOD_GAME_FRAME_CAP,
-                &serde_json::Value::Object(body),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.frame_cap_busy = false;
-                        if s.open_game_id.as_deref() == Some(gid.as_str()) {
-                            if let Ok(fc) = res {
-                                let ok = fc.ok;
-                                let msg = fc.message.clone();
-                                if !fc.tiers.is_empty() {
-                                    s.game_frame_cap = Some(fc);
-                                }
-                                if !ok {
-                                    s.frame_cap_error = Some(
-                                        msg.unwrap_or_else(|| "Could not save frame cap.".into()),
-                                    );
-                                }
-                            } else {
-                                s.frame_cap_error = Some("Could not save frame cap.".into());
-                            }
-                        }
-                    });
-                },
-            );
-            return;
-        }
-        if let Some(ref mut fc) = self.game_frame_cap {
-            if let Some(t) = tier {
-                fc.selected_tier = t.to_string();
-                if t == "off" || t == "uncapped" {
-                    fc.active_cap_fps = None;
-                    fc.word = if t == "uncapped" {
-                        "Uncapped".into()
-                    } else {
-                        "Off".into()
-                    };
-                    fc.good = t == "uncapped";
-                } else if t == "refresh" {
-                    fc.active_cap_fps = cap_fps;
-                    fc.word = format!("{} fps · {}", cap_fps.unwrap_or(0), fc.backend_label);
-                    fc.good = true;
-                } else if let Some(found) = fc.tiers.iter().find(|ti| ti.id == t) {
-                    fc.active_cap_fps = found.cap_fps;
-                    fc.word = format!("{} fps · {}", found.cap_fps.unwrap_or(0), fc.backend_label);
-                    fc.good = true;
-                }
-            }
-            if let Some(fps) = cap_fps {
-                fc.active_cap_fps = Some(fps);
-            }
-            if let Some(b) = backend {
-                fc.backend = b.to_string();
-                if let Some(found) = fc.backends.iter().find(|bk| bk.id == b) {
-                    fc.backend_label = found.label.clone();
-                }
-            }
-        }
-    }
-
-    pub fn run_cap_lab(&mut self, id: &str, cap_a_fps: i32, cap_b_fps: i32) {
-        self.frame_cap_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.frame_cap_busy = true;
-            let gid = id.to_string();
-            rpc.call::<_, CapLabActionReply>(
-                METHOD_GAME_CAP_LAB_RUN,
-                &json!({ "id": gid, "capAFps": cap_a_fps, "capBFps": cap_b_fps }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.frame_cap_busy = false;
-                        if let Ok(reply) = res {
-                            if let Some(ref mut fc) = s.game_frame_cap {
-                                fc.ab = reply.ab;
-                            }
-                            if !reply.ok {
-                                s.frame_cap_error = Some(
-                                    reply
-                                        .message
-                                        .unwrap_or_else(|| "Could not start A/B test.".into()),
-                                );
-                            }
-                        } else {
-                            s.frame_cap_error = Some("Could not start A/B test.".into());
-                        }
-                    });
-                },
-            );
-            return;
-        }
-        if let Some(ref mut fc) = self.game_frame_cap {
-            fc.ab.status = "running".into();
-            fc.ab.cap_a_fps = cap_a_fps;
-            fc.ab.cap_b_fps = cap_b_fps;
-            fc.ab.current_arm = Some("A".into());
-            fc.ab.elapsed_seconds = 0;
-            fc.ab.total_seconds = 20;
-        }
-    }
-
-    pub fn cancel_cap_lab(&mut self, id: &str) {
-        self.frame_cap_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.frame_cap_busy = true;
-            let gid = id.to_string();
-            rpc.call::<_, CapLabActionReply>(
-                METHOD_GAME_CAP_LAB_CANCEL,
-                &json!({ "id": gid }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.frame_cap_busy = false;
-                        match res {
-                            Ok(reply) => {
-                                if let Some(ref mut fc) = s.game_frame_cap {
-                                    fc.ab = reply.ab;
-                                }
-                                if !reply.ok {
-                                    s.frame_cap_error =
-                                        Some(reply.message.unwrap_or_else(|| {
-                                            "Could not cancel A/B test.".into()
-                                        }));
-                                }
-                            }
-                            Err(_) => {
-                                s.frame_cap_error = Some("Could not cancel A/B test.".into());
-                            }
-                        }
-                    });
-                },
-            );
-            return;
-        }
-        if let Some(ref mut fc) = self.game_frame_cap {
-            fc.ab.status = "cancelled".into();
-            fc.ab.reason = Some("Cancelled by user.".into());
-        }
-    }
-
     pub fn close_game_page_tx(&mut self, tx: &mut Tx) {
         tx.unclipped_flights();
         self.close_game_page();
@@ -2613,9 +2332,6 @@ impl AppState {
         self.frame_gen_menu_open = false;
         self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
-        self.frame_cap_menu_open = false;
-        self.frame_cap_busy = false;
-        self.frame_cap_error = None;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
         self.game_page.pending_choice = None;

@@ -141,11 +141,10 @@ internal static partial class GameSettings
 
     internal static IReadOnlyList<string> ApexLegendsAdvice(Pc pc, string? launchOptions = null)
     {
-        List<string> notes = [];
-        if (VrrFrameCap(pc) is { } cap)
-            notes.Add($"Add +fps_max {cap.ToString(CultureInfo.InvariantCulture)} -dev in Steam or EA launch options for a VRR frame cap and faster startup.");
-        else
-            notes.Add("Optional safe launch options: -dev skips intro videos; add +fps_max <cap> only if you want an in-game cap.");
+        List<string> notes =
+        [
+            "Optional safe launch options: -dev skips intro videos.",
+        ];
         if (LaunchOptionsReferenceAutoexec(launchOptions))
             notes.Add("Your launch options reference autoexec.cfg; Exo leaves install-folder cfg files untouched under EAC. Keep only standard cvars and never use movement or superglide cfg chains.");
         else

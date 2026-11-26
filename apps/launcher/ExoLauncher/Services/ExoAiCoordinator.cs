@@ -165,8 +165,6 @@ internal sealed class ExoAiCoordinator : IDisposable
         try { gpuAnswer = _readGpuAnswer(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: GPU process read skipped: " + ex.GetType().Name); }
         string? capSuggestion = null;
-        try { capSuggestion = FrameCapService.Shared.SuggestSentenceFor(gaming.GameId); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: cap suggestion skipped: " + ex.GetType().Name); }
         lock (_gate)
         {
             return new ExoAiSnapshot(

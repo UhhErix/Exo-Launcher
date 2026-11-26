@@ -53,17 +53,11 @@ internal static partial class GameSettings
             ["RocketLeague", "RocketLeague_EAC"], Nvidia: RocketLeagueNvidia, Format: ParseRocketLeague, Program: RocketLeagueProgram, Mark: IniVersion,
             Advice: _ => RocketLeagueAdvice(pc));
 
-    internal static IReadOnlyList<string> RocketLeagueAdvice(Pc pc)
-    {
-        List<string> notes =
-        [
-            "Display mode and V-Sync are stored in Rocket League's encrypted account save; set Borderless or Fullscreen and V-Sync off in-game.",
-            "Dynamic shadows are off for consistent frame pacing; keep DynamicShadows on if you read ball height from floor shadows.",
-        ];
-        if (!pc.Vrr)
-            notes.Add("Leave CustomFPS uncapped or match your display in-game when variable refresh rate is off.");
-        return notes;
-    }
+    internal static IReadOnlyList<string> RocketLeagueAdvice(Pc pc) =>
+    [
+        "Display mode and V-Sync are stored in Rocket League's encrypted account save; set Borderless or Fullscreen and V-Sync off in-game.",
+        "Dynamic shadows are off for consistent frame pacing; keep DynamicShadows on if you read ball height from floor shadows.",
+    ];
 
     /// <summary>RocketLeague.exe in the copy's own install (NVIDIA's Rocket League profile is that program in Epic's and Steam's alike).</summary>
     internal static string? RocketLeagueProgram(Models.GameEntry game)

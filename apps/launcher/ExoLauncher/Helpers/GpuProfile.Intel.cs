@@ -48,7 +48,7 @@ internal static partial class GpuProfile
         Write(Keys.Endurance, 0);
         Write(Keys.Sharpening, 0);
         Write(Keys.LowLatency, LowLatencyValue(lowLatency));
-        Write(Keys.AdaptiveSync, 1);
+        Write(Keys.AdaptiveSync, 0);
         Write(Keys.ShaderDownload, 1);
         return writes;
     }
@@ -58,11 +58,10 @@ internal static partial class GpuProfile
     {
         bool Has(string key) => writes.Any(write => write.Key == key);
         var on = new List<string>();
-        if (Has(Keys.AdaptiveSync)) on.Add("Adaptive Sync on");
         if (Has(Keys.LowLatency))
             on.Add(lowLatency switch { LowLatencyBoost => "Low latency with boost", LowLatencyOff => "Low latency off", _ => "Low latency on" });
         if (Has(Keys.ShaderDownload)) on.Add("Intel's prebuilt shaders");
-        var off = new (string Key, string Name)[] { (Keys.Endurance, "Endurance Gaming"), (Keys.Sharpening, "sharpening") }
+        var off = new (string Key, string Name)[] { (Keys.AdaptiveSync, "Adaptive Sync"), (Keys.Endurance, "Endurance Gaming"), (Keys.Sharpening, "sharpening") }
             .Where(item => Has(item.Key)).Select(item => item.Name).ToList();
         var parts = new List<string>();
         if (on.Count > 0) parts.Add(string.Join(", ", on));

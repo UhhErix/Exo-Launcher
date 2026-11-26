@@ -1888,7 +1888,6 @@ pub enum HostEvent {
     ExoAccountChanged,
     AutopilotReport(crate::events::AutopilotReportEvent),
     AutopilotLive(Option<crate::pc_types::AutopilotLive>),
-    GameCapLab(Box<CapLabStatus>),
     ShadersChanged,
     ShadersEvent(crate::settings_types::ShadersEventPayload),
     AccountsProgress(crate::settings_types::AccountsProgressEvent),
