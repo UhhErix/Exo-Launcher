@@ -39,6 +39,9 @@ pub enum NoticeActionKind {
         notice_id: u64,
     },
     CancelPowerGuardShutdown,
+    ClosePowerGuardGame {
+        game_id: String,
+    },
     ReenableSystemEq {
         notice_key: String,
     },
@@ -824,6 +827,10 @@ impl AppState {
             }
             NoticeActionKind::CancelPowerGuardShutdown => {
                 self.cancel_power_guard_shutdown();
+            }
+            NoticeActionKind::ClosePowerGuardGame { game_id } => {
+                self.dismiss_notice_by_key("power-guard-stage2");
+                self.stop_game_held(&game_id);
             }
             NoticeActionKind::ReenableSystemEq { notice_key } => {
                 self.dismiss_notice_by_key(&notice_key);

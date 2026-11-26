@@ -31,7 +31,7 @@ pub fn exo_guard_policy() -> GuardPolicy {
     GuardPolicy {
         alerts_enabled: true,
         opt_in_lower_power_limit: true,
-        opt_in_close_game: true,
+        opt_in_close_game: false,
         opt_in_shutdown_pc: false,
         ..GuardPolicy::default()
     }
@@ -390,19 +390,30 @@ impl AppState {
                     .iter()
                     .find(|g| g.is_running)
                     .map(|g| (g.id.clone(), g.title.clone()));
-                let msg: String = if self.pc.power_guard_ui.dev_mock_actions {
+                let (event, msg, action) = if self.pc.power_guard_ui.dev_mock_actions {
                     self.pc.power_guard_ui.mock_game_closes += 1;
-                    match running_id {
+                    let msg = match running_id {
                         Some((_, name)) => format!("Mock closed {name} after sustained fault"),
                         None => "Mock game close triggered (no running game)".into(),
-                    }
+                    };
+                    ("game-closed", msg, None)
                 } else if let Some((gid, name)) = running_id {
-                    self.stop_game_held(&gid);
-                    format!("Closing {name} after sustained GPU fault")
+                    (
+                        "game-close-offered",
+                        format!("The GPU fault keeps going. Close {name} to protect your PC?"),
+                        Some(NoticeActionSpec {
+                            label: format!("Close {name}"),
+                            primary: false,
+                            danger: true,
+                            busy: false,
+                            confirm: None,
+                            kind: NoticeActionKind::ClosePowerGuardGame { game_id: gid },
+                        }),
+                    )
                 } else {
-                    "No running game to close".into()
+                    ("game-closed", "No running game to close".into(), None)
                 };
-                self.record_power_guard_event("game-closed", msg.clone());
+                self.record_power_guard_event(event, msg.clone());
                 self.pc.power_guard_ui.live.last_action_note = Some(msg.clone());
                 self.push_rich_notice(RichNoticeSpec {
                     key_id: Some("power-guard-stage2".into()),
@@ -411,6 +422,7 @@ impl AppState {
                     text: msg,
                     tone: NoticeTone::Bad,
                     sticky: Some(true),
+                    action,
                     ..Default::default()
                 });
             }
@@ -858,10 +870,42 @@ mod tests {
         let pol = &s.pc.power_guard_ui.live.policy;
         assert!(pol.alerts_enabled);
         assert!(pol.opt_in_lower_power_limit);
-        assert!(pol.opt_in_close_game);
+        assert!(!pol.opt_in_close_game);
         assert!(!pol.opt_in_shutdown_pc);
         let _ = card_view(&s);
         let _ = view(&s);
+    }
+
+    #[test]
+    fn close_game_only_offers_and_the_offer_closes_the_game() {
+        let jpath = temp_journal_path("offer-close");
+        let _ = std::fs::remove_file(&jpath);
+        let mut s = AppState::with_demo_games();
+        s.pc.power_guard_ui.set_journal_path(jpath.clone());
+        s.pc.power_guard_ui.live.policy.opt_in_close_game = true;
+        s.games[0].is_running = true;
+        let id = s.games[0].id.clone();
+
+        s.handle_power_guard_action(&GuardAction::CloseGame, Severity::Critical, &[]);
+        assert!(s.is_game_held(&id).is_none());
+        let kind = s
+            .notices
+            .iter()
+            .chain(s.notice_runtime.queue.iter())
+            .find(|n| n.key_id.as_deref() == Some("power-guard-stage2"))
+            .and_then(|n| n.action.as_ref())
+            .map(|a| a.kind.clone())
+            .expect("close offer");
+        assert_eq!(
+            kind,
+            NoticeActionKind::ClosePowerGuardGame {
+                game_id: id.clone()
+            }
+        );
+
+        s.execute_notice_action(kind);
+        assert!(s.is_game_held(&id).is_some());
+        let _ = std::fs::remove_file(&jpath);
     }
 
     #[test]
@@ -873,6 +917,7 @@ mod tests {
         s.pc.power_guard_ui.dev_mock_actions = true;
         s.pc.power_guard_ui.set_journal_path(jpath.clone());
 
+        s.pc.power_guard_ui.live.policy.opt_in_close_game = true;
         s.pc.power_guard_ui.live.policy.opt_in_shutdown_pc = true;
         s.pc.power_guard_ui.live.policy.alert_sustained_ms = 2_000;
         s.pc.power_guard_ui.live.policy.stage_step_ms = 5_000;
