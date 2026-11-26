@@ -60,7 +60,7 @@ internal sealed partial class DiscordRest : IDisposable
     internal static int Build => _build ?? FallbackBuild;
 
     /// <summary>The properties Discord's web client identifies with, on the gateway and (base64) on every request.</summary>
-    internal static JsonObject Properties() => new()
+    internal static JsonObject Properties(bool? focused = null) => new()
     {
         ["os"] = "Windows",
         ["browser"] = "Chrome",
@@ -80,16 +80,16 @@ internal sealed partial class DiscordRest : IDisposable
         ["client_event_source"] = null,
         ["client_launch_id"] = LaunchId,
         ["client_heartbeat_session_id"] = HeartbeatSessionId,
-        ["client_app_state"] = HostWindow.IsActive ? "focused" : "unfocused",
+        ["client_app_state"] = (focused ?? (App.MainAppWindow is not null || HostWindow.HasNativeState ? HostWindow.IsActive : true)) ? "focused" : "unfocused",
     };
 
     internal static string SuperProperties()
     {
         var build = Build;
-        var focused = HostWindow.IsActive;
+        var focused = App.MainAppWindow is not null || HostWindow.HasNativeState ? HostWindow.IsActive : true;
         var cached = _superPropertiesCache;
         if (cached.Build == build && cached.Focused == focused && cached.Encoded is not null) return cached.Encoded;
-        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(Properties().ToJsonString()));
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(Properties(focused).ToJsonString()));
         _superPropertiesCache = (build, focused, encoded);
         return encoded;
     }

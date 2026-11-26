@@ -2046,7 +2046,6 @@ fn voice_page(s: &AppState) -> El {
     }
 
     let only_my = client.only_my_voice;
-    let voice_iso = client.voice_isolation;
     let loopback_ec = client.loopback_echo_cancellation;
     let learned = client
         .my_voice_learned
@@ -2063,18 +2062,6 @@ fn voice_page(s: &AppState) -> El {
             s.save_discord_client_settings(json!({ "onlyMyVoice": !only_my }));
         },
     ));
-    if only_my {
-        page = page.child(toggle_row(
-            "dc-set-voice-isolation",
-            "Separate overlapping voices",
-            missing_detail(client.voice_isolation_ready)
-                .or(Some("VoxLock INT8 target-speaker isolation")),
-            voice_iso,
-            move |s: &mut AppState| {
-                s.save_discord_client_settings(json!({ "voiceIsolation": !voice_iso }));
-            },
-        ));
-    }
     if only_my || learned {
         page = page.child(value_row(
             "Your voice",

@@ -269,31 +269,21 @@ public sealed class FriendLinkTests
     [Fact]
     public void DiscordApiHeadersStayOnDiscordApiRequests()
     {
-        ExoLauncher.Services.HostWindow.SetNativeState((nint)0x42, true);
-        try
-        {
-            using var req = DiscordRest.BuildRequest(HttpMethod.Get, "users/@me", null);
-            Assert.True(req.Headers.Contains("Origin"));
-            Assert.NotNull(req.Headers.Referrer);
-            Assert.True(req.Headers.Contains("X-Discord-Locale"));
-            Assert.True(req.Headers.Contains("X-Discord-Timezone"));
-            Assert.True(req.Headers.Contains("X-Debug-Options"));
-            Assert.True(req.Headers.Contains("X-Super-Properties"));
-            Assert.Equal("empty", req.Headers.GetValues("Sec-Fetch-Dest").Single());
-            Assert.Equal("cors", req.Headers.GetValues("Sec-Fetch-Mode").Single());
-            Assert.Equal("same-origin", req.Headers.GetValues("Sec-Fetch-Site").Single());
-            Assert.Equal("?0", req.Headers.GetValues("sec-ch-ua-mobile").Single());
-            Assert.Equal("\"Windows\"", req.Headers.GetValues("sec-ch-ua-platform").Single());
-            Assert.Contains("Google Chrome", req.Headers.GetValues("sec-ch-ua").Single(), StringComparison.Ordinal);
-            Assert.Equal("focused", DiscordRest.Properties()["client_app_state"]!.GetValue<string>());
-
-            ExoLauncher.Services.HostWindow.SetNativeState((nint)0x42, false);
-            Assert.Equal("unfocused", DiscordRest.Properties()["client_app_state"]!.GetValue<string>());
-        }
-        finally
-        {
-            ExoLauncher.Services.HostWindow.ClearNativeState();
-        }
+        using var req = DiscordRest.BuildRequest(HttpMethod.Get, "users/@me", null);
+        Assert.True(req.Headers.Contains("Origin"));
+        Assert.NotNull(req.Headers.Referrer);
+        Assert.True(req.Headers.Contains("X-Discord-Locale"));
+        Assert.True(req.Headers.Contains("X-Discord-Timezone"));
+        Assert.True(req.Headers.Contains("X-Debug-Options"));
+        Assert.True(req.Headers.Contains("X-Super-Properties"));
+        Assert.Equal("empty", req.Headers.GetValues("Sec-Fetch-Dest").Single());
+        Assert.Equal("cors", req.Headers.GetValues("Sec-Fetch-Mode").Single());
+        Assert.Equal("same-origin", req.Headers.GetValues("Sec-Fetch-Site").Single());
+        Assert.Equal("?0", req.Headers.GetValues("sec-ch-ua-mobile").Single());
+        Assert.Equal("\"Windows\"", req.Headers.GetValues("sec-ch-ua-platform").Single());
+        Assert.Contains("Google Chrome", req.Headers.GetValues("sec-ch-ua").Single(), StringComparison.Ordinal);
+        Assert.Equal("focused", DiscordRest.Properties(focused: true)["client_app_state"]!.GetValue<string>());
+        Assert.Equal("unfocused", DiscordRest.Properties(focused: false)["client_app_state"]!.GetValue<string>());
     }
 
     [Fact]

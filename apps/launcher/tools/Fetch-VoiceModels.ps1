@@ -20,7 +20,7 @@ $pins = @([regex]::Matches((Get-Content $pinFile -Raw), $pattern) | ForEach-Obje
         Sha256 = $_.Groups[6].Value
     }
 })
-if ($pins.Count -ne 5) { throw "Expected 5 voice model pins in $pinFile, found $($pins.Count)." }
+if ($pins.Count -ne 3) { throw "Expected 3 voice model pins in $pinFile, found $($pins.Count)." }
 
 function Test-Pin($pin, [string]$path) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $false }

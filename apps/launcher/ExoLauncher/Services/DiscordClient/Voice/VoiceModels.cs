@@ -13,29 +13,28 @@ internal enum VoiceModelTier
 internal static class VoiceModels
 {
     internal static readonly GitHubReleaseAsset DpdfNetBaselineAsset = new(
-        "UhhErix", "Exo-Launcher", "voice-models-v1", "exo_dpdfnet_baseline_gaming.onnx",
-        8_729_975, "0c3b0d24f518d4c12c18d6363d69f8983e509718318fabbab23488485e075ca1");
+        "UhhErix", "Exo-Launcher", "voice-models-v2", "dpdfnet_baseline.onnx",
+        8_791_035, "debaf0e8893479fca91b8b4c1eae8db195aa8980ccc9012f5809fde2b738151a");
 
     internal static readonly GitHubReleaseAsset DpdfNet48kHrAsset = new(
-        "UhhErix", "Exo-Launcher", "voice-models-v1", "exo_dpdfnet2_48khz_hr_gaming.onnx",
-        10_504_629, "e6a453bd093171c7389d123fe71acd4bd6effe9ec0ff767abb12b70cfce7a755");
-
-    internal static readonly GitHubReleaseAsset VoxLockEnrollAsset = new(
-        "UhhErix", "Exo-Launcher", "voice-models-v1", "voxlock_enroll.onnx",
-        12_476_014, "5d06048c156bb8cd422d29848e6d38fb26a7b39f6f7fd92eccf2a6ed1ce003c6");
-
-    internal static readonly GitHubReleaseAsset VoxLockChunkAsset = new(
-        "UhhErix", "Exo-Launcher", "voice-models-v1", "voxlock_chunk_int8.onnx",
-        66_608_910, "df61a9d0062b0adbcf1182302b1eb8b815f15ac47ea4923e8e164c1aff64121d");
+        "UhhErix", "Exo-Launcher", "voice-models-v2", "dpdfnet2_48khz_hr.onnx",
+        10_596_848, "0b399f8a58dc4d70d8cd97541f5c39869406145193b957d00a03b66070944928");
 
     internal static readonly GitHubReleaseAsset TitaNetAsset = new(
-        "UhhErix", "Exo-Launcher", "voice-models-v1", "nemo_en_titanet_small.onnx",
+        "UhhErix", "Exo-Launcher", "voice-models-v2", "nemo_en_titanet_small.onnx",
         40_257_283, "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e");
 
     internal static IReadOnlyList<GitHubReleaseAsset> Bundled { get; } =
-        [DpdfNetBaselineAsset, DpdfNet48kHrAsset, VoxLockEnrollAsset, VoxLockChunkAsset, TitaNetAsset];
+        [DpdfNetBaselineAsset, DpdfNet48kHrAsset, TitaNetAsset];
 
-    internal const string RetiredTitaNetDownload = "titanet_small.onnx";
+    internal static readonly string[] RetiredModelDownloads =
+    [
+        "titanet_small.onnx",
+        "exo_dpdfnet_baseline_gaming.onnx",
+        "exo_dpdfnet2_48khz_hr_gaming.onnx",
+        "voxlock_enroll.onnx",
+        "voxlock_chunk_int8.onnx",
+    ];
 
     internal static string VoiceDir => Path.Combine(PathHelper.AppDataDir, "voice");
 
@@ -57,20 +56,16 @@ internal static class VoiceModels
 #if DEBUG
         return [];
 #else
-        return [.. Bundled.Select(asset => Path.Combine(VoiceDir, asset.AssetName)), Path.Combine(VoiceDir, RetiredTitaNetDownload)];
+        return [.. Bundled.Select(asset => Path.Combine(VoiceDir, asset.AssetName)), .. RetiredModelDownloads.Select(name => Path.Combine(VoiceDir, name))];
 #endif
     }
 
     internal static string BaselineModelPath { get; set; } = ModelPath(DpdfNetBaselineAsset);
     internal static string HighQualityModelPath { get; set; } = ModelPath(DpdfNet48kHrAsset);
-    internal static string VoxLockEnrollPath { get; set; } = ModelPath(VoxLockEnrollAsset);
-    internal static string VoxLockChunkPath { get; set; } = ModelPath(VoxLockChunkAsset);
     internal static string EnrollmentAudioPath { get; set; } = Path.Combine(VoiceDir, "my-voice-enroll.bin");
 
     private static (long Size, DateTime Written, bool Whole)? _baselineChecked;
     private static (long Size, DateTime Written, bool Whole)? _hqChecked;
-    private static (long Size, DateTime Written, bool Whole)? _voxEnrollChecked;
-    private static (long Size, DateTime Written, bool Whole)? _voxChunkChecked;
 
     private static bool CheckPinned(GitHubReleaseAsset asset, string path, ref (long Size, DateTime Written, bool Whole)? cache)
     {
@@ -84,9 +79,7 @@ internal static class VoiceModels
 
     internal static bool BaselineReady() => CheckPinned(DpdfNetBaselineAsset, BaselineModelPath, ref _baselineChecked);
     internal static bool HighQualityReady() => CheckPinned(DpdfNet48kHrAsset, HighQualityModelPath, ref _hqChecked);
-    internal static bool VoxLockReady() =>
-        CheckPinned(VoxLockEnrollAsset, VoxLockEnrollPath, ref _voxEnrollChecked)
-        && CheckPinned(VoxLockChunkAsset, VoxLockChunkPath, ref _voxChunkChecked);
+    internal static bool VoxLockReady() => false;
 
     internal static void SaveEnrollmentAudio(ReadOnlySpan<float> voice16k)
     {

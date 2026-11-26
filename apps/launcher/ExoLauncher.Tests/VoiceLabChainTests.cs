@@ -90,7 +90,7 @@ public class VoiceLabChainTests
     [Fact]
     public void VoiceModelsShipBesideExoAndAreNeverFetched()
     {
-        Assert.Equal(5, VoiceModels.Bundled.Count);
+        Assert.Equal(3, VoiceModels.Bundled.Count);
         Assert.Contains(VoiceModels.TitaNetAsset, VoiceModels.Bundled);
         Assert.Equal(VoiceModels.ModelPath(VoiceModels.TitaNetAsset), SpeakerModel.ModelPath);
         foreach (var asset in VoiceModels.Bundled)
@@ -104,7 +104,7 @@ public class VoiceLabChainTests
 #if !DEBUG
         Assert.Equal(VoiceModels.BundledPath(VoiceModels.DpdfNetBaselineAsset), VoiceModels.ModelPath(VoiceModels.DpdfNetBaselineAsset));
         var retired = VoiceModels.RetiredDownloads().ToList();
-        Assert.Equal(VoiceModels.Bundled.Select(a => Path.Combine(VoiceModels.VoiceDir, a.AssetName)).Append(Path.Combine(VoiceModels.VoiceDir, "titanet_small.onnx")), retired);
+        Assert.Equal(VoiceModels.Bundled.Select(a => Path.Combine(VoiceModels.VoiceDir, a.AssetName)).Concat(VoiceModels.RetiredModelDownloads.Select(n => Path.Combine(VoiceModels.VoiceDir, n))), retired);
         Assert.Equal(VoiceModels.BundledPath(VoiceModels.TitaNetAsset), SpeakerModel.ModelPath);
 #endif
     }

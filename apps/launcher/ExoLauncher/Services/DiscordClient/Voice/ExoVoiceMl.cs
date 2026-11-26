@@ -232,19 +232,6 @@ internal sealed class NeuralNoiseSuppressor : IDisposable
                 var h = ExoVoiceMl.CreateDpdfNet(VoiceModels.HighQualityModelPath, intraThreads: 1);
                 return h != 0 ? new NeuralNoiseSuppressor(tier, h, 0) : null;
             }
-            if (tier == VoiceModelTier.VoxLockTse)
-            {
-                if (!VoiceModels.VoxLockReady()) return null;
-                if (VoiceModels.LoadEnrollmentAudio() is not { } enroll) return null;
-                var h = ExoVoiceMl.CreateVoxLock(VoiceModels.VoxLockEnrollPath, VoiceModels.VoxLockChunkPath, intraThreads: 1);
-                if (h == 0) return null;
-                if (!ExoVoiceMl.EnrollVoxLock16k(h, enroll))
-                {
-                    ExoVoiceMl.DestroyVoxLock(h);
-                    return null;
-                }
-                return new NeuralNoiseSuppressor(tier, 0, h);
-            }
             return null;
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)

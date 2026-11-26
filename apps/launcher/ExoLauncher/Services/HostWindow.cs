@@ -31,6 +31,9 @@ internal static class HostWindow
         Interlocked.Exchange(ref _nativeActive, -1);
     }
 
+    internal static bool HasNativeState =>
+        Interlocked.Read(ref _nativeHwnd) != 0 || Volatile.Read(ref _nativeActive) >= 0;
+
     internal static nint OwnerHwnd
     {
         get
