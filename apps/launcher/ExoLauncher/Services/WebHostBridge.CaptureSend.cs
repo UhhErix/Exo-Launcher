@@ -10,9 +10,8 @@ public sealed partial class WebHostBridge
     /// optional message: the file read (or cut to fit) by the window, posted once per conversation. A conversation it went to
     /// is named in <c>sent</c>, so a retry after one failed never sends it twice.
     /// </summary>
-    private static async Task<object> CaptureSendAsync(JsonElement p, bool hasParams, CancellationToken ct)
+    private async Task<object> CaptureSendAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
-        if (App.MainAppWindow is not { } window) return new { ok = false, message = "The app window is unavailable." };
         if (DiscordSession.Current is not { } session) return new { ok = false, message = "Sign in to Discord in Exo to send captures." };
         var channels = hasParams && p.TryGetProperty("channelIds", out var list) && list.ValueKind == JsonValueKind.Array
             ? list.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => DiscordRest.Id(e.GetString()!)).Distinct().Take(CaptureShare.MaxConversations).ToList()
@@ -27,7 +26,12 @@ public sealed partial class WebHostBridge
             try { guilds[id] = session.Cache.CanSend(id) ? session.Cache.GuildOf(id) : throw new UnauthorizedAccessException(); }
             catch (UnauthorizedAccessException) { return new { ok = false, message = "You can't send messages in one of those." }; }
         }
-        var upload = await Task.Run(() => window.CaptureUploadAsync(ReadString(p, hasParams, "id"), ReadDouble(p, hasParams, "startMs"), ReadDouble(p, hasParams, "endMs"), ct), ct).ConfigureAwait(true);
+        var captureId = ReadString(p, hasParams, "id");
+        var startMs = ReadDouble(p, hasParams, "startMs");
+        var endMs = ReadDouble(p, hasParams, "endMs");
+        var upload = App.MainAppWindow is { } window
+            ? await Task.Run(() => window.CaptureUploadAsync(captureId, startMs, endMs, ct), ct).ConfigureAwait(true)
+            : await Task.Run(() => _services.HeadlessCapture.UploadAsync(captureId, startMs, endMs, ct), ct).ConfigureAwait(true);
         if (upload.File is not { } file) return new { ok = false, message = upload.Error, item = upload.Made };
         var sent = new List<string>();
         foreach (var id in channels)

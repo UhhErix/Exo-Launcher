@@ -2516,8 +2516,12 @@ impl AppState {
     }
 
     pub fn set_window_focused(&mut self, focused: bool) {
+        let changed = self.chrome.window_focused != focused;
         self.chrome.window_focused = focused;
         crate::gamepad::set_window_focused(focused);
+        if changed {
+            self.notify_host_window_state();
+        }
     }
 
     pub fn apply_gamepad_action(&mut self, action: GamepadAction, tx: &mut Tx) {

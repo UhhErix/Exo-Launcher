@@ -135,7 +135,6 @@ public sealed partial class WebHostBridge
             var token = _bridgeLifetime.Token;
             var next = _services.Library.PeekCachedLibrary().FirstOrDefault(game => game.Installed &&
                 ShaderPrepareEligible(game) && ShaderPrepare.WantsAuto(prepare.StateOf(game).State, game.PlaytimeMinutes));
-            if (App.MainAppWindow is not { } window) return;
             if (next is null)
             {
                 // Nothing to prepare: one compile's short check instead, once per game per driver. The engine says whether compiling reaches the game.
@@ -146,12 +145,12 @@ public sealed partial class WebHostBridge
                 if (check.Game is null) return;
                 AppLog.Info($"Shaders: checking {check.Game.Title}'s compile, the PC is idle.");
                 prepare.NoteVerified(check.Game.Id);
-                await window.ShadersVerifyAsync(check.Status.EngineId!, token).ConfigureAwait(false);
+                await _services.ShadersHost.VerifyAsync(check.Status.EngineId!, token).ConfigureAwait(false);
                 return;
             }
             AppLog.Info($"Prepare shaders: {next.Title} starts by itself, the PC is idle.");
             var ask = JsonSerializer.SerializeToElement(new { id = next.Id });
-            window.DispatcherQueue.EnqueueAsync(async () =>
+            _queue.EnqueueAsync(async () =>
             {
                 try { await ShaderPrepareStartAsync(ask, true, token).ConfigureAwait(true); }
                 catch (Exception error) when (error is not OutOfMemoryException) { AppLog.Warn($"Prepare shaders: {next.Title} did not start: {error.Message}"); }

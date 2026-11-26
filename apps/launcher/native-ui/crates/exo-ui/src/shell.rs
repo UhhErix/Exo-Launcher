@@ -360,6 +360,7 @@ impl AppState {
                     }
                 },
             );
+            self.notify_host_window_state();
             self.call_host_async("shell.prepare", json!({}), |_, _: Result<Value, String>| {});
             self.call_host_async(
                 "notes.pending",

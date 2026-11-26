@@ -32,7 +32,7 @@ public sealed partial class WebHostBridge
     private void OnGiftsTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args) =>
         UiGuard.Run(() =>
         {
-            if (App.MainAppWindow?.WindowIsActive == true && !_services.Launcher.AnyGameRunning) _ = ReadGiftsAsync();
+            if (HostWindow.IsActive && !_services.Launcher.AnyGameRunning) _ = ReadGiftsAsync();
         });
 
     private void StopGiftsTimer()
@@ -148,7 +148,7 @@ public sealed partial class WebHostBridge
     }
 
     private static nint? GiftsOwner() =>
-        App.MainAppWindow is { } window ? WinRT.Interop.WindowNative.GetWindowHandle(window) : null;
+        HostWindow.OwnerHwnd is var hwnd && hwnd != 0 ? hwnd : null;
 
     private static object GiftsDto(StoreGifts.Snapshot snapshot) => new
     {

@@ -21,6 +21,5 @@ public sealed partial class WebHostBridge
             unlocked = unlock.Done,
             total = unlock.Total,
         });
-        AchievementBanner.PlayTierSound(tier, settings.AchievementVolume);
     }
 }

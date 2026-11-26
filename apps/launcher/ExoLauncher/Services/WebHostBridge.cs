@@ -847,9 +847,10 @@ public sealed partial class WebHostBridge
                 // The UI reached a usable start (Library or first-run setup): an update's startup receipt (UpdateStartupHealth).
                 "shell.ready" => ShellReady(),
                 "shell.bootstrap" => await ShellBootstrapAsync(requestToken).ConfigureAwait(false),
+                "shell.windowFocus" => HandleShellWindowFocus(paramsEl, hasParams),
                 "shell.prepare" => App.MainAppWindow is { } prepareWindow
                     ? await prepareWindow.PrepareConnectedRoomsAsync()
-                    : new { ok = false },
+                    : await PrepareHeadlessConnectedRoomsAsync(),
                 "music.playback" => _services.MusicEngine.IsActive || App.MainAppWindow is not null
                     ? await _services.MusicEngine.PlaybackAsync().ConfigureAwait(false)
                     : await _services.HeadlessMusic.PlaybackAsync().ConfigureAwait(false),
@@ -913,14 +914,18 @@ public sealed partial class WebHostBridge
                     : await Task.Run(() => _services.HeadlessCapture.EditAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "preset"),
                         ReadDouble(paramsEl, hasParams, "startMs"), ReadDouble(paramsEl, hasParams, "endMs"), requestToken)).ConfigureAwait(false),
                 "capture.reel" => App.MainAppWindow is { } reelWindow && hasParams
-                    ? await Task.Run(() => reelWindow.CaptureReelStart(paramsEl)).ConfigureAwait(false) : new { ok = false },
-                "capture.reel.cancel" => App.MainAppWindow?.CaptureReelCancel() ?? new { ok = false },
+                    ? await Task.Run(() => reelWindow.CaptureReelStart(paramsEl)).ConfigureAwait(false)
+                    : hasParams ? await Task.Run(() => _services.HeadlessCapture.ReelStart(paramsEl)).ConfigureAwait(false) : new { ok = false },
+                "capture.reel.cancel" => App.MainAppWindow?.CaptureReelCancel() ?? _services.HeadlessCapture.ReelCancel(),
                 "capture.text" => App.MainAppWindow is { } textWindow
                     ? await Task.Run(() => textWindow.CaptureTextAsync(ReadString(paramsEl, hasParams, "id"), ReadDouble(paramsEl, hasParams, "x"), ReadDouble(paramsEl, hasParams, "y"),
-                        ReadDouble(paramsEl, hasParams, "width"), ReadDouble(paramsEl, hasParams, "height"))).ConfigureAwait(false) : new { ok = false },
+                        ReadDouble(paramsEl, hasParams, "width"), ReadDouble(paramsEl, hasParams, "height"))).ConfigureAwait(false)
+                    : await Task.Run(() => _services.HeadlessCapture.TextAsync(ReadString(paramsEl, hasParams, "id"), ReadDouble(paramsEl, hasParams, "x"), ReadDouble(paramsEl, hasParams, "y"),
+                        ReadDouble(paramsEl, hasParams, "width"), ReadDouble(paramsEl, hasParams, "height"))).ConfigureAwait(false),
                 "capture.send" => await CaptureSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "capture.saveImage" => App.MainAppWindow is { } imageWindow
-                    ? await Task.Run(() => imageWindow.CaptureSaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(false) : new { ok = false },
+                    ? await Task.Run(() => imageWindow.CaptureSaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(false)
+                    : await Task.Run(() => _services.HeadlessCapture.SaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(false),
                 "friends.badge" => App.MainAppWindow?.FriendsBadge() ?? new { count = DiscordClient.DiscordSession.CurrentBadge },
                 "deps.list" => await _rpcWork.RunAsync(method, DepsList, requestToken, coalesceKey: method).ConfigureAwait(false),
                 "runtimes.list" => await _rpcWork.RunAsync(method, RuntimesListAsync, requestToken, coalesceKey: method).ConfigureAwait(false),
@@ -2331,10 +2336,17 @@ public sealed partial class WebHostBridge
     {
         try
         {
-            var window = App.MainAppWindow;
-            if (window is null)
+            if (App.MainAppWindow is not { } window)
             {
-                tcs.TrySetResult(new PickedFile(null, true, "The file picker could not open."));
+                var (path, failed) = await HostWindow.PickOpenFileAsync(
+                    "Choose Riot data export",
+                    [("Riot data export", "*.zip;*.json")],
+                    HostWindow.DownloadsFolder()).ConfigureAwait(false);
+                tcs.TrySetResult(failed
+                    ? new PickedFile(null, true, "The file picker could not open.")
+                    : path is null
+                        ? new PickedFile(null, true, null)
+                        : new PickedFile(path, false, null));
                 return;
             }
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
@@ -2489,10 +2501,17 @@ public sealed partial class WebHostBridge
     {
         try
         {
-            var window = App.MainAppWindow;
-            if (window is null)
+            if (App.MainAppWindow is not { } window)
             {
-                tcs.TrySetResult(new PickedFile(null, true, "The file picker could not open."));
+                var (path, failed) = await HostWindow.PickOpenFileAsync(
+                    "Choose cover art",
+                    [("Images", "*.png;*.jpg;*.jpeg;*.webp;*.gif")],
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)).ConfigureAwait(false);
+                tcs.TrySetResult(failed
+                    ? new PickedFile(null, true, "The file picker could not open.")
+                    : path is null
+                        ? new PickedFile(null, true, null)
+                        : new PickedFile(path, false, null));
                 return;
             }
 
@@ -3173,7 +3192,16 @@ public sealed partial class WebHostBridge
         {
             try
             {
-                if (App.MainAppWindow is not { } window) { tcs.TrySetResult(new { ok = false, cancelled = true, message = "The file picker could not open." }); return; }
+                if (App.MainAppWindow is not { } window)
+                {
+                    var (path, failed) = await HostWindow.PickOpenFileAsync(
+                        "Choose game executable",
+                        [("Programs", "*.exe")]).ConfigureAwait(false);
+                    if (failed) { tcs.TrySetResult(new { ok = false, cancelled = true, message = "The file picker could not open." }); return; }
+                    if (path is not null) Helpers.PickedPaths.Remember(path);
+                    tcs.TrySetResult(path is null ? new { ok = false, cancelled = true, message = "Canceled." } : new { ok = true, cancelled = false, path });
+                    return;
+                }
                 var picker = new Windows.Storage.Pickers.FileOpenPicker();
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
                 picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder;
@@ -3207,10 +3235,13 @@ public sealed partial class WebHostBridge
     {
         try
         {
-            var window = App.MainAppWindow;
-            if (window is null)
+            if (App.MainAppWindow is not { } window)
             {
-                tcs.TrySetResult(new { ok = false, cancelled = true, message = "The folder picker could not open." });
+                var (path, failed) = await HostWindow.PickFolderAsync("Choose folder").ConfigureAwait(false);
+                if (failed) { tcs.TrySetResult(new { ok = false, cancelled = true, message = "The folder picker could not open." }); return; }
+                if (path is null) { tcs.TrySetResult(new { ok = false, cancelled = true, message = "Canceled." }); return; }
+                Helpers.PickedPaths.Remember(path);
+                tcs.TrySetResult(new { ok = true, cancelled = false, path });
                 return;
             }
 
@@ -3592,6 +3623,26 @@ public sealed partial class WebHostBridge
     private static object HeartbeatReply(JsonElement p, bool hasParams)
     {
         HangWatchdog.PageBeat(ReadBool(p, hasParams, "visible") != false);
+        return new { ok = true };
+    }
+
+    private static object HandleShellWindowFocus(JsonElement p, bool hasParams)
+    {
+        nint hwnd = 0;
+        if (hasParams && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("hwnd", out var h) && h.ValueKind == JsonValueKind.Number && h.TryGetInt64(out var raw) && raw != 0)
+            hwnd = (nint)raw;
+        var active = ReadBool(p, hasParams, "active");
+        HostWindow.SetNativeState(hwnd, active);
+        if (active == true && DiscordClient.DiscordSession.Viewing is { } open) DiscordClient.DiscordSession.ClearNotices(open);
+        return new { ok = true };
+    }
+
+    private async Task<object> PrepareHeadlessConnectedRoomsAsync()
+    {
+        if (PackagedSmoke.Enabled || !_services.Settings.Current.OnboardingComplete) return new { ok = true };
+        await Task.WhenAll(
+            Task.Run(() => _services.HeadlessCapture.Prewarm()),
+            Task.Run(DiscordClient.DiscordSession.Start)).ConfigureAwait(false);
         return new { ok = true };
     }
 

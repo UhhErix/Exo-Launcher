@@ -440,6 +440,7 @@ pub const METHOD_RPC_CANCEL: &str = "rpc.cancel";
 pub const METHOD_SHELL_BOOTSTRAP: &str = "shell.bootstrap";
 pub const METHOD_SHELL_OPEN_URL: &str = "shell.openUrl";
 pub const METHOD_SHELL_READY: &str = "shell.ready";
+pub const METHOD_SHELL_WINDOW_FOCUS: &str = "shell.windowFocus";
 pub const METHOD_SPOTIFY_ACT: &str = "spotify.act";
 pub const METHOD_SPOTIFY_LINK: &str = "spotify.link";
 pub const METHOD_SPOTIFY_START: &str = "spotify.start";

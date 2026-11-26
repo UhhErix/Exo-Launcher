@@ -505,6 +505,32 @@ public sealed class NamedPipeHostTransportTests
     }
 
     [Fact]
+    public void HostWindowTracksNativeHwndAndFocusWithoutWinUiWindow()
+    {
+        HostWindow.ClearNativeState();
+        try
+        {
+            Assert.Equal((nint)0, HostWindow.OwnerHwnd);
+            Assert.False(HostWindow.IsActive);
+
+            HostWindow.SetNativeState((nint)0x12345, true);
+            Assert.Equal((nint)0x12345, HostWindow.OwnerHwnd);
+            Assert.True(HostWindow.IsActive);
+
+            HostWindow.SetNativeState(0, false);
+            Assert.Equal((nint)0x12345, HostWindow.OwnerHwnd);
+            Assert.False(HostWindow.IsActive);
+
+            HostWindow.ClearNativeState();
+            Assert.Equal((nint)0, HostWindow.OwnerHwnd);
+        }
+        finally
+        {
+            HostWindow.ClearNativeState();
+        }
+    }
+
+    [Fact]
     public void ReliableQueueIsBoundedAgainstStalledClient()
     {
         using var transport = new NamedPipeHostTransport($"exo-test-bound-{Guid.NewGuid():N}");

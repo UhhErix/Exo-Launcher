@@ -231,7 +231,7 @@ public sealed partial class WebHostBridge
         var product = await rest.CollectiblesProductAsync(skuId, ct).ConfigureAwait(false);
         var item = product.Body is { ValueKind: JsonValueKind.Object } pb && Text(pb, "name") is { Length: > 0 } name ? name : "this item";
         var charge = $"Buy {(item.Length > 80 ? item[..80] : item)} on Discord for {DiscordRest.PriceText(amount, currency)}, charged to {card.Label}?";
-        if (App.MainAppWindow is not { } window || !await window.ConfirmNativeAsync("Buy on Discord?", charge, "Buy").ConfigureAwait(false))
+        if (!await HostWindow.ConfirmNativeAsync("Buy on Discord?", charge, "Buy").ConfigureAwait(false))
             return new { ok = false, confirm = false, declined = true, message = (string?)"Nothing was charged.", paymentId = (string?)null };
         var bought = await rest.PurchaseAsync(skuId, sourceId, amount, currency, ct).ConfigureAwait(false);
         Helpers.AppLog.Info($"Discord client: Shop purchase {(bought.Error is null ? "completed" : "not completed")}.");

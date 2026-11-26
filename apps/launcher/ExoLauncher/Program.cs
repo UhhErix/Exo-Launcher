@@ -176,7 +176,13 @@ public static class Program
             if (Services.ExoLinks.Find(args) is { } place) Services.WebHostBridge.QueueOpen(place);
             if (Services.RuneHostSession.TryParse(args, onWarning: AppLog.Warn) is { } runeOptions)
             {
-                mainInstance.Activated += (_, _) => UiGuard.Run(Services.RuneHostSession.RequestActivate);
+                mainInstance.Activated += (_, activated) => UiGuard.Run(() =>
+                {
+                    if (activated.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs link
+                        && Services.ExoLinks.Find(Services.NoteTextFiles.Split(link.Arguments)) is { } openedLink)
+                        Services.RuneHostSession.OpenLink(openedLink);
+                    Services.RuneHostSession.RequestActivate();
+                });
                 Environment.ExitCode = Services.RuneHostSession.Run(runeOptions);
                 return;
             }

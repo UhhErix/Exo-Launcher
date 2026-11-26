@@ -167,7 +167,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>Exo Capture, as <see cref="Services.CaptureReel"/> needs it.</summary>
-    private sealed class AddonReelEngine(Services.CaptureAddon addon) : Services.CaptureReel.IReelEngine
+    internal sealed class AddonReelEngine(Services.CaptureAddon addon) : Services.CaptureReel.IReelEngine
     {
         public async Task<IReadOnlyList<Services.CaptureReel.Facts?>> FactsAsync(IReadOnlyList<string> paths, CancellationToken ct)
         {

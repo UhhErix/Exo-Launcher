@@ -1058,12 +1058,27 @@ impl AppState {
             return;
         }
         self.pc.owner_hwnd = hwnd;
+        self.notify_host_window_state();
         if self.pc.mouse_panel_open
             && let Some(rect) = self.pc.mouse_panel_rect
         {
             let visible = self.mouse_panel_should_be_visible();
             self.pc.mouse_panel_visible = visible;
             self.send_mouse_panel_open(rect, visible);
+        }
+    }
+
+    pub fn notify_host_window_state(&self) {
+        #[cfg(windows)]
+        if let Some(rpc) = self.rpc.clone() {
+            rpc.call_raw(
+                exo_rpc::METHOD_SHELL_WINDOW_FOCUS,
+                &json!({
+                    "hwnd": self.pc.owner_hwnd,
+                    "active": self.chrome.window_focused,
+                }),
+                |_| {},
+            );
         }
     }
 

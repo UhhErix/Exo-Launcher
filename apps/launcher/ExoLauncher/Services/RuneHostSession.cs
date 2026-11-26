@@ -14,6 +14,29 @@ internal sealed partial class RuneHostSession
     private const int SwRestore = 9;
     private static readonly object ActiveUiLock = new();
     private static Process? _activeUiProcess;
+    private static WebHostBridge? _activeBridge;
+
+    internal static IntPtr ActiveUiMainWindowHandle()
+    {
+        Process? ui;
+        lock (ActiveUiLock) ui = _activeUiProcess;
+        if (ui is null) return IntPtr.Zero;
+        try
+        {
+            if (ui.HasExited) return IntPtr.Zero;
+            ui.Refresh();
+            return ui.MainWindowHandle;
+        }
+        catch { return IntPtr.Zero; }
+    }
+
+    internal static void OpenLink(ExoLinks.Place place)
+    {
+        WebHostBridge? bridge;
+        lock (ActiveUiLock) bridge = _activeBridge;
+        if (bridge is not null) bridge.OpenLink(place);
+        else WebHostBridge.QueueOpen(place);
+    }
 
     internal static void RequestActivate()
     {
@@ -239,6 +262,24 @@ internal sealed partial class RuneHostSession
         WebViewRuntimeLocator.ClearStaleBrowserFolderPin();
         var services = App.Services;
         services.Initialize();
+        if (options.SpawnUi && !PackagedSmoke.Enabled && !HostMode.IsDisposable && !ForegroundWatcher.StartedQuiet &&
+            services.Updater.SettleKeptUpdate(services.AppVersion))
+        {
+            var started = false;
+            try { started = services.Updater.ApplyKeptAtStartAsync(services.AppVersion).GetAwaiter().GetResult(); }
+            catch (Exception ex) { AppLog.Warn("Update at start failed: " + ex.GetType().Name); }
+            if (started)
+            {
+                UpdateHandOff.Save(UpdateHandOff.FilePath, Program.LaunchArgs, DateTimeOffset.UtcNow);
+                services.Shutdown();
+                return 0;
+            }
+        }
+        if (options.SpawnUi)
+        {
+            AutoTuneService.CheckAtStart();
+            if (!PackagedSmoke.Enabled && !HostMode.IsDisposable) _ = services.Updater.OpenCheck(services.AppVersion);
+        }
         KeepAwake.SettingOn = () => true;
 
         var dispatcherController = DispatcherQueueController.CreateOnDedicatedThread();
@@ -256,6 +297,7 @@ internal sealed partial class RuneHostSession
         }
         using var transport = new NamedPipeHostTransport(options.PipeName);
         var bridge = new WebHostBridge(services, queue);
+        lock (ActiveUiLock) _activeBridge = bridge;
         using var stop = new ManualResetEventSlim(false);
         string? shutdownReason = null;
         void TriggerStop(string reason)
@@ -270,8 +312,21 @@ internal sealed partial class RuneHostSession
         bridge.StartBackgroundMonitors();
         if (options.SpawnUi)
         {
+            AchievementBanner.Start(queue);
             services.StartDeferredServices();
             StartGameServices();
+            if (!PackagedSmoke.Enabled)
+            {
+                Telemetry.Start();
+                Telemetry.Track("app.start", ("startup_ms", (long)(DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds));
+                PendingReports.SendOnLaunch(TimeSpan.FromSeconds(15));
+                _ = Task.Run(() =>
+                {
+                    try { Adapters.StoreWindowHider.CollapseOrphanSurfaces(); } catch { }
+                    InstalledAppsEntry.Refresh(AppServices.RunningVersion);
+                });
+                DlssSwapService.WatchUpscalerReleases();
+            }
         }
         Action<int> onDiscordBadge = count => bridge.PostFriendsBadge(count);
         DiscordClient.DiscordSession.BadgeChanged += onDiscordBadge;
@@ -322,9 +377,11 @@ internal sealed partial class RuneHostSession
         }
         finally
         {
+            HostWindow.ClearNativeState();
             lock (ActiveUiLock)
             {
                 if (ReferenceEquals(_activeUiProcess, uiProcess)) _activeUiProcess = null;
+                if (ReferenceEquals(_activeBridge, bridge)) _activeBridge = null;
             }
             Console.CancelKeyPress -= onCancel;
             DiscordClient.DiscordSession.BadgeChanged -= onDiscordBadge;

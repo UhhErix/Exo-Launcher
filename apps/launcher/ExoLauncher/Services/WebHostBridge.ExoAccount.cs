@@ -64,14 +64,20 @@ public sealed partial class WebHostBridge
     {
         var code = ReadString(p, hasParams, "code");
         if (string.IsNullOrWhiteSpace(code) || code.Length > 64) return new { ok = false, message = "There is no recovery code to save." };
-        var picked = await OnUiThread(async () =>
-        {
-            var picker = new Windows.Storage.Pickers.FileSavePicker();
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow!));
-            picker.FileTypeChoices.Add("Text", [".txt"]);
-            picker.SuggestedFileName = "Exo recovery code";
-            return (await picker.PickSaveFileAsync())?.Path;
-        }).ConfigureAwait(true);
+        var picked = App.MainAppWindow is not null
+            ? await OnUiThread(async () =>
+            {
+                var picker = new Windows.Storage.Pickers.FileSavePicker();
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow!));
+                picker.FileTypeChoices.Add("Text", [".txt"]);
+                picker.SuggestedFileName = "Exo recovery code";
+                return (await picker.PickSaveFileAsync())?.Path;
+            }).ConfigureAwait(true)
+            : await HostWindow.PickSaveFileAsync(
+                "Save Exo recovery code",
+                [("Text", "*.txt")],
+                "Exo recovery code",
+                "txt").ConfigureAwait(true);
         if (picked.Failed) return new { ok = false, message = "The file picker could not open." };
         if (picked.Path is null) return new { ok = false, cancelled = true };
         await File.WriteAllTextAsync(picked.Path,
@@ -171,7 +177,7 @@ public sealed partial class WebHostBridge
     {
         if (hasParams && p.TryGetProperty("ownerHwnd", out var raw) && raw.ValueKind == JsonValueKind.Number && raw.TryGetUInt64(out var h) && h != 0)
             return (nint)h;
-        return App.MainAppWindow is { } w ? WinRT.Interop.WindowNative.GetWindowHandle(w) : 0;
+        return HostWindow.OwnerHwnd;
     }
 
     private async Task<object> ExoAccountPasskeyStatusAsync()
@@ -226,14 +232,20 @@ public sealed partial class WebHostBridge
     {
         var result = await ExoAccountSettings.ExportAsync(PathHelper.AppDataDir, DateTimeOffset.UtcNow);
         if (!result.Ok || result.File is null) return new { ok = false, message = AccountMessages.For(result.Error) };
-        var picked = await OnUiThread(async () =>
-        {
-            var picker = new Windows.Storage.Pickers.FileSavePicker();
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow!));
-            picker.FileTypeChoices.Add("JSON", [".json"]);
-            picker.SuggestedFileName = "Exo account export";
-            return (await picker.PickSaveFileAsync())?.Path;
-        }).ConfigureAwait(true);
+        var picked = App.MainAppWindow is not null
+            ? await OnUiThread(async () =>
+            {
+                var picker = new Windows.Storage.Pickers.FileSavePicker();
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow!));
+                picker.FileTypeChoices.Add("JSON", [".json"]);
+                picker.SuggestedFileName = "Exo account export";
+                return (await picker.PickSaveFileAsync())?.Path;
+            }).ConfigureAwait(true)
+            : await HostWindow.PickSaveFileAsync(
+                "Export Exo account data",
+                [("JSON", "*.json")],
+                "Exo account export",
+                "json").ConfigureAwait(true);
         if (picked.Failed) return new { ok = false, message = "The file picker could not open." };
         if (picked.Path is null) return new { ok = false, cancelled = true };
         await File.WriteAllTextAsync(picked.Path, result.File.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));

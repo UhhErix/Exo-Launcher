@@ -353,7 +353,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>Exo's own type (Geist), so the add-on's toast and windows read like Exo.</summary>
-    private static string CaptureFont()
+    internal static string CaptureFont()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Geist-Variable.ttf");
         return File.Exists(path) ? path : "";
@@ -555,7 +555,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>Keys Exo will not take: ones ShadowPlay or Game Bar use, or a bare key that would stop typing it.</summary>
-    private static string? CaptureHotkeyProblem(string keys)
+    internal static string? CaptureHotkeyProblem(string keys)
     {
         if (keys.Length is 0 or > 40) return "Pick a key combination.";
         var parts = keys.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -571,7 +571,7 @@ public sealed partial class MainWindow
         return null;
     }
 
-    private static string? CaptureFolderProblem(string folder)
+    internal static string? CaptureFolderProblem(string folder)
     {
         try
         {

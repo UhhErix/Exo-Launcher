@@ -631,7 +631,7 @@ internal sealed partial class DiscordSession
     private static void Notify(DiscordCache.Notification notice)
     {
         var settings = App.Services.Settings.Shared;
-        var inFront = App.MainAppWindow?.WindowIsActive == true;
+        var inFront = HostWindow.IsActive;
         // Game focus: a game is running, so messages wait in the unread badge instead of popping up.
         var route = DiscordNotifier.Route(inFront, Viewing, notice.ChannelId,
             settings.DiscordQuietWhilePlaying && App.Services.Launcher.AnyGameRunning, StreamerQuiet, settings.DiscordDesktopNotifications);

@@ -229,7 +229,7 @@ internal sealed partial class DiscordSession
         if (Viewing is not { } viewing || !d.TryGetProperty("channel_id", out var c) || c.GetString() != viewing) return;
         if (!d.TryGetProperty("author", out var author) || author.ValueKind != JsonValueKind.Object) return;
         if (author.TryGetProperty("id", out var id) && id.GetString() == Cache.Me?.Id) return;
-        if (App.MainAppWindow?.WindowIsActive == true) Sound("message3");
+        if (HostWindow.IsActive) Sound("message3");
         if (d.TryGetProperty("tts", out var tts) && tts.ValueKind == JsonValueKind.True && d.TryGetProperty("content", out var content))
         {
             var name = author.TryGetProperty("global_name", out var gn) && gn.ValueKind == JsonValueKind.String ? gn.GetString()
