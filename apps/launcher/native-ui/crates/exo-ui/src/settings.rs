@@ -8,13 +8,13 @@ use crate::settings_state::{
 use crate::settings_stores::{shaders_section, stores_section};
 use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
-    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, SelectTrigger, TRANSPARENT, bad, exo_glass,
-    fg_muted, float_line, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good,
-    hairline, hover_fill, icon_chevron_left, icon_close, icon_download, icon_info, icon_library,
-    icon_music, icon_search, icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled,
-    select_trigger, slider_track, switch_pill, type_body, type_control, type_page, type_section,
-    type_small,
+    BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, SelectTrigger, TRANSPARENT, bad, card_border,
+    fg_muted, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline,
+    hover_fill, icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_music,
+    icon_search, icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled, select_trigger,
+    selected_fill, slider_track, surface_card, switch_pill, type_body, type_control, type_page,
+    type_section, type_small, type_title,
 };
 use rune::{
     Cursor, El, Phase, ScrollSpec, SpringPair, TextStyle, Transition, col, edit_access, el, row,
@@ -234,7 +234,7 @@ pub(crate) fn settings_group(title: &str, rows: Vec<El>) -> El {
         if idx > 0 {
             card = card.child(el().w_full().h(1.0).fill(hairline()));
         }
-        card = card.child(el().w_full().px(18.0).child(r));
+        card = card.child(r);
     }
     col()
         .w_full()
@@ -305,11 +305,13 @@ fn section_library(s: &AppState) -> El {
         is_highlighted(s, "library-tools"),
     ));
 
-    let mut out = col()
-        .w_full()
-        .gap(24.0)
-        .child(stores_section(s))
-        .child(tools_card);
+    let mut out = col().w_full().gap(24.0).child(stores_section(s)).child(
+        col()
+            .w_full()
+            .gap(8.0)
+            .child(section_head("Display"))
+            .child(tools_card),
+    );
 
     if let Some(shaders) = shaders_section(s) {
         out = out.child(shaders);
@@ -413,13 +415,7 @@ fn section_downloads(s: &AppState) -> El {
             .on_press(move |s: &mut AppState| s.wp4_set_upscaler_anticheat(!upscaler_ac)),
         ));
 
-    col().w_full().gap(24.0).child(
-        col()
-            .w_full()
-            .gap(8.0)
-            .child(section_head("Downloads"))
-            .child(card),
-    )
+    col().w_full().gap(24.0).child(card)
 }
 
 fn section_in_game(s: &AppState) -> El {
@@ -821,7 +817,7 @@ pub fn view(s: &AppState) -> El {
         Vec::new()
     };
 
-    let back_btn = row()
+    let back_btn = el()
         .key("settings-back")
         .role("button")
         .label("Back")
@@ -830,32 +826,28 @@ pub fn view(s: &AppState) -> El {
         .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(34.0)
-        .pl(12.0)
-        .pr(14.0)
-        .gap(6.0)
-        .center_y()
+        .size(30.0, 30.0)
+        .center()
         .radius(RADIUS_PILL)
-        .liquid_glass(exo_glass(ExoGlass::Control, true))
+        .fill(TRANSPARENT)
         .hover(hover_fill())
         .press(pressed_fill())
         .motion(SPRING_QUICK)
         .on_press(|s: &mut AppState| s.toggle_settings())
-        .child(icon_chevron_left(16.0, FG))
-        .child(text("Back").font(type_body()).color(FG));
+        .child(icon_chevron_left(16.0, fg_muted()));
 
     let mut search_bar = row()
         .w_full()
-        .h(36.0)
+        .h(34.0)
         .px(12.0)
         .gap(8.0)
         .center_y()
         .hit()
         .cursor(Cursor::Text)
         .radius(RADIUS_PILL)
-        .fill(TRANSPARENT)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(icon_search(15.0, fg_muted()))
+        .fill(glass_still_control_fill())
+        .border(1.0, card_border())
+        .child(icon_search(14.0, fg_muted()))
         .child(
             text_input(&s.pc.settings_query, type_body())
                 .key("settings-search")
@@ -959,8 +951,7 @@ pub fn view(s: &AppState) -> El {
                             .motion(SPRING_SNAPPY)
                             .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                             .radius(RADIUS_SMALL)
-                            .fill(FG.alpha(0.15))
-                            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                            .fill(selected_fill())
                             .inert(),
                     );
                 }
@@ -984,20 +975,31 @@ pub fn view(s: &AppState) -> El {
 
     let sidebar = col()
         .key("settings-sidebar")
-        .w(scaled(280.0))
+        .w(scaled(256.0))
         .h_full()
-        .py(24.0)
-        .px(16.0)
-        .gap(14.0)
-        .border_sides([0.0, 1.0, 0.0, 0.0], float_line())
-        .child(row().child(back_btn))
+        .min_h(0.0)
+        .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .fill(surface_card())
+        .border(1.0, card_border())
+        .py(14.0)
+        .px(12.0)
+        .gap(12.0)
         .child(
-            row().h(scaled(42.0)).px(8.0).center_y().child(
-                text("Settings")
-                    .key("settings-sidebar-title")
-                    .font(type_page().letter_spacing(-0.02))
-                    .color(FG),
-            ),
+            row()
+                .w_full()
+                .h(34.0)
+                .px(2.0)
+                .gap(6.0)
+                .center_y()
+                .child(back_btn)
+                .child(
+                    text("Settings")
+                        .key("settings-sidebar-title")
+                        .font(type_title())
+                        .color(FG),
+                ),
         )
         .child(search_bar)
         .child(nav_body);
@@ -1032,14 +1034,14 @@ pub fn view(s: &AppState) -> El {
                         .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
                 )
                 .w_full()
-                .max_w(scaled(960.0))
-                .pt(24.0)
+                .max_w(scaled(840.0))
+                .pt(20.0)
                 .px(36.0)
-                .pb(48.0)
+                .pb(56.0)
                 .child(
                     row()
                         .key("settings-page-title")
-                        .h(scaled(42.0))
+                        .h(scaled(40.0))
                         .center_y()
                         .child(
                             text(title)
@@ -1048,7 +1050,7 @@ pub fn view(s: &AppState) -> El {
                                 .color(FG),
                         ),
                 )
-                .child(col().w_full().pt(20.0).child(body)),
+                .child(col().w_full().pt(18.0).child(body)),
         );
 
     col()
@@ -1056,12 +1058,15 @@ pub fn view(s: &AppState) -> El {
         .w_full()
         .h_full()
         .pt(52.0)
+        .px(GAP)
+        .pb(GAP)
         .fill(BG)
         .child(
             row()
                 .key("settings-shell")
                 .w_full()
                 .h_full()
+                .gap(GAP)
                 .items_start()
                 .child(sidebar)
                 .child(right_col),
@@ -1108,23 +1113,23 @@ mod tests {
             .expect("settings-pane-General");
 
         assert!(
-            (shell_rect[2] - 1920.0).abs() <= 1.0,
-            "expected full-width 1920px settings shell, got {}",
+            (shell_rect[2] - 1900.0).abs() <= 1.0,
+            "expected inset 1900px settings shell, got {}",
             shell_rect[2]
         );
         assert!(
-            sidebar_rect[0].abs() <= 1.0 && (sidebar_rect[2] - 280.0).abs() <= 1.0,
-            "expected left-docked 280px sidebar at x=0, got {:?}",
+            (sidebar_rect[0] - 10.0).abs() <= 1.0 && (sidebar_rect[2] - 256.0).abs() <= 1.0,
+            "expected floating 256px sidebar at x=10, got {:?}",
             sidebar_rect
         );
         assert!(
-            (scroll_rect[0] - 280.0).abs() <= 1.0 && (scroll_rect[2] - 1640.0).abs() <= 1.0,
-            "expected right scroll pane at x=280 w=1640, got {:?}",
+            (scroll_rect[0] - 276.0).abs() <= 1.0 && (scroll_rect[2] - 1634.0).abs() <= 1.0,
+            "expected right scroll pane at x=276 w=1634, got {:?}",
             scroll_rect
         );
         assert!(
-            (pane_rect[0] - 620.0).abs() <= 1.0 && (pane_rect[2] - 960.0).abs() <= 1.0,
-            "expected centered 960px settings inner pane at x=620, got {:?}",
+            (pane_rect[0] - 673.0).abs() <= 1.0 && (pane_rect[2] - 840.0).abs() <= 1.0,
+            "expected centered 840px settings inner pane at x=673, got {:?}",
             pane_rect
         );
 
@@ -1142,18 +1147,18 @@ mod tests {
             .expect("set-label-Last backup");
 
         assert!(
-            (title_rect[0] - 656.0).abs() <= 1.5,
-            "expected page title at x=656, got {}",
+            (title_rect[0] - 709.0).abs() <= 1.5,
+            "expected page title at x=709, got {}",
             title_rect[0]
         );
         assert!(
-            (sec_rect[0] - 658.0).abs() <= 1.5,
-            "expected section head at x=658, got {}",
+            (sec_rect[0] - 711.0).abs() <= 1.5,
+            "expected section head at x=711, got {}",
             sec_rect[0]
         );
         assert!(
-            (row1_rect[0] - 674.0).abs() <= 1.5,
-            "expected row label at x=674 (656+18), got {}",
+            (row1_rect[0] - 727.0).abs() <= 1.5,
+            "expected row label at x=727 (709+18), got {}",
             row1_rect[0]
         );
         assert!(

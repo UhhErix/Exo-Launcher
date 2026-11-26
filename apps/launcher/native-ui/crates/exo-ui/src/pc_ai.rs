@@ -850,8 +850,8 @@ fn updates_card_view(s: &AppState) -> El {
         .gap(4.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(exo_kit::surface_elevated())
-        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
+        .fill(exo_kit::surface_card())
+        .border(1.0, exo_kit::card_border())
         .child(
             row()
                 .w_full()
@@ -1560,8 +1560,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .pb(6.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(exo_kit::surface_elevated())
-        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
+        .fill(exo_kit::surface_card())
+        .border(1.0, exo_kit::card_border())
         .child(
             row()
                 .w_full()
@@ -1886,8 +1886,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .pb(10.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(exo_kit::surface_elevated())
-        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
+        .fill(exo_kit::surface_card())
+        .border(1.0, exo_kit::card_border())
         .child(
             text(pc_name.to_string())
                 .key("exo-ai-hw-title")
@@ -2407,8 +2407,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .pb(16.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(exo_kit::surface_elevated())
-        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
+        .fill(exo_kit::surface_card())
+        .border(1.0, exo_kit::card_border())
         .child(
             row()
                 .w_full()

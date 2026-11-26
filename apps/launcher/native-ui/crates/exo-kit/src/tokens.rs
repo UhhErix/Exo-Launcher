@@ -153,7 +153,7 @@ pub fn scrim_fill() -> Color {
 }
 
 pub fn surface_card() -> Color {
-    Color::WHITE.alpha(0.02)
+    Color::WHITE.alpha(0.025)
 }
 
 pub fn surface_elevated() -> Color {

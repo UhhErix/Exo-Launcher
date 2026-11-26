@@ -1,4 +1,4 @@
-use crate::devices_audio::{device_btn, device_icon_btn, device_row, device_switch};
+use crate::devices_audio::{device_btn, device_icon_btn, device_row};
 use crate::media_state::CaptureFilter;
 use crate::pc_state::format_bytes;
 use crate::snip_editor;
@@ -2538,32 +2538,31 @@ fn settings_choice_rows(
         .find(|(v, _)| *v == spec.current)
         .map(|(_, l)| *l)
         .unwrap_or(spec.current);
-    let mut out = vec![device_row(
+    let err = settings_err_for(s, row_key);
+    let mut out = vec![crate::settings::set_row(
         spec.label,
-        spec.detail,
-        settings_err_for(s, row_key),
-        Some(
-            device_btn(format!("cap-set-ch-{row_key}"), cur_lbl, spec.disabled).on_press(
-                move |s: &mut AppState| {
-                    s.media.captures_ui.settings_open_choice =
-                        if is_open { None } else { Some(row_key.into()) };
-                },
-            ),
-        ),
+        spec.detail.as_deref(),
+        err.as_deref(),
+        false,
+        crate::settings::set_btn(format!("cap-set-ch-{row_key}"), cur_lbl, None)
+            .disabled(spec.disabled)
+            .on_press(move |s: &mut AppState| {
+                s.media.captures_ui.settings_open_choice =
+                    if is_open { None } else { Some(row_key.into()) };
+            }),
     )];
     if is_open {
-        let mut pills = row().w_full().flex_wrap().gap(6.0).py(4.0);
+        let mut pills = row().w_full().px(18.0).pb(12.0).flex_wrap().gap(8.0);
         for (val, lbl) in spec.choices {
             let v = *val;
             let f = on_pick.clone();
-            pills = pills.child(
-                filter_pill(
-                    format!("cap-set-opt-{row_key}-{val}"),
-                    *lbl,
-                    *val == spec.current,
-                )
-                .on_press(move |s: &mut AppState| f(s, v)),
-            );
+            let active = *val == spec.current;
+            let btn = if active {
+                crate::settings::set_primary_btn(format!("cap-set-opt-{row_key}-{val}"), *lbl, None)
+            } else {
+                crate::settings::set_btn(format!("cap-set-opt-{row_key}-{val}"), *lbl, None)
+            };
+            pills = pills.child(btn.on_press(move |s: &mut AppState| f(s, v)));
         }
         out.push(pills);
     }
@@ -2702,34 +2701,32 @@ pub(crate) fn settings_body(s: &AppState) -> El {
             }
         }
     });
-    rec_rows.push(device_row(
+    let q_detail = encoder_line(live);
+    let q_err = settings_err_for(s, "quality");
+    rec_rows.push(crate::settings::set_row(
         "Quality",
-        encoder_line(live),
-        settings_err_for(s, "quality"),
-        Some(
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(text("Smaller files").font(type_small()).color(fg_muted()))
-                .child(quality_slider)
-                .child(text("Best quality").font(type_small()).color(fg_muted())),
-        ),
+        q_detail.as_deref(),
+        q_err.as_deref(),
+        false,
+        row()
+            .gap(10.0)
+            .center_y()
+            .child(text("Smaller files").font(type_small()).color(fg_muted()))
+            .child(quality_slider)
+            .child(text("Best quality").font(type_small()).color(fg_muted())),
     ));
 
-    rec_rows.push(device_row(
+    let call_err = settings_err_for(s, "callVoices");
+    rec_rows.push(crate::settings::set_row(
         "Record voice chat",
         None,
-        settings_err_for(s, "callVoices"),
-        Some(
-            device_switch("cap-set-call", "Record voice chat", call_voices, disabled).on_press(
-                move |s: &mut AppState| {
-                    s.capture_save_settings_patch(
-                        "callVoices",
-                        json!({ "callVoices": !call_voices }),
-                    );
-                },
-            ),
-        ),
+        call_err.as_deref(),
+        false,
+        exo_kit::switch_pill("cap-set-call", "Record voice chat", call_voices)
+            .disabled(disabled)
+            .on_press(move |s: &mut AppState| {
+                s.capture_save_settings_patch("callVoices", json!({ "callVoices": !call_voices }));
+            }),
     ));
 
     for (label, field, keys, ok) in [
@@ -2759,68 +2756,67 @@ pub(crate) fn settings_body(s: &AppState) -> El {
             let k = keys_label(keys);
             if k.is_empty() { "Set".into() } else { k }
         };
-        let err = (!ok).then(|| "Another app already uses these keys. Pick others.".into());
-        rec_rows.push(device_row(
+        let err: Option<String> =
+            (!ok).then(|| "Another app already uses these keys. Pick others.".into());
+        rec_rows.push(crate::settings::set_row(
             label,
             None,
-            err,
-            Some(
-                device_btn(format!("cap-hk-{field}"), btn_lbl, disabled).on_press(
-                    move |s: &mut AppState| {
-                        s.media.captures_ui.listening_hotkey =
-                            if listening { None } else { Some(field.into()) };
-                    },
-                ),
-            ),
+            err.as_deref(),
+            false,
+            crate::settings::set_btn(format!("cap-hk-{field}"), btn_lbl, None)
+                .disabled(disabled)
+                .on_press(move |s: &mut AppState| {
+                    s.media.captures_ui.listening_hotkey =
+                        if listening { None } else { Some(field.into()) };
+                }),
         ));
     }
 
     let print_blocked = live.is_some_and(|l| !l.hotkeys.print_screen) && print_screen;
-    rec_rows.push(device_row(
+    let prt_err = settings_err_for(s, "printScreen").or_else(|| {
+        print_blocked.then(|| {
+            "Windows keeps Print Screen for Snipping Tool. Turn that off in Windows Settings > Accessibility > Keyboard."
+                .into()
+        })
+    });
+    rec_rows.push(crate::settings::set_row(
         "Print Screen snips",
         None,
-        settings_err_for(s, "printScreen").or_else(|| {
-            print_blocked.then(|| {
-                "Windows keeps Print Screen for Snipping Tool. Turn that off in Windows Settings > Accessibility > Keyboard."
-                    .into()
-            })
-        }),
-        Some(
-            device_switch("cap-set-prtsc", "Print Screen snips", print_screen, disabled).on_press(
-                move |s: &mut AppState| {
-                    s.capture_save_settings_patch(
-                        "printScreen",
-                        json!({ "printScreen": !print_screen }),
-                    );
-                },
-            ),
-        ),
+        prt_err.as_deref(),
+        false,
+        exo_kit::switch_pill("cap-set-prtsc", "Print Screen snips", print_screen)
+            .disabled(disabled)
+            .on_press(move |s: &mut AppState| {
+                s.capture_save_settings_patch(
+                    "printScreen",
+                    json!({ "printScreen": !print_screen }),
+                );
+            }),
     ));
 
     let folder_detail = cfg
         .map(|c| c.folder.clone())
         .filter(|f| !f.is_empty())
         .or_else(|| status.and_then(|st| st.folder.clone()));
-    let mut storage_rows = vec![device_row(
+    let folder_err = settings_err_for(s, "folder");
+    let mut storage_rows = vec![crate::settings::set_row(
         "Save to",
-        folder_detail,
-        settings_err_for(s, "folder"),
-        Some(
-            row()
-                .gap(8.0)
-                .child(
-                    device_btn("cap-set-folder-open", "Open", disabled)
-                        .on_press(|s: &mut AppState| s.capture_open_folder()),
-                )
-                .child(
-                    device_btn(
-                        "cap-set-folder-change",
-                        "Change",
-                        disabled || s.media.captures_ui.picking_folder,
-                    )
+        folder_detail.as_deref(),
+        folder_err.as_deref(),
+        false,
+        row()
+            .gap(8.0)
+            .center_y()
+            .child(
+                crate::settings::set_btn("cap-set-folder-open", "Open", None)
+                    .disabled(disabled)
+                    .on_press(|s: &mut AppState| s.capture_open_folder()),
+            )
+            .child(
+                crate::settings::set_btn("cap-set-folder-change", "Change", None)
+                    .disabled(disabled || s.media.captures_ui.picking_folder)
                     .on_press(|s: &mut AppState| s.capture_pick_folder()),
-                ),
-        ),
+            ),
     )];
 
     storage_rows.extend(settings_choice_rows(

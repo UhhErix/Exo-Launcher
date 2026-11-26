@@ -2001,8 +2001,8 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         .gap(14.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(exo_kit::surface_elevated())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .fill(exo_kit::surface_card())
+        .border(1.0, exo_kit::card_border())
         .child(header)
         .child(body);
 
