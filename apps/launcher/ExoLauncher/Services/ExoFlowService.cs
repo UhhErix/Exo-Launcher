@@ -34,6 +34,7 @@ internal static class ExoFlowService
                 return candidate;
         }
 
+#if DEBUG
         var dir = new DirectoryInfo(baseDir);
         for (var i = 0; i < 8 && dir is not null; i++)
         {
@@ -46,6 +47,7 @@ internal static class ExoFlowService
             dir = dir.Parent;
         }
 
+#endif
         return null;
     }
 

@@ -227,6 +227,7 @@ internal sealed partial class RuneHostSession
         var beside = Path.Combine(appBaseDirectory, "exo-ui.exe");
         if (File.Exists(beside)) return beside;
 
+#if DEBUG
         var dir = new DirectoryInfo(appBaseDirectory);
         for (var depth = 0; depth < 8 && dir is not null; depth++, dir = dir.Parent)
         {
@@ -235,6 +236,7 @@ internal sealed partial class RuneHostSession
             var debug = Path.Combine(dir.FullName, "native-ui", "target", "debug", "exo-ui.exe");
             if (File.Exists(debug)) return debug;
         }
+#endif
         return null;
     }
 
@@ -255,6 +257,19 @@ internal sealed partial class RuneHostSession
         WebViewRuntimeLocator.ClearStaleBrowserFolderPin();
         var services = App.Services;
         services.Initialize();
+        if (!PackagedSmoke.Enabled && !HostMode.IsDisposable && !ForegroundWatcher.StartedQuiet &&
+            services.Updater.SettleKeptUpdate(services.AppVersion))
+        {
+            var started = false;
+            try { started = services.Updater.ApplyKeptAtStartAsync(services.AppVersion).GetAwaiter().GetResult(); }
+            catch (Exception ex) { AppLog.Warn("Update at start failed: " + ex.GetType().Name); }
+            if (started)
+            {
+                UpdateHandOff.Save(UpdateHandOff.FilePath, Program.LaunchArgs, DateTimeOffset.UtcNow);
+                services.Shutdown();
+                return 0;
+            }
+        }
         KeepAwake.SettingOn = () => true;
 
         var dispatcherController = DispatcherQueueController.CreateOnDedicatedThread();

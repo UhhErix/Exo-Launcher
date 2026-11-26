@@ -19,7 +19,7 @@ namespace ExoLauncher.Services;
 public sealed partial class AppUpdateService
 {
     internal const string StagedRecordName = "staged-update.json";
-    internal const string WaitsForGameMessage = "Your update is ready and goes in after your game, the next time Exo opens.";
+    internal const string WaitsForGameMessage = "Your update is ready and goes in the next time Exo opens.";
     /// <summary>Room the installer needs beyond its own parts (its log, the shortcut, Windows' own slack).</summary>
     internal const long SpaceMargin = 256L * 1024 * 1024;
     /// <summary>A kept installer started this many times without the update taking is dropped; the next update downloads anew.</summary>

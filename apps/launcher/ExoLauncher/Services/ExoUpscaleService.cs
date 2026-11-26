@@ -88,6 +88,7 @@ internal static class ExoUpscaleService
                 return candidate;
         }
 
+#if DEBUG
         var dir = new DirectoryInfo(baseDir);
         for (var i = 0; i < 8 && dir is not null; i++)
         {
@@ -100,6 +101,7 @@ internal static class ExoUpscaleService
             dir = dir.Parent;
         }
 
+#endif
         return null;
     }
 
@@ -117,6 +119,7 @@ internal static class ExoUpscaleService
                 return candidate;
         }
 
+#if DEBUG
         var dir = new DirectoryInfo(baseDir);
         for (var i = 0; i < 8 && dir is not null; i++)
         {
@@ -129,6 +132,7 @@ internal static class ExoUpscaleService
             dir = dir.Parent;
         }
 
+#endif
         return null;
     }
 
