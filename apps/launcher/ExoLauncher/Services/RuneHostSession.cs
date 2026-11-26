@@ -52,33 +52,21 @@ internal sealed partial class RuneHostSession
         return psi;
     }
 
-    internal static bool ReadUseClassicWebUiPreference()
-    {
-        try
-        {
-            var path = PathHelper.SettingsPath;
-            if (!File.Exists(path)) return false;
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            return doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("useClassicWebUi", out var prop)
-                && prop.ValueKind == JsonValueKind.True;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+#if DEBUG
+    internal const bool ClassicUiAllowed = true;
+#else
+    internal const bool ClassicUiAllowed = false;
+#endif
 
     internal static Options? TryParse(
         string[]? args,
         Func<string, string?>? readEnv = null,
         Func<string, bool>? fileExists = null,
         Action<string>? onWarning = null,
-        Func<bool>? readClassicPref = null)
+        bool allowClassic = ClassicUiAllowed)
     {
         readEnv ??= Environment.GetEnvironmentVariable;
         fileExists ??= File.Exists;
-        readClassicPref ??= ReadUseClassicWebUiPreference;
         try
         {
             string? explicitPipe = null;
@@ -142,9 +130,11 @@ internal sealed partial class RuneHostSession
                 return null;
 
             uiMode ??= SafeReadEnv(readEnv, "EXO_UI", onWarning);
-            if (string.Equals(uiMode, "web", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(uiMode, "webview", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(uiMode, "webview2", StringComparison.OrdinalIgnoreCase))
+            if (!allowClassic && uiMode is not null && uiMode.StartsWith("web", StringComparison.OrdinalIgnoreCase))
+                SafeWarn(onWarning, $"RuneHostSession: ui mode '{uiMode}' is only available in development builds; starting the native interface.");
+            if (allowClassic && string.Equals(uiMode, "web", StringComparison.OrdinalIgnoreCase)
+                || allowClassic && string.Equals(uiMode, "webview", StringComparison.OrdinalIgnoreCase)
+                || allowClassic && string.Equals(uiMode, "webview2", StringComparison.OrdinalIgnoreCase))
             {
                 return null;
             }
@@ -154,11 +144,9 @@ internal sealed partial class RuneHostSession
                 || string.Equals(uiMode, "native", StringComparison.OrdinalIgnoreCase);
             if (!explicitRune)
             {
-                if (SafeReadClassicPref(readClassicPref, onWarning))
-                    return null;
                 var bundledUi = Path.Combine(AppContext.BaseDirectory, "exo-ui.exe");
                 var hasOverride = !string.IsNullOrWhiteSpace(uiExe) && SafeFileExists(fileExists, uiExe, onWarning);
-                if (!hasOverride && !SafeFileExists(fileExists, bundledUi, onWarning))
+                if (allowClassic && !hasOverride && !SafeFileExists(fileExists, bundledUi, onWarning))
                     return null;
             }
 
@@ -193,19 +181,6 @@ internal sealed partial class RuneHostSession
         catch (Exception ex)
         {
             SafeWarn(onWarning, $"RuneHostSession: failed to probe UI executable path ({ex.GetType().Name}); ignoring.");
-            return false;
-        }
-    }
-
-    private static bool SafeReadClassicPref(Func<bool> readClassicPref, Action<string>? onWarning)
-    {
-        try
-        {
-            return readClassicPref();
-        }
-        catch (Exception ex)
-        {
-            SafeWarn(onWarning, $"RuneHostSession: failed to read classic UI preference ({ex.GetType().Name}); ignoring.");
             return false;
         }
     }
@@ -249,8 +224,17 @@ internal sealed partial class RuneHostSession
         Achievements.AchievementSource.Start();
     }
 
+    internal const string MissingFileMessage = "Exo is missing a file. Reinstall Exo to repair it.";
+
     internal static int Run(Options options)
     {
+        var exe = options.SpawnUi ? ResolveUiExecutable(options.UiExecutableOverride, AppContext.BaseDirectory) : null;
+        if (options.SpawnUi && exe is null)
+        {
+            AppLog.Error("RuneHostSession: exo-ui.exe not found.");
+            MessageBoxW(IntPtr.Zero, MissingFileMessage, "Exo Launcher", 0x10);
+            return 2;
+        }
         SystemSpecs.WarmInBackground();
         WebViewRuntimeLocator.ClearStaleBrowserFolderPin();
         var services = App.Services;
@@ -307,14 +291,8 @@ internal sealed partial class RuneHostSession
         var jobHandle = IntPtr.Zero;
         try
         {
-            if (options.SpawnUi)
+            if (exe is not null)
             {
-                var exe = ResolveUiExecutable(options.UiExecutableOverride, AppContext.BaseDirectory);
-                if (exe is null)
-                {
-                    AppLog.Error("RuneHostSession: exo-ui.exe not found.");
-                    return 2;
-                }
                 var psi = BuildUiStartInfo(exe, options.PipeName);
                 uiProcess = Process.Start(psi);
                 if (uiProcess is null)
@@ -484,4 +462,7 @@ internal sealed partial class RuneHostSession
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW")]
+    private static extern int MessageBoxW(IntPtr owner, string text, string caption, uint type);
 }

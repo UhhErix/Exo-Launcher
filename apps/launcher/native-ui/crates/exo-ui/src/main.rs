@@ -2896,6 +2896,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.discord.settings_ext.client.only_my_voice = true;
         s.discord.settings_ext.client.voice_isolation = true;
         s.discord.settings_ext.client.voice_isolation_ready = Some(true);
+        s.discord.settings_ext.client.my_voice_model_ready = Some(true);
         s.discord.settings_ext.client.my_voice_learned = Some(true);
         s.discord.settings_ext.client.my_voice_seconds = Some(14.0);
         s.discord.settings_ext.mic_level = Some(exo_rpc::DiscordMicLevel {
@@ -4890,7 +4891,9 @@ mod tests {
         let mut s = AppState::default();
         assert_eq!(s.push_notice("Saved", state::NoticeTone::Good), 0);
         assert!(s.notices.is_empty());
+        assert_eq!(s.notice.as_deref(), Some("Saved"));
         assert!(!s.dismiss_top_layer());
+        assert!(s.notice.is_none());
 
         let id1 = s.push_notice("First notice", state::NoticeTone::Bad);
         let id2 = s.push_notice("Second notice", state::NoticeTone::Bad);

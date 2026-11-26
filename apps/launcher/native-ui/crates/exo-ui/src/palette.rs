@@ -1,3 +1,4 @@
+use crate::pc_state::SettingsSection;
 use crate::shell::room_icon;
 use crate::state::{AppState, PaletteItem, PaletteTarget, Room};
 use exo_kit::{
@@ -13,6 +14,118 @@ use rune::{
     text_input,
 };
 use serde_json::json;
+
+fn settings_page_keywords(sec: SettingsSection) -> &'static [&'static str] {
+    match sec {
+        SettingsSection::General => &[
+            "dark mode",
+            "amoled",
+            "pure black",
+            "text size",
+            "reduce motion",
+            "animation",
+            "startup",
+            "start with windows",
+            "window",
+        ],
+        SettingsSection::Account => &[
+            "game stores",
+            "sign in",
+            "account",
+            "steam",
+            "epic",
+            "gog",
+            "amazon",
+            "riot",
+            "ea",
+            "ubisoft",
+            "battle.net",
+            "xbox",
+            "offline mode",
+            "soundtracks",
+            "shaders",
+        ],
+        SettingsSection::Appearance => &[
+            "downloads",
+            "install folder",
+            "download hours",
+            "automatic updates",
+            "anti-cheat",
+            "dlss",
+            "fsr",
+            "xess",
+        ],
+        SettingsSection::Graphics => &[
+            "in game",
+            "achievements",
+            "pop-ups",
+            "obs overlay url",
+            "fps counter",
+            "frame rate",
+            "overlay",
+            "gpu use",
+            "vram",
+            "ram",
+            "battery",
+        ],
+        SettingsSection::Updates => &[
+            "music",
+            "music service",
+            "spotify",
+            "apple music",
+            "youtube music",
+            "lossless",
+            "jam",
+        ],
+        SettingsSection::Capture => &[
+            "capture",
+            "exo capture",
+            "instant replay",
+            "replay",
+            "record",
+            "recording",
+            "clips",
+            "snip",
+            "screenshot",
+            "print screen",
+            "hotkeys",
+            "voice chat",
+        ],
+        SettingsSection::About => &[
+            "about",
+            "version",
+            "updates",
+            "caches",
+            "what's new",
+            "changelog",
+            "account",
+            "privacy",
+            "app data",
+            "telemetry",
+            "crash reports",
+        ],
+    }
+}
+
+pub(crate) fn append_settings_pages(query: &str, items: &mut Vec<PaletteItem>) {
+    for sec in SettingsSection::ALL {
+        let title = crate::settings::nav_label(sec);
+        if title.to_lowercase().contains(query)
+            || "settings".contains(query)
+            || settings_page_keywords(sec)
+                .iter()
+                .any(|k| k.contains(query))
+        {
+            items.push(PaletteItem {
+                id: format!("pal-set-{}", sec.key()),
+                group: "Go to",
+                title: title.into(),
+                detail: Some("Settings".into()),
+                target: PaletteTarget::SettingsSection(sec),
+            });
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct PaletteChannelItem {
@@ -569,6 +682,30 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn palette_settings_pages_follow_the_settings_nav() {
+        let mut s = AppState::default();
+        s.palette_query.text = "sett".into();
+        s.palette_query.sync_invariants();
+        let pages: Vec<String> = s
+            .palette_results()
+            .into_iter()
+            .filter(|i| matches!(i.target, PaletteTarget::SettingsSection(_)))
+            .map(|i| i.title)
+            .collect();
+        let nav: Vec<String> = SettingsSection::ALL
+            .into_iter()
+            .map(|sec| crate::settings::nav_label(sec).to_string())
+            .collect();
+        assert_eq!(pages, nav);
+        assert!(pages.iter().any(|t| t == "Capture"));
+
+        let mut items = Vec::new();
+        append_settings_pages("instant replay", &mut items);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "pal-set-set-sec-capture");
+    }
 
     #[test]
     fn palette_includes_selected_game_discord_and_music_extras() {

@@ -31,7 +31,6 @@ const DLSS_PRELOAD_MAX_GAMES: usize = 8;
 const DLSS_NEWER_DELAY_SECS: f64 = 20.0;
 const MOVE_POLL_BASE_SECS: f64 = 2.0;
 const MOVE_POLL_MAX_SECS: f64 = 8.0;
-pub const SHADERS_RELEASES_URL: &str = "https://getexo.app/source";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PrimaryActionKind {
@@ -1254,7 +1253,7 @@ pub fn shader_word(status: &ShaderStatus) -> Option<LineWord> {
         )),
         "ready" | "record" => Some(LineWord::plain("Not compiled")),
         "unsupported" => Some(LineWord::plain("Not supported in this game")),
-        "noApp" => Some(LineWord::plain("Get Exo Shaders")),
+        "noApp" => Some(LineWord::plain("Missing from this install")),
         "error" => Some(LineWord::bad("Could not check")),
         _ => None,
     }
@@ -2878,6 +2877,43 @@ impl AppState {
         }
         #[cfg(not(windows))]
         let _ = url;
+    }
+
+    pub fn open_message_link(&mut self, url: &str) {
+        let confirmed = self.discord.link_confirm.as_deref() == Some(url);
+        self.discord.link_confirm = None;
+        if self.status == HostStatus::Standalone {
+            self.notice = Some(format!("Open {url}"));
+            return;
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let target = url.to_string();
+            rpc.call::<_, OpenUrlReply>(
+                METHOD_SHELL_OPEN_URL,
+                &json!({ "url": target, "guard": true, "confirmed": confirmed }),
+                move |res| match res {
+                    Ok(reply) if !reply.ok => handle.update(move |s, _| {
+                        if let Some(brand) = reply.lookalike {
+                            s.notice = Some(crate::discord_md::lookalike_question(&brand));
+                            s.discord.link_confirm = Some(target);
+                        } else {
+                            s.notice = Some(
+                                reply
+                                    .message
+                                    .unwrap_or_else(|| "Could not open that link.".into()),
+                            );
+                        }
+                    }),
+                    Ok(_) => {}
+                    Err(e) => handle.update(move |s, _| {
+                        s.notice = Some(format!("Could not open link: {e}"));
+                    }),
+                },
+            );
+        }
+        #[cfg(not(windows))]
+        let _ = confirmed;
     }
 
     pub fn select_game_source(&mut self, variant_id: &str) {

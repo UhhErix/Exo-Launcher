@@ -1612,6 +1612,8 @@ pub struct DiscordClientSettings {
     #[serde(default)]
     pub voice_isolation_ready: Option<bool>,
     #[serde(default)]
+    pub my_voice_model_ready: Option<bool>,
+    #[serde(default)]
     pub others_noise_suppression: bool,
     #[serde(default)]
     pub only_my_voice: bool,
@@ -1707,6 +1709,7 @@ impl Default for DiscordClientSettings {
             voice_model_ready: None,
             voice_hq_model_ready: None,
             voice_isolation_ready: None,
+            my_voice_model_ready: None,
             others_noise_suppression: false,
             only_my_voice: false,
             my_voice_learned: None,

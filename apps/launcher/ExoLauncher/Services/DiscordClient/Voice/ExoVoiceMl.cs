@@ -208,19 +208,25 @@ internal sealed class NeuralNoiseSuppressor : IDisposable
         _vox = vox;
     }
 
+    internal static NeuralNoiseSuppressor? CreateUnverifiedForTests(string modelPath)
+    {
+        var h = ExoVoiceMl.CreateDpdfNet(modelPath, intraThreads: 1);
+        return h != 0 ? new NeuralNoiseSuppressor(VoiceModelTier.DpdfNetBaseline, h, 0) : null;
+    }
+
     internal static NeuralNoiseSuppressor? Create(VoiceModelTier tier)
     {
         try
         {
             if (tier == VoiceModelTier.DpdfNetBaseline)
             {
-                if (!VoiceModels.BaselineReady() && !File.Exists(VoiceModels.BaselineModelPath)) return null;
+                if (!VoiceModels.BaselineReady()) return null;
                 var h = ExoVoiceMl.CreateDpdfNet(VoiceModels.BaselineModelPath, intraThreads: 1);
                 return h != 0 ? new NeuralNoiseSuppressor(tier, h, 0) : null;
             }
             if (tier == VoiceModelTier.DpdfNet48kHr)
             {
-                if (!VoiceModels.HighQualityReady() && !File.Exists(VoiceModels.HighQualityModelPath)) return null;
+                if (!VoiceModels.HighQualityReady()) return null;
                 var h = ExoVoiceMl.CreateDpdfNet(VoiceModels.HighQualityModelPath, intraThreads: 1);
                 return h != 0 ? new NeuralNoiseSuppressor(tier, h, 0) : null;
             }

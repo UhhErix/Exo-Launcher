@@ -1609,6 +1609,7 @@ export interface StartupItem {
   verdict: 'remove' | 'optional' | 'keep' | 'locked' | null
   missing: boolean
   locked: boolean
+  lockKind?: 'windows' | 'security' | 'anticheat' | 'driver' | 'inputaudio' | 'exo' | 'updater' | null
   /** Listed so the player sees it; Exo never turns it off. */
   readOnly: boolean
   status?: string | null
@@ -1851,8 +1852,6 @@ export interface LauncherSettings {
   reduceMotion?: boolean
   /** The window always opens maximized; off, it opens as it was when it closed. */
   startMaximized?: boolean
-  useClassicWebUi?: boolean
-  relaunchForUiSwitch?: boolean
   /** Settings › General › Open Exo when Windows starts. */
   startWithWindows?: boolean
   textColour?: 'white' | 'grey' | string
@@ -2372,7 +2371,6 @@ export interface HostEventMap {
   'controller.state': ControllerState
   /** Exo Capture's state changed: buffering, recording, hotkeys, or it stopped. */
   'capture.state': CaptureState
-  /** An achievement unlocked while a game runs: the native UI shows its banner over the game (the host plays its sound). */
   'achievement.unlocked': { game: string; name: string; description: string; icon?: string | null; tier: string; percent?: number | null; unlocked: number; total: number }
   /** A clip, recording, snip, trim or export was saved; edit: a snip to open in the editor, Exo in front (not one taken over a game). */
   'capture.saved': { item: CaptureItem; edit?: boolean }

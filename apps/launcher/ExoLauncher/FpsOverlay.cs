@@ -15,9 +15,9 @@ namespace ExoLauncher;
 
 /// <summary>
 /// The FPS counter over the game: one small pill off the top of the game's screen ("142 FPS"), in its corner or its
-/// middle: Goeist tabular figures over Exo's Liquid Glass material. Drawn via DirectComposition
+/// middle: Geist tabular figures over Exo's Liquid Glass material. Drawn via DirectComposition
 /// (<see cref="Windows.UI.Composition"/> Host Backdrop blur + saturation + dark legibility tint, diagonal Fresnel rim,
-/// outer hairline separation, rounded pill geometric clip, and a DirectWrite Goeist drawing surface) with a safe GDI
+/// outer hairline separation, rounded pill geometric clip, and a DirectWrite Geist drawing surface) with a safe GDI
 /// <see cref="UpdateLayeredWindow"/> fallback when backdrop composition is unavailable or High Contrast is enabled.
 /// Never takes focus or clicks, excludes itself from captures (<c>WDA_EXCLUDEFROMCAPTURE</c>), and re-asserts
 /// <c>HWND_TOPMOST</c> if a game rises above it in Z-order.
@@ -59,7 +59,7 @@ internal sealed unsafe class FpsOverlay : IDisposable
     private const byte CapsuleAlpha = 199, NumberInk = 255, RestInk = 191;
     private const double EdgeTop = 0.17, EdgeFoot = 0.03;
     private const uint TextQuality = 4; // ANTIALIASED_QUALITY: gray, hinted to the pixel grid, so stems stay sharp at any scale.
-    private const string ClassName = "ExoFpsCounter", SemiBoldFace = "Goeist SemiBold", RegularFace = "Goeist", Separator = " · ";
+    private const string ClassName = "ExoFpsCounter", SemiBoldFace = "Geist SemiBold", RegularFace = "Geist", Separator = " · ";
 
     private static WndProc? _proc;
     private static WinEventProc? _frontChanged;
@@ -169,8 +169,8 @@ internal sealed unsafe class FpsOverlay : IDisposable
     internal static void AddFont(string? path = null)
     {
         if (Interlocked.Exchange(ref _fontAdded, 1) == 1) return;
-        path ??= Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Goeist-Variable.ttf");
-        if (AddFontResourceExW(path, 0x10 /* FR_PRIVATE */, IntPtr.Zero) == 0) AppLog.Warn("FPS counter: Goeist didn't load, so Windows picks a font.");
+        path ??= Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Geist-Variable.ttf");
+        if (AddFontResourceExW(path, 0x10 /* FR_PRIVATE */, IntPtr.Zero) == 0) AppLog.Warn("FPS counter: Geist didn't load, so Windows picks a font.");
     }
 
     /// <summary>The capsule: a 32-bit top-down DIB of premultiplied pixels, selected into its own DC.</summary>
@@ -288,7 +288,7 @@ internal sealed unsafe class FpsOverlay : IDisposable
 
     private static uint Gray(byte ink) => (uint)(ink | ink << 8 | ink << 16);
 
-    /// <summary>The faces GDI selected for the number and the rest at a scale, as it reports them: Goeist's, unless Windows fell back.</summary>
+    /// <summary>The faces GDI selected for the number and the rest at a scale, as it reports them: Geist's, unless Windows fell back.</summary>
     internal static (string Number, string Words) Faces(double scale = 1)
     {
         Draw(new(0, null), scale).Dispose();
@@ -416,7 +416,7 @@ internal sealed unsafe class FpsOverlay : IDisposable
         if (CanUseLiquidGlass(IsHighContrast(), backdropSupported: true))
         {
             MakeWindow(noRedirectionBitmap: true);
-            _glass = GlassHost.TryCreate(_hwnd, Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Goeist-Variable.ttf"));
+            _glass = GlassHost.TryCreate(_hwnd, Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Geist-Variable.ttf"));
             if (_glass is not null)
             {
                 _usingGlass = true;

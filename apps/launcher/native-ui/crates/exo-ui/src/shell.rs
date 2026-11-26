@@ -474,6 +474,7 @@ const BAR_SCROLL_START: f32 = 24.0;
 
 struct AutoBar {
     shift: rune::Live<[f32; 2]>,
+    caption_backing: rune::Live<f32>,
     scroll_hidden: AtomicBool,
     peek: AtomicBool,
     last_y: AtomicU32,
@@ -482,6 +483,7 @@ struct AutoBar {
 thread_local! {
     static AUTO_BAR: AutoBar = AutoBar {
         shift: rune::Live::new([0.0, 0.0]),
+        caption_backing: rune::Live::new(0.0),
         scroll_hidden: AtomicBool::new(false),
         peek: AtomicBool::new(false),
         last_y: AtomicU32::new(0),
@@ -497,6 +499,7 @@ fn sync_auto_bar() {
     auto_bar(|bar| {
         let hide = bar.scroll_hidden.load(Ordering::Relaxed) && !bar.peek.load(Ordering::Relaxed);
         bar.shift.set([0.0, if hide { BAR_HIDE_DY } else { 0.0 }]);
+        bar.caption_backing.set(if hide { 1.0 } else { 0.0 });
     });
 }
 
@@ -1210,6 +1213,18 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             auto_bar(|bar| bar.shift.smooth(SPRING_MOVE))
         }
     };
+    let caption_backing = (insets.trailing > 0.0 && !bar_pinned).then(|| {
+        let reserve = (insets.trailing - CAPTION_TRAILING_INSET).max(0.0);
+        apply_glass(
+            el().key("titlebar-caption-backing")
+                .pin(None, Some(8.0), Some(right_pin), None)
+                .size(reserve + 2.0 * CAPTION_CAPSULE_PAD, 36.0)
+                .radius(RADIUS_PILL)
+                .live_opacity(auto_bar(|bar| bar.caption_backing.smooth(SPRING_MOVE))),
+            ExoGlass::Bar,
+            false,
+        )
+    });
     let top_bar = el()
         .key("top-bar")
         .live_offset(bar_shift())
@@ -1351,6 +1366,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         })
         .child(room_stage)
         .children((!hero_bleeds_top).then_some(top_fade))
+        .children(caption_backing)
         .child(top_bar);
 
     if !s.media.captures_open && s.room == Room::Discord {

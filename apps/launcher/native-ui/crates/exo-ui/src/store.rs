@@ -1,7 +1,7 @@
 use crate::state::{AppState, InputMode, title_hue};
 use crate::store_page::{HERO_ROTATE_SECS, find_owned_game};
 use exo_kit::{
-    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    BG, ExoGlass, FG, PAGE_GUTTER, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted,
     glass_button, glass_control_fill, glass_icon_circle_opt, glass_rim_bottom, glass_rim_top, good,
     hover_fill, icon_arrow_right, icon_bookmark_filled, icon_check, icon_chevron_left,
@@ -256,7 +256,7 @@ fn tile_meta_row(tile: &StoreTile) -> Option<El> {
 
 fn store_grid_card_width(viewport_w: f32) -> f32 {
     let usable = if viewport_w > 0.0 {
-        (viewport_w - 48.0).max(160.0)
+        (viewport_w - PAGE_GUTTER * 2.0).max(160.0)
     } else {
         1392.0
     };
@@ -472,7 +472,7 @@ pub fn store_shelf_row(
     let mut header = row()
         .w_full()
         .pt(8.0)
-        .px(24.0)
+        .px(PAGE_GUTTER)
         .pb(6.0)
         .justify_between()
         .center_y()
@@ -536,7 +536,7 @@ pub fn store_shelf_row(
         .key(track_key)
         .w_full()
         .pt(8.0)
-        .px(24.0)
+        .px(PAGE_GUTTER)
         .pb(4.0)
         .gap(16.0)
         .scroll_x()
@@ -724,7 +724,7 @@ fn wishlist_view(s: &AppState, scale: f32) -> El {
     let mut head = row()
         .w_full()
         .pt(4.0)
-        .px(10.0)
+        .px(PAGE_GUTTER)
         .pb(6.0)
         .justify_between()
         .center_y();
@@ -745,7 +745,7 @@ fn wishlist_view(s: &AppState, scale: f32) -> El {
         row()
             .w_full()
             .pt(8.0)
-            .px(10.0)
+            .px(PAGE_GUTTER)
             .flex_wrap()
             .gap(16.0)
             .children(
@@ -762,7 +762,7 @@ fn wishlist_view(s: &AppState, scale: f32) -> El {
                     .w_full()
                     .mt(32.0)
                     .pt(4.0)
-                    .px(10.0)
+                    .px(PAGE_GUTTER)
                     .pb(6.0)
                     .child(text("Not on sale").font(type_title()).color(FG)),
             )
@@ -770,7 +770,7 @@ fn wishlist_view(s: &AppState, scale: f32) -> El {
                 row()
                     .w_full()
                     .pt(8.0)
-                    .px(10.0)
+                    .px(PAGE_GUTTER)
                     .flex_wrap()
                     .gap(16.0)
                     .children(rest.into_iter().map(|t| {
@@ -836,7 +836,7 @@ fn search_view(s: &AppState, scale: f32) -> El {
         row()
             .w_full()
             .pt(8.0)
-            .px(24.0)
+            .px(PAGE_GUTTER)
             .flex_wrap()
             .gap(16.0)
             .children(
@@ -1022,7 +1022,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
     let mut hero_row = row()
         .key("store-hero-section")
         .w_full()
-        .px(24.0)
+        .px(PAGE_GUTTER)
         .gap(16.0)
         .items_start()
         .on_hover_change(|s: &mut AppState, inside, _tx| {
@@ -1327,7 +1327,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
     let sub_bar = row()
         .w_full()
         .pt(12.0)
-        .px(24.0)
+        .px(PAGE_GUTTER)
         .pb(16.0)
         .gap(12.0)
         .justify_between()
@@ -1426,8 +1426,19 @@ mod tests {
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
         rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.frame(0.0);
-        rt.settle_all();
+        rt.update(|s, _| {
+            let home = s.store_home.as_mut().expect("demo store home");
+            let base = home.hero.first().cloned().expect("demo hero");
+            while home.hero.len() < 4 {
+                let mut extra = base.clone();
+                extra.app_id = format!("{}-{}", base.app_id, home.hero.len());
+                extra.name = format!("{} {}", base.name, home.hero.len());
+                home.hero.push(extra);
+            }
+        });
         rt.frame(1.0 / 60.0);
+        rt.settle_all();
+        rt.frame(2.0 / 60.0);
 
         let blurs = rt
             .instances
@@ -1448,13 +1459,14 @@ mod tests {
             "expected 560px hero height, got {}",
             hero_rect[3]
         );
-        if let Some((side_rect, _)) = rt.presented("store-hero-side-list") {
-            assert!(
-                (side_rect[1] - hero_rect[1]).abs() <= 1.0
-                    && (side_rect[3] - hero_rect[3]).abs() <= 1.0,
-                "expected side-picker flush with hero banner: hero={hero_rect:?} side={side_rect:?}"
-            );
-        }
+        let (side_rect, _) = rt
+            .presented("store-hero-side-list")
+            .expect("store-hero-side-list presented with four featured games");
+        assert!(
+            (side_rect[1] - hero_rect[1]).abs() <= 1.0
+                && (side_rect[3] - hero_rect[3]).abs() <= 1.0,
+            "expected side-picker flush with hero banner: hero={hero_rect:?} side={side_rect:?}"
+        );
     }
 
     #[test]
@@ -1605,5 +1617,9 @@ mod tests {
         assert!(rt.presented("store-tile-wish-rest-1145350").is_some());
         assert!(rt.presented("store-tile-wish-rest-999002").is_some());
         assert!(rt.presented("store-tile-lib-wish-rest-1145350").is_some());
+        let (sale_rect, _) = rt.presented("store-tile-wish-sale-999001").unwrap();
+        let (check_rect, _) = rt.presented("store-check-prices").unwrap();
+        assert!((sale_rect[0] - exo_kit::PAGE_GUTTER).abs() < 1.0);
+        assert!((1920.0 - check_rect[0] - check_rect[2] - exo_kit::PAGE_GUTTER).abs() < 1.0);
     }
 }

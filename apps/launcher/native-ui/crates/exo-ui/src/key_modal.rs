@@ -55,11 +55,11 @@ pub fn register_events(reg: &mut EventRegistry) {
             .map(|s| s.to_string());
         if ok && let Some(gid) = game_id {
             state.close_key_modal();
+            state.refresh_library();
             state.push_notice(
                 message.unwrap_or_else(|| "Key activated.".into()),
                 NoticeTone::Good,
             );
-            state.refresh_library();
             state.open_game_page(&gid);
         } else {
             state.push_notice(
@@ -403,6 +403,7 @@ mod tests {
         assert!(!s.key_modal_open);
         assert_eq!(s.open_game_id.as_deref(), Some(first_id.as_str()));
         assert!(s.notices.is_empty());
+        assert_eq!(s.notice.as_deref(), Some("Added to library"));
     }
 
     #[test]

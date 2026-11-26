@@ -213,14 +213,14 @@ Function ${UN}ExoGuiInit
     StrCpy $S 300
     !insertmacro Pictures 300
   ${EndIf}
-  ; Goeist, Exo's type, private to setup: GDI names its instances "Goeist <weight>".
-  File "/oname=$PLUGINSDIR\Goeist.ttf" "${__FILEDIR__}\..\ExoLauncher\Assets\Fonts\Goeist-Variable.ttf"
-  System::Call 'gdi32::AddFontResourceExW(w "$PLUGINSDIR\Goeist.ttf", i 0x10, p 0)'
-  !insertmacro Font $FontTitle 26 600 "Goeist SemiBold"
-  !insertmacro Font $FontButton 13 600 "Goeist SemiBold"
-  !insertmacro Font $FontBody 13 400 "Goeist"
-  !insertmacro Font $FontSmall 12 400 "Goeist"
-  !insertmacro Font $FontClose 16 400 "Goeist"
+  ; Geist, Exo's type, private to setup: GDI names its instances "Geist <weight>".
+  File "/oname=$PLUGINSDIR\Geist.ttf" "${__FILEDIR__}\..\native-ui\crates\exo-kit\assets\fonts\Geist-Variable.ttf"
+  System::Call 'gdi32::AddFontResourceExW(w "$PLUGINSDIR\Geist.ttf", i 0x10, p 0)'
+  !insertmacro Font $FontTitle 26 600 "Geist SemiBold"
+  !insertmacro Font $FontButton 13 600 "Geist SemiBold"
+  !insertmacro Font $FontBody 13 400 "Geist"
+  !insertmacro Font $FontSmall 12 400 "Geist"
+  !insertmacro Font $FontClose 16 400 "Geist"
   !insertmacro Bitmap $BmpMark mark
   !insertmacro Bitmap $BmpButton button
   !insertmacro Bitmap $BmpButtonHover button-hover
@@ -270,7 +270,7 @@ Function ${UN}ExoGuiInit
 FunctionEnd
 
 Function ${UN}ExoGuiEnd
-  System::Call 'gdi32::RemoveFontResourceExW(w "$PLUGINSDIR\Goeist.ttf", i 0x10, p 0)'
+  System::Call 'gdi32::RemoveFontResourceExW(w "$PLUGINSDIR\Geist.ttf", i 0x10, p 0)'
 FunctionEnd
 
 ; NSIS shows its Back and Next again on every page.

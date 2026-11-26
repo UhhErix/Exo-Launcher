@@ -444,14 +444,7 @@ public sealed partial class WebHostBridge
         if (keybinds is not null) DiscordSession.Current?.KeybindsChanged();
         if (settings.DiscordUnreadBadge != badgeBefore) App.MainAppWindow?.RefreshTaskbarBadge();
         if (VoiceProcessing.From(settings).NoiseSuppression || settings.DiscordOthersNoiseSuppression)
-        {
             _ = NoiseSuppressorDownload.EnsureAsync(CancellationToken.None);
-            _ = VoiceModels.EnsureBaselineAsync(CancellationToken.None);
-            if (VoiceTierPolicy.NormalizeTier(settings.DiscordVoiceTier) != "cpu")
-                _ = VoiceModels.EnsureHighQualityAsync(CancellationToken.None);
-        }
-        if (settings.DiscordOnlyMyVoice && settings.DiscordVoiceIsolation)
-            _ = VoiceModels.EnsureVoxLockAsync(CancellationToken.None);
         var (captureMode, serviceDisabled) = CaptureServiceHealth.CurrentStatus();
         return new
         {
@@ -464,6 +457,7 @@ public sealed partial class WebHostBridge
             voiceModelReady = VoiceModels.BaselineReady(),
             voiceHqModelReady = VoiceModels.HighQualityReady(),
             voiceIsolationReady = VoiceModels.VoxLockReady(),
+            myVoiceModelReady = SpeakerModel.Ready(),
             othersNoiseSuppression = settings.DiscordOthersNoiseSuppression,
             onlyMyVoice = settings.DiscordOnlyMyVoice,
             myVoiceLearned = Voiceprint.Learned,

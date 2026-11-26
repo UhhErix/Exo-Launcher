@@ -339,7 +339,6 @@ public sealed class GameGraphicsFeaturesTests : IDisposable
             Assert.NotNull(group);
             Assert.True(group.On);
 
-            // Simulate a legacy state.json entry containing NVIDIA FrameRateLimit = 162.
             var persisted = GameGraphicsFeatures.LoadState(stateRoot);
             persisted.Games[game.Id].NvidiaSet[GraphicsCatalog.FrameRateLimit] = 162u;
             persisted.Games[game.Id].NvidiaBefore[GraphicsCatalog.FrameRateLimit] = null;
@@ -352,7 +351,6 @@ public sealed class GameGraphicsFeaturesTests : IDisposable
             Assert.Null(retiredWrites[GraphicsCatalog.FrameRateLimit]);
             Assert.False(GameGraphicsFeatures.LoadState(stateRoot).Games[game.Id].NvidiaSet.ContainsKey(GraphicsCatalog.FrameRateLimit));
 
-            // Undo via Optimize restores cleanly.
             var undoErr = GameGraphicsFeatures.ApplyOptimizeFeatures(game, on: false, ctx, driverOnly: true);
             Assert.Null(undoErr);
             Assert.False(GameGraphicsFeatures.OptimizeGroupState(game, ctx, driverOnly: true)!.On);

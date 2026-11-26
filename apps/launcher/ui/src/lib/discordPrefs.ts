@@ -126,6 +126,7 @@ export type DiscordClientSettings = {
   voiceModelReady?: boolean
   voiceHqModelReady?: boolean
   voiceIsolationReady?: boolean
+  myVoiceModelReady?: boolean
   /** The same on everyone else's voice in a call, each their own; off by default. */
   othersNoiseSuppression: boolean
   /** Only My Voice: voices that aren't the learned one are held back in calls (needs myVoiceLearned). */

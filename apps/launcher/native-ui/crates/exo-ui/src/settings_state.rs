@@ -127,20 +127,6 @@ pub const SETTINGS_INDEX: &[SettingsIndexEntry] = &[
         keywords: &["startup", "windows", "autostart", "boot"],
     },
     SettingsIndexEntry {
-        id: "general-classic-ui",
-        label: "Use classic interface",
-        section: SettingsSection::General,
-        page_label: "General",
-        keywords: &[
-            "classic",
-            "webview",
-            "webview2",
-            "interface",
-            "ui",
-            "fallback",
-        ],
-    },
-    SettingsIndexEntry {
         id: "general-last-backup",
         label: "Last backup",
         section: SettingsSection::General,

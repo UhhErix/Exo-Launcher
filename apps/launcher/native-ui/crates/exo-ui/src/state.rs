@@ -2885,6 +2885,10 @@ impl AppState {
             self.close_game_page();
             return true;
         }
+        if self.room == Room::Library && self.library_all_games {
+            self.close_all_games();
+            return true;
+        }
         if self.store_ext.lightbox_index.is_some() {
             self.store_close_lightbox();
             return true;
@@ -3525,120 +3529,7 @@ impl AppState {
                 }
             }
 
-            use crate::pc_state::SettingsSection;
-            const SETTINGS_PAGES: [(SettingsSection, &str, &[&str]); 6] = [
-                (
-                    SettingsSection::General,
-                    "General",
-                    &[
-                        "dark mode",
-                        "amoled",
-                        "pure black",
-                        "text size",
-                        "reduce motion",
-                        "animation",
-                        "startup",
-                        "start with windows",
-                        "window",
-                    ],
-                ),
-                (
-                    SettingsSection::Account,
-                    "Library",
-                    &[
-                        "game stores",
-                        "sign in",
-                        "account",
-                        "steam",
-                        "epic",
-                        "gog",
-                        "amazon",
-                        "riot",
-                        "ea",
-                        "ubisoft",
-                        "battle.net",
-                        "xbox",
-                        "offline mode",
-                        "soundtracks",
-                        "shaders",
-                    ],
-                ),
-                (
-                    SettingsSection::Appearance,
-                    "Downloads",
-                    &[
-                        "downloads",
-                        "install folder",
-                        "download hours",
-                        "automatic updates",
-                        "anti-cheat",
-                        "dlss",
-                        "fsr",
-                        "xess",
-                    ],
-                ),
-                (
-                    SettingsSection::Graphics,
-                    "In game",
-                    &[
-                        "in game",
-                        "achievements",
-                        "pop-ups",
-                        "obs overlay url",
-                        "fps counter",
-                        "frame rate",
-                        "overlay",
-                        "gpu use",
-                        "vram",
-                        "ram",
-                        "battery",
-                    ],
-                ),
-                (
-                    SettingsSection::Updates,
-                    "Music",
-                    &[
-                        "music",
-                        "music service",
-                        "spotify",
-                        "apple music",
-                        "youtube music",
-                        "lossless",
-                        "jam",
-                    ],
-                ),
-                (
-                    SettingsSection::About,
-                    "About",
-                    &[
-                        "about",
-                        "version",
-                        "updates",
-                        "caches",
-                        "what's new",
-                        "changelog",
-                        "account",
-                        "privacy",
-                        "app data",
-                        "telemetry",
-                        "crash reports",
-                    ],
-                ),
-            ];
-            for (sec, title, keywords) in SETTINGS_PAGES {
-                if title.to_lowercase().contains(&query)
-                    || "settings".contains(&query)
-                    || keywords.iter().any(|k| k.contains(&query))
-                {
-                    items.push(PaletteItem {
-                        id: format!("pal-set-{}", sec.key()),
-                        group: "Go to",
-                        title: title.into(),
-                        detail: Some("Settings".into()),
-                        target: PaletteTarget::SettingsSection(sec),
-                    });
-                }
-            }
+            crate::palette::append_settings_pages(&query, &mut items);
         }
 
         let (library_shelf, _, hidden_shelf) = self.shelf_shelves();

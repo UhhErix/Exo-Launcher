@@ -31,7 +31,7 @@ const FALLBACK_PRICING = { input: 3.0, output: 15.0 }
 export const RUBRIC_DIMENSIONS = [
   'layout and spacing (margins, paddings, gaps, grid tracks, proportions, clipping)',
   'sizes (container dimensions, card widths/heights, button heights, bar height, border radii)',
-  'type (family: Goeist / rounded Geist, weight, size, tracking / letter-spacing, line-height, sentence case)',
+  'type (family: Geist, weight, size, tracking / letter-spacing, line-height, sentence case)',
   'colour and glass material (Void #000 page/panels, token grays/accents, Liquid Glass blur/tint/hairline on floating surfaces and controls, text contrast)',
   'icons (Lucide icons at 1.5px stroke, icon size, missing/wrong/distorted glyphs)',
   'missing or extra elements (controls, labels, badges, borders, hairlines, art, chrome)',

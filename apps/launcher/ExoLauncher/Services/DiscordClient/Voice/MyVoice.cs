@@ -8,8 +8,8 @@ namespace ExoLauncher.Services.DiscordClient.Voice;
 /// calls by <see cref="VoiceprintLearning"/>) and, in calls, holds back voices that aren't theirs: someone else in the
 /// room, a TV, a stream playing on speakers. A voiceprint is NVIDIA's
 /// TitaNet-small speaker embedding (NeMo, CC-BY-4.0; 192 numbers), run through sherpa-onnx's C interface
-/// (Apache-2.0, with ONNX Runtime, both shipped beside Exo). The model (40 MB) comes with Exo: setup fetches it, pinned,
-/// from sherpa-onnx's release (<see cref="ExoComponents"/>). The voiceprint stays on this PC, DPAPI-protected
+/// (Apache-2.0, with ONNX Runtime, both shipped beside Exo). The model (40 MB) ships with Exo in voice\models, pinned
+/// (<see cref="VoiceModels.TitaNetAsset"/>). The voiceprint stays on this PC, DPAPI-protected
 /// (<see cref="ExoDpapi"/>); it is never sent anywhere.
 /// Measured on TTS voices through the cleaned 16 kHz voice frames: one second of the enrolled voice scored 0.67-0.87
 /// against its voiceprint, other voices 0.12-0.47 (another man's at most 0.47), so a voice under <see cref="Other"/> twice
@@ -206,7 +206,7 @@ internal sealed class MyVoice : IThreadPoolWorkItem
 
     /// <summary>
     /// Learns the voice from the live meter's take (its cleaned mono 48 kHz frames and which the gate let through):
-    /// at least three seconds of voice. Fetches the model first if it isn't here. A message for the user, null when learned.
+    /// at least three seconds of voice. A message for the user, null when learned.
     /// </summary>
     internal static async Task<string?> LearnAsync(float[] cleaned, bool[] voiced, CancellationToken ct)
     {
@@ -224,7 +224,7 @@ internal sealed class MyVoice : IThreadPoolWorkItem
         // in a game not theirs, and Only My Voice held them back.
         if (voice.Count < TeachSeconds * Rate)
             return $"Exo has heard {voice.Count / Rate} of the {TeachSeconds} seconds of your voice it needs. Keep talking, in a call or on the meter above, then teach it again.";
-        if (!await SpeakerModel.EnsureAsync(ct).ConfigureAwait(false)) return "The voice model couldn't be downloaded. Check your connection and try again.";
+        if (!SpeakerModel.Ready()) return "Only My Voice's model is missing from this install. Reinstall Exo to repair it.";
         if (await Task.Run(() => SpeakerModel.Embed(voice.ToArray()), ct).ConfigureAwait(false) is not { } print) return "Exo couldn't learn the voice from that take. Record it again.";
         VoiceModels.SaveEnrollmentAudio(voice.ToArray());
         // A teach starts learning over: this take is the anchor calls learn around.

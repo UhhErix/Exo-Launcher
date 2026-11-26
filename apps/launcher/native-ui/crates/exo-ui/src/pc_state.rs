@@ -41,10 +41,10 @@ impl SettingsSection {
     pub fn key(self) -> &'static str {
         match self {
             Self::General => "set-sec-general",
-            Self::Account => "set-sec-account",
-            Self::Appearance => "set-sec-appearance",
-            Self::Graphics => "set-sec-graphics",
-            Self::Updates => "set-sec-updates",
+            Self::Account => "set-sec-library",
+            Self::Appearance => "set-sec-downloads",
+            Self::Graphics => "set-sec-ingame",
+            Self::Updates => "set-sec-music",
             Self::Capture => "set-sec-capture",
             Self::About => "set-sec-about",
         }

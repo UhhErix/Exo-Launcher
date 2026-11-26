@@ -115,7 +115,7 @@ pub(crate) fn set_danger_btn(
     btn.child(text(label).font(type_control()).color(bad()))
 }
 
-fn nav_label(sec: SettingsSection) -> &'static str {
+pub(crate) fn nav_label(sec: SettingsSection) -> &'static str {
     match sec {
         SettingsSection::General => "General",
         SettingsSection::Account => "Library",
@@ -148,7 +148,7 @@ fn text_size_label(raw: &str) -> &'static str {
     }
 }
 
-fn set_row(
+pub(crate) fn set_row(
     title: &str,
     subtitle: Option<&str>,
     error: Option<&str>,
@@ -164,6 +164,7 @@ fn set_row(
     if let Some(sub) = subtitle {
         left = left.child(
             text(sub.to_string())
+                .key(format!("set-sub-{title}"))
                 .font(TextStyle::new(scaled(12.0), 400.0))
                 .color(fg_muted())
                 .wrap(),
@@ -227,6 +228,21 @@ fn section_head(title: &str) -> El {
         )
 }
 
+pub(crate) fn settings_group(title: &str, rows: Vec<El>) -> El {
+    let mut card = settings_card();
+    for (idx, r) in rows.into_iter().enumerate() {
+        if idx > 0 {
+            card = card.child(el().w_full().h(1.0).fill(hairline()));
+        }
+        card = card.child(el().w_full().px(18.0).child(r));
+    }
+    col()
+        .w_full()
+        .gap(8.0)
+        .child(section_head(title))
+        .child(card)
+}
+
 fn is_highlighted(s: &AppState, id: &str) -> bool {
     s.wp4.highlight_row.is_some_and(|(rid, _)| rid == id)
 }
@@ -269,31 +285,7 @@ fn section_general(s: &AppState) -> El {
             "startWithWindows",
             set.start_with_windows,
             is_highlighted(s, "general-startup"),
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
-            "set-classic-ui",
-            "Use classic interface",
-            Some("Switch to the classic WebView2 interface on restart (or launch with --ui=web)"),
-            "useClassicWebUi",
-            set.use_classic_web_ui,
-            is_highlighted(s, "general-classic-ui"),
         ));
-
-    let main_card = if set.use_classic_web_ui {
-        main_card
-            .child(el().w_full().h(1.0).fill(hairline()))
-            .child(set_row(
-                "Restart to switch interface",
-                Some("Exo will reopen in the classic WebView2 interface"),
-                None,
-                false,
-                set_btn("set-classic-ui-relaunch", "Restart now", None)
-                    .on_press(|s: &mut AppState| s.relaunch_for_ui_switch(true)),
-            ))
-    } else {
-        main_card
-    };
 
     col()
         .w_full()
@@ -1173,6 +1165,48 @@ mod tests {
     }
 
     #[test]
+    fn settings_capture_matches_other_cards_and_reports_missing_install() {
+        let mut state = AppState::default();
+        state.status = crate::state::HostStatus::Standalone;
+        state.switch_room(Room::Settings);
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        let (general_row, _) = rt.presented("set-label-Text size").expect("Text size");
+        let (general_head, _) = rt.presented("set-sec-head-Backups").expect("Backups");
+
+        rt.update(|s, _| s.pc.settings_section = SettingsSection::Capture);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        let (head, _) = rt.presented("set-sec-head-Recording").expect("Recording");
+        assert!(
+            (head[0] - general_head[0]).abs() <= 1.0,
+            "{head:?} vs {general_head:?}"
+        );
+
+        rt.update(|s, _| {
+            s.media.capture_status = Some(exo_rpc::CaptureStatusReply {
+                ok: true,
+                present: false,
+                ..Default::default()
+            });
+        });
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        let (label, _) = rt
+            .presented("set-label-Exo Capture")
+            .expect("Exo Capture row");
+        assert!(
+            (label[0] - general_row[0]).abs() <= 1.0,
+            "{label:?} vs {general_row:?}"
+        );
+        assert!(rt.find("set-sec-head-Exo Capture").is_none());
+        assert!(rt.find("cap-set-get").is_none());
+        assert!(rt.presented("set-sub-Exo Capture").is_some());
+    }
+
+    #[test]
     fn settings_section_switch_motion_gate() {
         for reduce_motion in [false, true] {
             let mut state = AppState::default();
@@ -1183,7 +1217,7 @@ mod tests {
             let mut run = Run::new(rt, 120.0);
             run.idle(0.5);
             run.step();
-            run.act("switch to Library", |rt| Run::tap(rt, "set-sec-account"));
+            run.act("switch to Library", |rt| Run::tap(rt, "set-sec-library"));
             run.play(0.5);
             run.act("switch to About", |rt| Run::tap(rt, "set-sec-about"));
             run.play(0.5);

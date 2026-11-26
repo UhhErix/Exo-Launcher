@@ -1,19 +1,20 @@
 use crate::pc_menus::{driver_row_view, menu_btn};
 use crate::pc_state::{
-    AutoTuneStageStatus, PcPartMenu, PcTab, compute_initial_auto_tune_stages,
-    count_pending_auto_tune, format_bytes, overview_health_items, trim_stop,
+    AutoTuneStageId, AutoTuneStageStatus, PcPartMenu, PcTab, SettingsAndPcState, best_steps_list,
+    compute_initial_auto_tune_stages, count_pending_auto_tune, format_bytes, overview_health_items,
+    trim_stop,
 };
 use crate::pc_storage::{exo_ai_storage_view, format_gb_short};
 use crate::state::{AppState, HostStatus, title_hue};
 use exo_kit::{
-    BG, BadgeTone, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, bad, fg_faint, fg_muted, float_line, good,
-    hover_fill, icon_app_window, icon_check, icon_chevron_right, icon_cpu, icon_hard_drive,
+    BG, BadgeTone, FG, GAP, PAGE_GUTTER, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
+    RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, bad, fg_faint, fg_muted, float_line,
+    good, hover_fill, icon_app_window, icon_check, icon_chevron_right, icon_cpu, icon_hard_drive,
     icon_monitor, icon_zap, pressed_fill, primary_button, progress_bar, scaled, status_badge,
     subtle_fill, surface_card, track_fill, type_body, type_control, type_page, type_section,
     type_small, type_title, warn,
 };
-use exo_rpc::{DriverEntry, RuntimeItem, RuntimesProgress, TunePart};
+use exo_rpc::{DriverEntry, LauncherSettings, RuntimeItem, RuntimesProgress, TunePart};
 use rune::{Cursor, El, ScrollSpec, SurfaceFit, TextStyle, col, el, oklch, row, text};
 use serde_json::json;
 
@@ -142,6 +143,35 @@ fn format_windows_label(about: Option<&exo_rpc::SystemAbout>) -> String {
 }
 
 const SHADER_ROUGH: f64 = 1.5;
+const EXO_AI_STACK_BELOW_W: f32 = 1440.0;
+
+fn exo_ai_stacks(window_w: f32) -> bool {
+    window_w > 0.0 && window_w < EXO_AI_STACK_BELOW_W
+}
+
+fn auto_tune_pending_stages(
+    pc: &SettingsAndPcState,
+    settings: &LauncherSettings,
+) -> Vec<AutoTuneStageId> {
+    let mut ids: Vec<AutoTuneStageId> = best_steps_list(pc, settings)
+        .into_iter()
+        .filter(|step| !step.done)
+        .filter_map(|step| match step.key {
+            "power" => Some(AutoTuneStageId::Cooling),
+            "profile" | "hdr" | "frameGen" => Some(AutoTuneStageId::Graphics),
+            "network" | "system" | "drives" => Some(AutoTuneStageId::System),
+            _ => None,
+        })
+        .collect();
+    if pc
+        .display_state
+        .as_ref()
+        .is_some_and(|d| d.displays.iter().any(|screen| !screen.is_best))
+    {
+        ids.push(AutoTuneStageId::Graphics);
+    }
+    ids
+}
 
 #[derive(Debug, Clone, Copy)]
 struct ShaderSpan {
@@ -1555,6 +1585,11 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         )
         .child(el().w_full().h(1.0).fill(float_line()));
 
+    let pending_stages = if pending.is_some_and(|n| n > 0) && !s.pc.auto_tune_running {
+        auto_tune_pending_stages(&s.pc, &s.settings)
+    } else {
+        Vec::new()
+    };
     let mut stages_col = col().w_full();
     for (row_idx, pair) in stages.chunks(2).enumerate() {
         if row_idx > 0 {
@@ -1583,11 +1618,15 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     .mt(2.0)
                     .center()
                     .child(el().size(8.0, 8.0).radius(4.0).fill(FG)),
-                AutoTuneStageStatus::Idle => el()
-                    .size(16.0, 16.0)
-                    .mt(2.0)
-                    .center()
-                    .child(el().size(6.0, 6.0).radius(3.0).fill(fg_faint())),
+                AutoTuneStageStatus::Idle => el().size(16.0, 16.0).mt(2.0).center().child(
+                    el().size(6.0, 6.0)
+                        .radius(3.0)
+                        .fill(if pending_stages.contains(&stage.id) {
+                            warn()
+                        } else {
+                            fg_faint()
+                        }),
+                ),
             };
             pair_row = pair_row.child(
                 row()
@@ -2443,9 +2482,11 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
     if s.pc.shaders.as_ref().is_some_and(|sh| !sh.present) && shader_list.is_empty() {
         shaders_card = shaders_card.child(
             el().w_full().py(16.0).child(
-                text("Exo Shaders isn't installed")
+                text("Exo Shaders is missing from this install. Reinstall Exo to repair it.")
+                    .key("exo-ai-shaders-missing")
                     .font(type_body())
-                    .color(fg_muted()),
+                    .color(fg_muted())
+                    .wrap(),
             ),
         );
     } else if shader_list.is_empty() && !s.pc.shaders_scanning {
@@ -2482,7 +2523,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             .grow(1.0)
             .min_h(0.0)
             .pt(TITLEBAR_HEIGHT + 12.0)
-            .px(GAP)
+            .px(PAGE_GUTTER)
             .pb(20.0)
             .gap(12.0)
             .scroll(ScrollSpec {
@@ -2490,15 +2531,22 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             })
             .chain_scroll_offset(crate::shell::bar_scroll_watch)
             .child(header)
-            .child(
+            .child(if exo_ai_stacks(s.chrome.top_bar_width) {
+                col()
+                    .key("exo-ai-grid")
+                    .w_full()
+                    .gap(GAP)
+                    .child(left_col.w_full())
+                    .child(right_col.w_full())
+            } else {
                 row()
                     .key("exo-ai-grid")
                     .w_full()
                     .items_start()
                     .gap(GAP)
                     .child(left_col)
-                    .child(right_col),
-            ),
+                    .child(right_col)
+            }),
     )
 }
 
@@ -2512,6 +2560,35 @@ mod tests {
     use crate::state::{AppState, Room};
     use rune::render::KIND_BACKDROP_BLUR;
     use rune::{Env, Runtime};
+
+    #[test]
+    fn exo_ai_stacks_columns_in_a_narrow_window_and_offers_shaders() {
+        assert!(!super::exo_ai_stacks(0.0));
+        assert!(!super::exo_ai_stacks(1920.0));
+        let mut state = AppState::default();
+        state.pc.shaders = Some(exo_rpc::ShadersAddonStatus {
+            present: false,
+            ..Default::default()
+        });
+        state.switch_room(Room::ExoAi);
+        let mut rt = Runtime::new(state, shell::view, (1100.0, 800.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        rt.settle_all();
+        rt.frame(2.0 / 60.0);
+
+        assert!(super::exo_ai_stacks(rt.state.chrome.top_bar_width));
+        let (hw_rect, _) = rt.presented("exo-ai-hw-card").expect("exo-ai-hw-card");
+        let (upd_rect, _) = rt
+            .presented("exo-ai-updates-card")
+            .expect("exo-ai-updates-card");
+        assert!((upd_rect[0] - hw_rect[0]).abs() < 1.0);
+        assert!(upd_rect[1] > hw_rect[1] + hw_rect[3] - 1.0);
+        assert!((hw_rect[0] - exo_kit::PAGE_GUTTER).abs() < 1.0);
+        assert!(rt.find("shaders-get").is_none());
+        assert!(rt.presented("exo-ai-shaders-missing").is_some());
+    }
 
     #[test]
     fn exo_ai_bento_balance_header_alignment_and_blur_cap() {

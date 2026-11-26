@@ -2611,7 +2611,6 @@ public sealed partial class WebHostBridge
             whatsNewSeen = s.WhatsNewSeen,
             reduceMotion = s.ReduceMotion,
             startMaximized = s.StartMaximized,
-            useClassicWebUi = s.UseClassicWebUi,
             startWithWindows = s.StartWithWindows,
             framelessPinTop = s.FramelessPinTop,
             framelessPinSide = s.FramelessPinSide,
@@ -2667,8 +2666,6 @@ public sealed partial class WebHostBridge
         bool? onboard = null;
         bool? reduceMotion = null;
         bool? startMaximized = null;
-        bool? useClassicWebUi = null;
-        var relaunchForUiSwitch = false;
         bool? framelessPinTop = null, framelessPinSide = null;
         bool? showLibraryTools = null;
         string? textColour = null, textSize = null;
@@ -2703,12 +2700,6 @@ public sealed partial class WebHostBridge
         if (p.TryGetProperty("startMaximized", out var startMaximizedEl) &&
             (startMaximizedEl.ValueKind is JsonValueKind.True or JsonValueKind.False))
             startMaximized = startMaximizedEl.GetBoolean();
-        if (p.TryGetProperty("useClassicWebUi", out var useClassicEl) &&
-            (useClassicEl.ValueKind is JsonValueKind.True or JsonValueKind.False))
-            useClassicWebUi = useClassicEl.GetBoolean();
-        if (p.TryGetProperty("relaunchForUiSwitch", out var relaunchEl) &&
-            relaunchEl.ValueKind == JsonValueKind.True)
-            relaunchForUiSwitch = true;
         if (p.TryGetProperty("framelessPinTop", out var fpt) &&
             (fpt.ValueKind is JsonValueKind.True or JsonValueKind.False))
             framelessPinTop = fpt.GetBoolean();
@@ -2769,8 +2760,7 @@ public sealed partial class WebHostBridge
             discordQuietWhilePlaying: discordQuietWhilePlaying,
             whatsNewSeen: whatsNewSeen,
             frameGenEverywhere: frameGenEverywhere,
-            graphicsFeaturesBestSettings: graphicsFeaturesBestSettings,
-            useClassicWebUi: useClassicWebUi);
+            graphicsFeaturesBestSettings: graphicsFeaturesBestSettings);
         if (hdrForGames is not null || hdrSdrGamma is not null) _services.HdrHost.SyncSoon();
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
         if (textSize is not null || reduceMotion is not null) _services.MousePanel.NotifySettingsChanged();
@@ -2840,49 +2830,7 @@ public sealed partial class WebHostBridge
             if (!string.IsNullOrWhiteSpace(riotId.GetString()))
                 _ = Task.Run(() => PlaytimeService.TryAutoSeedRiotHoursAsync(() => _services.Library.RefreshDerivedStateAsync(CancellationToken.None)));
         }
-        if (relaunchForUiSwitch)
-            ScheduleUiSwitchRelaunch();
         return BuildSettings();
-    }
-
-    private void ScheduleUiSwitchRelaunch()
-    {
-        var exe = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe)) return;
-        var pid = Environment.ProcessId;
-        var shutdown = RequestHostShutdown;
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(120).ConfigureAwait(false);
-            try
-            {
-                var psi = new ProcessStartInfo(exe)
-                {
-                    UseShellExecute = false,
-                    WorkingDirectory = PathHelper.AppDataDir,
-                };
-                psi.Environment.Remove("EXO_UI");
-                psi.ArgumentList.Add("--wait-pid");
-                psi.ArgumentList.Add(pid.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                Process.Start(psi);
-            }
-            catch (Exception ex)
-            {
-                AppLog.Warn("UI switch relaunch failed: " + ex.Message);
-                return;
-            }
-            if (shutdown is not null)
-            {
-                shutdown();
-            }
-            else
-            {
-                _queue.Enqueue(() =>
-                {
-                    try { Microsoft.UI.Xaml.Application.Current.Exit(); } catch { }
-                });
-            }
-        });
     }
 
     /// <summary>

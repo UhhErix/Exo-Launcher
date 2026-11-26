@@ -372,7 +372,8 @@ internal static class AppleMusicNative
                 var catId = p.library ? catalogOf(r) && catalogOf(r).id : p.id;
                 if (catId && !others) extra = tryApi('/v1/catalog/' + SF + '/albums/' + encodeURIComponent(catId), { views: 'more-by-artist,other-versions,you-might-also-like', 'omit[resource]': 'autos' });
               } else if (want === 'playlist') {
-                h.facts = [at.lastModifiedDate ? 'Updated ' + dateText(at.lastModifiedDate) : '', (at.trackCount || list.length) ? (at.trackCount || list.length) + ' songs' : ''].filter(Boolean);
+                var updated = dateText(at.lastModifiedDate), songs = at.trackCount || list.length;
+                h.facts = [updated ? 'Updated ' + updated : '', songs ? songs + (songs === 1 ? ' song' : ' songs') : ''].filter(Boolean);
               }
               h.editable = p.type === 'library-playlists' && !!at.canEdit;
               var total = Math.max(at.trackCount || 0, pageOf(list, t.next, 0));

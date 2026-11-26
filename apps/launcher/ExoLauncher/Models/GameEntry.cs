@@ -346,7 +346,6 @@ public sealed class AppSettings
     public bool ReduceMotion { get; set; }
     /// <summary>When true, Exo's window always opens maximized. When false, it opens as it was when it closed.</summary>
     public bool StartMaximized { get; set; }
-    public bool UseClassicWebUi { get; set; }
     /// <summary>Always on. Chrome hides until an edge hover; pin insets the page.</summary>
     public bool FramelessMode { get; set; } = true;
     public bool FramelessPinTop { get; set; }

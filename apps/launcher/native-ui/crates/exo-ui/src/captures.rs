@@ -1,4 +1,4 @@
-use crate::devices_audio::{device_btn, device_icon_btn, device_panel, device_row, device_switch};
+use crate::devices_audio::{device_btn, device_icon_btn, device_row, device_switch};
 use crate::media_state::CaptureFilter;
 use crate::pc_state::format_bytes;
 use crate::snip_editor;
@@ -2386,9 +2386,10 @@ fn empty_state(s: &AppState) -> El {
 
     if !present {
         return el().w_full().grow(1.0).center().child(
-            text("Exo Capture isn't installed")
+            text("Exo Capture is missing from this install. Reinstall Exo to repair it.")
                 .font(type_title())
-                .color(FG),
+                .color(FG)
+                .wrap(),
         );
     }
 
@@ -2573,16 +2574,19 @@ pub(crate) fn settings_body(s: &AppState) -> El {
     let status = s.media.capture_status.as_ref();
     let live = status.and_then(|st| st.state.as_ref());
     let cfg = status.and_then(|st| st.settings.as_ref());
-    if live.is_some_and(|l| !l.present) {
-        return col().w_full().max_w(760.0).child(device_panel(
-            "Exo Capture",
-            vec![device_row(
-                "Exo Capture",
-                None,
-                None,
-                Some(status_badge("Not installed".into(), BadgeTone::Neutral)),
-            )],
-        ));
+    if !live.map_or(status.is_none_or(|st| st.present), |l| l.present) {
+        return col()
+            .w_full()
+            .gap(24.0)
+            .child(
+                crate::settings::settings_card().child(crate::settings::set_row(
+                    "Exo Capture",
+                    Some("Missing from this install. Reinstall Exo to repair it."),
+                    None,
+                    false,
+                    el(),
+                )),
+            );
     }
 
     let disabled = cfg.is_none();
@@ -2863,10 +2867,9 @@ pub(crate) fn settings_body(s: &AppState) -> El {
 
     col()
         .w_full()
-        .max_w(760.0)
-        .gap(16.0)
-        .child(device_panel("Recording", rec_rows))
-        .child(device_panel("Storage", storage_rows))
+        .gap(24.0)
+        .child(crate::settings::settings_group("Recording", rec_rows))
+        .child(crate::settings::settings_group("Storage", storage_rows))
 }
 
 fn reel_banner(s: &AppState) -> Option<El> {

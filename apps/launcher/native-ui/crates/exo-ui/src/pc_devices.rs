@@ -96,7 +96,76 @@ fn clean_device_name(dev: &PeripheralCard, s: &AppState) -> String {
             }
         }
     }
+    if dev.kind == "mouse"
+        && let Some(mouse) = receiver_mouse_name(&dev.name)
+    {
+        return mouse;
+    }
     dev.name.clone()
+}
+
+fn is_receiver_word(word: &str) -> bool {
+    word.eq_ignore_ascii_case("dongle") || word.eq_ignore_ascii_case("receiver")
+}
+
+fn name_key(name: &str) -> String {
+    name.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+fn known_mice() -> &'static [(String, String)] {
+    use exo_hid_devices::registry::{DeviceCategory, catalog};
+    static MICE: std::sync::OnceLock<Vec<(String, String)>> = std::sync::OnceLock::new();
+    MICE.get_or_init(|| {
+        let mut mice: Vec<(String, String)> = Vec::new();
+        for entry in catalog() {
+            if entry.category != DeviceCategory::Mouse {
+                continue;
+            }
+            let vendor = entry.vendor.display_name();
+            let base = entry
+                .model_name
+                .split(" (")
+                .next()
+                .unwrap_or(&entry.model_name);
+            let model = base.strip_prefix(vendor).unwrap_or(base).trim();
+            if model.is_empty()
+                || model.split_whitespace().any(is_receiver_word)
+                || mice.iter().any(|(_, m)| m == model)
+            {
+                continue;
+            }
+            mice.push((name_key(vendor), model.to_string()));
+        }
+        mice
+    })
+}
+
+fn receiver_mouse_name(name: &str) -> Option<String> {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    if !words.iter().any(|w| is_receiver_word(w)) {
+        return None;
+    }
+    let wanted = name_key(
+        &words
+            .iter()
+            .filter(|w| !is_receiver_word(w))
+            .copied()
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+    if wanted.is_empty() {
+        return None;
+    }
+    known_mice()
+        .iter()
+        .find(|(vendor, model)| {
+            let key = name_key(model);
+            wanted == key || wanted == format!("{vendor}{key}")
+        })
+        .map(|(_, model)| model.clone())
 }
 
 fn format_battery_pct(b: f64) -> i32 {
@@ -1639,6 +1708,32 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wireless_receiver_shows_the_mouse_it_belongs_to() {
+        let s = AppState::default();
+        let card = |name: &str| PeripheralCard {
+            id: "hid:mouse".into(),
+            kind: "mouse".into(),
+            name: name.into(),
+            maker: Some("Finalmouse".into()),
+            connection: Some("wireless".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            clean_device_name(&card("StarlightX Dongle"), &s),
+            "Starlight X"
+        );
+        assert_eq!(
+            clean_device_name(&card("Finalmouse ULX Receiver"), &s),
+            "ULX"
+        );
+        assert_eq!(
+            clean_device_name(&card("Mystery Dongle"), &s),
+            "Mystery Dongle"
+        );
+        assert_eq!(clean_device_name(&card("Starlight X"), &s), "Starlight X");
+    }
 
     #[test]
     fn microphone_uses_mic_fallback_icon() {

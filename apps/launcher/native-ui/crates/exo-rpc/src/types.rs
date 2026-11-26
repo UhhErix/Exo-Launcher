@@ -1554,8 +1554,6 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub start_maximized: bool,
     #[serde(default)]
-    pub use_classic_web_ui: bool,
-    #[serde(default)]
     pub show_library_tools: bool,
     #[serde(default)]
     pub pause_downloads_while_playing: bool,

@@ -35,14 +35,6 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     keywords: ['startup', 'windows', 'autostart', 'boot'],
   },
   {
-    id: 'general-classic-ui',
-    label: 'Use classic interface',
-    page: 'general',
-    pageLabel: 'General',
-    sectionId: 'general',
-    keywords: ['classic', 'webview', 'webview2', 'interface', 'ui', 'fallback'],
-  },
-  {
     id: 'general-last-backup',
     label: 'Last backup',
     page: 'general',

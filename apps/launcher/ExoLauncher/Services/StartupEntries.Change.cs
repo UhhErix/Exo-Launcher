@@ -476,7 +476,7 @@ internal static partial class StartupEntries
         {
             if (ReadAll(host).FirstOrDefault(entry => entry.Id == id) is not { } entry) return "Exo has nothing to put back for it.";
             if (entry.Enabled) return null;
-            if (entry.Locked) return "Exo can't change this startup entry.";
+            if (entry.Locked && entry.Lock != LockKind.Updater) return "Exo can't change this startup entry.";
             if (Split(id).Kind == "service") return "Exo can't put this one back, so turn it on in Windows' Services.";
             if (entry.ReadOnly) return "Exo can't change this startup entry.";
             if (OnChanges(host, id) is not { } changes) return "Exo can't turn this one back on.";

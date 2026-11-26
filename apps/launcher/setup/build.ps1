@@ -20,9 +20,9 @@ Pop-Location
 $ui = Join-Path $build 'ui'
 Move-Item -Force (Join-Path $ui 'setup.html') (Join-Path $ui 'index.html')
 Copy-Item (Join-Path $repo 'ui\public\logo.svg') (Join-Path $ui 'logo.svg') -Force
-# Goeist, as Exo draws it (ui/src/fonts.css loads /fonts): the upright cut is all the screens use.
+# Geist, as Exo draws it (ui/src/fonts.css loads /fonts): the upright cut is all the screens use.
 New-Item -ItemType Directory -Force (Join-Path $ui 'fonts') | Out-Null
-Copy-Item (Join-Path $repo 'ui\public\fonts\Goeist-Variable.woff2'), (Join-Path $repo 'ui\public\fonts\LICENSE-Goeist.txt') (Join-Path $ui 'fonts') -Force
+Copy-Item (Join-Path $repo 'ui\public\fonts\Geist-Variable.woff2'), (Join-Path $repo 'ui\public\fonts\LICENSE-Geist.txt') (Join-Path $ui 'fonts') -Force
 $files = Get-ChildItem -Recurse -File $ui
 $pack = [IO.MemoryStream]::new()
 $writer = [IO.BinaryWriter]::new($pack)

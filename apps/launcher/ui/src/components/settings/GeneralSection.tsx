@@ -28,13 +28,6 @@ export const GeneralSection = memo(function GeneralSection({ settings, onSave: s
         onChange={value => save({ reduceMotion: value })} />
       <SwitchRow id="set-start-with-windows" label="Open Exo when Windows starts" checked={settings?.startWithWindows === true} disabled={disabled}
         onChange={value => save({ startWithWindows: value })} />
-      <SwitchRow id="set-use-classic-web-ui" label="Use classic interface" detail="Classic WebView2 interface (restart to switch, or launch with --ui=web)" checked={settings?.useClassicWebUi === true} disabled={disabled}
-        onChange={value => save({ useClassicWebUi: value })} />
-      {settings && settings.useClassicWebUi !== true ? (
-        <Row label="Restart to switch to the native interface">
-          <button type="button" className="exo-set-btn" onClick={() => void save({ useClassicWebUi: false, relaunchForUiSwitch: true })}>Restart now</button>
-        </Row>
-      ) : null}
     </Section>
   )
 })

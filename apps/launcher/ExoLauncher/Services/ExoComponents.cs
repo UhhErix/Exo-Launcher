@@ -11,8 +11,8 @@ internal delegate void ComponentProgress(long done, bool unpacking);
 /// <summary>
 /// One part Exo fetches beside itself: a fixed version, pinned by size and SHA-256 where its code lives.
 /// </summary>
-/// <param name="Name">What it is, as setup shows it ("TitaNet voice model").</param>
-/// <param name="Feature">What waits on it, for the notice when it can't be fetched ("Only My Voice").</param>
+/// <param name="Name">What it is, as setup shows it ("Legendary for Epic Games").</param>
+/// <param name="Feature">What waits on it, for the notice when it can't be fetched ("Epic Games").</param>
 /// <param name="Download">Its download, in bytes.</param>
 /// <param name="Unpack">What its download unpacks to, in bytes; 0 when it is used as it comes.</param>
 /// <param name="Ready">Whether it is here and whole (verified against its pins).</param>
@@ -21,12 +21,6 @@ internal delegate void ComponentProgress(long done, bool unpacking);
 internal sealed record ExoComponent(string Name, string Feature, long Download, long Unpack, Func<bool> Ready,
     Func<ComponentProgress, CancellationToken, Task> Fetch, Func<string> Location)
 {
-    /// <summary>
-    /// Something else does its feature's work while it isn't here (Windows' own AI noise suppression stands in for
-    /// DeepFilterNet), so a fetch that fails says nothing on screen: the feature still works. app.log says it.
-    /// </summary>
-    internal bool HasStandIn { get; init; }
-
     /// <summary>A single pinned release file used as it comes (a store tool, a model), kept at <paramref name="path"/>.</summary>
     internal static ExoComponent Pinned(string name, string feature, GitHubReleaseAsset asset, Func<string> path, Func<string, bool> validate) =>
         new(name, feature, asset.ExpectedSize, 0,
@@ -36,14 +30,14 @@ internal sealed record ExoComponent(string Name, string Feature, long Download, 
 }
 
 /// <summary>
-/// Everything Exo fetches beside itself, in one list: the store tools (Legendary, gogdl, Nile) and Only My Voice's
-/// voice model (TitaNet); Exo's noise suppression (DeepFilterNet) ships inside the app. Each is pinned where its
+/// Everything Exo fetches beside itself, in one list: the store tools (Legendary, gogdl, Nile); Exo Voice's models
+/// (noise suppression, voice isolation and Only My Voice's TitaNet) ship inside the app. Each is pinned where its
 /// code lives; this list only names them. Exo's setup fetches them all while it installs (ExoLauncher.exe
 /// --fetch-components, which setup/src/main.cpp runs and shows as a measured step), so every feature is ready the first
 /// time it's used. What didn't come (offline, a failed step, an update whose pin changed, a build run from source) is
 /// fetched quietly after Exo starts, never while downloads are held (outside the download hours) or a game plays, and
 /// only what is missing or no longer matches its pin: an update fetches nothing
-/// that is here and whole. A part that fails twice is said once ("Only My Voice couldn't be set up"); Exo keeps trying.
+/// that is here and whole. A part that fails twice is said once ("Epic Games couldn't be set up"); Exo keeps trying.
 /// A feature that needs its part sooner still fetches it itself, silently. Uninstalling Exo removes them all.
 /// </summary>
 internal static class ExoComponents
@@ -53,8 +47,6 @@ internal static class ExoComponents
         EpicAdapter.Component,
         GogAdapter.Component,
         AmazonAdapter.Component,
-        SpeakerModel.Component,
-        VoiceModels.BaselineComponent,
     ];
 
     /// <summary>A component's fetch moved on (bytes done, whether unpacking), from whoever started it.</summary>
@@ -186,7 +178,7 @@ internal static class ExoComponents
                     {
                         var count = failures[component] = failures.GetValueOrDefault(component) + 1;
                         AppLog.Info($"Components: {component.Name} wasn't fetched ({ex.GetType().Name}: {ex.Message}); try {count}.");
-                        if (count == 2 && !component.HasStandIn) FailedTwice?.Invoke(component.Feature);
+                        if (count == 2) FailedTwice?.Invoke(component.Feature);
                     }
                 }
                 var wait = failures.Count == 0 ? TimeSpan.FromSeconds(5)
@@ -200,13 +192,14 @@ internal static class ExoComponents
 
     /// <summary>What Exo fetched and no longer needs: dictation's Parakeet speech model (about 670 MB), the whisper.cpp
     /// engine and model dictation and captions fetched on request, the clip captions kept under capture, and the
-    /// DeepFilterNet library 3.13.3 to 3.20.0 downloaded (50 MB), which now ships inside the app.</summary>
+    /// DeepFilterNet library 3.13.3 to 3.20.0 downloaded (50 MB) and Exo Voice's models (TitaNet included), which now ship inside the app.</summary>
     private static IEnumerable<string> Retired() =>
     [
         Path.Combine(PathHelper.AppDataDir, "models", "parakeet-tdt-0.6b-v3"),
         Path.Combine(PathHelper.AppDataDir, "speech"),
         Path.Combine(PathHelper.AppDataDir, "capture", "captions"),
         Path.Combine(PathHelper.AppDataDir, "voice", "exo-deepfilter.dll"),
+        .. VoiceModels.RetiredDownloads(),
     ];
 
     /// <summary>Deletes <see cref="Retired"/>'s folders where they're still on this PC.</summary>

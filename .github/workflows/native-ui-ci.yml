@@ -8,7 +8,6 @@ on:
       - 'apps/launcher/ui/contracts/keyboard-layouts.json'
       - 'apps/launcher/ui/src/lib/whatsNew.json'
       - 'apps/launcher/CHANGELOG.md'
-      - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
   push:
     branches: [main]
@@ -18,7 +17,6 @@ on:
       - 'apps/launcher/ui/contracts/keyboard-layouts.json'
       - 'apps/launcher/ui/src/lib/whatsNew.json'
       - 'apps/launcher/CHANGELOG.md'
-      - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
 
 permissions: {}

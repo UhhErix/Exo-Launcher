@@ -185,6 +185,8 @@ pub struct LibraryExtraState {
     pub grid_focused_id: Option<String>,
     pub grid_intended_col: Option<usize>,
     pub grid_width: f32,
+    pub type_find: String,
+    pub type_find_at: f64,
     pub adding_portable: bool,
     pub folder_seq: u64,
     pub home_extras_pending_id: Option<String>,
@@ -228,6 +230,8 @@ impl Default for LibraryExtraState {
             grid_focused_id: None,
             grid_intended_col: None,
             grid_width: 0.0,
+            type_find: String::new(),
+            type_find_at: 0.0,
             adding_portable: false,
             folder_seq: 1,
             home_extras_pending_id: None,
@@ -987,6 +991,31 @@ pub fn next_by_initial(tiles: &[GridTile], from: Option<usize>, ch: char) -> Opt
     None
 }
 
+pub const TYPE_FIND_SECS: f64 = 1.0;
+
+pub fn type_find_query(prev: &str, last_at: f64, now: f64, ch: char) -> String {
+    let mut query = if now - last_at <= TYPE_FIND_SECS {
+        prev.to_string()
+    } else {
+        String::new()
+    };
+    query.extend(ch.to_lowercase());
+    query
+}
+
+pub fn next_by_prefix(tiles: &[GridTile], from: Option<usize>, query: &str) -> Option<usize> {
+    let mut chars = query.chars();
+    let first = chars.next()?;
+    if chars.all(|c| c == first) {
+        return next_by_initial(tiles, from, first);
+    }
+    let len = tiles.len();
+    let start = from.unwrap_or(0);
+    (0..len).map(|step| (start + step) % len).find(|&idx| {
+        matches!(&tiles[idx], GridTile::Game(g) if g.title.trim().to_lowercase().starts_with(query))
+    })
+}
+
 pub fn move_grid_focus_index(
     current: usize,
     item_count: usize,
@@ -1633,6 +1662,21 @@ impl AppState {
         self.lib.picked.clear();
         self.lib.pick_anchor = None;
         self.lib.select_folder_menu_open = false;
+    }
+
+    pub fn close_all_games(&mut self) {
+        self.library_all_games = false;
+        self.library_show_hidden = false;
+        self.library_more_open = false;
+        self.library_add_open = false;
+        self.library_filter_open = false;
+        self.exit_select_mode();
+        self.filters.clear();
+        self.library_search.text.clear();
+        self.library_search.sync_invariants();
+        self.lib.type_find.clear();
+        self.lib.type_find_at = 0.0;
+        self.lib.grid_focused_id = None;
     }
 
     pub fn exit_select_mode(&mut self) {
@@ -2546,7 +2590,11 @@ pub fn handle_library_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
             .grid_focused_id
             .as_deref()
             .and_then(|id| tiles.iter().position(|t| t.key_id() == id));
-        if let Some(next_idx) = next_by_initial(&tiles, from, ch) {
+        let now = tx.clock();
+        let query = type_find_query(&s.lib.type_find, s.lib.type_find_at, now, ch);
+        s.lib.type_find_at = now;
+        s.lib.type_find = query.clone();
+        if let Some(next_idx) = next_by_prefix(&tiles, from, &query) {
             let (grid_cols, _, _) = all_grid_metrics(s.lib.grid_width);
             let key_id = tiles[next_idx].key_id();
             s.lib.grid_focused_id = Some(key_id.clone());
@@ -2788,11 +2836,47 @@ mod tests {
         assert_eq!(next_by_initial(&tiles, Some(1), 'b'), Some(2));
         assert_eq!(next_by_initial(&tiles, Some(2), 'a'), Some(1));
 
+        let named = vec![
+            GridTile::Game(Box::new(sample_game("n1", "EOS", "steam", true))),
+            GridTile::Game(Box::new(sample_game("n2", "Satisfactory", "steam", true))),
+            GridTile::Game(Box::new(sample_game("n3", "Sekiro", "steam", true))),
+            GridTile::Game(Box::new(sample_game("n4", "Kena", "steam", true))),
+        ];
+        let mut query = String::new();
+        let mut at = 0.0;
+        let mut focus = None;
+        for (ch, now) in [('s', 10.0), ('E', 10.3), ('k', 10.6)] {
+            query = type_find_query(&query, at, now, ch);
+            at = now;
+            focus = next_by_prefix(&named, focus, &query).or(focus);
+        }
+        assert_eq!(query, "sek");
+        assert_eq!(focus, Some(2));
+        assert_eq!(type_find_query("sek", 10.6, 12.0, 'k'), "k");
+        assert_eq!(next_by_prefix(&named, Some(1), "ss"), Some(2));
+        assert_eq!(next_by_prefix(&named, Some(2), "sss"), Some(1));
+
         let (down, col) = move_grid_focus_index(0, 12, 5, 2, &Key::Down, false, None).unwrap();
         assert_eq!(down, 5);
         assert_eq!(col, Some(0));
         let (end, _) = move_grid_focus_index(0, 12, 5, 2, &Key::End, true, None).unwrap();
         assert_eq!(end, 11);
+    }
+
+    #[test]
+    fn escape_leaves_all_games_like_the_back_button() {
+        let mut s = AppState::with_demo_games();
+        s.room = crate::state::Room::Library;
+        s.library_all_games = true;
+        s.library_show_hidden = true;
+        s.lib.type_find = "sek".into();
+        s.lib.type_find_at = 10.6;
+        s.lib.grid_focused_id = Some(s.games[0].id.clone());
+        assert!(s.dismiss_top_layer());
+        assert!(!s.library_all_games);
+        assert!(!s.library_show_hidden);
+        assert!(s.lib.type_find.is_empty());
+        assert_eq!(s.lib.grid_focused_id, None);
     }
 
     #[test]

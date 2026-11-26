@@ -52,7 +52,7 @@ export function NativeMusicRoom({ service, active, shown, nowPlaying }: {
         report(message, 'NativeMusicRoom.signIn')
         setSignInMessage(message)
       }
-      else setSignInStatus(result.message ?? 'Finish signing in in its window.')
+      else setSignInStatus(result.message ?? `Finish signing in to ${adapter.name} in the window that opened.`)
     } catch (error) {
       report(error, 'NativeMusicRoom.signIn')
       setSignInMessage(`${adapter.name} could not start sign-in. Try again.`)

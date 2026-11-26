@@ -182,6 +182,7 @@ pub const RADIUS_PANEL: f32 = 18.0;
 pub const RADIUS_SHEET: f32 = 24.0;
 pub const RADIUS_PILL: f32 = 999.0;
 pub const GAP: f32 = 10.0;
+pub const PAGE_GUTTER: f32 = 24.0;
 pub const TITLEBAR_HEIGHT: f32 = 52.0;
 
 pub const GLASS_CONTROL_SIGMA: f32 = 10.0;

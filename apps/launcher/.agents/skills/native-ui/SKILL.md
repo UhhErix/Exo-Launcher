@@ -20,7 +20,7 @@ Exo pins the `exo` branch of our Rune fork (`https://github.com/UhhErix/rune`, u
 
 ## Rules
 
-- DESIGN.md is the brief and `exo-design` is the checklist. Every colour, size and spring comes from `exo-kit/src/tokens.rs` (glass from `glass.rs`); a new value is a new token there, never a literal in `exo-ui` (nothing enforces it; `hex()` literals remain). Void black page, Geist (which font native should draw is an open decision), sentence case, no emoji in chrome.
+- DESIGN.md is the brief and `exo-design` is the checklist. Every colour, size and spring comes from `exo-kit/src/tokens.rs` (glass from `glass.rs`); a new value is a new token there, never a literal in `exo-ui` (nothing enforces it; `hex()` literals remain). Void black page, Geist (Exo's one typeface on every surface), sentence case, no emoji in chrome.
 - The host keeps secrets, filesystem paths and store work. `exo-ui` shows bounded DTOs from `exo-rpc`. A new pipe method or field needs the host side and `host-v1.json` in the same change (`npm run contracts:write` from `ui/` after an intentional change).
 - No prose comments (AGENTS.md's comment ban). `tools/check-comments.mjs` doesn't scan `.rs`, so remove the ones you touch.
 - AGENTS.md's hard stops and enforced rules apply here too; most checks don't reach Rust, so review for them. Smallest complete change; delete what it replaces.

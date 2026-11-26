@@ -1767,6 +1767,12 @@ fn profiles_page(s: &AppState) -> El {
     )
 }
 
+const MISSING_FROM_INSTALL: &str = "Missing from this install. Reinstall Exo to repair it.";
+
+fn missing_detail(ready: Option<bool>) -> Option<&'static str> {
+    (ready == Some(false)).then_some(MISSING_FROM_INSTALL)
+}
+
 fn voice_page(s: &AppState) -> El {
     let ext = &s.discord.settings_ext;
     let client = &ext.client;
@@ -1989,16 +1995,14 @@ fn voice_page(s: &AppState) -> El {
         .child(choice_row(
             "dc-set-ns",
             "Voice cleanup",
-            ext.mic_level
-                .as_ref()
-                .and_then(|l| suppression_detail(&l.stages.suppression))
-                .or(
-                    if sup_val == "exo" && client.voice_model_ready == Some(false) {
-                        Some("Downloading voice add-on; DeepFilterNet 3 standing in")
-                    } else {
-                        None
-                    },
-                ),
+            (sup_val == "exo")
+                .then(|| missing_detail(client.voice_model_ready))
+                .flatten()
+                .or_else(|| {
+                    ext.mic_level
+                        .as_ref()
+                        .and_then(|l| suppression_detail(&l.stages.suppression))
+                }),
             sup_val,
             vec![
                 ("exo", "Exo AI"),
@@ -2021,11 +2025,14 @@ fn voice_page(s: &AppState) -> El {
         page = page.child(choice_row(
             "dc-set-voice-tier",
             "Processing tier",
-            Some(match tier_val {
-                "cpu" => "Pinned off game cores, under 20% of one core",
-                "hq" => "48 kHz Studio; steps down if a game needs the GPU",
-                _ => "48 kHz Studio when idle, low CPU in games",
-            }),
+            (tier_val != "cpu")
+                .then(|| missing_detail(client.voice_hq_model_ready))
+                .flatten()
+                .or(Some(match tier_val {
+                    "cpu" => "Pinned off game cores, under 20% of one core",
+                    "hq" => "48 kHz Studio; steps down if a game needs the GPU",
+                    _ => "48 kHz Studio when idle, low CPU in games",
+                })),
             tier_val,
             vec![
                 ("auto", "Auto"),
@@ -2048,7 +2055,9 @@ fn voice_page(s: &AppState) -> El {
     page = page.child(toggle_row(
         "dc-set-only-my-voice",
         "Only my voice",
-        Some("Uses your TitaNet voiceprint to block other voices in the room"),
+        missing_detail(client.my_voice_model_ready).or(Some(
+            "Uses your TitaNet voiceprint to block other voices in the room",
+        )),
         only_my,
         move |s: &mut AppState| {
             s.save_discord_client_settings(json!({ "onlyMyVoice": !only_my }));
@@ -2058,11 +2067,8 @@ fn voice_page(s: &AppState) -> El {
         page = page.child(toggle_row(
             "dc-set-voice-isolation",
             "Separate overlapping voices",
-            Some(if client.voice_isolation_ready == Some(false) {
-                "VoxLock INT8 add-on downloads lazily when enabled"
-            } else {
-                "VoxLock INT8 target-speaker isolation"
-            }),
+            missing_detail(client.voice_isolation_ready)
+                .or(Some("VoxLock INT8 target-speaker isolation")),
             voice_iso,
             move |s: &mut AppState| {
                 s.save_discord_client_settings(json!({ "voiceIsolation": !voice_iso }));
@@ -3154,34 +3160,36 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
 
     for p in DiscordSettingsPage::ALL {
         let active = p == page;
-        nav = nav.child(
-            row()
-                .key(p.key())
-                .role("tab")
-                .label(p.label())
-                .focusable(true)
-                .hit()
-                .cursor(Cursor::Pointer)
-                .w_full()
-                .h(34.0)
-                .px(12.0)
-                .center_y()
-                .radius(RADIUS_SMALL)
-                .fill(if active { selected_fill() } else { TRANSPARENT })
-                .hover(if active {
-                    selected_fill()
-                } else {
-                    hover_fill()
-                })
-                .press(pressed_fill())
-                .motion(SPRING_QUICK)
-                .on_press(move |s: &mut AppState| s.select_discord_settings_page(p))
-                .child(text(p.label()).font(type_control()).color(if active {
-                    FG
-                } else {
-                    fg_muted()
-                })),
-        );
+        let mut item = row()
+            .key(p.key())
+            .role("tab")
+            .label(p.label())
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .w_full()
+            .h(34.0)
+            .px(12.0)
+            .center_y()
+            .radius(RADIUS_SMALL)
+            .fill(if active { selected_fill() } else { TRANSPARENT })
+            .hover(if active {
+                selected_fill()
+            } else {
+                hover_fill()
+            })
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press(move |s: &mut AppState| s.select_discord_settings_page(p))
+            .child(text(p.label()).font(type_control()).color(if active {
+                FG
+            } else {
+                fg_muted()
+            }));
+        if active {
+            item = item.autofocus();
+        }
+        nav = nav.child(item);
     }
 
     let body_content = match page {
@@ -3388,6 +3396,17 @@ fn _unused_icons_anchor() -> (El, El, El) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_voice_model_says_the_install_needs_repair() {
+        assert_eq!(missing_detail(Some(false)), Some(MISSING_FROM_INSTALL));
+        assert_eq!(missing_detail(Some(true)), None);
+        assert_eq!(missing_detail(None), None);
+        assert_eq!(
+            MISSING_FROM_INSTALL,
+            "Missing from this install. Reinstall Exo to repair it."
+        );
+    }
 
     #[test]
     fn keybind_label_orders_modifiers_first() {

@@ -98,8 +98,12 @@
     <EmbeddedResource Include="Services\StartupCatalog.json" LogicalName="StartupCatalog.json" />
     <!-- The file-level update's swap (AppUpdateService.Delta): the installer's own scripts, run after Exo closes. -->
     <EmbeddedResource Include="..\tools\installer\Apply-ExoDelta.ps1;..\tools\installer\Complete-ExoUpdate.ps1;..\tools\installer\Verify-Payload.ps1;..\tools\installer\Close-ExoLauncher.ps1;..\tools\installer\Clean-ExoInstall.ps1" LogicalName="installer/%(Filename)%(Extension)" Link="Installer\%(Filename)%(Extension)" />
-    <!-- The banner page's font (Assets/Overlay/banner.html): the one the UI ships, one copy in the repo. -->
-    <Content Include="..\ui\public\fonts\Goeist-Variable.woff2" Link="Assets\Overlay\Goeist-Variable.woff2">
+    <!-- Geist beside the app: the banner's WOFF2 the UI ships, and for GDI and DirectWrite the TTF native-ui embeds; one copy of each in the repo. -->
+    <Content Include="..\ui\public\fonts\Geist-Variable.woff2" Link="Assets\Overlay\Geist-Variable.woff2">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\native-ui\crates\exo-kit\assets\fonts\Geist-Variable.ttf;..\native-ui\crates\exo-kit\assets\fonts\LICENSE-Geist.txt" Link="Assets\Fonts\%(Filename)%(Extension)">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>

@@ -4678,7 +4678,10 @@ impl AppState {
                             Ok(r) if r.ok => {
                                 s.media.music_sign_in_status =
                                     Some(r.message.unwrap_or_else(|| {
-                                        "Finish signing in in its window.".into()
+                                        format!(
+                                            "Finish signing in to {} in the window that opened.",
+                                            service.label()
+                                        )
                                     }));
                                 if s.room == Room::Music
                                     && s.media.music_start_gen == generation

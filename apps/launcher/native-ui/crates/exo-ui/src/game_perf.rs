@@ -1,14 +1,14 @@
 use crate::game_actions::{
-    LineWord, SHADERS_RELEASES_URL, frame_gen_word, optimize_word, shader_word, trim_stop,
-    upscaler_line_word, upscaler_view,
+    LineWord, frame_gen_word, optimize_word, shader_word, trim_stop, upscaler_line_word,
+    upscaler_view,
 };
 use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
     FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK,
     SelectTrigger, TRANSPARENT, bad, fg_faint, fg_muted, float_line, glass_rim_bottom,
     glass_rim_top, glass_still_control_fill, good, hex, hover_fill, icon_chevron_right,
-    icon_external, pressed_fill, select_trigger, switch_pill, switch_pill_keyed, type_control,
-    type_section, type_small, type_title,
+    pressed_fill, select_trigger, switch_pill, switch_pill_keyed, type_control, type_section,
+    type_small, type_title,
 };
 use exo_rpc::Game;
 use rune::{Cursor, El, Transition, col, el, row, text};
@@ -262,14 +262,12 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
     }
 
     if let Some(ref sh) = s.game_page.shaders
+        && sh.state == "noApp"
+    {
+        rows.push(perf_reading_row("Shaders", shader_word(sh), None));
+    } else if let Some(ref sh) = s.game_page.shaders
         && sh.state != "unsupported"
     {
-        let no_app = sh.state == "noApp";
-        let icon = if no_app {
-            icon_external(14.0, fg_muted())
-        } else {
-            icon_chevron_right(14.0, fg_muted())
-        };
         rows.push(perf_action_row(
             PerfActionSpec {
                 key: "gp-perf-shaders",
@@ -277,17 +275,11 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
                 word: shader_word(sh),
                 disabled: false,
                 armed_question: None,
-                trailing_icon: Some(icon),
+                trailing_icon: Some(icon_chevron_right(14.0, fg_muted())),
                 control: None,
                 gamepad_focus,
             },
-            move |st, _| {
-                if no_app {
-                    st.open_external_url(SHADERS_RELEASES_URL);
-                } else {
-                    st.open_game_system_page("shaders");
-                }
-            },
+            |st, _| st.open_game_system_page("shaders"),
         ));
     }
 

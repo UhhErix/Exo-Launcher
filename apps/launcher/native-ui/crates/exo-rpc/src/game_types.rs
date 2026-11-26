@@ -356,6 +356,7 @@ pub struct OpenUrlReply {
     #[serde(deserialize_with = "null_as_default")]
     pub ok: bool,
     pub lookalike: Option<String>,
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

@@ -2167,6 +2167,7 @@ pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
     if !s.library_all_games {
         entries.push(MenuEntry::item(
             MenuItem::new("lib-menu-hidden", "Hidden games")
+                .icon(icon_eye_off(15.0, FG))
                 .checked(s.library_show_hidden)
                 .on_select(|s: &mut AppState, _| {
                     s.library_show_hidden = !s.library_show_hidden;

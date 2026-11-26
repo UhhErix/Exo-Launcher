@@ -751,6 +751,18 @@ fn ready_section(s: &AppState, programs: &[InstalledAppItem]) -> El {
     sec
 }
 
+fn last_used_label(app: &InstalledAppItem) -> Option<String> {
+    let filled = |v: &Option<String>| {
+        v.as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+    };
+    filled(&app.quiet_since)
+        .map(|q| format!("Before {q}"))
+        .or_else(|| filled(&app.last_opened))
+}
+
 fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> El {
     let id = app.id.clone();
     let is_armed =
@@ -823,12 +835,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
         .unwrap_or("")
         .to_string();
     let size_txt = app.bytes.map(format_bytes).unwrap_or_else(|| "—".into());
-    let last_used = app
-        .quiet_since
-        .as_deref()
-        .map(|q| format!("Before {q}"))
-        .or_else(|| app.last_opened.clone())
-        .unwrap_or_default();
+    let last_used = last_used_label(app).unwrap_or_default();
 
     let action_word = if app.replaces.is_some() {
         "Remove"
@@ -963,6 +970,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
         content_row = content_row.child(
             el().w(scaled(112.0)).child(
                 text(last_used)
+                    .key(format!("app-used-{}", app.id))
                     .font(type_small())
                     .color(apps_secondary())
                     .truncate(),
@@ -1016,6 +1024,17 @@ fn sort_head_btn(key: &'static str, label: &'static str, by: AppsSortBy, s: &App
             }
         })
         .child(inner)
+}
+
+fn startup_off_locked(item: &StartupItem) -> bool {
+    item.read_only || (item.locked && item.lock_kind.as_deref() != Some("updater"))
+}
+
+fn startup_off_detail(item: &StartupItem) -> String {
+    if item.read_only && item.status.as_deref().is_none_or(|st| st.trim().is_empty()) {
+        return "Exo can't turn this one on".into();
+    }
+    startup_detail(item)
 }
 
 fn startup_detail(item: &StartupItem) -> String {
@@ -1326,13 +1345,13 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
                     ids: g.ids.clone(),
                     name: g.item.name.clone(),
                     icon: g.item.icon.clone(),
-                    detail: startup_detail(g.item),
+                    detail: startup_off_detail(g.item),
                     amount: if g.item.memory > 0 {
                         format_bytes(g.item.memory)
                     } else {
                         String::new()
                     },
-                    locked: g.item.locked || g.item.read_only,
+                    locked: startup_off_locked(g.item),
                 });
             }
         } else if g.item.enabled {
@@ -1343,13 +1362,13 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
                 ids: g.ids.clone(),
                 name: g.item.name.clone(),
                 icon: g.item.icon.clone(),
-                detail: startup_detail(g.item),
+                detail: startup_off_detail(g.item),
                 amount: if g.item.memory > 0 {
                     format_bytes(g.item.memory)
                 } else {
                     String::new()
                 },
-                locked: g.item.locked || g.item.read_only,
+                locked: startup_off_locked(g.item),
             });
         }
     }
@@ -1362,7 +1381,7 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             icon: g.item.icon.clone(),
             detail: format_turned_off_day(&g.item.at),
             amount: String::new(),
-            locked: g.item.locked,
+            locked: false,
         };
         if is_windows_startup_id(&g.item.id) {
             off_rows.push(row);
@@ -1466,11 +1485,7 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             r.icon.as_deref(),
             "Off",
             None,
-            if r.locked {
-                String::new()
-            } else {
-                r.detail.clone()
-            },
+            r.detail.clone(),
             r.amount.clone(),
             err,
             ctrl,
@@ -1749,12 +1764,12 @@ pub(crate) fn apps_room(s: &AppState) -> El {
 
         let visible_main = &main_apps[..main_apps.len().min(120)];
         let visible_parts = &parts[..parts.len().min(60)];
-        let show_last_used = programs.iter().any(|a| {
-            a.last_opened
-                .as_deref()
-                .is_some_and(|t| !t.trim().is_empty())
-                || a.quiet_since.is_some()
-        });
+        let show_parts = searching || s.pc.apps_parts_open;
+        let shown_parts: &[&InstalledAppItem] = if show_parts { visible_parts } else { &[] };
+        let show_last_used = visible_main
+            .iter()
+            .chain(shown_parts)
+            .any(|a| last_used_label(a).is_some());
         let wide_select = s.pc.apps_run.is_some() || !s.pc.apps_picked.is_empty();
 
         let mut select_controls = row().gap(8.0).center_y().justify_end();
@@ -1898,7 +1913,6 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         }
         list_col = list_col.child(rows_col);
         if !visible_parts.is_empty() || s.pc.apps_list.as_ref().is_some_and(|l| l.edge_removed) {
-            let show_parts = searching || s.pc.apps_parts_open;
             let mut parts_sec = col().w_full().child(
                 row()
                     .key("apps-parts-toggle")
@@ -2134,6 +2148,33 @@ mod tests {
             rt.find("apps-head-last-used").is_some(),
             "Last used column should render when at least one app has last_opened"
         );
+        let (rect, _) = rt
+            .presented("app-used-app:obs")
+            .expect("OBS last used cell");
+        assert!(rect[2] > 1.0, "Last used value must be drawn, got {rect:?}");
+    }
+
+    #[test]
+    fn apps_hides_last_used_column_when_no_shown_app_has_a_value() {
+        let mut state = AppState::default();
+        if let Some(ref mut list) = state.pc.apps_list {
+            for p in &mut list.programs {
+                p.last_opened = if p.id == "app:vcredist" {
+                    Some("2026-11-20".into())
+                } else {
+                    Some("  ".into())
+                };
+                p.quiet_since = None;
+            }
+        }
+        state.pc.apps_parts_open = false;
+        state.switch_room(Room::Apps);
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        assert!(rt.find("apps-head-last-used").is_none());
+        assert!(rt.find("app-used-app:obs").is_none());
     }
 
     #[test]
@@ -2209,6 +2250,78 @@ mod tests {
         );
         item.status = Some("Blocked by policy".into());
         assert_eq!(super::startup_detail(&item), "Blocked by policy");
+    }
+
+    #[test]
+    fn startup_off_rows_keep_a_switch_or_say_why_not() {
+        let mut state = AppState::default();
+        state.switch_room(Room::Apps);
+        state.pc.apps_sub_tab = crate::pc_state::AppsSubTab::Startup;
+        state.pc.startup_list = Some(exo_rpc::StartupListReply {
+            ok: true,
+            message: None,
+            items: vec![
+                exo_rpc::StartupItem {
+                    id: "run:edge-update".into(),
+                    name: "Microsoft Edge Update".into(),
+                    command: "MicrosoftEdgeUpdate.exe /c".into(),
+                    source: "run".into(),
+                    enabled: false,
+                    locked: true,
+                    lock_kind: Some("updater".into()),
+                    status: Some("Exo needs this one to keep WebView2 up to date.".into()),
+                    ..Default::default()
+                },
+                exo_rpc::StartupItem {
+                    id: "run:security".into(),
+                    name: "Windows Security notification icon".into(),
+                    command: "SecurityHealthSystray.exe".into(),
+                    source: "run".into(),
+                    enabled: false,
+                    locked: true,
+                    lock_kind: Some("security".into()),
+                    status: Some("Your security software needs this one.".into()),
+                    ..Default::default()
+                },
+                exo_rpc::StartupItem {
+                    id: "run:policy".into(),
+                    name: "Policy App".into(),
+                    command: "policy.exe".into(),
+                    source: "run".into(),
+                    enabled: false,
+                    read_only: true,
+                    ..Default::default()
+                },
+            ],
+            removed: vec![],
+            extras: 0,
+        });
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        assert!(rt.find("startup-row-run:edge-update").is_some());
+        assert!(
+            rt.find("startup-sw-run:edge-update").is_some(),
+            "A locked updater that is off can still be turned back on"
+        );
+        assert!(rt.find("startup-row-run:security").is_some());
+        assert!(
+            rt.find("startup-sw-run:security").is_none(),
+            "Only an updater lock unlocks the switch"
+        );
+        assert!(rt.find("startup-row-run:policy").is_some());
+        assert!(rt.find("startup-sw-run:policy").is_none());
+        let policy = exo_rpc::StartupItem {
+            read_only: true,
+            command: "policy.exe".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::startup_off_detail(&policy),
+            "Exo can't turn this one on"
+        );
     }
 
     #[test]

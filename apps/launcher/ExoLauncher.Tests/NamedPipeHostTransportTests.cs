@@ -406,32 +406,41 @@ public sealed class NamedPipeHostTransportTests
         Assert.NotNull(envMode);
         Assert.True(envMode!.SpawnUi);
 
-        var defaultWithBundled = RuneHostSession.TryParse([], _ => null, path => path.EndsWith("exo-ui.exe", StringComparison.OrdinalIgnoreCase), readClassicPref: () => false);
+        var defaultWithBundled = RuneHostSession.TryParse([], _ => null, path => path.EndsWith("exo-ui.exe", StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(defaultWithBundled);
         Assert.True(defaultWithBundled!.SpawnUi);
 
-        var defaultWithoutBundled = RuneHostSession.TryParse([], _ => null, _ => false, readClassicPref: () => false);
-        Assert.Null(defaultWithoutBundled);
+        var devWithoutBundled = RuneHostSession.TryParse([], _ => null, _ => false, allowClassic: true);
+        Assert.Null(devWithoutBundled);
 
-        var webRollbackFlag = RuneHostSession.TryParse(["--ui=web"], _ => null, _ => true, readClassicPref: () => false);
-        Assert.Null(webRollbackFlag);
+        var shippedWithoutBundled = RuneHostSession.TryParse([], _ => null, _ => false, allowClassic: false);
+        Assert.NotNull(shippedWithoutBundled);
+        Assert.True(shippedWithoutBundled!.SpawnUi);
+        Assert.Null(RuneHostSession.ResolveUiExecutable(null, Path.Combine(Path.GetTempPath(), "exo-no-ui-" + Guid.NewGuid().ToString("N"))));
+        Assert.Equal("Exo is missing a file. Reinstall Exo to repair it.", RuneHostSession.MissingFileMessage);
 
-        var webRollbackEnv = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "web" : null, _ => true, readClassicPref: () => false);
-        Assert.Null(webRollbackEnv);
+        var webInDevBuild = RuneHostSession.TryParse(["--ui=web"], _ => null, _ => true, allowClassic: true);
+        Assert.Null(webInDevBuild);
 
-        var smokeBypass = RuneHostSession.TryParse(["--smoke-test"], _ => null, _ => true, readClassicPref: () => false);
+        var webEnvInDevBuild = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "web" : null, _ => true, allowClassic: true);
+        Assert.Null(webEnvInDevBuild);
+
+        var shippedWarnings = new List<string>();
+        var webInShippedBuild = RuneHostSession.TryParse(["--ui=web"], _ => null, _ => true, shippedWarnings.Add, allowClassic: false);
+        Assert.NotNull(webInShippedBuild);
+        Assert.Contains(shippedWarnings, w => w.Contains("only available in development builds", StringComparison.Ordinal));
+        Assert.True(webInShippedBuild!.SpawnUi);
+
+        var webEnvInShippedBuild = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "webview2" : null, _ => true, allowClassic: false);
+        Assert.NotNull(webEnvInShippedBuild);
+        Assert.True(webEnvInShippedBuild!.SpawnUi);
+
+        var smokeBypass = RuneHostSession.TryParse(["--smoke-test"], _ => null, _ => true);
         Assert.Null(smokeBypass);
 
-        var classicPref = RuneHostSession.TryParse([], _ => null, _ => true, readClassicPref: () => true);
-        Assert.Null(classicPref);
-
-        var cliNativeOverridesPref = RuneHostSession.TryParse(["--ui=native"], _ => null, _ => true, readClassicPref: () => true);
-        Assert.NotNull(cliNativeOverridesPref);
-        Assert.True(cliNativeOverridesPref!.SpawnUi);
-
-        var envNativeOverridesPref = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "native" : null, _ => true, readClassicPref: () => true);
-        Assert.NotNull(envNativeOverridesPref);
-        Assert.True(envNativeOverridesPref!.SpawnUi);
+        var envNative = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "native" : null, _ => true);
+        Assert.NotNull(envNative);
+        Assert.True(envNative!.SpawnUi);
 
         var warnings = new List<string>();
         Assert.Null(RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null, _ => false, warnings.Add));
@@ -474,19 +483,20 @@ public sealed class NamedPipeHostTransportTests
             Assert.NotEmpty(warnings);
         }
 
-        Assert.Null(RuneHostSession.TryParse(null, _ => null, _ => false));
-        Assert.Null(RuneHostSession.TryParse([null!, "", "--unknown", "exolauncher://library", "-Embedding"], _ => null, _ => false));
-        Assert.Null(RuneHostSession.TryParse(["--ui"], _ => null, _ => false));
-        Assert.Null(RuneHostSession.TryParse(["--rune-ui-path"], _ => null, _ => false));
-        Assert.Null(RuneHostSession.TryParse([], key => key == "EXO_UI" ? "unexpected-value" : null, _ => false));
+        Assert.Null(RuneHostSession.TryParse(null, _ => null, _ => false, allowClassic: true));
+        Assert.Null(RuneHostSession.TryParse([null!, "", "--unknown", "exolauncher://library", "-Embedding"], _ => null, _ => false, allowClassic: true));
+        Assert.Null(RuneHostSession.TryParse(["--ui"], _ => null, _ => false, allowClassic: true));
+        Assert.Null(RuneHostSession.TryParse(["--rune-ui-path"], _ => null, _ => false, allowClassic: true));
+        Assert.Null(RuneHostSession.TryParse([], key => key == "EXO_UI" ? "unexpected-value" : null, _ => false, allowClassic: true));
 
         var envWarnings = new List<string>();
-        Assert.Null(RuneHostSession.TryParse([], _ => throw new InvalidOperationException("env failure"), _ => false, envWarnings.Add));
+        Assert.Null(RuneHostSession.TryParse([], _ => throw new InvalidOperationException("env failure"), _ => false, envWarnings.Add, allowClassic: true));
         Assert.NotEmpty(envWarnings);
 
         var fsWarnings = new List<string>();
-        Assert.Null(RuneHostSession.TryParse([], key => key == "EXO_RUNE_UI_PATH" ? "C:\\bad|path\\exo-ui.exe" : null, _ => throw new ArgumentException("invalid path"), fsWarnings.Add));
+        Assert.Null(RuneHostSession.TryParse([], key => key == "EXO_RUNE_UI_PATH" ? "C:\\bad|path\\exo-ui.exe" : null, _ => throw new ArgumentException("invalid path"), fsWarnings.Add, allowClassic: true));
         Assert.NotEmpty(fsWarnings);
+        Assert.True(RuneHostSession.TryParse([], _ => throw new InvalidOperationException("env failure"), _ => throw new ArgumentException("invalid path"), allowClassic: false) is { SpawnUi: true });
 
         var overrideEq = RuneHostSession.TryParse(["--ui=rune", "--rune-ui-path=C:\\exo\\exo-ui.exe"], _ => null, _ => false);
         Assert.NotNull(overrideEq);

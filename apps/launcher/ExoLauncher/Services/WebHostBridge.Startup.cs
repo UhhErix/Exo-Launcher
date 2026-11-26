@@ -61,6 +61,7 @@ public sealed partial class WebHostBridge
                 unneeded = StartupEntries.Unneeded(entry),
                 missing = entry.Missing,
                 locked = entry.Locked,
+                lockKind = entry.Locked ? entry.Lock.ToString().ToLowerInvariant() : null,
                 readOnly = entry.ReadOnly,
                 // One plain sentence for a row Exo leaves alone or can't hold, and the guard's state for the page.
                 status = entry.Locked ? StartupLocks.Sentence(entry.Lock) : entry.Status,

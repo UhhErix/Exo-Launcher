@@ -17,6 +17,7 @@ $nativeUi = Join-Path $repo 'native-ui\target\release\exo-ui.exe'
 if (Test-Path -LiteralPath $nativeUi) {
     Copy-Item -LiteralPath $nativeUi -Destination (Join-Path $incoming 'exo-ui.exe') -Force
 }
+& (Join-Path $PSScriptRoot 'Fetch-VoiceModels.ps1') -Destination $incoming | Out-Null
 # dotnet publish carries no add-ons (Build-Release.ps1 adds them): keep each installed one the publish lacks, or the swap
 # drops Exo Capture and Settings says it is not installed. Lucid (addons\lucid, hosted until 3.25) is not carried over.
 $installedAddons = Join-Path $app 'addons'

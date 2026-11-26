@@ -1094,7 +1094,7 @@ mod tests {
             state: "noApp".into(),
             ..Default::default()
         };
-        assert_eq!(shader_word(&sh).unwrap().text, "Get Exo Shaders");
+        assert_eq!(shader_word(&sh).unwrap().text, "Missing from this install");
     }
 
     #[test]

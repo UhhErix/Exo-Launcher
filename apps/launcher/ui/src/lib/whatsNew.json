@@ -5,12 +5,7 @@
       {
         "icon": "Library",
         "title": "All-new native desktop interface",
-        "detail": "Faster startup, smoother scrolling, and lower memory use across Library, Store, Discord, Music, and PC, keeping all your existing settings, games, and accounts."
-      },
-      {
-        "icon": "Settings",
-        "title": "Classic interface one switch away",
-        "detail": "Prefer the previous layout? Turn on Use classic interface in Settings › General to switch back whenever you like."
+        "detail": "Faster startup, smoother scrolling, and lower memory use across Library, Store, Discord, Music, and Exo AI, keeping all your existing settings, games, and accounts."
       },
       {
         "icon": "Mic",
@@ -25,7 +20,7 @@
       {
         "icon": "Performance",
         "title": "Smarter PC power, cooling, and display tools",
-        "detail": "Adds power protection, safe fan-curve limits, monitor calibration, and network latency checks in the PC room."
+        "detail": "Adds power protection, safe fan-curve limits, monitor calibration, and network latency checks in Exo AI."
       },
       {
         "icon": "Record",

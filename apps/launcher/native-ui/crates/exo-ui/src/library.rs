@@ -9,15 +9,15 @@ use crate::state::{
     library_chip_options, now_unix_ms, title_hue,
 };
 use exo_kit::{
-    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
-    SPRING_FLIGHT, SPRING_MOVE, SPRING_PRESS, SPRING_QUICK, SPRING_SMOOTH, SelectTrigger,
-    TRANSPARENT, exo_play_button, fg_faint, fg_muted, glass_button, glass_button_opt,
-    glass_icon_circle, glass_icon_circle_opt, glass_panel_fill, glass_plate_fill, glass_rim,
-    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hover_fill, icon_check,
-    icon_chevron_left, icon_chevron_right, icon_close, icon_download, icon_filter, icon_grid,
-    icon_more_horiz, icon_play, icon_plus, icon_search, popover_transition_for, pressed_fill,
-    primary_button, select_trigger, surface_card, type_body, type_control, type_first_run,
-    type_section, type_small, type_title, warn,
+    BG, ExoGlass, FG, PAGE_GUTTER, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_PRESS, SPRING_QUICK, SPRING_SMOOTH,
+    SelectTrigger, TRANSPARENT, exo_play_button, fg_faint, fg_muted, glass_button,
+    glass_button_opt, glass_icon_circle, glass_icon_circle_opt, glass_panel_fill, glass_plate_fill,
+    glass_rim, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hover_fill,
+    icon_check, icon_chevron_left, icon_chevron_right, icon_close, icon_download, icon_filter,
+    icon_grid, icon_more_horiz, icon_play, icon_plus, icon_search, popover_transition_for,
+    pressed_fill, primary_button, select_trigger, surface_card, type_body, type_control,
+    type_first_run, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{Game, InstallProgress};
 use rune::{
@@ -33,11 +33,10 @@ const DECK_CARD_H: f32 = 336.0;
 pub const ALL_CARD_W: f32 = 163.63;
 pub const ALL_CARD_H: f32 = 245.45;
 const ALL_GRID_GAP: f32 = 14.0;
-const ALL_GRID_PAD_X: f32 = 24.0;
 
 pub fn all_grid_metrics(viewport_w: f32) -> (usize, f32, f32) {
     let usable = if viewport_w > 0.0 {
-        (viewport_w - ALL_GRID_PAD_X * 2.0).max(160.0)
+        (viewport_w - PAGE_GUTTER * 2.0).max(160.0)
     } else {
         1900.0
     };
@@ -1235,17 +1234,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .hover(hover_fill())
         .press(pressed_fill())
         .motion(SPRING_QUICK)
-        .on_press(|s: &mut AppState| {
-            s.library_all_games = false;
-            s.library_show_hidden = false;
-            s.library_more_open = false;
-            s.library_add_open = false;
-            s.library_filter_open = false;
-            s.exit_select_mode();
-            s.filters.clear();
-            s.library_search.text.clear();
-            s.library_search.sync_invariants();
-        })
+        .on_press(|s: &mut AppState| s.close_all_games())
         .child(icon_chevron_left(16.0, FG))
         .child(text("Library").font(type_control()).color(FG));
 
@@ -1397,7 +1386,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
     let head = row()
         .w_full()
         .pt(7.0)
-        .px(ALL_GRID_PAD_X)
+        .px(PAGE_GUTTER)
         .pb(15.0)
         .gap(16.0)
         .center_y()
@@ -1472,7 +1461,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                 row()
                     .w_full()
                     .mt(-8.0)
-                    .px(ALL_GRID_PAD_X)
+                    .px(PAGE_GUTTER)
                     .pb(16.0)
                     .gap(6.0)
                     .center_y()
@@ -1486,7 +1475,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .w_full()
         .h(37.0)
         .pt(5.0)
-        .px(ALL_GRID_PAD_X)
+        .px(PAGE_GUTTER)
         .pb(5.0)
         .center_y()
         .child(text(heading).font(type_title()).color(FG));
@@ -1546,7 +1535,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         col()
             .w_full()
             .pt(8.0)
-            .px(ALL_GRID_PAD_X)
+            .px(PAGE_GUTTER)
             .gap(ALL_GRID_GAP)
             .children(rows)
     };
@@ -1867,7 +1856,7 @@ mod tests {
             assert!(cols >= min_cols && cols <= max_cols, "vp={vp} cols={cols}");
             let row_w = cols as f32 * w
                 + (cols - 1) as f32 * super::ALL_GRID_GAP
-                + super::ALL_GRID_PAD_X * 2.0;
+                + exo_kit::PAGE_GUTTER * 2.0;
             assert!(
                 row_w <= vp + 0.5,
                 "vp={vp} row_w={row_w} overflows viewport"

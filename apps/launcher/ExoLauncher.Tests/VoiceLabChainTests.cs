@@ -88,21 +88,25 @@ public class VoiceLabChainTests
     }
 
     [Fact]
-    public void VoiceModelsPinsAreValidSha256AndNotInInstaller()
+    public void VoiceModelsShipBesideExoAndAreNeverFetched()
     {
-        foreach (var asset in new[]
-        {
-            VoiceModels.DpdfNetBaselineAsset,
-            VoiceModels.DpdfNet48kHrAsset,
-            VoiceModels.VoxLockEnrollAsset,
-            VoiceModels.VoxLockChunkAsset,
-        })
+        Assert.Equal(5, VoiceModels.Bundled.Count);
+        Assert.Contains(VoiceModels.TitaNetAsset, VoiceModels.Bundled);
+        Assert.Equal(VoiceModels.ModelPath(VoiceModels.TitaNetAsset), SpeakerModel.ModelPath);
+        foreach (var asset in VoiceModels.Bundled)
         {
             Assert.True(asset.ExpectedSize > 1_000_000);
             Assert.Equal(64, asset.ExpectedSha256.Length);
+            Assert.Equal(Path.Combine(AppContext.BaseDirectory, "voice", "models", asset.AssetName), VoiceModels.BundledPath(asset));
+            Assert.DoesNotContain(ExoComponents.All, c => string.Equals(Path.GetFileName(c.Location()), asset.AssetName, StringComparison.OrdinalIgnoreCase));
         }
-        Assert.Contains(VoiceModels.BaselineComponent, ExoComponents.All);
-        Assert.True(VoiceModels.BaselineComponent.HasStandIn);
+        Assert.Equal(VoiceModels.Bundled.Select(a => a.AssetName).Distinct().Count(), VoiceModels.Bundled.Count);
+#if !DEBUG
+        Assert.Equal(VoiceModels.BundledPath(VoiceModels.DpdfNetBaselineAsset), VoiceModels.ModelPath(VoiceModels.DpdfNetBaselineAsset));
+        var retired = VoiceModels.RetiredDownloads().ToList();
+        Assert.Equal(VoiceModels.Bundled.Select(a => Path.Combine(VoiceModels.VoiceDir, a.AssetName)).Append(Path.Combine(VoiceModels.VoiceDir, "titanet_small.onnx")), retired);
+        Assert.Equal(VoiceModels.BundledPath(VoiceModels.TitaNetAsset), SpeakerModel.ModelPath);
+#endif
     }
 
     [Fact]
@@ -130,7 +134,8 @@ public class VoiceLabChainTests
         try
         {
             VoiceModels.BaselineModelPath = path;
-            using var suppressor = NeuralNoiseSuppressor.Create(VoiceModelTier.DpdfNetBaseline);
+            if (!VoiceModels.BaselineReady()) Assert.Null(NeuralNoiseSuppressor.Create(VoiceModelTier.DpdfNetBaseline));
+            using var suppressor = NeuralNoiseSuppressor.CreateUnverifiedForTests(path);
             Assert.NotNull(suppressor);
             var rng = new Random(42);
             double inEnergy = 0, outEnergy = 0;

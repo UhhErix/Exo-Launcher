@@ -415,10 +415,6 @@ internal static partial class GameGraphicsFeatures
         return null;
     }
 
-    /// <summary>
-    /// Removes any NVIDIA driver Frame Rate Limiter (0x10835002) that earlier builds wrote under Graphics Features › Reflex,
-    /// putting each game's profile back to its original value (driver default / uncapped).
-    /// </summary>
     internal static int RetireFrameCapOverrides(string? stateRoot = null)
     {
         var root = stateRoot ?? DefaultStateRoot;

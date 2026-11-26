@@ -24,7 +24,7 @@ internal static class NetworkDestinations
     internal sealed record Destination(string Host, string PrivacyRow);
 
     internal const string UpdateAddress = "Exo's update address (updates.getexo.app, on Exo's Cloudflare account)";
-    internal const string ToolReleases = "Store tools and the voice model: Legendary, gogdl and Nile, and NVIDIA's TitaNet voice model, from Exo's cache (updates.getexo.app, on Exo's Cloudflare account)";
+    internal const string ToolReleases = "Store tools: Legendary, gogdl and Nile, from Exo's cache (updates.getexo.app, on Exo's Cloudflare account)";
     internal const string StoreTools = "Epic, GOG, Amazon (through Legendary, gogdl, Nile)";
     internal const string EpicServices = "Epic account and library services";
     internal const string EpicDownloads = "Epic's download hosts (the manifest list from launcher-public-service-prod06.ol.epicgames.com, and the CDN hosts it names)";
