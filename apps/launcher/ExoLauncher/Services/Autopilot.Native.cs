@@ -21,6 +21,8 @@ internal sealed class AutopilotNative : IAutopilotSystem
 
     public int Front() => (int)ForegroundWatcher.ForegroundProcess();
 
+    public IReadOnlyDictionary<int, GpuProcessLoad> GpuProcesses() => GpuProcessMonitor.Shared.SampleForAutopilot();
+
     public int? Read(Knob knob, int pid, long created)
     {
         var handle = Open(pid, created, QueryLimited | (knob == Knob.Io ? QueryInformation : 0));

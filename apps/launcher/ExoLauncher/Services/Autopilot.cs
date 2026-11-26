@@ -20,11 +20,16 @@ internal enum Knob
 }
 
 /// <summary>What Autopilot needs of Windows, behind one seam so every decision and every put-back is tested with fakes.</summary>
+internal readonly record struct GpuProcessLoad(double TotalPercent, long LocalBytes, long NonLocalBytes);
+
 internal interface IAutopilotSystem
 {
+    private static readonly IReadOnlyDictionary<int, GpuProcessLoad> EmptyGpu = new Dictionary<int, GpuProcessLoad>();
+
     IReadOnlyList<ProcessRow> Processes();
     /// <summary>The process now in front (the foreground window's), or 0.</summary>
     int Front();
+    IReadOnlyDictionary<int, GpuProcessLoad> GpuProcesses() => EmptyGpu;
     /// <summary>The knob's value, or null when the process is gone, is another one by now (its start time), or won't say.</summary>
     int? Read(Knob knob, int pid, long created);
     /// <summary>Writes the knob; false when the process is gone, is another one by now, or Windows refused.</summary>
@@ -167,6 +172,10 @@ internal static class AutopilotRules
     /// <summary>A background app using this many cores on average between two looks is held back while the game is in front.</summary>
     internal const double HogCores = 0.25;
 
+    internal const double HogGpuPercent = 10.0;
+    internal const double HogGpuWithVramPercent = 3.0;
+    internal const long HogVramBytes = 256L << 20;
+
     /// <summary>At most this many processes are held back in one session.</summary>
     internal const int MaxDemoted = 48;
 
@@ -196,6 +205,12 @@ internal static class AutopilotRules
 
     /// <summary>Whether a background process is held back now: named by the player or learned for this game, or using <see cref="HogCores"/> or more.</summary>
     internal static bool Hog(string bare, double cores, IReadOnlySet<string> named) => named.Contains(bare) || cores >= HogCores;
+
+    internal static bool GpuHog(double gpuPercent, long localVramBytes) =>
+        gpuPercent >= HogGpuPercent || (gpuPercent >= HogGpuWithVramPercent && localVramBytes >= HogVramBytes);
+
+    internal static bool Hog(string bare, double cores, double gpuPercent, long localVramBytes, IReadOnlySet<string> named) =>
+        Hog(bare, cores, named) || GpuHog(gpuPercent, localVramBytes);
 }
 
 /// <summary>
@@ -466,6 +481,7 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         else _gameSaid ??= game.MayTouchGame ? null : $"Left {game.Title} itself alone: it runs with anti-cheat, so Exo doesn't open it";
 
         // Background apps: named, learned or hogging, while the game is in front.
+        var gpu = system.GpuProcesses();
         var named = new HashSet<string>(options.AlwaysDemote.Concat(game.Learned).Select(AutopilotSafety.Bare), StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {
@@ -473,7 +489,8 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
             if (_demoted.Contains((row.Pid, row.CreateTime)) || AutopilotRules.LeftAlone(row, _session, tree, _self, front) is not null) continue;
             var cores = seconds > 0 && before.TryGetValue((row.Pid, row.CreateTime), out var was) ? (row.CpuTime - was) / (seconds * 1e7) : 0;
             var bare = AutopilotSafety.Bare(row.Name);
-            if (!AutopilotRules.Hog(bare, cores, named)) continue;
+            gpu.TryGetValue(row.Pid, out var gpuUse);
+            if (!AutopilotRules.Hog(bare, cores, gpuUse.TotalPercent, gpuUse.LocalBytes, named)) continue;
             _demoted.Add((row.Pid, row.CreateTime));
             if (Demote(row)) _demotedNames.Add(bare);
         }

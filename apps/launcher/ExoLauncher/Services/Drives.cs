@@ -338,7 +338,56 @@ internal static partial class Drives
     /// The newest firmware a maker lists, where its page says so publicly. Samsung's consumer tools page
     /// (semiconductor.samsung.com/consumer-storage/support/tools/) listed 8B2QJXD7 for the 990 PRO (1, 2 TB) on 2026-10-28.
     /// </summary>
-    private static readonly (Regex Model, string Latest)[] LatestFirmware = [(NinetyNinetyPro(), "8B2QJXD7")];
+    internal sealed record FirmwareRule(Regex Model, string Latest);
+
+    internal static readonly IReadOnlyDictionary<string, IReadOnlyList<FirmwareRule>> FirmwareByVendor =
+        new Dictionary<string, IReadOnlyList<FirmwareRule>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Samsung"] =
+            [
+                new(NinetyNinetyPro(), "8B2QJXD7"),
+                new(NinetyEightyPro(), "5B2QGXA7"),
+            ],
+            ["WD"] =
+            [
+                new(WdSn770TwoTb(), "731130WD"),
+                new(WdSn580TwoTb(), "281050WD"),
+                new(WdSn5000TwoTb(), "291020WD"),
+                new(WdSn850x(), "624361WD"),
+            ],
+            ["Crucial"] =
+            [
+                new(CrucialT500(), "P8CR003"),
+                new(CrucialP5Plus(), "P7CR403"),
+            ],
+            ["SK hynix"] =
+            [
+                new(SkHynixP41(), "51061A20"),
+            ],
+            ["Kingston"] =
+            [
+                new(KingstonKc3000(), "EIFK31.7"),
+                new(KingstonFuryRenegade(), "EIFK31.7"),
+            ],
+            ["Solidigm"] =
+            [
+                new(SolidigmP44Pro(), "002C"),
+            ],
+        };
+
+    internal static string? FirmwareVendorKey(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return null;
+        var m = model.Trim();
+        bool Has(params string[] tokens) => tokens.Any(t => m.Contains(t, StringComparison.OrdinalIgnoreCase));
+        if (Has("Samsung")) return "Samsung";
+        if (Has("WD", "WDC", "SanDisk", "Western Digital")) return "WD";
+        if (Has("Crucial", "Micron") || m.StartsWith("CT", StringComparison.OrdinalIgnoreCase)) return "Crucial";
+        if (Has("SK hynix", "SHPP41", "HFS", "Platinum P41", "Gold P31")) return "SK hynix";
+        if (Has("Kingston", "SKC3000", "KC3000", "SFYR", "FURY Renegade", "SNV", "SA400", "SA2000")) return "Kingston";
+        if (Has("Solidigm", "SSDPF", "SSDPE", "P44 Pro", "P41 Plus")) return "Solidigm";
+        return null;
+    }
 
     /// <summary>
     /// The line for firmware with a known fault on this Windows (<paramref name="build"/>: its build, this PC's when null),
@@ -362,11 +411,12 @@ internal static partial class Drives
     internal static string? NewerFirmware(string? model, string? firmware)
     {
         if (model is null || firmware is not { Length: > 1 }) return null;
-        foreach (var (pattern, latest) in LatestFirmware)
+        if (FirmwareVendorKey(model) is not { } vendorKey || !FirmwareByVendor.TryGetValue(vendorKey, out var rules)) return null;
+        var now = firmware.Trim().ToUpperInvariant();
+        foreach (var rule in rules)
         {
-            if (!pattern.IsMatch(model)) continue;
-            var now = firmware.Trim().ToUpperInvariant();
-            return now.Length == latest.Length && now[1..] == latest[1..] && char.IsAsciiDigit(now[0]) && now[0] < latest[0] ? latest : null;
+            if (!rule.Model.IsMatch(model)) continue;
+            return DriverAdvisories.Firmware(now, rule.Latest) < 0 ? rule.Latest : null;
         }
         return null;
     }
@@ -377,11 +427,14 @@ internal static partial class Drives
         if (string.IsNullOrWhiteSpace(model)) return null;
         var m = model.Trim();
         bool Starts(params string[] prefixes) => prefixes.Any(p => m.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        bool Has(params string[] tokens) => tokens.Any(t => m.Contains(t, StringComparison.OrdinalIgnoreCase));
         if (Starts("Samsung")) return ("Samsung", "Samsung Magician", "https://semiconductor.samsung.com/consumer-storage/support/tools/");
         if (Starts("WD", "WDC", "SanDisk", "Western Digital")) return ("SanDisk", "SanDisk Dashboard", "https://www.sandisk.com/en-us/topics/upgrades/drive-monitoring-sandisk-dashboard");
         if (Starts("Crucial", "CT", "Micron")) return ("Crucial", "Storage Executive", "https://www.crucial.com/support/storage-executive");
-        if (Starts("Kingston", "KINGSTON", "SNV", "SKC", "SFYR", "SA400", "SA2000")) return ("Kingston", "Kingston SSD Manager", "https://www.kingston.com/en/support/technical/ksm-firmware-update");
-        if (Starts("Solidigm", "INTEL SSDPE", "SSDPE")) return ("Solidigm", "Solidigm Synergy", "https://www.solidigm.com/support-page/drivers-downloads/ka-01737.html");
+        if (Starts("SK hynix", "SHPP", "HFS", "BC711", "BC901") || Has("SK hynix", "Platinum P41", "Gold P31")) return ("SK hynix", "SK hynix Drive Manager", "https://ssd.skhynix.com/download/");
+        if (Starts("Kingston", "KINGSTON", "SNV", "SKC", "SFYR", "SA400", "SA2000") || Has("KC3000", "FURY Renegade")) return ("Kingston", "Kingston SSD Manager", "https://www.kingston.com/en/support/technical/ksm-firmware-update");
+        if (Starts("Solidigm", "INTEL SSDPE", "SSDPE", "SSDPF") || Has("P44 Pro", "P41 Plus")) return ("Solidigm", "Solidigm Synergy", "https://www.solidigm.com/support-page/drivers-downloads/ka-01737.html");
+        if (Starts("Sabrent")) return ("Sabrent", "Rocket Control Panel", "https://sabrent.com/pages/rocket-control-panel");
         if (Starts("Corsair", "Force MP")) return ("Corsair", "Corsair SSD Toolbox", "https://help.corsair.com/hc/en-us/articles/15292042915213-SSD-How-to-Update-your-SSD-Firmware");
         if (Starts("Seagate", "ST")) return ("Seagate", "SeaTools", "https://www.seagate.com/support/downloads/seatools/");
         return null;
@@ -390,6 +443,39 @@ internal static partial class Drives
     // 990 PRO and 990 PRO with Heatsink at 1 and 2 TB (the 4 TB runs its own firmware line).
     [GeneratedRegex(@"Samsung SSD 990 PRO\b(?!.*4TB)", RegexOptions.IgnoreCase)]
     private static partial Regex NinetyNinetyPro();
+
+    [GeneratedRegex(@"Samsung SSD 980 PRO\b", RegexOptions.IgnoreCase)]
+    private static partial Regex NinetyEightyPro();
+
+    [GeneratedRegex(@"\bSN770M? 2TB\b", RegexOptions.IgnoreCase)]
+    private static partial Regex WdSn770TwoTb();
+
+    [GeneratedRegex(@"\bSN580 2TB\b", RegexOptions.IgnoreCase)]
+    private static partial Regex WdSn580TwoTb();
+
+    [GeneratedRegex(@"\bSN5000 2TB\b", RegexOptions.IgnoreCase)]
+    private static partial Regex WdSn5000TwoTb();
+
+    [GeneratedRegex(@"\bSN850X\b", RegexOptions.IgnoreCase)]
+    private static partial Regex WdSn850x();
+
+    [GeneratedRegex(@"(?:Crucial.*T500|CT\d+T500)", RegexOptions.IgnoreCase)]
+    private static partial Regex CrucialT500();
+
+    [GeneratedRegex(@"(?:Crucial.*P5 Plus|CT\d+P5PSSD8)", RegexOptions.IgnoreCase)]
+    private static partial Regex CrucialP5Plus();
+
+    [GeneratedRegex(@"(?:SHPP41|Platinum\s+P41)", RegexOptions.IgnoreCase)]
+    private static partial Regex SkHynixP41();
+
+    [GeneratedRegex(@"(?:SKC3000|KC3000)", RegexOptions.IgnoreCase)]
+    private static partial Regex KingstonKc3000();
+
+    [GeneratedRegex(@"(?:SFYR|FURY\s+Renegade)", RegexOptions.IgnoreCase)]
+    private static partial Regex KingstonFuryRenegade();
+
+    [GeneratedRegex(@"(?:SSDPFKKW|P44\s+Pro)", RegexOptions.IgnoreCase)]
+    private static partial Regex SolidigmP44Pro();
 
     [GeneratedRegex(@"Samsung SSD 8[67]0 QVO\b|\bSSDPEKNW\d{3}[GT][89]\b|\bSSDP[EF]KNU\d{3}[GT]Z\b|\bCT\d{3,4}P1SSD8\b", RegexOptions.IgnoreCase)]
     private static partial Regex QlcModel();
@@ -413,17 +499,24 @@ internal static partial class Drives
         internal bool Off => TaskOff || MaintenanceOff || ServiceOff;
     }
 
+    internal sealed record TrimState(bool NtfsOff, bool RefsOff = false)
+    {
+        internal bool Off => NtfsOff || RefsOff;
+    }
+
     /// <summary>
     /// What Exo changed: each drive's CacheIsPowerProtected as it was, the task's, Automatic Maintenance's and the
     /// service's state, and each drive's UserWriteCacheSetting as it was (null: it wasn't set).
     /// </summary>
-    internal sealed record Backup(List<FlushChange> Flush, OptimizeChange? Optimize, List<CacheChange>? Cache = null);
+    internal sealed record Backup(List<FlushChange> Flush, OptimizeChange? Optimize, List<CacheChange>? Cache = null, TrimChange? Trim = null);
 
     internal sealed record FlushChange(string InstanceId, int Was);
 
     internal sealed record CacheChange(string InstanceId, int? Was);
 
     internal sealed record OptimizeChange(bool TaskWasOff, bool MaintenanceWasOff, bool ServiceWasOff = false);
+
+    internal sealed record TrimChange(bool NtfsWasOff, bool RefsWasOff = false);
 
     /// <summary>Drives whose flushing Exo would turn back on: flushing off, by Windows' own setting, on a drive Windows names.</summary>
     internal static IReadOnlyList<Disk> FlushPending(IReadOnlyList<Disk> disks) =>
@@ -440,7 +533,7 @@ internal static partial class Drives
         disks.Where(d => CacheFixable(d) && d.CacheSetting is not 1 && d.InstanceId is { } id && DiskId().IsMatch(id)).ToList();
 
     /// <summary>The fix rows, from what was read and what Exo changed.</summary>
-    internal static IReadOnlyList<Fix> Fixes(IReadOnlyList<Disk> disks, Optimize? optimize, Backup? backup)
+    internal static IReadOnlyList<Fix> Fixes(IReadOnlyList<Disk> disks, Optimize? optimize, Backup? backup, TrimState? trim = null)
     {
         var list = new List<Fix>();
         var cachePending = CachePending(disks);
@@ -475,12 +568,18 @@ internal static partial class Drives
                     : "Off: Windows' scheduled optimize is off"));
         else if (optimize is not null && backup?.Optimize is not null)
             list.Add(new("optimize", "Weekly optimize", "On", Applied: true));
+        var hasSsd = disks.Any(d => d.Kind is "NVMe SSD" or "SSD");
+        if (hasSsd && trim is { Off: true })
+            list.Add(new("trim", "SSD TRIM", "Off: Windows DisableDeleteNotify is disabled, slowing SSD writes"));
+        else if (hasSsd && trim is not null && backup?.Trim is not null)
+            list.Add(new("trim", "SSD TRIM", "On", Applied: true));
         return list;
     }
 
     internal const string DefragTask = @"\Microsoft\Windows\Defrag\ScheduledDefrag";
     internal const string MaintenanceKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance";
     internal const string DefragService = "defragsvc";
+    internal const string FileSystemKey = @"SYSTEM\CurrentControlSet\Control\FileSystem";
 
     /// <summary>
     /// The elevated lines that turn flushing on for <paramref name="flush"/> drives (CacheIsPowerProtected 0), set write caching (<paramref name="cache"/>: UserWriteCacheSetting, the value behind Device Manager's
@@ -489,7 +588,7 @@ internal static partial class Drives
     /// Windows names (checked by pattern, quoted) reach reg.exe; null when one isn't.
     /// </summary>
     internal static IReadOnlyList<string>? Commands(string reg, string schtasks, IEnumerable<(string Id, int Value)> flush, OptimizeChange? optimizeOn,
-        IEnumerable<(string Id, int? Value)>? cache = null)
+        IEnumerable<(string Id, int? Value)>? cache = null, TrimChange? trimOn = null)
     {
         var lines = new List<string>();
         foreach (var (id, value) in flush)
@@ -508,6 +607,12 @@ internal static partial class Drives
             if (on.TaskWasOff) lines.Add($"\"{schtasks}\" /Change /TN \"{DefragTask}\" /ENABLE");
             if (on.MaintenanceWasOff) lines.Add($"\"{reg}\" delete \"HKLM\\{MaintenanceKey}\" /v MaintenanceDisabled /f /reg:64");
             if (on.ServiceWasOff) lines.Add($"\"{Path.Combine(Path.GetDirectoryName(schtasks) ?? "", "sc.exe")}\" config {DefragService} start= demand");
+        }
+        if (trimOn is { } trim)
+        {
+            var fsutil = Path.Combine(Path.GetDirectoryName(reg) ?? "", "fsutil.exe");
+            if (trim.NtfsWasOff) lines.Add($"\"{fsutil}\" behavior set DisableDeleteNotify 0");
+            if (trim.RefsWasOff) lines.Add($"\"{fsutil}\" behavior set DisableDeleteNotify ReFS 0");
         }
         return lines;
     }

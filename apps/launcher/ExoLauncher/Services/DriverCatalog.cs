@@ -220,7 +220,7 @@ internal sealed class DriverCatalog(IReadOnlyList<IDriverProvider> providers)
         {
             if (await BiosUpdate.ReadAsync(ct).ConfigureAwait(false) is not { } b) return null;
             // ASUS's page for the board even when it's current: a known problem with what runs opens it.
-            var page = b.Page ?? (PcAbout.Maker(b.Board) == "ASUS" && PcAbout.Bios.Product is { } model && PcAbout.Real(model) ? BiosUpdate.AsusPage(model.Trim()) : null);
+            var page = b.Page ?? BiosUpdate.SupportPage(PcAbout.Bios.Maker, PcAbout.Bios.Product);
             return new DriverItem("bios:board", "bios", "BIOS", b.Board, b.Version, b.Date, b.Latest, b.LatestDate,
                 b.UpToDate == false ? DriverHow.Page : DriverHow.None, page, false) { Source = PcAbout.Maker(b.Board), Device = b.Board };
         }

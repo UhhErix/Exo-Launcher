@@ -1327,6 +1327,51 @@ const mockExoAiPref: {
   lastCheckUtc: null,
 }
 
+const mockGpuProcesses = () => {
+  const topGpu = {
+    pid: 4120,
+    name: 'chrome',
+    adapterLuid: '0x00000000_0x00010A4F',
+    adapterName: 'NVIDIA GeForce RTX 3070',
+    totalPercent: 14.2,
+    engines: [{ type: '3D', percent: 14.2 }, { type: 'Video Decode', percent: 3.1 }],
+    localBytes: 640 * 1024 * 1024,
+    nonLocalBytes: 42 * 1024 * 1024,
+    protectedReason: null as string | null,
+  }
+  const dwm = {
+    pid: 1024,
+    name: 'dwm',
+    adapterLuid: '0x00000000_0x00010A4F',
+    adapterName: 'NVIDIA GeForce RTX 3070',
+    totalPercent: 2.1,
+    engines: [{ type: '3D', percent: 2.1 }],
+    localBytes: 280 * 1024 * 1024,
+    nonLocalBytes: 18 * 1024 * 1024,
+    protectedReason: 'part of Windows',
+  }
+  return {
+    ok: true,
+    adapters: [
+      {
+        luid: '0x00000000_0x00010A4F',
+        name: 'NVIDIA GeForce RTX 3070',
+        vendorId: 0x10DE,
+        dedicatedBytes: 8 * 1024 ** 3,
+        sharedBytes: 8 * 1024 ** 3,
+        software: false,
+      },
+    ],
+    processes: [topGpu, dwm],
+    answer: {
+      summary: 'chrome is using 14% GPU (3D) and 640 MB VRAM.',
+      topGpu,
+      topVram: topGpu,
+      hogs: [topGpu],
+    },
+  }
+}
+
 const mockExoAi = () => ({
   autoApplyBestSettings: mockExoAiPref.autoApplyBestSettings,
   backgroundDriftCheck: mockExoAiPref.backgroundDriftCheck,
@@ -1354,6 +1399,7 @@ const mockExoAi = () => ({
     fanCount: 2,
     note: null as string | null,
   },
+  gpuAnswer: mockGpuProcesses().answer,
 })
 
 const MOCK_HANDLERS: Record<string, MockHandler> = {
@@ -2128,6 +2174,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'exoAi.state': () => mockExoAi(),
+  'gpu.processes': () => mockGpuProcesses(),
   'exoAi.set': (p) => {
     const patch = (p ?? {}) as { autoApplyBestSettings?: boolean; backgroundDriftCheck?: boolean; fanPreset?: string; runNow?: boolean }
     if (typeof patch.autoApplyBestSettings === 'boolean') mockExoAiPref.autoApplyBestSettings = patch.autoApplyBestSettings

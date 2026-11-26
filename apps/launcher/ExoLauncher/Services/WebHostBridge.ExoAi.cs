@@ -71,5 +71,6 @@ public sealed partial class WebHostBridge
             fanCount = snap.Fans.FanCount,
             note = snap.Fans.Note,
         },
+        gpuAnswer = GpuAnswerDto(snap.GpuAnswer),
     };
 }

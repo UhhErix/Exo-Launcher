@@ -38,6 +38,10 @@ internal static partial class PcHealth
     /// <summary>A discrete graphics card's active and maximum PCIe link widths (e.g. running at x8 on an x16 slot).</summary>
     internal sealed record PcieLink(string AdapterName, uint CurrentWidth, uint MaxWidth);
 
+    internal sealed record MemorySlot(bool Populated, byte FormFactor, byte MemoryType, string? DeviceLocator, string? BankLocator);
+
+    internal sealed record SingleChannelIssue(int PopulatedCount, int TotalSlots, bool SameChannelMisplaced, IReadOnlyList<string> PopulatedLocators);
+
     internal sealed record Reading(
         IReadOnlyList<Dimm> Dimms,
         GpuBar? Gpu,
@@ -57,9 +61,20 @@ internal static partial class PcHealth
         string? BoardMaker = null,
         PcieLink? GpuPcie = null,
         bool Laptop = false,
-        bool PrimaryOnIntegrated = false);
+        bool PrimaryOnIntegrated = false,
+        IReadOnlyList<MemorySlot>? MemorySlots = null,
+        string? BoardProduct = null,
+        string? CpuIdentifier = null,
+        uint? MicrocodeRevision = null,
+        int OsBuild = 0,
+        int? OsUbr = null);
 
     private const byte DimmFormFactor = 0x09; // SMBIOS: a desktop DIMM (SODIMMs are laptops and mini PCs, which seldom offer EXPO/XMP)
+    private const byte SodimmFormFactor = 0x0D;
+    internal const uint IntelVminFixMicrocode = 0x12F;
+    internal const uint IntelVminRootFixMicrocode = 0x12B;
+    internal const int Win11_24H2_Build = 26100;
+    internal const int Win11_BranchBackportMinUbr = 4112;
 
     // The speeds memory runs at with EXPO/XMP off (JEDEC's DDR4 and DDR5 bins). A kit at any other speed was set by hand.
     private static readonly int[] Jedec = [1333, 1600, 1866, 2133, 2400, 2666, 2933, 3200, 4000, 4400, 4800, 5200, 5600, 6000, 6400];
@@ -76,6 +91,18 @@ internal static partial class PcHealth
             ("Gigabyte", "rebar") => "Settings → IO Ports → Above 4G Decoding & Re-Size BAR",
             ("ASRock", "xmp") => "OC Tweaker → DRAM Configuration",
             ("ASRock", "rebar") => "Advanced → PCI Configuration → Above 4G Decoding & C.A.M.",
+            ("Biostar", "xmp") => "Tweaker → Memory Clock Mode / XMP",
+            ("Biostar", "rebar") => "Advanced → PCI Subsystem Settings → Re-Size BAR Support",
+            ("NZXT", "xmp") => "OC Tweaker → DRAM Configuration",
+            ("NZXT", "rebar") => "Advanced → PCI Configuration → Above 4G Decoding & C.A.M.",
+            ("EVGA", "xmp") => "Memory → Memory Profile (XMP)",
+            ("EVGA", "rebar") => "Advanced → PCIe Configuration → Resizable BAR",
+            ("Supermicro", "xmp") => "Advanced → Memory Configuration",
+            ("Supermicro", "rebar") => "Advanced → PCIe/PCI/PnP Configuration → Above 4G Decoding",
+            ("Dell" or "Alienware", "xmp") => "Advanced → Performance Options → XMP Memory",
+            ("Dell" or "Alienware", "rebar") => "Advanced → PCIe Configuration → Resizable BAR",
+            ("HP", "xmp") => "Advanced → Memory Profile (XMP)",
+            ("Lenovo", "xmp") => "Configuration → Memory Profile (XMP)",
             _ => null,
         };
 
@@ -84,10 +111,32 @@ internal static partial class PcHealth
         var items = new List<Item>();
         var x3d = ClassOf(r.Cpu, r.CpuHybridProbe) == PowerProfiles.CpuClass.AmdDualCcdX3d;
         var parked = x3d || ClassOf(r.Cpu, r.CpuHybridProbe) == PowerProfiles.CpuClass.AmdDualCcdZen5;
+        if (IntelVminShiftMicrocode(r.Cpu, r.CpuIdentifier, r.MicrocodeRevision, r.Laptop) is { } mc)
+        {
+            var url = BiosUpdate.SupportPage(r.BoardMaker, r.BoardProduct);
+            items.Add(new("cpumicrocode", "CPU microcode",
+                $"Your Intel 13th/14th Gen CPU is running microcode 0x{mc.Revision:X} (below Intel's 0x12F Vmin-shift fix). Update your motherboard BIOS to prevent instability and permanent CPU degradation.",
+                Url: url));
+        }
+        if (RyzenBranchPredictionMissing(r.Cpu, r.OsBuild, r.OsUbr))
+        {
+            var detail = r.OsBuild < 22000
+                ? "Windows 10 lacks AMD Ryzen branch-prediction optimizations. Upgrading to Windows 11 24H2 or newer can boost Ryzen gaming FPS by up to 10–11%."
+                : "This Windows 11 build lacks AMD Ryzen branch-prediction optimizations (24H2 or 23H2 KB5041587). Updating Windows can boost Ryzen gaming FPS by up to 10–11%.";
+            items.Add(new("ryzenbranch", "Windows branch prediction", detail));
+        }
         if (SlowRam(r.Dimms) is { } ram)
         {
             var hint = BiosPath(r.BoardMaker, "xmp") is { } path ? $" ({path})" : "";
             items.Add(new("ram", "Memory speed", $"Your RAM runs at {ram.Runs} MT/s; it's rated for {ram.Rated}. Turn on EXPO/XMP in the BIOS{hint}."));
+        }
+        if (SingleChannelRam(r.MemorySlots) is { } sc)
+        {
+            var loc = sc.PopulatedLocators.Count > 0 ? $" ({string.Join(", ", sc.PopulatedLocators)})" : "";
+            var detail = sc.SameChannelMisplaced
+                ? $"Your {sc.PopulatedCount} memory sticks{loc} are in the same channel, so RAM runs in single-channel mode. Move one stick to the other channel (typically slots A2 and B2) for dual-channel performance."
+                : $"Only 1 memory stick is installed across {sc.TotalSlots} slots, so RAM runs in single-channel mode. Adding a matching second stick in the other channel improves CPU-bound gaming FPS.";
+            items.Add(new("ramchannel", "Memory channels", detail));
         }
         if (ReBarOff(r.Gpu))
         {
@@ -337,6 +386,126 @@ internal static partial class PcHealth
         return dimms;
     }
 
+    internal static List<MemorySlot> ParseMemorySlots(ReadOnlySpan<byte> raw)
+    {
+        var slots = new List<MemorySlot>();
+        Walk(raw, (type, s, strings) =>
+        {
+            if (type != 17 || s.Length < 0x13) return;
+            var size = U16(s, 0x0C);
+            var populated = size is not (0 or 0xFFFF);
+            var device = s[0x10] is > 0 and var di && di <= strings.Count ? strings[di - 1].Trim() : null;
+            var bank = s[0x11] is > 0 and var bi && bi <= strings.Count ? strings[bi - 1].Trim() : null;
+            slots.Add(new MemorySlot(populated, s[0x0E], s[0x12], device, bank));
+        });
+        return slots;
+    }
+
+    internal static SingleChannelIssue? SingleChannelRam(IReadOnlyList<MemorySlot>? slots)
+    {
+        if (slots is null || slots.Count < 2) return null;
+        var populated = slots.Where(s => s.Populated).ToList();
+        if (populated.Count == 0) return null;
+        foreach (var slot in populated)
+        {
+            if (slot.FormFactor is not (DimmFormFactor or SodimmFormFactor)) return null;
+            if (slot.MemoryType is 0x1B or 0x1C or 0x1D or 0x1E or 0x23) return null;
+        }
+        var locators = populated
+            .Select(s => string.IsNullOrWhiteSpace(s.DeviceLocator) ? s.BankLocator : s.DeviceLocator)
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Select(l => l!.Trim())
+            .ToList();
+        if (populated.Count == 1)
+            return new SingleChannelIssue(1, slots.Count, SameChannelMisplaced: false, locators);
+        if (slots.Count < 4) return null;
+
+        var boardChannels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var slot in slots)
+        {
+            if (ChannelOf(slot.DeviceLocator, slot.BankLocator) is { } ch) boardChannels.Add(ch);
+        }
+        if (boardChannels.Count < 2) return null;
+
+        var populatedChannels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var slot in populated)
+        {
+            if (ChannelOf(slot.DeviceLocator, slot.BankLocator) is not { } ch) return null;
+            populatedChannels.Add(ch);
+        }
+        return populatedChannels.Count == 1
+            ? new SingleChannelIssue(populated.Count, slots.Count, SameChannelMisplaced: true, locators)
+            : null;
+    }
+
+    internal static string? ChannelOf(string? deviceLocator, string? bankLocator)
+    {
+        return ExtractChannel(deviceLocator) ?? ExtractChannel(bankLocator);
+    }
+
+    private static string? ExtractChannel(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var s = text.Trim();
+        if (ChannelWordPattern().Match(s) is { Success: true } m1) return m1.Groups[1].Value.ToUpperInvariant();
+        if (SlotLetterPattern().Match(s) is { Success: true } m2) return m2.Groups[1].Value.ToUpperInvariant();
+        if (BareSlotLetterPattern().Match(s) is { Success: true } m3) return m3.Groups[1].Value.ToUpperInvariant();
+        return null;
+    }
+
+    internal static uint? ParseMicrocodeRevision(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length >= 8)
+        {
+            var high = BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..8]);
+            return high > 0 ? high : null;
+        }
+        if (bytes.Length == 4)
+        {
+            var rev = BinaryPrimitives.ReadUInt32LittleEndian(bytes);
+            return rev > 0 ? rev : null;
+        }
+        return null;
+    }
+
+    internal static (int Family, int Model)? ParseIntelFamilyModel(string? identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier)) return null;
+        var m = IntelIdentifierPattern().Match(identifier);
+        if (!m.Success) return null;
+        return int.TryParse(m.Groups[1].Value, out var fam) && int.TryParse(m.Groups[2].Value, out var mod)
+            ? (fam, mod)
+            : null;
+    }
+
+    internal static (uint Revision, bool Critical)? IntelVminShiftMicrocode(string? cpu, string? cpuIdentifier, uint? microcodeRevision, bool laptop)
+    {
+        if (laptop || microcodeRevision is not { } rev || rev == 0 || rev >= IntelVminFixMicrocode) return null;
+        var isIntel = cpu?.Contains("Intel", StringComparison.OrdinalIgnoreCase) == true
+            || cpuIdentifier?.StartsWith("Intel", StringComparison.OrdinalIgnoreCase) == true;
+        if (!isIntel) return null;
+        if (cpu is not null && (cpu.Contains("Ultra", StringComparison.OrdinalIgnoreCase) || IntelMobileOrLowPower().IsMatch(cpu)))
+            return null;
+
+        var fm = ParseIntelFamilyModel(cpuIdentifier);
+        var affectedSilicon = fm switch
+        {
+            (6, 0xB7) => cpu is null || !Intel12thGen().IsMatch(cpu),
+            (6, 0xBF) => cpu is not null && Intel1314Desktop().IsMatch(cpu),
+            null => cpu is not null && Intel1314Desktop().IsMatch(cpu),
+            _ => false,
+        };
+        return affectedSilicon ? (rev, rev < IntelVminRootFixMicrocode) : null;
+    }
+
+    internal static bool RyzenBranchPredictionMissing(string? cpu, int osBuild, int? osUbr)
+    {
+        if (string.IsNullOrWhiteSpace(cpu) || !cpu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)) return false;
+        if (osBuild <= 0 || osBuild >= Win11_24H2_Build) return false;
+        if (osBuild is 22631 or 22621 && osUbr >= Win11_BranchBackportMinUbr) return false;
+        return true;
+    }
+
     /// <summary>The system enclosure's chassis type (SMBIOS type 3, lock bit dropped), else null.</summary>
     internal static byte? ChassisType(ReadOnlySpan<byte> raw)
     {
@@ -352,6 +521,7 @@ internal static partial class PcHealth
 
     private static readonly Lazy<byte[]> Smbios = new(SmbiosTable, LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly Lazy<IReadOnlyList<Dimm>> Memory = new(() => ParseDimms(Smbios.Value), LazyThreadSafetyMode.ExecutionAndPublication);
+    private static readonly Lazy<IReadOnlyList<MemorySlot>> MemorySlotTable = new(() => ParseMemorySlots(Smbios.Value), LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly Lazy<HybridGpu?> Hybrid = new(ReadHybrid, LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly Lazy<GpuBar?> Gpu = new(() => WithSmartAccessMemory(ReadGpu()), LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly Lazy<PcieLink?> GpuPcie = new(() => ReadGpuPcie(Gpu.Value?.Name), LazyThreadSafetyMode.ExecutionAndPublication);
@@ -403,7 +573,9 @@ internal static partial class PcHealth
         var advised = subject is null ? null : DriverAdvisories.Shared.Against(subject, installed);
         var laptop = ThisPcIsLaptop();
         var primaryOnIntegrated = !laptop && Hybrid.Value is not null && ReadPrimaryOnIntegrated();
-        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid(), BoardMaker: PcAbout.Maker(PcAbout.Bios.Maker), GpuPcie: GpuPcie.Value, Laptop: laptop, PrimaryOnIntegrated: primaryOnIntegrated);
+        var (cpuIdentifier, microcode) = ReadCpuSilicon();
+        var (osBuild, osUbr) = PcAbout.OsBuildAndUbr();
+        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid(), BoardMaker: PcAbout.Maker(PcAbout.Bios.Maker), GpuPcie: GpuPcie.Value, Laptop: laptop, PrimaryOnIntegrated: primaryOnIntegrated, MemorySlots: MemorySlotTable.Value, BoardProduct: PcAbout.Bios.Product, CpuIdentifier: cpuIdentifier, MicrocodeRevision: microcode, OsBuild: osBuild, OsUbr: osUbr);
         if (Interlocked.Exchange(ref _logged, 1) == 0) AppLog.Info("PC health: " + Describe(reading));
         return reading;
     }
@@ -432,6 +604,18 @@ internal static partial class PcHealth
             return (key?.GetValue("ProcessorNameString") as string)?.Trim();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return null; }
+    }
+
+    private static (string? Identifier, uint? Microcode) ReadCpuSilicon()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
+            var id = (key?.GetValue("Identifier") as string)?.Trim();
+            var rev = key?.GetValue("Update Revision") is byte[] bytes ? ParseMicrocodeRevision(bytes) : null;
+            return (id, rev);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return (null, null); }
     }
 
     [GeneratedRegex(@"amd_chipset_software_(\d+\.\d+\.\d+\.\d+)\.exe", RegexOptions.IgnoreCase)]
@@ -477,4 +661,25 @@ internal static partial class PcHealth
     // Patriot PVS416G360C8, ADATA AX4U360038G18, TeamGroup TF3D416G3600HC18 (mt: MT/s, h: hundreds, t: tens).
     [GeneratedRegex(@"^(?:CM\w*?X[45]M\d[A-Z]?(?<mt>\d{4})C\d|F[45]-(?<mt>\d{4})[A-Z]\d|KF(?<mt>\d{4})C|(?:KF|HX)[45](?<h>\d{2})C|(?:BL|CP)\w*?G(?<h>\d{2})C|PV\w*?G(?<t>\d{3})C|AX[45]U(?<mt>\d{4})|\w*?(?<mt>\d{4})HC\d)", RegexOptions.IgnoreCase)]
     private static partial Regex PartRating();
+
+    [GeneratedRegex(@"\bChannel\s*[-_]?\s*([A-H]|\d+)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ChannelWordPattern();
+
+    [GeneratedRegex(@"(?:DIMM|SLOT|RAM|MEM|CH)[-_ ]*([A-H])[0-4]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SlotLetterPattern();
+
+    [GeneratedRegex(@"^([A-H])[1-4]$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex BareSlotLetterPattern();
+
+    [GeneratedRegex(@"Intel\w*\s+Family\s+(\d+)\s+Model\s+(\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex IntelIdentifierPattern();
+
+    [GeneratedRegex(@"\bi[579]-1[34]\d{3}(?:K|KF|KS|F)?\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Intel1314Desktop();
+
+    [GeneratedRegex(@"\bi[3579]-12\d{3}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Intel12thGen();
+
+    [GeneratedRegex(@"\bi[3579]-1[34]\d{3}(?:T|TE|H|HX|HK|U|P|G\d)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex IntelMobileOrLowPower();
 }

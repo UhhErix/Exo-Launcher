@@ -43,15 +43,27 @@ function parts(state: PcState, kept: KeepStatus['pc']): Part[] {
   const release = about ? releaseOf(about) : null
   const pcieWarn = health?.items.find(item => item.key === 'pcie')?.detail
   const cableWarn = health?.items.find(item => item.key === 'gpucable')?.detail
+  const cpuMicrocode = health?.items.find(item => item.key === 'cpumicrocode')?.detail
+  const ryzenBranch = health?.items.find(item => item.key === 'ryzenbranch')?.detail
+  const ramChannel = health?.items.find(item => item.key === 'ramchannel')?.detail
+  const ramSpeed = health?.items.find(item => item.key === 'ram')?.detail
   const gpuWords = keptWords(kept)
   return [
-    { label: 'Processor', icon: Cpu, value: about?.processor },
+    {
+      label: 'Processor', icon: Cpu, value: about?.processor,
+      note: cpuMicrocode ?? ryzenBranch ?? null,
+      tone: cpuMicrocode ? 'is-bad' as const : ryzenBranch ? 'is-warn' as const : null,
+    },
     {
       label: 'Graphics', icon: GraphicsCard, value: cardName(state),
       ...gpuWords,
       ...(!gpuWords.note && pcieWarn ? { note: pcieWarn, tone: 'is-warn' as const } : {}),
     },
-    { label: 'Memory', icon: Memory, value: about?.memoryGb ? joined([`${about.memoryGb} GB`, about.memoryType]) : null },
+    {
+      label: 'Memory', icon: Memory, value: about?.memoryGb ? joined([`${about.memoryGb} GB`, about.memoryType]) : null,
+      note: ramChannel ?? ramSpeed ?? null,
+      tone: (ramChannel || ramSpeed) ? 'is-warn' as const : null,
+    },
     { label: 'Screen', icon: Monitor, value: screenName(state.profile), note: cableWarn, tone: cableWarn ? 'is-warn' as const : null },
     ...(about ? [board(about), network(about, state.health)] : []),
     { label: 'Windows', icon: ThisPcIcon, value: release ? windowsName(release) : null },
