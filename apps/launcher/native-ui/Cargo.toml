@@ -63,7 +63,7 @@ lto = "thin"
 codegen-units = 1
 debug = "line-tables-only"
 strip = false
-panic = "abort"
+panic = "unwind"
 
 [profile.release-cdylib]
 inherits = "release"
