@@ -164,9 +164,9 @@ before that check so the time does not.
 **No human holds the keyring.** It was generated once, at the first deploy, and given to Wrangler on standard input, so it
 was never printed, typed or stored outside the Worker's secrets. It is never generated again (see [Redeploy](#redeploy)).
 
-**Dev copy.** `exo-account-dev` needs its own throwaway keyring before it answers: `npx wrangler@4.165.0 secret put ACCOUNT_SECRETS --env dev`
-(a new `id:hex` key as above, never a live one). Without it every route answers 503 `not-configured`. The `--env dev` flag is
-what keeps it off the live Worker: the same command without it replaces the live keyring.
+**Dev copy.** `exo-account-dev` needs its own throwaway keyring (a new `id:hex` key as above, never a live one) set on the dev
+Worker only, or every route answers 503 `not-configured`. The command is not written out here: the owner sets it, and it must
+name the dev Worker, because aimed at the live one it replaces every account's keyring.
 
 ## Tests
 
