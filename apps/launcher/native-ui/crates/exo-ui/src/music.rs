@@ -442,6 +442,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
         let more_key = format!("music-lib-{i}-more");
         let more_key_r = more_key.clone();
 
+        let card_play = card.clone();
         let art_el = if is_folder {
             el().size(36.0, 36.0)
                 .radius(RECENT_ART_RADIUS)
@@ -449,7 +450,26 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
                 .center()
                 .child(icon_folder(16.0, fg_muted()))
         } else {
-            render_art(s, &card.image, Some(36.0), art_r, is_liked, scale)
+            el().size(36.0, 36.0)
+                .radius(art_r)
+                .clip_rounded(art_r)
+                .child(render_art(s, &card.image, Some(36.0), art_r, is_liked, scale))
+                .child(
+                    el().key(format!("music-lib-play-{i}"))
+                        .role("button")
+                        .label(format!("Play {}", card.title))
+                        .focusable(false)
+                        .hit()
+                        .press_on_down()
+                        .press_scale(PRESS_SCALE)
+                        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                        .radius(art_r)
+                        .fill(Color::BLACK.alpha(0.62))
+                        .center()
+                        .group_opacity(0.0, 1.0)
+                        .on_press(move |s: &mut AppState| s.music_play_card(&card_play))
+                        .child(icon_play(13.0, FG)),
+                )
         };
 
         let mut text_col = col()
@@ -468,6 +488,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
 
         let mut item_row = row()
             .key(format!("music-lib-{i}"))
+            .hover_group()
             .role("button")
             .label(card.title.clone())
             .focusable(true)
@@ -526,7 +547,9 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
         }
 
         if selected {
-            item_row = item_row.fill(pressed_fill());
+            item_row = item_row
+                .fill(exo_kit::surface_elevated_hi())
+                .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom());
         }
         lib_rows.push(item_row);
     }
@@ -548,9 +571,10 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
         .h_full()
         .min_h(0.0)
         .radius(RADIUS_PANEL)
+        .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .fill(BG)
-        .border(1.0, glass_rim())
+        .fill(exo_kit::surface_sidebar())
+        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
         .px(8.0)
         .pt(12.0)
         .gap(8.0)
@@ -596,7 +620,8 @@ fn folder_name_row(s: &AppState, key: &str) -> El {
         )
 }
 
-/// Round play button revealed when the card is hovered or focused (Spotify-style).
+/// Round play button overlaid on album/playlist art and recent tiles — clearly visible at rest
+/// with a refined obsidian disc and crisp bright highlight on hover.
 fn card_play_button(key: String, card: &PlayerCard, size: f32) -> El {
     let play = card.clone();
     el().key(key)
@@ -604,25 +629,29 @@ fn card_play_button(key: String, card: &PlayerCard, size: f32) -> El {
         .label(format!("Play {}", card.title))
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .size(size, size)
         .radius(RADIUS_PILL)
-        .fill(FG)
-        .shadow(0.0, 10.0, Color::BLACK.alpha(0.45))
+        .fill(Color::BLACK.alpha(0.68))
+        .hover(Color::BLACK.alpha(0.84))
+        .border_gradient(1.0, Color::WHITE.alpha(0.28), Color::WHITE.alpha(0.08))
+        .shadow(0.0, 10.0, Color::BLACK.alpha(0.55))
         .center()
-        .group_opacity(0.0, 1.0)
+        .group_opacity(0.90, 1.0)
+        .motion(SPRING_QUICK)
         .on_press(move |s: &mut AppState| s.music_play_card(&play))
-        .child(icon_play(size * 0.42, PRIMARY_FG))
+        .child(el().pl(1.5).child(icon_play(size * 0.40, FG)))
 }
 
 fn recent_grid(s: &AppState, scale: f32) -> El {
     let svc = s.media.music_service;
     let items: Vec<&PlayerCard> = s.media.music_recent.iter().take(8).collect();
     el().w_full()
-        .mb(32.0)
+        .mb(28.0)
         .equal_columns(4)
-        .gap(10.0)
+        .gap(12.0)
         .children(items.into_iter().enumerate().map(|(i, card)| {
             let is_artist = card.kind == "artist";
             let is_liked = card.kind == "collection" || card.title == svc.liked_name();
@@ -641,18 +670,20 @@ fn recent_grid(s: &AppState, scale: f32) -> El {
                 .label(card.title.clone())
                 .focusable(true)
                 .hit()
+                .cursor(Cursor::Pointer)
                 .press_on_down()
                 .press_scale(PRESS_SCALE)
                 .w_full()
                 .min_w(0.0)
-                .h(52.0)
-                .pl(4.0)
-                .pr(48.0)
-                .py(4.0)
+                .h(56.0)
+                .pl(6.0)
+                .pr(46.0)
+                .py(6.0)
                 .gap(12.0)
                 .radius(RADIUS_CARD)
-                .fill(TRANSPARENT)
-                .border(1.0, glass_rim())
+                .continuous_corners()
+                .fill(exo_kit::surface_elevated_hi())
+                .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
                 .hover(hover_fill())
                 .center_y()
                 .motion(SPRING_QUICK)
@@ -676,11 +707,11 @@ fn recent_grid(s: &AppState, scale: f32) -> El {
                         .min_w(0.0),
                 )
                 .child(
-                    el().pin(None, Some(8.0), Some(8.0), None)
+                    el().pin(None, Some(12.0), Some(10.0), None)
                         .child(card_play_button(
                             format!("music-recent-play-{i}"),
                             card,
-                            36.0,
+                            32.0,
                         )),
                 )
         }))
@@ -703,6 +734,7 @@ pub(crate) fn shelf_section(s: &AppState, idx: usize, section: &PlayerSection, s
                 .label("Show all")
                 .focusable(true)
                 .hit()
+                .cursor(Cursor::Pointer)
                 .press_on_down()
                 .px(8.0)
                 .py(4.0)
@@ -715,24 +747,25 @@ pub(crate) fn shelf_section(s: &AppState, idx: usize, section: &PlayerSection, s
         );
     }
 
+    let cols = if section.items.len() >= 6 { 6 } else { 5 };
     let mut cards: Vec<El> = section
         .items
         .iter()
-        .take(8)
+        .take(cols)
         .enumerate()
         .map(|(j, card)| shelf_card(s, idx, j, card, scale))
         .collect();
 
-    while cards.len() < 8 {
+    while cards.len() < cols {
         cards.push(el().w_full().min_w(0.0));
     }
 
-    col().w_full().mb(32.0).child(head).child(
+    col().w_full().mb(30.0).child(head).child(
         el().w_full()
-            .pt(8.0)
-            .pb(8.0)
-            .equal_columns(8)
-            .gap(32.0)
+            .pt(4.0)
+            .pb(6.0)
+            .equal_columns(cols)
+            .gap(20.0)
             .children(cards),
     )
 }
@@ -979,17 +1012,17 @@ fn main_panel(s: &AppState, scale: f32) -> El {
     let search_box = row()
         .key("music-search-box")
         .w(260.0)
-        .h(32.0)
+        .h(34.0)
         .px(12.0)
         .gap(8.0)
         .radius(RADIUS_PILL)
-        .fill(TRANSPARENT)
-        .border(1.0, glass_rim())
+        .fill(exo_kit::surface_elevated_hi())
+        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
         .center_y()
-        .child(icon_search(16.0, fg_muted()))
+        .child(icon_search(15.0, fg_muted()))
         .child(search_input);
 
-    let mut head = row().w_full().h(32.0).mb(16.0).gap(12.0).center_y();
+    let mut head = row().w_full().h(34.0).mb(18.0).gap(12.0).center_y();
     if !s.media.music_history.is_empty() {
         head = head.child(
             el().key("music-back-btn")
@@ -997,11 +1030,12 @@ fn main_panel(s: &AppState, scale: f32) -> El {
                 .label("Back")
                 .focusable(true)
                 .hit()
+                .cursor(Cursor::Pointer)
                 .press_on_down()
                 .size(32.0, 32.0)
                 .radius(RADIUS_PILL)
-                .fill(TRANSPARENT)
-                .border(1.0, glass_rim())
+                .fill(exo_kit::surface_elevated_hi())
+                .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
                 .hover(hover_fill())
                 .center()
                 .on_press(|s: &mut AppState| s.music_go_back())
@@ -1025,17 +1059,18 @@ fn main_panel(s: &AppState, scale: f32) -> El {
         .h_full()
         .min_h(0.0)
         .radius(RADIUS_PANEL)
+        .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .fill(BG)
-        .border(1.0, glass_rim())
+        .fill(exo_kit::surface_elevated())
+        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
         .child(
             col()
                 .key("music-main-scroll")
                 .w_full()
                 .h_full()
-                .pt(20.0)
-                .px(24.0)
-                .pb(120.0)
+                .pt(22.0)
+                .px(26.0)
+                .pb(128.0)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
@@ -1373,18 +1408,49 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
     let left = row()
         .grow(1.0)
         .min_w(0.0)
-        .gap(10.0)
+        .gap(12.0)
         .center_y()
-        .child(render_art_image(
-            s.current_playback_art(scale),
-            Some(48.0),
-            RADIUS_PILL,
-            false,
-        ))
+        .child(
+            el().size(48.0, 48.0)
+                .radius(RADIUS_SMALL + 2.0)
+                .continuous_corners()
+                .clip_rounded(RADIUS_SMALL + 2.0)
+                .border(1.0, Color::WHITE.alpha(0.12))
+                .child(render_art_image(
+                    s.current_playback_art(scale),
+                    Some(48.0),
+                    RADIUS_SMALL + 2.0,
+                    false,
+                )),
+        )
         .child(song_text)
         .child(verdict_controls(s, "music-bar"));
 
-    let center = playback_controls(s, "music");
+    let pos_ms = s.media.current_position_ms();
+    let dur_ms = pb.and_then(|p| p.duration_ms);
+    let can_seek = pb.is_some_and(|p| p.can_seek);
+    let time_font = TextStyle::new(11.0 * text_scale(s), 500.0).features("'tnum' 1");
+    let bar_progress = row()
+        .gap(8.0)
+        .center_y()
+        .child(
+            text(format_time_clock(pos_ms))
+                .font(time_font)
+                .color(fg_muted())
+                .w(34.0),
+        )
+        .child(seek_slider("music-bar-seek", 240.0, pos_ms, dur_ms, can_seek))
+        .child(
+            text(format_time_clock(dur_ms.map(|d| d as f64)))
+                .font(time_font)
+                .color(fg_muted())
+                .w(34.0),
+        );
+    let center = col()
+        .items_center()
+        .gap(3.0)
+        .child(playback_controls(s, "music"))
+        .child(bar_progress);
 
     let muted = s.media.music_muted;
     let mute_btn = bar_icon_btn(
@@ -1549,12 +1615,13 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         row()
             .key("music-transport-bar")
             .w_full()
-            .max_w(1040.0)
-            .h(64.0)
-            .pl(10.0)
-            .pr(14.0)
-            .gap(16.0)
-            .radius(RADIUS_PILL)
+            .max_w(1080.0)
+            .h(76.0)
+            .pl(14.0)
+            .pr(16.0)
+            .gap(18.0)
+            .radius(exo_kit::RADIUS_SHEET)
+            .continuous_corners()
             .center_y()
             .child(left)
             .child(center)
@@ -1622,30 +1689,46 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
     let has_lyrics = !s.media.music_track_uri.is_empty()
         && (!s.media.music_lyrics_lines.is_empty() || s.media.music_lyrics_loading);
 
-    let art_size: f32 = if has_lyrics { 440.0 } else { 496.0 };
-    let title_font = TextStyle::new(28.0 * text_scale(s), 700.0).lh(28.0 * text_scale(s) * 1.22);
+    let art_size: f32 = if has_lyrics { 356.0 } else { 384.0 };
+    let control_w: f32 = if has_lyrics { 468.0 } else { 540.0 };
+    let title_font = TextStyle::new(26.0 * text_scale(s), 700.0)
+        .letter_spacing(-0.025)
+        .lh(26.0 * text_scale(s) * 1.2);
+    let time_font = TextStyle::new(12.0 * text_scale(s), 500.0).features("'tnum' 1");
     let hue = crate::state::title_hue(title);
     let art_img = s.current_playback_art(scale);
 
-    // Calm gradient backdrop tinted by the track: no artwork wash, no moving orbs.
+    // Rich calm gradient backdrop tinted by the track: deep atmospheric harmony, no artwork wash, no moving orbs.
     let backdrop = el()
         .key(format!("music-immerse-bg-{track_key}"))
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .linear_gradient(
-            std::f32::consts::PI * 0.72,
+            std::f32::consts::PI * 0.78,
             [
-                (0.0, oklch(0.34, 0.12, hue)),
-                (0.55, oklch(0.18, 0.07, (hue + 40.0) % 360.0)),
-                (1.0, BG),
+                (0.0, oklch(0.32, 0.13, hue)),
+                (0.38, oklch(0.21, 0.09, (hue + 22.0) % 360.0)),
+                (0.74, oklch(0.11, 0.045, (hue + 48.0) % 360.0)),
+                (1.0, exo_kit::srgb(5, 6, 9, 1.0)),
             ],
+        )
+        .child(
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .linear_gradient(
+                    std::f32::consts::PI,
+                    [
+                        (0.0, oklch(0.46, 0.14, hue).alpha(0.22)),
+                        (0.45, TRANSPARENT),
+                        (1.0, BG.alpha(0.54)),
+                    ],
+                ),
         )
         .transition(Transition::opacity().springs(SpringPair::new(SPRING_SMOOTH, SPRING_SMOOTH)));
 
     let leave_btn = bar_icon_btn(
         "music-immersion-close",
         "Leave full window",
-        icon_maximize(16.0, FG.alpha(0.82)),
-        34.0,
+        icon_maximize(16.0, FG.alpha(0.86)),
+        32.0,
         false,
         false,
     )
@@ -1655,25 +1738,25 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
     });
 
     let progress = row()
-        .w_full()
+        .w(control_w)
         .gap(12.0)
         .center_y()
         .child(
             text(format_time_clock(pos_ms))
-                .font(scaled_small(s))
+                .font(time_font)
                 .color(FG.alpha(0.72))
                 .w(40.0),
         )
         .child(seek_slider(
             "music-immersion-seek",
-            (art_size - 104.0).max(200.0),
+            (control_w - 104.0).max(200.0),
             pos_ms,
             dur_ms,
             can_seek,
         ))
         .child(
             text(format_time_clock(dur_ms.map(|d| d as f64)))
-                .font(scaled_small(s))
+                .font(time_font)
                 .color(FG.alpha(0.72))
                 .w(40.0),
         );
@@ -1687,116 +1770,133 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
             (s.media.music_volume * 100.0).round() as i32
         }
     );
-    let vol = apply_glass(
-        row()
-            .h(36.0)
-            .pl(8.0)
-            .pr(14.0)
-            .gap(8.0)
-            .radius(RADIUS_PILL)
-            .center_y()
-            .child(
-                bar_icon_btn(
-                    "music-immersion-mute",
-                    if muted { "Unmute music" } else { "Mute music" },
-                    if muted {
-                        icon_volume_off(16.0, fg_muted())
-                    } else {
-                        icon_volume(16.0, FG)
-                    },
-                    26.0,
-                    false,
-                    false,
-                )
-                .on_press(|s: &mut AppState| s.music_toggle_mute()),
+    let vol_slider_w = if has_lyrics { 58.0 } else { 78.0 };
+    let vol_cluster = row()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(6.0)
+        .center_y()
+        .child(
+            bar_icon_btn(
+                "music-immersion-mute",
+                if muted { "Unmute music" } else { "Mute music" },
+                if muted {
+                    icon_volume_off(15.0, fg_muted())
+                } else {
+                    icon_volume(15.0, FG.alpha(0.88))
+                },
+                28.0,
+                false,
+                false,
             )
-            .child(volume_slider(
-                "music-immersion",
-                124.0,
-                s.media.music_volume,
-                muted,
-            ))
-            .child(text(vol_pct).font(scaled_small(s)).color(FG.alpha(0.75))),
-        ExoGlass::ClearMedia,
-        false,
-    );
+            .on_press(|s: &mut AppState| s.music_toggle_mute()),
+        )
+        .child(volume_slider(
+            "music-immersion",
+            vol_slider_w,
+            s.media.music_volume,
+            muted,
+        ))
+        .child(
+            text(vol_pct)
+                .font(time_font)
+                .color(FG.alpha(0.68))
+                .w(30.0),
+        );
 
+    // Single unified floating Liquid Glass control dock: volume + playback + verdicts + exit.
     let controls_dock = apply_glass(
         row()
             .key("music-immersion-controls")
-            .w_full()
-            .h(52.0)
-            .px(12.0)
-            .gap(8.0)
+            .w(control_w)
+            .h(56.0)
+            .px(14.0)
+            .gap(10.0)
             .radius(RADIUS_PILL)
             .center_y()
+            .child(vol_cluster)
+            .child(playback_controls(s, "music-immersion"))
             .child(
                 row()
                     .grow(1.0)
                     .min_w(0.0)
-                    .child(verdict_controls(s, "music-immersion")),
-            )
-            .child(playback_controls(s, "music-immersion"))
-            .child(row().grow(1.0).min_w(0.0).justify_end().child(leave_btn)),
-        ExoGlass::Bar,
+                    .justify_end()
+                    .gap(4.0)
+                    .center_y()
+                    .child(verdict_controls(s, "music-immersion"))
+                    .child(leave_btn),
+            ),
+        ExoGlass::ClearMedia,
         false,
     );
 
-    // Living album art card: breathes gently between playing (1.0 + deep shadow) and paused (0.90 settled).
+    // Living album art card: elevated with crisp rim and soft studio shadow.
+    let art_radius = exo_kit::RADIUS_SHEET;
+    let art_content = if art_img.is_some() {
+        render_art_image(art_img, Some(art_size), art_radius, false)
+    } else {
+        el().size(art_size, art_size)
+            .radius(art_radius)
+            .continuous_corners()
+            .linear_gradient(
+                std::f32::consts::PI * 0.85,
+                [
+                    (0.0, oklch(0.30, 0.11, hue)),
+                    (0.65, oklch(0.16, 0.06, (hue + 28.0) % 360.0)),
+                    (1.0, exo_kit::srgb(12, 14, 19, 1.0)),
+                ],
+            )
+            .center()
+            .child(icon_music(56.0, FG.alpha(0.42)))
+    };
     let art_card = el()
         .key(format!("music-immerse-art-{track_key}"))
         .size(art_size, art_size)
-        .radius(RADIUS_PANEL)
+        .radius(art_radius)
         .continuous_corners()
-        .border(1.0, Color::WHITE.alpha(0.14))
+        .clip_rounded(art_radius)
+        .border_gradient(1.0, Color::WHITE.alpha(0.24), Color::WHITE.alpha(0.06))
         .shadow(
             0.0,
-            if playing { 30.0 } else { 12.0 },
-            Color::BLACK.alpha(if playing { 0.62 } else { 0.36 }),
+            if playing { 32.0 } else { 14.0 },
+            Color::BLACK.alpha(if playing { 0.68 } else { 0.42 }),
         )
-        .scale(if playing { 1.0 } else { 0.91 })
+        .scale(if playing { 1.0 } else { 0.93 })
         .motion(SPRING_SMOOTH)
-        .transition(Transition::scale(0.94).springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)))
-        .child(render_art_image(
-            art_img,
-            Some(art_size),
-            RADIUS_PANEL,
-            false,
-        ));
+        .transition(Transition::scale(0.95).springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)))
+        .child(art_content);
 
     let title_row = row()
-        .w_full()
-        .gap(12.0)
+        .w(control_w)
+        .gap(16.0)
         .justify_between()
         .center_y()
         .child(
             col()
                 .grow(1.0)
                 .min_w(0.0)
-                .gap(3.0)
+                .gap(4.0)
                 .child(text(title).font(title_font).color(FG).truncate())
                 .child(song_artists_row(s, pb, false)),
         )
         .child(immersion_eq_bars(playing, t, reduce_motion));
 
     let song_col = col()
-        .w(art_size)
+        .w(control_w)
         .items_center()
-        .gap(18.0)
+        .gap(22.0)
         .glass_container(GLASS_CONTAINER_SPACING)
         .child(art_card)
-        .child(title_row)
-        .child(progress)
-        .child(controls_dock)
-        .child(vol);
+        .child(col().w_full().gap(14.0).child(title_row).child(progress))
+        .child(controls_dock);
 
     let mut stage = row()
         .w_full()
         .h_full()
-        .pt(TITLEBAR_HEIGHT + 24.0)
-        .pb(40.0)
+        .pt(TITLEBAR_HEIGHT + 28.0)
+        .pb(44.0)
         .px(64.0)
-        .gap(64.0)
+        .gap(72.0)
         .center()
         .child(song_col);
 
@@ -1804,8 +1904,8 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         stage = stage.child(
             col()
                 .key("music-immersion-lyrics")
-                .w(540.0)
-                .max_h(760.0)
+                .w(520.0)
+                .max_h(680.0)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
@@ -2550,9 +2650,11 @@ mod tests {
         let shelf_01 = c1.1 - c0.1;
         let shelf_12 = c2.1 - c1.1;
         assert!(
-            (c0.1 - 419.75).abs() <= 1.5
-                && (shelf_01 - 300.5).abs() <= 1.5
-                && (shelf_12 - 300.5).abs() <= 1.5,
+            (c0.0 - c1.0).abs() <= 1.0
+                && (c1.0 - c2.0).abs() <= 1.0
+                && (c0.1 - 492.25).abs() <= 2.0
+                && (shelf_01 - 421.45).abs() <= 2.0
+                && (shelf_12 - shelf_01).abs() <= 1.0,
             "shelf vertical alignment drifted: c0={c0:?} c1={c1:?} c2={c2:?} d01={shelf_01} d12={shelf_12}"
         );
     }

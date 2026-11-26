@@ -1226,15 +1226,11 @@ pub fn properties_card(s: &AppState, game: &Game) -> El {
         head = head.child(status_badge("Playing".to_string(), BadgeTone::Good));
     }
 
-    let mut card = col()
+    let mut card = exo_kit::amoled_card(RADIUS_PANEL)
         .key("gp-props-card")
         .grow(1.0)
         .min_w(340.0)
-        .radius(RADIUS_PANEL)
-        .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
-        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(head);
 
     let Some(props) = props else {

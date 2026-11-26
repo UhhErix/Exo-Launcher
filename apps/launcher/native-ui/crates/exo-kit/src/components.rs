@@ -4,7 +4,7 @@ use crate::tokens::{
     BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
     SPRING_POPOVER, SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, TITLEBAR_HEIGHT, TRANSPARENT, bad,
     fg_muted, glass_rim, glass_rim_bottom, glass_rim_top, good, hover_fill, pressed_fill,
-    subtle_fill, track_fill, type_control, type_section, type_small, warn,
+    subtle_fill, surface_elevated, track_fill, type_control, type_section, type_small, warn,
 };
 use rune::{
     Align, CaptionGlyph, CaptionStyle, Color, Cursor, Effect, El, Side, SpringPair, Titlebar,
@@ -172,7 +172,7 @@ pub fn amoled_card(radius: f32) -> El {
     col()
         .radius(radius)
         .continuous_corners()
-        .fill(BG)
+        .fill(surface_elevated())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
 }
 

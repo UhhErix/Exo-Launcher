@@ -387,9 +387,11 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .child(art);
 
     if active {
-        card = card.outline(2.0, 3.0, FG);
+        card = card
+            .border_gradient(1.5, FG.alpha(0.78), FG.alpha(0.24))
+            .shadow(12.0, 28.0, BG.alpha(0.86));
     } else if game.is_running {
-        card = card.outline(1.0, 2.0, good());
+        card = card.border(1.5, good().alpha(0.82));
     }
     card = card.focus_ring(2.0, 3.0, FG);
 
@@ -892,10 +894,11 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::PI,
             [
-                (0.0, BG.alpha(0.0)),
-                (0.40, BG.alpha(0.0)),
-                (0.66, BG.alpha(0.28)),
-                (0.86, BG.alpha(0.76)),
+                (0.0, BG.alpha(0.32)),
+                (0.16, BG.alpha(0.05)),
+                (0.42, BG.alpha(0.0)),
+                (0.68, BG.alpha(0.34)),
+                (0.88, BG.alpha(0.80)),
                 (1.0, BG),
             ],
         );
@@ -905,9 +908,9 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .linear_gradient(
             std::f32::consts::FRAC_PI_2,
             [
-                (0.0, BG.alpha(0.46)),
-                (0.30, BG.alpha(0.14)),
-                (0.62, BG.alpha(0.0)),
+                (0.0, BG.alpha(0.56)),
+                (0.32, BG.alpha(0.18)),
+                (0.64, BG.alpha(0.0)),
             ],
         );
 
@@ -1004,17 +1007,39 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             s.open_game_page_from(&gid_more, Some(format!("deck:{gid_more}")), tx);
         });
 
-        col()
+        let mut meta_parts: Vec<String> = Vec::new();
+        let store_lbl = game.store_display();
+        if !store_lbl.is_empty() {
+            meta_parts.push(store_lbl.to_string());
+        }
+        if let Some(pt) = format_playtime_short(game.playtime_minutes) {
+            meta_parts.push(format!("{pt} played"));
+        }
+        if let Some(sz) = game.size_bytes.filter(|&b| b > 0) {
+            meta_parts.push(format_bytes_short(sz));
+        } else if game.installed {
+            meta_parts.push("Installed".into());
+        }
+
+        let mut lockup = col()
             .key(format!("hero-lockup-{}", game.id))
             .transition(
                 Transition::offset(0.0, 10.0)
                     .combined(Transition::opacity())
                     .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
             )
-            .gap(14.0)
+            .gap(12.0)
             .max_w(600.0)
-            .child(identity)
-            .child(row().gap(10.0).center_y().child(play_btn).child(more_btn))
+            .child(identity);
+        if !meta_parts.is_empty() {
+            lockup = lockup.child(
+                text(meta_parts.join(" · "))
+                    .font(type_small())
+                    .color(FG.alpha(0.72))
+                    .truncate(),
+            );
+        }
+        lockup.child(row().gap(10.0).center_y().child(play_btn).child(more_btn))
     } else {
         col().gap(10.0)
     };
@@ -1127,6 +1152,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             col()
                 .w_full()
                 .h_full()
+                .pt(exo_kit::TITLEBAR_HEIGHT + 16.0)
                 .justify_end()
                 .children(
                     library_refresh_notice(s, false)
@@ -1260,7 +1286,6 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             .key("library-home-deck")
             .w_full()
             .h_full()
-            .pt(70.0)
             .gap(8.0)
             .fill(BG)
             .child(stage)
@@ -1459,7 +1484,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
     let head = row()
         .w_full()
         .pt(7.0)
-        .px(10.0)
+        .px(ALL_GRID_PAD_X)
         .pb(15.0)
         .gap(16.0)
         .center_y()
@@ -1534,7 +1559,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                 row()
                     .w_full()
                     .mt(-8.0)
-                    .px(10.0)
+                    .px(ALL_GRID_PAD_X)
                     .pb(16.0)
                     .gap(6.0)
                     .center_y()
@@ -1548,7 +1573,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .w_full()
         .h(37.0)
         .pt(5.0)
-        .px(10.0)
+        .px(ALL_GRID_PAD_X)
         .pb(5.0)
         .center_y()
         .child(text(heading).font(type_title()).color(FG));
@@ -1575,7 +1600,14 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         }
         empty_col
     } else {
-        let (grid_cols, card_w, card_h) = all_grid_metrics(s.lib.grid_width);
+        let grid_vp = if s.lib.grid_width > 0.0 {
+            s.lib.grid_width
+        } else if s.chrome.top_bar_width > 0.0 {
+            s.chrome.top_bar_width
+        } else {
+            1440.0
+        };
+        let (grid_cols, card_w, card_h) = all_grid_metrics(grid_vp);
         let mut folder_counter = 0usize;
         let rendered: Vec<El> = visible
             .iter()

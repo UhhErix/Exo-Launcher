@@ -3,7 +3,7 @@ use std::thread;
 
 use exo_gpu::{GpuControlReadonlyOverview, read_gpu_control_overview};
 use exo_kit::{
-    BG, BadgeTone, FG, RADIUS_PANEL, bad, fg_muted, float_line, status_badge, type_control,
+    BadgeTone, FG, RADIUS_PANEL, bad, fg_muted, status_badge, type_control,
     type_small, type_title, warn,
 };
 use exo_sensors::adaptive::{HardwareAudit, PollMode, run_full_hardware_audit};
@@ -280,8 +280,8 @@ pub(crate) fn card_view(s: &AppState) -> El {
         .gap(10.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(BG)
-        .border(1.0, float_line())
+        .fill(exo_kit::surface_elevated())
+        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
         .child(header)
         .child(
             row()

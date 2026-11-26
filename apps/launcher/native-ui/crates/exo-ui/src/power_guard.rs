@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use exo_kit::{
-    BG, BadgeTone, FG, RADIUS_CARD, RADIUS_PANEL, bad, fg_muted, float_line, status_badge,
+    BadgeTone, FG, RADIUS_CARD, RADIUS_PANEL, bad, fg_muted, float_line, status_badge,
     subtle_fill, track_fill, type_control, type_small, type_title, warn,
 };
 use exo_power_guard::backends::nvidia::try_set_nvidia_power_limit_w;
@@ -1056,8 +1056,8 @@ pub(crate) fn card_view(s: &AppState) -> El {
         .gap(10.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(BG)
-        .border(1.0, float_line())
+        .fill(exo_kit::surface_elevated())
+        .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
         .child(header)
         .child(
             row()
