@@ -8,11 +8,6 @@
         "detail": "Faster startup, smoother scrolling, and lower memory use across Library, Store, Discord, Music, and PC, keeping all your existing settings, games, and accounts."
       },
       {
-        "icon": "Settings",
-        "title": "Classic interface one switch away",
-        "detail": "Prefer the previous layout? Turn on Use classic interface in Settings › General to switch back whenever you like."
-      },
-      {
         "icon": "Mic",
         "title": "Faster, clearer Exo Voice",
         "detail": "Upgrades voice cleanup with automatic gaming tuning, optional voice isolation, and echo cancellation in Discord calls."

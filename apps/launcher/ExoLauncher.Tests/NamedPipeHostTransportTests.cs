@@ -454,6 +454,46 @@ public sealed class NamedPipeHostTransportTests
         Assert.Throws<InvalidOperationException>(() => PackagedSmoke.ResolveInstanceKey([], isDisposable: true, Path.Combine(installed, "test")));
     }
 
+    [Theory]
+    [InlineData(false, false, false, false)]
+    [InlineData(false, true, false, false)]
+    [InlineData(false, false, true, true)]
+    [InlineData(false, true, true, true)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, false, true, true)]
+    [InlineData(true, true, true, false)]
+    public void RuneHostSessionKeepsTheWebUiOnlyWhenItWasRequestedAndIsBuilt(bool webRequested, bool webBuilt, bool runeAvailable, bool expectRune)
+    {
+        Assert.Equal(expectRune, RuneHostSession.UseRuneUi(webRequested, webBuilt, runeAvailable));
+    }
+
+    [Fact]
+    public void RuneHostSessionStartsRuneWhenAWebUiRequestFindsNoBuiltWebUi()
+    {
+        Func<string, bool> releaseFiles = path => path.EndsWith("exo-ui.exe", StringComparison.OrdinalIgnoreCase);
+        Func<string, bool> devFiles = path => releaseFiles(path) || path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase);
+
+        var flag = RuneHostSession.TryParse(["--ui=web"], _ => null, releaseFiles, readClassicPref: () => false);
+        Assert.NotNull(flag);
+        Assert.True(flag!.SpawnUi);
+        Assert.Contains("wwwroot", flag.WebUiFallbackNotice);
+
+        var env = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "web" : null, releaseFiles, readClassicPref: () => false);
+        Assert.NotNull(env?.WebUiFallbackNotice);
+
+        var saved = RuneHostSession.TryParse([], _ => null, releaseFiles, readClassicPref: () => true);
+        Assert.NotNull(saved?.WebUiFallbackNotice);
+
+        var plain = RuneHostSession.TryParse([], _ => null, releaseFiles, readClassicPref: () => false);
+        Assert.NotNull(plain);
+        Assert.Null(plain!.WebUiFallbackNotice);
+
+        Assert.Null(RuneHostSession.TryParse(["--ui=web"], _ => null, devFiles, readClassicPref: () => false));
+        Assert.Null(RuneHostSession.TryParse([], _ => null, devFiles, readClassicPref: () => true));
+        Assert.Null(RuneHostSession.TryParse(["--ui=web"], _ => null, _ => false, readClassicPref: () => false));
+    }
+
     [Fact]
     public void RuneHostSessionTryParseNeverThrowsOnInvalidOrForeignInputs()
     {

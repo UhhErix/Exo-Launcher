@@ -1059,13 +1059,7 @@ public sealed partial class MainWindow : Window
 
     private static string? ResolveWwwRoot()
     {
-        var baseDir = AppContext.BaseDirectory;
-        var candidates = new[]
-        {
-            Path.Combine(baseDir, "wwwroot"),
-            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "wwwroot")),
-        };
-        foreach (var c in candidates)
+        foreach (var c in RuneHostSession.WwwRootCandidates(AppContext.BaseDirectory))
         {
             if (Directory.Exists(c) && File.Exists(Path.Combine(c, "index.html")))
                 return c;

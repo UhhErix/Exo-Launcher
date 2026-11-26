@@ -174,6 +174,7 @@ public static class Program
             if (Services.ExoLinks.Find(args) is { } place) Services.WebHostBridge.QueueOpen(place);
             if (Services.RuneHostSession.TryParse(args, onWarning: AppLog.Warn) is { } runeOptions)
             {
+                if (runeOptions.WebUiFallbackNotice is { } fallbackNotice) AppLog.Warn(fallbackNotice);
                 mainInstance.Activated += (_, _) => UiGuard.Run(Services.RuneHostSession.RequestActivate);
                 Environment.ExitCode = Services.RuneHostSession.Run(runeOptions);
                 return;

@@ -269,31 +269,7 @@ fn section_general(s: &AppState) -> El {
             "startWithWindows",
             set.start_with_windows,
             is_highlighted(s, "general-startup"),
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
-            "set-classic-ui",
-            "Use classic interface",
-            Some("Switch to the classic WebView2 interface on restart (or launch with --ui=web)"),
-            "useClassicWebUi",
-            set.use_classic_web_ui,
-            is_highlighted(s, "general-classic-ui"),
         ));
-
-    let main_card = if set.use_classic_web_ui {
-        main_card
-            .child(el().w_full().h(1.0).fill(hairline()))
-            .child(set_row(
-                "Restart to switch interface",
-                Some("Exo will reopen in the classic WebView2 interface"),
-                None,
-                false,
-                set_btn("set-classic-ui-relaunch", "Restart now", None)
-                    .on_press(|s: &mut AppState| s.relaunch_for_ui_switch(true)),
-            ))
-    } else {
-        main_card
-    };
 
     col()
         .w_full()

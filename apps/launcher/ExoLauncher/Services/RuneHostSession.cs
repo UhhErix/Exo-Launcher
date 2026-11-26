@@ -32,7 +32,16 @@ internal sealed partial class RuneHostSession
         catch { }
     }
 
-    internal sealed record Options(string PipeName, bool SpawnUi, string? UiExecutableOverride);
+    internal sealed record Options(string PipeName, bool SpawnUi, string? UiExecutableOverride, string? WebUiFallbackNotice = null);
+
+    internal static string[] WwwRootCandidates(string baseDir) =>
+    [
+        Path.Combine(baseDir, "wwwroot"),
+        Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "wwwroot")),
+    ];
+
+    internal static bool UseRuneUi(bool webRequested, bool webUiBuilt, bool runeUiAvailable) =>
+        runeUiAvailable && !(webRequested && webUiBuilt);
 
     [GeneratedRegex("^[A-Za-z0-9._-]{1,120}$")]
     private static partial Regex ValidPipeName();
@@ -142,27 +151,27 @@ internal sealed partial class RuneHostSession
                 return null;
 
             uiMode ??= SafeReadEnv(readEnv, "EXO_UI", onWarning);
-            if (string.Equals(uiMode, "web", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(uiMode, "webview", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(uiMode, "webview2", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
             uiExe ??= SafeReadEnv(readEnv, "EXO_RUNE_UI_PATH", onWarning);
             var explicitRune = string.Equals(uiMode, "rune", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(uiMode, "native", StringComparison.OrdinalIgnoreCase);
-            if (!explicitRune)
-            {
-                if (SafeReadClassicPref(readClassicPref, onWarning))
-                    return null;
-                var bundledUi = Path.Combine(AppContext.BaseDirectory, "exo-ui.exe");
-                var hasOverride = !string.IsNullOrWhiteSpace(uiExe) && SafeFileExists(fileExists, uiExe, onWarning);
-                if (!hasOverride && !SafeFileExists(fileExists, bundledUi, onWarning))
-                    return null;
-            }
+            var webRequested = !explicitRune
+                && (string.Equals(uiMode, "web", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(uiMode, "webview", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(uiMode, "webview2", StringComparison.OrdinalIgnoreCase)
+                    || SafeReadClassicPref(readClassicPref, onWarning));
+            var runeAvailable = explicitRune
+                || (!string.IsNullOrWhiteSpace(uiExe) && SafeFileExists(fileExists, uiExe, onWarning))
+                || SafeFileExists(fileExists, Path.Combine(AppContext.BaseDirectory, "exo-ui.exe"), onWarning);
+            var webBuilt = webRequested
+                && WwwRootCandidates(AppContext.BaseDirectory).Any(c => SafeFileExists(fileExists, Path.Combine(c, "index.html"), onWarning));
+            if (!UseRuneUi(webRequested, webBuilt, runeAvailable))
+                return null;
 
-            return new Options($"exo-launcher-rpc-{Environment.ProcessId}", SpawnUi: true, UiExecutableOverride: uiExe);
+            return new Options(
+                $"exo-launcher-rpc-{Environment.ProcessId}",
+                SpawnUi: true,
+                UiExecutableOverride: uiExe,
+                WebUiFallbackNotice: webRequested ? "RuneHostSession: the classic web interface was requested but wwwroot\\index.html is not in this build; starting the native interface." : null);
         }
         catch (Exception ex)
         {
