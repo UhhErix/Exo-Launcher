@@ -903,8 +903,20 @@ mod tests {
             }
         );
 
+        let closing = format!("Closing {}…", s.games[0].title);
         s.execute_notice_action(kind);
-        assert!(s.is_game_held(&id).is_some());
+        let texts: Vec<&str> = s
+            .notices
+            .iter()
+            .chain(s.notice_runtime.queue.iter())
+            .map(|n| n.text.as_str())
+            .collect();
+        assert!(texts.contains(&closing.as_str()));
+        assert!(
+            !texts
+                .iter()
+                .any(|t| t.starts_with("The GPU fault keeps going"))
+        );
         let _ = std::fs::remove_file(&jpath);
     }
 
