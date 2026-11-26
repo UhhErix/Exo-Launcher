@@ -24,7 +24,6 @@ use rune::{
     row, text,
 };
 use serde_json::{Value, json};
-use std::sync::LazyLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 #[derive(Debug, Clone)]
@@ -480,27 +479,32 @@ struct AutoBar {
     last_y: AtomicU32,
 }
 
-static AUTO_BAR: LazyLock<AutoBar> = LazyLock::new(|| AutoBar {
-    shift: rune::Live::new([0.0, 0.0]),
-    scroll_hidden: AtomicBool::new(false),
-    peek: AtomicBool::new(false),
-    last_y: AtomicU32::new(0),
-});
-
 thread_local! {
+    static AUTO_BAR: AutoBar = AutoBar {
+        shift: rune::Live::new([0.0, 0.0]),
+        scroll_hidden: AtomicBool::new(false),
+        peek: AtomicBool::new(false),
+        last_y: AtomicU32::new(0),
+    };
     static BAR_ROOM: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
 }
 
+fn auto_bar<R>(f: impl FnOnce(&AutoBar) -> R) -> R {
+    AUTO_BAR.with(f)
+}
+
 fn sync_auto_bar() {
-    let bar = &*AUTO_BAR;
-    let hide = bar.scroll_hidden.load(Ordering::Relaxed) && !bar.peek.load(Ordering::Relaxed);
-    bar.shift.set([0.0, if hide { BAR_HIDE_DY } else { 0.0 }]);
+    auto_bar(|bar| {
+        let hide = bar.scroll_hidden.load(Ordering::Relaxed) && !bar.peek.load(Ordering::Relaxed);
+        bar.shift.set([0.0, if hide { BAR_HIDE_DY } else { 0.0 }]);
+    });
 }
 
 fn reset_auto_bar() {
-    let bar = &*AUTO_BAR;
-    bar.scroll_hidden.store(false, Ordering::Relaxed);
-    bar.last_y.store(0, Ordering::Relaxed);
+    auto_bar(|bar| {
+        bar.scroll_hidden.store(false, Ordering::Relaxed);
+        bar.last_y.store(0, Ordering::Relaxed);
+    });
     sync_auto_bar();
 }
 
@@ -509,8 +513,7 @@ pub fn follow_bar(scroller: El) -> El {
 }
 
 pub fn bar_scroll_watch(at: rune::ScrollPos) {
-    {
-        let bar = &*AUTO_BAR;
+    let changed = auto_bar(|bar| {
         let y = at.offset[1].max(0.0);
         let last = f32::from_bits(bar.last_y.swap(y.to_bits(), Ordering::Relaxed));
         let was = bar.scroll_hidden.load(Ordering::Relaxed);
@@ -523,10 +526,11 @@ pub fn bar_scroll_watch(at: rune::ScrollPos) {
         } else {
             was
         };
-        if hidden != was {
-            bar.scroll_hidden.store(hidden, Ordering::Relaxed);
-            sync_auto_bar();
-        }
+        bar.scroll_hidden.store(hidden, Ordering::Relaxed);
+        hidden != was
+    });
+    if changed {
+        sync_auto_bar();
     }
 }
 
@@ -1188,7 +1192,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if room_changed {
         reset_auto_bar();
         if immersive {
-            AUTO_BAR.scroll_hidden.store(true, Ordering::Relaxed);
+            auto_bar(|bar| bar.scroll_hidden.store(true, Ordering::Relaxed));
             sync_auto_bar();
         }
     }
@@ -1203,7 +1207,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         if bar_pinned {
             (&rune::Live::new([0.0, 0.0])).into()
         } else {
-            AUTO_BAR.shift.smooth(SPRING_MOVE)
+            auto_bar(|bar| bar.shift.smooth(SPRING_MOVE))
         }
     };
     let top_bar = el()
@@ -1340,7 +1344,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         })
         .on_pointer_move_local(|_s: &mut AppState, p, tx| {
             let peek = p.window_y <= BAR_PEEK_ZONE;
-            if AUTO_BAR.peek.swap(peek, Ordering::Relaxed) != peek {
+            if auto_bar(|bar| bar.peek.swap(peek, Ordering::Relaxed)) != peek {
                 sync_auto_bar();
             }
             tx.live_only();
