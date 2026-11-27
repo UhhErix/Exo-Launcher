@@ -638,9 +638,9 @@ fn mention_badge(count: i32, border_color: Option<Color>, sc: f32) -> El {
 }
 
 fn unread_dot_band(border_color: Color) -> El {
-    el().size(14.0, 14.0)
-        .radius(7.0)
-        .fill(FG)
+    el().size(12.0, 12.0)
+        .radius(6.0)
+        .fill(fg_muted())
         .border(2.0, border_color)
 }
 

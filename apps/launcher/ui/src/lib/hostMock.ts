@@ -1064,7 +1064,7 @@ const MOCK_APP = { publisher: null, version: null, installedOn: null, bytes: nul
 let MOCK_PROGRAMS = [
   { ...MOCK_APP, id: 'HKLM:7-Zip', name: '7-Zip 26.01 (x64)', publisher: 'Igor Pavlov', version: '26.01', bytes: 5_200_000 },
   { ...MOCK_APP, id: 'HKCU:Discord', name: 'Discord', publisher: 'Discord Inc.', bytes: 412_000_000, replaces: 'discord' },
-  { ...MOCK_APP, id: 'HKLM:Steam', name: 'Steam', publisher: 'Valve Corporation', bytes: 1_200_000_000, care: 'store', caution: 'Your games from it need it to start.' },
+  { ...MOCK_APP, id: 'HKLM:Steam', name: 'Steam', publisher: 'Valve Corporation', bytes: 1_200_000_000, care: 'store', caution: 'Its games need it to start.' },
   { ...MOCK_APP, id: 'HKLM:Vanguard', name: 'Riot Vanguard', publisher: 'Riot Games, Inc.', bytes: 273_000_000, care: 'anticheat', removable: false },
   { ...MOCK_APP, id: 'HKLM:VC14', name: 'Microsoft Visual C++ v14 Redistributable (x64)', publisher: 'Microsoft Corporation', bytes: 21_000_000, care: 'runtime', caution: 'Games and apps that need it stop working until it’s installed again.' },
   { ...MOCK_APP, id: 'store:Clipchamp.Clipchamp_yxz26nhyzhsrt', name: 'Clipchamp', publisher: 'Microsoft Corp.', store: true, installedOn: '2026-10-12', bytes: 160_000_000, replaces: 'clipchamp' },

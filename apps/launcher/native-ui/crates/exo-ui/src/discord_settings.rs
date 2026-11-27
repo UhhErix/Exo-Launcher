@@ -6,8 +6,8 @@ use exo_kit::{
     RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, filter_pill,
     glass_button, glass_still_control_fill, good, hairline, hover_fill, icon_check, icon_close,
     icon_mic, icon_mic_off, icon_settings, icon_volume, modal_card_transition, pressed_fill,
-    primary_button, scrim_fill, selected_fill, type_body, type_control, type_label, type_section,
-    type_small, type_title, warn,
+    primary_button, scrim_fill, selected_fill, switch_track, type_body, type_control, type_label,
+    type_section, type_small, type_title, warn,
 };
 use exo_rpc::{
     ActionResult, DiscordAccount, DiscordAccountConnection, DiscordAccountReply,
@@ -1047,29 +1047,12 @@ fn toggle_row(
     if let Some(d) = detail {
         left = left.child(text(d).font(type_label()).color(fg_muted()));
     }
-    let pill = el()
-        .w(40.0)
-        .h(22.0)
-        .radius(RADIUS_PILL)
-        .fill(if on { FG } else { selected_fill() })
-        .border(1.0, if on { FG } else { hairline() })
-        .motion(SPRING_QUICK)
-        .child(
-            el().pin(
-                if on { Some(20.0) } else { Some(2.0) },
-                Some(2.0),
-                None,
-                None,
-            )
-            .size(16.0, 16.0)
-            .radius(RADIUS_PILL)
-            .fill(if on { PRIMARY_FG } else { fg_muted() })
-            .motion(SPRING_QUICK),
-        );
+    let pill = switch_track(on);
     row()
         .key(key)
         .role("switch")
         .label(label)
+        .checked(on)
         .focusable(true)
         .hit()
         .cursor(Cursor::Pointer)

@@ -1047,8 +1047,8 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
             .radius(RADIUS_PANEL)
             .continuous_corners()
             .clip_rounded(RADIUS_PANEL)
-            .fill(exo_kit::surface_elevated())
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+            .fill(exo_kit::surface_card())
+            .border(1.0, exo_kit::card_border())
             .child(
                 row()
                     .w_full()

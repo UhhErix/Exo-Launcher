@@ -446,7 +446,7 @@ fn auto_tune_hardware_row(
             menu_btn(
                 format!("ai-tune-{}", if is_cpu { "cpu" } else { "gpu" }),
                 lbl,
-                true,
+                false,
                 false,
                 blocked,
             )
@@ -2381,8 +2381,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 );
         } else {
             let ids_c = ready_ids.clone();
-            shader_actions =
-                shader_actions.child(primary_button("shaders-compile", "Compile", None).on_press(
+            shader_actions = shader_actions.child(
+                menu_btn("shaders-compile".into(), "Compile", false, false, false).on_press(
                     move |s: &mut AppState| {
                         if !ids_c.is_empty() || s.pc.shaders_queue_can_start {
                             let mut steps = Vec::new();
@@ -2395,7 +2395,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                             s.compile_shaders_all();
                         }
                     },
-                ));
+                ),
+            );
         }
     }
 

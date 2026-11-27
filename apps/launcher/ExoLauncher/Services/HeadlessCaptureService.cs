@@ -342,6 +342,13 @@ internal sealed class HeadlessCaptureService : IDisposable
             fps = state?["fps"]?.GetValue<double>(),
             hdr = state?["hdr"]?.GetValue<bool>() ?? false,
             error = state?["error"]?.GetValue<string>(),
+            hotkeys = new
+            {
+                saveReplay = state?["hotkeys"]?["saveReplay"]?["ok"]?.GetValue<bool>() ?? true,
+                record = state?["hotkeys"]?["record"]?["ok"]?.GetValue<bool>() ?? true,
+                snip = state?["hotkeys"]?["snip"]?["ok"]?.GetValue<bool>() ?? true,
+                printScreen = state?["printScreenOk"]?.GetValue<bool>() ?? true,
+            },
         };
     }
 

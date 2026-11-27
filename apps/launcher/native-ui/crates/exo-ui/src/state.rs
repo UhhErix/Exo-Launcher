@@ -3283,6 +3283,7 @@ impl AppState {
                 ],
             ),
             (Room::Music, &[]),
+            (Room::Devices, &[]),
             (
                 Room::ExoAi,
                 &[
@@ -3299,7 +3300,6 @@ impl AppState {
                 ],
             ),
             (Room::Apps, &["uninstall", "programs", "bloat", "startup"]),
-            (Room::Devices, &[]),
             (Room::Settings, &[]),
         ];
 

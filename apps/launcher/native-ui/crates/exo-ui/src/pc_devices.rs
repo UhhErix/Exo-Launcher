@@ -333,7 +333,7 @@ fn device_showcase_card_sized(
                         .children(port_warn.map(|w| {
                             text(w)
                                 .font(TextStyle::new(scaled(12.0), 600.0))
-                                .color(bad())
+                                .color(exo_kit::warn())
                         })),
                 ),
         )
@@ -1021,8 +1021,8 @@ fn wooting_keyboard_page(
 
         if kb.has_rapid_trigger && kb.rapid_trigger.is_some() {
             let mut rt_rows = vec![device_row(
-                "Rapid Trigger",
-                Some("Resets key actuation the instant it moves upward".into()),
+                "Reset a key the instant it lifts",
+                None,
                 None,
                 Some(
                     device_switch("kb-rt-toggle", "Rapid Trigger", rt_on, !can_write).on_press(

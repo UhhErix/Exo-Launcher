@@ -649,7 +649,7 @@ fn ready_section(s: &AppState, programs: &[InstalledAppItem]) -> El {
                 junk_detail,
                 false,
                 s.pc.junk_cleaned.as_ref().and_then(|(_, e)| e.clone()),
-                flat_btn("apps-junk-clean".into(), lbl, false, true, busy).on_press(
+                flat_btn("apps-junk-clean".into(), lbl, false, is_armed, busy).on_press(
                     |s: &mut AppState| {
                         if s.pc.armed_confirm.as_deref() == Some("junk-clean") {
                             s.clean_apps_junk();
@@ -920,11 +920,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             .hover(hover_fill())
             .press(pressed_fill())
             .on_press(move |s: &mut AppState| s.arm_or_confirm_uninstall(&id))
-            .child(
-                text(action_word)
-                    .font(type_control())
-                    .color(apps_danger_fg()),
-            );
+            .child(text(action_word).font(type_control()).color(FG));
         row()
             .key(format!("app-uninst-slot-{}", app.id))
             .absolute(0.0, 0.0)
@@ -1239,7 +1235,7 @@ fn startup_line_row(
                 .color(FG)
                 .truncate(),
         )
-        .child(startup_tag_pill(tag_label, tag_tone));
+        .children((!tag_label.is_empty()).then(|| startup_tag_pill(tag_label, tag_tone)));
     let copy = col()
         .grow(1.0)
         .min_w(0.0)
@@ -1453,8 +1449,8 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             format!("startup-row-{}", g.item.id),
             &g.item.name,
             g.item.icon.as_deref(),
-            if required { "Required" } else { "On" },
-            if required { None } else { Some("good") },
+            "",
+            None,
             startup_detail(g.item),
             amount,
             err,
@@ -1483,7 +1479,7 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             format!("startup-row-{}", r.id),
             &r.name,
             r.icon.as_deref(),
-            "Off",
+            "",
             None,
             r.detail.clone(),
             r.amount.clone(),

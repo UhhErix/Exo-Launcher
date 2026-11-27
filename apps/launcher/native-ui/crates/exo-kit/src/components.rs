@@ -487,7 +487,7 @@ pub fn switch_pill(key: &'static str, label: &'static str, on: bool) -> El {
     switch_pill_keyed(key, label, on)
 }
 
-pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: bool) -> El {
+pub fn switch_track(on: bool) -> El {
     let knob = el()
         .size(20.0, 20.0)
         .radius(10.0)
@@ -496,7 +496,16 @@ pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: b
         .absolute(if on { 18.0 } else { 2.0 }, 2.0)
         .motion(SPRING_SNAPPY);
 
-    el().key(key)
+    el().size(40.0, 24.0)
+        .radius(RADIUS_PILL)
+        .fill(if on { good() } else { track_fill() })
+        .motion(SPRING_QUICK)
+        .child(knob)
+}
+
+pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: bool) -> El {
+    switch_track(on)
+        .key(key)
         .role("switch")
         .label(label)
         .checked(on)
@@ -505,11 +514,6 @@ pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: b
         .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .size(40.0, 24.0)
-        .radius(RADIUS_PILL)
-        .fill(if on { good() } else { track_fill() })
-        .motion(SPRING_QUICK)
-        .child(knob)
 }
 
 pub fn slider_track(

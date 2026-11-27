@@ -2569,6 +2569,11 @@ fn settings_choice_rows(
         err.as_deref(),
         false,
         crate::settings::set_btn(format!("cap-set-ch-{row_key}"), cur_lbl, None)
+            .child(if is_open {
+                exo_kit::icon_chevron_up(12.0, exo_kit::fg_muted())
+            } else {
+                exo_kit::icon_chevron_down(12.0, exo_kit::fg_muted())
+            })
             .disabled(spec.disabled)
             .on_press(move |s: &mut AppState| {
                 s.media.captures_ui.settings_open_choice =
