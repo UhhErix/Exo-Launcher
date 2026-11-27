@@ -84,8 +84,8 @@ pub use discord_types::{
 pub use events::{
     AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
     CaptureShrunkEvent, GameRunStateEvent, GpuDriverInstallEvent, InstallQueueEvent,
-    LaunchStatusEvent, MusicVolumeEvent, NotesOpenEvent, PausedDownloadItem, RequestId,
-    ShellBootstrap, StoreChangedEvent, StoreSaleEvent,
+    LaunchStatusEvent, MusicVolumeEvent, PausedDownloadItem, RequestId, ShellBootstrap,
+    StoreChangedEvent, StoreSaleEvent,
 };
 pub use game_types::{
     AntiCheatLaunch, ArtworkMutationResponse, CompressProgressEvent, CompressState,
@@ -102,9 +102,7 @@ pub use media_types::{
     CaptureSendReply, CaptureSettingsDto, CaptureStatusReply, CaptureTextReply, Concert,
     CreditGroup, CreditPerson, JamMember, JamSession, LyricsLine, LyricsWord, MusicControlReply,
     MusicMatchReply, MusicMatchSong, MusicPlayback, MusicPlaybackReply, MusicStatusEvent,
-    MusicVolumeReply, NoteInfo, NotesActReply, NotesListReply, NotesOpenReply, NotesPendingReply,
-    NotesPhotoReply, NotesReadReply, NotesSaveAsReply, NotesSaveReply, NotesSpellReply,
-    NotesTextFilesReply, PlayerActReply, PlayerAlbumRef, PlayerArtist, PlayerCard, PlayerDevice,
+    MusicVolumeReply, PlayerActReply, PlayerAlbumRef, PlayerArtist, PlayerCard, PlayerDevice,
     PlayerFolderRef, PlayerFriend, PlayerFriendContext, PlayerFriendTrack, PlayerFriendUser,
     PlayerHeader, PlayerLink, PlayerOption, PlayerRating, PlayerSection, PlayerStartReply,
     PlayerStateData, PlayerStateReply, PlayerTrack, PlayerViewData, PlayerViewReply, SpotifyAudio,
@@ -326,28 +324,9 @@ pub const METHOD_DISCORD_VOICE: &str = "discord.voice";
 pub const METHOD_FRIENDS_BADGE: &str = "friends.badge";
 pub const METHOD_EQ: &str = "eq";
 pub const METHOD_EQ_HEADPHONES: &str = "eq.headphones";
-pub const METHOD_HID_CLOSE: &str = "hid.close";
-pub const METHOD_HID_LIST: &str = "hid.list";
-pub const METHOD_HID_OPEN: &str = "hid.open";
-pub const METHOD_HID_RECEIVE_FEATURE_REPORT: &str = "hid.receiveFeatureReport";
-pub const METHOD_HID_RECEIVE_INPUT_REPORT: &str = "hid.receiveInputReport";
-pub const METHOD_HID_SEND_FEATURE_REPORT: &str = "hid.sendFeatureReport";
 pub const METHOD_HID_SEND_REPORT: &str = "hid.sendReport";
-pub const METHOD_MOUSE_PRESETS_GET: &str = "mouse.presets.get";
-pub const METHOD_MOUSE_PRESETS_SET: &str = "mouse.presets.set";
 pub const METHOD_MOUSE_PROFILES_GET: &str = "mouse.profiles.get";
 pub const METHOD_MOUSE_PROFILES_SET: &str = "mouse.profiles.set";
-pub const METHOD_NOTES_ACT: &str = "notes.act";
-pub const METHOD_NOTES_LIST: &str = "notes.list";
-pub const METHOD_NOTES_OPEN: &str = "notes.open";
-pub const METHOD_NOTES_PENDING: &str = "notes.pending";
-pub const METHOD_NOTES_PHOTO: &str = "notes.photo";
-pub const METHOD_NOTES_READ: &str = "notes.read";
-pub const METHOD_NOTES_SAVE: &str = "notes.save";
-pub const METHOD_NOTES_SAVE_AS: &str = "notes.saveAs";
-pub const METHOD_NOTES_SESSION: &str = "notes.session";
-pub const METHOD_NOTES_SPELL: &str = "notes.spell";
-pub const METHOD_NOTES_TEXT_FILES: &str = "notes.textFiles";
 pub const METHOD_STEAM_INPUT_STATE: &str = "steamInput.state";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
 pub const METHOD_BACKUP_STATUS: &str = "backup.status";
@@ -361,7 +340,6 @@ pub const METHOD_GPU_AFMF3: &str = "gpu.afmf3";
 pub const METHOD_GPU_CONTROL_PANEL: &str = "gpu.controlPanel";
 pub const METHOD_GPU_DISPLAY: &str = "gpu.display";
 pub const METHOD_GPU_DRIVER: &str = "gpu.driver";
-pub const METHOD_GPU_PROCESSES: &str = "gpu.processes";
 pub const METHOD_GPU_PROFILE: &str = "gpu.profile";
 pub const METHOD_GPU_TUNING_APPLY: &str = "gpu.tuning.apply";
 pub const METHOD_GPU_TUNING_RESET: &str = "gpu.tuning.reset";
@@ -407,8 +385,6 @@ pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_GAME_RESUME_DOWNLOAD: &str = "game.resumeDownload";
 pub const METHOD_GAME_SETTINGS: &str = "game.settings";
-pub const METHOD_GAME_GRAPHICS_FEATURES: &str = "game.graphicsFeatures";
-pub const METHOD_GAME_GRAPHICS_FEATURES_SET: &str = "game.graphicsFeatures.set";
 pub const METHOD_GAME_FRAME_GEN: &str = "game.frameGen";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
@@ -670,28 +646,9 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_FRIENDS_BADGE,
     METHOD_EQ,
     METHOD_EQ_HEADPHONES,
-    METHOD_HID_CLOSE,
-    METHOD_HID_LIST,
-    METHOD_HID_OPEN,
-    METHOD_HID_RECEIVE_FEATURE_REPORT,
-    METHOD_HID_RECEIVE_INPUT_REPORT,
-    METHOD_HID_SEND_FEATURE_REPORT,
     METHOD_HID_SEND_REPORT,
-    METHOD_MOUSE_PRESETS_GET,
-    METHOD_MOUSE_PRESETS_SET,
     METHOD_MOUSE_PROFILES_GET,
     METHOD_MOUSE_PROFILES_SET,
-    METHOD_NOTES_ACT,
-    METHOD_NOTES_LIST,
-    METHOD_NOTES_OPEN,
-    METHOD_NOTES_PENDING,
-    METHOD_NOTES_PHOTO,
-    METHOD_NOTES_READ,
-    METHOD_NOTES_SAVE,
-    METHOD_NOTES_SAVE_AS,
-    METHOD_NOTES_SESSION,
-    METHOD_NOTES_SPELL,
-    METHOD_NOTES_TEXT_FILES,
     METHOD_STEAM_INPUT_STATE,
     METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_STATE,
@@ -703,7 +660,6 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GPU_CONTROL_PANEL,
     METHOD_GPU_DISPLAY,
     METHOD_GPU_DRIVER,
-    METHOD_GPU_PROCESSES,
     METHOD_GPU_PROFILE,
     METHOD_GPU_TUNING_APPLY,
     METHOD_GPU_TUNING_RESET,
@@ -750,8 +706,6 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_PROPERTIES_SET,
     METHOD_GAME_RESUME_DOWNLOAD,
     METHOD_GAME_SETTINGS,
-    METHOD_GAME_GRAPHICS_FEATURES,
-    METHOD_GAME_GRAPHICS_FEATURES_SET,
     METHOD_GAME_FRAME_GEN,
     METHOD_KEYS_PREVIEW,
     METHOD_KEYS_ACTIVATE,
@@ -2229,9 +2183,6 @@ fn parse_event(
         "capture.shrunk" => Ok(serde_json::from_str::<CaptureShrunkEvent>(data_raw)
             .map(|ev| HostEvent::CaptureShrunk(Box::new(ev)))
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
-        "notes.open" => Ok(serde_json::from_str::<NotesOpenEvent>(data_raw)
-            .map(HostEvent::NotesOpen)
-            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "controller.state" => Ok(serde_json::from_str::<ControllerStateEvent>(data_raw)
             .map(HostEvent::ControllerState)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
@@ -2656,10 +2607,6 @@ mod tests {
             (
                 br#"{"event":"capture.shrunk","data":{"id":"c1","before":50000000,"after":12000000,"item":{"id":"c1","kind":"video","size":12000000}}}"#,
                 |ev| matches!(ev, HostEvent::CaptureShrunk(s) if s.id == "c1" && s.before == 50_000_000 && s.after == 12_000_000 && s.item.is_some()),
-            ),
-            (
-                br#"{"event":"notes.open","data":{"id":"note-1","message":null}}"#,
-                |ev| matches!(ev, HostEvent::NotesOpen(n) if n.id.as_deref() == Some("note-1")),
             ),
             (
                 br#"{"event":"controller.state","data":{"id":"pad-1","lx":128,"ly":127,"rx":200,"ry":50,"l2":10,"r2":255,"profile":2,"stopL":1,"stopR":2,"battery":80,"charging":true,"extras":64}}"#,

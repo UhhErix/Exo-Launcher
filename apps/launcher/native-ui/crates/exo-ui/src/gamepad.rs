@@ -268,7 +268,6 @@ pub fn bar_view(s: &AppState) -> El {
                         .color(fg_muted()),
                 ),
             ExoGlass::Bar,
-            false,
         );
     }
 
@@ -310,7 +309,6 @@ pub fn bar_view(s: &AppState) -> El {
                     .child(text(label).font(type_small()).color(fg_muted()))
             })),
         ExoGlass::Bar,
-        false,
     )
 }
 

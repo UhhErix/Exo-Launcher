@@ -140,7 +140,7 @@ pub fn select_trigger<S: 'static>(
         if open {
             trigger = trigger.fill(hover_fill());
         }
-        trigger = apply_glass(trigger, ExoGlass::Control, !disabled);
+        trigger = apply_glass(trigger, ExoGlass::Control);
     }
 
     if !disabled {
@@ -192,7 +192,6 @@ pub struct SelectMenuSpec<S: 'static> {
     pub options: Vec<SelectOption>,
     pub width: f32,
     pub align: Align,
-    pub blur: bool,
     pub gamepad_focus: bool,
     pub on_select: SelectPickCb<S>,
     pub on_dismiss: SelectDismissCb<S>,
@@ -206,7 +205,6 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
         options,
         width,
         align,
-        blur,
         gamepad_focus,
         on_select,
         on_dismiss,
@@ -291,7 +289,6 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
         .collect();
 
     let dismiss_modal = Rc::clone(&on_dismiss);
-    let _ = blur;
     let panel_radius = RADIUS_CARD + 2.0;
     let panel = apply_glass(
         col()
@@ -314,7 +311,6 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
             .focus_return(trigger_key)
             .children(rows),
         ExoGlass::Menu,
-        false,
     );
 
     vec![panel]

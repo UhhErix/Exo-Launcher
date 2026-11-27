@@ -4,15 +4,15 @@ use crate::settings_state::{
 };
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, RADIUS_SMALL, SPRING_BASE, bad, fg_muted, glass_panel_opt, glass_rim_bottom,
-    glass_rim_top, glass_still_control_fill, good, hairline, icon_check, modal_card_transition,
-    scaled, switch_pill, type_body, type_small, type_title,
+    BG, FG, RADIUS_SMALL, SPRING_BASE, bad, fg_muted, glass_panel, glass_rim_bottom, glass_rim_top,
+    glass_still_control_fill, good, hairline, icon_check, modal_card_transition, scaled,
+    scrim_fill, switch_pill, type_body, type_small, type_title,
 };
 use rune::{
     Cursor, El, Key, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text, text_input,
 };
 
-pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn layers(s: &AppState) -> Vec<El> {
     let sent = matches!(s.wp4.report_phase, ReportPhase::Sent(_));
     let sending = matches!(s.wp4.report_phase, ReportPhase::Sending);
     let version = s.settings.app_version.as_deref().or_else(|| {
@@ -281,11 +281,11 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .child(github_btn)
         .child(row().gap(8.0).center_y().child(cancel_btn).child(send_btn));
 
-    let card = glass_panel_opt("report-problem-modal", 560.0, blur)
+    let card = glass_panel("report-problem-modal", 560.0)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(true, |s: &mut AppState| s.wp4_close_report())
-        .modal_scrim(BG.alpha(0.56))
+        .modal_scrim(scrim_fill())
         .child(content)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(footer);

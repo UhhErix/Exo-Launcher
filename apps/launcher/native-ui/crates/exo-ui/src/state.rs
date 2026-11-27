@@ -733,6 +733,7 @@ pub struct AppState {
     pub notice_runtime: NoticeRuntimeState,
     pub palette_extras: PaletteExtrasState,
     pub ui_discard_edit: TextEdit,
+    pub ui_discard_canvas: rune::ImageCanvasState,
     pub web_host: Box<crate::web_host::LazyWebHostState>,
     #[cfg(windows)]
     pub rpc: Option<Arc<RpcClient>>,
@@ -894,6 +895,7 @@ impl AppState {
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
             ui_discard_edit: TextEdit::default(),
+            ui_discard_canvas: rune::ImageCanvasState::new(1, 1),
             web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,
@@ -1007,6 +1009,7 @@ impl AppState {
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
             ui_discard_edit: TextEdit::default(),
+            ui_discard_canvas: rune::ImageCanvasState::new(1, 1),
             web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,

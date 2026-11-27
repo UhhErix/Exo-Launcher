@@ -80,14 +80,6 @@ pub fn glass_control_fill() -> Color {
     BG.alpha(0.54)
 }
 
-pub fn glass_bar_tint() -> Color {
-    BG.alpha(0.36)
-}
-
-pub fn glass_panel_tint() -> Color {
-    BG.alpha(0.54)
-}
-
 pub fn glass_panel_fill() -> Color {
     BG.alpha(0.76)
 }
@@ -102,10 +94,6 @@ pub fn glass_still_control_fill() -> Color {
 
 pub fn glass_still_panel_fill() -> Color {
     srgb(4, 4, 4, 0.97)
-}
-
-pub fn glass_panel_shadow_color() -> Color {
-    BG.alpha(0.64)
 }
 
 pub fn glass_rim_top() -> Color {
@@ -185,8 +173,6 @@ pub const GAP: f32 = 10.0;
 pub const PAGE_GUTTER: f32 = 24.0;
 pub const TITLEBAR_HEIGHT: f32 = 52.0;
 
-pub const GLASS_CONTROL_SIGMA: f32 = 10.0;
-pub const GLASS_PANEL_SIGMA: f32 = 16.0;
 pub const GLASS_CONTAINER_SPACING: f32 = 10.0;
 pub const EXO_MAX_BACKDROP_BLURS: usize = 16;
 pub const PRESS_SCALE: f32 = 0.97;

@@ -2031,7 +2031,7 @@ mod tests {
     use crate::shell;
     use crate::state::{AppState, Room};
     use rune::motion_gate::Run;
-    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::render::KIND_LIQUID_GLASS;
     use rune::{Env, Key, KeyEvent, Mods, Runtime};
 
     #[test]
@@ -2053,14 +2053,14 @@ mod tests {
             rt.find("apps-head-last-used").is_none(),
             "Last used column should hide when no app has last_opened"
         );
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "Apps exceeded blur cap: {blurs}"
+            glass_draws <= 3,
+            "Apps: {glass_draws} Liquid Glass draws, bound 3"
         );
 
         let (_, rest_op) = rt

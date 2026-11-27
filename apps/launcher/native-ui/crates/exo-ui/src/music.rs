@@ -1642,13 +1642,6 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         .child(immerse_btn)
         .child(more_btn);
 
-    let overlay_open = s.capture_menu_open
-        || s.palette_open
-        || s.key_modal_open
-        || s.props_open
-        || s.setup.beat.is_some()
-        || s.media.music_playlist_sheet.is_some();
-
     let pill = apply_glass(
         row()
             .key("music-transport-bar")
@@ -1665,7 +1658,6 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
             .child(center)
             .child(right),
         ExoGlass::Bar,
-        overlay_open,
     );
 
     row()
@@ -1883,7 +1875,6 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
                     .child(leave_btn),
             ),
         ExoGlass::ClearMedia,
-        false,
     );
 
     // Dedicated compact Liquid Glass volume capsule centered beneath the transport dock.
@@ -1918,7 +1909,6 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
             ))
             .child(text(vol_pct).font(time_font).color(FG.alpha(0.72)).w(34.0)),
         ExoGlass::ClearMedia,
-        false,
     );
 
     // Living album art card: elevated with crisp hairline rim and zero muddy drop shadow.
@@ -2818,21 +2808,19 @@ mod tests {
             state.library_more_open = !capture;
 
             assert!(mini_player(&state, 1.0, crate::state::MiniBarSlot::Inline).is_some());
-            let budget = shell::BlurBudget::compute(&state, true);
-            assert!(budget.mini_player);
 
             let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
             rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
             rt.frame(0.0);
             assert!(rt.find("music-mini-player").is_some());
-            let blurs = rt
+            let glass_draws = rt
                 .instances
                 .iter()
-                .filter(|i| i.params[1] == rune::render::KIND_BACKDROP_BLUR)
+                .filter(|i| i.params[1] == rune::render::KIND_LIQUID_GLASS)
                 .count();
             assert!(
-                blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-                "menu open exceeded EXO_MAX_BACKDROP_BLURS: {blurs}"
+                glass_draws <= 10,
+                "mini-player with a menu open: {glass_draws} Liquid Glass draws, bound 10"
             );
         }
     }

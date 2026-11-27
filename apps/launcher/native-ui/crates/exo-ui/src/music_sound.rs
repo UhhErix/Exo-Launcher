@@ -11,8 +11,8 @@ use exo_kit::{
     BG, ContextMenuSpec, FG, MenuAnchor, MenuDismissCb, MenuEntry, MenuItem, MenuSubmenuCb,
     PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, SPRING_SMOOTH,
     TRANSPARENT, bad, context_menu_layers, danger_button, fg_faint, fg_muted, filter_pill,
-    glass_button, glass_rim, good, hairline, hover_fill, icon_chevron_down, icon_close, icon_link,
-    icon_maximize, pressed_fill, primary_button, qr_code_view, switch_pill,
+    glass_button, glass_button_opt, glass_rim, good, hairline, hover_fill, icon_chevron_down,
+    icon_close, icon_link, icon_maximize, pressed_fill, primary_button, qr_code_view, switch_pill,
 };
 use exo_rpc::{PlayerCard, PlayerTrack, SpotifyAudio};
 use rune::{
@@ -1424,7 +1424,7 @@ fn listen_along_section(s: &AppState, titled: bool, scale: f32) -> El {
                             .child(text(sub).font(scaled_small(s)).color(fg_muted()).truncate()),
                     )
                     .child(
-                        glass_button("music-along-listen", "Listen", None)
+                        glass_button_opt("music-along-listen", "Listen", None, false)
                             .key(format!("music-along-listen-{i}"))
                             .on_press(move |s: &mut AppState| {
                                 s.start_listen_along(f_click.clone(), r_click.clone());
@@ -2325,8 +2325,6 @@ fn build_music_menu(
         id: id.into(),
         anchor,
         width,
-        blur: true,
-        submenu_blur: true,
         open_submenu,
         return_focus: None,
         gamepad_focus: false,

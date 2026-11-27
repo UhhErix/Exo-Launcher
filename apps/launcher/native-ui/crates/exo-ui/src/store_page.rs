@@ -1673,7 +1673,7 @@ fn buy_panel(
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control))
         .hover(hover_fill())
         .press(pressed_fill())
         .motion(SPRING_QUICK)
@@ -1761,7 +1761,7 @@ fn buy_panel(
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control))
         .hover(hover_fill())
         .press(pressed_fill())
         .motion(SPRING_QUICK)
@@ -2161,7 +2161,6 @@ pub fn view(s: &AppState, scale: f32) -> El {
             .child(icon_chevron_left(16.0, FG))
             .child(text("Store").font(type_control()).color(FG)),
         ExoGlass::ClearMedia,
-        true,
     );
     if gamepad {
         back_btn = back_btn.focus_ring(2.0, 3.0, FG);

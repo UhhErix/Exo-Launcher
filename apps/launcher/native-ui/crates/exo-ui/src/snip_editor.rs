@@ -875,7 +875,10 @@ pub fn view(s: &AppState, _item: &CaptureItem) -> El {
                     .crop_scrim(crop_scrim())
                     .crop_border(FG)
                     .handle_color(FG)
-                    .on_state(|s: &mut AppState| &mut s.media.snip_editor.as_mut().unwrap().canvas)
+                    .on_state(|s: &mut AppState| match s.media.snip_editor.as_mut() {
+                        Some(ed) => &mut ed.canvas,
+                        None => &mut s.ui_discard_canvas,
+                    })
                     .build(),
             )
     } else {

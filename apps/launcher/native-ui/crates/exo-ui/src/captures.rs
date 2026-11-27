@@ -1151,7 +1151,7 @@ fn popover_row(
     r
 }
 
-pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn popover_layers(s: &AppState) -> Vec<El> {
     let status = s.media.capture_status.as_ref();
     let live = status.and_then(|st| st.state.as_ref());
     let cfg = status.and_then(|st| st.settings.as_ref());
@@ -1179,7 +1179,6 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
         "top-capture-btn"
     };
 
-    let _ = blur;
     let mut menu = col()
         .key("capture-popover-menu")
         .w(240.0)
@@ -1188,7 +1187,7 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu, false))
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu))
         .transition(popover_transition_for(Side::Bottom, Align::End))
         .role("menu")
         .label("Capture")
@@ -1519,7 +1518,7 @@ fn send_to_dialog_overlay(s: &AppState) -> Option<El> {
         .padding(20.0)
         .gap(12.0)
         .radius(RADIUS_SHEET)
-        .liquid_glass(exo_glass(ExoGlass::Sheet, false))
+        .liquid_glass(exo_glass(ExoGlass::Sheet))
         .child(text("Send to").font(type_title()).color(FG))
         .child(
             row()
@@ -2231,7 +2230,7 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                 .padding(6.0)
                 .gap(2.0)
                 .radius(RADIUS_PANEL)
-                .liquid_glass(exo_glass(ExoGlass::Menu, false))
+                .liquid_glass(exo_glass(ExoGlass::Menu))
                 .child(
                     row()
                         .key("cap-share-discord")
@@ -2282,7 +2281,7 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                 .padding(6.0)
                 .gap(2.0)
                 .radius(RADIUS_PANEL)
-                .liquid_glass(exo_glass(ExoGlass::Menu, false))
+                .liquid_glass(exo_glass(ExoGlass::Menu))
                 .child(if is_img {
                     row()
                         .key("cap-more-ocr")
@@ -3000,7 +2999,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .press_on_down()
                 .size(32.0, 32.0)
                 .radius(RADIUS_PILL)
-                .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Control, true))
+                .fill(exo_kit::ExoGlass::Control.still_fill())
                 .hover(hover_fill())
                 .center()
                 .on_press(|s: &mut AppState| s.close_captures())
@@ -3327,8 +3326,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .radius(RADIUS_SHEET)
                 .continuous_corners()
                 .clip_rounded(RADIUS_SHEET)
-                .border(1.0, hairline())
-                .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu, false))
+                .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
                 .child(sheet_inner),
         )
         .children(lb_overlay)

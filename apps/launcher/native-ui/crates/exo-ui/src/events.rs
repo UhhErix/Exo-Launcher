@@ -53,7 +53,6 @@ pub enum HostEventKind {
     CaptureSaved,
     CaptureReel,
     CaptureShrunk,
-    NotesOpen,
     InstallQueue,
     GameRunState,
     LaunchStatus,
@@ -138,7 +137,6 @@ impl HostEventKind {
             HostEvent::CaptureSaved(_) => Self::CaptureSaved,
             HostEvent::CaptureReel(_) => Self::CaptureReel,
             HostEvent::CaptureShrunk(_) => Self::CaptureShrunk,
-            HostEvent::NotesOpen(_) => Self::NotesOpen,
             HostEvent::InstallQueue(_) => Self::InstallQueue,
             HostEvent::GameRunState(_) => Self::GameRunState,
             HostEvent::LaunchStatus(_) => Self::LaunchStatus,
@@ -300,6 +298,7 @@ fn register_shell(reg: &mut EventRegistry) {
         state.pc.mouse_panel_error = None;
         state.pc.mouse_panel_rect = None;
         state.pc.mouse_panel_visible = false;
+        state.pc.selected_device_id = None;
         state.status = HostStatus::Error(why);
         state.notice = Some("Disconnected from Exo host".into());
         true
@@ -844,9 +843,11 @@ mod tests {
         let mut s = AppState::with_demo_games();
         s.pc.mouse_panel_open = true;
         s.pc.mouse_panel_visible = true;
+        s.pc.selected_device_id = Some("dev:mouse".into());
         assert!(s.apply_host_event(HostEvent::Disconnected("pipe closed".into())));
         assert!(!s.pc.mouse_panel_open);
         assert!(!s.pc.mouse_panel_visible);
+        assert!(s.pc.selected_device_id.is_none());
         assert!(matches!(s.status, HostStatus::Error(ref why) if why == "pipe closed"));
         assert_eq!(s.notice.as_deref(), Some("Disconnected from Exo host"));
     }

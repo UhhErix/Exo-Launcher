@@ -179,7 +179,7 @@ impl AppState {
     }
 }
 
-pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn layers(s: &AppState) -> Vec<El> {
     let preview_note = if let Some(ref preview) = s.key_preview {
         if let Some(ref store) = preview.store {
             Some((
@@ -354,7 +354,6 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 
     content = content.child(footer);
 
-    let _ = blur;
     let card = col()
         .key("activate-key-modal")
         .w(420.0)
@@ -365,7 +364,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(true, |s: &mut AppState| s.close_key_modal())

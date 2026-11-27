@@ -1636,8 +1636,6 @@ pub struct ArtBase {
     #[serde(default)]
     pub devices_dir: Option<String>,
     #[serde(default)]
-    pub notes_dir: Option<String>,
-    #[serde(default)]
     pub captures_dir: Option<String>,
     #[serde(default)]
     pub capture_thumbs_dir: Option<String>,
@@ -1878,7 +1876,6 @@ pub enum HostEvent {
     CaptureSaved(Box<crate::events::CaptureSavedEvent>),
     CaptureReel(Box<crate::events::CaptureReelEvent>),
     CaptureShrunk(Box<crate::events::CaptureShrunkEvent>),
-    NotesOpen(crate::events::NotesOpenEvent),
     InstallQueue(crate::events::InstallQueueEvent),
     GameRunState(crate::events::GameRunStateEvent),
     LaunchStatus(crate::events::LaunchStatusEvent),

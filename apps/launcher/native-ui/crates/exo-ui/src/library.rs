@@ -385,7 +385,7 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
     card
 }
 
-pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
+pub fn library_filter_overlay(s: &AppState) -> Vec<El> {
     if !s.library_filter_open {
         return Vec::new();
     }
@@ -431,7 +431,6 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
             ),
         );
     }
-    let _ = blur;
     let panel = col()
         .key("library-filter-pop")
         .w(420.0)
@@ -440,7 +439,7 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(exo_kit::exo_glass(ExoGlass::Popover, false))
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Popover))
         .transition(popover_transition_for(Side::Bottom, Align::End))
         .focus_group()
         .focus_return("all-games-filter")
@@ -956,7 +955,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             .gap(8.0)
             .center_y()
             .radius(RADIUS_PILL)
-            .liquid_glass(ExoGlass::Control.to_liquid_glass(false, exo_kit::glass_accessibility()))
+            .liquid_glass(ExoGlass::Control.to_liquid_glass())
             .child(icon_search(14.0, fg_muted()))
             .child(
                 text_input(&s.library_search, type_small())
@@ -1218,7 +1217,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control))
         .hover(hover_fill())
         .press(pressed_fill())
         .motion(SPRING_QUICK)
@@ -1563,9 +1562,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                     .px(16.0)
                     .center_y()
                     .radius(RADIUS_PILL)
-                    .liquid_glass(
-                        ExoGlass::Control.to_liquid_glass(true, exo_kit::glass_accessibility()),
-                    )
+                    .liquid_glass(ExoGlass::Control.to_liquid_glass())
                     .hover(hover_fill())
                     .on_press(|s: &mut AppState| s.visible_limit += 96)
                     .child(
@@ -1593,7 +1590,7 @@ mod tests {
     use crate::shell;
     use crate::state::AppState;
     use rune::motion_gate::Run;
-    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::render::{KIND_BACKDROP_BLUR, KIND_LIQUID_GLASS};
     use rune::{Env, Runtime};
 
     #[test]
@@ -1774,12 +1771,15 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert!(rt.presented("tile-folder:f1").is_some());
         assert!(rt.presented("tile-folder:f2").is_some());
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
-        assert!(blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS);
+        assert!(
+            glass_draws <= 6,
+            "Library with folders: {glass_draws} Liquid Glass draws, bound 6"
+        );
 
         rt.update(|s, _| s.open_folder_panel("f1", false));
         rt.settle_all();

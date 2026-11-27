@@ -476,7 +476,7 @@ pub fn register_events(state: &mut AppState) {
 impl AppState {
     pub fn load_gpu_manual_tuning(&mut self) {
         if self.status != HostStatus::Connected {
-            if self.pc.gpu_tuning_ui.state.is_none() {
+            if self.status == HostStatus::Standalone && self.pc.gpu_tuning_ui.state.is_none() {
                 self.pc.gpu_tuning_ui = GpuManualTuningUiState::demo();
             }
             return;

@@ -562,7 +562,7 @@ pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
     }
 }
 
-pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn layers(s: &AppState) -> Vec<El> {
     let items = s.palette_results();
     let clamped = if items.is_empty() {
         0
@@ -650,7 +650,6 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
             )
     };
 
-    let _ = blur;
     let card = col()
         .key("command-palette")
         .w(scaled(576.0))
@@ -660,7 +659,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false))
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .focus_return("search-capsule")

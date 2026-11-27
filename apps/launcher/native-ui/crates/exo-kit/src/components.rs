@@ -103,10 +103,6 @@ pub fn modal_card_transition() -> Transition {
 }
 
 pub fn glass_capsule(key: &'static str) -> El {
-    glass_capsule_opt(key, true)
-}
-
-pub fn glass_capsule_opt(key: &'static str, _blur: bool) -> El {
     let capsule = row()
         .key(key)
         .h(36.0)
@@ -114,14 +110,10 @@ pub fn glass_capsule_opt(key: &'static str, _blur: bool) -> El {
         .gap(2.0)
         .center_y()
         .radius(RADIUS_PILL);
-    apply_glass(capsule, ExoGlass::Bar, false)
+    apply_glass(capsule, ExoGlass::Bar)
 }
 
 pub fn glass_panel(key: impl Into<String>, width: f32) -> El {
-    glass_panel_opt(key, width, true).transition(popover_transition())
-}
-
-pub fn glass_panel_opt(key: impl Into<String>, width: f32, _blur: bool) -> El {
     let panel = rune::col()
         .key(key)
         .w(width)
@@ -130,42 +122,7 @@ pub fn glass_panel_opt(key: impl Into<String>, width: f32, _blur: bool) -> El {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default);
-    apply_glass(panel, ExoGlass::Panel, false)
-}
-
-pub fn glass_plate(key: impl Into<String>, _blur: bool) -> El {
-    let plate = row().key(key).center_y().radius(RADIUS_PILL);
-    apply_glass(plate, ExoGlass::ClearMedia, false)
-}
-
-pub fn glass_input(key: impl Into<String>) -> El {
-    let input = row()
-        .key(key)
-        .h(34.0)
-        .px(12.0)
-        .gap(8.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .cursor(Cursor::Text);
-    apply_glass(input, ExoGlass::Control, false)
-}
-
-pub fn glass_chip(key: impl Into<String>, label: impl Into<String>, icon: Option<El>) -> El {
-    let mut chip = apply_glass(
-        row()
-            .key(key)
-            .h(28.0)
-            .px(10.0)
-            .gap(6.0)
-            .center_y()
-            .radius(RADIUS_PILL),
-        ExoGlass::Control,
-        false,
-    );
-    if let Some(ic) = icon {
-        chip = chip.child(ic);
-    }
-    chip.child(text(label.into()).font(type_small()).color(FG))
+    apply_glass(panel, ExoGlass::Panel)
 }
 
 pub fn amoled_card(radius: f32) -> El {
@@ -233,7 +190,7 @@ pub fn glass_icon_circle_opt(
         .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(icon);
-    apply_glass_opt(btn, ExoGlass::Control, true, blur)
+    apply_glass_opt(btn, ExoGlass::Control, blur)
 }
 
 pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
@@ -302,7 +259,6 @@ pub fn glass_button_dyn(
             .hover_motion(SPRING_QUICK, SPRING_BASE)
             .motion(SPRING_QUICK),
         ExoGlass::Control,
-        true,
         blur,
     );
     if let Some(ic) = icon {
@@ -365,7 +321,6 @@ pub fn glass_button_opt(
             .hover_motion(SPRING_QUICK, SPRING_BASE)
             .motion(SPRING_QUICK),
         ExoGlass::Control,
-        true,
         blur,
     );
     if let Some(ic) = icon {

@@ -10,14 +10,14 @@ use crate::discord_search;
 use crate::discord_threads;
 use crate::state::{AppState, ContextMenuTarget};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_BASE, SPRING_FLIGHT, SPRING_QUICK, bad, fg_faint, fg_muted, glass_button, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_arrow_up, icon_bell_off,
-    icon_bookmark, icon_bookmark_filled, icon_check, icon_close, icon_copy, icon_download,
-    icon_edit, icon_external, icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin,
-    icon_plus, icon_reply, icon_search, icon_smile, icon_sparkles, icon_trash,
-    popover_transition_from, pressed_fill, primary_button, scrim_fill, subtle_fill, type_body,
-    type_control, type_label, type_page, type_section, type_small,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_BASE, SPRING_FLIGHT, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted,
+    glass_button, glass_button_opt, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline,
+    hex, hover_fill, icon_arrow_up, icon_bell_off, icon_bookmark, icon_bookmark_filled, icon_check,
+    icon_close, icon_copy, icon_download, icon_edit, icon_external, icon_hash, icon_more_horiz,
+    icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply, icon_search, icon_smile,
+    icon_sparkles, icon_trash, popover_transition_from, pressed_fill, primary_button, scrim_fill,
+    subtle_fill, type_body, type_control, type_label, type_page, type_section, type_small,
 };
 use exo_rpc::{DiscordAppComponent, DiscordAttachment, DiscordEmbed, DiscordMessage};
 use rune::{
@@ -1027,7 +1027,7 @@ fn render_link_cards(s: &AppState, msg: &DiscordMessage, is_mine: bool, scale: f
                                         .child(text(subtitle).font(type_label()).color(fg_muted())),
                                 )
                                 .child(if joined {
-                                    glass_button("dc-inv-go", "Joined", None)
+                                    glass_button_opt("dc-inv-go", "Joined", None, false)
                                         .key(format!("dc-inv-go-{code}"))
                                         .on_press(move |s: &mut AppState| {
                                             if let Some(ref g) = gid_c {
@@ -1127,7 +1127,7 @@ fn render_link_cards(s: &AppState, msg: &DiscordMessage, is_mine: bool, scale: f
                                         ),
                                 )
                                 .child(if claimed {
-                                    glass_button("dc-gift-done", "Claimed", None)
+                                    glass_button_opt("dc-gift-done", "Claimed", None, false)
                                         .key(format!("dc-gift-done-{code}"))
                                 } else {
                                     primary_button("dc-gift-claim", "Accept", None)
@@ -2495,38 +2495,39 @@ pub fn timeline_and_composer(
 
     if s.discord.chat.plus_menu_open {
         let has_text = !s.discord.chat.composer.text.trim().is_empty();
-        let mut pmenu = col()
-            .key("dc-plus-menu")
-            .role("menu")
-            .focus_group()
-            .pin(Some(14.0), None, None, Some(64.0))
-            .w(230.0)
-            .padding(6.0)
-            .gap(2.0)
-            .radius(RADIUS_CARD)
-            .fill(BG)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-            .transition(popover_transition_from(rune::Vec2::new(0.0, 1.0)))
-            .child(
-                row()
-                    .key("dc-pm-drop-hint")
-                    .w_full()
-                    .h(34.0)
-                    .px(10.0)
-                    .gap(8.0)
-                    .center_y()
-                    .radius(RADIUS_SMALL)
-                    .hover(hover_fill())
-                    .cursor(Cursor::Pointer)
-                    .hit()
-                    .press_on_down()
-                    .on_press(|s: &mut AppState| {
-                        s.discord.chat.plus_menu_open = false;
-                        s.notice = Some("Drop files onto the chat to upload".into());
-                    })
-                    .child(icon_paperclip(14.0, FG))
-                    .child(text("Upload a file").font(type_small()).color(FG)),
-            );
+        let mut pmenu = apply_glass(
+            col()
+                .key("dc-plus-menu")
+                .role("menu")
+                .focus_group()
+                .pin(Some(14.0), None, None, Some(64.0))
+                .w(230.0)
+                .padding(6.0)
+                .gap(2.0)
+                .radius(RADIUS_CARD)
+                .transition(popover_transition_from(rune::Vec2::new(0.0, 1.0))),
+            ExoGlass::Menu,
+        )
+        .child(
+            row()
+                .key("dc-pm-drop-hint")
+                .w_full()
+                .h(34.0)
+                .px(10.0)
+                .gap(8.0)
+                .center_y()
+                .radius(RADIUS_SMALL)
+                .hover(hover_fill())
+                .cursor(Cursor::Pointer)
+                .hit()
+                .press_on_down()
+                .on_press(|s: &mut AppState| {
+                    s.discord.chat.plus_menu_open = false;
+                    s.notice = Some("Drop files onto the chat to upload".into());
+                })
+                .child(icon_paperclip(14.0, FG))
+                .child(text("Upload a file").font(type_small()).color(FG)),
+        );
         if has_text {
             pmenu = pmenu.child(
                 row()
@@ -2656,36 +2657,36 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
     }
 }
 
-pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
+pub fn chat_overlay_layers(s: &AppState, scale: f32) -> Vec<El> {
     let mut out = Vec::new();
-    if let Some(el) = discord_threads::create_dm_overlay(s, blur, scale) {
+    if let Some(el) = discord_threads::create_dm_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::poll_creator_overlay(s, blur) {
+    if let Some(el) = discord_threads::poll_creator_overlay(s) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::invite_dialog_overlay(s, blur, scale) {
+    if let Some(el) = discord_threads::invite_dialog_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::forward_dialog_overlay(s, blur, scale) {
+    if let Some(el) = discord_threads::forward_dialog_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::new_thread_dialog_overlay(s, blur) {
+    if let Some(el) = discord_threads::new_thread_dialog_overlay(s) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::report_dialog_overlay(s, blur) {
+    if let Some(el) = discord_threads::report_dialog_overlay(s) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::modify_attachment_overlay(s, blur) {
+    if let Some(el) = discord_threads::modify_attachment_overlay(s) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::profile_dialog_overlay(s, blur, scale) {
+    if let Some(el) = discord_threads::profile_dialog_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_pickers::reactions_dialog_overlay(s, blur, scale) {
+    if let Some(el) = discord_pickers::reactions_dialog_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_pickers::app_modal_overlay(s, blur) {
+    if let Some(el) = discord_pickers::app_modal_overlay(s) {
         out.push(el);
     }
     if s.discord.chat.links.lightbox.is_open() && !s.discord.chat.links.lightbox_slides.is_empty() {
@@ -2738,45 +2739,49 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
                     let orig_save = active_orig.clone();
                     let orig_open = active_orig;
                     out.push(
-                        row()
-                            .key("dc-lightbox-actions")
-                            .pin(Some(20.0), None, None, Some(20.0))
-                            .padding(6.0)
-                            .gap(6.0)
-                            .center_y()
-                            .radius(RADIUS_PILL)
-                            .fill(BG)
-                            .border(1.0, glass_rim())
-                            .child(
-                                glass_button("dc-lb-copy", "Copy image", Some(icon_copy(12.0, FG)))
-                                    .on_press(move |st: &mut AppState| {
-                                        st.discord_image_action("copy", &orig_copy);
-                                    }),
+                        apply_glass(
+                            row()
+                                .key("dc-lightbox-actions")
+                                .pin(Some(20.0), None, None, Some(20.0))
+                                .padding(6.0)
+                                .gap(6.0)
+                                .center_y()
+                                .radius(RADIUS_PILL),
+                            ExoGlass::Menu,
+                        )
+                        .child(
+                            glass_button_opt(
+                                "dc-lb-copy",
+                                "Copy image",
+                                Some(icon_copy(12.0, FG)),
+                                false,
                             )
-                            .child(
-                                glass_button(
-                                    "dc-lb-save",
-                                    "Save image",
-                                    Some(icon_download(12.0, FG)),
-                                )
-                                .on_press(
-                                    move |st: &mut AppState| {
-                                        st.discord_image_action("save", &orig_save);
-                                    },
-                                ),
+                            .on_press(move |st: &mut AppState| {
+                                st.discord_image_action("copy", &orig_copy);
+                            }),
+                        )
+                        .child(
+                            glass_button_opt(
+                                "dc-lb-save",
+                                "Save image",
+                                Some(icon_download(12.0, FG)),
+                                false,
                             )
-                            .child(
-                                glass_button(
-                                    "dc-lb-open",
-                                    "Open original",
-                                    Some(icon_external(12.0, FG)),
-                                )
-                                .on_press(
-                                    move |st: &mut AppState| {
-                                        st.open_external_url(&orig_open);
-                                    },
-                                ),
-                            ),
+                            .on_press(move |st: &mut AppState| {
+                                st.discord_image_action("save", &orig_save);
+                            }),
+                        )
+                        .child(
+                            glass_button_opt(
+                                "dc-lb-open",
+                                "Open original",
+                                Some(icon_external(12.0, FG)),
+                                false,
+                            )
+                            .on_press(move |st: &mut AppState| {
+                                st.open_external_url(&orig_open);
+                            }),
+                        ),
                     );
                 }
             }
@@ -2797,37 +2802,39 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
                     .hit()
                     .on_press(|st: &mut AppState| st.close_discord_lightbox())
                     .child(
-                        col()
-                            .padding(20.0)
-                            .gap(12.0)
-                            .center()
-                            .radius(RADIUS_PANEL)
-                            .fill(BG)
-                            .border(1.0, glass_rim())
-                            .hit()
-                            .child(text("Loading image…").font(type_body()).color(FG))
-                            .child(
-                                row()
-                                    .gap(8.0)
-                                    .child(
-                                        glass_button(
-                                            "dc-lb-loading-open",
-                                            "Open original",
-                                            Some(icon_external(12.0, FG)),
-                                        )
-                                        .on_press(
-                                            move |st: &mut AppState| {
-                                                st.open_external_url(&orig_open);
-                                            },
-                                        ),
+                        apply_glass(
+                            col()
+                                .padding(20.0)
+                                .gap(12.0)
+                                .center()
+                                .radius(RADIUS_PANEL)
+                                .hit(),
+                            ExoGlass::Menu,
+                        )
+                        .child(text("Loading image…").font(type_body()).color(FG))
+                        .child(
+                            row()
+                                .gap(8.0)
+                                .child(
+                                    glass_button_opt(
+                                        "dc-lb-loading-open",
+                                        "Open original",
+                                        Some(icon_external(12.0, FG)),
+                                        false,
                                     )
-                                    .child(
-                                        glass_button("dc-lb-loading-close", "Close", None)
-                                            .on_press(|st: &mut AppState| {
-                                                st.close_discord_lightbox();
-                                            }),
+                                    .on_press(
+                                        move |st: &mut AppState| {
+                                            st.open_external_url(&orig_open);
+                                        },
                                     ),
-                            ),
+                                )
+                                .child(
+                                    glass_button_opt("dc-lb-loading-close", "Close", None, false)
+                                        .on_press(|st: &mut AppState| {
+                                            st.close_discord_lightbox();
+                                        }),
+                                ),
+                        ),
                     ),
             );
         }
@@ -2853,7 +2860,7 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
             .radius(RADIUS_CARD)
             .continuous_corners()
             .clip_rounded(RADIUS_CARD)
-            .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu, false))
+            .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu))
             .transition(popover_transition_from(rune::Vec2::new(0.0, 0.0)))
             .child(
                 row()

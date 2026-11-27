@@ -1365,7 +1365,7 @@ pub fn properties_card(s: &AppState, game: &Game) -> El {
     card.child(body)
 }
 
-pub fn dropdown_overlay(s: &AppState, which: OpenDropdown, blur: bool) -> Vec<El> {
+pub fn dropdown_overlay(s: &AppState, which: OpenDropdown) -> Vec<El> {
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
     let dismiss: SelectDismissCb<AppState> = Rc::new(|st: &mut AppState, _| {
         st.close_dropdown();
@@ -1390,7 +1390,6 @@ pub fn dropdown_overlay(s: &AppState, which: OpenDropdown, blur: bool) -> Vec<El
                 ],
                 width: 180.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(|st: &mut AppState, val: &str, _: &mut Tx| {
                     st.set_game_window_mode(val);
@@ -1420,7 +1419,6 @@ pub fn dropdown_overlay(s: &AppState, which: OpenDropdown, blur: bool) -> Vec<El
                 options,
                 width: 210.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(move |st: &mut AppState, val: &str, _: &mut Tx| {
                     if game_id.is_empty() || val == current {
@@ -1463,7 +1461,6 @@ pub fn dropdown_overlay(s: &AppState, which: OpenDropdown, blur: bool) -> Vec<El
                 ],
                 width: 160.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(move |st: &mut AppState, val: &str, _: &mut Tx| {
                     if !game_id.is_empty() {
@@ -1492,7 +1489,6 @@ pub fn dropdown_overlay(s: &AppState, which: OpenDropdown, blur: bool) -> Vec<El
                 ],
                 width: 180.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(move |st: &mut AppState, val: &str, _: &mut Tx| {
                     if !game_id.is_empty() {
@@ -1525,7 +1521,6 @@ pub fn dropdown_overlay(s: &AppState, which: OpenDropdown, blur: bool) -> Vec<El
                 options,
                 width: 220.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(move |st: &mut AppState, val: &str, _: &mut Tx| {
                     if game_id.is_empty() || val == current {
@@ -1576,7 +1571,6 @@ pub fn dropdown_overlay(s: &AppState, which: OpenDropdown, blur: bool) -> Vec<El
                 options,
                 width: 260.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(move |st: &mut AppState, val: &str, _: &mut Tx| {
                     if game_id.is_empty() || val == current {
@@ -1614,7 +1608,6 @@ pub fn dropdown_overlay(s: &AppState, which: OpenDropdown, blur: bool) -> Vec<El
                 ],
                 width: 260.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(move |st: &mut AppState, val: &str, _: &mut Tx| {
                     if game_id.is_empty() || val == current {
@@ -1651,7 +1644,6 @@ pub fn dropdown_overlay(s: &AppState, which: OpenDropdown, blur: bool) -> Vec<El
             ],
             width: 190.0,
             align: Align::End,
-            blur,
             gamepad_focus,
             on_select: Rc::new(move |st: &mut AppState, val: &str, _: &mut Tx| {
                 if !game_id.is_empty() {

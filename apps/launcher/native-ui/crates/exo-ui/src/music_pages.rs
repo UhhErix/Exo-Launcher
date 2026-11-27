@@ -7,12 +7,11 @@ use crate::music::{
 };
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, GAP, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
-    RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, bad, fg_faint, fg_muted,
-    filter_pill, glass_button, glass_control_fill, glass_panel, glass_rim, glass_rim_bottom,
-    glass_rim_top, good, hairline, hover_fill, icon_chevron_down, icon_close, icon_download,
-    icon_external, icon_more_horiz, icon_play, icon_search, pressed_fill, primary_button,
-    store_logo,
+    BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, bad, fg_faint, fg_muted, filter_pill, glass_button,
+    glass_button_opt, glass_control_fill, glass_panel, glass_rim, glass_rim_bottom, glass_rim_top,
+    good, hairline, hover_fill, icon_chevron_down, icon_close, icon_download, icon_external,
+    icon_more_horiz, icon_play, icon_search, pressed_fill, primary_button, scrim_fill, store_logo,
 };
 use exo_rpc::{
     ArtistAbout, Concert, PlayerCard, PlayerHeader, PlayerLink, PlayerSection, PlayerTrack,
@@ -2194,7 +2193,7 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
             render_art(s, &sheet.image_url, Some(140.0), RADIUS_CARD, false, scale)
         };
         form = form.child(row().w_full().gap(14.0).center_y().child(preview).child(
-            glass_button("music-sheet-pick-cover", "Choose picture", None).on_press_tx(
+            glass_button_opt("music-sheet-pick-cover", "Choose picture", None, false).on_press_tx(
                 |_: &mut AppState, tx| {
                     let opts =
                         FileDialogOptions::default().filter("Pictures", &["jpg", "jpeg", "png"]);
@@ -2309,7 +2308,7 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
         .justify_end()
         .gap(8.0)
         .child(
-            glass_button("music-sheet-cancel", "Cancel", None)
+            glass_button_opt("music-sheet-cancel", "Cancel", None, false)
                 .on_press(|s: &mut AppState| s.media.music_playlist_sheet = None),
         )
         .child(
@@ -2331,11 +2330,11 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
 
     el().key("music-playlist-sheet-backdrop")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.68))
+        .fill(scrim_fill())
         .center()
         .child(
-            glass_panel("music-playlist-sheet", GLASS_PANEL_SIGMA)
-                .w(440.0)
+            glass_panel("music-playlist-sheet", 440.0)
+                .transition(exo_kit::popover_transition())
                 .px(20.0)
                 .py(20.0)
                 .child(

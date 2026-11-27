@@ -9,7 +9,7 @@ use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_QUICK, TRANSPARENT, amoled_card, bad, exo_mark, fg_faint, fg_muted, glass_control_fill,
-    glass_panel_opt, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chat,
+    glass_panel, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chat,
     icon_check, icon_chevron_left, icon_chevron_right, icon_close, icon_gamepad, icon_headphones,
     icon_keyboard, icon_library, icon_microphone, icon_mouse, icon_music, icon_search,
     icon_settings, icon_shield, icon_sparkles, icon_store, modal_card_transition, pressed_fill,
@@ -1053,7 +1053,7 @@ fn welcome(s: &AppState, scale: f32) -> El {
                 .child(text(dev.name.clone()).font(type_small()).color(FG).wrap()),
         );
     }
-    let found = glass_panel_opt("setup-found", 470.0, true)
+    let found = glass_panel("setup-found", 470.0)
         .pin(None, None, Some(24.0), Some(24.0))
         .padding(20.0)
         .gap(14.0)
@@ -1806,7 +1806,7 @@ fn pc_defaults(s: &AppState) -> El {
     }
     let count = picks.len();
     let total = tuning_items.len();
-    let panel = glass_panel_opt("setup-picks", 560.0, true)
+    let panel = glass_panel("setup-picks", 560.0)
         .padding(22.0)
         .gap(12.0)
         .child(
@@ -1963,7 +1963,7 @@ fn tour_stage(s: &AppState, scale: f32) -> El {
                 .child(grid),
         );
     let first = TOUR_STEPS[0];
-    let card = glass_panel_opt("setup-tour-coach", 408.0, true)
+    let card = glass_panel("setup-tour-coach", 408.0)
         .pin(None, Some(20.0), Some(24.0), None)
         .padding(20.0)
         .gap(14.0)
@@ -2084,7 +2084,7 @@ fn done(s: &AppState, scale: f32) -> El {
                 .child(text(sub).font(type_small()).color(fg_muted()).wrap()),
         );
     }
-    let facts = glass_panel_opt("setup-done-facts", 470.0, true)
+    let facts = glass_panel("setup-done-facts", 470.0)
         .padding(20.0)
         .gap(18.0)
         .child(
@@ -2362,7 +2362,7 @@ fn tour_step_icon(icon: TourIcon) -> El {
     }
 }
 
-pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn tour_layers(s: &AppState) -> Vec<El> {
     let Some(raw_step) = s.setup.beat else {
         return Vec::new();
     };
@@ -2571,7 +2571,6 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
         .child(skip_btn)
         .child(actions);
 
-    let _ = blur;
     let mut card = col()
         .key("exo-tour-card")
         .w(scaled(408.0))
@@ -2582,7 +2581,7 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel, false))
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel))
         .padding(20.0)
         .gap(14.0)
         .transition(modal_card_transition())
@@ -2609,7 +2608,7 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
 
 pub fn return_bar(s: &AppState) -> El {
     let stage = s.setup.return_to.unwrap_or(2).min(STAGES - 1);
-    glass_panel_opt("setup-return", 300.0, true)
+    glass_panel("setup-return", 300.0)
         .pin(None, Some(76.0), Some(24.0), None)
         .h(48.0)
         .px(16.0)

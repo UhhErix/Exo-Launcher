@@ -23,10 +23,10 @@ Totals recomputed from the rows below on 2026-11-26; the prose after this table 
 | Exo AI / PC | 24 | 0 | 0 | 0 | 24 |
 | Apps | 12 | 0 | 0 | 0 | 12 |
 | Devices | 11 | 0 | 0 | 0 | 11 |
-| Captures | 10 | 0 | 0 | 0 | 10 |
+| Captures | 8 | 0 | 0 | 0 | 8 |
 | Settings | 23 | 0 | 0 | 0 | 23 |
 | Onboarding & Account | 10 | 0 | 0 | 0 | 10 |
-| **Overall** | **241** | **0** | **0** | **0** | **241** |
+| **Overall** | **239** | **0** | **0** | **0** | **239** |
 
 RPC: React calls 345 of 345 contract methods; native references 134. 211 methods React calls are never called natively. Events: React handles 77 of 77; native handles 35; 42 React-handled events are dropped natively.
 
@@ -306,7 +306,7 @@ Totals: DONE 11, PARTIAL 0, MISSING 0, BROKEN 0 (of 11).
 
 ## Captures
 
-Totals: DONE 10, PARTIAL 0, MISSING 0, BROKEN 0 (of 10).
+Totals: DONE 8, PARTIAL 0, MISSING 0, BROKEN 0 (of 8). Notes is not counted: the owner removed it from the native UI on 2026-11-26 (classic keeps `NotesView.tsx`), so it is not a parity target.
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
@@ -315,8 +315,6 @@ Totals: DONE 10, PARTIAL 0, MISSING 0, BROKEN 0 (of 10).
 | Send to (Discord, share) | components/captures/CapturesSheet.tsx:341 | exo-ui/src/captures.rs:1549 | DONE | rpc: capture.send, discord.home, discord.channels. Share menu (Send to Discord dialog with multi-target DM/channel picker + optional message, Copy picture/file). |
 | Clip editor (trim, play, export) | components/captures/ClipEditor.tsx:180 | exo-ui/src/captures.rs:1744 | DONE | rpc: capture.edit, capture.item. Draggable TrimBar, 0.5x/1x/2x speed, Loop, Play/Audio transport, Trim save + Export presets (Discord <10MB, 16:9, 9:16). |
 | Snip editor (mark up, crop, copy text OCR, save) | components/captures/SnipEditor.tsx:167 | exo-ui/src/snip_editor.rs:567 | DONE | rpc: capture.saveImage, capture.text. Built on Rune ImageCanvas (Crop Free/16:9/9:16/Square, Arrow/Box/Highlight/Freehand, cell-average RGBA Blur, OCR Copy text via Tx::copy, Undo/Redo/Revert/Save PNG). |
-| Notes buttons (capture menu + sheet header) | components/captures/CapturesSheet.tsx:4 | exo-ui/src/captures.rs:1330 | DONE | Both capture popover (New note, Notes, Capture settings) and sheet header Notes button open NotesView directly. |
-| Notes (Markdown editor, files, session, photo drop, spellcheck) | components/captures/NotesView.tsx:351 | exo-ui/src/notes.rs:1833 | DONE | rpc: notes.list/read/save/saveAs/act/open/photo/session/spell/textFiles/pending + notes.open event. Tabs, inline rename, Markdown toolbar & live preview with clickable checklists, Find & Replace, photo drag-drop (<=25MB), spellcheck, 450ms autosave, palette commands, Ctrl shortcuts. |
 | Capture settings (replay length, quality, save-to, storage cap, auto-delete, voice chat) | components/captures/CaptureSettings.tsx:4 | exo-ui/src/captures.rs:2623 | DONE | rpc: capture.settings, shell.pickFolder. Instant replay, Replay length, Frame rate, Quality slider, Record voice chat, live hotkey recorder + conflict warnings, Print Screen snips, Save to Open/Change, Max storage, Auto-delete after. |
 | Highlight reel ("Making your reel") | components/captures/CapturesSheet.tsx:8 | exo-ui/src/captures.rs:2923 | DONE | rpc: capture.reel, capture.reelCancel + capture.reel event. Selection & game-chip Make reel N, progress/waiting/canWait banner with Wait & Cancel. |
 | capture.shrunk event (compaction) | components/captures/CapturesSheet.tsx:298 | exo-ui/src/captures.rs:375 | DONE | Typed HostEvent::CaptureShrunk registered via AppState::register_event in events.rs; updates item size/URL and viewer status in place. |

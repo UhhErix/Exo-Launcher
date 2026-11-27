@@ -8,7 +8,7 @@ use exo_kit::{
 use rune::{Align, El, Side, Tx, el, row, text};
 use std::rc::Rc;
 
-pub fn select_bar_overlay(s: &AppState, blur: bool) -> Vec<El> {
+pub fn select_bar_overlay(s: &AppState) -> Vec<El> {
     if !s.lib.selecting || !s.library_all_games || s.open_game_id.is_some() {
         return Vec::new();
     }
@@ -56,7 +56,6 @@ pub fn select_bar_overlay(s: &AppState, blur: bool) -> Vec<El> {
         hide_btn = hide_btn.opacity(0.42);
     }
 
-    let _ = blur;
     let mut bar = apply_glass(
         row()
             .key("library-select-bar")
@@ -76,7 +75,6 @@ pub fn select_bar_overlay(s: &AppState, blur: bool) -> Vec<El> {
             )
             .child(hide_btn),
         ExoGlass::Bar,
-        false,
     );
 
     if !hidden_view {
@@ -195,8 +193,6 @@ pub fn select_bar_overlay(s: &AppState, blur: bool) -> Vec<El> {
                 gap: 8.0,
             },
             width: 220.0,
-            blur,
-            submenu_blur: false,
             open_submenu: None,
             return_focus: Some("select-bar-folder".into()),
             gamepad_focus: s.input_mode == InputMode::Gamepad,

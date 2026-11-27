@@ -1,8 +1,8 @@
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, RADIUS_CARD, fg_faint, fg_muted, float_line, glass_button, glass_icon_circle,
-    glass_rim_bottom, glass_rim_top, icon_close, icon_external, icon_refresh,
-    modal_card_transition, modal_scrim_transition, scrim_fill, type_body, type_section, type_small,
+    BG, ExoGlass, FG, RADIUS_CARD, apply_glass, fg_faint, fg_muted, float_line, glass_button_opt,
+    glass_icon_circle_opt, icon_close, icon_external, icon_refresh, modal_card_transition,
+    modal_scrim_transition, scrim_fill, type_body, type_section, type_small,
 };
 #[cfg(not(windows))]
 use rune::NativeSurface;
@@ -602,7 +602,7 @@ impl AppState {
     }
 }
 
-pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn overlay_layers(s: &AppState) -> Vec<El> {
     let Some(ref active) = s.web_host.active else {
         return Vec::new();
     };
@@ -641,19 +641,26 @@ pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
                 .child(text(status).font(type_small()).color(fg_muted())),
         )
         .child(
-            glass_icon_circle("web-host-reload", "Reload", 30.0, icon_refresh(14.0, FG))
-                .on_press(|s: &mut AppState| s.web_host.reload()),
+            glass_icon_circle_opt(
+                "web-host-reload",
+                "Reload",
+                30.0,
+                icon_refresh(14.0, FG),
+                false,
+            )
+            .on_press(|s: &mut AppState| s.web_host.reload()),
         )
         .child(
-            glass_button(
+            glass_button_opt(
                 "web-host-external",
                 "Open in browser",
                 Some(icon_external(13.0, FG)),
+                false,
             )
             .on_press(move |s: &mut AppState| s.store_open_external_url(open_url.clone())),
         )
         .child(
-            glass_icon_circle("web-host-close", "Close", 30.0, icon_close(14.0, FG))
+            glass_icon_circle_opt("web-host-close", "Close", 30.0, icon_close(14.0, FG), false)
                 .on_press(|s: &mut AppState| s.close_web_surface()),
         );
 
@@ -684,22 +691,19 @@ pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
             });
     }
 
-    let mut card = col()
-        .key("web-host-card")
-        .pin(Some(48.0), Some(68.0), Some(48.0), Some(32.0))
-        .radius(RADIUS_CARD)
-        .continuous_corners()
-        .clip_rounded(RADIUS_CARD)
-        .fill(BG.alpha(0.94))
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .transition(modal_card_transition())
-        .child(header)
-        .child(el().w_full().h(1.0).fill(float_line()))
-        .child(viewport);
-
-    if blur {
-        card = card.backdrop_blur(24.0);
-    }
+    let card = apply_glass(
+        col()
+            .key("web-host-card")
+            .pin(Some(48.0), Some(68.0), Some(48.0), Some(32.0))
+            .radius(RADIUS_CARD)
+            .continuous_corners()
+            .clip_rounded(RADIUS_CARD)
+            .transition(modal_card_transition()),
+        ExoGlass::Sheet,
+    )
+    .child(header)
+    .child(el().w_full().h(1.0).fill(float_line()))
+    .child(viewport);
 
     if let Some(ref err) = s.web_host.error {
         let banner = row()

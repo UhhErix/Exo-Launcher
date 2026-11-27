@@ -2,10 +2,10 @@ use crate::events::{EventRegistry, HostEventKind};
 use crate::state::{AppState, Room};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
-    SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_muted, glass_panel_opt, good, hairline,
-    hover_fill, icon_headphones, icon_headphones_off, icon_mic, icon_mic_off, icon_phone,
-    icon_phone_off, popover_transition_from, pressed_fill, selected_fill, slider_track, type_body,
-    type_section, type_small,
+    SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_muted, good, hairline, hover_fill,
+    icon_headphones, icon_headphones_off, icon_mic, icon_mic_off, icon_phone, icon_phone_off,
+    popover_transition_from, pressed_fill, selected_fill, slider_track, type_body, type_section,
+    type_small,
 };
 use exo_rpc::{DiscordChannels, DiscordHome, DiscordVoiceMember, HostEvent};
 use rune::{Cursor, El, Phase, SpringPair, SurfaceFit, Transition, col, el, row, text};
@@ -320,7 +320,7 @@ fn island_btn(
         .child(icon)
 }
 
-pub fn capsule(s: &AppState, scale: f32, blur: bool) -> Option<El> {
+pub fn capsule(s: &AppState, scale: f32) -> Option<El> {
     if let Some(caller) = s.island.ringing_caller.as_ref() {
         let mut ring = row()
             .key("exo-island-ring")
@@ -357,8 +357,7 @@ pub fn capsule(s: &AppState, scale: f32, blur: bool) -> Option<El> {
                 true,
                 |s| s.island_decline_ring(),
             ));
-        let _ = blur;
-        ring = apply_glass(ring, ExoGlass::Tinted(good().alpha(0.32)), false);
+        ring = apply_glass(ring, ExoGlass::Tinted(good().alpha(0.32)));
         return Some(ring);
     }
 
@@ -571,12 +570,11 @@ pub fn capsule(s: &AppState, scale: f32, blur: bool) -> Option<El> {
             |s| s.leave_discord_voice(),
         ));
 
-    let _ = blur;
-    cap = apply_glass(cap, ExoGlass::Bar, false);
+    cap = apply_glass(cap, ExoGlass::Bar);
     Some(cap)
 }
 
-pub fn person_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn person_menu_layers(s: &AppState) -> Vec<El> {
     let Some(ref menu) = s.island.person_menu else {
         return Vec::new();
     };
@@ -680,15 +678,23 @@ pub fn person_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
         menu.x.round() as i32,
         menu.y.round() as i32
     );
-    let card = glass_panel_opt("island-person-menu", 204.0, blur)
-        .role("menu")
-        .label(menu.name.clone())
-        .focus_group()
-        .radius(RADIUS_CARD)
-        .clip_rounded(RADIUS_CARD)
-        .anchored_fit(pt_key.clone(), rune::Side::Bottom, rune::Align::Start, 4.0)
-        .transition(popover_transition_from(rune::Vec2::new(0.0, 0.0)))
-        .child(body);
+    let card = apply_glass(
+        col()
+            .key("island-person-menu")
+            .w(204.0)
+            .radius(RADIUS_CARD)
+            .continuous_corners()
+            .clip_rounded(RADIUS_CARD)
+            .hit()
+            .cursor(Cursor::Default),
+        ExoGlass::Menu,
+    )
+    .role("menu")
+    .label(menu.name.clone())
+    .focus_group()
+    .anchored_fit(pt_key.clone(), rune::Side::Bottom, rune::Align::Start, 4.0)
+    .transition(popover_transition_from(rune::Vec2::new(0.0, 0.0)))
+    .child(body);
 
     let scrim = el()
         .key("island-person-scrim")
@@ -721,7 +727,7 @@ mod tests {
     fn island_shows_outside_discord_during_call_and_hides_in_discord() {
         let mut s = AppState::default();
         s.room = Room::Library;
-        assert!(capsule(&s, 1.0, true).is_none());
+        assert!(capsule(&s, 1.0).is_none());
 
         s.apply_host_event(HostEvent::DiscordVoice(DiscordVoice {
             state: "connected".into(),
@@ -732,10 +738,10 @@ mod tests {
             ..Default::default()
         }));
         assert!(s.island_in_call());
-        assert!(capsule(&s, 1.0, true).is_some());
+        assert!(capsule(&s, 1.0).is_some());
 
         s.room = Room::Discord;
-        assert!(capsule(&s, 1.0, true).is_none());
+        assert!(capsule(&s, 1.0).is_none());
     }
 
     #[test]
@@ -746,13 +752,13 @@ mod tests {
             data: json!({ "channelId": "dm-42", "ringing": true, "caller": "Sam" }),
         });
         assert_eq!(s.island.ringing_caller.as_deref(), Some("Sam"));
-        assert!(capsule(&s, 1.0, true).is_some());
+        assert!(capsule(&s, 1.0).is_some());
 
         s.apply_host_event(HostEvent::Raw {
             event: "discord.call".into(),
             data: json!({ "channelId": "dm-42", "ringing": false }),
         });
         assert!(s.island.ringing_channel_id.is_none());
-        assert!(capsule(&s, 1.0, true).is_none());
+        assert!(capsule(&s, 1.0).is_none());
     }
 }

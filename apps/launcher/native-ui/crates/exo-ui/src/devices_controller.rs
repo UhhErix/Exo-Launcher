@@ -2345,7 +2345,7 @@ fn calibrate_dialog_overlay(s: &AppState, card: &PeripheralCard, edge: bool) -> 
         .padding(24.0)
         .gap(16.0)
         .radius(RADIUS_SHEET)
-        .liquid_glass(exo_glass(ExoGlass::Sheet, false))
+        .liquid_glass(exo_glass(ExoGlass::Sheet))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .child(text(title).font(type_title()).color(FG))
@@ -2471,7 +2471,7 @@ fn profile_editor_overlay(s: &AppState) -> Option<El> {
             .padding(24.0)
             .gap(14.0)
             .radius(RADIUS_SHEET)
-            .liquid_glass(exo_glass(ExoGlass::Sheet, false))
+            .liquid_glass(exo_glass(ExoGlass::Sheet))
             .motion(SPRING_BASE)
             .child(
                 text(format!(
@@ -2645,7 +2645,7 @@ fn profile_editor_overlay(s: &AppState) -> Option<El> {
         .padding(24.0)
         .gap(14.0)
         .radius(RADIUS_SHEET)
-        .liquid_glass(exo_glass(ExoGlass::Sheet, false))
+        .liquid_glass(exo_glass(ExoGlass::Sheet))
         .motion(SPRING_BASE)
         .child(
             text(if ed.is_new {

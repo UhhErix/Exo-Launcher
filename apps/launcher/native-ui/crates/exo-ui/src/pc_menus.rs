@@ -5,12 +5,11 @@ use crate::pc_state::{
 use crate::state::{AppState, Room};
 use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_MOVE, SPRING_QUICK, bad, fg_muted, float_line, glass_panel_opt, glass_rim_bottom,
-    glass_rim_top, good, hover_fill, icon_check, icon_chevron_down, icon_close, icon_cpu,
-    icon_hard_drive, icon_monitor, modal_card_transition, modal_scrim_transition,
-    popover_transition_from, pressed_fill, progress_bar, scaled, slider_track, status_badge,
-    subtle_fill, track_fill, type_body, type_control, type_page, type_section, type_small,
-    type_title, warn,
+    SPRING_MOVE, SPRING_QUICK, bad, fg_muted, float_line, glass_panel, good, hover_fill,
+    icon_check, icon_chevron_down, icon_close, icon_cpu, icon_hard_drive, icon_monitor,
+    modal_card_transition, modal_scrim_transition, popover_transition_from, pressed_fill,
+    progress_bar, scaled, slider_track, status_badge, subtle_fill, track_fill, type_body,
+    type_control, type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{AutopilotLive, AutopilotReport, DriverProgress, DriverState, OutputColor};
 use rune::{Cursor, El, Key, Phase, ScrollSpec, TextStyle, col, el, row, text};
@@ -1990,7 +1989,7 @@ fn board_menu_body(s: &AppState) -> El {
     body
 }
 
-fn auto_tune_cinema_layer(s: &AppState, blur: bool) -> Option<El> {
+fn auto_tune_cinema_layer(s: &AppState) -> Option<El> {
     let running = s.pc.auto_tune_running;
     let finished = s.pc.auto_tune_finished;
     if !running && !finished {
@@ -2199,7 +2198,7 @@ fn auto_tune_cinema_layer(s: &AppState, blur: bool) -> Option<El> {
         card_body = card_body.child(foot);
     }
 
-    let card = glass_panel_opt("exo-at-cinema-card", 620.0, blur)
+    let card = glass_panel("exo-at-cinema-card", 620.0)
         .role("alertdialog")
         .label(headline)
         .transition(modal_card_transition())
@@ -2230,7 +2229,7 @@ fn auto_tune_cinema_layer(s: &AppState, blur: bool) -> Option<El> {
     Some(scrim)
 }
 
-fn driver_consent_layer(s: &AppState, blur: bool) -> Option<El> {
+fn driver_consent_layer(s: &AppState) -> Option<El> {
     if !s.pc.gpu_driver_consent_open {
         return None;
     }
@@ -2369,7 +2368,7 @@ fn driver_consent_layer(s: &AppState, blur: bool) -> Option<El> {
             ),
     );
 
-    let card = glass_panel_opt("gpu-driver-consent-dialog", 540.0, blur)
+    let card = glass_panel("gpu-driver-consent-dialog", 540.0)
         .role("dialog")
         .label(title)
         .transition(modal_card_transition())
@@ -2397,7 +2396,7 @@ fn driver_consent_layer(s: &AppState, blur: bool) -> Option<El> {
     )
 }
 
-fn driver_install_overlay_layer(s: &AppState, blur: bool) -> Option<El> {
+fn driver_install_overlay_layer(s: &AppState) -> Option<El> {
     let install = s.pc.driver_install_overlay.as_ref()?;
     let title = match (install.name.as_deref(), install.version.as_deref()) {
         (Some(n), Some(v)) => format!("{n} {v}"),
@@ -2434,7 +2433,7 @@ fn driver_install_overlay_layer(s: &AppState, blur: bool) -> Option<El> {
             .unwrap_or_else(|| "Driver update did not finish.".into()),
         other => other.into(),
     };
-    let mut panel = glass_panel_opt("driver-install-overlay", 480.0, blur)
+    let mut panel = glass_panel("driver-install-overlay", 480.0)
         .role("dialog")
         .label(title.clone())
         .px(24.0)
@@ -2487,7 +2486,7 @@ fn driver_install_overlay_layer(s: &AppState, blur: bool) -> Option<El> {
     )
 }
 
-pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub(crate) fn part_menu_layers(s: &AppState) -> Vec<El> {
     if s.room != Room::ExoAi {
         return Vec::new();
     }
@@ -2549,24 +2548,15 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
             })
             .clip_fade_linear(0.0, 0.0, 0.0, 24.0)
             .child(body_inner);
-        let mut card = col()
+        let card = col()
             .key("pc-part-menu")
             .w(580.0)
             .radius(RADIUS_PANEL)
             .continuous_corners()
             .clip_rounded(RADIUS_PANEL)
             .hit()
-            .cursor(Cursor::Default);
-        if blur {
-            card = card.liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false));
-        } else {
-            card = card.fill(exo_kit::surface_elevated()).border_gradient(
-                1.0,
-                glass_rim_top(),
-                glass_rim_bottom(),
-            );
-        }
-        let card = card
+            .cursor(Cursor::Default)
+            .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
             .role("dialog")
             .label(title)
             .transition(popover_transition_from(rune::Vec2::new(0.5, 1.0)))
@@ -2606,13 +2596,13 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
         );
     }
 
-    if let Some(cine) = auto_tune_cinema_layer(s, blur) {
+    if let Some(cine) = auto_tune_cinema_layer(s) {
         layers.push(cine);
     }
-    if let Some(consent) = driver_consent_layer(s, blur) {
+    if let Some(consent) = driver_consent_layer(s) {
         layers.push(consent);
     }
-    if let Some(overlay) = driver_install_overlay_layer(s, blur) {
+    if let Some(overlay) = driver_install_overlay_layer(s) {
         layers.push(overlay);
     }
 

@@ -3,10 +3,10 @@ use crate::store_page::{HERO_ROTATE_SECS, find_owned_game};
 use exo_kit::{
     BG, ExoGlass, FG, PAGE_GUTTER, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted,
-    glass_button, glass_control_fill, glass_icon_circle_opt, glass_rim_bottom, glass_rim_top, good,
-    hover_fill, icon_arrow_right, icon_bookmark_filled, icon_check, icon_chevron_left,
-    icon_chevron_right, icon_close, icon_refresh, icon_search, pressed_fill, scaled, type_body,
-    type_control, type_section, type_small, type_title,
+    glass_button, glass_control_fill, glass_icon_circle_opt, glass_plate_fill, glass_rim_bottom,
+    glass_rim_top, good, hover_fill, icon_arrow_right, icon_bookmark_filled, icon_check,
+    icon_chevron_left, icon_chevron_right, icon_close, icon_refresh, icon_search, pressed_fill,
+    scaled, type_body, type_control, type_section, type_small, type_title,
 };
 use exo_rpc::{StoreArt, StoreTile, types::format_cents};
 use rune::{
@@ -337,7 +337,7 @@ fn store_tile_card_sized(
                 .size(28.0, 28.0)
                 .radius(RADIUS_PILL)
                 .center()
-                .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+                .fill(glass_plate_fill())
                 .child(icon_bookmark_filled(14.0, FG)),
         );
     }
@@ -934,7 +934,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                 el().px(12.0)
                     .py(4.0)
                     .radius(RADIUS_PILL)
-                    .liquid_glass(exo_kit::exo_glass(ExoGlass::ClearMedia, false))
+                    .liquid_glass(exo_kit::exo_glass(ExoGlass::ClearMedia))
                     .child(
                         text(hero_when(hero.when.as_deref()))
                             .font(type_small())
@@ -950,7 +950,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                     .gap(6.0)
                     .center_y()
                     .radius(RADIUS_PILL)
-                    .liquid_glass(exo_kit::exo_glass(ExoGlass::ClearMedia, false))
+                    .liquid_glass(exo_kit::exo_glass(ExoGlass::ClearMedia))
                     .child(icon_bookmark_filled(12.0, FG))
                     .child(text("On your wishlist").font(type_small()).color(FG)),
             );
@@ -992,7 +992,7 @@ fn hero_section(s: &AppState, hero_items: &[StoreTile], scale: f32) -> El {
                 .gap(8.0)
                 .center_y()
                 .radius(RADIUS_PILL)
-                .liquid_glass(exo_kit::exo_glass(ExoGlass::ClearMedia, false))
+                .liquid_glass(exo_kit::exo_glass(ExoGlass::ClearMedia))
                 .child(price_el),
         );
     }
@@ -1226,7 +1226,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control))
         .child(icon_search(14.0, fg_muted()))
         .child(search_input);
 
@@ -1253,7 +1253,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .py(2.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control))
         .child(
             tab_pill("store-tab-discover", "Discover", active_home, gamepad).on_press(
                 |s: &mut AppState| {
@@ -1406,7 +1406,7 @@ mod tests {
     use crate::shell;
     use crate::state::{AppState, Room};
     use rune::motion_gate::Run;
-    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::render::KIND_LIQUID_GLASS;
     use rune::{Env, Runtime};
 
     #[test]
@@ -1420,7 +1420,7 @@ mod tests {
     }
 
     #[test]
-    fn store_hero_alignment_and_blur_cap() {
+    fn store_hero_alignment_and_glass_bound() {
         let mut state = AppState::with_demo_games();
         state.switch_room(Room::Store);
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
@@ -1440,15 +1440,14 @@ mod tests {
         rt.settle_all();
         rt.frame(2.0 / 60.0);
 
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "Store exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
-            exo_kit::EXO_MAX_BACKDROP_BLURS
+            glass_draws <= 6,
+            "Store: {glass_draws} Liquid Glass draws, bound 6"
         );
 
         let (hero_rect, _) = rt

@@ -129,7 +129,6 @@ fn game_store_pill(
                 .radius(RADIUS_PILL)
                 .children(pills),
             ExoGlass::ClearMedia,
-            false,
         ));
     }
 
@@ -151,7 +150,6 @@ fn game_store_pill(
                     .color(fg_muted()),
             ),
         ExoGlass::ClearMedia,
-        false,
     ))
 }
 
@@ -511,7 +509,6 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
             .child(icon_chevron_left(16.0, FG))
             .child(text("Library").font(type_control()).color(FG)),
         ExoGlass::ClearMedia,
-        true,
     );
     if gamepad_focus {
         back_btn = back_btn.focus_ring(2.0, 3.0, FG);
@@ -689,8 +686,7 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
                     .radius(RADIUS_PANEL)
                     .continuous_corners()
                     .clip_rounded(RADIUS_PANEL)
-                    .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Control, false))
-                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                    .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Control))
                     .children(stat_items),
             );
         }

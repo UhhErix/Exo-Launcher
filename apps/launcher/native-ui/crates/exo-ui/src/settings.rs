@@ -1111,11 +1111,11 @@ mod tests {
     use crate::shell;
     use crate::state::{AppState, Room};
     use rune::motion_gate::Run;
-    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::render::KIND_LIQUID_GLASS;
     use rune::{Env, Runtime};
 
     #[test]
-    fn settings_gridlines_gutter_and_blur_cap() {
+    fn settings_gridlines_gutter_and_glass_bound() {
         let mut rt = Runtime::new(
             AppState::default(),
             shell::view,
@@ -1127,14 +1127,14 @@ mod tests {
         rt.settle_all();
         rt.frame(1.0 / 60.0);
 
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= 4,
-            "Settings exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+            glass_draws <= 3,
+            "Settings: {glass_draws} Liquid Glass draws, bound 3"
         );
 
         let (shell_rect, _) = rt.presented("settings-shell").expect("settings-shell");

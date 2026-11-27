@@ -4172,15 +4172,14 @@ mod tests {
         rt.update(|s, _| s.switch_room(Room::ExoAi));
         rt.frame(2.0 / 60.0);
         assert_eq!(rt.state.pc.pc_tab, pc_state::PcTab::ExoAi);
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "PC room exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
-            exo_kit::EXO_MAX_BACKDROP_BLURS
+            glass_draws <= 3,
+            "Exo AI room: {glass_draws} Liquid Glass draws, bound 3"
         );
 
         let (sx, sy) = rt.find("pc-tab-storage").expect("Storage button");
@@ -4405,15 +4404,14 @@ mod tests {
         rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.frame(0.0);
         assert!(rt.find("music-mini-player").is_some());
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "mini-player exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
-            exo_kit::EXO_MAX_BACKDROP_BLURS
+            glass_draws <= 9,
+            "mini-player: {glass_draws} Liquid Glass draws, bound 9"
         );
 
         let (mx, my) = rt.find("mini-open-music").expect("Mini player open Music");
@@ -4457,12 +4455,15 @@ mod tests {
         rt.frame(0.0);
         assert_eq!(rt.state.room, Room::Discord);
         assert_eq!(rt.state.discord.place, discord_state::DiscordPlace::Home);
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
-        assert!(blurs <= 4, "Discord exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            glass_draws <= 3,
+            "Discord home: {glass_draws} Liquid Glass draws, bound 3"
+        );
 
         let (mx, my) = rt.find("dc-dm-dm-ada").expect("DM row");
         rt.pointer_down(mx, my);
@@ -4535,14 +4536,14 @@ mod tests {
         });
         rt.frame(0.0);
         assert!(rt.find("dc-composer").is_some());
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= 4,
-            "Discord chat exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+            glass_draws <= 3,
+            "Discord chat: {glass_draws} Liquid Glass draws, bound 3"
         );
 
         let before_count = rt
@@ -4609,15 +4610,14 @@ mod tests {
         rt.frame(0.0);
         assert!(rt.find("dc-voice-stage").is_some());
         assert!(rt.find("dc-stream-theater").is_some());
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "Discord voice exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
-            exo_kit::EXO_MAX_BACKDROP_BLURS
+            glass_draws <= 7,
+            "Discord voice: {glass_draws} Liquid Glass draws, bound 7"
         );
 
         let (gx, gy) = rt.find("dc-dock-share").expect("Share screen button");
@@ -4871,17 +4871,14 @@ mod tests {
             },
             None,
         );
-        let settings_blur_rects: Vec<[f32; 4]> = rt_settings
+        let glass_draws = rt_settings
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
-            .map(|i| i.rect)
-            .collect();
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
+            .count();
         assert!(
-            settings_blur_rects.len() <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "void-top Settings room emitted {} backdrop blurs (cap {}): {settings_blur_rects:?}",
-            settings_blur_rects.len(),
-            exo_kit::EXO_MAX_BACKDROP_BLURS
+            glass_draws <= 3,
+            "void-top Settings room: {glass_draws} Liquid Glass draws, bound 3"
         );
     }
 
@@ -5022,7 +5019,7 @@ mod tests {
     }
 
     #[test]
-    fn notice_stack_respects_blur_budget_with_mini_player_and_music() {
+    fn notice_stack_respects_glass_bound_with_mini_player_and_music() {
         for (label, setup) in [
             (
                 "library+mini+3-toasts",
@@ -5060,15 +5057,14 @@ mod tests {
             rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
             rt.poll = Some(poll_state);
             rt.frame(0.0);
-            let blur_count = rt
+            let glass_draws = rt
                 .instances
                 .iter()
-                .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+                .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
                 .count();
             assert!(
-                blur_count <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-                "{label}: emitted {blur_count} backdrop blurs (cap {})",
-                exo_kit::EXO_MAX_BACKDROP_BLURS
+                glass_draws <= 11,
+                "{label}: {glass_draws} Liquid Glass draws, bound 11"
             );
         }
     }
@@ -6143,14 +6139,14 @@ mod motion_audit {
             -4
         );
 
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == rune::render::KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == rune::render::KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= 4,
-            "blur cap exceeded on native mouse view: {blurs}"
+            glass_draws <= 3,
+            "native mouse view: {glass_draws} Liquid Glass draws, bound 3"
         );
 
         let (bx, by) = rt.find("dev-back").expect("back button");

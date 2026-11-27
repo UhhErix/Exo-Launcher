@@ -360,7 +360,7 @@ fn discord_audio_quick_entries(s: &AppState, input: bool) -> Vec<MenuEntry<AppSt
     items
 }
 
-pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec<El> {
+pub fn context_menu_overlay(s: &AppState) -> Vec<El> {
     let Some(ref cm) = s.context_menu else {
         return Vec::new();
     };
@@ -2109,8 +2109,6 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
         id: menu_id,
         anchor,
         width,
-        blur,
-        submenu_blur,
         open_submenu: cm.open_submenu,
         return_focus: return_focus.clone(),
         gamepad_focus,
@@ -2129,7 +2127,7 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
     }
 }
 
-pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
+pub fn library_more_overlay(s: &AppState) -> Vec<El> {
     if !s.library_more_open {
         return Vec::new();
     }
@@ -2184,8 +2182,6 @@ pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
                 gap: 8.0,
             },
             width: 240.0,
-            blur,
-            submenu_blur: false,
             open_submenu: None,
             return_focus: Some(anchor_key.into()),
             gamepad_focus,
@@ -2198,7 +2194,7 @@ pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
     )
 }
 
-pub fn library_add_overlay(s: &AppState, blur: bool) -> Vec<El> {
+pub fn library_add_overlay(s: &AppState) -> Vec<El> {
     if !s.library_add_open {
         return Vec::new();
     }
@@ -2237,8 +2233,6 @@ pub fn library_add_overlay(s: &AppState, blur: bool) -> Vec<El> {
                 gap: 8.0,
             },
             width: 240.0,
-            blur,
-            submenu_blur: false,
             open_submenu: None,
             return_focus: Some(anchor_key.into()),
             gamepad_focus,
@@ -2251,7 +2245,7 @@ pub fn library_add_overlay(s: &AppState, blur: bool) -> Vec<El> {
     )
 }
 
-pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
+pub fn dropdown_overlay(s: &AppState) -> Vec<El> {
     let Some(which) = s.open_dropdown else {
         return Vec::new();
     };
@@ -2277,7 +2271,6 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
                 ],
                 width: 240.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(|s: &mut AppState, val: &str, _: &mut Tx| s.set_text_size(val)),
                 on_dismiss: dismiss,
@@ -2301,7 +2294,6 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
                 ],
                 width: 240.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(|s: &mut AppState, val: &str, _: &mut Tx| {
                     s.set_fps_counter_position(val);
@@ -2332,7 +2324,6 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
                 options,
                 width: 240.0,
                 align: Align::End,
-                blur,
                 gamepad_focus,
                 on_select: Rc::new(|s: &mut AppState, val: &str, _: &mut Tx| {
                     s.set_music_service(val);
@@ -2376,8 +2367,6 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
                         gap: 8.0,
                     },
                     width: 240.0,
-                    blur,
-                    submenu_blur: false,
                     open_submenu: None,
                     return_focus: Some("sort-cycle".into()),
                     gamepad_focus,
@@ -2396,6 +2385,6 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
         | OpenDropdown::GameBeta
         | OpenDropdown::GameFolder
         | OpenDropdown::GameAntiCheat
-        | OpenDropdown::GameUpscalerStop => crate::game_props::dropdown_overlay(s, which, blur),
+        | OpenDropdown::GameUpscalerStop => crate::game_props::dropdown_overlay(s, which),
     }
 }

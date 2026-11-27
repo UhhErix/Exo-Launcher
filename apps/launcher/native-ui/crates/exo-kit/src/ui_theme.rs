@@ -1,4 +1,4 @@
-use crate::glass::{ExoGlass, exo_glass, glass_accessibility};
+use crate::glass::{ExoGlass, exo_glass};
 use crate::tokens::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SHEET,
     RADIUS_SMALL, SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_PRESS, SPRING_QUICK, bad,
@@ -66,21 +66,20 @@ pub fn exo_rune_kit() -> Kit {
 }
 
 pub fn exo_effect_gate(game_running: bool, gpu_enabled: bool) -> EffectGate {
-    let a11y = glass_accessibility();
     EffectGate {
-        reduced_motion: a11y.reduced_motion,
+        reduced_motion: false,
         game_running,
-        gpu_enabled: gpu_enabled && a11y.allows_transparency(),
+        gpu_enabled,
     }
 }
 
 pub fn exo_ui_theme(game_running: bool) -> UiTheme {
     let gate = exo_effect_gate(game_running, true);
     let glass = GlassTokens {
-        control: Some(exo_glass(ExoGlass::Control, true)),
-        panel: Some(exo_glass(ExoGlass::Panel, false)),
-        overlay: Some(exo_glass(ExoGlass::Menu, false)),
-        capsule: Some(exo_glass(ExoGlass::Bar, true)),
+        control: Some(exo_glass(ExoGlass::Control)),
+        panel: Some(exo_glass(ExoGlass::Panel)),
+        overlay: Some(exo_glass(ExoGlass::Menu)),
+        capsule: Some(exo_glass(ExoGlass::Bar)),
     };
     let radii = UiRadii {
         control: RADIUS_SMALL,

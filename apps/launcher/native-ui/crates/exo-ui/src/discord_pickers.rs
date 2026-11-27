@@ -6,10 +6,10 @@ use crate::state::AppState;
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted, glass_button,
-    glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill,
-    icon_check, icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_star_filled,
-    icon_trash, modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill,
-    switch_pill, type_body, type_control, type_label, type_section, type_small,
+    glass_button_opt, glass_control_fill, glass_rim, good, hairline, hover_fill, icon_check,
+    icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_star_filled, icon_trash,
+    modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, switch_pill,
+    type_body, type_control, type_label, type_section, type_small,
 };
 use exo_rpc::{DiscordMessage, DiscordReaction};
 use rune::{
@@ -190,18 +190,19 @@ pub fn expression_picker_popover(s: &AppState, scale: f32) -> Option<El> {
         s.discord.chat.picker.tab
     };
 
-    let mut box_el = col()
-        .key("dc-expr-picker")
-        .pin(None, None, Some(12.0), Some(64.0))
-        .w(420.0)
-        .h(430.0)
-        .padding(12.0)
-        .gap(10.0)
-        .radius(RADIUS_PANEL)
-        .clip_rounded(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .transition(picker_pop_transition());
+    let mut box_el = apply_glass(
+        col()
+            .key("dc-expr-picker")
+            .pin(None, None, Some(12.0), Some(64.0))
+            .w(420.0)
+            .h(430.0)
+            .padding(12.0)
+            .gap(10.0)
+            .radius(RADIUS_PANEL)
+            .clip_rounded(RADIUS_PANEL)
+            .transition(picker_pop_transition()),
+        ExoGlass::Menu,
+    );
 
     if for_composer {
         box_el = box_el.child(
@@ -1083,15 +1084,16 @@ pub fn mention_autocomplete_popover(s: &AppState, channel_id: &str, scale: f32) 
         return None;
     }
 
-    let mut panel = col()
-        .key("dc-mention-ac")
-        .w_full()
-        .padding(6.0)
-        .gap(2.0)
-        .radius(RADIUS_CARD)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .transition(picker_pop_transition());
+    let mut panel = apply_glass(
+        col()
+            .key("dc-mention-ac")
+            .w_full()
+            .padding(6.0)
+            .gap(2.0)
+            .radius(RADIUS_CARD)
+            .transition(picker_pop_transition()),
+        ExoGlass::Menu,
+    );
     for r in rows {
         panel = panel.child(r);
     }
@@ -1132,15 +1134,16 @@ pub fn slash_command_list_popover(s: &AppState, channel_id: &str) -> Option<El> 
         .take(12)
         .collect();
 
-    let mut panel = col()
-        .key("dc-slash-list")
-        .w_full()
-        .padding(6.0)
-        .gap(2.0)
-        .radius(RADIUS_CARD)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .transition(picker_pop_transition());
+    let mut panel = apply_glass(
+        col()
+            .key("dc-slash-list")
+            .w_full()
+            .padding(6.0)
+            .gap(2.0)
+            .radius(RADIUS_CARD)
+            .transition(picker_pop_transition()),
+        ExoGlass::Menu,
+    );
 
     if loading && entries.is_empty() {
         panel = panel.child(
@@ -1363,7 +1366,7 @@ pub fn slash_command_form(s: &AppState) -> Option<El> {
     Some(wrap)
 }
 
-pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
+pub fn app_modal_overlay(s: &AppState) -> Option<El> {
     let active = s.discord.chat.apps.active_modal.as_ref()?;
     let mut fields_col = col().w_full().gap(10.0);
 
@@ -1466,8 +1469,6 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
         .padding(20.0)
         .gap(14.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(
             row()
@@ -1504,7 +1505,7 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
             .justify_end()
             .gap(8.0)
             .child(
-                glass_button("dc-am-cancel", "Cancel", None)
+                glass_button_opt("dc-am-cancel", "Cancel", None, false)
                     .on_press(|s: &mut AppState| s.discord.chat.apps.active_modal = None),
             )
             .child(
@@ -1521,8 +1522,7 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
             ),
     );
 
-    let _ = blur;
-    let card = apply_glass(card, ExoGlass::Sheet, false)
+    let card = apply_glass(card, ExoGlass::Sheet)
         .modal(true, |s: &mut AppState| {
             s.discord.chat.apps.active_modal = None
         })
@@ -1535,7 +1535,7 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
     Some(host)
 }
 
-pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
+pub fn reactions_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
     let dlg = s.discord.chat.reactors_dialog.as_ref()?;
     let msg: Option<&DiscordMessage> = s
         .discord
@@ -1674,7 +1674,7 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
             && let Some(last_id) = dlg.users.last().map(|u| u.id.clone())
         {
             users_list = users_list.child(
-                glass_button("dc-reactors-more", "Load more", None)
+                glass_button_opt("dc-reactors-more", "Load more", None, false)
                     .on_press(move |s: &mut AppState| s.load_reactors_page(Some(&last_id))),
             );
         }
@@ -1687,8 +1687,6 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
         .padding(16.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(
             row()
@@ -1737,8 +1735,7 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
                 ),
         );
 
-    let _ = blur;
-    let card = apply_glass(card, ExoGlass::Sheet, false)
+    let card = apply_glass(card, ExoGlass::Sheet)
         .modal(true, |s: &mut AppState| {
             s.discord.chat.reactors_dialog = None
         })

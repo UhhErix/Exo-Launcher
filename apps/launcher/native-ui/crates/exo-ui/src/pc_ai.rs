@@ -2551,8 +2551,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
     )
 }
 
-pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
-    crate::pc_menus::part_menu_layers(s, blur)
+pub(crate) fn part_menu_layers(s: &AppState) -> Vec<El> {
+    crate::pc_menus::part_menu_layers(s)
 }
 
 #[cfg(test)]

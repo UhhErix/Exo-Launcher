@@ -64,7 +64,25 @@ pub struct NativeMouseUiState {
 
 impl Default for NativeMouseUiState {
     fn default() -> Self {
-        Self::demo()
+        Self {
+            devices: Vec::new(),
+            selected_index: 0,
+            profiles: Vec::new(),
+            active_profile_id: String::new(),
+            game_rules: Vec::new(),
+            auto_engine: AutoProfileEngine::new(MouseConfig::default(), 500),
+            rate_limiter: HidWriteRateLimiter::default(),
+            irq_plan: None,
+            last_polling: None,
+            write_error: None,
+            notice: None,
+            total_writes: 0,
+            skipped_redundant_writes: 0,
+            rate_limited_count: 0,
+            dirty_flash: false,
+            profiles_loaded: false,
+            mock_active_game: None,
+        }
     }
 }
 
@@ -72,25 +90,7 @@ impl NativeMouseUiState {
     pub fn demo() -> Self {
         let devices = dev_mock_devices();
         let Some(first) = devices.first().cloned() else {
-            return Self {
-                devices: Vec::new(),
-                selected_index: 0,
-                profiles: Vec::new(),
-                active_profile_id: String::new(),
-                game_rules: Vec::new(),
-                auto_engine: AutoProfileEngine::new(MouseConfig::default(), 500),
-                rate_limiter: HidWriteRateLimiter::default(),
-                irq_plan: None,
-                last_polling: None,
-                write_error: None,
-                notice: None,
-                total_writes: 0,
-                skipped_redundant_writes: 0,
-                rate_limited_count: 0,
-                dirty_flash: false,
-                profiles_loaded: false,
-                mock_active_game: None,
-            };
+            return Self::default();
         };
         let profiles = default_named_profiles(&first.config, &first.capabilities);
         let rules = default_game_rules(&first.config, &first.capabilities);

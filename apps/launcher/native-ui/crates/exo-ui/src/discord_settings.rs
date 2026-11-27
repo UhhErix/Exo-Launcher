@@ -4,7 +4,7 @@ use crate::state::{AppState, HostStatus};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, filter_pill,
-    glass_button, glass_still_control_fill, good, hairline, hover_fill, icon_check, icon_close,
+    glass_button_opt, glass_still_control_fill, good, hairline, hover_fill, icon_check, icon_close,
     icon_mic, icon_mic_off, icon_settings, icon_volume, modal_card_transition, pressed_fill,
     primary_button, scrim_fill, selected_fill, switch_track, type_body, type_control, type_label,
     type_section, type_small, type_title, warn,
@@ -1525,7 +1525,7 @@ fn devices_subpage(s: &AppState) -> El {
             .pb(6.0)
             .child(text("Logged-in devices").font(type_title()).color(FG))
             .child(
-                glass_button("dc-dev-back", "Back", None)
+                glass_button_opt("dc-dev-back", "Back", None, false)
                     .on_press(|s: &mut AppState| s.discord.settings_ext.devices_view = false),
             ),
     );
@@ -1577,7 +1577,7 @@ fn devices_subpage(s: &AppState) -> El {
                 )
                 .children((!sess.current && hash.is_some()).then(|| {
                     let h = hash.unwrap();
-                    glass_button("dc-dev-out", "Log out", None)
+                    glass_button_opt("dc-dev-out", "Log out", None, false)
                         .key(format!("dc-dev-out-{idx}"))
                         .on_press(move |s: &mut AppState| {
                             s.logout_discord_sessions(vec![h.clone()])
@@ -1589,7 +1589,7 @@ fn devices_subpage(s: &AppState) -> El {
     if !others.is_empty() {
         page = page.child(
             row().pt(8.0).justify_end().child(
-                glass_button("dc-dev-out-all", "Log out all other devices", None)
+                glass_button_opt("dc-dev-out-all", "Log out all other devices", None, false)
                     .on_press(move |s: &mut AppState| s.logout_discord_sessions(others.clone())),
             ),
         );
@@ -2054,10 +2054,11 @@ fn voice_page(s: &AppState) -> El {
                 "Learning".into()
             },
             learned.then(|| {
-                glass_button(
+                glass_button_opt(
                     "dc-set-myvoice-reset",
                     if only_my { "Start over" } else { "Forget" },
                     None,
+                    false,
                 )
                 .on_press(|s: &mut AppState| s.forget_discord_my_voice())
             }),
@@ -2190,10 +2191,11 @@ fn voice_page(s: &AppState) -> El {
                     keybind_label(ptt_keys)
                 },
                 Some(
-                    glass_button(
+                    glass_button_opt(
                         "dc-set-ptt-rec",
                         if recording_ptt { "Stop" } else { "Record" },
                         None,
+                        false,
                     )
                     .on_press(move |s: &mut AppState| {
                         s.discord.settings_ext.recording_keybind = if recording_ptt {
@@ -2674,9 +2676,10 @@ fn notifications_page(s: &AppState) -> El {
                         .gap(8.0)
                         .center_y()
                         .child(
-                            glass_button("dc-snd-prev-message3", "Preview", None).on_press(
-                                |s: &mut AppState| s.play_discord_ui_sound("message3", true),
-                            ),
+                            glass_button_opt("dc-snd-prev-message3", "Preview", None, false)
+                                .on_press(|s: &mut AppState| {
+                                    s.play_discord_ui_sound("message3", true)
+                                }),
                         )
                         .child(
                             filter_pill(
@@ -2716,7 +2719,7 @@ fn sound_toggle_row(sound: &'static str, label: &'static str, c: &DiscordClientS
                 .gap(8.0)
                 .center_y()
                 .child(
-                    glass_button("dc-snd-prev", "Preview", None)
+                    glass_button_opt("dc-snd-prev", "Preview", None, false)
                         .key(format!("dc-snd-prev-{sound}"))
                         .on_press(move |s: &mut AppState| s.play_discord_ui_sound(sound, true)),
                 )
@@ -2960,10 +2963,11 @@ fn keybinds_page(s: &AppState) -> El {
                         .gap(6.0)
                         .center_y()
                         .child(
-                            glass_button(
+                            glass_button_opt(
                                 "dc-kb-rec",
                                 if recording { "Stop" } else { "Edit" },
                                 None,
+                                false,
                             )
                             .key(format!("dc-kb-rec-{idx}"))
                             .on_press(move |s: &mut AppState| {
@@ -2975,7 +2979,7 @@ fn keybinds_page(s: &AppState) -> El {
                             }),
                         )
                         .child(
-                            glass_button("dc-kb-del", "Delete", None)
+                            glass_button_opt("dc-kb-del", "Delete", None, false)
                                 .key(format!("dc-kb-del-{idx}"))
                                 .on_press(move |s: &mut AppState| {
                                     let mut next = s.discord.settings_ext.client.keybinds.clone();
@@ -3031,19 +3035,23 @@ fn keybinds_page(s: &AppState) -> El {
                                     Some(KeybindRecordTarget::New);
                             }),
                         )
-                        .child(glass_button("dc-kb-new-cancel", "Cancel", None).on_press(
-                            |s: &mut AppState| {
-                                s.discord.settings_ext.new_keybind_action = None;
-                                s.discord.settings_ext.recording_keybind = None;
-                            },
-                        )),
+                        .child(
+                            glass_button_opt("dc-kb-new-cancel", "Cancel", None, false).on_press(
+                                |s: &mut AppState| {
+                                    s.discord.settings_ext.new_keybind_action = None;
+                                    s.discord.settings_ext.recording_keybind = None;
+                                },
+                            ),
+                        ),
                 ),
         );
     } else {
         page = page.child(row().pt(6.0).child(
-            glass_button("dc-kb-add", "Add keybind", None).on_press(|s: &mut AppState| {
-                s.discord.settings_ext.new_keybind_action = Some("PUSH_TO_TALK".into());
-            }),
+            glass_button_opt("dc-kb-add", "Add keybind", None, false).on_press(
+                |s: &mut AppState| {
+                    s.discord.settings_ext.new_keybind_action = Some("PUSH_TO_TALK".into());
+                },
+            ),
         ));
     }
     page
@@ -3122,7 +3130,7 @@ fn connected_apps_page(s: &AppState) -> El {
                             )),
                     )
                     .child(
-                        glass_button("dc-app-deauth", "Deauthorize", None)
+                        glass_button_opt("dc-app-deauth", "Deauthorize", None, false)
                             .key(format!("dc-app-deauth-{}", app.id))
                             .on_press(move |s: &mut AppState| s.deauthorize_discord_app(&id)),
                     ),
@@ -3132,7 +3140,7 @@ fn connected_apps_page(s: &AppState) -> El {
     page
 }
 
-pub fn settings_modal(s: &AppState, blur: bool) -> El {
+pub fn settings_modal(s: &AppState) -> El {
     let page = s.discord.settings_page;
     let mut nav = col().w(212.0).h_full().py(24.0).px(12.0).gap(5.0).child(
         row()
@@ -3244,7 +3252,7 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
         .modal(true, |s: &mut AppState| s.close_discord_settings_clean())
         .modal_live(["top-bar"])
         .modal_scrim(scrim_fill())
-        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false))
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
         .hit()
         .child(nav)
         .child(
@@ -3266,7 +3274,6 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
                 )
                 .child(close_btn),
         );
-    let _ = blur;
 
     el().key("dc-settings-layer")
         .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
@@ -3274,7 +3281,7 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
         .child(sheet)
 }
 
-pub fn custom_status_modal(s: &AppState, blur: bool) -> El {
+pub fn custom_status_modal(s: &AppState) -> El {
     let cur_clear = s.discord.settings_ext.custom_status_clear_ms;
     let mut clear_pills = row().gap(6.0).wrap();
     for (idx, (ms, lbl)) in CLEAR_AFTER_OPTIONS.into_iter().enumerate() {
@@ -3345,11 +3352,11 @@ pub fn custom_status_modal(s: &AppState, blur: bool) -> El {
                 .justify_end()
                 .gap(8.0)
                 .children(s.discord.custom_status.is_some().then(|| {
-                    glass_button("dc-cstatus-clear", "Clear", None)
+                    glass_button_opt("dc-cstatus-clear", "Clear", None, false)
                         .on_press(|s: &mut AppState| s.save_discord_custom_status_ext(true))
                 }))
                 .child(
-                    glass_button("dc-cstatus-cancel", "Cancel", None)
+                    glass_button_opt("dc-cstatus-cancel", "Cancel", None, false)
                         .on_press(|s: &mut AppState| s.discord.custom_status_open = false),
                 )
                 .child(
@@ -3361,8 +3368,7 @@ pub fn custom_status_modal(s: &AppState, blur: bool) -> El {
                     .on_press(|s: &mut AppState| s.save_discord_custom_status_ext(false)),
                 ),
         );
-    let _ = blur;
-    let panel = apply_glass(panel, ExoGlass::Sheet, false);
+    let panel = apply_glass(panel, ExoGlass::Sheet);
 
     el().key("dc-cstatus-layer")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))

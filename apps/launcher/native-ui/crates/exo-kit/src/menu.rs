@@ -110,8 +110,6 @@ pub struct ContextMenuSpec<S: 'static> {
     pub id: String,
     pub anchor: MenuAnchor,
     pub width: f32,
-    pub blur: bool,
-    pub submenu_blur: bool,
     pub open_submenu: Option<usize>,
     pub return_focus: Option<String>,
     pub gamepad_focus: bool,
@@ -120,7 +118,7 @@ pub struct ContextMenuSpec<S: 'static> {
     pub on_submenu: MenuSubmenuCb<S>,
 }
 
-fn glass_menu_surface(key: String, width: f32, _blur: bool, origin: Vec2) -> El {
+fn glass_menu_surface(key: String, width: f32, origin: Vec2) -> El {
     let radius = RADIUS_CARD + 2.0;
     col()
         .key(key)
@@ -133,7 +131,7 @@ fn glass_menu_surface(key: String, width: f32, _blur: bool, origin: Vec2) -> El 
         .clip_rounded(radius)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(exo_glass(ExoGlass::Menu, false))
+        .liquid_glass(exo_glass(ExoGlass::Menu))
         .transition(popover_transition_from(origin))
 }
 
@@ -381,8 +379,6 @@ fn build_context_menu_layers<S: 'static>(
         id,
         anchor,
         width,
-        blur,
-        submenu_blur,
         open_submenu,
         return_focus,
         gamepad_focus,
@@ -427,7 +423,7 @@ fn build_context_menu_layers<S: 'static>(
         &on_submenu,
     );
 
-    let mut main_menu = glass_menu_surface(format!("{id}-menu"), width, blur, origin)
+    let mut main_menu = glass_menu_surface(format!("{id}-menu"), width, origin)
         .role("menu")
         .focus_group()
         .anchored_fit(anchor_key, side, align, gap)
@@ -455,7 +451,6 @@ fn build_context_menu_layers<S: 'static>(
         let sub_menu = glass_menu_surface(
             format!("{id}-submenu"),
             (width - 20.0).max(180.0),
-            submenu_blur,
             Vec2::new(0.0, 0.0),
         )
         .role("menu")
@@ -502,8 +497,6 @@ mod tests {
                 id: "test-ctx".into(),
                 anchor: MenuAnchor::Point(x, y),
                 width: 200.0,
-                blur: true,
-                submenu_blur: false,
                 open_submenu: None,
                 return_focus: None,
                 gamepad_focus: false,

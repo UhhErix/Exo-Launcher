@@ -5,10 +5,10 @@ use crate::state::AppState;
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_QUICK, apply_glass, bad, danger_button, fg_faint, fg_muted, glass_button,
-    glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hex,
-    hover_fill, icon_check, icon_close, icon_external, icon_hash, icon_plus, icon_search,
-    icon_trash, icon_user_plus, icon_users, modal_card_transition, primary_button, scrim_fill,
-    subtle_fill, switch_pill, type_body, type_control, type_label, type_section, type_small,
+    glass_button_opt, glass_control_fill, glass_rim, good, hairline, hex, hover_fill, icon_check,
+    icon_close, icon_external, icon_hash, icon_plus, icon_search, icon_trash, icon_user_plus,
+    icon_users, modal_card_transition, primary_button, scrim_fill, subtle_fill, switch_pill,
+    type_body, type_control, type_label, type_section, type_small,
 };
 use exo_rpc::{DiscordMessage, DiscordPoll};
 use rune::{
@@ -56,14 +56,8 @@ const REPORT_REASONS: &[&str] = &[
     "Impersonation or other violation",
 ];
 
-fn modal_wrap(
-    key: &'static str,
-    blur: bool,
-    card: El,
-    on_close: impl Fn(&mut AppState) + 'static,
-) -> El {
-    let _ = blur;
-    let card = apply_glass(card, ExoGlass::Sheet, false)
+fn modal_wrap(key: &'static str, card: El, on_close: impl Fn(&mut AppState) + 'static) -> El {
+    let card = apply_glass(card, ExoGlass::Sheet)
         .modal(true, on_close)
         .modal_scrim(scrim_fill());
     el().key(key)
@@ -92,7 +86,7 @@ fn choice_pill(key: String, label: &str, active: bool) -> El {
         )
 }
 
-pub fn create_dm_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
+pub fn create_dm_overlay(s: &AppState, scale: f32) -> Option<El> {
     let dlg = s.discord.chat.create_dm.as_ref()?;
     let q = dlg.query.text.trim().to_lowercase();
     let left = 9usize.saturating_sub(dlg.picked.len());
@@ -182,8 +176,6 @@ pub fn create_dm_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
         .padding(18.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(
             row()
@@ -276,7 +268,7 @@ pub fn create_dm_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
             .justify_end()
             .gap(8.0)
             .child(
-                glass_button("dc-cdm-cancel", "Cancel", None)
+                glass_button_opt("dc-cdm-cancel", "Cancel", None, false)
                     .on_press(|s: &mut AppState| s.discord.chat.create_dm = None),
             )
             .child(
@@ -285,12 +277,12 @@ pub fn create_dm_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
             ),
     );
 
-    Some(modal_wrap("dc-create-dm-scrim", blur, card, |s| {
+    Some(modal_wrap("dc-create-dm-scrim", card, |s| {
         s.discord.chat.create_dm = None
     }))
 }
 
-pub fn poll_creator_overlay(s: &AppState, blur: bool) -> Option<El> {
+pub fn poll_creator_overlay(s: &AppState) -> Option<El> {
     let pc = s.discord.chat.poll_creator.as_ref()?;
     let mut answers_col = col().w_full().gap(6.0);
     for (i, ans) in pc.answers.iter().enumerate() {
@@ -351,10 +343,11 @@ pub fn poll_creator_overlay(s: &AppState, blur: bool) -> Option<El> {
 
     if pc.answers.len() < 10 {
         answers_col = answers_col.child(
-            glass_button(
+            glass_button_opt(
                 "dc-poll-add-ans",
                 "Add another answer",
                 Some(icon_plus(12.0, FG)),
+                false,
             )
             .on_press(|s: &mut AppState| {
                 if let Some(ref mut p) = s.discord.chat.poll_creator
@@ -385,8 +378,6 @@ pub fn poll_creator_overlay(s: &AppState, blur: bool) -> Option<El> {
         .padding(20.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(
             row()
@@ -482,7 +473,7 @@ pub fn poll_creator_overlay(s: &AppState, blur: bool) -> Option<El> {
             .justify_end()
             .gap(8.0)
             .child(
-                glass_button("dc-poll-cancel", "Cancel", None)
+                glass_button_opt("dc-poll-cancel", "Cancel", None, false)
                     .on_press(|s: &mut AppState| s.discord.chat.poll_creator = None),
             )
             .child(
@@ -495,7 +486,7 @@ pub fn poll_creator_overlay(s: &AppState, blur: bool) -> Option<El> {
             ),
     );
 
-    Some(modal_wrap("dc-poll-creator-scrim", blur, card, |s| {
+    Some(modal_wrap("dc-poll-creator-scrim", card, |s| {
         s.discord.chat.poll_creator = None
     }))
 }
@@ -693,7 +684,7 @@ pub fn poll_card(s: &AppState, msg: &DiscordMessage, poll: &DiscordPoll) -> El {
     )
 }
 
-pub fn invite_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
+pub fn invite_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
     let dlg = s.discord.chat.invite_dialog.as_ref()?;
     if dlg.editing {
         let mut exp_row = row().w_full().gap(4.0).flex_wrap();
@@ -726,8 +717,6 @@ pub fn invite_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El>
             .padding(20.0)
             .gap(12.0)
             .radius(RADIUS_PANEL)
-            .fill(BG)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .transition(modal_card_transition())
             .child(
                 text("Server invite link settings")
@@ -776,19 +765,21 @@ pub fn invite_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El>
                     .w_full()
                     .justify_end()
                     .gap(8.0)
-                    .child(glass_button("dc-inv-edit-back", "Cancel", None).on_press(
-                        |s: &mut AppState| {
-                            if let Some(ref mut d) = s.discord.chat.invite_dialog {
-                                d.editing = false;
-                            }
-                        },
-                    ))
+                    .child(
+                        glass_button_opt("dc-inv-edit-back", "Cancel", None, false).on_press(
+                            |s: &mut AppState| {
+                                if let Some(ref mut d) = s.discord.chat.invite_dialog {
+                                    d.editing = false;
+                                }
+                            },
+                        ),
+                    )
                     .child(
                         primary_button("dc-inv-edit-gen", "Generate a new link", None)
                             .on_press(|s: &mut AppState| s.generate_invite_link()),
                     ),
             );
-        return Some(modal_wrap("dc-invite-scrim", blur, card, |s| {
+        return Some(modal_wrap("dc-invite-scrim", card, |s| {
             s.discord.chat.invite_dialog = None
         }));
     }
@@ -842,13 +833,18 @@ pub fn invite_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El>
                             .truncate(),
                     )
                     .child(
-                        glass_button("dc-inv-send", if sent { "Sent" } else { "Invite" }, None)
-                            .key(format!("dc-inv-send-{}", f.id))
-                            .on_press(move |s: &mut AppState| {
-                                if !sent {
-                                    s.send_invite_to_friend(&fid);
-                                }
-                            }),
+                        glass_button_opt(
+                            "dc-inv-send",
+                            if sent { "Sent" } else { "Invite" },
+                            None,
+                            false,
+                        )
+                        .key(format!("dc-inv-send-{}", f.id))
+                        .on_press(move |s: &mut AppState| {
+                            if !sent {
+                                s.send_invite_to_friend(&fid);
+                            }
+                        }),
                     ),
             );
         }
@@ -866,8 +862,6 @@ pub fn invite_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El>
         .padding(20.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(
             row()
@@ -1016,7 +1010,7 @@ pub fn invite_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El>
             ),
     );
 
-    Some(modal_wrap("dc-invite-scrim", blur, card, |s| {
+    Some(modal_wrap("dc-invite-scrim", card, |s| {
         s.discord.chat.invite_dialog = None
     }))
 }
@@ -1029,7 +1023,7 @@ struct ForwardTarget {
     is_dm: bool,
 }
 
-pub fn forward_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
+pub fn forward_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
     let dlg = s.discord.chat.forward_dialog.as_ref()?;
     let q = dlg.query.text.trim().to_lowercase();
     let mut targets: Vec<ForwardTarget> = Vec::new();
@@ -1130,8 +1124,6 @@ pub fn forward_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
         .padding(18.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(
             row()
@@ -1227,7 +1219,7 @@ pub fn forward_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
             .justify_end()
             .gap(8.0)
             .child(
-                glass_button("dc-fwd-cancel", "Cancel", None)
+                glass_button_opt("dc-fwd-cancel", "Cancel", None, false)
                     .on_press(|s: &mut AppState| s.discord.chat.forward_dialog = None),
             )
             .child(
@@ -1236,12 +1228,12 @@ pub fn forward_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
             ),
     );
 
-    Some(modal_wrap("dc-forward-scrim", blur, card, |s| {
+    Some(modal_wrap("dc-forward-scrim", card, |s| {
         s.discord.chat.forward_dialog = None
     }))
 }
 
-pub fn new_thread_dialog_overlay(s: &AppState, blur: bool) -> Option<El> {
+pub fn new_thread_dialog_overlay(s: &AppState) -> Option<El> {
     let dlg = s.discord.chat.new_thread_dialog.as_ref()?;
     let mut card = col()
         .key("dc-new-thread-card")
@@ -1249,8 +1241,6 @@ pub fn new_thread_dialog_overlay(s: &AppState, blur: bool) -> Option<El> {
         .padding(18.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(text("Create thread").font(type_section()).color(FG))
         .child(
@@ -1290,7 +1280,7 @@ pub fn new_thread_dialog_overlay(s: &AppState, blur: bool) -> Option<El> {
             .justify_end()
             .gap(8.0)
             .child(
-                glass_button("dc-nt-cancel", "Cancel", None)
+                glass_button_opt("dc-nt-cancel", "Cancel", None, false)
                     .on_press(|s: &mut AppState| s.discord.chat.new_thread_dialog = None),
             )
             .child(
@@ -1303,12 +1293,12 @@ pub fn new_thread_dialog_overlay(s: &AppState, blur: bool) -> Option<El> {
             ),
     );
 
-    Some(modal_wrap("dc-new-thread-scrim", blur, card, |s| {
+    Some(modal_wrap("dc-new-thread-scrim", card, |s| {
         s.discord.chat.new_thread_dialog = None
     }))
 }
 
-pub fn report_dialog_overlay(s: &AppState, blur: bool) -> Option<El> {
+pub fn report_dialog_overlay(s: &AppState) -> Option<El> {
     let dlg = s.discord.chat.report_dialog.as_ref()?;
     let mut card = col()
         .key("dc-report-card")
@@ -1316,8 +1306,6 @@ pub fn report_dialog_overlay(s: &AppState, blur: bool) -> Option<El> {
         .padding(20.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(
             row()
@@ -1415,7 +1403,7 @@ pub fn report_dialog_overlay(s: &AppState, blur: bool) -> Option<El> {
                 .justify_end()
                 .gap(8.0)
                 .child(
-                    glass_button("dc-rep-cancel", "Cancel", None)
+                    glass_button_opt("dc-rep-cancel", "Cancel", None, false)
                         .on_press(|s: &mut AppState| s.discord.chat.report_dialog = None),
                 )
                 .child(
@@ -1433,12 +1421,12 @@ pub fn report_dialog_overlay(s: &AppState, blur: bool) -> Option<El> {
         );
     }
 
-    Some(modal_wrap("dc-report-scrim", blur, card, |s| {
+    Some(modal_wrap("dc-report-scrim", card, |s| {
         s.discord.chat.report_dialog = None
     }))
 }
 
-pub fn modify_attachment_overlay(s: &AppState, blur: bool) -> Option<El> {
+pub fn modify_attachment_overlay(s: &AppState) -> Option<El> {
     let draft = s.discord.chat.modifying_attachment.as_ref()?;
     let mut card = col()
         .key("dc-mod-att-card")
@@ -1446,8 +1434,6 @@ pub fn modify_attachment_overlay(s: &AppState, blur: bool) -> Option<El> {
         .padding(18.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(text("Modify attachment").font(type_section()).color(FG))
         .child(
@@ -1472,7 +1458,10 @@ pub fn modify_attachment_overlay(s: &AppState, blur: bool) -> Option<El> {
                                 .single_line()
                                 .color(FG)
                                 .on_edit(edit_access(|s: &mut AppState| {
-                                    &mut s.discord.chat.modifying_attachment.as_mut().unwrap().name
+                                    match s.discord.chat.modifying_attachment.as_mut() {
+                                        Some(draft) => &mut draft.name,
+                                        None => &mut s.ui_discard_edit,
+                                    }
                                 })),
                         ),
                 ),
@@ -1503,13 +1492,10 @@ pub fn modify_attachment_overlay(s: &AppState, blur: bool) -> Option<El> {
                                 .color(FG)
                                 .placeholder("Add a description", fg_faint())
                                 .on_edit(edit_access(|s: &mut AppState| {
-                                    &mut s
-                                        .discord
-                                        .chat
-                                        .modifying_attachment
-                                        .as_mut()
-                                        .unwrap()
-                                        .description
+                                    match s.discord.chat.modifying_attachment.as_mut() {
+                                        Some(draft) => &mut draft.description,
+                                        None => &mut s.ui_discard_edit,
+                                    }
                                 })),
                             2,
                             4,
@@ -1541,7 +1527,7 @@ pub fn modify_attachment_overlay(s: &AppState, blur: bool) -> Option<El> {
                 .justify_end()
                 .gap(8.0)
                 .child(
-                    glass_button("dc-mod-att-cancel", "Cancel", None)
+                    glass_button_opt("dc-mod-att-cancel", "Cancel", None, false)
                         .on_press(|s: &mut AppState| s.discord.chat.modifying_attachment = None),
                 )
                 .child(
@@ -1550,12 +1536,12 @@ pub fn modify_attachment_overlay(s: &AppState, blur: bool) -> Option<El> {
                 ),
         );
 
-    Some(modal_wrap("dc-mod-att-scrim", blur, card, |s| {
+    Some(modal_wrap("dc-mod-att-scrim", card, |s| {
         s.discord.chat.modifying_attachment = None
     }))
 }
 
-pub fn profile_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
+pub fn profile_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
     let dlg = s.discord.chat.profile_dialog.as_ref()?;
     let me_id = s.discord.home.me.as_ref().map(|m| m.id.as_str());
     let is_me = me_id == Some(dlg.user_id.as_str());
@@ -1657,36 +1643,44 @@ pub fn profile_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
         ));
         if rel == 0 {
             actions = actions.child(
-                glass_button(
+                glass_button_opt(
                     "dc-pf-add-btn",
                     "Add friend",
                     Some(icon_user_plus(13.0, FG)),
+                    false,
                 )
                 .on_press(move |s: &mut AppState| s.accept_discord_friend(&uid_add)),
             );
         } else if rel == 3 {
             actions = actions.child(
-                glass_button("dc-pf-acc-btn", "Accept", Some(icon_check(13.0, good())))
-                    .on_press(move |s: &mut AppState| s.accept_discord_friend(&uid_add)),
+                glass_button_opt(
+                    "dc-pf-acc-btn",
+                    "Accept",
+                    Some(icon_check(13.0, good())),
+                    false,
+                )
+                .on_press(move |s: &mut AppState| s.accept_discord_friend(&uid_add)),
             );
         }
     }
     if !dlg.full {
         actions = actions.child(
-            glass_button("dc-pf-full-btn", "Full profile", None).on_press(|s: &mut AppState| {
-                let uid = s
-                    .discord
-                    .chat
-                    .profile_dialog
-                    .as_ref()
-                    .map(|d| d.user_id.clone());
-                if let Some(ref mut d) = s.discord.chat.profile_dialog {
-                    d.full = true;
-                }
-                if let Some(u) = uid {
-                    s.fetch_mutual_friends(&u);
-                }
-            }),
+            glass_button_opt("dc-pf-full-btn", "Full profile", None, false).on_press(
+                |s: &mut AppState| {
+                    let uid = s
+                        .discord
+                        .chat
+                        .profile_dialog
+                        .as_ref()
+                        .map(|d| d.user_id.clone());
+                    if let Some(ref mut d) = s.discord.chat.profile_dialog {
+                        d.full = true;
+                    }
+                    if let Some(u) = uid {
+                        s.fetch_mutual_friends(&u);
+                    }
+                },
+            ),
         );
     }
 
@@ -1864,12 +1858,14 @@ pub fn profile_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
                                         .color(fg_faint()),
                                 ),
                         )
-                        .child(glass_button("dc-pf-join-vc", "Join voice", None).on_press(
-                            move |s: &mut AppState| {
-                                s.discord.chat.profile_dialog = None;
-                                s.join_discord_voice(Some(&gid_v), &cid_v);
-                            },
-                        )),
+                        .child(
+                            glass_button_opt("dc-pf-join-vc", "Join voice", None, false).on_press(
+                                move |s: &mut AppState| {
+                                    s.discord.chat.profile_dialog = None;
+                                    s.join_discord_voice(Some(&gid_v), &cid_v);
+                                },
+                            ),
+                        ),
                 );
             }
             if let Some(bio_s) = bio {
@@ -1941,13 +1937,10 @@ pub fn profile_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
                                             .color(FG)
                                             .placeholder("Click to add a note", fg_faint())
                                             .on_edit(edit_access(|s: &mut AppState| {
-                                                &mut s
-                                                    .discord
-                                                    .chat
-                                                    .profile_dialog
-                                                    .as_mut()
-                                                    .unwrap()
-                                                    .note
+                                                match s.discord.chat.profile_dialog.as_mut() {
+                                                    Some(dlg) => &mut dlg.note,
+                                                    None => &mut s.ui_discard_edit,
+                                                }
                                             }))
                                             .on_submit(|s: &mut AppState, _| s.save_profile_note()),
                                     ),
@@ -2115,8 +2108,6 @@ pub fn profile_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
         .h(if dlg.full { 580.0 } else { 460.0 })
         .radius(RADIUS_PANEL)
         .clip_rounded(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(banner)
         .child(
@@ -2130,7 +2121,7 @@ pub fn profile_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El
                 .child(body),
         );
 
-    Some(modal_wrap("dc-profile-scrim", blur, card, |s| {
+    Some(modal_wrap("dc-profile-scrim", card, |s| {
         s.discord.chat.profile_dialog = None
     }))
 }
@@ -2290,7 +2281,10 @@ fn profile_roles_section(s: &AppState) -> El {
                         .color(FG)
                         .placeholder("Find a role", fg_faint())
                         .on_edit(edit_access(|s: &mut AppState| {
-                            &mut s.discord.chat.profile_dialog.as_mut().unwrap().role_query
+                            match s.discord.chat.profile_dialog.as_mut() {
+                                Some(dlg) => &mut dlg.role_query,
+                                None => &mut s.ui_discard_edit,
+                            }
                         })),
                 )
                 .child(opts),

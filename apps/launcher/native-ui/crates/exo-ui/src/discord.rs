@@ -5,7 +5,6 @@ use crate::discord_settings;
 use crate::discord_state::{DiscordFriendsTab, DiscordPlace, DiscordSettingsPage};
 use crate::discord_threads::parse_hex_color;
 use crate::discord_voice;
-use crate::shell::BlurBudget;
 use crate::state::{AppState, ContextMenuTarget};
 use exo_kit::{
     BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
@@ -3664,7 +3663,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
     panel
 }
 
-fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32, budget: BlurBudget) -> El {
+fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32) -> El {
     let head_h = 48.0 * sc;
     match s.discord.place {
         DiscordPlace::Messages => {
@@ -3833,13 +3832,7 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32, budget: BlurBudget) ->
             }
             let is_voice = matches!(ch.kind.as_str(), "voice" | "stage");
             if is_voice {
-                return discord_voice::voice_stage_view(
-                    s,
-                    gid.as_deref(),
-                    ch,
-                    scale,
-                    budget.discord_voice_bar,
-                );
+                return discord_voice::voice_stage_view(s, gid.as_deref(), ch, scale);
             }
 
             let guild_prefix = s
@@ -4583,7 +4576,7 @@ pub fn can_show_room(s: &AppState) -> bool {
             || s.discord.from_snapshot)
 }
 
-pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
+pub fn view(s: &AppState, scale: f32) -> El {
     if !can_show_room(s) {
         return signed_out_view(s);
     }
@@ -4605,7 +4598,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
             .is_some_and(|c| matches!(c.kind.as_str(), "voice" | "stage"));
         body = body
             .child(server_left_rail(s, guild, sc, scale))
-            .child(channel_or_dm_stage(s, sc, scale, budget));
+            .child(channel_or_dm_stage(s, sc, scale));
         if s.discord.inbox_open {
             body = body.child(crate::discord_search::inbox_panel(s, sc, scale));
         } else if !on_voice || !s.discord.voice_ui.show_voice_chat {
@@ -4618,7 +4611,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
     } else if s.discord.place == DiscordPlace::Messages {
         body = body
             .child(dm_sidebar(s, sc, scale))
-            .child(channel_or_dm_stage(s, sc, scale, budget));
+            .child(channel_or_dm_stage(s, sc, scale));
         if s.discord.inbox_open {
             body = body.child(crate::discord_search::inbox_panel(s, sc, scale));
         } else if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
@@ -4679,15 +4672,15 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
     }
 }
 
-pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
-    let mut out = discord_voice::voice_overlay_layers(s, blur);
-    out.extend(discord_admin::overlay_layers(s, blur));
-    out.extend(discord_chat::chat_overlay_layers(s, blur, 1.0));
+pub fn overlay_layers(s: &AppState) -> Vec<El> {
+    let mut out = discord_voice::voice_overlay_layers(s);
+    out.extend(discord_admin::overlay_layers(s));
+    out.extend(discord_chat::chat_overlay_layers(s, 1.0));
     if s.discord.settings_open {
-        out.push(discord_settings::settings_modal(s, blur));
+        out.push(discord_settings::settings_modal(s));
     }
     if s.discord.custom_status_open {
-        out.push(discord_settings::custom_status_modal(s, blur));
+        out.push(discord_settings::custom_status_modal(s));
     }
     out
 }
@@ -4700,7 +4693,7 @@ mod tests {
     use crate::state::{AppState, Room};
     use exo_rpc::{DiscordFriend, DiscordRich};
     use rune::motion_gate::Run;
-    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::render::KIND_LIQUID_GLASS;
     use rune::{Env, Runtime};
 
     #[test]
@@ -4782,23 +4775,26 @@ mod tests {
         state
     }
 
-    fn blur_count(rt: &Runtime<AppState>) -> usize {
+    fn glass_draws(rt: &Runtime<AppState>) -> usize {
         rt.instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count()
     }
 
     #[test]
-    fn discord_friends_gridlines_five_cols_and_blur_cap() {
+    fn discord_friends_gridlines_five_cols_and_glass_bound() {
         let state = demo_discord_state(false);
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
 
-        let blurs = blur_count(&rt);
-        assert!(blurs <= 4, "Discord exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        let glass = glass_draws(&rt);
+        assert!(
+            glass <= 3,
+            "Discord friends: {glass} Liquid Glass draws, bound 3"
+        );
 
         let (c0, _) = rt.presented("dc-friend-200001").expect("card 0");
         let (c1, _) = rt.presented("dc-friend-200002").expect("card 1");
@@ -4908,9 +4904,10 @@ mod tests {
             rt.frame(0.0);
             rt.settle_all();
             rt.frame(1.0 / 60.0);
+            let glass = glass_draws(&rt);
             assert!(
-                blur_count(&rt) <= 4,
-                "Discord chat exceeded MAX_BACKDROP_BLURS=4"
+                glass <= 3,
+                "Discord chat: {glass} Liquid Glass draws, bound 3"
             );
 
             let mut run = Run::new(rt, 120.0);
@@ -4986,9 +4983,10 @@ mod tests {
                 rt.update(|s, _| s.discord.voice_ui.panel = VoicePanel::Audio);
             });
             vrun.play(0.5);
+            let glass = glass_draws(&vrun.rt);
             assert!(
-                blur_count(&vrun.rt) <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-                "Discord voice audio panel exceeded EXO_MAX_BACKDROP_BLURS"
+                glass <= 4,
+                "Discord voice audio panel: {glass} Liquid Glass draws, bound 4"
             );
             vrun.act("switch to GoLive panel", |rt| {
                 rt.update(|s, _| s.discord.voice_ui.panel = VoicePanel::GoLive);

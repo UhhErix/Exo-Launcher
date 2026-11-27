@@ -5515,7 +5515,10 @@ impl AppState {
     }
 
     pub fn handle_discord_open(&mut self, ev: DiscordOpenEvent) -> bool {
-        self.room = Room::Discord;
+        self.switch_room(Room::Discord);
+        if ev.channel_id.is_empty() {
+            return true;
+        }
         if let Some(gid) = ev.guild_id {
             self.open_discord_guild(&gid);
             self.open_discord_channel(&ev.channel_id);
@@ -5586,8 +5589,10 @@ impl AppState {
     }
 
     pub fn handle_friends_badge(&mut self, count: u32) -> bool {
-        if self.discord.chat.friends_badge_count != count {
-            self.discord.chat.friends_badge_count = count;
+        self.discord.chat.friends_badge_count = count;
+        self.chrome.discord_badge_revision = self.chrome.discord_badge_revision.saturating_add(1);
+        if self.chrome.discord_badge_count != count {
+            self.chrome.discord_badge_count = count;
             true
         } else {
             false

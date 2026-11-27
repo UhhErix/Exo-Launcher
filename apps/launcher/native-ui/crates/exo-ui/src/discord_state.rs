@@ -2734,14 +2734,13 @@ mod tests {
         let hydrate_us = t0.elapsed().as_micros();
 
         let t1 = Instant::now();
-        let budget = crate::shell::BlurBudget::compute(&app, false);
-        let _root = crate::discord::view(&app, 1.0, budget);
+        let _root = crate::discord::view(&app, 1.0);
         let first_view_us = t1.elapsed().as_micros();
 
         let mut samples_us = Vec::with_capacity(50);
         for _ in 0..50 {
             let start = Instant::now();
-            let _root = crate::discord::view(&app, 1.0, budget);
+            let _root = crate::discord::view(&app, 1.0);
             samples_us.push(start.elapsed().as_micros());
         }
         samples_us.sort_unstable();

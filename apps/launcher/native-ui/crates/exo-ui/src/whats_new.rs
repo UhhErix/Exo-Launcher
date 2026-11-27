@@ -3,7 +3,7 @@ use crate::notice::{NoticeActionKind, NoticeActionSpec, RichNoticeSpec};
 use crate::settings::set_btn;
 use crate::state::{AppState, NoticeTone, Room};
 use exo_kit::{
-    BG, FG, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, bad, fg_muted, glass_button, glass_panel_opt,
+    FG, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, bad, fg_muted, glass_button_opt, glass_panel,
     icon_app_window, icon_chat, icon_download, icon_folder, icon_gamepad, icon_hard_drive,
     icon_key, icon_library, icon_mic, icon_monitor, icon_mouse, icon_music, icon_notes, icon_play,
     icon_refresh, icon_scissors, icon_search, icon_server, icon_settings, icon_shield,
@@ -997,7 +997,7 @@ fn whats_new_icon(name: &str) -> El {
     }
 }
 
-pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn whats_new_layers(s: &AppState) -> Vec<El> {
     if s.whats_new.mode.is_none() {
         return Vec::new();
     }
@@ -1135,7 +1135,6 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
 
     card_inner = card_inner.child(foot);
 
-    let _ = blur;
     let card = col()
         .key("whats-new-sheet")
         .w(scaled(540.0))
@@ -1147,7 +1146,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet, false))
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(false, |s: &mut AppState| s.close_whats_new())
@@ -1165,7 +1164,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
     vec![host]
 }
 
-pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn update_sheet_layers(s: &AppState) -> Vec<El> {
     if !s.whats_new.sheet_open {
         return Vec::new();
     }
@@ -1217,7 +1216,7 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         let mut foot = row().w_full().gap(10.0);
         if s.whats_new.not_now {
             foot = foot.child(
-                glass_button("update-not-now", "Not now", None)
+                glass_button_opt("update-not-now", "Not now", None, false)
                     .grow(1.0)
                     .justify_center()
                     .on_press(|s: &mut AppState| s.set_aside_update_sheet()),
@@ -1240,7 +1239,7 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         inner = inner.child(foot);
     }
 
-    let card = glass_panel_opt("update-sheet", scaled(420.0), blur)
+    let card = glass_panel("update-sheet", scaled(420.0))
         .role("alertdialog")
         .label("Update available")
         .radius(RADIUS_SHEET)
@@ -1248,7 +1247,7 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(false, |s: &mut AppState| s.set_aside_update_sheet())
-        .modal_scrim(BG.alpha(0.56))
+        .modal_scrim(scrim_fill())
         .child(inner);
 
     let host = col()
