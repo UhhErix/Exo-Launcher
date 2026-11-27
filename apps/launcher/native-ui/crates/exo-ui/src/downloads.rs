@@ -132,11 +132,52 @@ pub fn register_events(reg: &mut EventRegistry) {
         if state.downloads.open && !p.is_active {
             state.load_downloads();
         }
-        state.downloads.open
+        let noticed = state.apply_transfer_notice(&p);
+        state.downloads.open || noticed
     });
 }
 
 impl AppState {
+    fn apply_transfer_notice(&mut self, p: &InstallProgress) -> bool {
+        let Some(game_id) = p.game_id.as_deref().filter(|id| !id.is_empty()) else {
+            return false;
+        };
+        let key = format!("transfer:{game_id}");
+        if p.phase != "failed" {
+            return (p.is_active || p.phase == "completed" || p.phase == "cancelled")
+                && self.dismiss_notice_by_key(&key);
+        }
+        let title = self
+            .games
+            .iter()
+            .find(|g| g.id == game_id)
+            .map(|g| g.title.clone());
+        let text = p
+            .status
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "Install failed.".into());
+        let action = game_id
+            .starts_with("steam:")
+            .then(|| crate::notice::NoticeActionSpec {
+                label: "Open Steam".into(),
+                primary: false,
+                danger: false,
+                busy: false,
+                confirm: None,
+                kind: crate::notice::NoticeActionKind::OpenSteamDownloads,
+            });
+        self.push_rich_notice(crate::notice::RichNoticeSpec {
+            key_id: Some(key),
+            title,
+            text,
+            tone: crate::state::NoticeTone::Bad,
+            action,
+            ..Default::default()
+        });
+        true
+    }
+
     pub fn open_downloads(&mut self) {
         self.close_context_menu();
         self.close_dropdown();
@@ -642,6 +683,41 @@ pub fn layers(s: &AppState) -> Vec<El> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stopped_steam_download_offers_steam_and_clears_when_it_resumes() {
+        let mut s = AppState::default();
+        let failed = |id: &str, status: &str| {
+            HostEvent::InstallProgress(InstallProgress {
+                game_id: Some(id.into()),
+                phase: "failed".into(),
+                status: Some(status.into()),
+                ..Default::default()
+            })
+        };
+        assert!(s.apply_host_event(failed("steam:730", "Steam stopped the download.")));
+        let n = s.notices.back().expect("failure notice");
+        assert_eq!(n.text, "Steam stopped the download.");
+        assert_eq!(
+            n.action.as_ref().map(|a| a.label.as_str()),
+            Some("Open Steam")
+        );
+
+        assert!(s.apply_host_event(failed("epic:abc", "The install didn't finish.")));
+        assert!(s.notices.back().expect("epic notice").action.is_none());
+
+        s.apply_host_event(HostEvent::InstallProgress(InstallProgress {
+            game_id: Some("steam:730".into()),
+            phase: "downloading".into(),
+            is_active: true,
+            ..Default::default()
+        }));
+        assert!(
+            s.notices
+                .iter()
+                .all(|n| n.key_id.as_deref() != Some("transfer:steam:730"))
+        );
+    }
 
     #[test]
     fn speed_formatting_matches_react_thresholds() {

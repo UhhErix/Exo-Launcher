@@ -4,8 +4,8 @@ use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
     SPRING_QUICK, amoled_card, bad, fg_faint, fg_muted, glass_control_fill, glass_rim, good,
     hairline, hover_fill, icon_chevron_down, icon_chevron_left, icon_heart, icon_search,
-    primary_button, scaled, slider_track, status_badge, track_fill, type_body, type_control,
-    type_section, type_small, type_title,
+    primary_button, scaled, slider_range, slider_track, status_badge, track_fill, type_body,
+    type_control, type_section, type_small, type_title,
 };
 use exo_rpc::{
     ActionResult, AudioFormatOption, AudioFormatsReply, AudioReadReply, DevicesImageReply,
@@ -1995,6 +1995,15 @@ fn endpoint_panel(
                 }
             }
         });
+        let slider = slider_range(
+            slider,
+            f64::from(shown),
+            0.0,
+            100.0,
+            1.0,
+            true,
+            move |s: &mut AppState, v| s.commit_audio_volume(is_output, v.round() as i32),
+        );
         rows.push(device_row(
             "Volume",
             None,

@@ -16,8 +16,8 @@ use exo_kit::{
     icon_music_filled, icon_settings, icon_settings_filled, icon_sparkles, icon_sparkles_filled,
     icon_store, icon_store_filled, icon_volume, icon_volume_low, icon_volume_off,
     icon_win_maximize, icon_win_restore, modal_scrim_transition, popover_transition_for,
-    pressed_fill, scrim_fill, selected_fill, set_text_scale, slider_track, type_body, type_section,
-    type_small,
+    pressed_fill, scrim_fill, selected_fill, set_text_scale, slider_range, slider_track, type_body,
+    type_section, type_small,
 };
 use rune::{
     Align, Cursor, Cx, El, Phase, ScrollSpec, Side, SpringPair, TextStyle, Transition, col, el,
@@ -531,6 +531,21 @@ fn discord_badge_el(count: u32) -> Option<El> {
     )
 }
 
+pub(crate) fn mini_volume_range(s: &AppState, track: El) -> El {
+    let muted = s.media.music_muted || s.media.music_volume <= 0.001;
+    let level = if muted {
+        0.0
+    } else {
+        s.media.music_volume.clamp(0.0, 1.0)
+    };
+    slider_range(track, level, 0.0, 1.0, 0.05, true, |s: &mut AppState, v| {
+        if v > 0.01 {
+            s.chrome.mini_last_audible = v as f32;
+        }
+        s.music_set_volume(v, Some(v <= 0.001));
+    })
+}
+
 fn mini_volume_popover_layers(s: &AppState) -> Vec<El> {
     if !s.chrome.mini_volume_open {
         return Vec::new();
@@ -566,6 +581,7 @@ fn mini_volume_popover_layers(s: &AppState) -> Vec<El> {
             }
         }
     });
+    let slider = mini_volume_range(s, slider);
 
     let mute_icon_btn = el()
         .key("mini-vol-pop-mute")

@@ -1195,7 +1195,15 @@ fn volume_slider(key_prefix: &str, width: f32, level: f64, muted: bool) -> El {
                 .fill(FG),
         );
     }
-    slider
+    exo_kit::slider_range(
+        slider,
+        f64::from(pct),
+        0.0,
+        1.0,
+        0.05,
+        true,
+        |s: &mut AppState, v| s.music_set_volume(v, None),
+    )
 }
 
 fn seek_slider(
@@ -1248,6 +1256,15 @@ fn seek_slider(
                 }
             }
         });
+        s_el = exo_kit::slider_range(
+            s_el,
+            pos_ms.unwrap_or(0.0).clamp(0.0, dur as f64),
+            0.0,
+            dur as f64,
+            5000.0,
+            true,
+            |s: &mut AppState, v| s.music_seek_ms(v),
+        );
     }
     s_el
 }
@@ -2347,6 +2364,15 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
                     }
                 }
             });
+        seek_bar = exo_kit::slider_range(
+            seek_bar,
+            duration_ms as f64 * f64::from(progress.clamp(0.0, 1.0)),
+            0.0,
+            duration_ms as f64,
+            5000.0,
+            true,
+            |s: &mut AppState, v| s.seek_music_ms(v.round() as i64),
+        );
     }
 
     let track_btn = row()
@@ -2422,6 +2448,7 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
                 }
             }
         });
+        let vol_slider = crate::shell::mini_volume_range(s, vol_slider);
         row()
             .gap(4.0)
             .center_y()

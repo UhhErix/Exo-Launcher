@@ -137,6 +137,9 @@ fn embed_card(
         if let Some(ref url) = embed.url {
             let u = url.clone();
             title_el = el()
+                .role("link")
+                .label(title.clone())
+                .focusable(true)
                 .w_full()
                 .cursor(Cursor::Pointer)
                 .hit()
@@ -225,6 +228,9 @@ fn embed_card(
             let lb_orig = orig_c.clone();
             let lb_cap = embed.title.clone().unwrap_or_else(|| "GIF".into());
             let mut tile = el()
+                .role("button")
+                .label(format!("Open {lb_cap}"))
+                .focusable(true)
                 .w(gw)
                 .h(gh)
                 .radius(RADIUS_SMALL)
@@ -286,7 +292,10 @@ fn embed_card(
         let lb_orig = orig_c.clone();
         let lb_cap = embed.title.clone().unwrap_or_default();
         inner = inner.child(
-            el().w(360.0)
+            el().role("button")
+                .label("Open image")
+                .focusable(true)
+                .w(360.0)
                 .h(202.0)
                 .radius(RADIUS_SMALL)
                 .clip_rounded(RADIUS_SMALL)
@@ -338,7 +347,10 @@ fn embed_card(
             (300.0, 190.0)
         };
         inner = inner.child(
-            el().w(tw)
+            el().role("button")
+                .label("Open image")
+                .focusable(true)
+                .w(tw)
                 .h(th)
                 .radius(RADIUS_SMALL)
                 .clip_rounded(RADIUS_SMALL)
@@ -427,6 +439,9 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
             let reveal_id = att.id.clone();
             return el()
                 .key(format!("dc-att-sp-{}", att.id))
+                .role("button")
+                .label_static("Show spoiler")
+                .focusable(true)
                 .w(box_w)
                 .h(box_h)
                 .radius(RADIUS_CARD)
@@ -460,6 +475,9 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
         let lb_alt = att.description.clone().unwrap_or_default();
         let mut frame = el()
             .key(format!("dc-att-img-{}", att.id))
+            .role("button")
+            .label(format!("Open image {}", att.filename))
+            .focusable(true)
             .w(box_w)
             .h(box_h)
             .radius(RADIUS_CARD)
@@ -505,6 +523,10 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
             let aid_alt = att_id.clone();
             frame = frame.child(
                 el().key(format!("dc-att-alt-{}", att.id))
+                    .role("button")
+                    .label_static("Toggle image description")
+                    .focusable(true)
+                    .expanded(alt_open)
                     .pin(Some(8.0), None, None, Some(8.0))
                     .px(6.0)
                     .py(2.0)
@@ -584,6 +606,14 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
                     let u = att.url.clone();
                     card = card.child(
                         el().key(format!("dc-att-exp-{}", att.id))
+                            .role("button")
+                            .label(if *expanded {
+                                "Collapse file text"
+                            } else {
+                                "Expand file text"
+                            })
+                            .focusable(true)
+                            .expanded(*expanded)
                             .w_full()
                             .px(12.0)
                             .py(6.0)
@@ -659,6 +689,9 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
     let open_u = att.url.clone();
     row()
         .key(format!("dc-att-file-{}", att.id))
+        .role("link")
+        .label(format!("Open file {}", att.filename))
+        .focusable(true)
         .px(12.0)
         .py(8.0)
         .gap(8.0)
@@ -734,6 +767,14 @@ fn render_component_node(
             };
             let mut btn = row()
                 .key(format!("dc-comp-btn-{}-{idx}", msg.id))
+                .role(if is_link { "link" } else { "button" })
+                .label(if label.is_empty() {
+                    "Button".to_string()
+                } else {
+                    label.clone()
+                })
+                .focusable(!comp.disabled)
+                .disabled(comp.disabled)
                 .h(30.0)
                 .px(12.0)
                 .gap(5.0)
@@ -801,6 +842,10 @@ fn render_component_node(
             let mut box_col = col().w(300.0).gap(4.0).child(
                 row()
                     .key(format!("dc-comp-sel-{select_id}"))
+                    .role("button")
+                    .label(placeholder.clone())
+                    .focusable(true)
+                    .expanded(is_open)
                     .w_full()
                     .h(34.0)
                     .px(10.0)
@@ -851,6 +896,9 @@ fn render_component_node(
                     opts = opts.child(
                         col()
                             .key(format!("dc-comp-sopt-{select_id}-{oi}"))
+                            .role("option")
+                            .label(opt.label.clone())
+                            .focusable(true)
                             .w_full()
                             .px(8.0)
                             .py(6.0)
@@ -1227,6 +1275,9 @@ fn system_message_row(s: &AppState, msg: &DiscordMessage) -> Option<El> {
             if let Some(ref th) = msg.thread {
                 let tid = th.id.clone();
                 r = r
+                    .role("button")
+                    .label(format!("Open thread {thread_name}"))
+                    .focusable(true)
                     .cursor(Cursor::Pointer)
                     .hit()
                     .press_on_down()
@@ -1396,6 +1447,10 @@ fn message_row(
         let jump_mid = r.id.clone();
         body = body.child(
             row()
+                .key(format!("dc-reply-jump-{}", msg.id))
+                .role("link")
+                .label(format!("Jump to reply from {}", r.display_name()))
+                .focusable(true)
                 .w_full()
                 .gap(6.0)
                 .center_y()
@@ -1570,7 +1625,11 @@ fn message_row(
         let pf_uname = msg.author.username.clone();
         let pf_av = msg.author.avatar_url();
         let mut header_left = row().gap(7.0).center_y().child(
-            el().cursor(Cursor::Pointer)
+            el().key(format!("dc-msg-author-{}", msg.id))
+                .role("button")
+                .label(format!("Open profile of {author_name}"))
+                .focusable(true)
+                .cursor(Cursor::Pointer)
                 .hit()
                 .press_on_down()
                 .on_press(move |s: &mut AppState| {
@@ -1844,6 +1903,9 @@ fn message_row(
         body = body.child(
             row()
                 .key(format!("dc-thbox-{}", th.id))
+                .role("button")
+                .label(format!("Open thread {}", th.name))
+                .focusable(true)
                 .px(10.0)
                 .py(6.0)
                 .gap(8.0)
@@ -1882,7 +1944,11 @@ fn message_row(
                         .color(fg_faint()),
                 )
                 .child(
-                    el().cursor(Cursor::Pointer)
+                    el().key(format!("dc-ephemeral-dismiss-{mid_dis}"))
+                        .role("button")
+                        .label_static("Dismiss message")
+                        .focusable(true)
+                        .cursor(Cursor::Pointer)
                         .hit()
                         .press_on_down()
                         .on_press(move |s: &mut AppState| {
@@ -1914,6 +1980,10 @@ fn message_row(
                 rrow = rrow.child(
                     row()
                         .key(format!("dc-rx-{}-{}-{is_burst}", msg.id, key_rx))
+                        .role("button")
+                        .label(format!("{}, {cnt}", r.emoji.display()))
+                        .focusable(true)
+                        .checked(mine)
                         .h(26.0)
                         .px(8.0)
                         .gap(5.0)
@@ -1964,6 +2034,10 @@ fn message_row(
                 let already = msg.reactions.iter().any(|r| r.emoji.key() == em && r.me);
                 bar = bar.child(
                     el().key(format!("dc-qrx-{}-{em}", msg.id))
+                        .role("button")
+                        .label(format!("React with {em}"))
+                        .focusable(true)
+                        .checked(already)
                         .size(24.0, 24.0)
                         .radius(12.0)
                         .hover(hover_fill())
@@ -2045,7 +2119,11 @@ fn message_row(
                 s.open_context_menu(msg_ctx_target.clone(), p.x, p.y);
             })
             .child(
-                el().cursor(Cursor::Pointer)
+                el().key(format!("dc-msg-avatar-{}", msg.id))
+                    .role("button")
+                    .label(format!("Open profile of {}", msg.display_name()))
+                    .focusable(true)
+                    .cursor(Cursor::Pointer)
                     .hit()
                     .on_press(move |s: &mut AppState| {
                         s.open_user_profile_dialog(ProfileOpenRequest {
@@ -2251,6 +2329,10 @@ pub fn timeline_and_composer(
                         .center_y()
                         .child(
                             el().key("dc-reply-ping")
+                                .role("checkbox")
+                                .label_static("Mention author")
+                                .focusable(true)
+                                .checked(ping_on)
                                 .px(8.0)
                                 .h(22.0)
                                 .radius(RADIUS_PILL)
@@ -2441,6 +2523,9 @@ pub fn timeline_and_composer(
             if s.discord.chat.too_long_prompt || left < 0 {
                 right_foot = right_foot.child(
                     el().key("dc-upload-as-file-prompt")
+                        .role("button")
+                        .label_static("Upload as file")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .press_on_down()
@@ -2511,6 +2596,9 @@ pub fn timeline_and_composer(
         .child(
             row()
                 .key("dc-pm-drop-hint")
+                .role("menuitem")
+                .label_static("Upload a file")
+                .focusable(true)
                 .w_full()
                 .h(34.0)
                 .px(10.0)
@@ -2532,6 +2620,9 @@ pub fn timeline_and_composer(
             pmenu = pmenu.child(
                 row()
                     .key("dc-pm-as-file")
+                    .role("menuitem")
+                    .label_static("Upload message as file")
+                    .focusable(true)
                     .w_full()
                     .h(34.0)
                     .px(10.0)
@@ -2550,6 +2641,9 @@ pub fn timeline_and_composer(
         pmenu = pmenu.child(
             row()
                 .key("dc-pm-poll")
+                .role("menuitem")
+                .label_static("Create poll")
+                .focusable(true)
                 .w_full()
                 .h(34.0)
                 .px(10.0)
@@ -2619,6 +2713,10 @@ fn pending_upload_chip(u: &PendingAttachment) -> El {
         )
         .child(
             el().key(format!("dc-up-sp-{}", u.local_id))
+                .role("checkbox")
+                .label_static("Mark as spoiler")
+                .focusable(true)
+                .checked(u.spoiler)
                 .px(5.0)
                 .h(20.0)
                 .radius(4.0)
@@ -2864,6 +2962,10 @@ pub fn chat_overlay_layers(s: &AppState, scale: f32) -> Vec<El> {
             .transition(popover_transition_from(rune::Vec2::new(0.0, 0.0)))
             .child(
                 row()
+                    .key("dc-image-menu-copy")
+                    .role("menuitem")
+                    .label_static("Copy image")
+                    .focusable(true)
                     .w_full()
                     .h(32.0)
                     .px(10.0)
@@ -2880,6 +2982,10 @@ pub fn chat_overlay_layers(s: &AppState, scale: f32) -> Vec<El> {
             )
             .child(
                 row()
+                    .key("dc-image-menu-save")
+                    .role("menuitem")
+                    .label_static("Save image")
+                    .focusable(true)
                     .w_full()
                     .h(32.0)
                     .px(10.0)
@@ -2897,6 +3003,10 @@ pub fn chat_overlay_layers(s: &AppState, scale: f32) -> Vec<El> {
             .child(el().w_full().h(1.0).fill(hairline()))
             .child(
                 row()
+                    .key("dc-image-menu-copy-link")
+                    .role("menuitem")
+                    .label_static("Copy link")
+                    .focusable(true)
                     .w_full()
                     .h(32.0)
                     .px(10.0)
@@ -2917,6 +3027,10 @@ pub fn chat_overlay_layers(s: &AppState, scale: f32) -> Vec<El> {
             )
             .child(
                 row()
+                    .key("dc-image-menu-open-link")
+                    .role("menuitem")
+                    .label_static("Open link")
+                    .focusable(true)
                     .w_full()
                     .h(32.0)
                     .px(10.0)

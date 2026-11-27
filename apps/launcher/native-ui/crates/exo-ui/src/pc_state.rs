@@ -493,6 +493,7 @@ pub struct SettingsAndPcState {
     pub hdr_ui: crate::pc_hdr::HdrCalibrationUiState,
     pub power_guard_ui: Box<crate::power_guard::PowerGuardUiState>,
     pub hw_sensors_ui: Box<crate::hw_sensors::HwSensorsUiState>,
+    pub gpu_activity_ui: crate::gpu_activity::GpuActivityUiState,
 }
 
 impl SettingsAndPcState {
@@ -1262,6 +1263,7 @@ impl SettingsAndPcState {
             hdr_ui: crate::pc_hdr::HdrCalibrationUiState::default(),
             power_guard_ui: Box::default(),
             hw_sensors_ui: Box::default(),
+            gpu_activity_ui: Default::default(),
         }
     }
 
@@ -1430,6 +1432,7 @@ impl SettingsAndPcState {
             hdr_ui: crate::pc_hdr::HdrCalibrationUiState::default(),
             power_guard_ui: Box::default(),
             hw_sensors_ui: Box::default(),
+            gpu_activity_ui: Default::default(),
         }
     }
 }

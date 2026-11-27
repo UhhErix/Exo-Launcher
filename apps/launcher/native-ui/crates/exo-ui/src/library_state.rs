@@ -1561,7 +1561,28 @@ impl AppState {
         let Some(folder_id) = self.lib.folder_sheet.as_ref().map(|s| s.id.clone()) else {
             return;
         };
-        match decode_cropper_image(path) {
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        let path = path.to_path_buf();
+        std::thread::Builder::new()
+            .name("exo-folder-picture".into())
+            .spawn(move || {
+                let decoded = decode_cropper_image(&path);
+                handle.update(move |s, _| s.land_folder_cropper_image(folder_id, decoded));
+            })
+            .ok();
+    }
+
+    pub fn land_folder_cropper_image(
+        &mut self,
+        folder_id: String,
+        decoded: Result<(u32, u32, Vec<u8>), String>,
+    ) {
+        if self.lib.folder_sheet.as_ref().map(|s| s.id.as_str()) != Some(folder_id.as_str()) {
+            return;
+        }
+        match decoded {
             Ok((w, h, rgba)) => {
                 let preview = Pixels::new();
                 preview.set(w, h, rgba.clone());
@@ -2682,6 +2703,32 @@ mod tests {
             owned: true,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn folder_picture_lands_only_on_the_sheet_it_was_picked_for() {
+        let mut s = AppState::for_host_pipe();
+        s.open_new_folder_sheet(Vec::new());
+        let id = s.lib.folder_sheet.as_ref().unwrap().id.clone();
+
+        s.land_folder_cropper_image("someone-else".into(), Ok((64, 64, vec![0; 64 * 64 * 4])));
+        assert!(s.lib.folder_cropper.is_none());
+
+        s.land_folder_cropper_image(id.clone(), Err("Choose a picture under 15 MB.".into()));
+        assert!(s.lib.folder_cropper.is_none());
+        assert_eq!(
+            s.lib
+                .folder_sheet
+                .as_ref()
+                .and_then(|sh| sh.picture_error.as_deref()),
+            Some("Choose a picture under 15 MB.")
+        );
+
+        s.land_folder_cropper_image(id.clone(), Ok((64, 64, vec![0; 64 * 64 * 4])));
+        let crop = s.lib.folder_cropper.as_ref().expect("cropper opened");
+        assert_eq!(crop.folder_id, id);
+        assert_eq!((crop.raw_width, crop.raw_height), (64, 64));
+        assert!(s.lib.folder_sheet.as_ref().unwrap().picture_error.is_none());
     }
 
     #[test]

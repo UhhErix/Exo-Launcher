@@ -28,6 +28,7 @@ mod game_perf;
 mod game_props;
 mod gamepad;
 mod gifts;
+mod gpu_activity;
 mod gpu_tuning;
 mod hud_overlay;
 mod hw_sensors;
@@ -459,9 +460,9 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let wp4 = s.wp4_tick(now);
     let hb = s.tick_shell_heartbeat(now, tx);
     let music = s.music_tick_with_tx(now, Some(tx));
-    let snip = s.tick_snip_editor_reload();
     let pg = s.tick_power_guard(now);
     let hw = s.tick_hw_sensors(now);
+    s.tick_gpu_activity(now);
     let web = s.poll_web_host();
     let bench = s.tick_web_lifecycle_bench(now, tx);
     focus_changed
@@ -473,7 +474,6 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
         || wp4
         || hb
         || music
-        || snip
         || pg
         || hw
         || web

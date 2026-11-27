@@ -438,6 +438,9 @@ fn render_inline_text(
     if parsed.has_spoiler && !reveal_spoilers {
         let mid = msg_id.to_string();
         return el()
+            .role("button")
+            .label_static("Reveal spoiler")
+            .focusable(true)
             .w_full()
             .hit()
             .press_on_down()

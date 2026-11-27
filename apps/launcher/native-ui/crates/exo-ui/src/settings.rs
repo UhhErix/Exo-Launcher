@@ -13,8 +13,8 @@ use exo_kit::{
     fg_muted, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline,
     hover_fill, icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_search,
     icon_sliders, icon_trophy, icon_user, pressed_fill, progress_bar, scaled, select_trigger,
-    selected_fill, slider_track, surface_card, switch_pill, type_body, type_control, type_page,
-    type_section, type_small, type_title,
+    selected_fill, slider_range, slider_track, surface_card, switch_pill, type_body, type_control,
+    type_page, type_section, type_small, type_title,
 };
 use rune::{
     Cursor, El, Phase, ScrollSpec, SpringPair, TextStyle, Transition, col, edit_access, el, row,
@@ -472,6 +472,15 @@ fn section_in_game(s: &AppState) -> El {
             }
         }
     });
+    let slider = slider_range(
+        slider,
+        f64::from(volume),
+        0.0,
+        100.0,
+        5.0,
+        true,
+        |s: &mut AppState, v| s.wp4_set_achievement_volume(v.round() as i32, true),
+    );
 
     let copied = s
         .wp4

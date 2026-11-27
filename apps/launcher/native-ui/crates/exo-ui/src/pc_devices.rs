@@ -937,6 +937,18 @@ fn wooting_keyboard_page(
                     None,
                 );
             });
+            let act_slider = exo_kit::slider_range(
+                act_slider,
+                act,
+                min_act,
+                max_act,
+                0.1,
+                can_write,
+                move |s: &mut AppState, v| {
+                    let stepped = ((v * 10.0).round() / 10.0).clamp(min_act, max_act);
+                    s.update_keyboard_settings(Some(stepped), None, None, None, None);
+                },
+            );
             let mut act_readout = el()
                 .key("kb-act-up")
                 .hit()
@@ -1053,6 +1065,18 @@ fn wooting_keyboard_page(
                             );
                         },
                     );
+                let rt_slider = exo_kit::slider_range(
+                    rt_slider,
+                    rt_mm,
+                    0.10,
+                    2.35,
+                    0.05,
+                    can_write,
+                    |s: &mut AppState, v| {
+                        let stepped = ((v * 20.0).round() / 20.0).clamp(0.10, 2.35);
+                        s.update_keyboard_settings(None, None, Some(stepped), None, None);
+                    },
+                );
                 let mut rt_readout = el()
                     .key("kb-rt-up")
                     .hit()
@@ -1109,6 +1133,18 @@ fn wooting_keyboard_page(
                 let stepped = ((r * 20.0).round() as i32 * 5).clamp(0, 100);
                 s.update_keyboard_settings(None, None, None, None, Some(stepped));
             });
+            let rgb_slider = exo_kit::slider_range(
+                rgb_slider,
+                f64::from(rgb),
+                0.0,
+                100.0,
+                5.0,
+                can_write,
+                |s: &mut AppState, v| {
+                    let stepped = ((v / 5.0).round() as i32 * 5).clamp(0, 100);
+                    s.update_keyboard_settings(None, None, None, None, Some(stepped));
+                },
+            );
             let mut rgb_label = el()
                 .key("kb-rgb-down")
                 .hit()

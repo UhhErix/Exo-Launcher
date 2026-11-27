@@ -208,6 +208,7 @@ pub struct DiscordState {
     pub loaded: bool,
     pub warmed: bool,
     pub snapshot_hydrated: bool,
+    pub snapshot_epoch: u32,
     pub from_snapshot: bool,
     pub refresh_pending: u8,
     pub refresh_queued: bool,
@@ -282,6 +283,7 @@ impl DiscordState {
             loaded: false,
             warmed: false,
             snapshot_hydrated: false,
+            snapshot_epoch: 0,
             from_snapshot: false,
             refresh_pending: 0,
             refresh_queued: false,
@@ -862,17 +864,32 @@ impl AppState {
             .map(|p| p.join(DISCORD_SNAPSHOT_FILENAME))
     }
 
-    pub(crate) fn hydrate_discord_snapshot(&mut self) -> bool {
+    pub(crate) fn hydrate_discord_snapshot(&mut self) {
         if self.discord.snapshot_hydrated || self.discord.home.me.is_some() {
-            return false;
+            return;
         }
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
         self.discord.snapshot_hydrated = true;
         let Some(path) = self.discord_snapshot_path() else {
-            return false;
+            return;
         };
-        let Some(snap) = read_discord_snapshot(&path) else {
+        let epoch = self.discord.snapshot_epoch;
+        std::thread::Builder::new()
+            .name("exo-dc-snap-read".into())
+            .spawn(move || {
+                if let Some(snap) = read_discord_snapshot(&path) {
+                    handle.update_if(move |s, _| s.apply_discord_snapshot(snap, epoch));
+                }
+            })
+            .ok();
+    }
+
+    pub(crate) fn apply_discord_snapshot(&mut self, snap: DiscordDiskSnapshot, epoch: u32) -> bool {
+        if epoch != self.discord.snapshot_epoch || self.discord.home.me.is_some() {
             return false;
-        };
+        }
         self.discord.home = snap.home;
         self.discord.friends = snap.friends;
         self.discord.blocked = snap.blocked;
@@ -914,6 +931,7 @@ impl AppState {
 
     pub(crate) fn clear_discord_snapshot(&mut self) {
         self.discord.from_snapshot = false;
+        self.discord.snapshot_epoch = self.discord.snapshot_epoch.wrapping_add(1);
         self.discord.home = DiscordHome::default();
         self.discord.friends.clear();
         self.discord.blocked.clear();
@@ -924,7 +942,12 @@ impl AppState {
         self.discord.channels_by_guild.clear();
         self.discord.members_by_guild.clear();
         if let Some(path) = self.discord_snapshot_path() {
-            let _ = std::fs::remove_file(path);
+            std::thread::Builder::new()
+                .name("exo-dc-snap-clear".into())
+                .spawn(move || {
+                    let _ = std::fs::remove_file(path);
+                })
+                .ok();
         }
     }
 
@@ -2418,9 +2441,11 @@ impl AppState {
         let Some(dir) = self.remote_cache_dir.clone() else {
             return;
         };
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
         let urls = self.collect_discord_image_urls();
-        let mut missing: VecDeque<String> = VecDeque::new();
-        let has_cache = self.image_cache.is_some();
+        let mut pending: VecDeque<String> = VecDeque::new();
         for url in urls {
             if exo_rpc::remote_art::parse_allowed_https(&url).is_none() {
                 continue;
@@ -2428,66 +2453,54 @@ impl AppState {
             if self.discord.warmed_image_urls.contains(&url) {
                 continue;
             }
-            if exo_rpc::remote_art::cache_path_for(&dir, &url).is_file() {
-                if has_cache {
-                    let _ = self.remote_image(&url, 1.0);
-                    self.discord.warmed_image_urls.insert(url);
-                }
-            } else if self.discord.prefetched_urls.insert(url.clone()) {
-                missing.push_back(url);
+            if self.discord.prefetched_urls.insert(url.clone()) {
+                pending.push_back(url);
             }
         }
-        if missing.is_empty() {
+        if pending.is_empty() {
             return;
         }
-        #[cfg(windows)]
-        if let Some(handle) = self.handle.clone() {
-            for url in &missing {
-                self.discord.prefetching_urls.insert(url.clone());
-            }
-            let workers = DISCORD_PREFETCH_WORKERS.min(missing.len());
-            let queue = Arc::new(Mutex::new(missing));
-            for i in 0..workers {
-                let queue = Arc::clone(&queue);
-                let dir = dir.clone();
-                let handle = handle.clone();
-                std::thread::Builder::new()
-                    .name(format!("exo-dc-art-{i}"))
-                    .spawn(move || {
-                        let mut done_batch: Vec<(String, bool)> = Vec::with_capacity(4);
-                        loop {
-                            let next = queue.lock().ok().and_then(|mut q| q.pop_front());
-                            let Some(url) = next else {
-                                break;
-                            };
-                            let ok = exo_rpc::remote_art::fetch_cached_image(&url, &dir).is_some();
-                            done_batch.push((url, ok));
-                            if done_batch.len() >= 4 {
-                                let batch = std::mem::take(&mut done_batch);
-                                handle.update(move |s, _| {
-                                    for (u, ok) in batch {
-                                        s.discord.prefetching_urls.remove(&u);
-                                        if ok {
-                                            let _ = s.remote_image(&u, 1.0);
-                                            s.discord.warmed_image_urls.insert(u);
-                                        }
-                                    }
-                                });
-                            }
+        for url in &pending {
+            self.discord.prefetching_urls.insert(url.clone());
+        }
+        let workers = DISCORD_PREFETCH_WORKERS.min(pending.len());
+        let queue = Arc::new(Mutex::new(pending));
+        for i in 0..workers {
+            let queue = Arc::clone(&queue);
+            let dir = dir.clone();
+            let handle = handle.clone();
+            std::thread::Builder::new()
+                .name(format!("exo-dc-art-{i}"))
+                .spawn(move || {
+                    let mut done_batch: Vec<(String, Option<PathBuf>)> = Vec::with_capacity(4);
+                    loop {
+                        let next = queue.lock().ok().and_then(|mut q| q.pop_front());
+                        let Some(url) = next else {
+                            break;
+                        };
+                        let path = exo_rpc::remote_art::fetch_cached_image(&url, &dir);
+                        done_batch.push((url, path));
+                        if done_batch.len() >= 4 {
+                            let batch = std::mem::take(&mut done_batch);
+                            handle.update(move |s, _| s.land_discord_prefetch(batch));
                         }
-                        if !done_batch.is_empty() {
-                            handle.update(move |s, _| {
-                                for (u, ok) in done_batch {
-                                    s.discord.prefetching_urls.remove(&u);
-                                    if ok {
-                                        let _ = s.remote_image(&u, 1.0);
-                                        s.discord.warmed_image_urls.insert(u);
-                                    }
-                                }
-                            });
-                        }
-                    })
-                    .ok();
+                    }
+                    if !done_batch.is_empty() {
+                        handle.update(move |s, _| s.land_discord_prefetch(done_batch));
+                    }
+                })
+                .ok();
+        }
+    }
+
+    fn land_discord_prefetch(&mut self, batch: Vec<(String, Option<PathBuf>)>) {
+        let room = self.current_cache_room();
+        for (u, path) in batch {
+            self.discord.prefetching_urls.remove(&u);
+            if let Some(p) = path
+                && self.land_remote_image(&u, 360.0, 1.0, room, p).is_some()
+            {
+                self.discord.warmed_image_urls.insert(u);
             }
         }
     }
@@ -2496,11 +2509,13 @@ impl AppState {
         if self.image_cache.is_none() || !self.discord.loaded {
             return;
         }
+        self.startup_disk_art.set(true);
         let images: Vec<rune::Image> = self
             .collect_discord_image_urls()
             .into_iter()
             .filter_map(|u| self.remote_image_sized(&u, 64.0, scale))
             .collect();
+        self.startup_disk_art.set(false);
         for img in images {
             let _ = img.wait();
         }
@@ -2597,7 +2612,9 @@ mod tests {
         let snap_path = app.discord_snapshot_path().expect("snapshot path");
         write_discord_snapshot(&realistic_snapshot(), &snap_path).expect("write snapshot");
 
-        assert!(app.hydrate_discord_snapshot());
+        let epoch = app.discord.snapshot_epoch;
+        let snap = read_discord_snapshot(&snap_path).expect("read snapshot");
+        assert!(app.apply_discord_snapshot(snap, epoch));
         assert!(app.discord.from_snapshot);
         assert!(app.discord.loaded);
         assert_eq!(app.discord.home.dms.len(), 50);
@@ -2613,7 +2630,46 @@ mod tests {
         assert!(!can_show_room(&app));
         assert!(app.discord.home.me.is_none());
         assert!(app.discord.friends.is_empty());
-        assert!(!snap_path.exists());
+        assert!(eventually_gone(&snap_path));
+
+        let late = realistic_snapshot();
+        assert!(!app.apply_discord_snapshot(late, epoch));
+        assert!(app.discord.home.me.is_none());
+
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    fn eventually_gone(path: &Path) -> bool {
+        (0..300).any(|_| {
+            if !path.exists() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+            false
+        })
+    }
+
+    #[test]
+    fn snapshot_without_handle_waits_and_late_snapshot_yields_to_live_home() {
+        let dir = temp_cache_dir("nohandle");
+        let mut app = AppState::for_host_pipe();
+        app.remote_cache_dir = Some(dir.clone());
+        app.hydrate_discord_snapshot();
+        assert!(!app.discord.snapshot_hydrated);
+        assert!(app.discord.home.me.is_none());
+
+        app.discord.home.me = Some(DiscordMe {
+            id: "live".into(),
+            name: "Live".into(),
+            ..Default::default()
+        });
+        let epoch = app.discord.snapshot_epoch;
+        assert!(!app.apply_discord_snapshot(realistic_snapshot(), epoch));
+        assert_eq!(
+            app.discord.home.me.as_ref().map(|m| m.id.as_str()),
+            Some("live")
+        );
+        assert!(!app.discord.from_snapshot);
 
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
@@ -2664,7 +2720,7 @@ mod tests {
     }
 
     #[test]
-    fn warm_discord_hydrates_offline_and_marks_warmed_once_connected() {
+    fn warm_discord_waits_for_handle_and_marks_warmed_once_connected() {
         let dir = temp_cache_dir("warm");
         let mut app = AppState::for_host_pipe();
         app.remote_cache_dir = Some(dir.clone());
@@ -2672,8 +2728,11 @@ mod tests {
         write_discord_snapshot(&realistic_snapshot(), &snap_path).expect("write snapshot");
 
         app.warm_discord();
-        assert!(app.discord.home.me.is_some());
+        assert!(!app.discord.snapshot_hydrated);
         assert!(!app.discord.warmed);
+        let snap = read_discord_snapshot(&snap_path).expect("read snapshot");
+        assert!(app.apply_discord_snapshot(snap, app.discord.snapshot_epoch));
+        assert!(app.discord.home.me.is_some());
 
         app.status = HostStatus::Connected;
         app.warm_discord();
@@ -2730,7 +2789,8 @@ mod tests {
         write_discord_snapshot(&realistic_snapshot(), &snap_path).expect("write snapshot");
 
         let t0 = Instant::now();
-        assert!(app.hydrate_discord_snapshot());
+        let snap = read_discord_snapshot(&snap_path).expect("read snapshot");
+        assert!(app.apply_discord_snapshot(snap, app.discord.snapshot_epoch));
         let hydrate_us = t0.elapsed().as_micros();
 
         let t1 = Instant::now();

@@ -514,6 +514,31 @@ pub fn slider_track(
         )
 }
 
+pub fn slider_range<S: 'static>(
+    track: El,
+    value: f64,
+    min: f64,
+    max: f64,
+    step: f64,
+    enabled: bool,
+    set: impl Fn(&mut S, f64) + Clone + 'static,
+) -> El {
+    let track = track.range_value(value, min, max).range_step(step);
+    if !enabled {
+        return track;
+    }
+    let stepped = set.clone();
+    track
+        .on_step(move |s: &mut S, delta, _| {
+            stepped(s, slider_stepped(value, min, max, step, delta));
+        })
+        .on_set_value(move |s: &mut S, target, _| set(s, target))
+}
+
+pub fn slider_stepped(value: f64, min: f64, max: f64, step: f64, delta: i32) -> f64 {
+    (value + f64::from(delta) * step).clamp(min, max.max(min))
+}
+
 pub fn progress_bar(width: f32, fraction: f32) -> El {
     let fill_w = (width * fraction.clamp(0.0, 1.0)).max(2.0);
     el().w(width)

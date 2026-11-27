@@ -2515,6 +2515,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
 
     right_col = right_col.child(crate::power_guard::card_view(s));
 
+    right_col = right_col.child(crate::gpu_activity::card_view(s));
+
     right_col = right_col.child(shaders_card);
 
     col().key("room-exo-ai").w_full().h_full().fill(BG).child(

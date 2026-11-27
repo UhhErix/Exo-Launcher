@@ -722,6 +722,7 @@ pub struct AppState {
     pub room_left_at: HashMap<CacheRoom, f64>,
     pub discord_dirty_while_closed: bool,
     remote_inflight: RefCell<HashSet<String>>,
+    pub(crate) startup_disk_art: Cell<bool>,
     pub video_router: VideoFrameRouter,
     pub events: Rc<EventRegistry>,
     pub chrome: ShellChromeState,
@@ -884,6 +885,7 @@ impl AppState {
             room_left_at: HashMap::new(),
             discord_dirty_while_closed: false,
             remote_inflight: RefCell::new(HashSet::new()),
+            startup_disk_art: Cell::new(false),
             video_router: VideoFrameRouter::new(),
             events: Rc::new(EventRegistry::with_defaults()),
             chrome: ShellChromeState::default(),
@@ -998,6 +1000,7 @@ impl AppState {
             room_left_at: HashMap::new(),
             discord_dirty_while_closed: false,
             remote_inflight: RefCell::new(HashSet::new()),
+            startup_disk_art: Cell::new(false),
             video_router: VideoFrameRouter::new(),
             events: Rc::new(EventRegistry::with_defaults()),
             chrome: ShellChromeState::default(),
@@ -1092,6 +1095,7 @@ impl AppState {
     }
 
     pub fn preload_visible_covers_sync(&self, scale: f32) {
+        self.startup_disk_art.set(true);
         let mut images: Vec<Image> = Vec::new();
         if self.room == Room::Library
             && self.art_base.covers_dir.is_some()
@@ -1257,6 +1261,7 @@ impl AppState {
                 }
             }
         }
+        self.startup_disk_art.set(false);
         for img in images {
             let _ = img.wait();
         }
@@ -1979,10 +1984,6 @@ impl AppState {
         loaded
     }
 
-    pub fn remote_image(&self, url: &str, scale: f32) -> Option<Image> {
-        self.remote_image_sized(url, 360.0, scale)
-    }
-
     pub fn remote_image_sized(&self, url: &str, max_dim: f32, scale: f32) -> Option<Image> {
         self.remote_image_in_room(url, max_dim, scale, self.current_cache_room())
     }
@@ -2004,13 +2005,11 @@ impl AppState {
         }
         let dir = self.remote_cache_dir.as_ref()?;
         remote_art::parse_allowed_https(url)?;
-        let path = remote_art::cache_path_for(dir, url);
-        if path.is_file() {
-            let img = cache.file_capped(path, dim, scale);
-            self.images
-                .borrow_mut()
-                .insert(cache_key, Some(img.clone()), room, dim, scale);
-            return Some(img);
+        if self.startup_disk_art.get() {
+            let path = remote_art::cache_path_for(dir, url);
+            if path.is_file() {
+                return self.land_remote_image(url, dim, scale, room, path);
+            }
         }
         #[cfg(windows)]
         if let Some(handle) = self.handle.clone() {
@@ -2028,19 +2027,12 @@ impl AppState {
                             s.remote_inflight.borrow_mut().remove(&inflight_key);
                             let room_active =
                                 room == CacheRoom::Global || s.current_cache_room() == room;
-                            if let (Some(p), Some(ic)) = (fetched, s.image_cache.as_ref()) {
-                                if room_active {
-                                    let img = ic.file_capped(p, dim, scale);
-                                    s.images.borrow_mut().insert(
-                                        key_owned,
-                                        Some(img),
-                                        room,
-                                        dim,
-                                        scale,
-                                    );
-                                    return true;
-                                }
-                                return false;
+                            if let Some(p) = fetched
+                                && s.image_cache.is_some()
+                            {
+                                return room_active
+                                    && s.land_remote_image(&url_owned, dim, scale, room, p)
+                                        .is_some();
                             }
                             s.images
                                 .borrow_mut()
@@ -2052,6 +2044,24 @@ impl AppState {
             }
         }
         None
+    }
+
+    pub(crate) fn land_remote_image(
+        &self,
+        url: &str,
+        max_dim: f32,
+        scale: f32,
+        room: CacheRoom,
+        path: PathBuf,
+    ) -> Option<Image> {
+        let cache = self.image_cache.as_ref()?;
+        let dim = bucket_dim(max_dim);
+        let cache_key = format!("rem:{}@{dim:.0}", remote_art::canonical_cache_key(url));
+        let img = cache.file_capped(path, dim, scale);
+        self.images
+            .borrow_mut()
+            .insert(cache_key, Some(img.clone()), room, dim, scale);
+        Some(img)
     }
 
     pub fn current_playback_art(&self, scale: f32) -> Option<Image> {
@@ -4635,6 +4645,38 @@ mod library_sort_and_confirm_tests {
     }
 
     #[test]
+    fn disk_cached_remote_art_loads_off_thread_after_startup() {
+        const TINY_PNG_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2dIAAAAASUVORK5CYII=";
+        let tiny_png = exo_rpc::base64::decode(TINY_PNG_B64).expect("valid png");
+        let cache_dir =
+            std::env::temp_dir().join(format!("exo-ui-disk-art-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        std::fs::create_dir_all(&cache_dir).expect("cache dir");
+
+        let mut s = AppState::with_demo_games();
+        s.remote_cache_dir = Some(cache_dir.clone());
+        s.install_waker(Arc::new(|| {}));
+        let url = "https://cdn.discordapp.com/avatars/7/a.png?ex=1&is=1&hm=a";
+        let path = remote_art::cache_path_for(&cache_dir, url);
+        std::fs::write(&path, &tiny_png).expect("write cached art");
+
+        assert!(s.remote_image_sized(url, 128.0, 1.0).is_none());
+        let room = s.current_cache_room();
+        assert!(s.land_remote_image(url, 128.0, 1.0, room, path).is_some());
+        let resigned = "https://cdn.discordapp.com/avatars/7/a.png?ex=2&is=2&hm=b";
+        assert!(s.remote_image_sized(resigned, 128.0, 1.0).is_some());
+
+        let other = "https://cdn.discordapp.com/avatars/8/b.png";
+        std::fs::write(remote_art::cache_path_for(&cache_dir, other), &tiny_png)
+            .expect("write cached art");
+        s.startup_disk_art.set(true);
+        assert!(s.remote_image_sized(other, 128.0, 1.0).is_some());
+        s.startup_disk_art.set(false);
+
+        let _ = std::fs::remove_dir_all(&cache_dir);
+    }
+
+    #[test]
     fn memory_leak_regression_10k_music_and_discord_pushes_stay_bounded() {
         use exo_rpc::{
             DiscordMessage, DiscordMessageEvent, DiscordPresenceEvent, DiscordTypingEvent,
@@ -4741,7 +4783,9 @@ mod library_sort_and_confirm_tests {
             if !p.is_file() {
                 std::fs::write(&p, &tiny_png).expect("write avatar");
             }
+            s.startup_disk_art.set(true);
             let img_a = s.remote_image_sized(&url_a, 128.0, 1.0);
+            s.startup_disk_art.set(false);
             let img_b = s.remote_image_sized(&url_b, 128.0, 1.0);
             assert!(img_a.is_some());
             assert!(img_b.is_some());

@@ -12,7 +12,8 @@ use exo_kit::{
     glass_icon_circle_opt, glass_panel_fill, glass_rim, hover_fill, icon_check, icon_edit,
     icon_image_upload, icon_search, icon_zoom_in, icon_zoom_out, modal_card_transition,
     modal_scrim_transition, primary_button, scrim_fill, select_menu_layers, select_trigger,
-    slider_track, subtle_fill, type_body, type_control, type_section, type_small, type_title,
+    slider_range, slider_track, subtle_fill, type_body, type_control, type_section, type_small,
+    type_title,
 };
 use exo_rpc::Game;
 use rune::{
@@ -1147,7 +1148,7 @@ fn folder_cropper_body(crop: &crate::library_state::FolderCropperState, folder_n
             )
             .on_press(|s: &mut AppState| adjust_crop_zoom(s, 1.0 / 1.15)),
         )
-        .child(
+        .child(slider_range(
             slider_track(
                 "folder-crop-zoom-slider",
                 "Zoom",
@@ -1161,7 +1162,13 @@ fn folder_cropper_body(crop: &crate::library_state::FolderCropperState, folder_n
                 let target_zoom = 1.0 + frac * (CROP_MAX_ZOOM - 1.0);
                 set_crop_zoom(s, target_zoom);
             }),
-        )
+            f64::from(crop.zoom),
+            1.0,
+            f64::from(CROP_MAX_ZOOM),
+            0.1,
+            !crop.busy,
+            |s: &mut AppState, v| set_crop_zoom(s, v as f32),
+        ))
         .child(
             glass_icon_circle_opt(
                 "folder-crop-zoom-in",

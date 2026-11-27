@@ -2199,9 +2199,18 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
                         FileDialogOptions::default().filter("Pictures", &["jpg", "jpeg", "png"]);
                     tx.open_file(opts, |s: &mut AppState, res, _| {
                         if let Ok(Some(path)) = res
-                            && let Ok(bytes) = std::fs::read(path)
+                            && let Some(handle) = s.handle.clone()
                         {
-                            s.music_playlist_sheet_pick_file(bytes);
+                            std::thread::Builder::new()
+                                .name("exo-music-cover-read".into())
+                                .spawn(move || {
+                                    if let Ok(bytes) = std::fs::read(path) {
+                                        handle.update(move |s, _| {
+                                            s.music_playlist_sheet_pick_file(bytes)
+                                        });
+                                    }
+                                })
+                                .ok();
                         }
                     });
                 },

@@ -8,8 +8,8 @@ use exo_kit::{
     SPRING_MOVE, SPRING_QUICK, bad, fg_muted, float_line, glass_panel, good, hover_fill,
     icon_check, icon_chevron_down, icon_close, icon_cpu, icon_hard_drive, icon_monitor,
     modal_card_transition, modal_scrim_transition, popover_transition_from, pressed_fill,
-    progress_bar, scaled, slider_track, status_badge, subtle_fill, track_fill, type_body,
-    type_control, type_page, type_section, type_small, type_title, warn,
+    progress_bar, scaled, slider_range, slider_track, status_badge, subtle_fill, track_fill,
+    type_body, type_control, type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{AutopilotLive, AutopilotReport, DriverProgress, DriverState, OutputColor};
 use rune::{Cursor, El, Key, Phase, ScrollSpec, TextStyle, col, el, row, text};
@@ -885,6 +885,7 @@ fn display_menu_body(s: &AppState) -> El {
                 let lo_b = ddc.brightness_min;
                 let hi_b = ddc.brightness_max.max(lo_b + 1);
                 let ratio = ((br - lo_b) as f32 / (hi_b - lo_b) as f32).clamp(0.0, 1.0);
+                let sid_keys = sid.clone();
                 body = body.child(menu_row(
                     "Monitor brightness",
                     None,
@@ -892,7 +893,7 @@ fn display_menu_body(s: &AppState) -> El {
                     row()
                         .gap(10.0)
                         .center_y()
-                        .child(
+                        .child(slider_range(
                             slider_track(
                                 "ddc-br-slider",
                                 "Monitor brightness",
@@ -912,7 +913,18 @@ fn display_menu_body(s: &AppState) -> El {
                                 m.insert("brightness".into(), json!(val));
                                 s.run_gpu_display_change("ddc", "ddcBrightness", m);
                             }),
-                        )
+                            f64::from(br),
+                            f64::from(lo_b),
+                            f64::from(hi_b),
+                            5.0,
+                            !busy,
+                            move |s: &mut AppState, v| {
+                                let mut m = serde_json::Map::new();
+                                m.insert("display".into(), json!(sid_keys));
+                                m.insert("brightness".into(), json!(v.round() as i32));
+                                s.run_gpu_display_change("ddc", "ddcBrightness", m);
+                            },
+                        ))
                         .child(
                             el().w(40.0)
                                 .justify_end()
@@ -925,6 +937,7 @@ fn display_menu_body(s: &AppState) -> El {
                 let lo_c = ddc.contrast_min;
                 let hi_c = ddc.contrast_max.max(lo_c + 1);
                 let ratio = ((ct - lo_c) as f32 / (hi_c - lo_c) as f32).clamp(0.0, 1.0);
+                let sid_keys = sid.clone();
                 body = body.child(menu_row(
                     "Monitor contrast",
                     None,
@@ -932,7 +945,7 @@ fn display_menu_body(s: &AppState) -> El {
                     row()
                         .gap(10.0)
                         .center_y()
-                        .child(
+                        .child(slider_range(
                             slider_track(
                                 "ddc-ct-slider",
                                 "Monitor contrast",
@@ -952,7 +965,18 @@ fn display_menu_body(s: &AppState) -> El {
                                 m.insert("contrast".into(), json!(val));
                                 s.run_gpu_display_change("ddc", "ddcContrast", m);
                             }),
-                        )
+                            f64::from(ct),
+                            f64::from(lo_c),
+                            f64::from(hi_c),
+                            5.0,
+                            !busy,
+                            move |s: &mut AppState, v| {
+                                let mut m = serde_json::Map::new();
+                                m.insert("display".into(), json!(sid_keys));
+                                m.insert("contrast".into(), json!(v.round() as i32));
+                                s.run_gpu_display_change("ddc", "ddcContrast", m);
+                            },
+                        ))
                         .child(
                             el().w(40.0)
                                 .justify_end()
@@ -980,6 +1004,8 @@ fn display_menu_body(s: &AppState) -> El {
                 let cmax = ctrl.max;
                 let sid = screen.id.clone();
                 let key_s = ctrl.key.clone();
+                let sid_keys = sid.clone();
+                let key_keys = key_s.clone();
                 body = body.child(menu_row(
                     ctrl.label.clone(),
                     None,
@@ -987,7 +1013,7 @@ fn display_menu_body(s: &AppState) -> El {
                     row()
                         .gap(10.0)
                         .center_y()
-                        .child(
+                        .child(slider_range(
                             slider_track(
                                 format!("col-slider-{}", ctrl.key),
                                 ctrl.label.clone(),
@@ -1010,7 +1036,20 @@ fn display_menu_body(s: &AppState) -> El {
                                 m.insert("value".into(), json!(val));
                                 s.run_gpu_display_change("adjust", &key_s, m);
                             }),
-                        )
+                            ctrl.value,
+                            cmin,
+                            cmax,
+                            step,
+                            !busy,
+                            move |s: &mut AppState, v| {
+                                let val = ((v / step).round() * step).clamp(cmin, cmax);
+                                let mut m = serde_json::Map::new();
+                                m.insert("display".into(), json!(sid_keys));
+                                m.insert("key".into(), json!(key_keys));
+                                m.insert("value".into(), json!(val));
+                                s.run_gpu_display_change("adjust", &key_keys, m);
+                            },
+                        ))
                         .child(
                             el().w(40.0)
                                 .justify_end()

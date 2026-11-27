@@ -1,4 +1,5 @@
 use crate::devices_audio::device_btn;
+use crate::image_cache::bucket_dim;
 use crate::state::{AppState, HostStatus};
 use exo_kit::{
     BG, FG, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, bad, fg_faint, fg_muted,
@@ -7,7 +8,7 @@ use exo_kit::{
     type_body, type_control, type_section, type_small,
 };
 use exo_rpc::{
-    CaptureItem, CaptureSaveImageReply, CaptureTextReply, METHOD_CAPTURE_SAVE_IMAGE,
+    ArtBase, CaptureItem, CaptureSaveImageReply, CaptureTextReply, METHOD_CAPTURE_SAVE_IMAGE,
     METHOD_CAPTURE_TEXT,
 };
 use rune::{
@@ -15,6 +16,8 @@ use rune::{
     KeyEvent, Pixels, TextStyle, Tx, col, el, row, text,
 };
 use serde_json::json;
+use std::path::PathBuf;
+use std::time::Duration;
 
 fn annotate_red() -> Color {
     srgb(255, 92, 92, 1.0)
@@ -300,92 +303,115 @@ impl SnipEditorState {
     }
 }
 
+const SNIP_LOAD_ATTEMPTS: usize = 40;
+const SNIP_LOAD_RETRY: Duration = Duration::from_millis(100);
+
+pub enum SnipSource {
+    Full(Pixels),
+    Thumb(PathBuf),
+}
+
+fn read_snip_source(art: &ArtBase, url: &str) -> Option<SnipSource> {
+    if let Some(path) = art.resolve_capture_file(url)
+        && let Ok(bytes) = std::fs::read(&path)
+        && let Ok(px) = Pixels::from_png(&bytes)
+    {
+        return Some(SnipSource::Full(px));
+    }
+    art.resolve_capture_thumb(url).map(SnipSource::Thumb)
+}
+
 impl AppState {
     pub fn open_snip_editor(&mut self, item_id: &str) {
-        let pixels = self
+        let pixels = (self.status == HostStatus::Standalone).then(|| {
+            let (w, h) = (960u32, 540u32);
+            let mut rgba = vec![0u8; (w * h * 4) as usize];
+            for y in 0..h {
+                for x in 0..w {
+                    let i = ((y * w + x) * 4) as usize;
+                    let gx = (x * 255 / w) as u8;
+                    let gy = (y * 255 / h) as u8;
+                    rgba[i] = 18 + (gx / 5);
+                    rgba[i + 1] = 24 + (gy / 4);
+                    rgba[i + 2] = 44 + (gx / 3);
+                    rgba[i + 3] = 255;
+                }
+            }
+            let px = Pixels::new();
+            px.set(w, h, rgba);
+            px
+        });
+        let mut ed = SnipEditorState::new(item_id.to_string(), pixels);
+        if ed.pixels.is_none() {
+            ed.error = Some("Loading snip image…".into());
+            self.spawn_snip_load(item_id);
+        }
+        self.media.snip_editor = Some(ed);
+    }
+
+    fn spawn_snip_load(&self, item_id: &str) {
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        let Some(url) = self
             .media
             .capture_items
             .iter()
             .find(|c| c.id == item_id)
-            .and_then(|item| {
-                if let Some(path) = self.art_base.resolve_capture_file(&item.url)
-                    && let Ok(bytes) = std::fs::read(&path)
-                    && let Ok(px) = Pixels::from_png(&bytes)
-                {
-                    return Some(px);
-                }
-                self.capture_thumb_image(&item.url, 1.0)
-                    .map(|img| img.pixels().clone())
-            });
-        let pixels = pixels.or_else(|| {
-            (self.status == HostStatus::Standalone).then(|| {
-                let (w, h) = (960u32, 540u32);
-                let mut rgba = vec![0u8; (w * h * 4) as usize];
-                for y in 0..h {
-                    for x in 0..w {
-                        let i = ((y * w + x) * 4) as usize;
-                        let gx = (x * 255 / w) as u8;
-                        let gy = (y * 255 / h) as u8;
-                        rgba[i] = 18 + (gx / 5);
-                        rgba[i + 1] = 24 + (gy / 4);
-                        rgba[i + 2] = 44 + (gx / 3);
-                        rgba[i + 3] = 255;
+            .map(|c| c.url.clone())
+        else {
+            return;
+        };
+        let art = self.art_base.clone();
+        let item_id = item_id.to_string();
+        std::thread::Builder::new()
+            .name("exo-snip-load".into())
+            .spawn(move || {
+                let loaded = (0..SNIP_LOAD_ATTEMPTS).find_map(|attempt| {
+                    if attempt > 0 {
+                        std::thread::sleep(SNIP_LOAD_RETRY);
                     }
+                    read_snip_source(&art, &url)
+                });
+                if let Some(source) = loaded {
+                    handle.update_if(move |s, _| s.land_snip_source(&item_id, source));
                 }
-                let px = Pixels::new();
-                px.set(w, h, rgba);
-                px
             })
-        });
-        let mut ed = SnipEditorState::new(item_id.to_string(), pixels);
-        if ed.pixels.is_none() && self.status != HostStatus::Standalone {
-            ed.error = Some("Loading snip image…".into());
+            .ok();
+    }
+
+    pub fn land_snip_source(&mut self, item_id: &str, source: SnipSource) -> bool {
+        let Some(ref old) = self.media.snip_editor else {
+            return false;
+        };
+        if old.item_id != item_id || old.pixels.is_some() {
+            return false;
         }
-        self.media.snip_editor = Some(ed);
+        let px = match source {
+            SnipSource::Full(px) => px,
+            SnipSource::Thumb(path) => {
+                let Some(cache) = self.image_cache.as_ref() else {
+                    return false;
+                };
+                cache
+                    .file_capped(path, bucket_dim(320.0), 1.0)
+                    .pixels()
+                    .clone()
+            }
+        };
+        let mut next = SnipEditorState::new(item_id.to_string(), Some(px));
+        next.tab = old.tab;
+        next.markup = old.markup;
+        next.crop_shape = old.crop_shape;
+        next.sync_tool();
+        self.media.snip_editor = Some(next);
+        true
     }
 
     pub fn close_snip_editor(&mut self) {
         self.media.snip_editor = None;
     }
 
-    pub fn tick_snip_editor_reload(&mut self) -> bool {
-        let Some(ref ed) = self.media.snip_editor else {
-            return false;
-        };
-        if ed.pixels.is_some() || self.status == HostStatus::Standalone {
-            return false;
-        }
-        let item_id = ed.item_id.clone();
-        let reloaded = self
-            .media
-            .capture_items
-            .iter()
-            .find(|c| c.id == item_id)
-            .and_then(|item| {
-                if let Some(path) = self.art_base.resolve_capture_file(&item.url)
-                    && let Ok(bytes) = std::fs::read(&path)
-                    && let Ok(px) = Pixels::from_png(&bytes)
-                {
-                    return Some(px);
-                }
-                self.capture_thumb_image(&item.url, 1.0)
-                    .map(|img| img.pixels().clone())
-            });
-        let Some(px) = reloaded else {
-            return false;
-        };
-        let mut next = SnipEditorState::new(item_id, Some(px));
-        if let Some(ref old) = self.media.snip_editor {
-            next.tab = old.tab;
-            next.markup = old.markup;
-            next.crop_shape = old.crop_shape;
-        }
-        next.sync_tool();
-        self.media.snip_editor = Some(next);
-        true
-    }
-
-    /// Traces the current snip locally into clean editable SVG using OpenVector (`openvector` CLI / `npx openvector`).
     pub fn snip_export_svg(&mut self) {
         let Some(ref mut ed) = self.media.snip_editor else {
             return;
@@ -411,22 +437,28 @@ impl AppState {
             return;
         }
 
-        let target_svg = self
+        let capture_url = self
             .media
             .capture_items
             .iter()
             .find(|c| c.id == item_id)
-            .and_then(|item| self.art_base.resolve_capture_file(&item.url))
-            .map(|p| p.with_extension("svg"))
-            .unwrap_or_else(|| {
-                std::env::temp_dir().join(format!("exo-snip-{}.svg", item_id.replace(':', "-")))
-            });
+            .map(|c| c.url.clone());
+        let art = self.art_base.clone();
 
         #[cfg(windows)]
         if let Some(handle) = self.handle.clone() {
             std::thread::spawn(move || {
                 use std::os::windows::process::CommandExt;
                 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+                let target_svg = capture_url
+                    .as_deref()
+                    .and_then(|url| art.resolve_capture_file(url))
+                    .map(|p| p.with_extension("svg"))
+                    .unwrap_or_else(|| {
+                        std::env::temp_dir()
+                            .join(format!("exo-snip-{}.svg", item_id.replace(':', "-")))
+                    });
 
                 let tmp_in = std::env::temp_dir().join(format!(
                     "exo-ov-in-{}.png",
@@ -502,7 +534,7 @@ impl AppState {
             });
         }
         #[cfg(not(windows))]
-        let _ = (png_bytes, target_svg);
+        let _ = (png_bytes, capture_url, art, item_id);
     }
 
     pub fn snip_save(&mut self) {
@@ -1181,6 +1213,32 @@ mod tests {
         assert!(!ed.is_dirty());
         assert!(ed.canvas.redo());
         assert!(ed.is_dirty());
+    }
+
+    #[test]
+    fn snip_pixels_land_once_on_the_matching_editor() {
+        let mut s = AppState::for_host_pipe();
+        s.open_snip_editor("s1");
+        let ed = s.media.snip_editor.as_mut().expect("snip editor opened");
+        assert!(ed.pixels.is_none());
+        assert_eq!(ed.error.as_deref(), Some("Loading snip image…"));
+        ed.tab = SnipTab::Blur;
+
+        let px = || {
+            let px = Pixels::new();
+            px.set(40, 30, vec![90u8; 40 * 30 * 4]);
+            px
+        };
+        assert!(!s.land_snip_source("other", SnipSource::Full(px())));
+        assert!(s.media.snip_editor.as_ref().unwrap().pixels.is_none());
+
+        assert!(s.land_snip_source("s1", SnipSource::Full(px())));
+        let ed = s.media.snip_editor.as_ref().unwrap();
+        assert_eq!(ed.pixels.as_ref().map(|p| p.size()), Some((40, 30)));
+        assert_eq!(ed.tab, SnipTab::Blur);
+        assert!(ed.error.is_none());
+
+        assert!(!s.land_snip_source("s1", SnipSource::Full(px())));
     }
 
     #[test]

@@ -35,6 +35,7 @@ pub const STAGE_TITLES: [&str; STAGES] = [
     "Live tour",
     "Done",
 ];
+const ACCOUNT_STAGE: usize = 1;
 const TOUR_STAGE: usize = 4;
 const DONE_STAGE: usize = 5;
 const TRACK_H: f32 = 64.0;
@@ -280,6 +281,14 @@ impl AppState {
     }
 
     fn setup_go_stage(&mut self, stage: usize) {
+        if self.setup.stage == ACCOUNT_STAGE && stage > ACCOUNT_STAGE {
+            #[cfg(windows)]
+            self.call_host_async(
+                "exoAccount.markAsked",
+                json!({}),
+                |_, _: Result<serde_json::Value, String>| {},
+            );
+        }
         self.setup.stage = stage.min(DONE_STAGE);
         self.setup_enter_stage();
         self.setup_persist(false);

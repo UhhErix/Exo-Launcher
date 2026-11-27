@@ -5156,18 +5156,39 @@ impl AppState {
     pub fn attach_discord_files(&mut self, paths: &[PathBuf]) {
         self.discord.chat.drop_hover = false;
         let room = 10usize.saturating_sub(self.discord.chat.pending_uploads.len());
-        for path in paths.iter().take(room) {
-            let Ok(bytes) = std::fs::read(path) else {
-                continue;
-            };
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("attachment.bin")
-                .to_string();
-            let mime = guess_mime(&name);
-            self.attach_raw_bytes(name, mime, bytes);
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        let paths: Vec<PathBuf> = paths.iter().take(room).cloned().collect();
+        if paths.is_empty() {
+            return;
         }
+        std::thread::Builder::new()
+            .name("exo-dc-attach-read".into())
+            .spawn(move || {
+                let files: Vec<(String, Vec<u8>)> = paths
+                    .iter()
+                    .filter_map(|path| {
+                        let bytes = std::fs::read(path).ok()?;
+                        let name = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("attachment.bin")
+                            .to_string();
+                        Some((name, bytes))
+                    })
+                    .collect();
+                if files.is_empty() {
+                    return;
+                }
+                handle.update(move |s, _| {
+                    for (name, bytes) in files {
+                        let mime = guess_mime(&name);
+                        s.attach_raw_bytes(name, mime, bytes);
+                    }
+                });
+            })
+            .ok();
     }
 
     pub fn remove_pending_upload(&mut self, local_id: &str) {

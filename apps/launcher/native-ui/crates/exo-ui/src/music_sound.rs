@@ -1773,7 +1773,8 @@ fn crossfade_slider(sec: i32) -> El {
     let frac = ((sec - 1) as f32 / 11.0).clamp(0.0, 1.0);
     let width = 300.0;
     let fill_w = (width * frac).clamp(4.0, width);
-    el().key("music-sound-crossfade-slider")
+    let track = el()
+        .key("music-sound-crossfade-slider")
         .role("slider")
         .label("Crossfade length in seconds")
         .focusable(true)
@@ -1808,7 +1809,22 @@ fn crossfade_slider(sec: i32) -> El {
                 .size(12.0, 12.0)
                 .radius(6.0)
                 .fill(FG),
-        )
+        );
+    exo_kit::slider_range(
+        track,
+        f64::from(sec.clamp(1, 12)),
+        1.0,
+        12.0,
+        1.0,
+        true,
+        |s: &mut AppState, v| {
+            let ms = v.round() as i32 * 1000;
+            if let Some(ref mut a) = s.media.music_sound_spotify {
+                a.crossfade_ms = ms;
+            }
+            s.music_set_spotify_audio("crossfadeMs", json!({ "index": ms }));
+        },
+    )
 }
 
 fn spotify_eq_bands(
@@ -1836,12 +1852,13 @@ fn spotify_eq_bands(
             let norm = ((gain as f32 + 12.0) / 24.0).clamp(0.0, 1.0);
             let fill_h = (track_h * norm).clamp(4.0, track_h);
             let key_id = band.key.clone();
+            let key_keys = band.key.clone();
             col()
                 .key(format!("music-eq-band-{i}"))
                 .items_center()
                 .gap(6.0)
                 .child(text(gain_txt).font(scaled_small(s)).color(fg_muted()))
-                .child(
+                .child(exo_kit::slider_range(
                     el().key(format!("music-eq-slider-{i}"))
                         .role("slider")
                         .label(format!("{hz_txt} gain"))
@@ -1883,7 +1900,25 @@ fn spotify_eq_bands(
                                         .fill(FG),
                                 ),
                         ),
-                )
+                    f64::from(gain.clamp(-12, 12)),
+                    -12.0,
+                    12.0,
+                    1.0,
+                    true,
+                    move |s: &mut AppState, v| {
+                        let next_gain = v.round() as i32;
+                        if let Some(ref mut a) = s.media.music_sound_spotify
+                            && let Some(ref mut fs) = a.equalizer.filters
+                            && let Some(b) = fs.iter_mut().find(|x| x.key == key_keys)
+                        {
+                            b.gain = f64::from(next_gain);
+                        }
+                        s.music_set_spotify_audio(
+                            "equalizerGain",
+                            json!({ "index": next_gain, "uid": key_keys }),
+                        );
+                    },
+                ))
                 .child(text(hz_txt).font(scaled_small(s)).color(fg_muted()))
         }))
 }

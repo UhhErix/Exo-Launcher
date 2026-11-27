@@ -4,8 +4,8 @@ use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
     SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_muted, good, hairline, hover_fill,
     icon_headphones, icon_headphones_off, icon_mic, icon_mic_off, icon_phone, icon_phone_off,
-    popover_transition_from, pressed_fill, selected_fill, slider_track, type_body, type_section,
-    type_small,
+    popover_transition_from, pressed_fill, selected_fill, slider_range, slider_track, type_body,
+    type_section, type_small,
 };
 use exo_rpc::{DiscordChannels, DiscordHome, DiscordVoiceMember, HostEvent};
 use rune::{Cursor, El, Phase, SpringPair, SurfaceFit, Transition, col, el, row, text};
@@ -650,6 +650,18 @@ pub fn person_menu_layers(s: &AppState) -> Vec<El> {
                 }
             }
         });
+        let uid_keys = uid.clone();
+        let vol_slider = slider_range(
+            vol_slider,
+            f64::from(user_audio.volume.clamp(0.0, 200.0)),
+            0.0,
+            200.0,
+            5.0,
+            true,
+            move |s: &mut AppState, v| {
+                s.set_discord_user_mix(&uid_keys, Some(v as f32), None, None);
+            },
+        );
 
         body = body
             .child(el().w_full().h(1.0).fill(hairline()))

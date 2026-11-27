@@ -3339,11 +3339,11 @@
       "feature": "GPU activity (per-process VRAM, shared memory, engine slices)",
       "status": "DONE",
       "reactRef": "components/gpu/GpuProcessesSection.tsx:1",
-      "nativeRef": "exo-ui/src/pc_ai.rs:2080",
+      "nativeRef": "exo-ui/src/gpu_activity.rs:92",
       "rpc": [
         "gpu.processes"
       ],
-      "notes": "GPU activity card in Exo AI room with 3-second polling, Refresh button, per-process VRAM/shared memory metrics, engine slices, and multi-adapter subtitle.",
+      "notes": "GPU activity card in Exo AI room with 3-second polling, per-process VRAM/shared memory metrics, engine slices, and multi-adapter subtitle.",
       "workPackage": "WP9"
     },
     {

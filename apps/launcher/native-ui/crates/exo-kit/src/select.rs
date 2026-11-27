@@ -114,6 +114,7 @@ pub fn select_trigger<S: 'static>(
         .key(key)
         .role("combobox")
         .label(aria_label)
+        .expanded(open)
         .h(32.0)
         .px(12.0)
         .gap(6.0)

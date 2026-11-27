@@ -68,6 +68,10 @@ fn modal_wrap(key: &'static str, card: El, on_close: impl Fn(&mut AppState) + 's
 
 fn choice_pill(key: String, label: &str, active: bool) -> El {
     el().key(key)
+        .role("radio")
+        .label(label.to_string())
+        .checked(active)
+        .focusable(true)
         .cursor(Cursor::Pointer)
         .hit()
         .press_on_down()
@@ -191,6 +195,9 @@ pub fn create_dm_overlay(s: &AppState, scale: f32) -> Option<El> {
                 )
                 .child(
                     el().key("dc-cdm-close")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .size(26.0, 26.0)
                         .radius(13.0)
                         .hover(hover_fill())
@@ -320,6 +327,9 @@ pub fn poll_creator_overlay(s: &AppState) -> Option<El> {
         if pc.answers.len() > 2 {
             arow = arow.child(
                 el().key(format!("dc-poll-ans-rm-{i}"))
+                    .role("button")
+                    .label(format!("Remove answer {}", i + 1))
+                    .focusable(true)
                     .size(28.0, 28.0)
                     .radius(14.0)
                     .hover(bad().alpha(0.22))
@@ -387,6 +397,9 @@ pub fn poll_creator_overlay(s: &AppState) -> Option<El> {
                 .child(text("Create a poll").font(type_section()).color(FG))
                 .child(
                     el().key("dc-poll-close")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .size(26.0, 26.0)
                         .radius(13.0)
                         .hover(hover_fill())
@@ -590,6 +603,10 @@ pub fn poll_card(s: &AppState, msg: &DiscordMessage, poll: &DiscordPoll) -> El {
             let multi = poll.allow_multiselect;
             let mut btn = row()
                 .key(format!("dc-poll-opt-{}-{}", msg.id, ans.answer_id))
+                .role("checkbox")
+                .label(format!("{emoji_prefix}{label}"))
+                .checked(picked)
+                .focusable(true)
                 .w_full()
                 .h(36.0)
                 .px(10.0)
@@ -875,6 +892,9 @@ pub fn invite_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
                 )
                 .child(
                     el().key("dc-inv-close")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .size(26.0, 26.0)
                         .radius(13.0)
                         .hover(hover_fill())
@@ -998,6 +1018,9 @@ pub fn invite_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
             )
             .child(
                 el().key("dc-inv-edit-link")
+                    .role("button")
+                    .label_static("Edit invite link")
+                    .focusable(true)
                     .cursor(Cursor::Pointer)
                     .hit()
                     .press_on_down()
@@ -1069,6 +1092,10 @@ pub fn forward_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
         let id_c = t.id.clone();
         let mut r = row()
             .key(format!("dc-fwd-t-{}", t.id))
+            .role("checkbox")
+            .label(t.name.clone())
+            .checked(on)
+            .focusable(true)
             .w_full()
             .h(36.0)
             .px(8.0)
@@ -1133,6 +1160,9 @@ pub fn forward_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
                 .child(text("Forward to").font(type_section()).color(FG))
                 .child(
                     el().key("dc-fwd-close")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .size(26.0, 26.0)
                         .radius(13.0)
                         .hover(hover_fill())
@@ -1315,6 +1345,9 @@ pub fn report_dialog_overlay(s: &AppState) -> Option<El> {
                 .child(text("Report message").font(type_section()).color(FG))
                 .child(
                     el().key("dc-rep-close")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .size(26.0, 26.0)
                         .radius(13.0)
                         .hover(hover_fill())
@@ -1364,6 +1397,10 @@ pub fn report_dialog_overlay(s: &AppState) -> Option<El> {
             reasons = reasons.child(
                 row()
                     .key(format!("dc-rep-r-{reason}"))
+                    .role("radio")
+                    .label(reason.to_string())
+                    .checked(active)
+                    .focusable(true)
                     .w_full()
                     .h(34.0)
                     .px(10.0)
@@ -1803,7 +1840,10 @@ pub fn profile_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
         } else if mf > 0 || ms > 0 {
             body = body.child(
                 row().gap(8.0).child(
-                    el().cursor(Cursor::Pointer)
+                    el().role("button")
+                        .label_static("View mutual friends and servers")
+                        .focusable(true)
+                        .cursor(Cursor::Pointer)
                         .hit()
                         .press_on_down()
                         .on_press(|s: &mut AppState| {
@@ -1990,6 +2030,9 @@ pub fn profile_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
                         flist = flist.child(
                             row()
                                 .key(format!("dc-pf-mf-{}", f.id))
+                                .role("button")
+                                .label(name.clone())
+                                .focusable(true)
                                 .w_full()
                                 .h(40.0)
                                 .px(8.0)
@@ -2045,6 +2088,9 @@ pub fn profile_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
                     slist = slist.child(
                         row()
                             .key(format!("dc-pf-ms-{}", g.id))
+                            .role("button")
+                            .label(g.name.clone())
+                            .focusable(true)
                             .w_full()
                             .h(40.0)
                             .px(8.0)
@@ -2178,11 +2224,14 @@ fn profile_roles_section(s: &AppState) -> El {
             .fill(subtle_fill())
             .border(1.0, hairline())
             .child(el().size(8.0, 8.0).radius(4.0).fill(dot_color))
-            .child(text(name).font(type_label()).color(FG));
+            .child(text(name.clone()).font(type_label()).color(FG));
         if removable {
             let rid_rm = rid.clone();
             chip = chip.child(
                 el().key(format!("dc-pf-role-rm-{rid}"))
+                    .role("button")
+                    .label(format!("Remove role {name}"))
+                    .focusable(true)
                     .size(16.0, 16.0)
                     .radius(8.0)
                     .hover(bad().alpha(0.22))
@@ -2200,6 +2249,9 @@ fn profile_roles_section(s: &AppState) -> El {
     if editable {
         chips = chips.child(
             el().key("dc-pf-role-add")
+                .role("button")
+                .label_static("Add role")
+                .focusable(true)
                 .size(24.0, 24.0)
                 .radius(12.0)
                 .fill(subtle_fill())
@@ -2249,6 +2301,9 @@ fn profile_roles_section(s: &AppState) -> El {
             opts = opts.child(
                 row()
                     .key(format!("dc-pf-ropt-{}", choice.id))
+                    .role("option")
+                    .label(choice.name.clone())
+                    .focusable(true)
                     .w_full()
                     .h(28.0)
                     .px(8.0)

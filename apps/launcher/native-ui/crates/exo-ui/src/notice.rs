@@ -42,6 +42,7 @@ pub enum NoticeActionKind {
     ReenableSystemEq {
         notice_key: String,
     },
+    OpenSteamDownloads,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -825,6 +826,29 @@ impl AppState {
             NoticeActionKind::ReenableSystemEq { notice_key } => {
                 self.dismiss_notice_by_key(&notice_key);
                 self.eq_act("system-eq", "reenable-system-eq", serde_json::json!({}));
+            }
+            NoticeActionKind::OpenSteamDownloads => {
+                #[cfg(windows)]
+                self.call_host_async(
+                    "steam.downloads",
+                    json!({}),
+                    |s, res: Result<Value, String>| {
+                        let failed = match res {
+                            Ok(v) if v.get("ok").and_then(Value::as_bool) == Some(true) => None,
+                            Ok(v) => Some(
+                                v.get("message")
+                                    .and_then(Value::as_str)
+                                    .filter(|m| !m.is_empty())
+                                    .unwrap_or("Steam's Downloads couldn't be opened.")
+                                    .to_string(),
+                            ),
+                            Err(_) => Some("Steam's Downloads couldn't be opened.".into()),
+                        };
+                        if let Some(msg) = failed {
+                            s.push_notice(msg, NoticeTone::Bad);
+                        }
+                    },
+                );
             }
         }
     }
