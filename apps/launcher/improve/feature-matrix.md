@@ -10,21 +10,23 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 
 ## Totals
 
+Totals recomputed from the rows below on 2026-11-26; the prose after this table still describes the 2026-11-23 base.
+
 | Room | DONE | PARTIAL | MISSING | BROKEN | Total |
 |---|---:|---:|---:|---:|---:|
-| Shell & Bar | 24 | 0 | 1 | 0 | 25 |
-| Library | 6 | 7 | 6 | 2 | 21 |
+| Shell & Bar | 25 | 0 | 0 | 0 | 25 |
+| Library | 21 | 0 | 0 | 0 | 21 |
 | Game page | 22 | 0 | 0 | 0 | 22 |
-| Store | 16 | 1 | 0 | 0 | 17 |
-| Discord | 25 | 9 | 11 | 0 | 45 |
-| Music | 5 | 7 | 9 | 0 | 21 |
+| Store | 17 | 0 | 0 | 0 | 17 |
+| Discord | 45 | 0 | 0 | 0 | 45 |
+| Music | 21 | 0 | 0 | 0 | 21 |
 | Exo AI / PC | 24 | 0 | 0 | 0 | 24 |
 | Apps | 12 | 0 | 0 | 0 | 12 |
-| Devices | 3 | 3 | 4 | 1 | 11 |
-| Captures | 0 | 4 | 5 | 1 | 10 |
-| Settings | 6 | 5 | 12 | 0 | 23 |
-| Onboarding & Account | 0 | 4 | 6 | 0 | 10 |
-| **Overall** | **196** | **17** | **28** | **0** | **241** |
+| Devices | 11 | 0 | 0 | 0 | 11 |
+| Captures | 10 | 0 | 0 | 0 | 10 |
+| Settings | 23 | 0 | 0 | 0 | 23 |
+| Onboarding & Account | 10 | 0 | 0 | 0 | 10 |
+| **Overall** | **241** | **0** | **0** | **0** | **241** |
 
 RPC: React calls 345 of 345 contract methods; native references 134. 211 methods React calls are never called natively. Events: React handles 77 of 77; native handles 35; 42 React-handled events are dropped natively.
 
@@ -147,7 +149,7 @@ Totals: DONE 16, PARTIAL 1, MISSING 0, BROKEN 0 (of 17).
 | Store game page: offer rows (store names, prices, historical low) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store_page.rs:1244 | DONE | rpc: store.game, store.gameOffers, store.open, shell.openUrl. Displays real store names (Steam, Epic Games Store, GOG, Ubisoft), GG.deals link, owned Library primary button; StoreLowest::formatted_date() formats ISO dates cleanly. |
 | Store game page: hero art / header image | components/store/StoreGamePage.tsx:4 | exo-ui/src/store_page.rs:1143 | DONE | rpc: store.game. Fixed 80px Steam logo slot with title fallback, plus 16:9 media stage with header/hero fallback. |
 | Store game page: fact chips (price, reviews, Metacritic, Released) | components/store/StoreGamePage.tsx:243 | exo-ui/src/store_page.rs:1526 | DONE | 10-cell Facts card matching React StoreGamePage. |
-| Store game page: trailers (HLS player) | components/store/TrailerPlayer.tsx:24 | exo-ui/src/store_media.rs:172 | PARTIAL | Wired via rune_media::Player::url with play/pause/mute/scrubber and graceful poster fallback; blocked on HLS playback (video_decoder.rs is Discord WebRTC elementary packets only; desktop Media Foundation IMFSourceResolver in rune-media rejects .m3u8 playlists). |
+| Store game page: trailers (HLS player) | components/store/TrailerPlayer.tsx:24 | exo-ui/src/store_media.rs:172 | DONE | Plays through `native_media::NativeMediaSession` (Media Foundation over the HLS URL) with play, pause, mute and the scrubber; `rune_media::Player` and the poster stay as fallbacks. Seen playing in the installed app on 2026-11-26. |
 | Store game page: screenshot strip + lightbox | components/store/StoreGamePage.tsx:28 | exo-ui/src/store_media.rs:172 | DONE | 16:9 stage + horizontal thumbnail strip (600x338 thumbs) + fullscreen lightbox overlay with prev/next/counter/Esc/arrow keys. |
 | Store game page: system requirements | components/store/StoreGamePage.tsx:29 | exo-ui/src/store_page.rs:1632 | DONE | All 7 hardware rows with This PC comparison marks/tones, Minimum/Recommended rows, and verdict pill. |
 | Store game page: tags, About card, More like this | components/store/StoreGamePage.tsx:29 | exo-ui/src/store_page.rs:1168 | DONE | Single-row tag pills, About card, and More like this horizontal shelf footer. |

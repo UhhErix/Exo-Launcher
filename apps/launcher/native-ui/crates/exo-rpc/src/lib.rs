@@ -2454,6 +2454,9 @@ fn parse_event(
         "runtimes.progress" => Ok(serde_json::from_str::<RuntimesProgress>(data_raw)
             .map(HostEvent::RuntimesProgress)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "runtimes.done" => Ok(serde_json::from_str::<RuntimesInstallReply>(data_raw)
+            .map(HostEvent::RuntimesDone)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "shaders.rebuild" => Ok(serde_json::from_str::<ShaderRebuild>(data_raw)
             .map(HostEvent::ShadersRebuild)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
@@ -2958,6 +2961,10 @@ mod tests {
         assert!(matches!(
             parse_event("runtimes.progress", r#"{"phase":"download","name":"Visual C++"}"#, None),
             Ok(HostEvent::RuntimesProgress(p)) if p.name.as_deref() == Some("Visual C++")
+        ));
+        assert!(matches!(
+            parse_event("runtimes.done", r#"{"ok":true,"results":[{"id":"vcredist","name":"Visual C++","outcome":"installed"}]}"#, None),
+            Ok(HostEvent::RuntimesDone(r)) if r.ok && r.results.len() == 1
         ));
         assert!(matches!(
             parse_event("shaders.event", r#"{"name":"progress","data":{"rev":2}}"#, None),

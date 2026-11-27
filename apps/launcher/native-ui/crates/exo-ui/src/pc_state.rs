@@ -2092,6 +2092,36 @@ mod wp9_tests {
             Some("Visual C++")
         );
 
+        s.pc.runtimes_running = None;
+        s.pc.runtimes_progress = None;
+        assert!(
+            s.apply_host_event(HostEvent::RuntimesProgress(RuntimesProgress {
+                phase: "install".into(),
+                name: Some("DirectX".into()),
+                ..Default::default()
+            }))
+        );
+        assert_eq!(s.pc.runtimes_running.as_deref(), Some("update"));
+        assert!(
+            s.apply_host_event(HostEvent::RuntimesDone(exo_rpc::RuntimesInstallReply {
+                ok: true,
+                results: vec![exo_rpc::RuntimeResult {
+                    id: "directx".into(),
+                    outcome: "installed".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }))
+        );
+        assert!(s.pc.runtimes_running.is_none());
+        assert!(s.pc.runtimes_progress.is_none());
+        assert_eq!(
+            s.pc.runtimes_note
+                .as_ref()
+                .map(|(text, failed)| (text.as_str(), *failed)),
+            Some(("1 installed.", false))
+        );
+
         assert!(s.apply_host_event(HostEvent::ShadersRebuild(ShaderRebuild {
             ok: true,
             state: "running".into(),

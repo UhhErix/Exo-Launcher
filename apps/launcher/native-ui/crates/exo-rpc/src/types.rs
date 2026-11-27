@@ -1907,6 +1907,7 @@ pub enum HostEvent {
     DriversStep(crate::pc_types::DriverStep),
     BiosProgress { share: f64 },
     RuntimesProgress(crate::pc_types::RuntimesProgress),
+    RuntimesDone(crate::pc_types::RuntimesInstallReply),
     ShadersRebuild(crate::pc_types::ShaderRebuild),
     Raw { event: String, data: Value },
     Disconnected(String),

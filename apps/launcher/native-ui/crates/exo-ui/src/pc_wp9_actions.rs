@@ -1634,6 +1634,62 @@ impl AppState {
         }
     }
 
+    pub fn apply_runtimes_reply(&mut self, reply: RuntimesInstallReply) {
+        self.pc.runtimes_running = None;
+        self.pc.runtimes_canceling = false;
+        self.pc.runtimes_progress = None;
+        if let Some(items) = reply.items {
+            self.pc.runtimes = Some(items);
+        }
+        let mut installed = 0usize;
+        let mut newer = 0usize;
+        let mut restart = 0usize;
+        let mut failed = 0usize;
+        for r in &reply.results {
+            match r.outcome.as_str() {
+                "installed" => installed += 1,
+                "newer" => newer += 1,
+                "restart" => restart += 1,
+                "failed" => failed += 1,
+                _ => {}
+            }
+            self.pc.runtimes_results.insert(r.id.clone(), r.clone());
+        }
+        if reply.declined || reply.canceled || reply.results.is_empty() {
+            if let Some(m) = reply.message {
+                self.pc.runtimes_note = Some((m, !reply.ok && !reply.canceled));
+            }
+        } else {
+            let mut parts = Vec::new();
+            if installed > 0 {
+                parts.push(format!("{installed} installed"));
+            }
+            if newer > 0 {
+                parts.push(format!("{newer} already newer"));
+            }
+            if restart > 0 {
+                parts.push(format!(
+                    "{restart} {} a restart",
+                    if restart == 1 { "needs" } else { "need" }
+                ));
+            }
+            if failed > 0 {
+                parts.push(format!("{failed} failed"));
+            }
+            let text = if parts.is_empty() {
+                "Nothing needed installing.".into()
+            } else {
+                format!("{}.", parts.join(", "))
+            };
+            self.pc.runtimes_note = Some((text, failed > 0));
+        }
+    }
+
+    pub fn handle_runtimes_done_event(&mut self, reply: RuntimesInstallReply) -> bool {
+        self.apply_runtimes_reply(reply);
+        self.room == Room::ExoAi
+    }
+
     pub fn run_runtimes_install(&mut self, mode: &str) {
         if self.pc.runtimes_running.is_some() {
             return;
@@ -1655,54 +1711,7 @@ impl AppState {
                         s.pc.runtimes_canceling = false;
                         s.pc.runtimes_progress = None;
                         match res {
-                            Ok(reply) => {
-                                if let Some(items) = reply.items {
-                                    s.pc.runtimes = Some(items);
-                                }
-                                let mut installed = 0usize;
-                                let mut newer = 0usize;
-                                let mut restart = 0usize;
-                                let mut failed = 0usize;
-                                for r in &reply.results {
-                                    match r.outcome.as_str() {
-                                        "installed" => installed += 1,
-                                        "newer" => newer += 1,
-                                        "restart" => restart += 1,
-                                        "failed" => failed += 1,
-                                        _ => {}
-                                    }
-                                    s.pc.runtimes_results.insert(r.id.clone(), r.clone());
-                                }
-                                if reply.declined || reply.canceled || reply.results.is_empty() {
-                                    if let Some(m) = reply.message {
-                                        s.pc.runtimes_note =
-                                            Some((m, !reply.ok && !reply.canceled));
-                                    }
-                                } else {
-                                    let mut parts = Vec::new();
-                                    if installed > 0 {
-                                        parts.push(format!("{installed} installed"));
-                                    }
-                                    if newer > 0 {
-                                        parts.push(format!("{newer} already newer"));
-                                    }
-                                    if restart > 0 {
-                                        parts.push(format!(
-                                            "{restart} {} a restart",
-                                            if restart == 1 { "needs" } else { "need" }
-                                        ));
-                                    }
-                                    if failed > 0 {
-                                        parts.push(format!("{failed} failed"));
-                                    }
-                                    let text = if parts.is_empty() {
-                                        "Nothing needed installing.".into()
-                                    } else {
-                                        format!("{}.", parts.join(", "))
-                                    };
-                                    s.pc.runtimes_note = Some((text, failed > 0));
-                                }
-                            }
+                            Ok(reply) => s.apply_runtimes_reply(reply),
                             Err(_) => {
                                 s.pc.runtimes_note = Some((
                                     "The runtimes couldn’t be installed. Try again.".into(),
@@ -2998,11 +3007,11 @@ impl AppState {
     }
 
     pub fn handle_runtimes_progress_event(&mut self, prog: RuntimesProgress) -> bool {
-        if self.pc.runtimes_running.is_some() {
-            self.pc.runtimes_progress = Some(prog);
-            return self.room == Room::ExoAi;
+        if self.pc.runtimes_running.is_none() {
+            self.pc.runtimes_running = Some("update".into());
         }
-        false
+        self.pc.runtimes_progress = Some(prog);
+        self.room == Room::ExoAi
     }
 
     pub fn handle_shaders_event(&mut self, name: &str, data: &Value) -> bool {

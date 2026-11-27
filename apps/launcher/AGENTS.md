@@ -38,7 +38,7 @@ These fail the build or `check`. Fix the code, not the check; an exception goes 
 
 ## Stack (4.0.0)
 
-The native Rune UI is the default (`docs/decisions/2026-11-20-native-ui-rune.md`): `native-ui/` builds `exo-ui.exe` (Rust, wgpu DX12, our Rune fork `UhhErix/rune` pinned to `88707cf6` in `native-ui/Cargo.toml`). The .NET host spawns it (`Services/RuneHostSession.cs`) and talks to it over `IHostTransport` named pipes (`NamedPipeHostTransport`) with the `host-v1.json` contract; WebView2 stays in the host for pages that cannot leave a browser. New UI work lands in `native-ui/`.
+The native Rune UI is the default (`docs/decisions/2026-11-20-native-ui-rune.md`): `native-ui/` builds `exo-ui.exe` (Rust, wgpu DX12, our Rune fork `UhhErix/rune` pinned to `ee806e81` in `native-ui/Cargo.toml`). The .NET host spawns it (`Services/RuneHostSession.cs`) and talks to it over `IHostTransport` named pipes (`NamedPipeHostTransport`) with the `host-v1.json` contract; WebView2 stays in the host for pages that cannot leave a browser. New UI work lands in `native-ui/`.
 
 Classic React runs only in a Debug build: `--ui=web`, `EXO_UI=web`, or no `exo-ui.exe` beside the host. A shipped build always starts the native UI (`RuneHostSession.ClassicUiAllowed`; `--ui=web` there only logs a warning), and with no `exo-ui.exe` it says "Exo is missing a file. Reinstall Exo to repair it." in a message box and exits with code 2. `TrimUnusedPublishFiles` in `ExoLauncher.csproj` deletes the React bundle from `wwwroot` when `exo-ui.exe` is published.
 

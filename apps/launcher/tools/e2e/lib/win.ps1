@@ -424,7 +424,13 @@ switch ($Command) {
         $timeoutSec = if ($W -gt 0) { $W } else { 40 }
         foreach ($p in @(Get-Process ExoLauncher -ErrorAction SilentlyContinue | Where-Object Path -eq $exe)) {
             $h = [ExoWin]::MainWindow($p.Id, $p.MainWindowHandle)
-            if ($h -eq [IntPtr]::Zero -or -not [ExoWin]::PostMessage($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Exo did not accept a normal close' }
+            if ($h -ne [IntPtr]::Zero) {
+                if (-not [ExoWin]::PostMessage($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Exo did not accept a normal close' }
+            } else {
+                foreach ($ui in @(Get-CimInstance Win32_Process -Filter "Name='exo-ui.exe' AND ParentProcessId=$($p.Id)")) {
+                    try { [void](Get-Process -Id $ui.ProcessId -ErrorAction Stop).CloseMainWindow() } catch { }
+                }
+            }
             if (-not $p.WaitForExit($timeoutSec * 1000)) { throw "Exo did not exit in $timeoutSec s" }
         }
         '{"ok":true}'

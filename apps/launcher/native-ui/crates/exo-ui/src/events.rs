@@ -82,6 +82,7 @@ pub enum HostEventKind {
     DriversStep,
     BiosProgress,
     RuntimesProgress,
+    RuntimesDone,
     ShadersRebuild,
     Raw,
     Disconnected,
@@ -166,6 +167,7 @@ impl HostEventKind {
             HostEvent::DriversStep(_) => Self::DriversStep,
             HostEvent::BiosProgress { .. } => Self::BiosProgress,
             HostEvent::RuntimesProgress(_) => Self::RuntimesProgress,
+            HostEvent::RuntimesDone(_) => Self::RuntimesDone,
             HostEvent::ShadersRebuild(_) => Self::ShadersRebuild,
             HostEvent::Raw { .. } => Self::Raw,
             HostEvent::Disconnected(_) => Self::Disconnected,
@@ -686,6 +688,12 @@ fn register_pc(reg: &mut EventRegistry) {
             return false;
         };
         state.handle_runtimes_progress_event(prog)
+    });
+    reg.on(HostEventKind::RuntimesDone, |state, ev| {
+        let HostEvent::RuntimesDone(reply) = ev else {
+            return false;
+        };
+        state.handle_runtimes_done_event(reply)
     });
     reg.on(HostEventKind::ShadersEvent, |state, ev| {
         let HostEvent::ShadersEvent(se) = ev else {
