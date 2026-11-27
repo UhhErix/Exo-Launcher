@@ -631,8 +631,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .m-seg-item.is-on {
-  background: var(--selected);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--primary-ink);
 }
 
 .m-seg-item:disabled { cursor: default; }
@@ -1437,6 +1437,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .m-glide.is-glide-ready [aria-checked='true'] { background-color: transparent; }
+
+.m-seg.m-glide::before { background: var(--ink); }
 
 @keyframes m-arrive {
   from { transform: translateY(8px); }

@@ -1616,8 +1616,7 @@ impl AppState {
             self.switch_room(back);
         } else {
             self.pc.settings_section = match self.room {
-                Room::Library => crate::pc_state::SettingsSection::Account,
-                Room::Music => crate::pc_state::SettingsSection::Updates,
+                Room::Library => crate::pc_state::SettingsSection::Library,
                 _ => crate::pc_state::SettingsSection::General,
             };
             self.switch_room(Room::Settings);

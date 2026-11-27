@@ -11,8 +11,8 @@ use exo_kit::{
     BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, SelectTrigger, TRANSPARENT, bad, card_border,
     fg_muted, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hairline,
-    hover_fill, icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_music,
-    icon_search, icon_sliders, icon_trophy, pressed_fill, progress_bar, scaled, select_trigger,
+    hover_fill, icon_chevron_left, icon_close, icon_download, icon_info, icon_library, icon_search,
+    icon_sliders, icon_trophy, icon_user, pressed_fill, progress_bar, scaled, select_trigger,
     selected_fill, slider_track, surface_card, switch_pill, type_body, type_control, type_page,
     type_section, type_small, type_title,
 };
@@ -118,11 +118,11 @@ pub(crate) fn set_danger_btn(
 pub(crate) fn nav_label(sec: SettingsSection) -> &'static str {
     match sec {
         SettingsSection::General => "General",
-        SettingsSection::Account => "Library",
-        SettingsSection::Appearance => "Downloads",
-        SettingsSection::Graphics => "In game",
-        SettingsSection::Updates => "Music",
+        SettingsSection::Library => "Library",
+        SettingsSection::Downloads => "Downloads",
+        SettingsSection::InGame => "In game",
         SettingsSection::Capture => "Capture",
+        SettingsSection::Account => "Account",
         SettingsSection::About => "About",
     }
 }
@@ -131,11 +131,11 @@ fn nav_icon(sec: SettingsSection, active: bool) -> El {
     let c = if active { FG } else { FG.alpha(0.48) };
     match sec {
         SettingsSection::General => icon_sliders(15.0, c),
-        SettingsSection::Account => icon_library(15.0, c),
-        SettingsSection::Appearance => icon_download(15.0, c),
-        SettingsSection::Graphics => icon_trophy(15.0, c),
-        SettingsSection::Updates => icon_music(15.0, c),
+        SettingsSection::Library => icon_library(15.0, c),
+        SettingsSection::Downloads => icon_download(15.0, c),
+        SettingsSection::InGame => icon_trophy(15.0, c),
         SettingsSection::Capture => exo_kit::icon_camera(15.0, c),
+        SettingsSection::Account => icon_user(15.0, c),
         SettingsSection::About => icon_info(15.0, c),
     }
 }
@@ -228,7 +228,7 @@ fn section_head(title: &str) -> El {
         )
 }
 
-pub(crate) fn settings_group(title: &str, rows: Vec<El>) -> El {
+fn card_of(rows: Vec<El>) -> El {
     let mut card = settings_card();
     for (idx, r) in rows.into_iter().enumerate() {
         if idx > 0 {
@@ -236,11 +236,15 @@ pub(crate) fn settings_group(title: &str, rows: Vec<El>) -> El {
         }
         card = card.child(r);
     }
+    card
+}
+
+pub(crate) fn settings_group(title: &str, rows: Vec<El>) -> El {
     col()
         .w_full()
         .gap(8.0)
         .child(section_head(title))
-        .child(card)
+        .child(card_of(rows))
 }
 
 fn is_highlighted(s: &AppState, id: &str) -> bool {
@@ -269,8 +273,8 @@ fn section_general(s: &AppState) -> El {
                 .on_press(|s: &mut AppState| s.set_discord_layout("classic"))
         });
 
-    let main_card = settings_card()
-        .child(set_row(
+    let mut rows = vec![
+        set_row(
             "Text size",
             None,
             None,
@@ -286,38 +290,37 @@ fn section_general(s: &AppState) -> El {
                 .gamepad_focus(gamepad_focus),
                 |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::TextSize),
             ),
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(set_row(
-            "Discord layout",
-            Some("Exo's top server bar or classic Discord's left server rail."),
-            None,
-            false,
-            layout_pills,
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
+        ),
+        toggle_row(
             "set-reduce-motion",
             "Reduce motion",
             None,
             "reduceMotion",
             set.reduce_motion,
             is_highlighted(s, "general-reduce-motion"),
-        ))
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
+        ),
+        toggle_row(
             "set-start-win",
             "Open Exo when Windows starts",
             None,
             "startWithWindows",
             set.start_with_windows,
             is_highlighted(s, "general-startup"),
-        ));
+        ),
+        set_row(
+            "Discord layout",
+            Some("Exo's top server bar or classic Discord's left server rail."),
+            None,
+            false,
+            layout_pills,
+        ),
+    ];
+    rows.extend(music_rows(s));
 
     col()
         .w_full()
         .gap(24.0)
-        .child(main_card)
+        .child(card_of(rows))
         .child(backup_section(s))
 }
 
@@ -581,19 +584,33 @@ fn section_in_game(s: &AppState) -> El {
             ("set-fps-battery", "battery", "Lowest battery"),
             ("set-fps-clock", "clock", "Time of day"),
         ];
+        let mut chips = row().w_full().flex_wrap().gap(8.0);
         for &(key, id, label) in FPS_ITEMS {
             let checked = set.fps_counter_items.iter().any(|x| x == id);
-            fps_card = fps_card
-                .child(el().w_full().h(1.0).fill(hairline()))
-                .child(set_row(
-                    label,
-                    None,
-                    None,
-                    false,
-                    switch_pill(key, label, checked)
-                        .on_press(move |s: &mut AppState| s.toggle_fps_counter_item(id)),
-                ));
+            let chip = if checked {
+                set_primary_btn(key, label, None)
+            } else {
+                set_btn(key, label, None)
+            };
+            chips = chips.child(
+                chip.checked(checked)
+                    .on_press(move |s: &mut AppState| s.toggle_fps_counter_item(id)),
+            );
         }
+        fps_card = fps_card.child(el().w_full().h(1.0).fill(hairline())).child(
+            col()
+                .w_full()
+                .py(14.0)
+                .px(18.0)
+                .gap(10.0)
+                .child(
+                    text("Also show")
+                        .key("set-label-Also show")
+                        .font(TextStyle::new(scaled(13.0), 500.0))
+                        .color(FG),
+                )
+                .child(chips),
+        );
     }
 
     col()
@@ -631,7 +648,7 @@ fn next_yt_notification(raw: &str) -> &'static str {
     }
 }
 
-fn section_music(s: &AppState) -> El {
+fn music_rows(s: &AppState) -> Vec<El> {
     let web_prefs = s.wp4.web_prefs.as_ref().or(s.pc.web_preferences.as_ref());
     let pref_svc = web_prefs.and_then(|w| w.music_service.as_deref());
     let current = match pref_svc {
@@ -644,7 +661,7 @@ fn section_music(s: &AppState) -> El {
         || (pref_svc.is_none()
             && s.media.music_service == crate::media_state::MusicService::YouTube);
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
-    let mut card = settings_card().child(set_row(
+    let mut rows = vec![set_row(
         "Music service",
         None,
         s.wp4.web_prefs_error.as_deref(),
@@ -656,26 +673,24 @@ fn section_music(s: &AppState) -> El {
                 .gamepad_focus(gamepad_focus),
             |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::MusicService),
         ),
-    ));
+    )];
     if is_youtube {
         let notif = web_prefs
             .map(|p| p.notifications.as_str())
             .filter(|v| !v.is_empty())
             .unwrap_or("ask");
         let next = next_yt_notification(notif);
-        card = card
-            .child(el().w_full().h(1.0).fill(hairline()))
-            .child(set_row(
-                "YouTube Music notifications",
-                None,
-                None,
-                false,
-                set_btn("set-yt-notifications", yt_notification_label(notif), None)
-                    .disabled(s.wp4.web_prefs_saving)
-                    .on_press(move |s: &mut AppState| s.wp4_set_web_notifications(next)),
-            ));
+        rows.push(set_row(
+            "YouTube Music notifications",
+            None,
+            None,
+            false,
+            set_btn("set-yt-notifications", yt_notification_label(notif), None)
+                .disabled(s.wp4.web_prefs_saving)
+                .on_press(move |s: &mut AppState| s.wp4_set_web_notifications(next)),
+        ));
     }
-    col().w_full().gap(24.0).child(card)
+    rows
 }
 
 fn about_link(
@@ -831,7 +846,6 @@ fn section_about(s: &AppState) -> El {
         .w_full()
         .gap(24.0)
         .child(card)
-        .child(account_section(s))
         .child(privacy_section(s))
 }
 
@@ -1034,11 +1048,11 @@ pub fn view(s: &AppState) -> El {
     let title = nav_label(s.pc.settings_section);
     let body = match s.pc.settings_section {
         SettingsSection::General => section_general(s),
-        SettingsSection::Account => section_library(s),
-        SettingsSection::Appearance => section_downloads(s),
-        SettingsSection::Graphics => section_in_game(s),
-        SettingsSection::Updates => section_music(s),
+        SettingsSection::Library => section_library(s),
+        SettingsSection::Downloads => section_downloads(s),
+        SettingsSection::InGame => section_in_game(s),
         SettingsSection::Capture => crate::captures::settings_body(s),
+        SettingsSection::Account => account_section(s),
         SettingsSection::About => section_about(s),
     };
 
@@ -1047,7 +1061,6 @@ pub fn view(s: &AppState) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .items_center()
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
@@ -1061,7 +1074,7 @@ pub fn view(s: &AppState) -> El {
                         .springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK)),
                 )
                 .w_full()
-                .max_w(scaled(840.0))
+                .max_w(scaled(920.0))
                 .pt(20.0)
                 .px(36.0)
                 .pb(56.0)
@@ -1155,8 +1168,8 @@ mod tests {
             scroll_rect
         );
         assert!(
-            (pane_rect[0] - 673.0).abs() <= 1.0 && (pane_rect[2] - 840.0).abs() <= 1.0,
-            "expected centered 840px settings inner pane at x=673, got {:?}",
+            (pane_rect[0] - 276.0).abs() <= 1.0 && (pane_rect[2] - 920.0).abs() <= 1.0,
+            "expected left-aligned 920px settings inner pane at x=276, got {:?}",
             pane_rect
         );
 
@@ -1174,18 +1187,18 @@ mod tests {
             .expect("set-label-Last backup");
 
         assert!(
-            (title_rect[0] - 709.0).abs() <= 1.5,
-            "expected page title at x=709, got {}",
+            (title_rect[0] - 312.0).abs() <= 1.5,
+            "expected page title at x=312, got {}",
             title_rect[0]
         );
         assert!(
-            (sec_rect[0] - 711.0).abs() <= 1.5,
-            "expected section head at x=711, got {}",
+            (sec_rect[0] - 314.0).abs() <= 1.5,
+            "expected section head at x=314, got {}",
             sec_rect[0]
         );
         assert!(
-            (row1_rect[0] - 727.0).abs() <= 1.5,
-            "expected row label at x=727 (709+18), got {}",
+            (row1_rect[0] - 330.0).abs() <= 1.5,
+            "expected row label at x=330 (312+18), got {}",
             row1_rect[0]
         );
         assert!(
@@ -1280,7 +1293,7 @@ mod tests {
             s.wp4_jump_to_setting(hits[0]);
         });
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.pc.settings_section, SettingsSection::Graphics);
+        assert_eq!(rt.state.pc.settings_section, SettingsSection::InGame);
         assert!(rt.state.pc.settings_query.text.is_empty());
         assert!(rt.presented("set-label-OBS overlay URL").is_some());
     }
@@ -1307,7 +1320,7 @@ mod tests {
         assert!(!rt.state.wp4.report_open);
 
         rt.update(|s, _| {
-            s.pc.settings_section = SettingsSection::Account;
+            s.pc.settings_section = SettingsSection::Library;
             s.wp4.stores.push(exo_rpc::StoreStatus {
                 store: "steam".into(),
                 display_name: "Steam".into(),
@@ -1428,13 +1441,13 @@ mod tests {
         s.room = Room::Library;
         s.toggle_settings();
         assert_eq!(s.room, Room::Settings);
-        assert_eq!(s.pc.settings_section, SettingsSection::Account);
+        assert_eq!(s.pc.settings_section, SettingsSection::Library);
 
         s.toggle_settings();
         assert_eq!(s.room, Room::Library);
         s.room = Room::Music;
         s.toggle_settings();
-        assert_eq!(s.pc.settings_section, SettingsSection::Updates);
+        assert_eq!(s.pc.settings_section, SettingsSection::General);
 
         s.toggle_settings();
         s.room = Room::Store;
@@ -1475,7 +1488,7 @@ mod tests {
 
         rt.update(|s, _| {
             s.close_dropdown();
-            s.pc.settings_section = SettingsSection::Graphics;
+            s.pc.settings_section = SettingsSection::InGame;
             s.settings.fps_counter = true;
         });
         rt.frame(1.0 / 60.0);

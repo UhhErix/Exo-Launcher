@@ -19,33 +19,33 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSection {
     General,
-    Account,
-    Appearance,
-    Graphics,
-    Updates,
+    Library,
+    Downloads,
+    InGame,
     Capture,
+    Account,
     About,
 }
 
 impl SettingsSection {
     pub const ALL: [Self; 7] = [
         Self::General,
-        Self::Account,
-        Self::Appearance,
-        Self::Graphics,
-        Self::Updates,
+        Self::Library,
+        Self::Downloads,
+        Self::InGame,
         Self::Capture,
+        Self::Account,
         Self::About,
     ];
 
     pub fn key(self) -> &'static str {
         match self {
             Self::General => "set-sec-general",
-            Self::Account => "set-sec-library",
-            Self::Appearance => "set-sec-downloads",
-            Self::Graphics => "set-sec-ingame",
-            Self::Updates => "set-sec-music",
+            Self::Library => "set-sec-library",
+            Self::Downloads => "set-sec-downloads",
+            Self::InGame => "set-sec-ingame",
             Self::Capture => "set-sec-capture",
+            Self::Account => "set-sec-account",
             Self::About => "set-sec-about",
         }
     }
@@ -2278,7 +2278,7 @@ mod wp9_tests {
             ..Default::default()
         });
         s.switch_room(Room::Settings);
-        s.pc.settings_section = SettingsSection::Graphics;
+        s.pc.settings_section = SettingsSection::InGame;
         let mut rt = Runtime::new(s, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
         rt.frame(0.0);
         rt.settle_all();
@@ -2286,7 +2286,7 @@ mod wp9_tests {
         assert!(rt.find("set-fps-position").is_some());
         assert!(rt.find("set-fps-low").is_some());
 
-        rt.state.pc.settings_section = SettingsSection::Updates;
+        rt.state.pc.settings_section = SettingsSection::General;
         rt.invalidate();
         rt.frame(1.0 / 60.0);
         rt.settle_all();

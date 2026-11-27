@@ -189,18 +189,6 @@ pub(crate) fn cover_surface(
         );
     }
 
-    if dim {
-        art = art.child(
-            el().pin(None, Some(8.0), Some(8.0), None)
-                .size(22.0, 22.0)
-                .radius(11.0)
-                .center()
-                .fill(BG.alpha(0.68))
-                .border(1.0, FG.alpha(0.12))
-                .child(icon_download(14.0, FG)),
-        );
-    }
-
     if game.is_running || game.can_stop {
         art = art.child(badge_pill("Playing", good(), PRIMARY_FG));
     } else if let Some(tr) = transfer {

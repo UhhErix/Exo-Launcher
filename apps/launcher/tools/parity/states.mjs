@@ -1812,7 +1812,7 @@ export const STATES = [
       openSelector: '.exo-settings-layout',
     },
     native: {
-      scene: 'settings-account',
+      scene: 'settings-library',
       expect: { room: 'Settings' },
     },
   },
@@ -1834,7 +1834,7 @@ export const STATES = [
       openSelector: '.exo-settings-layout',
     },
     native: {
-      scene: 'settings-appearance',
+      scene: 'settings-downloads',
       expect: { room: 'Settings' },
     },
   },
@@ -1856,7 +1856,7 @@ export const STATES = [
       openSelector: '.exo-settings-layout',
     },
     native: {
-      scene: 'settings-graphics',
+      scene: 'settings-ingame',
       expect: { room: 'Settings' },
     },
   },
@@ -1878,7 +1878,7 @@ export const STATES = [
       openSelector: '.exo-settings-layout',
     },
     native: {
-      scene: 'settings-updates',
+      scene: 'settings-general',
       expect: { room: 'Settings' },
     },
   },

@@ -154,7 +154,7 @@ Exo adds these browser extensions to that profile:
 - **Exo Shield**, Exo's own blocker, blocks ads, trackers and cookie notices with the lists built into it (uBlock Origin Lite's and HaGeZi's Multi PRO), and downloads no lists of its own.
 - **SponsorBlock** asks sponsor.ajay.app about the video that is playing.
 
-These extensions have their own privacy policies. A music page that asks for your microphone, camera, clipboard or notifications asks you first; Settings > Music sets YouTube Music's notifications.
+These extensions have their own privacy policies. A music page that asks for your microphone, camera, clipboard or notifications asks you first; Settings > General sets YouTube Music's notifications.
 
 ## Exo's relay
 

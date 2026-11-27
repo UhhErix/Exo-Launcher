@@ -1779,15 +1779,6 @@ fn buy_panel(
     for off in &steam_offers {
         panel = panel.child(offer_row_button(s, off, true, free, soon, gamepad));
     }
-    panel = panel.child(
-        row()
-            .mt(4.0)
-            .gap(8.0)
-            .flex_wrap()
-            .child(wish_btn)
-            .child(gg_btn),
-    );
-
     let others: Vec<&StoreOffer> = s
         .store_offers
         .as_ref()
@@ -1805,7 +1796,14 @@ fn buy_panel(
         }
         panel = panel.child(others_row);
     }
-    panel
+    panel.child(
+        row()
+            .mt(4.0)
+            .gap(8.0)
+            .flex_wrap()
+            .child(wish_btn)
+            .child(gg_btn),
+    )
 }
 
 fn about_card(game: Option<&StoreGame>) -> El {

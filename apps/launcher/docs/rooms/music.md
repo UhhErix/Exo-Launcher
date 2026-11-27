@@ -4,7 +4,7 @@ The Music room is Exo's own player for Spotify, Apple Music or YouTube Music. Th
 
 ## Start here
 
-1. Pick your service in **Settings > Music**.
+1. Pick your service in **Settings > General**.
 2. Press **Sign in** in the Music room and sign in on the service's own page.
 
 Each service needs its paid plan: Spotify Premium, YouTube Music Premium or an Apple Music subscription.

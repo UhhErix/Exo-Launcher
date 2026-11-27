@@ -1,6 +1,6 @@
 use crate::devices_audio::{
-    DevicePageHeader, device_btn, device_icon_btn, device_page_shell_band, device_panel,
-    device_row, device_switch, port_short, port_words,
+    DevicePageHeader, device_btn, device_icon_btn, device_page_shell_columns_no_rescan,
+    device_panel, device_row, device_switch, port_short, port_words,
 };
 use crate::state::AppState;
 use exo_kit::{
@@ -1289,7 +1289,7 @@ fn wooting_keyboard_page(
         );
     }
 
-    device_page_shell_band(
+    device_page_shell_columns_no_rescan(
         DevicePageHeader {
             key: "room-devices-detail",
             name: kb_opt.and_then(|k| k.model.clone()).unwrap_or(display_name),
@@ -1346,7 +1346,7 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
             .h_full()
             .fill(BG)
             .child(
-                row().w_full().pt(60.0).px(16.0).pb(0.0).center_y().child(
+                row().w_full().pt(66.0).px(10.0).pb(0.0).center_y().child(
                     device_icon_btn(
                         "dev-back",
                         "Devices",

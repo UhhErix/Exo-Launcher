@@ -195,7 +195,7 @@ pub fn media_wait() -> El {
     let stage = el()
         .key("sg-media-wait-stage")
         .w_full()
-        .h(520.0)
+        .aspect_ratio(16.0 / 9.0)
         .radius(RADIUS_CARD)
         .fill(glass_control_fill())
         .border(1.0, float_line());
@@ -226,7 +226,7 @@ pub fn media_viewer(s: &AppState, game: &StoreGame, scale: f32) -> El {
     let mut stage = el()
         .key(format!("sg-banner-{}", game.app_id))
         .w_full()
-        .h(540.0)
+        .aspect_ratio(16.0 / 9.0)
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)

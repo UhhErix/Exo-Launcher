@@ -12,7 +12,7 @@ processor time, and after 15 idle minutes it is closed; opening Music starts it 
 | Apple Music | music.apple.com, hidden (`Helpers/AppleMusicNative.cs`, through the page's own MusicKit instance) | The Windows Apple Music app (AppleInc.AppleMusicWin, checked at 1.1540) is a native WinUI app on Apple's media stack with no reachable API for the library, queue or quality. Its link protocols (`music://`, `itmss://`, music.apple.com links) didn't even start it from outside, and it publishes no media session until something plays. So Exo can't drive it reliably, and the web engine stays: AAC at 256 kbps (High) or 64 kbps (Standard), no lossless or Dolby Atmos. Revisit if Apple adds automation to the Windows app. |
 | YouTube Music | music.youtube.com, hidden (`Helpers/YouTubeMusicNative.cs`) | There is no desktop app and no lossless; the web page is the best engine. |
 
-One client: the service is chosen in Settings › Music (the room's screens without a player link there). Web players share Exo's embedded profile, so each keeps its sign-in; one engine runs at a time. Exo never decrypts audio itself: protected streams play through each service's licensed player, in the page's Widevine module or in Spotify's app.
+One client: the service is chosen in Settings › General (the room's screens without a player link there). Web players share Exo's embedded profile, so each keeps its sign-in; one engine runs at a time. Exo never decrypts audio itself: protected streams play through each service's licensed player, in the page's Widevine module or in Spotify's app.
 
 Shared on top, for every service: one queue, Now Playing, library views, the bar's mini player, and
 Exo's own sleep timer (the player's Sound panel, `SoundPanel.tsx`).

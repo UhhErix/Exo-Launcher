@@ -1541,7 +1541,7 @@ pub fn page_for_card(card: &PlayerCard) -> Option<MusicNav> {
 
 impl AppState {
     pub fn open_music_settings(&mut self) {
-        self.pc.settings_section = SettingsSection::Updates;
+        self.pc.settings_section = SettingsSection::General;
         self.switch_room(Room::Settings);
     }
 

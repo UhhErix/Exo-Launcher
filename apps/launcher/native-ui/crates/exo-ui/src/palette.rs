@@ -27,8 +27,13 @@ fn settings_page_keywords(sec: SettingsSection) -> &'static [&'static str] {
             "startup",
             "start with windows",
             "window",
+            "discord layout",
+            "music service",
+            "spotify",
+            "apple music",
+            "youtube music",
         ],
-        SettingsSection::Account => &[
+        SettingsSection::Library => &[
             "game stores",
             "sign in",
             "account",
@@ -45,7 +50,7 @@ fn settings_page_keywords(sec: SettingsSection) -> &'static [&'static str] {
             "soundtracks",
             "shaders",
         ],
-        SettingsSection::Appearance => &[
+        SettingsSection::Downloads => &[
             "downloads",
             "install folder",
             "download hours",
@@ -55,7 +60,7 @@ fn settings_page_keywords(sec: SettingsSection) -> &'static [&'static str] {
             "fsr",
             "xess",
         ],
-        SettingsSection::Graphics => &[
+        SettingsSection::InGame => &[
             "in game",
             "achievements",
             "pop-ups",
@@ -67,15 +72,6 @@ fn settings_page_keywords(sec: SettingsSection) -> &'static [&'static str] {
             "vram",
             "ram",
             "battery",
-        ],
-        SettingsSection::Updates => &[
-            "music",
-            "music service",
-            "spotify",
-            "apple music",
-            "youtube music",
-            "lossless",
-            "jam",
         ],
         SettingsSection::Capture => &[
             "capture",
@@ -91,6 +87,18 @@ fn settings_page_keywords(sec: SettingsSection) -> &'static [&'static str] {
             "hotkeys",
             "voice chat",
         ],
+        SettingsSection::Account => &[
+            "account",
+            "exo account",
+            "sign in",
+            "sign out",
+            "password",
+            "passkeys",
+            "recovery code",
+            "signed-in pcs",
+            "export my data",
+            "delete account",
+        ],
         SettingsSection::About => &[
             "about",
             "version",
@@ -98,7 +106,6 @@ fn settings_page_keywords(sec: SettingsSection) -> &'static [&'static str] {
             "caches",
             "what's new",
             "changelog",
-            "account",
             "privacy",
             "app data",
             "telemetry",

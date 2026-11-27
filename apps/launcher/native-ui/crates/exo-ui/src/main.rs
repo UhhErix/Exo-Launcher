@@ -2707,21 +2707,21 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.switch_room(state::Room::Settings);
         s.pc.settings_section = pc_state::SettingsSection::General;
     }),
+    ("settings-library", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Library;
+    }),
+    ("settings-downloads", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Downloads;
+    }),
+    ("settings-ingame", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::InGame;
+    }),
     ("settings-account", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
         s.pc.settings_section = pc_state::SettingsSection::Account;
-    }),
-    ("settings-appearance", |s: &mut AppState| {
-        s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Appearance;
-    }),
-    ("settings-graphics", |s: &mut AppState| {
-        s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Graphics;
-    }),
-    ("settings-updates", |s: &mut AppState| {
-        s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Updates;
     }),
     ("settings-about", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
@@ -2734,7 +2734,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("settings-steam-signin", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Account;
+        s.pc.settings_section = pc_state::SettingsSection::Library;
         if s.wp4.stores.is_empty() {
             s.wp4.stores.push(exo_rpc::StoreStatus {
                 store: "steam".into(),
@@ -2755,7 +2755,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("settings-steam-password", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Account;
+        s.pc.settings_section = pc_state::SettingsSection::Library;
         if s.wp4.stores.is_empty() {
             s.wp4.stores.push(exo_rpc::StoreStatus {
                 store: "steam".into(),
@@ -2774,7 +2774,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("settings-steam-guard", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Account;
+        s.pc.settings_section = pc_state::SettingsSection::Library;
         if s.wp4.stores.is_empty() {
             s.wp4.stores.push(exo_rpc::StoreStatus {
                 store: "steam".into(),
@@ -5568,7 +5568,7 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert!(rt.state.open_dropdown.is_none());
 
-        rt.update(|s, _| s.pc.settings_section = pc_state::SettingsSection::Updates);
+        rt.update(|s, _| s.pc.settings_section = pc_state::SettingsSection::General);
         for _ in 0..20 {
             rt.frame(1.0 / 60.0);
         }

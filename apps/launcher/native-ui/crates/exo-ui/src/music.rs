@@ -2914,7 +2914,7 @@ mod tests {
         assert_eq!(rt.state.room, Room::Settings);
         assert_eq!(
             rt.state.pc.settings_section,
-            crate::pc_state::SettingsSection::Updates
+            crate::pc_state::SettingsSection::General
         );
     }
 
