@@ -795,9 +795,7 @@ pub struct CaptureHotkeys {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CaptureSettingsDto {
-    pub quality: i32,
     pub replay_seconds: i32,
-    pub max_fps: i32,
     pub replay_mode: String,
     pub cursor: bool,
     pub save_replay_keys: String,

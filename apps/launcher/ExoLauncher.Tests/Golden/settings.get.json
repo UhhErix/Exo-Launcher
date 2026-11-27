@@ -50,7 +50,6 @@
     "autoUpdateUpscalers": true,
     "upscalerAntiCheatEverywhere": false,
     "keepAwakeDownloads": true,
-    "storeClientsQuiet": true,
     "chipset": "amd",
     "libraryFolders": [
       {

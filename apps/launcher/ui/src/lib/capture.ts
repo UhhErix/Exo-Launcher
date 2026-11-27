@@ -31,10 +31,7 @@ export type CaptureState = {
 }
 
 export type CaptureSettings = {
-  quality: number
   replaySeconds: number
-  /** 60, or 120 where the screen runs that fast. */
-  maxFps: number
   replayMode: 'games' | 'always' | 'off'
   cursor: boolean
   saveReplayKeys: string

@@ -11,8 +11,8 @@ use exo_kit::{
     icon_folder, icon_gallery, icon_more_horiz, icon_pause, icon_play, icon_record_dot,
     icon_replay, icon_scissors, icon_settings, icon_sparkles, icon_star, icon_star_filled,
     icon_trash, icon_volume, icon_volume_off, popover_transition_for, pressed_fill, primary_button,
-    progress_bar, scaled, scrim_fill, slider_track, status_badge, type_body, type_control,
-    type_page, type_section, type_small, type_title, warn,
+    progress_bar, scaled, scrim_fill, status_badge, type_body, type_control, type_page,
+    type_section, type_small, type_title, warn,
 };
 use exo_rpc::{
     ActionResult, CaptureEditReply, CaptureItem, CaptureItemReply, CaptureListReply,
@@ -98,7 +98,6 @@ pub struct CapturesUiState {
     pub clip_note: Option<(String, bool)>,
     pub settings_open_choice: Option<String>,
     pub settings_row_error: Option<(String, String)>,
-    pub settings_quality_drag: Option<i32>,
     pub listening_hotkey: Option<String>,
     pub picking_folder: bool,
 }
@@ -278,30 +277,6 @@ fn current_ymd() -> (i32, u32, u32) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = y + if m <= 2 { 1 } else { 0 };
     (year as i32, m as u32, d as u32)
-}
-
-fn encoder_line(state: Option<&exo_rpc::CaptureLiveState>) -> Option<String> {
-    let st = state?;
-    let codec = st.codec.as_deref().filter(|s| !s.is_empty())?;
-    let gpu = st.encoder.as_deref().map(|enc| {
-        let mut s = enc.to_string();
-        for suffix in [
-            " HEVC Encoder MFT",
-            " H.264 Encoder MFT",
-            " H264 Encoder MFT",
-            " AV1 Encoder MFT",
-        ] {
-            if let Some(trimmed) = s.strip_suffix(suffix) {
-                s = trimmed.to_string();
-                break;
-            }
-        }
-        s
-    });
-    match gpu.filter(|g| !g.is_empty()) {
-        Some(g) => Some(format!("{codec} on {g}")),
-        None => Some(codec.to_string()),
-    }
 }
 
 fn combo_from_key_event(ev: &KeyEvent) -> Option<String> {
@@ -828,12 +803,7 @@ impl AppState {
             if let Some(v) = patch.get("replaySeconds").and_then(|v| v.as_i64()) {
                 cfg.replay_seconds = v as i32;
             }
-            if let Some(v) = patch.get("maxFps").and_then(|v| v.as_i64()) {
-                cfg.max_fps = v as i32;
-            }
-            if let Some(v) = patch.get("quality").and_then(|v| v.as_i64()) {
-                cfg.quality = v as i32;
-            }
+
             if let Some(v) = patch.get("callVoices").and_then(|v| v.as_bool()) {
                 cfg.call_voices = v;
             }
@@ -2620,13 +2590,7 @@ pub(crate) fn settings_body(s: &AppState) -> El {
     let disabled = cfg.is_none();
     let mode = cfg.map(|c| c.replay_mode.as_str()).unwrap_or("games");
     let replay_secs = cfg.map(|c| c.replay_seconds).unwrap_or(60).to_string();
-    let fps = cfg.map(|c| c.max_fps).unwrap_or(60).to_string();
-    let quality = s
-        .media
-        .captures_ui
-        .settings_quality_drag
-        .unwrap_or_else(|| cfg.map(|c| c.quality).unwrap_or(50))
-        .clamp(0, 100);
+
     let call_voices = cfg.is_some_and(|c| c.call_voices);
     let print_screen = cfg.is_some_and(|c| c.print_screen);
     let keep_gb = cfg.map(|c| c.keep_gb).unwrap_or(0).to_string();
@@ -2692,58 +2656,6 @@ pub(crate) fn settings_body(s: &AppState) -> El {
             },
         ));
     }
-
-    rec_rows.extend(settings_choice_rows(
-        s,
-        SettingsChoiceSpec {
-            row_key: "fps",
-            label: "Frame rate",
-            detail: None,
-            current: &fps,
-            choices: &[("60", "60 fps"), ("120", "120 fps")],
-            disabled,
-        },
-        |s, v| {
-            let n = v.parse::<i32>().unwrap_or(60);
-            s.capture_save_settings_patch("fps", json!({ "maxFps": n }));
-        },
-    ));
-
-    let quality_slider = slider_track(
-        "cap-quality-slider",
-        "Quality",
-        160.0,
-        quality as f32 / 100.0,
-        s.media.captures_ui.settings_quality_drag.is_some(),
-        disabled,
-    )
-    .on_drag(|s: &mut AppState, d, _| {
-        let ratio = (d.x / d.w.max(1.0)).clamp(0.0, 1.0);
-        let stepped = ((ratio * 20.0).round() as i32 * 5).clamp(0, 100);
-        match d.phase {
-            Phase::Down | Phase::Move => s.media.captures_ui.settings_quality_drag = Some(stepped),
-            Phase::Up => {
-                s.media.captures_ui.settings_quality_drag = None;
-                if !d.cancelled() {
-                    s.capture_save_settings_patch("quality", json!({ "quality": stepped }));
-                }
-            }
-        }
-    });
-    let q_detail = encoder_line(live);
-    let q_err = settings_err_for(s, "quality");
-    rec_rows.push(crate::settings::set_row(
-        "Quality",
-        q_detail.as_deref(),
-        q_err.as_deref(),
-        false,
-        row()
-            .gap(10.0)
-            .center_y()
-            .child(text("Smaller files").font(type_small()).color(fg_muted()))
-            .child(quality_slider)
-            .child(text("Best quality").font(type_small()).color(fg_muted())),
-    ));
 
     let call_err = settings_err_for(s, "callVoices");
     rec_rows.push(crate::settings::set_row(

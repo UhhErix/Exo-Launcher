@@ -853,7 +853,6 @@ impl AppState {
                 show_library_tools: true,
                 pause_downloads_while_playing: true,
                 keep_awake_downloads: true,
-                store_clients_quiet: true,
                 achievement_banners: true,
                 fps_counter: true,
                 fps_counter_position: Some("top-right".into()),

@@ -9,13 +9,13 @@ using ExoLauncher.Services.Account;
 namespace ExoLauncher.Tests;
 
 [Collection("AppDataIsolation")]
-public sealed class ReduceMotionSyncTests : IDisposable
+public sealed class SyncedSwitchOrderTests : IDisposable
 {
     private static readonly DateTimeOffset T0 = new(2026, 11, 24, 12, 0, 0, TimeSpan.Zero);
     private readonly string _data = Path.Combine(Path.GetTempPath(), "exo-rm-sync-" + Guid.NewGuid().ToString("N"));
     private readonly string? _priorDataDir = Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable);
 
-    public ReduceMotionSyncTests()
+    public SyncedSwitchOrderTests()
     {
         Directory.CreateDirectory(_data);
         Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, _data);
@@ -30,14 +30,14 @@ public sealed class ReduceMotionSyncTests : IDisposable
     }
 
     [Fact]
-    public void OlderLocalReduceMotionTrueDoesNotOverwriteNewerCloudFalseOnPull()
+    public void OlderLocalShowLibraryToolsTrueDoesNotOverwriteNewerCloudFalseOnPull()
     {
         var server = new MockSyncServer();
         var pcA = new AccountSyncEngine(new SyncState());
         var pcB = new AccountSyncEngine(new SyncState());
 
-        pcB.Write("settings", "app", "{\"ReduceMotion\":true,\"SortMode\":\"name\"}", 1000, T0);
-        pcA.Write("settings", "app", "{\"ReduceMotion\":false,\"SortMode\":\"name\"}", 2000, T0.AddSeconds(1));
+        pcB.Write("settings", "app", "{\"ShowLibraryTools\":true,\"SortMode\":\"name\"}", 1000, T0);
+        pcA.Write("settings", "app", "{\"ShowLibraryTools\":false,\"SortMode\":\"name\"}", 2000, T0.AddSeconds(1));
         Sync(pcA, server, T0.AddSeconds(5));
 
         pcB.Pull(server.Pull(pcB.State.Cursor), T0.AddSeconds(6));
@@ -45,68 +45,68 @@ public sealed class ReduceMotionSyncTests : IDisposable
 
         var cloud = JsonNode.Parse(server.Value("settings/app")!)!.AsObject();
         var localB = JsonNode.Parse(pcB.State.Items["settings/app"].Value!)!.AsObject();
-        Assert.False(cloud["ReduceMotion"]!.GetValue<bool>());
-        Assert.False(localB["ReduceMotion"]!.GetValue<bool>());
+        Assert.False(cloud["ShowLibraryTools"]!.GetValue<bool>());
+        Assert.False(localB["ShowLibraryTools"]!.GetValue<bool>());
         Assert.Empty(pcB.State.Dirty);
     }
 
     [Fact]
-    public void OlderLocalReduceMotionTrueDoesNotOverwriteNewerCloudFalseOnConflict()
+    public void OlderLocalShowLibraryToolsTrueDoesNotOverwriteNewerCloudFalseOnConflict()
     {
         var server = new MockSyncServer();
         var pcA = new AccountSyncEngine(new SyncState());
         var pcB = new AccountSyncEngine(new SyncState());
 
-        pcA.Write("settings", "app", "{\"ReduceMotion\":true,\"SortMode\":\"name\"}", 500, T0);
+        pcA.Write("settings", "app", "{\"ShowLibraryTools\":true,\"SortMode\":\"name\"}", 500, T0);
         Sync(pcA, server, T0.AddSeconds(3));
         pcB.Pull(server.Pull(0), T0.AddSeconds(4));
 
-        pcB.Write("settings", "app", "{\"ReduceMotion\":false,\"SortMode\":\"name\"}", 800, T0.AddSeconds(5));
-        pcB.Write("settings", "app", "{\"ReduceMotion\":true,\"SortMode\":\"name\"}", 1000, T0.AddSeconds(6));
+        pcB.Write("settings", "app", "{\"ShowLibraryTools\":false,\"SortMode\":\"name\"}", 800, T0.AddSeconds(5));
+        pcB.Write("settings", "app", "{\"ShowLibraryTools\":true,\"SortMode\":\"name\"}", 1000, T0.AddSeconds(6));
 
-        pcA.Write("settings", "app", "{\"ReduceMotion\":false,\"SortMode\":\"name\"}", 2000, T0.AddSeconds(7));
+        pcA.Write("settings", "app", "{\"ShowLibraryTools\":false,\"SortMode\":\"name\"}", 2000, T0.AddSeconds(7));
         Sync(pcA, server, T0.AddSeconds(10));
 
         Sync(pcB, server, T0.AddSeconds(12));
         Sync(pcB, server, T0.AddSeconds(16));
 
         var cloud = JsonNode.Parse(server.Value("settings/app")!)!.AsObject();
-        Assert.False(cloud["ReduceMotion"]!.GetValue<bool>());
+        Assert.False(cloud["ShowLibraryTools"]!.GetValue<bool>());
         Assert.Empty(pcB.State.Dirty);
     }
 
     [Fact]
-    public void NewerLocalReduceMotionFalseBeatsOlderCloudTrueAndPreservesOtherCloudKeys()
+    public void NewerLocalShowLibraryToolsFalseBeatsOlderCloudTrueAndPreservesOtherCloudKeys()
     {
         var server = new MockSyncServer();
         var pcA = new AccountSyncEngine(new SyncState());
         var pcB = new AccountSyncEngine(new SyncState());
 
-        pcA.Write("settings", "app", "{\"ReduceMotion\":true,\"SortMode\":\"played\",\"TextSize\":\"large\"}", 1000, T0);
+        pcA.Write("settings", "app", "{\"ShowLibraryTools\":true,\"SortMode\":\"played\",\"TextSize\":\"large\"}", 1000, T0);
         Sync(pcA, server, T0.AddSeconds(3));
 
-        pcB.Write("settings", "app", "{\"ReduceMotion\":false,\"SortMode\":\"name\",\"TextSize\":\"normal\"}", 2000, T0.AddSeconds(4), ["ReduceMotion"]);
+        pcB.Write("settings", "app", "{\"ShowLibraryTools\":false,\"SortMode\":\"name\",\"TextSize\":\"normal\"}", 2000, T0.AddSeconds(4), ["ShowLibraryTools"]);
         pcB.Pull(server.Pull(0), T0.AddSeconds(5));
         Sync(pcB, server, T0.AddSeconds(8));
 
         var cloud = JsonNode.Parse(server.Value("settings/app")!)!.AsObject();
-        Assert.False(cloud["ReduceMotion"]!.GetValue<bool>());
+        Assert.False(cloud["ShowLibraryTools"]!.GetValue<bool>());
         Assert.Equal("played", cloud["SortMode"]!.GetValue<string>());
         Assert.Equal("large", cloud["TextSize"]!.GetValue<string>());
     }
 
     [Fact]
-    public async Task StartupSyncAppVersionBeforeFirstPullDoesNotClobberCloudReduceMotionFalse()
+    public async Task StartupSyncAppVersionBeforeFirstPullDoesNotClobberCloudShowLibraryToolsFalse()
     {
         var server = new MockSyncServer();
-        var cloudSettings = AccountSyncMap.SettingsValue(new AppSettings { ReduceMotion = false, SortMode = "played" }).ToJsonString();
+        var cloudSettings = AccountSyncMap.SettingsValue(new AppSettings { ShowLibraryTools = false, SortMode = "played" }).ToJsonString();
         server.Seed("settings", "app", cloudSettings, 2000);
 
-        File.WriteAllText(PathHelper.SettingsPath, "{\"reduceMotion\":true,\"appVersion\":\"3.30.3\"}");
+        File.WriteAllText(PathHelper.SettingsPath, "{\"showLibraryTools\":true,\"appVersion\":\"3.30.3\"}");
 
         var settings = new SettingsService();
         settings.Load();
-        Assert.True(settings.Current.ReduceMotion);
+        Assert.True(settings.Current.ShowLibraryTools);
 
         var session = new AccountSession("tok", "acc-1", "person@example.com");
         AccountSyncHost? host = null;
@@ -121,10 +121,10 @@ public sealed class ReduceMotionSyncTests : IDisposable
 
         await host.SyncAsync(CancellationToken.None);
 
-        Assert.False(settings.Current.ReduceMotion);
+        Assert.False(settings.Current.ShowLibraryTools);
         Assert.Equal("played", settings.Current.SortMode);
         var cloud = JsonNode.Parse(server.Value("settings/app")!)!.AsObject();
-        Assert.False(cloud["ReduceMotion"]!.GetValue<bool>());
+        Assert.False(cloud["ShowLibraryTools"]!.GetValue<bool>());
         Assert.Empty(AccountSyncStore.Load(_data, "acc-1").Dirty);
     }
 
@@ -144,22 +144,22 @@ public sealed class ReduceMotionSyncTests : IDisposable
             item => AccountSyncApply.Pulled(item, settings, () => host?.KnownValue("settings", AccountSyncMap.SettingsId)));
         AccountSyncHooks.Attach(host);
 
-        var partialFromOlderBuild = "{\"ReduceMotion\":false,\"SortMode\":\"played\"}";
+        var partialFromOlderBuild = "{\"ShowLibraryTools\":false,\"SortMode\":\"played\"}";
         AccountSyncApply.Pulled(new AccountSyncHost.PulledItem("settings", AccountSyncMap.SettingsId, partialFromOlderBuild, IsNew: false), settings);
 
-        Assert.False(settings.Current.ReduceMotion);
+        Assert.False(settings.Current.ShowLibraryTools);
         Assert.Equal("played", settings.Current.SortMode);
         Assert.False(File.Exists(Path.Combine(_data, AccountSyncStore.FileName)));
     }
 
     [Fact]
-    public async Task PutConflictBetweenPullAndPushAppliesCloudReduceMotionFalseImmediately()
+    public async Task PutConflictBetweenPullAndPushAppliesCloudShowLibraryToolsFalseImmediately()
     {
         var server = new MockSyncServer();
-        var initial = AccountSyncMap.SettingsValue(new AppSettings { ReduceMotion = true, SortMode = "name" }).ToJsonString();
+        var initial = AccountSyncMap.SettingsValue(new AppSettings { ShowLibraryTools = true, SortMode = "name" }).ToJsonString();
         server.Seed("settings", "app", initial, 1000);
 
-        File.WriteAllText(PathHelper.SettingsPath, "{\"reduceMotion\":true,\"sortMode\":\"name\"}");
+        File.WriteAllText(PathHelper.SettingsPath, "{\"showLibraryTools\":true,\"sortMode\":\"name\"}");
         var settings = new SettingsService();
         settings.Load();
 
@@ -169,7 +169,7 @@ public sealed class ReduceMotionSyncTests : IDisposable
         {
             if (!injectConflict) return;
             injectConflict = false;
-            var otherPcFalse = AccountSyncMap.SettingsValue(new AppSettings { ReduceMotion = false, SortMode = "name" }).ToJsonString();
+            var otherPcFalse = AccountSyncMap.SettingsValue(new AppSettings { ShowLibraryTools = false, SortMode = "name" }).ToJsonString();
             server.Seed("settings", "app", otherPcFalse, DateTimeOffset.UtcNow.AddSeconds(10).ToUnixTimeMilliseconds());
         };
 
@@ -182,34 +182,34 @@ public sealed class ReduceMotionSyncTests : IDisposable
         AccountSyncHooks.Attach(host);
 
         await host.SyncAsync(CancellationToken.None);
-        Assert.True(settings.Current.ReduceMotion);
+        Assert.True(settings.Current.ShowLibraryTools);
 
         settings.ApplyPatch(sortMode: "played");
         injectConflict = true;
         await host.SyncAsync(CancellationToken.None, ignoreDebounce: true);
 
-        Assert.False(settings.Current.ReduceMotion);
+        Assert.False(settings.Current.ShowLibraryTools);
         Assert.Equal("played", settings.Current.SortMode);
 
         settings.SyncAppVersion("3.31.1");
         settings.ApplyPatch(textSize: "large");
         await host.SyncAsync(CancellationToken.None, ignoreDebounce: true);
 
-        Assert.False(settings.Current.ReduceMotion);
+        Assert.False(settings.Current.ShowLibraryTools);
         Assert.Equal("played", settings.Current.SortMode);
         Assert.Equal("large", settings.Current.TextSize);
         var cloud = JsonNode.Parse(server.Value("settings/app")!)!.AsObject();
-        Assert.False(cloud["ReduceMotion"]!.GetValue<bool>());
+        Assert.False(cloud["ShowLibraryTools"]!.GetValue<bool>());
     }
 
     [Fact]
-    public async Task SignedOutReduceMotionFalseChangeSticksOverOlderCloudTrueOnSignIn()
+    public async Task SignedOutShowLibraryToolsFalseChangeSticksOverOlderCloudTrueOnSignIn()
     {
         var server = new MockSyncServer();
-        var olderCloud = AccountSyncMap.SettingsValue(new AppSettings { ReduceMotion = true, SortMode = "played" }).ToJsonString();
+        var olderCloud = AccountSyncMap.SettingsValue(new AppSettings { ShowLibraryTools = true, SortMode = "played" }).ToJsonString();
         server.Seed("settings", "app", olderCloud, DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeMilliseconds());
 
-        File.WriteAllText(PathHelper.SettingsPath, "{\"reduceMotion\":true,\"sortMode\":\"name\"}");
+        File.WriteAllText(PathHelper.SettingsPath, "{\"showLibraryTools\":true,\"sortMode\":\"name\"}");
         var settings = new SettingsService();
         settings.Load();
 
@@ -222,27 +222,27 @@ public sealed class ReduceMotionSyncTests : IDisposable
             item => AccountSyncApply.Pulled(item, settings, () => host?.KnownValue("settings", AccountSyncMap.SettingsId)));
         AccountSyncHooks.Attach(host);
 
-        settings.ApplyPatch(reduceMotion: false);
-        Assert.False(settings.Current.ReduceMotion);
+        settings.ApplyPatch(showLibraryTools: false);
+        Assert.False(settings.Current.ShowLibraryTools);
 
         session = new AccountSession("tok", "acc-1", "person@example.com");
         await host.SyncAsync(CancellationToken.None, ignoreDebounce: true);
 
-        Assert.False(settings.Current.ReduceMotion);
+        Assert.False(settings.Current.ShowLibraryTools);
         Assert.Equal("played", settings.Current.SortMode);
         var cloud = JsonNode.Parse(server.Value("settings/app")!)!.AsObject();
-        Assert.False(cloud["ReduceMotion"]!.GetValue<bool>());
+        Assert.False(cloud["ShowLibraryTools"]!.GetValue<bool>());
         Assert.Equal("played", cloud["SortMode"]!.GetValue<string>());
     }
 
     [Fact]
-    public async Task SignedOutOlderReduceMotionTrueLosesToNewerCloudFalseOnSignIn()
+    public async Task SignedOutOlderShowLibraryToolsTrueLosesToNewerCloudFalseOnSignIn()
     {
         var server = new MockSyncServer();
-        var newerCloud = AccountSyncMap.SettingsValue(new AppSettings { ReduceMotion = false, SortMode = "played" }).ToJsonString();
+        var newerCloud = AccountSyncMap.SettingsValue(new AppSettings { ShowLibraryTools = false, SortMode = "played" }).ToJsonString();
         server.Seed("settings", "app", newerCloud, DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeMilliseconds());
 
-        File.WriteAllText(PathHelper.SettingsPath, "{\"reduceMotion\":false,\"sortMode\":\"name\"}");
+        File.WriteAllText(PathHelper.SettingsPath, "{\"showLibraryTools\":false,\"sortMode\":\"name\"}");
         var settings = new SettingsService();
         settings.Load();
 
@@ -255,16 +255,16 @@ public sealed class ReduceMotionSyncTests : IDisposable
             item => AccountSyncApply.Pulled(item, settings, () => host?.KnownValue("settings", AccountSyncMap.SettingsId)));
         AccountSyncHooks.Attach(host);
 
-        settings.ApplyPatch(reduceMotion: true);
-        Assert.True(settings.Current.ReduceMotion);
+        settings.ApplyPatch(showLibraryTools: true);
+        Assert.True(settings.Current.ShowLibraryTools);
 
         session = new AccountSession("tok", "acc-1", "person@example.com");
         await host.SyncAsync(CancellationToken.None, ignoreDebounce: true);
 
-        Assert.False(settings.Current.ReduceMotion);
+        Assert.False(settings.Current.ShowLibraryTools);
         Assert.Equal("played", settings.Current.SortMode);
         var cloud = JsonNode.Parse(server.Value("settings/app")!)!.AsObject();
-        Assert.False(cloud["ReduceMotion"]!.GetValue<bool>());
+        Assert.False(cloud["ShowLibraryTools"]!.GetValue<bool>());
         Assert.Empty(AccountSyncStore.Load(_data, "acc-1").Dirty);
     }
 
@@ -272,10 +272,10 @@ public sealed class ReduceMotionSyncTests : IDisposable
     public async Task UserToggleDuringPullApplyRaceIsNotOverwrittenByStalePulledSnapshot()
     {
         var server = new MockSyncServer();
-        var cloudTrue = AccountSyncMap.SettingsValue(new AppSettings { ReduceMotion = true, SortMode = "played" }).ToJsonString();
+        var cloudTrue = AccountSyncMap.SettingsValue(new AppSettings { ShowLibraryTools = true, SortMode = "played" }).ToJsonString();
         server.Seed("settings", "app", cloudTrue, DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeMilliseconds());
 
-        File.WriteAllText(PathHelper.SettingsPath, "{\"reduceMotion\":true,\"sortMode\":\"name\"}");
+        File.WriteAllText(PathHelper.SettingsPath, "{\"showLibraryTools\":true,\"sortMode\":\"name\"}");
         var settings = new SettingsService();
         settings.Load();
 
@@ -291,7 +291,7 @@ public sealed class ReduceMotionSyncTests : IDisposable
                 if (!simulatedUserEdit && item.Type == "settings")
                 {
                     simulatedUserEdit = true;
-                    settings.ApplyPatch(reduceMotion: false);
+                    settings.ApplyPatch(showLibraryTools: false);
                 }
                 return AccountSyncApply.Pulled(item, settings, () => host?.KnownValue("settings", AccountSyncMap.SettingsId));
             });
@@ -299,20 +299,20 @@ public sealed class ReduceMotionSyncTests : IDisposable
 
         await host.SyncAsync(CancellationToken.None, ignoreDebounce: true);
 
-        Assert.False(settings.Current.ReduceMotion);
+        Assert.False(settings.Current.ShowLibraryTools);
         Assert.Equal("played", settings.Current.SortMode);
         var cloud = JsonNode.Parse(server.Value("settings/app")!)!.AsObject();
-        Assert.False(cloud["ReduceMotion"]!.GetValue<bool>());
+        Assert.False(cloud["ShowLibraryTools"]!.GetValue<bool>());
     }
 
     [Fact]
-    public async Task SyncNowPushesFreshReduceMotionToggleImmediately()
+    public async Task SyncNowPushesFreshShowLibraryToolsToggleImmediately()
     {
         var server = new MockSyncServer();
-        var cloudTrue = AccountSyncMap.SettingsValue(new AppSettings { ReduceMotion = true }).ToJsonString();
+        var cloudTrue = AccountSyncMap.SettingsValue(new AppSettings { ShowLibraryTools = true }).ToJsonString();
         server.Seed("settings", "app", cloudTrue, DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeMilliseconds());
 
-        File.WriteAllText(PathHelper.SettingsPath, "{\"reduceMotion\":true}");
+        File.WriteAllText(PathHelper.SettingsPath, "{\"showLibraryTools\":true}");
         var settings = new SettingsService();
         settings.Load();
 
@@ -326,14 +326,32 @@ public sealed class ReduceMotionSyncTests : IDisposable
         AccountSyncHooks.Attach(host);
 
         await host.SyncAsync(CancellationToken.None);
-        settings.ApplyPatch(reduceMotion: false);
+        settings.ApplyPatch(showLibraryTools: false);
         await AccountSyncHooks.SyncNowAsync();
 
         var cloud = JsonNode.Parse(server.Value("settings/app")!)!.AsObject();
-        Assert.False(cloud["ReduceMotion"]!.GetValue<bool>());
+        Assert.False(cloud["ShowLibraryTools"]!.GetValue<bool>());
         Assert.Empty(AccountSyncStore.Load(_data, "acc-1").Dirty);
     }
 
+    [Fact]
+    public void SavedReduceMotionAndStoreQuietGiveWayToTheEnforcedValues()
+    {
+        var windowsReduces = !SettingsService.WindowsAnimates();
+        File.WriteAllText(PathHelper.SettingsPath, "{\"reduceMotion\":" + (windowsReduces ? "false" : "true") + ",\"storeClientsQuiet\":false}");
+        var settings = new SettingsService();
+        settings.Load();
+
+        Assert.Equal(windowsReduces, settings.Current.ReduceMotion);
+        Assert.True(settings.Current.StoreClientsQuiet);
+
+        settings.ApplyPatch(sortMode: "played");
+        Assert.Equal(windowsReduces, settings.Current.ReduceMotion);
+        Assert.True(settings.Current.StoreClientsQuiet);
+
+        var synced = AccountSyncMap.SettingsValue(new AppSettings { ReduceMotion = true });
+        Assert.False(synced.ContainsKey("ReduceMotion"));
+    }
     private static void Sync(AccountSyncEngine engine, MockSyncServer server, DateTimeOffset now)
     {
         var batch = engine.NextPush(now);

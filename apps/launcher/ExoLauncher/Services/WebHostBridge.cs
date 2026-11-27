@@ -2668,7 +2668,6 @@ public sealed partial class WebHostBridge
             autoUpdateUpscalers = s.AutoUpdateUpscalers,
             upscalerAntiCheatEverywhere = s.UpscalerAntiCheatEverywhere,
             keepAwakeDownloads = s.KeepAwakeDownloads,
-            storeClientsQuiet = s.StoreClientsQuiet,
             chipset,
             libraryFolders = s.LibraryFolders.Select(folder => new { id = folder.Id, name = folder.Name, color = folder.Color, sort = folder.Sort, art = resolveFolderArt(folder.Art), games = folder.Games }),
             hiddenGames = s.HiddenGames,
@@ -2684,7 +2683,6 @@ public sealed partial class WebHostBridge
         // copyPortableIntoLibrary, allowResize, checkForUpdates,
         // libraryShowInstalled, libraryShowOwned) are ignored if an older UI sends them.
         bool? onboard = null;
-        bool? reduceMotion = null;
         bool? startMaximized = null;
         bool? framelessPinTop = null, framelessPinSide = null;
         bool? showLibraryTools = null;
@@ -2714,9 +2712,7 @@ public sealed partial class WebHostBridge
             root = dr.ValueKind == JsonValueKind.String ? dr.GetString() : (dr.ValueKind == JsonValueKind.Null ? "" : null);
         if (!string.IsNullOrWhiteSpace(root))
             root = NormalizeInstallRoot(root) ?? throw new UserFacingException(InstallRootRejected);
-        if (p.TryGetProperty("reduceMotion", out var rm) &&
-            (rm.ValueKind is JsonValueKind.True or JsonValueKind.False))
-            reduceMotion = rm.GetBoolean();
+
         if (p.TryGetProperty("startMaximized", out var startMaximizedEl) &&
             (startMaximizedEl.ValueKind is JsonValueKind.True or JsonValueKind.False))
             startMaximized = startMaximizedEl.GetBoolean();
@@ -2767,7 +2763,6 @@ public sealed partial class WebHostBridge
             sortMode: sort,
             defaultInstallRoot: root,
             onboardingComplete: onboard,
-            reduceMotion: reduceMotion,
             startMaximized: startMaximized,
             textColour: textColour,
             textSize: textSize,
@@ -2785,11 +2780,10 @@ public sealed partial class WebHostBridge
             graphicsFeaturesBestSettings: graphicsFeaturesBestSettings);
         if (hdrForGames is not null || hdrSdrGamma is not null) _services.HdrHost.SyncSoon();
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
-        if (textSize is not null || reduceMotion is not null) _services.MousePanel.NotifySettingsChanged();
+        if (textSize is not null) _services.MousePanel.NotifySettingsChanged();
         if (showLibraryTools is { } tools && tools != previousShowLibraryTools)
             RefreshLibraryAfterToolsToggle();
         ApplyDownloadSettings(p);
-        ApplyStoreQuietSetting(p);
         ApplyStartWithWindowsSetting(p);
         ApplyAchievementSettings(p);
         ApplyFpsCounterSettings(p);

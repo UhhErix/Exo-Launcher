@@ -1026,23 +1026,6 @@ pub fn stores_section(s: &AppState) -> El {
         }
     }
 
-    if has_accounts {
-        let quiet = s.settings.store_clients_quiet;
-        card = card
-            .child(el().w_full().h(1.0).fill(hairline()))
-            .child(store_row_box(
-                "library-quiet-stores",
-                None,
-                "Keep store apps quiet",
-                None,
-                None,
-                hi("library-quiet-stores"),
-                switch_pill("set-quiet-clients", "Keep store apps quiet", quiet).on_press(
-                    move |s: &mut AppState| s.set_bool_setting("storeClientsQuiet", !quiet),
-                ),
-            ));
-    }
-
     let riot_listed = installed.iter().any(|st| st.store == "riot");
     let riot_id_set = s
         .settings

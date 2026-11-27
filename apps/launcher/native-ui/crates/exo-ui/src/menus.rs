@@ -601,7 +601,6 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
         }
         ContextMenuTarget::SettingsButton => {
             let text_size = s.settings.text_size.as_deref().unwrap_or("normal");
-            let reduce_motion = s.settings.reduce_motion;
             vec![
                 MenuEntry::item(
                     MenuItem::new("ctx-set-open", "Open Settings")
@@ -613,14 +612,6 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                     MenuItem::new("ctx-set-text-size", "Text size")
                         .icon(icon_sliders(15.0, FG))
                         .submenu(text_size_submenu(text_size)),
-                ),
-                MenuEntry::item(
-                    MenuItem::new("ctx-set-reduce-motion", "Reduce motion")
-                        .icon(icon_sparkles(15.0, FG))
-                        .checked(reduce_motion)
-                        .on_select(move |s: &mut AppState, _| {
-                            s.set_bool_setting("reduceMotion", !reduce_motion);
-                        }),
                 ),
                 MenuEntry::Separator,
                 MenuEntry::item(

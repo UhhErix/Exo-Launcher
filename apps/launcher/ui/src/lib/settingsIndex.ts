@@ -19,14 +19,6 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     keywords: ['small', 'normal', 'large', 'scale', 'font'],
   },
   {
-    id: 'general-reduce-motion',
-    label: 'Reduce motion',
-    page: 'general',
-    pageLabel: 'General',
-    sectionId: 'general',
-    keywords: ['animation', 'animations', 'transitions', 'motion'],
-  },
-  {
     id: 'general-startup',
     label: 'Open Exo when Windows starts',
     page: 'general',
@@ -65,14 +57,6 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     pageLabel: 'Library',
     sectionId: 'accounts',
     keywords: ['steam offline', 'go offline', 'go online'],
-  },
-  {
-    id: 'library-quiet-stores',
-    label: 'Keep store apps quiet',
-    page: 'library',
-    pageLabel: 'Library',
-    sectionId: 'accounts',
-    keywords: ['store clients', 'minimize', 'close', 'background'],
   },
   {
     id: 'library-riot-id',

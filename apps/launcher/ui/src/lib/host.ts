@@ -1918,7 +1918,6 @@ export interface LauncherSettings {
   /** Whose chipset driver this PC has and Exo updates: AMD's on a Ryzen, Intel's on an Intel processor (read-only: shows Keep the AMD or Intel chipset driver up to date). */
   chipset?: 'amd' | 'intel' | null
   /** Store clients (Steam, Epic) stay quiet: their pop-ups and sounds off and kept off; off puts them back as they were (default on). */
-  storeClientsQuiet?: boolean
   /** The Library's folders, in their order on the grid. */
   libraryFolders?: LibraryFolder[]
   /** Games hidden from the Library (card ids); its Hidden view lists them. */

@@ -54,23 +54,23 @@ public sealed class AccountSyncWiringTests : IDisposable
     [Fact]
     public void TheSettingsItemCarriesPreferencesAndNoDevicePaths()
     {
-        var settings = new AppSettings { ReduceMotion = true, DefaultInstallRoot = @"D:\Games" };
+        var settings = new AppSettings { ShowLibraryTools = true, DefaultInstallRoot = @"D:\Games" };
 
         var value = AccountSyncMap.SettingsValue(settings);
 
-        Assert.True(value["ReduceMotion"]!.GetValue<bool>());
+        Assert.True(value["ShowLibraryTools"]!.GetValue<bool>());
         Assert.Null(value["DefaultInstallRoot"]);
     }
 
     [Fact]
     public void APulledSettingsValueLaysOnlySyncedPropertiesOver()
     {
-        var source = new AppSettings { ReduceMotion = true, DefaultInstallRoot = @"D:\Games" };
-        var target = new AppSettings { ReduceMotion = false, DefaultInstallRoot = @"C:\Local" };
+        var source = new AppSettings { ShowLibraryTools = true, DefaultInstallRoot = @"D:\Games" };
+        var target = new AppSettings { ShowLibraryTools = false, DefaultInstallRoot = @"C:\Local" };
 
         AccountSyncMap.ApplySettings(target, AccountSyncMap.SettingsValue(source).ToJsonString());
 
-        Assert.True(target.ReduceMotion);
+        Assert.True(target.ShowLibraryTools);
         Assert.Equal(@"C:\Local", target.DefaultInstallRoot);
     }
 
@@ -101,13 +101,13 @@ public sealed class AccountSyncWiringTests : IDisposable
     {
         var dir = FreshDir();
         var engine = new AccountSyncEngine(new SyncState { AccountId = "acc" });
-        engine.Write("settings", "app", "{\"ReduceMotion\":true}", 1, DateTimeOffset.UtcNow);
+        engine.Write("settings", "app", "{\"ShowLibraryTools\":true}", 1, DateTimeOffset.UtcNow);
 
         AccountSyncStore.Save(dir, engine.State);
         var loaded = AccountSyncStore.Load(dir, "acc");
 
         Assert.Contains("settings/app", loaded.Dirty);
-        Assert.Equal("{\"ReduceMotion\":true}", loaded.Items["settings/app"].Value);
+        Assert.Equal("{\"ShowLibraryTools\":true}", loaded.Items["settings/app"].Value);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public sealed class AccountSyncWiringTests : IDisposable
         var dir = FreshDir();
         var host = new AccountSyncHost(dir, new ExoAccountClient(new Answer(HttpStatusCode.OK, "{}")), () => null, _ => { });
 
-        host.Write("settings", "app", "{\"ReduceMotion\":true}");
+        host.Write("settings", "app", "{\"ShowLibraryTools\":true}");
 
         Assert.False(File.Exists(Path.Combine(dir, AccountSyncStore.FileName)));
     }
@@ -155,7 +155,7 @@ public sealed class AccountSyncWiringTests : IDisposable
             new ExoAccountClient(new Answer(HttpStatusCode.Unauthorized, "{\"error\":\"signed-out\"}")),
             () => session, _ => { });
 
-        host.Write("settings", "app", "{\"ReduceMotion\":true}");
+        host.Write("settings", "app", "{\"ShowLibraryTools\":true}");
         await host.SyncAsync(CancellationToken.None);
 
         var saved = AccountSyncStore.Load(dir, "acc-1");

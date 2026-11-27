@@ -1127,9 +1127,7 @@ impl MediaState {
                 ..Default::default()
             }),
             settings: Some(CaptureSettingsDto {
-                quality: 60,
                 replay_seconds: 60,
-                max_fps: 120,
                 replay_mode: "games".into(),
                 cursor: true,
                 save_replay_keys: "Ctrl+Alt+F10".into(),

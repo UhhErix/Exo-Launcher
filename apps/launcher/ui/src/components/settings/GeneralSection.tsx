@@ -24,8 +24,7 @@ export const GeneralSection = memo(function GeneralSection({ settings, onSave: s
     <Section id="general">
       <ChoiceRow id="set-text-size" label="Text size" value={settings?.textSize ?? 'normal'} choices={TEXT_SIZES} disabled={disabled}
         onChange={value => save({ textSize: value })} />
-      <SwitchRow id="set-reduce-motion" label="Reduce motion" checked={settings?.reduceMotion === true} disabled={disabled}
-        onChange={value => save({ reduceMotion: value })} />
+
       <SwitchRow id="set-start-with-windows" label="Open Exo when Windows starts" checked={settings?.startWithWindows === true} disabled={disabled}
         onChange={value => save({ startWithWindows: value })} />
     </Section>

@@ -185,9 +185,7 @@ internal sealed class HeadlessCaptureService : IDisposable
             var replay = CaptureReplayBudget.For(s.ReplaySeconds, PhysicalMemory.Value, supportsReplayBudget);
             var parameters = new JsonObject
             {
-                ["quality"] = s.Quality,
                 ["replaySeconds"] = replay.Seconds,
-                ["maxFps"] = s.MaxFps,
                 ["replayMode"] = s.ReplayMode,
                 ["cursor"] = s.Cursor,
                 ["folder"] = folder,
@@ -359,9 +357,7 @@ internal sealed class HeadlessCaptureService : IDisposable
             var s = Config;
             return new
             {
-                quality = s.Quality,
                 replaySeconds = s.ReplaySeconds,
-                maxFps = s.MaxFps,
                 replayMode = s.ReplayMode,
                 cursor = s.Cursor,
                 printScreen = s.PrintScreen,
@@ -426,9 +422,7 @@ internal sealed class HeadlessCaptureService : IDisposable
                 int? n = v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) ? i : null;
                 switch (prop.Name)
                 {
-                    case "quality" when n is { } quality: s.Quality = Math.Clamp(quality, 0, 100); break;
                     case "replaySeconds" when n is { } secs: s.ReplaySeconds = Math.Clamp(secs, 15, 600); break;
-                    case "maxFps" when n is { } fps: s.MaxFps = fps >= 120 ? 120 : 60; break;
                     case "replayMode" when v.ValueKind == JsonValueKind.String && v.GetString() is "games" or "always" or "off": s.ReplayMode = v.GetString()!; break;
                     case "cursor" when v.ValueKind is JsonValueKind.True or JsonValueKind.False: s.Cursor = v.GetBoolean(); break;
                     case "printScreen" when v.ValueKind is JsonValueKind.True or JsonValueKind.False: s.PrintScreen = v.GetBoolean(); break;

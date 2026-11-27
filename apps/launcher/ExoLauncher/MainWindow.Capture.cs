@@ -47,10 +47,7 @@ public sealed partial class MainWindow
 
     internal sealed class CaptureSettings
     {
-        public int Quality { get; set; } = 50;
         public int ReplaySeconds { get; set; } = 60;
-        /// <summary>60, or 120 (up to the screen's refresh rate).</summary>
-        public int MaxFps { get; set; } = 60;
         /// <summary>games (while a game runs), always, or off.</summary>
         public string ReplayMode { get; set; } = "games";
         public bool Cursor { get; set; } = true;
@@ -261,9 +258,7 @@ public sealed partial class MainWindow
             var replay = Services.CaptureReplayBudget.For(s.ReplaySeconds, CapturePhysicalMemory.Value, supportsReplayBudget);
             var parameters = new JsonObject
             {
-                ["quality"] = s.Quality,
                 ["replaySeconds"] = replay.Seconds,
-                ["maxFps"] = s.MaxFps,
                 ["replayMode"] = s.ReplayMode,
                 ["cursor"] = s.Cursor,
                 ["folder"] = folder,
@@ -471,9 +466,7 @@ public sealed partial class MainWindow
         var s = CaptureConfig;
         return new
         {
-            s.Quality,
             s.ReplaySeconds,
-            s.MaxFps,
             s.ReplayMode,
             s.Cursor,
             s.SaveReplayKeys,
@@ -512,9 +505,7 @@ public sealed partial class MainWindow
                 int? n = v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) ? i : null;
                 switch (prop.Name)
                 {
-                    case "quality" when n is { } quality: s.Quality = Math.Clamp(quality, 0, 100); break;
                     case "replaySeconds" when n is { } seconds: s.ReplaySeconds = Math.Clamp(seconds, 30, 600); break;
-                    case "maxFps" when n is { } fps: s.MaxFps = fps >= 120 ? 120 : 60; break;
                     case "replayMode" when v.ValueKind == JsonValueKind.String && v.GetString() is "games" or "always" or "off": s.ReplayMode = v.GetString()!; break;
                     case "cursor" when v.ValueKind is JsonValueKind.True or JsonValueKind.False: s.Cursor = v.GetBoolean(); break;
                     case "printScreen" when v.ValueKind is JsonValueKind.True or JsonValueKind.False: s.PrintScreen = v.GetBoolean(); break;

@@ -292,14 +292,6 @@ fn section_general(s: &AppState) -> El {
             ),
         ),
         toggle_row(
-            "set-reduce-motion",
-            "Reduce motion",
-            None,
-            "reduceMotion",
-            set.reduce_motion,
-            is_highlighted(s, "general-reduce-motion"),
-        ),
-        toggle_row(
             "set-start-win",
             "Open Exo when Windows starts",
             None,

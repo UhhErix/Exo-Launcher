@@ -175,7 +175,7 @@ public sealed class AccountSessionEndTests : IDisposable
             var host = new AccountSyncHost(dir,
                 new ExoAccountClient(new Script((HttpStatusCode.Unauthorized, "{\"error\":\"signed-out\"}", null))),
                 () => AccountSessionStore.Load(dir), _ => { });
-            host.Write("settings", "app", "{\"ReduceMotion\":true}");
+            host.Write("settings", "app", "{\"ShowLibraryTools\":true}");
 
             await host.SyncAsync(CancellationToken.None);
 
@@ -185,7 +185,7 @@ public sealed class AccountSessionEndTests : IDisposable
             // The queue stays for the same account's next sign-in.
             Assert.Contains("settings/app", AccountSyncStore.Load(dir, Session("t-old").AccountId).Dirty);
             // A change made now waits for an account instead of going to the dead session's queue.
-            host.Write("settings", "app", "{\"ReduceMotion\":false}");
+            host.Write("settings", "app", "{\"ShowLibraryTools\":false}");
             Assert.True(File.Exists(Path.Combine(dir, AccountSyncHost.PendingFile)));
         }
         finally

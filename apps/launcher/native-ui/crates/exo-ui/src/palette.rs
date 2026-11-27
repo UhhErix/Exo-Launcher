@@ -22,8 +22,6 @@ fn settings_page_keywords(sec: SettingsSection) -> &'static [&'static str] {
             "amoled",
             "pure black",
             "text size",
-            "reduce motion",
-            "animation",
             "startup",
             "start with windows",
             "window",

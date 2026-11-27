@@ -684,7 +684,6 @@ const mockSettings: LauncherSettings = {
   autoUpdateUpscalers: true,
   upscalerAntiCheatEverywhere: false,
   keepAwakeDownloads: true,
-  storeClientsQuiet: true,
   chipset: mockIntelCpu ? 'intel' : 'amd',
   uiPrefs: mockTour ? {} : { tourSeen: 1 },
   ...(mockFolders ? {
@@ -1369,7 +1368,7 @@ const mockCaptureState = {
   encoder: 'NVIDIA HEVC Encoder MFT', hdr: false, hotkeys: { saveReplay: true, record: true, snip: true, printScreen: true },
 }
 const mockCaptureSettings: Record<string, unknown> = {
-  quality: 50, replaySeconds: 60, maxFps: 60, replayMode: 'games',
+  replaySeconds: 60, replayMode: 'games',
   cursor: true, saveReplayKeys: 'Ctrl+Alt+F10', recordKeys: 'Ctrl+Alt+F9', snipKeys: 'Ctrl+Alt+F8', printScreen: false, afterSnip: 'edit',
   folder: 'C:\\Users\\Player\\Videos\\Exo Captures', keepGb: 0, keepDays: 0, autoShrink: true, callVoices: false,
 }

@@ -1562,8 +1562,6 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub auto_update_games: bool,
     #[serde(default)]
-    pub store_clients_quiet: bool,
-    #[serde(default)]
     pub achievement_banners: bool,
     #[serde(default)]
     pub achievement_volume: Option<i32>,

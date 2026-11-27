@@ -85,14 +85,12 @@ impl AppState {
 
     pub fn set_bool_setting(&mut self, key: &str, value: bool) {
         match key {
-            "reduceMotion" => self.settings.reduce_motion = value,
             "startWithWindows" => self.settings.start_with_windows = value,
             "startMaximized" => self.settings.start_maximized = value,
             "showLibraryTools" => self.settings.show_library_tools = value,
             "pauseDownloadsWhilePlaying" => self.settings.pause_downloads_while_playing = value,
             "keepAwakeDownloads" => self.settings.keep_awake_downloads = value,
             "autoUpdateGames" => self.settings.auto_update_games = value,
-            "storeClientsQuiet" => self.settings.store_clients_quiet = value,
             "achievementBanners" => self.settings.achievement_banners = value,
             "fpsCounter" => self.settings.fps_counter = value,
             "hdrForGames" => self.settings.hdr_for_games = value,

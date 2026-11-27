@@ -113,13 +113,6 @@ pub const SETTINGS_INDEX: &[SettingsIndexEntry] = &[
         keywords: &["small", "normal", "large", "scale", "font"],
     },
     SettingsIndexEntry {
-        id: "general-reduce-motion",
-        label: "Reduce motion",
-        section: SettingsSection::General,
-        page_label: "General",
-        keywords: &["animation", "animations", "transitions", "motion"],
-    },
-    SettingsIndexEntry {
         id: "general-startup",
         label: "Open Exo when Windows starts",
         section: SettingsSection::General,
@@ -164,13 +157,6 @@ pub const SETTINGS_INDEX: &[SettingsIndexEntry] = &[
         section: SettingsSection::Library,
         page_label: "Library",
         keywords: &["steam offline", "go offline", "go online"],
-    },
-    SettingsIndexEntry {
-        id: "library-quiet-stores",
-        label: "Keep store apps quiet",
-        section: SettingsSection::Library,
-        page_label: "Library",
-        keywords: &["store clients", "minimize", "close", "background"],
     },
     SettingsIndexEntry {
         id: "library-riot-id",

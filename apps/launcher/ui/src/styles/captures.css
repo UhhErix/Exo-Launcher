@@ -14,20 +14,6 @@
   max-width: 760px;
 }
 
-/* A slider with its value after it: the value is a state, muted (faint fell under 4.5:1), its digits even. */
-.exo-capture-quality {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--color-muted);
-  font-size: calc(12px * var(--exo-scale, 1));
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.exo-capture-quality input[type='range'] {
-  width: 180px;
-}
 
 .exo-capture-hotkey {
   min-width: 132px;

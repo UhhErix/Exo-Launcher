@@ -21,7 +21,7 @@ Press **Ctrl+K**, or the Exo mark at the top left, to reach any room, game, acti
 ## Look and feel
 
 **Settings > General**:
-- **Text size** and **Reduce motion**. **Settings > Library** has **Show tools and soundtracks** (servers, SDKs and soundtracks in the Library).
+- **Text size**. Motion follows Windows' own **Animation effects** setting. **Settings > Library** has **Show tools and soundtracks** (servers, SDKs and soundtracks in the Library).
 
 Every screen gets the same layout: on a 1440p or 4K screen Exo draws the 1080p layout larger, so it looks the same, only sharper.
 
