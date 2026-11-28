@@ -1,6 +1,7 @@
 <p align="center"><img src="docs/media/logo.png" alt="Exo" width="88"></p>
 <h1 align="center">Exo Launcher 4.0</h1>
 <p align="center"><strong>Every game store, Discord, your music, your captures and your mouse in one app for Windows 11.</strong></p>
+<p align="center"><em>This release is 0.1 beta (build 4.0.0): the first release of the new native app. Expect some bugs.</em></p>
 
 <p align="center">
   <a href="https://getexo.app/download/launcher"><strong>Download for Windows 11</strong></a>
