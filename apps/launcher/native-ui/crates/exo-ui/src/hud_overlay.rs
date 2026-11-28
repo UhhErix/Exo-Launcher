@@ -131,7 +131,7 @@ pub fn view(state: &HudState, cx: &mut Cx<HudState>) -> El {
         .border(1.0, glass_rim())
         .center()
         .child(content);
-    let styled_pill = apply_glass_opt(pill, ExoGlass::Control, false, allow_glass);
+    let styled_pill = apply_glass_opt(pill, ExoGlass::Control, allow_glass);
 
     el().w_full()
         .h_full()

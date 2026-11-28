@@ -72,7 +72,6 @@ internal sealed class RadeonProfileService(IGpuDriver driver, string folder, Fun
                     return new FluidMotionFrames.Decision(false, "turned off by player");
                 return FluidMotionFrames.Decide(gpu, FrameGenFacts.ForLaunch(game));
             });
-            ApplyLaunchChillCap(game.Id, game.Title);
         };
         launcher.GameSessionCompleted += _ => GameEnded();
         _ = Task.Run(() =>

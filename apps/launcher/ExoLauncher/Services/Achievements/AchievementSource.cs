@@ -25,7 +25,7 @@ internal static class AchievementSource
     /// <summary>The page's files by the address it asks for them: the file in its folder and its type; null for anything else.</summary>
     internal static (string File, string Type)? AssetOf(string path) => path switch
     {
-        "/Goeist-Variable.woff2" => ("Goeist-Variable.woff2", "font/woff2"),
+        "/Geist-Variable.woff2" => ("Geist-Variable.woff2", "font/woff2"),
         "/sounds/common.wav" or "/sounds/rare.wav" or "/sounds/epic.wav" or "/sounds/legendary.wav" or "/sounds/completion.wav" => (Path.Combine("sounds", path[8..]), "audio/wav"),
         _ => null,
     };

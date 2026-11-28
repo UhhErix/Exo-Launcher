@@ -1,24 +1,135 @@
+use crate::pc_state::SettingsSection;
 use crate::shell::room_icon;
 use crate::state::{AppState, PaletteItem, PaletteTarget, Room};
 use exo_kit::{
     FG, RADIUS_SHEET, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, fg_muted, hairline,
     hover_fill, icon_chat, icon_close, icon_download, icon_gamepad, icon_key, icon_minimize,
-    icon_music, icon_notes, icon_pause, icon_play, icon_plus, icon_refresh, icon_search,
-    icon_server, icon_settings, icon_skip_back, icon_skip_forward, icon_sparkles,
-    modal_card_transition, scaled, scrim_fill, type_body, type_control, type_small,
+    icon_music, icon_pause, icon_play, icon_refresh, icon_search, icon_server, icon_settings,
+    icon_skip_back, icon_skip_forward, icon_sparkles, modal_card_transition, scaled, scrim_fill,
+    type_body, type_control, type_small,
 };
 use exo_rpc::{DiscordChannels, DiscordHome};
 use rune::{
-    Cursor, El, Key, KeyEvent, LiquidGlass, ScrollSpec, Spring, Transition, Tx, col, edit_access,
+    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, SurfaceFit, Transition, Tx, col, edit_access,
     el, row, text, text_input,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 
-#[derive(Debug, Clone, Default)]
-pub struct PaletteNoteItem {
-    pub id: String,
-    pub title: String,
-    pub snippet: String,
+fn settings_page_keywords(sec: SettingsSection) -> &'static [&'static str] {
+    match sec {
+        SettingsSection::General => &[
+            "dark mode",
+            "amoled",
+            "pure black",
+            "text size",
+            "startup",
+            "start with windows",
+            "window",
+            "discord layout",
+            "music service",
+            "spotify",
+            "apple music",
+            "youtube music",
+        ],
+        SettingsSection::Library => &[
+            "game stores",
+            "sign in",
+            "account",
+            "steam",
+            "epic",
+            "gog",
+            "amazon",
+            "riot",
+            "ea",
+            "ubisoft",
+            "battle.net",
+            "xbox",
+            "offline mode",
+            "soundtracks",
+            "shaders",
+        ],
+        SettingsSection::Downloads => &[
+            "downloads",
+            "install folder",
+            "download hours",
+            "automatic updates",
+            "anti-cheat",
+            "dlss",
+            "fsr",
+            "xess",
+        ],
+        SettingsSection::InGame => &[
+            "in game",
+            "achievements",
+            "pop-ups",
+            "obs overlay url",
+            "fps counter",
+            "frame rate",
+            "overlay",
+            "gpu use",
+            "vram",
+            "ram",
+            "battery",
+        ],
+        SettingsSection::Capture => &[
+            "capture",
+            "exo capture",
+            "instant replay",
+            "replay",
+            "record",
+            "recording",
+            "clips",
+            "snip",
+            "screenshot",
+            "print screen",
+            "hotkeys",
+            "voice chat",
+        ],
+        SettingsSection::Account => &[
+            "account",
+            "exo account",
+            "sign in",
+            "sign out",
+            "password",
+            "passkeys",
+            "recovery code",
+            "signed-in pcs",
+            "export my data",
+            "delete account",
+        ],
+        SettingsSection::About => &[
+            "about",
+            "version",
+            "updates",
+            "caches",
+            "what's new",
+            "changelog",
+            "privacy",
+            "app data",
+            "telemetry",
+            "crash reports",
+        ],
+    }
+}
+
+pub(crate) fn append_settings_pages(query: &str, items: &mut Vec<PaletteItem>) {
+    for sec in SettingsSection::ALL {
+        let title = crate::settings::nav_label(sec);
+        if title.to_lowercase().contains(query)
+            || "settings".contains(query)
+            || settings_page_keywords(sec)
+                .iter()
+                .any(|k| k.contains(query))
+        {
+            items.push(PaletteItem {
+                id: format!("pal-set-{}", sec.key()),
+                group: "Go to",
+                title: title.into(),
+                detail: Some("Settings".into()),
+                target: PaletteTarget::SettingsSection(sec),
+            });
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -31,7 +142,6 @@ pub struct PaletteChannelItem {
 
 #[derive(Debug, Clone, Default)]
 pub struct PaletteExtrasState {
-    pub notes: Vec<PaletteNoteItem>,
     pub dms: Vec<(String, String)>,
     pub servers: Vec<(String, String)>,
     pub channels: Vec<PaletteChannelItem>,
@@ -42,34 +152,6 @@ impl AppState {
         self.sync_palette_discord_from_cache();
         #[cfg(windows)]
         {
-            self.call_host_async("notes.list", json!({}), |s, res: Result<Value, String>| {
-                if let Ok(val) = res
-                    && val.get("ok").and_then(|v| v.as_bool()).unwrap_or(false)
-                    && let Some(arr) = val.get("notes").and_then(|v| v.as_array())
-                {
-                    s.palette_extras.notes = arr
-                        .iter()
-                        .map(|n| PaletteNoteItem {
-                            id: n
-                                .get("id")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            title: n
-                                .get("title")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            snippet: n
-                                .get("snippet")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                        })
-                        .filter(|n| !n.id.is_empty())
-                        .collect();
-                }
-            });
             self.call_host_async(
                 "discord.home",
                 json!({}),
@@ -168,9 +250,10 @@ impl AppState {
                 });
             }
             let install_title = format!("Install {}", sel.title);
-            if query.is_empty()
-                || install_title.to_lowercase().contains(query)
-                || "install".contains(query)
+            if !sel.installed
+                && (query.is_empty()
+                    || install_title.to_lowercase().contains(query)
+                    || "install".contains(query))
             {
                 items.push(PaletteItem {
                     id: "pal-action-install-selected".into(),
@@ -208,50 +291,6 @@ impl AppState {
                     detail: None,
                     target,
                 });
-            }
-        }
-
-        let note_actions: [(&str, &str, &[&str], PaletteTarget); 2] = [
-            (
-                "pal-note-new",
-                "New note",
-                &["notes", "write", "scratchpad"],
-                PaletteTarget::NoteNew,
-            ),
-            (
-                "pal-note-open",
-                "Notes",
-                &["note", "text", "markdown"],
-                PaletteTarget::NoteOpen,
-            ),
-        ];
-        for (id, title, keywords, target) in note_actions {
-            if query.is_empty()
-                || title.to_lowercase().contains(query)
-                || keywords.iter().any(|k| k.contains(query))
-            {
-                items.push(PaletteItem {
-                    id: id.into(),
-                    group: "Notes",
-                    title: title.into(),
-                    detail: None,
-                    target,
-                });
-            }
-        }
-        if !query.is_empty() {
-            for note in &self.palette_extras.notes {
-                if note.title.to_lowercase().contains(query)
-                    || note.snippet.to_lowercase().contains(query)
-                {
-                    items.push(PaletteItem {
-                        id: format!("pal-note-{}", note.id),
-                        group: "Notes",
-                        title: note.title.clone(),
-                        detail: (!note.snippet.trim().is_empty()).then(|| note.snippet.clone()),
-                        target: PaletteTarget::NoteItem(note.id.clone()),
-                    });
-                }
             }
         }
 
@@ -352,9 +391,6 @@ impl AppState {
             PaletteTarget::InstallSelected(id) => self.install_game(&id),
             PaletteTarget::OpenDownloads => self.open_downloads(),
             PaletteTarget::OpenWhatsNew => self.open_whats_new_all(),
-            PaletteTarget::NoteNew => self.open_notes(None, true),
-            PaletteTarget::NoteOpen => self.open_notes(None, false),
-            PaletteTarget::NoteItem(id) => self.open_notes(Some(id), false),
             PaletteTarget::DiscordDm(dm_id) => {
                 self.switch_room(Room::Discord);
                 self.open_discord_dm(&dm_id);
@@ -400,8 +436,6 @@ fn palette_icon(target: &PaletteTarget) -> El {
         PaletteTarget::InstallSelected(_) | PaletteTarget::OpenDownloads => {
             icon_download(16.0, fg_muted())
         }
-        PaletteTarget::NoteNew => icon_plus(16.0, fg_muted()),
-        PaletteTarget::NoteOpen | PaletteTarget::NoteItem(_) => icon_notes(16.0, fg_muted()),
         PaletteTarget::DiscordDm(_) | PaletteTarget::DiscordChannel { .. } => {
             icon_chat(16.0, fg_muted())
         }
@@ -413,9 +447,23 @@ fn palette_icon(target: &PaletteTarget) -> El {
     }
 }
 
-fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
+fn game_cover_icon(s: &AppState, target: &PaletteTarget, scale: f32) -> Option<El> {
+    let PaletteTarget::OpenGame(id) = target else {
+        return None;
+    };
+    let game = s.games.iter().find(|g| &g.id == id)?;
+    let cover = s.cover_image(game, scale)?;
+    Some(
+        el().size(scaled(20.0), scaled(28.0))
+            .radius(4.0)
+            .clip_rounded(4.0)
+            .pixels_fit(cover.pixels(), SurfaceFit::Fill),
+    )
+}
+
+fn palette_row(item: PaletteItem, index: usize, selected: bool, cover: Option<El>) -> El {
     let target = item.target.clone();
-    let icon = palette_icon(&target);
+    let icon = cover.unwrap_or_else(|| palette_icon(&target));
     let label = match item.detail {
         Some(ref detail) => format!("{}{}", item.title, detail),
         None => item.title.clone(),
@@ -452,7 +500,11 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
         .gap(scaled(12.0))
         .center_y()
         .radius(RADIUS_SMALL + 2.0)
-        .fill(if selected { hover_fill() } else { TRANSPARENT })
+        .fill(if selected {
+            exo_kit::selected_fill()
+        } else {
+            TRANSPARENT
+        })
         .hover(hover_fill())
         .hover_motion(Spring::NONE, SPRING_QUICK)
         .on_press_tx(move |s: &mut AppState, tx| {
@@ -525,7 +577,7 @@ pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
     }
 }
 
-pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn layers(s: &AppState, scale: f32) -> Vec<El> {
     let items = s.palette_results();
     let clamped = if items.is_empty() {
         0
@@ -562,7 +614,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .child(icon_search(16.0, fg_muted()))
         .child(input);
 
-    let max_palette_h = 820.8;
+    let max_palette_h = 580.0;
     let body = if items.is_empty() {
         el().w_full().h(72.0).center().child(
             text("No matching games or commands")
@@ -588,7 +640,8 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
                 );
                 last_group = Some(item.group);
             }
-            rows.push(palette_row(item, i, i == clamped));
+            let cover = game_cover_icon(s, &item.target, scale);
+            rows.push(palette_row(item, i, i == clamped, cover));
         }
         col()
             .key("command-palette-list")
@@ -613,7 +666,6 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
             )
     };
 
-    let _ = blur;
     let card = col()
         .key("command-palette")
         .w(scaled(576.0))
@@ -623,7 +675,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .focus_return("search-capsule")
@@ -638,7 +690,8 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 
     let host = col()
         .key("palette-host")
-        .pin(Some(0.0), Some(130.0), Some(0.0), None)
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .pt(88.0)
         .items_center()
         .transition(Transition::none())
         .child(card);
@@ -651,13 +704,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn palette_includes_selected_game_notes_discord_and_music_extras() {
+    fn palette_settings_pages_follow_the_settings_nav() {
         let mut s = AppState::default();
-        s.palette_extras.notes.push(PaletteNoteItem {
-            id: "n1".into(),
-            title: "Build notes".into(),
-            snippet: "FPS benchmark".into(),
-        });
+        s.palette_query.text = "sett".into();
+        s.palette_query.sync_invariants();
+        let pages: Vec<String> = s
+            .palette_results()
+            .into_iter()
+            .filter(|i| matches!(i.target, PaletteTarget::SettingsSection(_)))
+            .map(|i| i.title)
+            .collect();
+        let nav: Vec<String> = SettingsSection::ALL
+            .into_iter()
+            .map(|sec| crate::settings::nav_label(sec).to_string())
+            .collect();
+        assert_eq!(pages, nav);
+        assert!(pages.iter().any(|t| t == "Capture"));
+
+        let mut items = Vec::new();
+        append_settings_pages("instant replay", &mut items);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "pal-set-set-sec-capture");
+    }
+
+    #[test]
+    fn palette_includes_selected_game_discord_and_music_extras() {
+        let mut s = AppState::default();
         s.palette_extras.dms.push(("dm1".into(), "Alex".into()));
         s.palette_extras.servers.push(("g1".into(), "Squad".into()));
         s.palette_extras.channels.push(PaletteChannelItem {
@@ -672,9 +744,22 @@ mod tests {
         assert!(all.iter().any(|i| i.title == "Minimize window"));
         assert!(all.iter().any(|i| i.title == "Close window"));
         assert!(all.iter().any(|i| i.title.starts_with("Play ")));
-        assert!(all.iter().any(|i| i.title.starts_with("Install ")));
-        assert!(all.iter().any(|i| i.title == "New note"));
-        assert!(all.iter().any(|i| i.title == "Notes"));
+        let selected_installed = s.selected_game().is_some_and(|g| g.installed);
+        assert_eq!(
+            all.iter().any(|i| i.title.starts_with("Install ")),
+            !selected_installed
+        );
+        let selected_id = s.selected_game().map(|g| g.id.clone()).expect("selected");
+        if let Some(game) = s.games.iter_mut().find(|g| g.id == selected_id) {
+            game.installed = !selected_installed;
+        }
+        assert_eq!(
+            s.palette_results()
+                .iter()
+                .any(|i| i.title.starts_with("Install ")),
+            selected_installed
+        );
+        assert!(!all.iter().any(|i| i.title == "New note"));
         assert!(
             all.iter()
                 .any(|i| i.title == "Alex" && i.group == "Discord")
@@ -705,7 +790,51 @@ mod tests {
         );
 
         s.palette_query.text = "benchmark".into();
-        let note_filtered = s.palette_results();
-        assert!(note_filtered.iter().any(|i| i.title == "Build notes"));
+        assert!(!s.palette_results().iter().any(|i| i.title == "Build notes"));
+    }
+
+    #[test]
+    fn palette_renders_visible_liquid_glass_sheet_geometry() {
+        let mut s = AppState::with_demo_games();
+        s.palette_open = true;
+        s.palette_needs_focus = true;
+        let mut rt = rune::Runtime::new(
+            s,
+            crate::shell::view,
+            (1440.0, 900.0),
+            rune::Env::new(true, 2.0),
+        );
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+        // Simulate startup poll focusing the palette input before frame 0 paints:
+        // initial glass shapes must still land materialized (1.0) on the first frame.
+        rt.update(|s, tx| {
+            s.palette_needs_focus = false;
+            tx.focus("palette-input", false);
+        });
+        rt.frame(0.0);
+        let rect = rt
+            .presented("command-palette")
+            .map(|(r, _)| r)
+            .expect("command-palette presented");
+        let shapes = &rt.liquid_glass_frame().shapes;
+        assert!(
+            rect[2] > 500.0 && rect[3] > 200.0,
+            "command-palette collapsed: {rect:?}"
+        );
+        let pal_shape = shapes
+            .iter()
+            .find(|sh| {
+                (sh.rect[2] - rect[2] * 2.0).abs() < 8.0 && (sh.rect[3] - rect[3] * 2.0).abs() < 8.0
+            })
+            .expect("command-palette missing from liquid_glass shapes");
+        assert!(
+            pal_shape.extra[3] > 0.99,
+            "command-palette should be fully materialized on frame 0, got {}",
+            pal_shape.extra[3]
+        );
+        assert!(
+            shapes.iter().all(|sh| sh.extra[3] > 0.99),
+            "all initial liquid_glass shapes must land materialized on frame 0"
+        );
     }
 }

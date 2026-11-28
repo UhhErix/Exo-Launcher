@@ -576,6 +576,23 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         finally { _gate.Release(); }
     }
 
+    internal async Task<string?> ApplyAutoAsync()
+    {
+        if (!_gate.Wait(0)) return Busy;
+        try
+        {
+            var keys = StateOf(Settled()).Items
+                .Where(i => i.Blocked is null
+                    && Keys.Contains(i.Key)
+                    && i.Key is not (VrrKey or MouseAccelKey or IntegrityKey)
+                    && (!i.OptIn || i.Key is ServicesKey or MemCompressionKey))
+                .Select(i => i.Key)
+                .ToList();
+            return Logged(await ApplyNowAsync(keys, includePlaybookExtras: true).ConfigureAwait(false));
+        }
+        finally { _gate.Release(); }
+    }
+
     /// <summary>Turns one item off: puts back what Exo recorded and keeps it out of Best settings until it's on again.</summary>
     internal async Task<string?> TurnOffAsync(string key)
     {

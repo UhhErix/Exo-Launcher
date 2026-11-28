@@ -8,16 +8,17 @@ use exo_kit::{
     BG, ExoGlass, FG, FOLDER_COLOR_IDS, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
     RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectOption,
     SelectTrigger, TRANSPARENT, bad, danger_button, fg_faint, fg_muted, folder_color_label,
-    folder_color_mix_black, folder_color_swatch, glass_button, glass_button_opt,
-    glass_control_fill, glass_icon_circle, glass_panel_fill, glass_rim, hover_fill, icon_check,
-    icon_edit, icon_image_upload, icon_search, icon_zoom_in, icon_zoom_out, modal_card_transition,
+    folder_color_mix_black, folder_color_swatch, glass_button_opt, glass_control_fill,
+    glass_icon_circle_opt, glass_panel_fill, glass_rim, hover_fill, icon_check, icon_edit,
+    icon_image_upload, icon_search, icon_zoom_in, icon_zoom_out, modal_card_transition,
     modal_scrim_transition, primary_button, scrim_fill, select_menu_layers, select_trigger,
-    slider_track, subtle_fill, type_body, type_control, type_section, type_small, type_title,
+    slider_range, slider_track, subtle_fill, type_body, type_control, type_section, type_small,
+    type_title,
 };
 use exo_rpc::Game;
 use rune::{
-    Align, Cursor, El, FileDialogOptions, LiquidGlass, Phase, ScrollSpec, SurfaceFit, TextEdit,
-    TextStyle, col, edit_access, el, row, text, text_input,
+    Align, Cursor, El, FileDialogOptions, Phase, ScrollSpec, SurfaceFit, TextEdit, TextStyle, col,
+    edit_access, el, row, text, text_input,
 };
 use std::rc::Rc;
 
@@ -82,7 +83,7 @@ fn folder_art_el(
         .radius(RADIUS_CARD * 0.85)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD * 0.85)
-        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control, true))
+        .liquid_glass(exo_kit::exo_glass(ExoGlass::Control))
         .border_gradient(1.0, FG.alpha(0.22), TRANSPARENT);
 
     if folder.art.is_none() {
@@ -303,7 +304,7 @@ pub fn folder_card(
     card
 }
 
-pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
+pub fn folder_panel_overlay(s: &AppState, scale: f32) -> Vec<El> {
     let Some(folder) = s.open_folder_view() else {
         return Vec::new();
     };
@@ -375,11 +376,12 @@ pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         |s: &mut AppState, _| s.lib.folder_sort_open = !s.lib.folder_sort_open,
     );
 
-    let edit_btn = glass_icon_circle(
+    let edit_btn = glass_icon_circle_opt(
         "folder-panel-edit",
         "Edit folder",
         32.0,
         icon_edit(15.0, fg_muted()),
+        false,
     )
     .on_press(move |s: &mut AppState| s.open_edit_folder_sheet(&folder_id_edit));
 
@@ -443,7 +445,7 @@ pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel))
         .transition(modal_card_transition())
         .child(head)
         .child(grid);
@@ -471,7 +473,6 @@ pub fn folder_panel_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
             options,
             width: 200.0,
             align: Align::End,
-            blur,
             gamepad_focus: s.input_mode == InputMode::Gamepad,
             on_select: Rc::new(move |s: &mut AppState, val: &str, _| {
                 let next = sort_folder(&s.settings.library_folders, &folder_id_sort, val);
@@ -597,7 +598,7 @@ fn folder_panel_game_tile(
     tile
 }
 
-pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
+pub fn folder_sheet_overlay(s: &AppState, scale: f32) -> Vec<El> {
     let Some(sheet) = s.lib.folder_sheet.as_ref() else {
         return Vec::new();
     };
@@ -607,13 +608,12 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         folder_color_swatch(sheet.color, 1.0)
     };
 
-    let body = if s.lib.folder_cropper.is_some() {
-        folder_cropper_body(s, sheet.name.text.trim())
+    let body = if let Some(crop) = s.lib.folder_cropper.as_ref() {
+        folder_cropper_body(crop, sheet.name.text.trim())
     } else {
         folder_sheet_body(s, sheet, accent, scale)
     };
 
-    let _ = blur;
     let mut panel = el()
         .key("folder-sheet-dialog")
         .role("dialog")
@@ -634,7 +634,7 @@ pub fn folder_sheet_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel))
         .transition(modal_card_transition())
         .modal_tx(true, |s: &mut AppState, tx| {
             if s.lib.folder_cropper.is_some() {
@@ -756,7 +756,10 @@ fn folder_sheet_body(
                 .color(FG)
                 .placeholder("Folder name", fg_muted())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s.lib.folder_sheet.as_mut().unwrap().name
+                    match s.lib.folder_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.name,
+                        None => &mut s.ui_discard_edit,
+                    }
                 }))
                 .on_submit(|s: &mut AppState, _| s.save_folder_sheet()),
         );
@@ -841,7 +844,10 @@ fn folder_sheet_body(
                 .color(FG)
                 .placeholder("Search your games", fg_muted())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s.lib.folder_sheet.as_mut().unwrap().search
+                    match s.lib.folder_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.search,
+                        None => &mut s.ui_discard_edit,
+                    }
                 })),
         );
 
@@ -1015,8 +1021,7 @@ fn folder_sheet_body(
         .child(footer)
 }
 
-fn folder_cropper_body(s: &AppState, folder_name: &str) -> El {
-    let crop = s.lib.folder_cropper.as_ref().unwrap();
+fn folder_cropper_body(crop: &crate::library_state::FolderCropperState, folder_name: &str) -> El {
     let frame_w = 320.0_f32;
     let frame_h = frame_w / CROP_ASPECT;
     let (cw, _) = crop_size(crop.raw_width as f32, crop.raw_height as f32, crop.zoom);
@@ -1134,15 +1139,16 @@ fn folder_cropper_body(s: &AppState, folder_name: &str) -> El {
         .center_y()
         .gap(12.0)
         .child(
-            glass_icon_circle(
+            glass_icon_circle_opt(
                 "folder-crop-zoom-out",
                 "Zoom out",
                 28.0,
                 icon_zoom_out(14.0, fg_muted()),
+                false,
             )
             .on_press(|s: &mut AppState| adjust_crop_zoom(s, 1.0 / 1.15)),
         )
-        .child(
+        .child(slider_range(
             slider_track(
                 "folder-crop-zoom-slider",
                 "Zoom",
@@ -1156,13 +1162,20 @@ fn folder_cropper_body(s: &AppState, folder_name: &str) -> El {
                 let target_zoom = 1.0 + frac * (CROP_MAX_ZOOM - 1.0);
                 set_crop_zoom(s, target_zoom);
             }),
-        )
+            f64::from(crop.zoom),
+            1.0,
+            f64::from(CROP_MAX_ZOOM),
+            0.1,
+            !crop.busy,
+            |s: &mut AppState, v| set_crop_zoom(s, v as f32),
+        ))
         .child(
-            glass_icon_circle(
+            glass_icon_circle_opt(
                 "folder-crop-zoom-in",
                 "Zoom in",
                 28.0,
                 icon_zoom_in(16.0, fg_muted()),
+                false,
             )
             .on_press(|s: &mut AppState| adjust_crop_zoom(s, 1.15)),
         );
@@ -1178,7 +1191,7 @@ fn folder_cropper_body(s: &AppState, folder_name: &str) -> El {
     }
     foot = foot
         .child(
-            glass_button("folder-crop-cancel", "Cancel", None)
+            glass_button_opt("folder-crop-cancel", "Cancel", None, false)
                 .on_press(|s: &mut AppState| s.lib.folder_cropper = None),
         )
         .child(

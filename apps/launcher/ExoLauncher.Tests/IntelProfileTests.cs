@@ -272,7 +272,7 @@ public sealed class IntelProfileTests : IDisposable
         Assert.Equal(0, values[Keys.Endurance]);
         Assert.Equal(0, values[Keys.Sharpening]);
         Assert.Equal(1, values[Keys.LowLatency]);      // On, not boost
-        Assert.Equal(1, values[Keys.AdaptiveSync]);
+        Assert.Equal(0, values[Keys.AdaptiveSync]);
         Assert.DoesNotContain(Keys.FrameLimit, values.Keys);   // no cap from Exo
         Assert.Equal(1, values[Keys.ShaderDownload]);
         Assert.DoesNotContain(Keys.FrameGen, values.Keys);   // the player's, per game
@@ -306,7 +306,7 @@ public sealed class IntelProfileTests : IDisposable
     public void SummarySaysWhatTheProfileDoes()
     {
         var writes = GpuProfile.IntelWrites(FakeDriver.Current().Read()!, GpuProfile.LowLatencyBoost);
-        Assert.Equal("Adaptive Sync on, Low latency with boost, Intel's prebuilt shaders; Endurance Gaming and sharpening off",
+        Assert.Equal("Low latency with boost, Intel's prebuilt shaders; Adaptive Sync and Endurance Gaming and sharpening off",
             GpuProfile.IntelSummary(writes, GpuProfile.LowLatencyBoost));
     }
 
@@ -361,7 +361,7 @@ public sealed class IntelProfileTests : IDisposable
         Assert.True(applied.Ok);
         Assert.Equal("applied", applied.Status);
         Assert.DoesNotContain("Endurance", applied.Summary);
-        Assert.Equal(1, driver.Values[Keys.AdaptiveSync]);   // written after the refusal
+        Assert.Equal(0, driver.Values[Keys.AdaptiveSync]);   // written after the refusal
     }
 
     [Fact]

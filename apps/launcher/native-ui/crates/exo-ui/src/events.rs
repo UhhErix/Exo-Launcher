@@ -53,7 +53,6 @@ pub enum HostEventKind {
     CaptureSaved,
     CaptureReel,
     CaptureShrunk,
-    NotesOpen,
     InstallQueue,
     GameRunState,
     LaunchStatus,
@@ -61,7 +60,6 @@ pub enum HostEventKind {
     ExoAccountChanged,
     AutopilotReport,
     AutopilotLive,
-    GameCapLab,
     ShadersChanged,
     ShadersEvent,
     AccountsProgress,
@@ -83,6 +81,7 @@ pub enum HostEventKind {
     DriversStep,
     BiosProgress,
     RuntimesProgress,
+    RuntimesDone,
     ShadersRebuild,
     Raw,
     Disconnected,
@@ -138,7 +137,6 @@ impl HostEventKind {
             HostEvent::CaptureSaved(_) => Self::CaptureSaved,
             HostEvent::CaptureReel(_) => Self::CaptureReel,
             HostEvent::CaptureShrunk(_) => Self::CaptureShrunk,
-            HostEvent::NotesOpen(_) => Self::NotesOpen,
             HostEvent::InstallQueue(_) => Self::InstallQueue,
             HostEvent::GameRunState(_) => Self::GameRunState,
             HostEvent::LaunchStatus(_) => Self::LaunchStatus,
@@ -146,7 +144,6 @@ impl HostEventKind {
             HostEvent::ExoAccountChanged => Self::ExoAccountChanged,
             HostEvent::AutopilotReport(_) => Self::AutopilotReport,
             HostEvent::AutopilotLive(_) => Self::AutopilotLive,
-            HostEvent::GameCapLab(_) => Self::GameCapLab,
             HostEvent::ShadersChanged => Self::ShadersChanged,
             HostEvent::ShadersEvent(_) => Self::ShadersEvent,
             HostEvent::AccountsProgress(_) => Self::AccountsProgress,
@@ -168,6 +165,7 @@ impl HostEventKind {
             HostEvent::DriversStep(_) => Self::DriversStep,
             HostEvent::BiosProgress { .. } => Self::BiosProgress,
             HostEvent::RuntimesProgress(_) => Self::RuntimesProgress,
+            HostEvent::RuntimesDone(_) => Self::RuntimesDone,
             HostEvent::ShadersRebuild(_) => Self::ShadersRebuild,
             HostEvent::Raw { .. } => Self::Raw,
             HostEvent::Disconnected(_) => Self::Disconnected,
@@ -300,6 +298,7 @@ fn register_shell(reg: &mut EventRegistry) {
         state.pc.mouse_panel_error = None;
         state.pc.mouse_panel_rect = None;
         state.pc.mouse_panel_visible = false;
+        state.pc.selected_device_id = None;
         state.status = HostStatus::Error(why);
         state.notice = Some("Disconnected from Exo host".into());
         true
@@ -390,13 +389,6 @@ fn register_media(reg: &mut EventRegistry) {
             return false;
         };
         state.apply_capture_shrunk(*shrunk);
-        true
-    });
-    reg.on(HostEventKind::NotesOpen, |state, ev| {
-        let HostEvent::NotesOpen(note_ev) = ev else {
-            return false;
-        };
-        state.apply_notes_open(note_ev);
         true
     });
 }
@@ -696,6 +688,12 @@ fn register_pc(reg: &mut EventRegistry) {
         };
         state.handle_runtimes_progress_event(prog)
     });
+    reg.on(HostEventKind::RuntimesDone, |state, ev| {
+        let HostEvent::RuntimesDone(reply) = ev else {
+            return false;
+        };
+        state.handle_runtimes_done_event(reply)
+    });
     reg.on(HostEventKind::ShadersEvent, |state, ev| {
         let HostEvent::ShadersEvent(se) = ev else {
             return false;
@@ -845,9 +843,11 @@ mod tests {
         let mut s = AppState::with_demo_games();
         s.pc.mouse_panel_open = true;
         s.pc.mouse_panel_visible = true;
+        s.pc.selected_device_id = Some("dev:mouse".into());
         assert!(s.apply_host_event(HostEvent::Disconnected("pipe closed".into())));
         assert!(!s.pc.mouse_panel_open);
         assert!(!s.pc.mouse_panel_visible);
+        assert!(s.pc.selected_device_id.is_none());
         assert!(matches!(s.status, HostStatus::Error(ref why) if why == "pipe closed"));
         assert_eq!(s.notice.as_deref(), Some("Disconnected from Exo host"));
     }

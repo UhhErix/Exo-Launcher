@@ -2,9 +2,9 @@ use crate::events::{EventRegistry, HostEventKind};
 use crate::state::{AppState, MAX_NOTICES, NoticeItem, NoticeTone, Room};
 use exo_kit::{
     FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK,
-    bad, danger_button_dyn, fg_muted, glass_button_dyn, glass_panel_opt, good, hover_fill,
-    icon_alert, icon_bell, icon_check, icon_close, pressed_fill, primary_button_dyn, selected_fill,
-    track_fill, type_body, type_section, type_small,
+    bad, danger_button_dyn, fg_muted, glass_button_dyn, glass_panel, good, hover_fill, icon_alert,
+    icon_bell, icon_check, icon_close, pressed_fill, primary_button_dyn, selected_fill, track_fill,
+    type_body, type_section, type_small,
 };
 use exo_rpc::HostEvent;
 use rune::{Cursor, El, Phase, Spring, SpringPair, SurfaceFit, Transition, col, el, row, text};
@@ -16,6 +16,7 @@ pub const SWIPE_DISMISS_DX: f32 = 106.0;
 pub const SWIPE_DISMISS_VX: f32 = 420.0;
 const SWIPE_MIN_DX: f32 = -24.0;
 pub const QUEUE_MAX: usize = 8;
+pub const NOTICE_REPEAT_SECS: f64 = 45.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NoticeActionKind {
@@ -41,6 +42,7 @@ pub enum NoticeActionKind {
     ReenableSystemEq {
         notice_key: String,
     },
+    OpenSteamDownloads,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +83,7 @@ pub struct RichNoticeSpec {
 #[derive(Debug, Clone, Default)]
 pub struct NoticeRuntimeState {
     pub queue: VecDeque<NoticeItem>,
+    pub recent: HashMap<String, f64>,
     pub said_outages: HashSet<String>,
     pub shown_discord_notices: HashMap<String, String>,
 }
@@ -481,10 +484,42 @@ impl AppState {
         true
     }
 
+    pub fn notice_is_repeat(&mut self, fingerprint: String) -> bool {
+        let now = self.clock_secs();
+        self.notice_runtime
+            .recent
+            .retain(|_, at| now - *at < NOTICE_REPEAT_SECS);
+        if self.notice_runtime.recent.contains_key(&fingerprint) {
+            return true;
+        }
+        self.notice_runtime.recent.insert(fingerprint, now);
+        false
+    }
+
     pub fn push_rich_notice(&mut self, spec: RichNoticeSpec) -> u64 {
         let sticky = spec.sticky.unwrap_or_else(|| {
             spec.tone == NoticeTone::Bad || spec.action.is_some() || spec.progress.is_some()
         });
+        let updates_existing = spec.key_id.as_ref().is_some_and(|k| {
+            self.notices
+                .iter()
+                .any(|n| n.key_id.as_deref() == Some(k.as_str()))
+                || self
+                    .notice_runtime
+                    .queue
+                    .iter()
+                    .any(|n| n.key_id.as_deref() == Some(k.as_str()))
+        });
+        if !updates_existing
+            && spec.progress.is_none()
+            && self.notice_is_repeat(format!(
+                "{}|{}",
+                spec.title.as_deref().unwrap_or(""),
+                spec.text
+            ))
+        {
+            return 0;
+        }
         let remaining = stay_for_secs(
             spec.title.as_deref(),
             spec.where_label.as_deref(),
@@ -792,6 +827,29 @@ impl AppState {
                 self.dismiss_notice_by_key(&notice_key);
                 self.eq_act("system-eq", "reenable-system-eq", serde_json::json!({}));
             }
+            NoticeActionKind::OpenSteamDownloads => {
+                #[cfg(windows)]
+                self.call_host_async(
+                    "steam.downloads",
+                    json!({}),
+                    |s, res: Result<Value, String>| {
+                        let failed = match res {
+                            Ok(v) if v.get("ok").and_then(Value::as_bool) == Some(true) => None,
+                            Ok(v) => Some(
+                                v.get("message")
+                                    .and_then(Value::as_str)
+                                    .filter(|m| !m.is_empty())
+                                    .unwrap_or("Steam's Downloads couldn't be opened.")
+                                    .to_string(),
+                            ),
+                            Err(_) => Some("Steam's Downloads couldn't be opened.".into()),
+                        };
+                        if let Some(msg) = failed {
+                            s.push_notice(msg, NoticeTone::Bad);
+                        }
+                    },
+                );
+            }
         }
     }
 }
@@ -802,7 +860,7 @@ fn toast_transition() -> Transition {
     Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_BASE))
 }
 
-fn toast_card(s: &AppState, item: &NoticeItem, scale: f32, allow_blur: bool) -> El {
+fn toast_card(s: &AppState, item: &NoticeItem, scale: f32) -> El {
     let id = item.id;
     let drag_x = item.drag_x;
     let drag_opacity = (1.0 - drag_x.max(0.0) / 220.0).clamp(0.15, 1.0);
@@ -993,7 +1051,7 @@ fn toast_card(s: &AppState, item: &NoticeItem, scale: f32, allow_blur: bool) -> 
         );
     }
 
-    let mut card = glass_panel_opt(format!("notice-{id}"), TOAST_WIDTH, allow_blur)
+    let mut card = glass_panel(format!("notice-{id}"), TOAST_WIDTH)
         .role(if item.tone == NoticeTone::Bad {
             "alert"
         } else {
@@ -1054,20 +1112,14 @@ fn rubber_band_swipe_x(dx: f32) -> f32 {
     }
 }
 
-pub fn view(s: &AppState, scale: f32, allow_blur: bool) -> El {
-    let last_idx = s.notices.len().saturating_sub(1);
+pub fn view(s: &AppState, scale: f32) -> El {
     let bottom_inset = if s.room == Room::Music { 88.0 } else { 20.0 };
     col()
         .key("notice-stack")
         .pin(None, None, Some(20.0), Some(bottom_inset))
         .w(TOAST_WIDTH)
         .gap(8.0)
-        .children(
-            s.notices
-                .iter()
-                .enumerate()
-                .map(|(idx, item)| toast_card(s, item, scale, allow_blur && idx == last_idx)),
-        )
+        .children(s.notices.iter().map(|item| toast_card(s, item, scale)))
 }
 
 #[cfg(test)]

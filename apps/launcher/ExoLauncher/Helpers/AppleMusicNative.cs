@@ -57,7 +57,7 @@ internal static class AppleMusicNative
     internal static bool IsText(string? text) =>
         text is null || text.Length <= 1200 && !text.Any(c => char.IsControl(c) && c is not '\n');
 
-    internal const int AdapterVersion = 7;
+    internal const int AdapterVersion = 8;
     internal const string NeedInstallProperty = "__exoNeedInstall";
     internal const string InstallScript = "(" + Adapter + ")();";
 
@@ -161,7 +161,7 @@ internal static class AppleMusicNative
     private const string Adapter = """
         (function () {
           var w = window, ex = w.__exoAppleMusic;
-          if (ex && ex.v === 7) return ex;
+          if (ex && ex.v === 8) return ex;
           var bitrateRestored = false;
           function mk() {
             var M = w.MusicKit, m = null;
@@ -372,7 +372,8 @@ internal static class AppleMusicNative
                 var catId = p.library ? catalogOf(r) && catalogOf(r).id : p.id;
                 if (catId && !others) extra = tryApi('/v1/catalog/' + SF + '/albums/' + encodeURIComponent(catId), { views: 'more-by-artist,other-versions,you-might-also-like', 'omit[resource]': 'autos' });
               } else if (want === 'playlist') {
-                h.facts = [at.lastModifiedDate ? 'Updated ' + dateText(at.lastModifiedDate) : '', (at.trackCount || list.length) ? (at.trackCount || list.length) + ' songs' : ''].filter(Boolean);
+                var updated = dateText(at.lastModifiedDate), songs = at.trackCount || list.length;
+                h.facts = [updated ? 'Updated ' + updated : '', songs ? songs + (songs === 1 ? ' song' : ' songs') : ''].filter(Boolean);
               }
               h.editable = p.type === 'library-playlists' && !!at.canEdit;
               var total = Math.max(at.trackCount || 0, pageOf(list, t.next, 0));
@@ -771,6 +772,18 @@ internal static class AppleMusicNative
             }
             return next(0);
           }
+          function startQueue(m, q) {
+            var loadOnly = Object.assign({}, q);
+            delete loadOnly.startPlaying;
+            return Promise.resolve(m.setQueue(q)).catch(function () {
+              return m.setQueue(loadOnly);
+            }).then(function () {
+              if (m.isPlaying || m.playbackState === 2) return true;
+              return Promise.resolve(m.play()).then(function () { return true; }, function () {
+                return !!m.isPlaying || m.playbackState === 2;
+              });
+            });
+          }
           var acts = {
             // A song in its album or playlist, a whole list, an artist's top
             // songs, a station, a music video, or one song.
@@ -779,7 +792,7 @@ internal static class AppleMusicNative
               if (ctx && queueKeys[ctx.type]) {
                 var q = {}; q[queueKeys[ctx.type]] = ctx.id; q.startPlaying = true;
                 if (song && index >= 0) q.startWith = index;
-                return m.setQueue(q).then(function () { return true; });
+                return startQueue(m, q);
               }
               // The Songs page: its list as shown, from the chosen song (up to
               // 50 before it, 250 after).
@@ -792,7 +805,7 @@ internal static class AppleMusicNative
                   }
                   var from = Math.max(0, at - 50), ids = list.slice(from, at + 250).map(function (x) { return parse(x.t.uri).id; });
                   if (!ids.length) return false;
-                  return m.setQueue({ songs: ids, startWith: Math.min(at - from, ids.length - 1), startPlaying: true }).then(function () { return true; });
+                  return startQueue(m, { songs: ids, startWith: Math.min(at - from, ids.length - 1), startPlaying: true });
                 });
               }
               if (ctx && /artists$/.test(ctx.type)) {
@@ -800,17 +813,17 @@ internal static class AppleMusicNative
                   var ids = songIds(pg.tracks);
                   if (!ids.length) return false;
                   var start = song ? Math.max(0, ids.indexOf(song.id)) : 0;
-                  return m.setQueue({ songs: ids, startWith: start, startPlaying: true }).then(function () { return true; });
+                  return startQueue(m, { songs: ids, startWith: start, startPlaying: true });
                 });
               }
               var q1 = song ? one(song) : ctx ? one(ctx) : null;
-              return q1 ? m.setQueue(q1).then(function () { return true; }) : false;
+              return q1 ? startQueue(m, q1) : false;
             },
             enqueue: function (a) {
               var p = parse(a.uri), q = p && one(p);
               if (!q) return false;
               var m = mk();
-              if (!m.nowPlayingItem) return m.setQueue(q).then(function () { return true; });
+              if (!m.nowPlayingItem) return startQueue(m, q);
               delete q.startPlaying;
               return Promise.resolve(m.playLater(q)).then(function () { return true; });
             },
@@ -819,7 +832,7 @@ internal static class AppleMusicNative
               var p = parse(a.uri), q = p && one(p);
               if (!q) return false;
               var m = mk();
-              if (!m.nowPlayingItem) return m.setQueue(q).then(function () { return true; });
+              if (!m.nowPlayingItem) return startQueue(m, q);
               delete q.startPlaying;
               return Promise.resolve(m.playNext(q)).then(function () { return true; });
             },
@@ -871,11 +884,12 @@ internal static class AppleMusicNative
             station: function (a) {
               var p = parse(a.uri);
               if (!p) return false;
-              var id = p.type === 'stations' ? Promise.resolve(p.id.replace(/^ra\./, '')) : !p.library ? Promise.resolve(p.id)
+              if (p.type === 'stations') return startQueue(mk(), { station: p.id, startPlaying: true });
+              var id = !p.library ? Promise.resolve(p.id)
                 : api('/v1/me/library/' + p.type.replace(/^library-/, '') + '/' + encodeURIComponent(p.id), { include: 'catalog' }).then(function (d) { var c = catalogOf((d.data || [])[0]); return c ? c.id : ''; });
               return id.then(function (cid) {
                 if (!cid) return false;
-                return mk().setQueue({ station: 'ra.' + cid, startPlaying: true }).then(function () { return true; });
+                return startQueue(mk(), { station: 'ra.' + cid, startPlaying: true });
               });
             },
             shuffle: function (a) { mk().shuffleMode = a.on ? 1 : 0; return true; },
@@ -947,7 +961,7 @@ internal static class AppleMusicNative
             });
           }
           var me = {
-            v: 7,
+            v: 8,
             subscribed: null,
             view: function (name, a) {
               if (!views[name]) return Promise.resolve({ error: 'unknown view' });

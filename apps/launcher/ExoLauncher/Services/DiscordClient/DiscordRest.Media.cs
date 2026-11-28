@@ -20,6 +20,7 @@ internal sealed partial class DiscordRest
         {
             ["content"] = "",
             ["nonce"] = Nonce(),
+            ["mobile_network_type"] = "unknown",
             ["poll"] = new JsonObject
             {
                 ["question"] = new JsonObject { ["text"] = question },

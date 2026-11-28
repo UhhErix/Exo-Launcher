@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $repo = Split-Path -Parent $here
 $version = (Get-Content (Join-Path $repo 'VERSION') -Raw).Trim()
+$label = if ($version -match '^4\.(\d+)\.(\d+)') { if ([int]$Matches[2]) { "0.$([int]$Matches[1] + 1).$([int]$Matches[2]) beta" } else { "0.$([int]$Matches[1] + 1) beta" } } else { $version }
 $build = Join-Path $here 'build'
 $outDir = Join-Path $here 'out'
 New-Item -ItemType Directory -Force -Path $build, $outDir | Out-Null
@@ -20,9 +21,9 @@ Pop-Location
 $ui = Join-Path $build 'ui'
 Move-Item -Force (Join-Path $ui 'setup.html') (Join-Path $ui 'index.html')
 Copy-Item (Join-Path $repo 'ui\public\logo.svg') (Join-Path $ui 'logo.svg') -Force
-# Goeist, as Exo draws it (ui/src/fonts.css loads /fonts): the upright cut is all the screens use.
+# Geist, as Exo draws it (ui/src/fonts.css loads /fonts): the upright cut is all the screens use.
 New-Item -ItemType Directory -Force (Join-Path $ui 'fonts') | Out-Null
-Copy-Item (Join-Path $repo 'ui\public\fonts\Goeist-Variable.woff2'), (Join-Path $repo 'ui\public\fonts\LICENSE-Goeist.txt') (Join-Path $ui 'fonts') -Force
+Copy-Item (Join-Path $repo 'ui\public\fonts\Geist-Variable.woff2'), (Join-Path $repo 'ui\public\fonts\LICENSE-Geist.txt') (Join-Path $ui 'fonts') -Force
 $files = Get-ChildItem -Recurse -File $ui
 $pack = [IO.MemoryStream]::new()
 $writer = [IO.BinaryWriter]::new($pack)
@@ -43,7 +44,7 @@ $devCmd = Join-Path $vs 'Common7\Tools\VsDevCmd.bat'
 $native = Join-Path $build 'native'
 $commands = @(
     "`"$devCmd`" -arch=x64 -host_arch=x64 -no_logo",
-    "cmake -S `"$here`" -B `"$native`" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEXO_VERSION=$version",
+    "cmake -S `"$here`" -B `"$native`" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEXO_VERSION=$version `"-DEXO_LABEL=$label`"",
     "cmake --build `"$native`""
 ) -join ' && '
 cmd /c $commands

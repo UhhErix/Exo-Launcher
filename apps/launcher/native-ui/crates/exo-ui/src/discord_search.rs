@@ -99,6 +99,9 @@ fn result_message_card(
         .child(text(m.time_short()).font(type_label()).color(fg_faint()))
         .child(
             el().key(format!("dc-res-jump-{}", m.id))
+                .role("button")
+                .label_static("Jump to message")
+                .focusable(true)
                 .px(8.0)
                 .h(22.0)
                 .radius(RADIUS_PILL)
@@ -335,6 +338,9 @@ pub fn search_drawer(s: &AppState, scale: f32) -> El {
                     )
                     .child(
                         el().key(format!("dc-schip-rm-{idx}"))
+                            .role("button")
+                            .label_static("Remove filter")
+                            .focusable(true)
                             .size(16.0, 16.0)
                             .radius(8.0)
                             .hover(hover_fill())
@@ -684,8 +690,14 @@ fn inbox_for_you_list(s: &AppState, scale: f32) -> El {
             if let Some(link) = deeplink
                 && let Some((gid, cid, mid)) = discord_deeplink_target(&link)
             {
-                card = card.cursor(Cursor::Pointer).hit().press_on_down().on_press(
-                    move |s: &mut AppState| {
+                card = card
+                    .role("button")
+                    .label(item.body.clone().unwrap_or_else(|| "Notification".into()))
+                    .focusable(true)
+                    .cursor(Cursor::Pointer)
+                    .hit()
+                    .press_on_down()
+                    .on_press(move |s: &mut AppState| {
                         s.discord.inbox_open = false;
                         if let Some(ref m) = mid {
                             s.jump_to_discord_message(gid.as_deref(), &cid, m);
@@ -695,8 +707,7 @@ fn inbox_for_you_list(s: &AppState, scale: f32) -> El {
                         } else {
                             s.open_discord_dm(&cid);
                         }
-                    },
-                );
+                    });
             }
             list = list.child(card);
         }
@@ -773,6 +784,10 @@ fn inbox_unreads_list(s: &AppState, scale: f32) -> El {
                             .center_y()
                             .child(
                                 row()
+                                    .key(format!("dc-un-chopen-{}", ch.channel_id))
+                                    .role("button")
+                                    .label(ch.name.clone())
+                                    .focusable(true)
                                     .gap(5.0)
                                     .center_y()
                                     .cursor(Cursor::Pointer)
@@ -807,6 +822,9 @@ fn inbox_unreads_list(s: &AppState, scale: f32) -> El {
                         card = card.child(
                             row()
                                 .key(format!("dc-un-m-{}", m.id))
+                                .role("button")
+                                .label(m.display_name().to_string())
+                                .focusable(true)
                                 .w_full()
                                 .gap(6.0)
                                 .center_y()

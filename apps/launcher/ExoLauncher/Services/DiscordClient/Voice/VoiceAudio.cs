@@ -83,7 +83,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
         }
         if (capture && render) _echo ??= EchoCanceller.Create();
         if (capture && VoiceProcessing.Current.LoopbackEcho && Volatile.Read(ref _echo) is not null)
-            _loopback ??= new LoopbackEchoReference(frame => Volatile.Read(ref _echo)?.Render(frame, Deafened));
+            _loopback ??= new LoopbackEchoReference(frame => Volatile.Read(ref _echo)?.Render(frame, silent: false));
         if (capture)
         {
             _voice ??= new Thread(Hand) { IsBackground = true, Name = "Exo voice", Priority = ThreadPriority.Highest };
@@ -634,7 +634,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
         var gain = App.Services.Settings.Shared.DiscordOutputVolume / 100f;
         if (gain != 1f) for (var i = 0; i < mix.Length; i++) mix[i] *= gain;
         _limiter.Process(mix);
-        Volatile.Read(ref _echo)?.Render(mix, Deafened);
+        if (Volatile.Read(ref _loopback) is null) Volatile.Read(ref _echo)?.Render(mix, Deafened);
         // The call as it plays here, for Go Live to know it again in another app's sound (nothing plays while deafened).
         if (!Call) return;
         if (Deafened) CallEcho.Heard.Quiet(Opus.FrameSamples, QpcNow());

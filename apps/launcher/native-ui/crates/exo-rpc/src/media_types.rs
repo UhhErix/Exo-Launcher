@@ -147,7 +147,7 @@ pub struct PlayerStartReply {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerCard {
     #[serde(default)]
@@ -168,7 +168,7 @@ pub struct PlayerCard {
     pub owned: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerLink {
     #[serde(default)]
@@ -177,7 +177,7 @@ pub struct PlayerLink {
     pub kind: String,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerOption {
     #[serde(default)]
@@ -258,7 +258,7 @@ impl PlayerTrack {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerSection {
     #[serde(default)]
@@ -795,9 +795,7 @@ pub struct CaptureHotkeys {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CaptureSettingsDto {
-    pub quality: i32,
     pub replay_seconds: i32,
-    pub max_fps: i32,
     pub replay_mode: String,
     pub cursor: bool,
     pub save_replay_keys: String,
@@ -918,111 +916,6 @@ pub struct CaptureSaveImageReply {
     pub item: Option<CaptureItem>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NoteInfo {
-    pub id: String,
-    pub title: String,
-    pub snippet: String,
-    pub kind: String,
-    pub name: String,
-    pub edited: String,
-    pub size: u64,
-    pub pinned: bool,
-    pub external: bool,
-    pub unsaved: bool,
-    pub game_id: Option<String>,
-    pub encoding: String,
-    pub eol: String,
-    pub spelling: bool,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesListReply {
-    pub ok: bool,
-    pub notes: Vec<NoteInfo>,
-    pub tabs: Vec<String>,
-    pub active: Option<String>,
-    pub photos: Option<String>,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesReadReply {
-    pub ok: bool,
-    pub text: Option<String>,
-    pub note: Option<NoteInfo>,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesSaveReply {
-    pub ok: bool,
-    pub note: Option<NoteInfo>,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesPhotoReply {
-    pub ok: bool,
-    pub src: Option<String>,
-    pub cancelled: bool,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesActReply {
-    pub ok: bool,
-    pub note: Option<NoteInfo>,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesOpenReply {
-    pub ok: bool,
-    pub id: Option<String>,
-    pub cancelled: bool,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesSaveAsReply {
-    pub ok: bool,
-    pub id: Option<String>,
-    pub cancelled: bool,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesPendingReply {
-    pub id: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesSpellReply {
-    pub ok: bool,
-    pub wrong: bool,
-    pub suggestions: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NotesTextFilesReply {
-    pub ok: bool,
-    pub offered: bool,
-    pub is_default: bool,
-    pub message: Option<String>,
-}
-
 pub fn format_duration_ms(ms: f64) -> String {
     let total_secs = (ms.max(0.0) / 1000.0).floor() as u64;
     let hours = total_secs / 3600;
@@ -1033,4 +926,31 @@ pub fn format_duration_ms(ms: f64) -> String {
     } else {
         format!("{mins}:{secs:02}")
     }
+}
+
+pub const MUSIC_SNAPSHOT_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicServiceSnapshot {
+    #[serde(default)]
+    pub home_sections: Vec<PlayerSection>,
+    #[serde(default)]
+    pub recent: Vec<PlayerCard>,
+    #[serde(default)]
+    pub library: Vec<PlayerCard>,
+    #[serde(default)]
+    pub library_filters: Vec<PlayerOption>,
+    #[serde(default)]
+    pub library_top_filters: Vec<PlayerOption>,
+    #[serde(default)]
+    pub library_sorts: Vec<PlayerOption>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicDiskSnapshot {
+    pub version: u32,
+    #[serde(default)]
+    pub services: std::collections::HashMap<String, MusicServiceSnapshot>,
 }

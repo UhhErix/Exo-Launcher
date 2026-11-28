@@ -101,7 +101,6 @@ public sealed partial class WebHostBridge
         GameSettings.AppliedAgain += OnOptimizedAgain;
         AutopilotWatch.Reported += OnAutopilotReported;
         AutopilotWatch.Shared.LiveChanged += OnAutopilotLiveChanged;
-        FrameCapService.Shared.CapLabChanged += OnCapLabChanged;
         InitGpuAndDisplayCaches();
         GameSettings.WindowModeHeld += OnOptimizeHeld;
         Account.AccountSessionStore.Changed += OnAccountChanged;
@@ -299,6 +298,8 @@ public sealed partial class WebHostBridge
         _services.MousePanel.Attach(_queue, this);
         _services.HeadlessMusic.Attach(PostEvent, () => _services.MusicEngine.IsActive || App.MainAppWindow is not null);
         _services.HeadlessCapture.Attach(PostCaptureEvent);
+        Services.Achievements.AchievementWatch.Unlocked -= OnAchievementUnlocked;
+        Services.Achievements.AchievementWatch.Unlocked += OnAchievementUnlocked;
         if (Interlocked.Exchange(ref _transport, transport) is { } previous)
         {
             previous.MessageReceived -= OnMessage;
@@ -332,6 +333,7 @@ public sealed partial class WebHostBridge
         _services.MousePanel.Close();
         _services.HeadlessMusic.Detach();
         _services.HeadlessCapture.Detach();
+        Services.Achievements.AchievementWatch.Unlocked -= OnAchievementUnlocked;
         try { _bridgeLifetime.Cancel(); } catch { }
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
@@ -376,7 +378,6 @@ public sealed partial class WebHostBridge
         GameSettings.AppliedAgain -= OnOptimizedAgain;
         AutopilotWatch.Reported -= OnAutopilotReported;
         AutopilotWatch.Shared.LiveChanged -= OnAutopilotLiveChanged;
-        FrameCapService.Shared.CapLabChanged -= OnCapLabChanged;
         DetachGpuAndDisplayCaches();
         GameSettings.WindowModeHeld -= OnOptimizeHeld;
         Account.AccountSessionStore.Changed -= OnAccountChanged;
@@ -846,9 +847,10 @@ public sealed partial class WebHostBridge
                 // The UI reached a usable start (Library or first-run setup): an update's startup receipt (UpdateStartupHealth).
                 "shell.ready" => ShellReady(),
                 "shell.bootstrap" => await ShellBootstrapAsync(requestToken).ConfigureAwait(false),
+                "shell.windowFocus" => HandleShellWindowFocus(paramsEl, hasParams),
                 "shell.prepare" => App.MainAppWindow is { } prepareWindow
                     ? await prepareWindow.PrepareConnectedRoomsAsync()
-                    : new { ok = false },
+                    : await PrepareHeadlessConnectedRoomsAsync(),
                 "music.playback" => _services.MusicEngine.IsActive || App.MainAppWindow is not null
                     ? await _services.MusicEngine.PlaybackAsync().ConfigureAwait(false)
                     : await _services.HeadlessMusic.PlaybackAsync().ConfigureAwait(false),
@@ -912,14 +914,18 @@ public sealed partial class WebHostBridge
                     : await Task.Run(() => _services.HeadlessCapture.EditAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "preset"),
                         ReadDouble(paramsEl, hasParams, "startMs"), ReadDouble(paramsEl, hasParams, "endMs"), requestToken)).ConfigureAwait(false),
                 "capture.reel" => App.MainAppWindow is { } reelWindow && hasParams
-                    ? await Task.Run(() => reelWindow.CaptureReelStart(paramsEl)).ConfigureAwait(false) : new { ok = false },
-                "capture.reel.cancel" => App.MainAppWindow?.CaptureReelCancel() ?? new { ok = false },
+                    ? await Task.Run(() => reelWindow.CaptureReelStart(paramsEl)).ConfigureAwait(false)
+                    : hasParams ? await Task.Run(() => _services.HeadlessCapture.ReelStart(paramsEl)).ConfigureAwait(false) : new { ok = false },
+                "capture.reel.cancel" => App.MainAppWindow?.CaptureReelCancel() ?? _services.HeadlessCapture.ReelCancel(),
                 "capture.text" => App.MainAppWindow is { } textWindow
                     ? await Task.Run(() => textWindow.CaptureTextAsync(ReadString(paramsEl, hasParams, "id"), ReadDouble(paramsEl, hasParams, "x"), ReadDouble(paramsEl, hasParams, "y"),
-                        ReadDouble(paramsEl, hasParams, "width"), ReadDouble(paramsEl, hasParams, "height"))).ConfigureAwait(false) : new { ok = false },
+                        ReadDouble(paramsEl, hasParams, "width"), ReadDouble(paramsEl, hasParams, "height"))).ConfigureAwait(false)
+                    : await Task.Run(() => _services.HeadlessCapture.TextAsync(ReadString(paramsEl, hasParams, "id"), ReadDouble(paramsEl, hasParams, "x"), ReadDouble(paramsEl, hasParams, "y"),
+                        ReadDouble(paramsEl, hasParams, "width"), ReadDouble(paramsEl, hasParams, "height"))).ConfigureAwait(false),
                 "capture.send" => await CaptureSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "capture.saveImage" => App.MainAppWindow is { } imageWindow
-                    ? await Task.Run(() => imageWindow.CaptureSaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(false) : new { ok = false },
+                    ? await Task.Run(() => imageWindow.CaptureSaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(false)
+                    : await Task.Run(() => _services.HeadlessCapture.SaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(false),
                 "friends.badge" => App.MainAppWindow?.FriendsBadge() ?? new { count = DiscordClient.DiscordSession.CurrentBadge },
                 "deps.list" => await _rpcWork.RunAsync(method, DepsList, requestToken, coalesceKey: method).ConfigureAwait(false),
                 "runtimes.list" => await _rpcWork.RunAsync(method, RuntimesListAsync, requestToken, coalesceKey: method).ConfigureAwait(false),
@@ -1026,9 +1032,6 @@ public sealed partial class WebHostBridge
                 "dlss.frameGen" => await DlssFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "dlss.frameGenSet" => await DlssFrameGenSetAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.frameGen" => await GameFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "game.frameCap" => await GameFrameCapAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "game.capLab.run" => await GameCapLabRunAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "game.capLab.cancel" => GameCapLabCancel(paramsEl, hasParams),
                 // Windows' administrator prompt blocks the thread that asks until it is answered.
                 "shaders.status" => await _rpcWork.RunAsync(method, token => ShadersStatusAsync(paramsEl, hasParams, token), requestToken).ConfigureAwait(false),
                 "shaders.prepare.games" => await _rpcWork.RunAsync(method, ShaderPrepareGamesAsync, requestToken, coalesceKey: method).ConfigureAwait(false),
@@ -2333,10 +2336,17 @@ public sealed partial class WebHostBridge
     {
         try
         {
-            var window = App.MainAppWindow;
-            if (window is null)
+            if (App.MainAppWindow is not { } window)
             {
-                tcs.TrySetResult(new PickedFile(null, true, "The file picker could not open."));
+                var (path, failed) = await HostWindow.PickOpenFileAsync(
+                    "Choose Riot data export",
+                    [("Riot data export", "*.zip;*.json")],
+                    HostWindow.DownloadsFolder()).ConfigureAwait(false);
+                tcs.TrySetResult(failed
+                    ? new PickedFile(null, true, "The file picker could not open.")
+                    : path is null
+                        ? new PickedFile(null, true, null)
+                        : new PickedFile(path, false, null));
                 return;
             }
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
@@ -2491,10 +2501,17 @@ public sealed partial class WebHostBridge
     {
         try
         {
-            var window = App.MainAppWindow;
-            if (window is null)
+            if (App.MainAppWindow is not { } window)
             {
-                tcs.TrySetResult(new PickedFile(null, true, "The file picker could not open."));
+                var (path, failed) = await HostWindow.PickOpenFileAsync(
+                    "Choose cover art",
+                    [("Images", "*.png;*.jpg;*.jpeg;*.webp;*.gif")],
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)).ConfigureAwait(false);
+                tcs.TrySetResult(failed
+                    ? new PickedFile(null, true, "The file picker could not open.")
+                    : path is null
+                        ? new PickedFile(null, true, null)
+                        : new PickedFile(path, false, null));
                 return;
             }
 
@@ -2613,7 +2630,6 @@ public sealed partial class WebHostBridge
             whatsNewSeen = s.WhatsNewSeen,
             reduceMotion = s.ReduceMotion,
             startMaximized = s.StartMaximized,
-            useClassicWebUi = s.UseClassicWebUi,
             startWithWindows = s.StartWithWindows,
             framelessPinTop = s.FramelessPinTop,
             framelessPinSide = s.FramelessPinSide,
@@ -2643,6 +2659,7 @@ public sealed partial class WebHostBridge
             hdrSdrGamma = s.HdrSdrGamma,
             discordNoiseSuppression = s.DiscordNoiseSuppression,
             discordQuietWhilePlaying = s.DiscordQuietWhilePlaying,
+            discordLayout = s.DiscordLayout,
             pauseDownloadsWhilePlaying = s.PauseDownloadsWhilePlaying,
             downloadHoursStart = s.DownloadHoursStart,
             downloadHoursEnd = s.DownloadHoursEnd,
@@ -2651,7 +2668,6 @@ public sealed partial class WebHostBridge
             autoUpdateUpscalers = s.AutoUpdateUpscalers,
             upscalerAntiCheatEverywhere = s.UpscalerAntiCheatEverywhere,
             keepAwakeDownloads = s.KeepAwakeDownloads,
-            storeClientsQuiet = s.StoreClientsQuiet,
             chipset,
             libraryFolders = s.LibraryFolders.Select(folder => new { id = folder.Id, name = folder.Name, color = folder.Color, sort = folder.Sort, art = resolveFolderArt(folder.Art), games = folder.Games }),
             hiddenGames = s.HiddenGames,
@@ -2667,10 +2683,7 @@ public sealed partial class WebHostBridge
         // copyPortableIntoLibrary, allowResize, checkForUpdates,
         // libraryShowInstalled, libraryShowOwned) are ignored if an older UI sends them.
         bool? onboard = null;
-        bool? reduceMotion = null;
         bool? startMaximized = null;
-        bool? useClassicWebUi = null;
-        var relaunchForUiSwitch = false;
         bool? framelessPinTop = null, framelessPinSide = null;
         bool? showLibraryTools = null;
         string? textColour = null, textSize = null;
@@ -2699,18 +2712,10 @@ public sealed partial class WebHostBridge
             root = dr.ValueKind == JsonValueKind.String ? dr.GetString() : (dr.ValueKind == JsonValueKind.Null ? "" : null);
         if (!string.IsNullOrWhiteSpace(root))
             root = NormalizeInstallRoot(root) ?? throw new UserFacingException(InstallRootRejected);
-        if (p.TryGetProperty("reduceMotion", out var rm) &&
-            (rm.ValueKind is JsonValueKind.True or JsonValueKind.False))
-            reduceMotion = rm.GetBoolean();
+
         if (p.TryGetProperty("startMaximized", out var startMaximizedEl) &&
             (startMaximizedEl.ValueKind is JsonValueKind.True or JsonValueKind.False))
             startMaximized = startMaximizedEl.GetBoolean();
-        if (p.TryGetProperty("useClassicWebUi", out var useClassicEl) &&
-            (useClassicEl.ValueKind is JsonValueKind.True or JsonValueKind.False))
-            useClassicWebUi = useClassicEl.GetBoolean();
-        if (p.TryGetProperty("relaunchForUiSwitch", out var relaunchEl) &&
-            relaunchEl.ValueKind == JsonValueKind.True)
-            relaunchForUiSwitch = true;
         if (p.TryGetProperty("framelessPinTop", out var fpt) &&
             (fpt.ValueKind is JsonValueKind.True or JsonValueKind.False))
             framelessPinTop = fpt.GetBoolean();
@@ -2749,6 +2754,7 @@ public sealed partial class WebHostBridge
             textColour = tc.GetString();
         if (p.TryGetProperty("textSize", out var tsz) && tsz.ValueKind == JsonValueKind.String)
             textSize = tsz.GetString();
+        string? discordLayout = p.TryGetProperty("discordLayout", out var dl) && dl.ValueKind == JsonValueKind.String ? dl.GetString() : null;
         string? whatsNewSeen = p.TryGetProperty("whatsNewSeen", out var wn) && wn.ValueKind == JsonValueKind.String ? wn.GetString() : null;
         var previousShowLibraryTools = _services.Settings.Current.ShowLibraryTools;
         // Settings validate and commit first; a rejected patch must not leave
@@ -2757,7 +2763,6 @@ public sealed partial class WebHostBridge
             sortMode: sort,
             defaultInstallRoot: root,
             onboardingComplete: onboard,
-            reduceMotion: reduceMotion,
             startMaximized: startMaximized,
             textColour: textColour,
             textSize: textSize,
@@ -2769,19 +2774,16 @@ public sealed partial class WebHostBridge
             hdrSdrGamma: hdrSdrGamma,
             discordNoiseSuppression: discordNoiseSuppression,
             discordQuietWhilePlaying: discordQuietWhilePlaying,
+            discordLayout: discordLayout,
             whatsNewSeen: whatsNewSeen,
             frameGenEverywhere: frameGenEverywhere,
-            graphicsFeaturesBestSettings: graphicsFeaturesBestSettings,
-            useClassicWebUi: useClassicWebUi);
+            graphicsFeaturesBestSettings: graphicsFeaturesBestSettings);
         if (hdrForGames is not null || hdrSdrGamma is not null) _services.HdrHost.SyncSoon();
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
-        if (textSize is not null || reduceMotion is not null) _services.MousePanel.NotifySettingsChanged();
-        if (graphicsFeaturesBestSettings == true)
-            _ = Task.Run(() => GameGraphicsFeatures.ApplyBestSettingsSafe(_services.Library.PeekCachedLibrary(), GameSettings.ThisPc()));
+        if (textSize is not null) _services.MousePanel.NotifySettingsChanged();
         if (showLibraryTools is { } tools && tools != previousShowLibraryTools)
             RefreshLibraryAfterToolsToggle();
         ApplyDownloadSettings(p);
-        ApplyStoreQuietSetting(p);
         ApplyStartWithWindowsSetting(p);
         ApplyAchievementSettings(p);
         ApplyFpsCounterSettings(p);
@@ -2844,49 +2846,7 @@ public sealed partial class WebHostBridge
             if (!string.IsNullOrWhiteSpace(riotId.GetString()))
                 _ = Task.Run(() => PlaytimeService.TryAutoSeedRiotHoursAsync(() => _services.Library.RefreshDerivedStateAsync(CancellationToken.None)));
         }
-        if (relaunchForUiSwitch)
-            ScheduleUiSwitchRelaunch();
         return BuildSettings();
-    }
-
-    private void ScheduleUiSwitchRelaunch()
-    {
-        var exe = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe)) return;
-        var pid = Environment.ProcessId;
-        var shutdown = RequestHostShutdown;
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(120).ConfigureAwait(false);
-            try
-            {
-                var psi = new ProcessStartInfo(exe)
-                {
-                    UseShellExecute = false,
-                    WorkingDirectory = PathHelper.AppDataDir,
-                };
-                psi.Environment.Remove("EXO_UI");
-                psi.ArgumentList.Add("--wait-pid");
-                psi.ArgumentList.Add(pid.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                Process.Start(psi);
-            }
-            catch (Exception ex)
-            {
-                AppLog.Warn("UI switch relaunch failed: " + ex.Message);
-                return;
-            }
-            if (shutdown is not null)
-            {
-                shutdown();
-            }
-            else
-            {
-                _queue.Enqueue(() =>
-                {
-                    try { Microsoft.UI.Xaml.Application.Current.Exit(); } catch { }
-                });
-            }
-        });
     }
 
     /// <summary>
@@ -3229,7 +3189,16 @@ public sealed partial class WebHostBridge
         {
             try
             {
-                if (App.MainAppWindow is not { } window) { tcs.TrySetResult(new { ok = false, cancelled = true, message = "The file picker could not open." }); return; }
+                if (App.MainAppWindow is not { } window)
+                {
+                    var (path, failed) = await HostWindow.PickOpenFileAsync(
+                        "Choose game executable",
+                        [("Programs", "*.exe")]).ConfigureAwait(false);
+                    if (failed) { tcs.TrySetResult(new { ok = false, cancelled = true, message = "The file picker could not open." }); return; }
+                    if (path is not null) Helpers.PickedPaths.Remember(path);
+                    tcs.TrySetResult(path is null ? new { ok = false, cancelled = true, message = "Canceled." } : new { ok = true, cancelled = false, path });
+                    return;
+                }
                 var picker = new Windows.Storage.Pickers.FileOpenPicker();
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
                 picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder;
@@ -3263,10 +3232,13 @@ public sealed partial class WebHostBridge
     {
         try
         {
-            var window = App.MainAppWindow;
-            if (window is null)
+            if (App.MainAppWindow is not { } window)
             {
-                tcs.TrySetResult(new { ok = false, cancelled = true, message = "The folder picker could not open." });
+                var (path, failed) = await HostWindow.PickFolderAsync("Choose folder").ConfigureAwait(false);
+                if (failed) { tcs.TrySetResult(new { ok = false, cancelled = true, message = "The folder picker could not open." }); return; }
+                if (path is null) { tcs.TrySetResult(new { ok = false, cancelled = true, message = "Canceled." }); return; }
+                Helpers.PickedPaths.Remember(path);
+                tcs.TrySetResult(new { ok = true, cancelled = false, path });
                 return;
             }
 
@@ -3648,6 +3620,26 @@ public sealed partial class WebHostBridge
     private static object HeartbeatReply(JsonElement p, bool hasParams)
     {
         HangWatchdog.PageBeat(ReadBool(p, hasParams, "visible") != false);
+        return new { ok = true };
+    }
+
+    private static object HandleShellWindowFocus(JsonElement p, bool hasParams)
+    {
+        nint hwnd = 0;
+        if (hasParams && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("hwnd", out var h) && h.ValueKind == JsonValueKind.Number && h.TryGetInt64(out var raw) && raw != 0)
+            hwnd = (nint)raw;
+        var active = ReadBool(p, hasParams, "active");
+        HostWindow.SetNativeState(hwnd, active);
+        if (active == true && DiscordClient.DiscordSession.Viewing is { } open) DiscordClient.DiscordSession.ClearNotices(open);
+        return new { ok = true };
+    }
+
+    private async Task<object> PrepareHeadlessConnectedRoomsAsync()
+    {
+        if (PackagedSmoke.Enabled || !_services.Settings.Current.OnboardingComplete) return new { ok = true };
+        await Task.WhenAll(
+            Task.Run(() => _services.HeadlessCapture.Prewarm()),
+            Task.Run(DiscordClient.DiscordSession.Start)).ConfigureAwait(false);
         return new { ok = true };
     }
 

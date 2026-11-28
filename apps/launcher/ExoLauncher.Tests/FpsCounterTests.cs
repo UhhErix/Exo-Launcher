@@ -530,10 +530,10 @@ public sealed class FpsCounterTests
 
     /// <summary>The widths above hold for any face (every digit is padded to one cell), so this asks GDI which face it selected.</summary>
     [Fact]
-    public void ItDrawsGoeistNotAFallback()
+    public void ItDrawsGeistNotAFallback()
     {
         FpsOverlay.AddFont(Font());
-        Assert.Equal(("Goeist SemiBold", "Goeist"), FpsOverlay.Faces());
+        Assert.Equal(("Geist SemiBold", "Geist"), FpsOverlay.Faces());
     }
 
     [Fact]
@@ -551,7 +551,7 @@ public sealed class FpsCounterTests
 
     private static unsafe uint[] Pixels(FpsOverlay.Capsule capsule) => new ReadOnlySpan<uint>(capsule.Bits, capsule.Width * capsule.Height).ToArray();
 
-    private static string Font() => Repo.PathOf("ExoLauncher", "Assets", "Fonts", "Goeist-Variable.ttf");
+    private static string Font() => Repo.PathOf("native-ui", "crates", "exo-kit", "assets", "fonts", "Geist-Variable.ttf");
 
     [Theory]
     [InlineData(1.0, 24)]

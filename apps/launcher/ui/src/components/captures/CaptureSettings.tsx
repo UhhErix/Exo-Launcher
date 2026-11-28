@@ -1,6 +1,5 @@
 import { useState, type KeyboardEvent } from 'react'
 import { host } from '../../lib/host'
-import { Slider } from '../ui/Slider'
 import { clock, keysLabel, saveCaptureSettings as save, useCapture, type CaptureSettings, type CaptureState } from '../../lib/capture'
 import { Choice } from '../settings/Choice'
 import { Group, Row, State, SwitchRow } from '../settings/parts'
@@ -19,10 +18,7 @@ const LENGTHS = [
   { value: '300', label: '5 min' },
   { value: '600', label: '10 min' },
 ] as const
-const RATES = [
-  { value: '60', label: '60 fps' },
-  { value: '120', label: '120 fps' },
-] as const
+
 const KEEP_GB = [
   { value: '0', label: 'No limit' },
   { value: '25', label: '25 GB' },
@@ -140,19 +136,10 @@ function useRowErrors() {
   }
 }
 
-/** The encoder doing the work: "HEVC on NVIDIA GeForce RTX 3070". */
-function encoderLine(state: CaptureState | null): string | undefined {
-  if (!state?.codec) return undefined
-  const gpu = state.encoder?.replace(/ (HEVC|H\.?264|AV1) Encoder MFT$/i, '')
-  return `${state.codec}${gpu ? ` on ${gpu}` : ''}`
-}
 
 function ReplayRows({ state, settings }: { state: CaptureState | null; settings: CaptureSettings | null }) {
   const errors = useRowErrors()
-  const [quality, setQuality] = useState<number | null>(null)
   const disabled = !settings
-  const commit = () => { if (quality !== null) void save({ quality }).then(e => { errors.set('quality')(e); setQuality(null) }) }
-  const shown = quality ?? settings?.quality ?? 50
   const retained = state?.buffering
     ? state.replayRetainedMs == null ? 'Available time not reported' : `${clock(state.replayRetainedMs)} available`
     : null
@@ -180,32 +167,7 @@ function ReplayRows({ state, settings }: { state: CaptureState | null; settings:
           />
         </Row>
       ) : null}
-      <Row label="Frame rate" labelId="set-capture-fps" error={errors.of('fps')}>
-        <Choice
-          label="Frame rate"
-          value={String(settings?.maxFps ?? 60)}
-          choices={RATES}
-          disabled={disabled}
-          onChange={value => void save({ maxFps: Number(value) }).then(errors.set('fps'))}
-        />
-      </Row>
-      <Row label="Quality" labelId="set-capture-quality" detail={encoderLine(state)} error={errors.of('quality')}>
-        <div className="exo-capture-quality">
-          <span>Smaller files</span>
-          <Slider
-            min={0}
-            max={100}
-            step={5}
-            value={shown}
-            disabled={disabled}
-            aria-labelledby="set-capture-quality"
-            onChange={event => setQuality(Number(event.target.value))}
-            onPointerUp={commit}
-            onKeyUp={commit}
-          />
-          <span>Best quality</span>
-        </div>
-      </Row>
+
     </>
   )
 }

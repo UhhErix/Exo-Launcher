@@ -905,6 +905,22 @@ fn riot_baseline_row(s: &AppState, hi: bool) -> El {
     )
 }
 
+fn riot_rows(s: &AppState, card: El, hi_id: bool, hi_hours: bool) -> El {
+    let mut card = card
+        .child(el().w_full().h(1.0).fill(hairline()))
+        .child(riot_id_row(s, hi_id));
+    if s.settings
+        .riot_id
+        .as_deref()
+        .is_some_and(|id| !id.trim().is_empty())
+    {
+        card = card
+            .child(el().w_full().h(1.0).fill(hairline()))
+            .child(riot_baseline_row(s, hi_hours));
+    }
+    card
+}
+
 pub fn stores_section(s: &AppState) -> El {
     let hi = |id: &str| s.wp4.highlight_row.is_some_and(|(rid, _)| rid == id);
     let installed = settings_store_rows(&s.wp4.stores);
@@ -946,6 +962,9 @@ pub fn stores_section(s: &AppState) -> El {
                 card = card.child(el().w_full().h(1.0).fill(hairline()));
             }
             card = render_installed_store(s, card, store, accounts, hi("library-stores"));
+            if store.store == "riot" {
+                card = riot_rows(s, card, hi("library-riot-id"), hi("library-riot-hours"));
+            }
         }
     }
 
@@ -1007,41 +1026,14 @@ pub fn stores_section(s: &AppState) -> El {
         }
     }
 
-    if has_accounts {
-        let quiet = s.settings.store_clients_quiet;
-        card = card
-            .child(el().w_full().h(1.0).fill(hairline()))
-            .child(store_row_box(
-                "library-quiet-stores",
-                None,
-                "Keep store apps quiet",
-                None,
-                None,
-                hi("library-quiet-stores"),
-                switch_pill("set-quiet-clients", "Keep store apps quiet", quiet).on_press(
-                    move |s: &mut AppState| s.set_bool_setting("storeClientsQuiet", !quiet),
-                ),
-            ));
-    }
-
-    let has_riot = installed.iter().any(|st| st.store == "riot")
-        || s.settings
-            .riot_id
-            .as_deref()
-            .is_some_and(|id| !id.trim().is_empty());
-    if has_riot {
-        card = card
-            .child(el().w_full().h(1.0).fill(hairline()))
-            .child(riot_id_row(s, hi("library-riot-id")));
-        if s.settings
-            .riot_id
-            .as_deref()
-            .is_some_and(|id| !id.trim().is_empty())
-        {
-            card = card
-                .child(el().w_full().h(1.0).fill(hairline()))
-                .child(riot_baseline_row(s, hi("library-riot-hours")));
-        }
+    let riot_listed = installed.iter().any(|st| st.store == "riot");
+    let riot_id_set = s
+        .settings
+        .riot_id
+        .as_deref()
+        .is_some_and(|id| !id.trim().is_empty());
+    if !riot_listed && riot_id_set {
+        card = riot_rows(s, card, hi("library-riot-id"), hi("library-riot-hours"));
     }
 
     if !missing.is_empty() {

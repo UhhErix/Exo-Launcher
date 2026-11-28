@@ -32,7 +32,7 @@ internal sealed partial class DiscordSession
     private static string _state = "signedOut";
     private static string? _message;
 
-    private readonly string _token;
+    private string _token;
     private readonly CancellationTokenSource _stop = new();
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private readonly GatewaySendLimit _sendLimit = new();
@@ -286,7 +286,6 @@ internal sealed partial class DiscordSession
                     // The server's open threads and which you're in (THREAD_LIST_SYNC), as Discord's client asks: the
                     // sidebar lists the joined ones under their channel.
                     ["threads"] = true,
-                    ["activities"] = false,
                     ["member_updates"] = false,
                     ["channels"] = new JsonObject { [channelId] = new JsonArray([.. ranges.Select(r => (JsonNode)new JsonArray(r.From, r.To))]) },
                 },
@@ -350,6 +349,7 @@ internal sealed partial class DiscordSession
     private async Task<(string? Fatal, bool Ready, bool Limited)> ConnectOnceAsync()
     {
         using var ws = new ClientWebSocket();
+        ws.Options.Cookies = Rest.Cookies;
         ws.Options.SetRequestHeader("Origin", "https://discord.com");
         ws.Options.SetRequestHeader("User-Agent", DiscordRest.UserAgent);
         _ws = ws;
@@ -386,7 +386,7 @@ internal sealed partial class DiscordSession
                         _acked = true;
                         break;
                     case 1:
-                        await SendAsync(1, _seq is { } s ? JsonValue.Create(s) : null).ConfigureAwait(false);
+                        await SendHeartbeatAsync().ConfigureAwait(false);
                         break;
                     case 7:
                         return (null, ready, false);
@@ -434,18 +434,11 @@ internal sealed partial class DiscordSession
         _lastGatewayClose = code;
         _lastGatewayNetworkFailure = networkFailure && code is null;
         if (code is not null) AppLog.Info($"Discord client: gateway closed {code}.");
-        var keyRefused = _keyInPresence is not null && KeyRefused(code, Environment.TickCount64 - Volatile.Read(ref _keySentAt));
-        if (keyRefused)
-        {
-            _keyRefused = true;
-            _keyInPresence = null;
-            AppLog.Info("Share my games: Discord refused the presence with the key; it isn't sent again this run.");
-        }
         switch (code)
         {
             case 4004: return ("signedOut", ready, false);
             case 4008: return (null, ready, true);
-            case 4002 when !keyRefused && Environment.TickCount64 - _subscribedAt < 5000:
+            case 4002 when Environment.TickCount64 - _subscribedAt < 5000:
                 _noSubscribe = true;
                 AppLog.Info("Discord client: the gateway refused a channel subscription; not sending more.");
                 break;
@@ -461,11 +454,17 @@ internal sealed partial class DiscordSession
     private void Dispatch(string type, JsonElement data)
     {
         OnSettingsDispatch(type, data);
-        if (type == "SESSIONS_REPLACE") LogKeyEcho(data);
         if (type == "READY")
         {
             _sessionId = data.GetProperty("session_id").GetString();
             _resumeUrl = data.TryGetProperty("resume_gateway_url", out var url) ? url.GetString() : null;
+            if (data.TryGetProperty("auth_token", out var rotatedEl) && rotatedEl.ValueKind == JsonValueKind.String
+                && rotatedEl.GetString() is { Length: > 0 } rotated && rotated != _token)
+            {
+                _token = rotated;
+                Rest.UpdateToken(rotated);
+                DiscordToken.Save(rotated);
+            }
             Cache.LoadReady(data);
             AskForMyRoles();
             AskVoiceMembers();
@@ -639,7 +638,7 @@ internal sealed partial class DiscordSession
     private static void Notify(DiscordCache.Notification notice)
     {
         var settings = App.Services.Settings.Shared;
-        var inFront = App.MainAppWindow?.WindowIsActive == true;
+        var inFront = HostWindow.IsActive;
         // Game focus: a game is running, so messages wait in the unread badge instead of popping up.
         var route = DiscordNotifier.Route(inFront, Viewing, notice.ChannelId,
             settings.DiscordQuietWhilePlaying && App.Services.Launcher.AnyGameRunning, StreamerQuiet, settings.DiscordDesktopNotifications);
@@ -677,10 +676,12 @@ internal sealed partial class DiscordSession
         Cache.SetMyStatus(status);
         await SendPresenceAsync().ConfigureAwait(false);
         SyncLinks();
-        var reply = await Rest.SetStatusAsync(status, ct).ConfigureAwait(false);
         Event?.Invoke("discord.presence", new { userId = Cache.Me?.Id, status, activity = (string?)null, until });
-        if (reply.Error is not null) return reply.Error;
-        var (_, error) = await UserSettingsAsync(new Dictionary<string, JsonElement> { ["statusExpiresAtMs"] = JsonSerializer.SerializeToElement(until) }, ct).ConfigureAwait(false);
+        var (_, error) = await UserSettingsAsync(new Dictionary<string, JsonElement>
+        {
+            ["status"] = JsonSerializer.SerializeToElement(status),
+            ["statusExpiresAtMs"] = JsonSerializer.SerializeToElement(until),
+        }, ct).ConfigureAwait(false);
         ExpireStatusAt(until);
         return error;
     }
@@ -734,7 +735,6 @@ internal sealed partial class DiscordSession
             {
                 if (values["statusExpiresAtMs"] is JsonValue at && at.TryGetValue(out long until) && Cache.MyStatus != "online")
                     ExpireStatusAt(until);
-                await KeepPrivacyAsync(values).ConfigureAwait(false);
             }
             await reminders.ConfigureAwait(false);
         }
@@ -745,12 +745,6 @@ internal sealed partial class DiscordSession
     private CancellationTokenSource? _customExpiry;
     private readonly SemaphoreSlim _presenceGate = new(1, 1);
 
-    /// <summary>
-    /// This session's presence (op 3): the status and the account's custom status (as Discord's client always sends it,
-    /// so Exo being the active app never hides it), and the friend link's public key when Share my games wants it
-    /// (<see cref="FriendKeyCarrier"/>). Never a game or a song: those go to friends' Exo apps over the relay. One at a
-    /// time, read and sent together, so a presence read before sharing went off can't land after the one that says so.
-    /// </summary>
     private async Task SendPresenceAsync()
     {
         await _presenceGate.WaitAsync(_stop.Token).ConfigureAwait(false);
@@ -760,12 +754,8 @@ internal sealed partial class DiscordSession
             var settings = _userSettings ?? (await UserSettingsAsync(null, _stop.Token).ConfigureAwait(false)).Values;
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var custom = CustomActivity(settings?["customStatus"], now);
-            var key = KeyToPublish();
-            if (key is not null) custom = FriendKeyCarrier.Put(custom, key);
             if (custom is not null) activities.Add(custom);
-            if (key is not null) Volatile.Write(ref _keySentAt, Environment.TickCount64);
             await SendAsync(3, new JsonObject { ["status"] = Cache.MyStatus, ["since"] = 0, ["activities"] = activities.DeepClone(), ["afk"] = false }).ConfigureAwait(false);
-            _keyInPresence = key;
             foreach (var (name, payload) in Cache.SetMyActivities(activities)) Event?.Invoke(name, payload);
             var expiry = new CancellationTokenSource();
             Interlocked.Exchange(ref _customExpiry, expiry)?.Cancel();
@@ -832,14 +822,37 @@ internal sealed partial class DiscordSession
     private JsonObject Identify() => new()
     {
         ["token"] = _token,
-        // DEDUPE_USER_OBJECTS: READY carries users[], recipient_ids and merged_members (the user's own roles per server).
-        // AUTO_CALL_CONNECT: a DM call already on as Exo connects (one joined from a phone, one that outlived Exo's
-        // restart) comes as its CALL_CREATE, as in Discord's own client; without it Exo never knew of it, so no Join.
-        ["capabilities"] = (1 << 4) | (1 << 12),
+        ["capabilities"] = DiscordRest.Capabilities,
         ["properties"] = DiscordRest.Properties(),
         ["presence"] = new JsonObject { ["status"] = "unknown", ["since"] = 0, ["activities"] = new JsonArray(), ["afk"] = false },
         ["compress"] = false,
+        ["client_state"] = new JsonObject { ["guild_versions"] = new JsonObject() },
     };
+
+    internal static JsonObject BuildQosHeartbeat(long? seq, bool foregrounded, bool rtcConnected)
+    {
+        var reasons = new JsonArray();
+        if (foregrounded) reasons.Add("foregrounded");
+        if (rtcConnected) reasons.Add("rtc_connected");
+        return new JsonObject
+        {
+            ["seq"] = seq ?? 0,
+            ["qos"] = new JsonObject
+            {
+                ["ver"] = 31,
+                ["active"] = reasons.Count > 0,
+                ["reasons"] = reasons,
+            },
+        };
+    }
+
+    private Task SendHeartbeatAsync()
+    {
+        var focused = App.MainAppWindow is not null || HostWindow.HasNativeState ? HostWindow.IsActive : true;
+        bool rtc;
+        lock (_voiceGate) rtc = _voiceState == "connected";
+        return SendAsync(40, BuildQosHeartbeat(_seq, focused, rtc));
+    }
 
     private async Task HeartbeatAsync(ClientWebSocket ws, int interval, CancellationToken ct)
     {
@@ -850,7 +863,7 @@ internal sealed partial class DiscordSession
             {
                 if (!_acked) { ws.Abort(); return; }
                 _acked = false;
-                await SendAsync(1, _seq is { } s ? JsonValue.Create(s) : null).ConfigureAwait(false);
+                await SendHeartbeatAsync().ConfigureAwait(false);
                 await Task.Delay(interval, ct).ConfigureAwait(false);
             }
         }
@@ -862,7 +875,7 @@ internal sealed partial class DiscordSession
         if (_ws is not { State: WebSocketState.Open } ws) return;
         // Heartbeats, identify and resume always go; the rest keep under Discord's limit. A member request
         // over it is dropped (the room asks again later); anything else waits its turn.
-        if (op is not (1 or 2 or 6))
+        if (op is not (1 or 2 or 6 or 40))
             for (var wait = _sendLimit.Take(Environment.TickCount64); wait > 0; wait = _sendLimit.Take(Environment.TickCount64))
             {
                 if (op == 8) { AppLog.Debug("Discord client: member request held back (gateway send limit)."); return; }

@@ -46,8 +46,63 @@ public sealed partial class WebHostBridge
             if (smoothMotion is true && !supportsSmooth)
                 return new { ok = false, message = "Smooth Motion requires Wuthering Waves on an RTX 40 or 50 GPU." };
             var initialSmooth = supportsSmooth && _services.Settings.SmoothMotionEnabled(game.Id);
-            if (GameSettings.For(game, pc, initialSmooth) is not { } profile)
-                return new { ok = true, supported = false, note = GameSettings.AntiCheatNote(game, pc) };
+            var profile = GameSettings.For(game, pc, initialSmooth);
+            var gfxCtx = GameGraphicsFeatures.CreateLiveContext(game, _services.Settings);
+            var hasCuratedConfig = profile is not null && !string.IsNullOrEmpty(profile.File);
+
+            if (profile is null)
+            {
+                var gfxGroup = GameGraphicsFeatures.OptimizeGroupState(game, gfxCtx, driverOnly: false);
+                if (gfxGroup is null || !gfxGroup.Exo)
+                    return new { ok = true, supported = false, note = GameSettings.AntiCheatNote(game, pc) };
+
+                if ((all || string.Equals(group, "graphicsFeatures", StringComparison.OrdinalIgnoreCase)) && on is { } turnGfxOn)
+                {
+                    if (gfxCtx.Running) return new { ok = false, message = $"Close {game.Title} first." };
+                    if (GameGraphicsFeatures.ApplyOptimizeFeatures(game, turnGfxOn, gfxCtx, driverOnly: false) is { } gfxErr)
+                        return new { ok = false, message = gfxErr };
+                }
+
+                var updatedGfx = GameGraphicsFeatures.OptimizeGroupState(game, gfxCtx, driverOnly: false);
+                var gfxGroups = updatedGfx is null
+                    ? new List<object>()
+                    : new List<object>
+                    {
+                        new
+                        {
+                            id = updatedGfx.Id,
+                            label = updatedGfx.Label,
+                            on = updatedGfx.On,
+                            exo = updatedGfx.Exo,
+                            changes = updatedGfx.Changes?.Select(change => new
+                            {
+                                key = change.Key,
+                                current = change.Current,
+                                target = change.Target,
+                                applied = change.Applied,
+                                kept = change.Kept,
+                            }).ToList(),
+                        },
+                    };
+                var gfxStanding = updatedGfx is { On: true } ? "applied" : updatedGfx is { Exo: true } ? "partly" : "off";
+                return new
+                {
+                    ok = true,
+                    supported = true,
+                    title = game.Title,
+                    running = gfxCtx.Running,
+                    found = true,
+                    waiting = false,
+                    groups = gfxGroups,
+                    standing = gfxStanding,
+                    again = false,
+                    windowMode = (string?)null,
+                    smoothMotion = (bool?)null,
+                    advice = (IReadOnlyList<string>?)null,
+                    minecraft = (object?)null,
+                };
+            }
+
             var running = MainWindow.RunningLibraryGames().ContainsKey(game.Id) || GameSettings.Busy(profile);
             if (mode is not null)
             {
@@ -76,11 +131,27 @@ public sealed partial class WebHostBridge
                 if (!GameSettings.SetKey(profile, key, keyOn, profile.Program?.Invoke(game)))
                     return new { ok = false, message = "Could not save. Try again." };
             }
+            else if (string.Equals(group, "graphicsFeatures", StringComparison.OrdinalIgnoreCase) && on is { } gfxOnlyOn)
+            {
+                if (running) return new { ok = false, message = $"Close {profile.Title} first." };
+                if (GameGraphicsFeatures.ApplyOptimizeFeatures(game, gfxOnlyOn, gfxCtx, driverOnly: hasCuratedConfig) is { } gfxErr)
+                    return new { ok = false, message = gfxErr };
+            }
             else if ((group is not null || all) && on is { } turnOn)
             {
                 if (running) return new { ok = false, message = $"Close {profile.Title} first." };
+                if (all && !turnOn)
+                {
+                    if (GameGraphicsFeatures.ApplyOptimizeFeatures(game, false, gfxCtx, driverOnly: hasCuratedConfig) is { } gfxUndoErr)
+                        return new { ok = false, message = gfxUndoErr };
+                }
                 if (GameSettings.ApplyWithNvidia(game, profile, group, all, turnOn, includePerGamePower: true) is { } refused)
                     return new { ok = false, message = refused };
+                if (all && turnOn)
+                {
+                    if (GameGraphicsFeatures.ApplyOptimizeFeatures(game, true, gfxCtx, driverOnly: hasCuratedConfig) is { } gfxApplyErr)
+                        AppLog.Warn($"Optimize graphics features skipped for {profile.Title}: {gfxApplyErr}");
+                }
                 if (isMinecraft && all)
                 {
                     foreach (var inst in GameSettings.DiscoverMinecraftInstances())
@@ -104,7 +175,10 @@ public sealed partial class WebHostBridge
                 }
             }
             var summary = GameSettings.InspectState(game, profile, includePerGamePower: true);
-            var groups = summary.Groups?.Select(state => new
+            var combinedGroups = summary.Groups is null ? null : new List<GameSettings.GroupState>(summary.Groups);
+            if (combinedGroups is not null && GameGraphicsFeatures.OptimizeGroupState(game, gfxCtx, driverOnly: hasCuratedConfig) is { } extraGfx)
+                combinedGroups.Add(extraGfx);
+            var groups = combinedGroups?.Select(state => new
             {
                 id = state.Id,
                 label = state.Label,

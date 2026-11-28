@@ -25,8 +25,9 @@ Service: `https://accounts.getexo.app` (HTTPS only, no CORS, JSON in and out, `C
   D1 row count was not queried; this is API evidence, not a row count.
 - **Fixtures.** Built from that run. Passwords, bearer tokens, recovery codes, addresses and device ids are `{{kind-n}}`
   placeholders. Account and item ids are not secrets and are kept. A scan found no secret value left in the files.
-- **Dev service for tests.** `https://exo-account-dev.exo-erix.workers.dev` (Worker `exo-account-dev`, its own D1
-  `exo-account-dev`, the same code as live). Deployed 2026-11-07 with `wrangler deploy --env dev`, version
+- **Dev service for tests.** Not deployed as of 2026-11-26: the Cloudflare account has no `exo-account-dev` Worker or D1,
+  so tests that name it cannot run until it is created again. It was `https://exo-account-dev.exo-erix.workers.dev`
+  (Worker `exo-account-dev`, its own D1 `exo-account-dev`, the same code as live). Deployed 2026-11-07 with `wrangler deploy --env dev`, version
   `664e29b7-866b-43d9-8d66-0b0a03304439`. Smoke test that day, all against the dev address: sign-up 201, whoami 200,
   sign-in 200, PUT item 200 (version 1), pull 200 with the same value, sessions 200 (current row marked), delete 204,
   old token afterwards 401 `signed-out`. Afterwards the dev D1 held 0 accounts, 0 sessions, 0 items, 0 failure rows.

@@ -197,6 +197,7 @@ internal sealed class VoiceConnection : IAsyncDisposable
     {
         using var ws = new ClientWebSocket();
         ws.Options.SetRequestHeader("User-Agent", DiscordRest.UserAgent);
+        ws.Options.SetRequestHeader("Origin", "https://discord.com");
         _ws = ws;
         using var connection = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
         try

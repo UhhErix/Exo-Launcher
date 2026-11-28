@@ -8,7 +8,6 @@ on:
       - 'apps/launcher/ui/contracts/keyboard-layouts.json'
       - 'apps/launcher/ui/src/lib/whatsNew.json'
       - 'apps/launcher/CHANGELOG.md'
-      - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
   push:
     branches: [main]
@@ -18,7 +17,6 @@ on:
       - 'apps/launcher/ui/contracts/keyboard-layouts.json'
       - 'apps/launcher/ui/src/lib/whatsNew.json'
       - 'apps/launcher/CHANGELOG.md'
-      - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
 
 permissions: {}
@@ -69,7 +67,8 @@ jobs:
           $hash = ([System.Security.Cryptography.SHA256]::HashData($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
           "toolchain=$($hash.Substring(0, 16))" >> $env:GITHUB_OUTPUT
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -110,3 +109,14 @@ jobs:
               $_.Extension -in @('.pdb') -or ($_.LastWriteTime -lt $cutoff -and $_.DirectoryName -match '(\\deps|\\build|\\.fingerprint)' -and $_.DirectoryName -notmatch '\\build\\.+\\out(\\|$)')
             } | Remove-Item -Force
           }
+
+      - name: Save cache (main only)
+        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            apps/launcher/native-ui/target
+          key: ${{ runner.os }}-rune-${{ steps.rust-key.outputs.toolchain }}-${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}

@@ -84,6 +84,14 @@ public sealed class VoiceLatencyTests
         Assert.Equal(DelayTracker.Start, tracker.Samples);
     }
 
+    [Fact]
+    public void TracksFiveHopDpdfNetDelay()
+    {
+        var tracker = new DelayTracker();
+        Feed(tracker, voice: true, delay: 5 * DelayTracker.Hop, new Random(7));
+        Assert.Equal(5 * DelayTracker.Hop, tracker.Samples);
+    }
+
     private static float[] Noise(int length, Random random)
     {
         var x = new float[length];

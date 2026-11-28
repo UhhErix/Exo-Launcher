@@ -6,8 +6,8 @@ use crate::state::AppState;
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted, glass_button,
-    glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill,
-    icon_check, icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_trash,
+    glass_button_opt, glass_control_fill, glass_rim, good, hairline, hover_fill, icon_check,
+    icon_close, icon_hash, icon_plus, icon_search, icon_star, icon_star_filled, icon_trash,
     modal_card_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, switch_pill,
     type_body, type_control, type_label, type_section, type_small,
 };
@@ -149,6 +149,18 @@ pub fn emoji_cdn_url(id: &str, animated: bool, size: u32) -> String {
     format!("https://cdn.discordapp.com/emojis/{id}.webp?size={size}&quality=lossless{anim}")
 }
 
+pub fn reaction_emoji_el(s: &AppState, emoji: &exo_rpc::DiscordReactionEmoji, scale: f32) -> El {
+    let custom = emoji.id.as_deref().filter(|id| !id.is_empty());
+    if let Some(id) = custom
+        && let Some(img) = s.remote_image_sized(&emoji_cdn_url(id, false, 48), 18.0, scale)
+    {
+        return el()
+            .size(18.0, 18.0)
+            .pixels_fit(img.pixels(), SurfaceFit::Fit);
+    }
+    text(emoji.display()).font(type_small()).color(FG)
+}
+
 pub fn sticker_cdn_url(id: &str, format: i32, size: u32) -> String {
     let ext = if format == 4 { "gif" } else { "png" };
     format!("https://media.discordapp.net/stickers/{id}.{ext}?size={size}")
@@ -190,18 +202,19 @@ pub fn expression_picker_popover(s: &AppState, scale: f32) -> Option<El> {
         s.discord.chat.picker.tab
     };
 
-    let mut box_el = col()
-        .key("dc-expr-picker")
-        .pin(None, None, Some(12.0), Some(64.0))
-        .w(420.0)
-        .h(430.0)
-        .padding(12.0)
-        .gap(10.0)
-        .radius(RADIUS_PANEL)
-        .clip_rounded(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .transition(picker_pop_transition());
+    let mut box_el = apply_glass(
+        col()
+            .key("dc-expr-picker")
+            .pin(None, None, Some(12.0), Some(64.0))
+            .w(420.0)
+            .h(430.0)
+            .padding(12.0)
+            .gap(10.0)
+            .radius(RADIUS_PANEL)
+            .clip_rounded(RADIUS_PANEL)
+            .transition(picker_pop_transition()),
+        ExoGlass::Menu,
+    );
 
     if for_composer {
         box_el = box_el.child(
@@ -233,6 +246,9 @@ pub fn expression_picker_popover(s: &AppState, scale: f32) -> Option<El> {
                 .child(
                     el().key("dc-exp-close")
                         .size(26.0, 26.0)
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .radius(13.0)
                         .hover(hover_fill())
                         .cursor(Cursor::Pointer)
@@ -257,6 +273,9 @@ pub fn expression_picker_popover(s: &AppState, scale: f32) -> Option<El> {
                 .child(
                     el().key("dc-exp-close")
                         .size(26.0, 26.0)
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .radius(13.0)
                         .hover(hover_fill())
                         .cursor(Cursor::Pointer)
@@ -385,6 +404,9 @@ fn emoji_tab_body(s: &AppState, reacting_msg_id: Option<&str>, scale: f32) -> El
                     .key(format!("dc-cem-custom-{}", em.id))
                     .size(34.0, 34.0)
                     .radius(8.0)
+                    .role("button")
+                    .label(em_name.clone())
+                    .focusable(!locked)
                     .opacity(if locked { 0.35 } else { 1.0 })
                     .hover(if locked {
                         Color::TRANSPARENT
@@ -501,6 +523,9 @@ fn unicode_emoji_tile(
     let reacting = reacting_msg_id.map(str::to_string);
     let cid_c = active_cid.to_string();
     el().key(format!("dc-uem-{key_prefix}-{name}"))
+        .role("button")
+        .label(name.to_string())
+        .focusable(true)
         .size(34.0, 34.0)
         .radius(8.0)
         .hover(hover_fill())
@@ -576,9 +601,10 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
             .gif_favorites
             .iter()
             .map(|g| {
+                let anim = exo_rpc::remote_art::normalize_gif_image_url(&g.src);
                 (
                     g.url.clone(),
-                    g.src.clone(),
+                    anim,
                     "Favorite GIF".into(),
                     g.width,
                     g.height,
@@ -592,11 +618,13 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
             .gifs
             .iter()
             .map(|g| {
-                let thumb = g
-                    .preview
-                    .clone()
-                    .or_else(|| g.gif_src.clone())
-                    .unwrap_or_else(|| g.src.clone());
+                let raw = g
+                    .gif_src
+                    .as_deref()
+                    .filter(|u| !u.is_empty())
+                    .or_else(|| g.preview.as_deref().filter(|u| !u.is_empty()))
+                    .unwrap_or(&g.src);
+                let thumb = exo_rpc::remote_art::normalize_gif_image_url(raw);
                 (
                     g.url.clone(),
                     thumb,
@@ -626,6 +654,9 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
 
         let mut card = el()
             .key(format!("dc-gif-{idx}"))
+            .role("button")
+            .label(title.clone())
+            .focusable(true)
             .w_full()
             .h(card_h)
             .radius(RADIUS_SMALL)
@@ -651,6 +682,10 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
         card = card.child(
             el().key(format!("dc-gif-star-{idx}"))
                 .pin(None, Some(6.0), Some(6.0), None)
+                .role("button")
+                .label_static("Favorite GIF")
+                .checked(is_star)
+                .focusable(true)
                 .size(26.0, 26.0)
                 .radius(13.0)
                 .fill(BG.alpha(0.75))
@@ -662,7 +697,11 @@ fn gif_tab_body(s: &AppState, scale: f32) -> El {
                 .on_press(move |s: &mut AppState| {
                     s.toggle_gif_favorite(&url_star, &src_star, gw, gh)
                 })
-                .child(icon_star(13.0, if is_star { good() } else { fg_muted() })),
+                .child(if is_star {
+                    icon_star_filled(13.0, good())
+                } else {
+                    icon_star(13.0, fg_muted())
+                }),
         );
 
         if idx % 2 == 0 {
@@ -733,6 +772,9 @@ fn sticker_tab_body(s: &AppState, scale: f32) -> El {
             let url = sticker_cdn_url(&st.id, st.format, 96);
             let mut tile = col()
                 .key(format!("dc-st-{}", st.id))
+                .role("button")
+                .label(st.name.clone())
+                .focusable(!locked)
                 .w(88.0)
                 .padding(6.0)
                 .gap(4.0)
@@ -862,6 +904,9 @@ pub fn mention_autocomplete_popover(s: &AppState, channel_id: &str, scale: f32) 
                 rows.push(
                     row()
                         .key(format!("dc-ac-u-{}", u.id))
+                        .role("option")
+                        .label(display.clone())
+                        .focusable(true)
                         .w_full()
                         .h(34.0)
                         .px(10.0)
@@ -909,6 +954,9 @@ pub fn mention_autocomplete_popover(s: &AppState, channel_id: &str, scale: f32) 
                 rows.push(
                     row()
                         .key(format!("dc-ac-r-{}", role.id))
+                        .role("option")
+                        .label(role.name.clone())
+                        .focusable(true)
                         .w_full()
                         .h(32.0)
                         .px(10.0)
@@ -936,6 +984,9 @@ pub fn mention_autocomplete_popover(s: &AppState, channel_id: &str, scale: f32) 
                         rows.push(
                             row()
                                 .key(format!("dc-ac-g-{name}"))
+                                .role("option")
+                                .label(ins.clone())
+                                .focusable(true)
                                 .w_full()
                                 .h(32.0)
                                 .px(10.0)
@@ -977,6 +1028,9 @@ pub fn mention_autocomplete_popover(s: &AppState, channel_id: &str, scale: f32) 
                 rows.push(
                     row()
                         .key(format!("dc-ac-c-{}", ch.id))
+                        .role("option")
+                        .label(insert.clone())
+                        .focusable(true)
                         .w_full()
                         .h(32.0)
                         .px(10.0)
@@ -1020,6 +1074,9 @@ pub fn mention_autocomplete_popover(s: &AppState, channel_id: &str, scale: f32) 
                         rows.push(
                             row()
                                 .key(format!("dc-ac-em-{}", em.id))
+                                .role("option")
+                                .label(em.name.clone())
+                                .focusable(true)
                                 .w_full()
                                 .h(32.0)
                                 .px(10.0)
@@ -1049,6 +1106,9 @@ pub fn mention_autocomplete_popover(s: &AppState, channel_id: &str, scale: f32) 
                         rows.push(
                             row()
                                 .key(format!("dc-ac-u-{name}"))
+                                .role("option")
+                                .label(name.to_string())
+                                .focusable(true)
                                 .w_full()
                                 .h(32.0)
                                 .px(10.0)
@@ -1076,15 +1136,16 @@ pub fn mention_autocomplete_popover(s: &AppState, channel_id: &str, scale: f32) 
         return None;
     }
 
-    let mut panel = col()
-        .key("dc-mention-ac")
-        .w_full()
-        .padding(6.0)
-        .gap(2.0)
-        .radius(RADIUS_CARD)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .transition(picker_pop_transition());
+    let mut panel = apply_glass(
+        col()
+            .key("dc-mention-ac")
+            .w_full()
+            .padding(6.0)
+            .gap(2.0)
+            .radius(RADIUS_CARD)
+            .transition(picker_pop_transition()),
+        ExoGlass::Menu,
+    );
     for r in rows {
         panel = panel.child(r);
     }
@@ -1125,15 +1186,16 @@ pub fn slash_command_list_popover(s: &AppState, channel_id: &str) -> Option<El> 
         .take(12)
         .collect();
 
-    let mut panel = col()
-        .key("dc-slash-list")
-        .w_full()
-        .padding(6.0)
-        .gap(2.0)
-        .radius(RADIUS_CARD)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .transition(picker_pop_transition());
+    let mut panel = apply_glass(
+        col()
+            .key("dc-slash-list")
+            .w_full()
+            .padding(6.0)
+            .gap(2.0)
+            .radius(RADIUS_CARD)
+            .transition(picker_pop_transition()),
+        ExoGlass::Menu,
+    );
 
     if loading && entries.is_empty() {
         panel = panel.child(
@@ -1167,6 +1229,9 @@ pub fn slash_command_list_popover(s: &AppState, channel_id: &str) -> Option<El> 
             panel = panel.child(
                 row()
                     .key(key)
+                    .role("option")
+                    .label(format!("/{full_name}"))
+                    .focusable(true)
                     .w_full()
                     .h(36.0)
                     .px(10.0)
@@ -1290,15 +1355,10 @@ pub fn slash_command_form(s: &AppState) -> Option<El> {
                             .color(FG)
                             .placeholder(placeholder, fg_faint())
                             .on_edit(edit_access(move |s: &mut AppState| {
-                                s.discord
-                                    .chat
-                                    .apps
-                                    .active_command
-                                    .as_mut()
-                                    .unwrap()
-                                    .values
-                                    .entry(opt_k.clone())
-                                    .or_default()
+                                match s.discord.chat.apps.active_command.as_mut() {
+                                    Some(cmd) => cmd.values.entry(opt_k.clone()).or_default(),
+                                    None => &mut s.ui_discard_edit,
+                                }
                             }))
                             .on_submit(|s: &mut AppState, _| s.run_active_slash_command()),
                     ),
@@ -1314,6 +1374,9 @@ pub fn slash_command_form(s: &AppState) -> Option<El> {
         form_row = form_row.child(
             row()
                 .key(format!("dc-cmd-add-{}", opt.name))
+                .role("button")
+                .label(format!("Add {}", opt.name))
+                .focusable(true)
                 .h(24.0)
                 .px(8.0)
                 .gap(4.0)
@@ -1361,7 +1424,7 @@ pub fn slash_command_form(s: &AppState) -> Option<El> {
     Some(wrap)
 }
 
-pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
+pub fn app_modal_overlay(s: &AppState) -> Option<El> {
     let active = s.discord.chat.apps.active_modal.as_ref()?;
     let mut fields_col = col().w_full().gap(10.0);
 
@@ -1429,15 +1492,10 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
                     .color(FG)
                     .placeholder(placeholder, fg_faint())
                     .on_edit(edit_access(move |s: &mut AppState| {
-                        s.discord
-                            .chat
-                            .apps
-                            .active_modal
-                            .as_mut()
-                            .unwrap()
-                            .text_values
-                            .entry(cid_e.clone())
-                            .or_default()
+                        match s.discord.chat.apps.active_modal.as_mut() {
+                            Some(modal) => modal.text_values.entry(cid_e.clone()).or_default(),
+                            None => &mut s.ui_discard_edit,
+                        }
                     }));
                 if !is_para {
                     input = input.single_line();
@@ -1469,8 +1527,6 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
         .padding(20.0)
         .gap(14.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(
             row()
@@ -1484,6 +1540,9 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
                 )
                 .child(
                     el().key("dc-am-close")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .size(28.0, 28.0)
                         .radius(14.0)
                         .hover(hover_fill())
@@ -1507,7 +1566,7 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
             .justify_end()
             .gap(8.0)
             .child(
-                glass_button("dc-am-cancel", "Cancel", None)
+                glass_button_opt("dc-am-cancel", "Cancel", None, false)
                     .on_press(|s: &mut AppState| s.discord.chat.apps.active_modal = None),
             )
             .child(
@@ -1524,8 +1583,7 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
             ),
     );
 
-    let _ = blur;
-    let card = apply_glass(card, ExoGlass::Sheet, false)
+    let card = apply_glass(card, ExoGlass::Sheet)
         .modal(true, |s: &mut AppState| {
             s.discord.chat.apps.active_modal = None
         })
@@ -1538,7 +1596,7 @@ pub fn app_modal_overlay(s: &AppState, blur: bool) -> Option<El> {
     Some(host)
 }
 
-pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<El> {
+pub fn reactions_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
     let dlg = s.discord.chat.reactors_dialog.as_ref()?;
     let msg: Option<&DiscordMessage> = s
         .discord
@@ -1572,6 +1630,10 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
         left_tabs = left_tabs.child(
             row()
                 .key(format!("dc-rtab-{key}-{burst}"))
+                .role("tab")
+                .label(format!("{}, {count}", r.emoji.display()))
+                .checked(active)
+                .focusable(true)
                 .w_full()
                 .h(34.0)
                 .px(10.0)
@@ -1596,7 +1658,7 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
                 .hit()
                 .press_on_down()
                 .on_press(move |s: &mut AppState| s.select_reactors_tab(&k_click, burst))
-                .child(text(r.emoji.display()).font(type_small()).color(FG))
+                .child(reaction_emoji_el(s, &r.emoji, scale))
                 .child(text(count.to_string()).font(type_label()).color(fg_muted())),
         );
     }
@@ -1660,6 +1722,9 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
             if dlg.can_remove {
                 urow = urow.child(
                     el().key(format!("dc-reactor-rm-{}", user.id))
+                        .role("button")
+                        .label_static("Remove reaction")
+                        .focusable(true)
                         .size(26.0, 26.0)
                         .radius(13.0)
                         .hover(bad().alpha(0.22))
@@ -1677,7 +1742,7 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
             && let Some(last_id) = dlg.users.last().map(|u| u.id.clone())
         {
             users_list = users_list.child(
-                glass_button("dc-reactors-more", "Load more", None)
+                glass_button_opt("dc-reactors-more", "Load more", None, false)
                     .on_press(move |s: &mut AppState| s.load_reactors_page(Some(&last_id))),
             );
         }
@@ -1690,8 +1755,6 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
         .padding(16.0)
         .gap(12.0)
         .radius(RADIUS_PANEL)
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .transition(modal_card_transition())
         .child(
             row()
@@ -1701,6 +1764,9 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
                 .child(text("Reactions").font(type_section()).color(FG))
                 .child(
                     el().key("dc-reactors-close")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .size(26.0, 26.0)
                         .radius(13.0)
                         .hover(hover_fill())
@@ -1740,8 +1806,7 @@ pub fn reactions_dialog_overlay(s: &AppState, blur: bool, scale: f32) -> Option<
                 ),
         );
 
-    let _ = blur;
-    let card = apply_glass(card, ExoGlass::Sheet, false)
+    let card = apply_glass(card, ExoGlass::Sheet)
         .modal(true, |s: &mut AppState| {
             s.discord.chat.reactors_dialog = None
         })

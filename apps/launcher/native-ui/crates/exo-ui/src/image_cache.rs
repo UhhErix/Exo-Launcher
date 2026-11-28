@@ -23,9 +23,9 @@ pub fn scale_bucket(scale: f32) -> u8 {
 
 pub fn budget_for_scale(scale: f32) -> (usize, usize) {
     match scale_bucket(scale) {
-        0 => (96 << 20, 320),
-        1 => (144 << 20, 384),
-        _ => (192 << 20, 448),
+        0 => (192 << 20, 384),
+        1 => (256 << 20, 448),
+        _ => (320 << 20, 512),
     }
 }
 
@@ -34,12 +34,12 @@ pub fn bucket_dim(max_dim: f32) -> f32 {
         64.0
     } else if max_dim <= 140.0 {
         128.0
-    } else if max_dim <= 400.0 {
-        360.0
-    } else if max_dim <= 720.0 {
-        640.0
+    } else if max_dim <= 512.0 {
+        480.0
+    } else if max_dim <= 800.0 {
+        720.0
     } else {
-        1440.0
+        1920.0
     }
 }
 
@@ -54,6 +54,7 @@ struct CacheEntry {
     last_used: u64,
     bytes: usize,
     pending_est: usize,
+    stage: usize,
 }
 
 pub struct ImageLruCache {
@@ -162,10 +163,26 @@ impl ImageLruCache {
         Some(out)
     }
 
+    pub fn stage(&self, key: &str) -> usize {
+        self.entries.get(key).map_or(0, |e| e.stage)
+    }
+
     pub fn insert(
         &mut self,
         key: String,
         image: Option<Image>,
+        room: CacheRoom,
+        dim_pt: f32,
+        scale: f32,
+    ) {
+        self.insert_staged(key, image, 0, room, dim_pt, scale);
+    }
+
+    pub fn insert_staged(
+        &mut self,
+        key: String,
+        image: Option<Image>,
+        stage: usize,
         room: CacheRoom,
         dim_pt: f32,
         scale: f32,
@@ -197,6 +214,7 @@ impl ImageLruCache {
                 last_used: tick,
                 bytes,
                 pending_est,
+                stage,
             },
         ) {
             self.total_bytes = self.total_bytes.saturating_sub(old.bytes);

@@ -189,6 +189,8 @@ internal sealed class NeuralNoiseSuppressor : IDisposable
     private readonly float[] _outMono48 = new float[Opus.FrameSamples];
     private readonly float[] _mono16In = new float[Opus.FrameSamples / 3];
     private readonly float[] _mono16Out = new float[Opus.FrameSamples / 3];
+    private const float LevelSeconds = 3f, LevelFrom = -70f, MostLiftDb = 40f, MostCutDb = 20f;
+    private float _levelDb = float.NaN;
     private float _lastSample16;
     private float _lastLimit = float.NaN;
     private double _emaMsPer10Ms;
@@ -208,34 +210,27 @@ internal sealed class NeuralNoiseSuppressor : IDisposable
         _vox = vox;
     }
 
+    internal static NeuralNoiseSuppressor? CreateUnverifiedForTests(string modelPath)
+    {
+        var h = ExoVoiceMl.CreateDpdfNet(modelPath, intraThreads: 1);
+        return h != 0 ? new NeuralNoiseSuppressor(VoiceModelTier.DpdfNetBaseline, h, 0) : null;
+    }
+
     internal static NeuralNoiseSuppressor? Create(VoiceModelTier tier)
     {
         try
         {
             if (tier == VoiceModelTier.DpdfNetBaseline)
             {
-                if (!VoiceModels.BaselineReady() && !File.Exists(VoiceModels.BaselineModelPath)) return null;
+                if (!VoiceModels.BaselineReady()) return null;
                 var h = ExoVoiceMl.CreateDpdfNet(VoiceModels.BaselineModelPath, intraThreads: 1);
                 return h != 0 ? new NeuralNoiseSuppressor(tier, h, 0) : null;
             }
             if (tier == VoiceModelTier.DpdfNet48kHr)
             {
-                if (!VoiceModels.HighQualityReady() && !File.Exists(VoiceModels.HighQualityModelPath)) return null;
+                if (!VoiceModels.HighQualityReady()) return null;
                 var h = ExoVoiceMl.CreateDpdfNet(VoiceModels.HighQualityModelPath, intraThreads: 1);
                 return h != 0 ? new NeuralNoiseSuppressor(tier, h, 0) : null;
-            }
-            if (tier == VoiceModelTier.VoxLockTse)
-            {
-                if (!VoiceModels.VoxLockReady()) return null;
-                if (VoiceModels.LoadEnrollmentAudio() is not { } enroll) return null;
-                var h = ExoVoiceMl.CreateVoxLock(VoiceModels.VoxLockEnrollPath, VoiceModels.VoxLockChunkPath, intraThreads: 1);
-                if (h == 0) return null;
-                if (!ExoVoiceMl.EnrollVoxLock16k(h, enroll))
-                {
-                    ExoVoiceMl.DestroyVoxLock(h);
-                    return null;
-                }
-                return new NeuralNoiseSuppressor(tier, 0, h);
             }
             return null;
         }
@@ -249,8 +244,21 @@ internal sealed class NeuralNoiseSuppressor : IDisposable
     internal void Process(float[] stereo, int limitDb)
     {
         if (_failed || stereo.Length != VoiceAudio.FrameFloats) return;
+        double power = 0;
         for (var i = 0; i < Opus.FrameSamples; i++)
-            _mono48[i] = 0.5f * (stereo[2 * i] + stereo[2 * i + 1]);
+        {
+            var s = _mono48[i] = 0.5f * (stereo[2 * i] + stereo[2 * i + 1]);
+            power += s * (double)s;
+        }
+        var db = 10f * MathF.Log10((float)(power / Opus.FrameSamples) + 1e-12f);
+        if (db > LevelFrom && (SpeechDb is null || SpeechDb > VoiceGate.SpeechDb))
+            _levelDb = float.IsNaN(_levelDb) ? db : _levelDb + (db - _levelDb) * Opus.FrameSamples / (LevelSeconds * Opus.SampleRate);
+        var gain = float.IsNaN(_levelDb) ? 1f : MathF.Pow(10f, Math.Clamp(NoiseSuppressor.ModelDb - _levelDb, -MostCutDb, MostLiftDb) / 20f);
+        if (gain != 1f)
+        {
+            for (var i = 0; i < stereo.Length; i++) stereo[i] *= gain;
+            for (var i = 0; i < Opus.FrameSamples; i++) _mono48[i] *= gain;
+        }
 
         var t0 = Stopwatch.GetTimestamp();
         float speech;
@@ -283,6 +291,8 @@ internal sealed class NeuralNoiseSuppressor : IDisposable
         }
         else
         {
+            if (gain != 1f)
+                for (var i = 0; i < stereo.Length; i++) stereo[i] /= gain;
             return;
         }
 
@@ -295,10 +305,17 @@ internal sealed class NeuralNoiseSuppressor : IDisposable
         {
             _failed = true;
             SpeechDb = null;
+            if (gain != 1f)
+                for (var i = 0; i < stereo.Length; i++) stereo[i] /= gain;
             return;
         }
 
         SpeechDb = speech;
+        if (gain != 1f)
+        {
+            for (var i = 0; i < stereo.Length; i++) stereo[i] /= gain;
+            for (var i = 0; i < Opus.FrameSamples; i++) _mono48[i] /= gain;
+        }
         for (var i = 0; i < Opus.FrameSamples; i++)
             _outMono48[i] = stereo[2 * i];
         _delay.Add(_mono48, _outMono48);

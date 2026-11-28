@@ -2,9 +2,10 @@ use crate::image_cache::CacheRoom;
 use crate::library_state::gift_key;
 use crate::state::AppState;
 use exo_kit::{
-    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_QUICK, apply_glass,
-    bad, fg_muted, glass_control_fill, glass_panel_opt, glass_rim, good, hover_fill, icon_gift,
-    popover_transition_for, pressed_fill, surface_card, type_control, type_section, type_small,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    SPRING_QUICK, apply_glass, bad, fg_muted, glass_control_fill, glass_rim, good, hover_fill,
+    icon_gift, popover_transition_for, pressed_fill, surface_card, type_control, type_section,
+    type_small,
 };
 use exo_rpc::StoreGift;
 use rune::{Align, Cursor, El, ScrollSpec, Side, SurfaceFit, Tx, col, el, row, text};
@@ -42,11 +43,10 @@ pub fn gifts_pill(s: &AppState) -> Option<El> {
             .child(icon_gift(14.0, FG))
             .child(text(label).font(type_small()).color(FG)),
         ExoGlass::Tinted(good().alpha(0.32)),
-        true,
     ))
 }
 
-pub fn gifts_popover_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
+pub fn gifts_popover_overlay(s: &AppState, scale: f32) -> Vec<El> {
     if !s.lib.gifts_open {
         return Vec::new();
     }
@@ -60,26 +60,36 @@ pub fn gifts_popover_overlay(s: &AppState, scale: f32, blur: bool) -> Vec<El> {
         .map(|gift| gift_card_row(gift, s, scale))
         .collect();
 
-    let panel = glass_panel_opt("gifts-popover-panel", 560.0, blur)
-        .max_h(520.0)
-        .transition(popover_transition_for(Side::Top, Align::End))
-        .focus_group()
-        .focus_return("home-gifts-pill")
-        .anchored_fit("home-gifts-pill", Side::Top, Align::End, 8.0)
-        .px(12.0)
-        .pt(10.0)
-        .pb(12.0)
-        .gap(8.0)
-        .child(text("Gifts waiting").font(type_small()).color(fg_muted()))
-        .child(
-            col()
-                .w_full()
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .gap(8.0)
-                .children(rows),
-        );
+    let panel = apply_glass(
+        col()
+            .key("gifts-popover-panel")
+            .w(560.0)
+            .radius(RADIUS_PANEL)
+            .continuous_corners()
+            .clip_rounded(RADIUS_PANEL)
+            .hit()
+            .cursor(Cursor::Default),
+        ExoGlass::Popover,
+    )
+    .max_h(520.0)
+    .transition(popover_transition_for(Side::Top, Align::End))
+    .focus_group()
+    .focus_return("home-gifts-pill")
+    .anchored_fit("home-gifts-pill", Side::Top, Align::End, 8.0)
+    .px(12.0)
+    .pt(10.0)
+    .pb(12.0)
+    .gap(8.0)
+    .child(text("Gifts waiting").font(type_small()).color(fg_muted()))
+    .child(
+        col()
+            .w_full()
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .gap(8.0)
+            .children(rows),
+    );
 
     vec![
         el().key("gifts-popover-root")

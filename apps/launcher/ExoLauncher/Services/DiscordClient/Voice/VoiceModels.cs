@@ -12,51 +12,60 @@ internal enum VoiceModelTier
 
 internal static class VoiceModels
 {
-    internal const string RepoOwner = "UhhErix";
-    internal const string RepoName = "Exo-Launcher";
-    internal const string ReleaseTag = "voice-models-v1";
-
     internal static readonly GitHubReleaseAsset DpdfNetBaselineAsset = new(
-        "UhhErix", "Exo-Launcher", "voice-models-v1", "exo_dpdfnet_baseline_gaming.onnx",
-        8_729_975, "0c3b0d24f518d4c12c18d6363d69f8983e509718318fabbab23488485e075ca1");
+        "UhhErix", "Exo-Launcher", "voice-models-v2", "dpdfnet_baseline.onnx",
+        8_791_035, "debaf0e8893479fca91b8b4c1eae8db195aa8980ccc9012f5809fde2b738151a");
 
     internal static readonly GitHubReleaseAsset DpdfNet48kHrAsset = new(
-        "UhhErix", "Exo-Launcher", "voice-models-v1", "exo_dpdfnet2_48khz_hr_gaming.onnx",
-        10_504_629, "e6a453bd093171c7389d123fe71acd4bd6effe9ec0ff767abb12b70cfce7a755");
+        "UhhErix", "Exo-Launcher", "voice-models-v2", "dpdfnet2_48khz_hr.onnx",
+        10_596_848, "0b399f8a58dc4d70d8cd97541f5c39869406145193b957d00a03b66070944928");
 
-    internal static readonly GitHubReleaseAsset VoxLockEnrollAsset = new(
-        "UhhErix", "Exo-Launcher", "voice-models-v1", "voxlock_enroll.onnx",
-        12_476_014, "5d06048c156bb8cd422d29848e6d38fb26a7b39f6f7fd92eccf2a6ed1ce003c6");
+    internal static readonly GitHubReleaseAsset TitaNetAsset = new(
+        "UhhErix", "Exo-Launcher", "voice-models-v2", "nemo_en_titanet_small.onnx",
+        40_257_283, "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e");
 
-    internal static readonly GitHubReleaseAsset VoxLockChunkAsset = new(
-        "UhhErix", "Exo-Launcher", "voice-models-v1", "voxlock_chunk_int8.onnx",
-        66_608_910, "df61a9d0062b0adbcf1182302b1eb8b815f15ac47ea4923e8e164c1aff64121d");
+    internal static IReadOnlyList<GitHubReleaseAsset> Bundled { get; } =
+        [DpdfNetBaselineAsset, DpdfNet48kHrAsset, TitaNetAsset];
+
+    internal static readonly string[] RetiredModelDownloads =
+    [
+        "titanet_small.onnx",
+        "exo_dpdfnet_baseline_gaming.onnx",
+        "exo_dpdfnet2_48khz_hr_gaming.onnx",
+        "voxlock_enroll.onnx",
+        "voxlock_chunk_int8.onnx",
+    ];
 
     internal static string VoiceDir => Path.Combine(PathHelper.AppDataDir, "voice");
 
-    internal static string BaselineModelPath { get; set; } = Path.Combine(VoiceDir, "exo_dpdfnet_baseline_gaming.onnx");
-    internal static string HighQualityModelPath { get; set; } = Path.Combine(VoiceDir, "exo_dpdfnet2_48khz_hr_gaming.onnx");
-    internal static string VoxLockEnrollPath { get; set; } = Path.Combine(VoiceDir, "voxlock_enroll.onnx");
-    internal static string VoxLockChunkPath { get; set; } = Path.Combine(VoiceDir, "voxlock_chunk_int8.onnx");
-    internal static string EnrollmentAudioPath { get; set; } = Path.Combine(VoiceDir, "my-voice-enroll.bin");
+    internal static string BundledPath(GitHubReleaseAsset asset) =>
+        Path.Combine(AppContext.BaseDirectory, "voice", "models", asset.AssetName);
 
-    internal static readonly ExoComponent BaselineComponent = new(
-        "Exo Voice AI model",
-        "Voice cleanup",
-        DpdfNetBaselineAsset.ExpectedSize,
-        0,
-        BaselineReady,
-        (progress, ct) => VerifiedGitHubReleaseDownloader.Shared.DownloadPinnedAsync(
-            DpdfNetBaselineAsset, BaselineModelPath, _ => true, ct, done => progress(done, unpacking: false)),
-        () => BaselineModelPath)
+    internal static string ModelPath(GitHubReleaseAsset asset)
     {
-        HasStandIn = true,
-    };
+        var bundled = BundledPath(asset);
+#if DEBUG
+        var downloaded = Path.Combine(VoiceDir, asset.AssetName);
+        if (!File.Exists(bundled) && File.Exists(downloaded)) return downloaded;
+#endif
+        return bundled;
+    }
+
+    internal static IEnumerable<string> RetiredDownloads()
+    {
+#if DEBUG
+        return [];
+#else
+        return [.. Bundled.Select(asset => Path.Combine(VoiceDir, asset.AssetName)), .. RetiredModelDownloads.Select(name => Path.Combine(VoiceDir, name))];
+#endif
+    }
+
+    internal static string BaselineModelPath { get; set; } = ModelPath(DpdfNetBaselineAsset);
+    internal static string HighQualityModelPath { get; set; } = ModelPath(DpdfNet48kHrAsset);
+    internal static string EnrollmentAudioPath { get; set; } = Path.Combine(VoiceDir, "my-voice-enroll.bin");
 
     private static (long Size, DateTime Written, bool Whole)? _baselineChecked;
     private static (long Size, DateTime Written, bool Whole)? _hqChecked;
-    private static (long Size, DateTime Written, bool Whole)? _voxEnrollChecked;
-    private static (long Size, DateTime Written, bool Whole)? _voxChunkChecked;
 
     private static bool CheckPinned(GitHubReleaseAsset asset, string path, ref (long Size, DateTime Written, bool Whole)? cache)
     {
@@ -70,57 +79,7 @@ internal static class VoiceModels
 
     internal static bool BaselineReady() => CheckPinned(DpdfNetBaselineAsset, BaselineModelPath, ref _baselineChecked);
     internal static bool HighQualityReady() => CheckPinned(DpdfNet48kHrAsset, HighQualityModelPath, ref _hqChecked);
-    internal static bool VoxLockReady() =>
-        CheckPinned(VoxLockEnrollAsset, VoxLockEnrollPath, ref _voxEnrollChecked)
-        && CheckPinned(VoxLockChunkAsset, VoxLockChunkPath, ref _voxChunkChecked);
-
-    internal static async Task<bool> EnsureBaselineAsync(CancellationToken ct)
-    {
-        if (BaselineReady()) return true;
-        try
-        {
-            await ExoComponents.FetchAsync(BaselineComponent, ct).ConfigureAwait(false);
-            return BaselineReady();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            AppLog.Info("Discord voice: Exo Voice AI model wasn't fetched (" + ex.GetType().Name + "); falling back to DeepFilterNet 3.");
-            return false;
-        }
-    }
-
-    internal static async Task<bool> EnsureHighQualityAsync(CancellationToken ct)
-    {
-        if (HighQualityReady()) return true;
-        try
-        {
-            await VerifiedGitHubReleaseDownloader.Shared.DownloadPinnedAsync(DpdfNet48kHrAsset, HighQualityModelPath, _ => true, ct).ConfigureAwait(false);
-            return HighQualityReady();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            AppLog.Info("Discord voice: 48 kHz studio voice model wasn't fetched (" + ex.GetType().Name + ").");
-            return false;
-        }
-    }
-
-    internal static async Task<bool> EnsureVoxLockAsync(CancellationToken ct)
-    {
-        if (VoxLockReady()) return true;
-        try
-        {
-            if (!CheckPinned(VoxLockEnrollAsset, VoxLockEnrollPath, ref _voxEnrollChecked))
-                await VerifiedGitHubReleaseDownloader.Shared.DownloadPinnedAsync(VoxLockEnrollAsset, VoxLockEnrollPath, _ => true, ct).ConfigureAwait(false);
-            if (!CheckPinned(VoxLockChunkAsset, VoxLockChunkPath, ref _voxChunkChecked))
-                await VerifiedGitHubReleaseDownloader.Shared.DownloadPinnedAsync(VoxLockChunkAsset, VoxLockChunkPath, _ => true, ct).ConfigureAwait(false);
-            return VoxLockReady();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            AppLog.Info("Discord voice: VoxLock voice isolation model wasn't fetched (" + ex.GetType().Name + ").");
-            return false;
-        }
-    }
+    internal static bool VoxLockReady() => false;
 
     internal static void SaveEnrollmentAudio(ReadOnlySpan<float> voice16k)
     {

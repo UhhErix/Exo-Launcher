@@ -667,3 +667,42 @@ describe('/health', () => {
     expect(healthRes.headers.get('Cache-Control')).toBe('no-store')
   })
 })
+
+describe('error counters', () => {
+  const sink = () => {
+    const sent = []
+    return { sent, SIGNAL: { writeDataPoint: (point) => sent.push(point) } }
+  }
+  const withRandom = async (value, run) => {
+    const real = Math.random
+    Math.random = () => value
+    try {
+      return await run()
+    } finally {
+      Math.random = real
+    }
+  }
+
+  it('counts each answer by route and status class, and nothing else', async () => {
+    const counter = sink()
+    await withRandom(0, async () => {
+      await callWorker('', counter, undefined, '/health')
+      await callWorker('', counter, undefined, '/v1/cover')
+      await callWorker('', counter, undefined, '/wp-login.php?user=erix')
+    })
+    expect(counter.sent.map((point) => point.blobs)).toEqual([
+      ['covers', 'health', '2xx'],
+      ['covers', 'cover', '4xx'],
+      ['covers', 'other', '4xx'],
+    ])
+    expect(JSON.stringify(counter.sent)).not.toMatch(/erix|198\./)
+  })
+
+  it('writes a success only one time in a hundred', async () => {
+    const counter = sink()
+    await withRandom(0.5, async () => {
+      await callWorker('', counter, undefined, '/health')
+    })
+    expect(counter.sent).toEqual([])
+  })
+})

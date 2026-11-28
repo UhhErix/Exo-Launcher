@@ -25,6 +25,15 @@ internal static class AchievementBanner
     private static Timer? _close, _wait;
     private static DateTimeOffset _closeAt;
     private static readonly Queue<Unlock> Waiting = new();
+    private static Microsoft.UI.Dispatching.DispatcherQueue? _queue;
+
+    private static Microsoft.UI.Dispatching.DispatcherQueue? Queue => _queue ?? App.MainAppWindow?.DispatcherQueue;
+
+    internal static void PlayTierSound(string tier, int volume)
+    {
+        if (volume > 0 && tier is "common" or "rare" or "epic" or "legendary" or "completion")
+            _ = Task.Run(() => Overlay.Play(tier, volume));
+    }
 
     internal static bool ShouldPrewarm(bool bannersEnabled, bool gameRunning, bool hasOverlay) =>
         bannersEnabled && gameRunning && !hasOverlay;
@@ -34,18 +43,19 @@ internal static class AchievementBanner
     private static bool IsGameRunning() =>
         Services.GameRunningSignal.Running || Services.LeanSignal.Active || App.Services.Launcher.AnyGameRunning;
 
-    internal static void Start()
+    internal static void Start(Microsoft.UI.Dispatching.DispatcherQueue? queue = null)
     {
+        if (queue is not null) _queue = queue;
         AchievementWatch.Unlocked += unlock =>
         {
-            if (App.MainAppWindow?.DispatcherQueue.Enqueue(() => Arrive(unlock)) != true) AppLog.Warn("Achievements: no window thread for the banner.");
+            if (Queue?.Enqueue(() => Arrive(unlock)) != true) AppLog.Warn("Achievements: no window thread for the banner.");
         };
         Services.LeanSignal.Changed += OnGameStateChanged;
     }
 
     private static void OnGameStateChanged()
     {
-        App.MainAppWindow?.DispatcherQueue.Enqueue(() =>
+        Queue?.Enqueue(() =>
         {
             var running = IsGameRunning();
             if (ShouldPrewarm(App.Services.Settings.Current.AchievementBanners, running, _overlay is not null || _creating is not null))
@@ -105,7 +115,7 @@ internal static class AchievementBanner
         {
             Waiting.Enqueue(unlock);
             AppLog.Info($"Achievements: {unlock.Name} waits, the game is in exclusive full screen ({Waiting.Count} waiting).");
-            (_wait ??= new Timer(_ => App.MainAppWindow?.DispatcherQueue.Enqueue(Release))).Change(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+            (_wait ??= new Timer(_ => Queue?.Enqueue(Release))).Change(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
             return;
         }
         _ = ShowAsync([unlock]);
@@ -124,7 +134,7 @@ internal static class AchievementBanner
     /// <summary>A game holds the screen in exclusive full screen, and Exo isn't in front.</summary>
     private static bool CannotShow() =>
         SHQueryUserNotificationState(out var state) == 0 && state == 3 // QUNS_RUNNING_D3D_FULL_SCREEN
-        && !(App.MainAppWindow is { } main && GetForegroundWindow() == WinRT.Interop.WindowNative.GetWindowHandle(main));
+        && !(Services.HostWindow.OwnerHwnd is var owner && owner != 0 && GetForegroundWindow() == owner);
 
     private static async Task ShowAsync(IReadOnlyList<Unlock> unlocks)
     {
@@ -142,7 +152,7 @@ internal static class AchievementBanner
             var closeAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(4 + 12 * unlocks.Count);
             if (closeAt < _closeAt) closeAt = _closeAt.AddSeconds(12 * unlocks.Count);
             _closeAt = closeAt;
-            (_close ??= new Timer(_ => App.MainAppWindow?.DispatcherQueue.Enqueue(OnIdle))).Change(closeAt - DateTimeOffset.UtcNow, Timeout.InfiniteTimeSpan);
+            (_close ??= new Timer(_ => Queue?.Enqueue(OnIdle))).Change(closeAt - DateTimeOffset.UtcNow, Timeout.InfiniteTimeSpan);
         }
         catch (Exception ex)
         {
@@ -328,7 +338,7 @@ internal static class AchievementBanner
                 return;
             }
             if (_loaded) return;
-            _readyFallback ??= new Timer(_ => App.MainAppWindow?.DispatcherQueue.Enqueue(MarkReady), null, TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
+            _readyFallback ??= new Timer(_ => Queue?.Enqueue(MarkReady), null, TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
         }
 
         internal void OnNavigationCompleted(bool isSuccess) => OnNavigated(isSuccess);
@@ -357,7 +367,7 @@ internal static class AchievementBanner
             catch (Exception ex) when (ex is JsonException or InvalidOperationException) { AppLog.Debug("Achievements: no sound: " + ex.Message); }
         }
 
-        private static void Play(string name, int volume)
+        internal static void Play(string name, int volume)
         {
             try
             {

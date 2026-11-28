@@ -16,7 +16,7 @@ public sealed partial class WebHostBridge
     {
         if (!Uri.TryCreate(ReadString(p, hasParams, "url"), UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps || !IsStoreHost(url.Host))
             return new { ok = false };
-        var owner = App.MainAppWindow is { } window ? WinRT.Interop.WindowNative.GetWindowHandle(window) : 0;
+        var owner = HostWindow.OwnerHwnd;
         var page = owner == 0 ? url : await StoreLinks.ResolveAsync(url, owner, ct).ConfigureAwait(true) ?? url;
         if (page.Scheme != Uri.UriSchemeHttps || !IsStoreHost(page.Host)) page = url;
         try

@@ -6,9 +6,9 @@ use crate::settings_state::{
 };
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, RADIUS_SMALL, SPRING_BASE, bad, exo_mark, fg_muted, glass_panel_opt, glass_rim_bottom,
-    glass_rim_top, glass_still_control_fill, hairline, modal_card_transition, scaled, type_body,
-    type_section, type_small, type_title,
+    BG, FG, RADIUS_SMALL, SPRING_BASE, bad, exo_mark, fg_muted, glass_panel, glass_rim_bottom,
+    glass_rim_top, glass_still_control_fill, hairline, modal_card_transition, scaled, scrim_fill,
+    type_body, type_section, type_small, type_title,
 };
 use rune::{
     Cursor, El, PasswordInput, TextStyle, Transition, col, edit_access, el, row, text, text_input,
@@ -1299,14 +1299,14 @@ pub fn account_step_view(s: &AppState) -> El {
     }
 }
 
-pub fn account_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
-    let card = glass_panel_opt("exo-account-sheet", 480.0, blur)
+pub fn account_sheet_layers(s: &AppState) -> Vec<El> {
+    let card = glass_panel("exo-account-sheet", 480.0)
         .padding(28.0)
         .gap(16.0)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal_trap()
-        .modal_scrim(BG.alpha(0.76))
+        .modal_scrim(scrim_fill())
         .child(row().w_full().justify_center().child(exo_mark(48.0, FG)))
         .child(
             row()

@@ -4,7 +4,7 @@ use exo_kit::{
     type_section, type_small, type_title,
 };
 use exo_rpc::DiscordUser;
-use rune::{Color, El, Span, TextStyle, col, el, row, text};
+use rune::{Color, El, Link, LinkPaint, Span, TextStyle, col, el, row, text};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -12,6 +12,7 @@ pub struct ParsedInline {
     pub plain: String,
     pub spans: Vec<Span>,
     pub strikes: Vec<(usize, usize)>,
+    pub links: Vec<(usize, usize, String)>,
     pub has_spoiler: bool,
 }
 
@@ -27,7 +28,7 @@ fn mention_fg() -> Color {
     hex(0x7dd3fc, 1.0)
 }
 
-fn link_fg() -> Color {
+pub(crate) fn link_fg() -> Color {
     hex(0x64d2ff, 1.0)
 }
 
@@ -91,10 +92,45 @@ pub fn parse_inline_with_channels(
     channels: &HashMap<String, String>,
     reveal_spoilers: bool,
 ) -> ParsedInline {
-    let mut plain = String::with_capacity(input.len());
-    let mut spans = Vec::new();
-    let mut strikes = Vec::new();
-    let mut has_spoiler = false;
+    let mut out = ParsedInline {
+        plain: String::with_capacity(input.len()),
+        spans: Vec::new(),
+        strikes: Vec::new(),
+        links: Vec::new(),
+        has_spoiler: false,
+    };
+    let cx = InlineCx {
+        mentions,
+        channels,
+        reveal_spoilers,
+    };
+    parse_into(input, &cx, &mut out);
+    out
+}
+
+struct InlineCx<'a> {
+    mentions: &'a [DiscordUser],
+    channels: &'a HashMap<String, String>,
+    reveal_spoilers: bool,
+}
+
+fn parse_styled(
+    inner: &str,
+    cx: &InlineCx,
+    out: &mut ParsedInline,
+    style: impl FnOnce(&mut Span),
+) -> (usize, usize) {
+    let start = out.plain.len();
+    let mark = out.spans.len();
+    parse_into(inner, cx, out);
+    let end = out.plain.len();
+    let mut sp = Span::new(start, end);
+    style(&mut sp);
+    out.spans.insert(mark, sp);
+    (start, end)
+}
+
+fn parse_into(input: &str, cx: &InlineCx, out: &mut ParsedInline) {
     let bytes = input.as_bytes();
     let len = bytes.len();
     let mut i = 0usize;
@@ -105,16 +141,16 @@ pub fn parse_inline_with_channels(
             && end_rel > 0
         {
             let inner = &input[i + 1..i + 1 + end_rel];
-            let start = plain.len();
-            plain.push(' ');
-            plain.push_str(inner);
-            plain.push(' ');
-            let end = plain.len();
+            let start = out.plain.len();
+            out.plain.push(' ');
+            out.plain.push_str(inner);
+            out.plain.push(' ');
+            let end = out.plain.len();
             let mut sp = Span::new(start, end).bg(code_bg(), 2.0);
             sp.mono = true;
             sp.size = Some(12.5);
             sp.color = Some(hex(0xe5e5ea, 1.0));
-            spans.push(sp);
+            out.spans.push(sp);
             i = i + 2 + end_rel;
             continue;
         }
@@ -123,23 +159,36 @@ pub fn parse_inline_with_channels(
             && let Some(end_rel) = input[i + 2..].find("||")
             && end_rel > 0
         {
-            has_spoiler = true;
+            out.has_spoiler = true;
             let inner = &input[i + 2..i + 2 + end_rel];
-            let start = plain.len();
-            if reveal_spoilers {
-                plain.push_str(inner);
-                let end = plain.len();
-                let mut sp = Span::new(start, end).bg(subtle_fill(), 2.0);
-                sp.color = Some(FG);
-                spans.push(sp);
+            if cx.reveal_spoilers {
+                parse_styled(inner, cx, out, |sp| {
+                    sp.bg = Some(subtle_fill());
+                    sp.bg_pad = 2.0;
+                    sp.color = Some(FG);
+                });
             } else {
-                plain.push_str(" spoiler ");
-                let end = plain.len();
+                let start = out.plain.len();
+                out.plain.push_str(" spoiler ");
+                let end = out.plain.len();
                 let mut sp = Span::new(start, end).bg(spoiler_hidden_bg(), 2.0);
                 sp.color = Some(fg_faint());
-                spans.push(sp);
+                out.spans.push(sp);
             }
             i = i + 4 + end_rel;
+            continue;
+        }
+
+        if input[i..].starts_with("***")
+            && let Some(end_rel) = input[i + 3..].find("***")
+            && end_rel > 0
+        {
+            let inner = &input[i + 3..i + 3 + end_rel];
+            parse_styled(inner, cx, out, |sp| {
+                sp.weight = Some(680.0);
+                sp.italic = true;
+            });
+            i = i + 6 + end_rel;
             continue;
         }
 
@@ -148,12 +197,7 @@ pub fn parse_inline_with_channels(
             && end_rel > 0
         {
             let inner = &input[i + 2..i + 2 + end_rel];
-            let start = plain.len();
-            plain.push_str(inner);
-            let end = plain.len();
-            let mut sp = Span::new(start, end);
-            sp.weight = Some(680.0);
-            spans.push(sp);
+            parse_styled(inner, cx, out, |sp| sp.weight = Some(680.0));
             i = i + 4 + end_rel;
             continue;
         }
@@ -163,13 +207,8 @@ pub fn parse_inline_with_channels(
             && end_rel > 0
         {
             let inner = &input[i + 2..i + 2 + end_rel];
-            let start = plain.len();
-            plain.push_str(inner);
-            let end = plain.len();
-            strikes.push((start, end));
-            let mut sp = Span::new(start, end);
-            sp.color = Some(fg_muted());
-            spans.push(sp);
+            let range = parse_styled(inner, cx, out, |sp| sp.color = Some(fg_muted()));
+            out.strikes.push(range);
             i = i + 4 + end_rel;
             continue;
         }
@@ -179,13 +218,7 @@ pub fn parse_inline_with_channels(
             && end_rel > 0
         {
             let inner = &input[i + 2..i + 2 + end_rel];
-            let start = plain.len();
-            plain.push_str(inner);
-            let end = plain.len();
-            let mut sp = Span::new(start, end);
-            sp.weight = Some(550.0);
-            sp.color = Some(FG);
-            spans.push(sp);
+            parse_styled(inner, cx, out, |sp| sp.underline = Some(FG));
             i = i + 4 + end_rel;
             continue;
         }
@@ -196,12 +229,7 @@ pub fn parse_inline_with_channels(
             && end_rel > 0
         {
             let inner = &input[i + 1..i + 1 + end_rel];
-            let start = plain.len();
-            plain.push_str(inner);
-            let end = plain.len();
-            let mut sp = Span::new(start, end);
-            sp.italic = true;
-            spans.push(sp);
+            parse_styled(inner, cx, out, |sp| sp.italic = true);
             i = i + 2 + end_rel;
             continue;
         }
@@ -214,7 +242,8 @@ pub fn parse_inline_with_channels(
                 && !uid.starts_with('&')
                 && uid.chars().all(|c| c.is_ascii_digit())
             {
-                let label = mentions
+                let label = cx
+                    .mentions
                     .iter()
                     .find(|u| u.id == uid)
                     .map(|u| {
@@ -225,53 +254,55 @@ pub fn parse_inline_with_channels(
                             .to_string()
                     })
                     .unwrap_or_else(|| "user".into());
-                let start = plain.len();
-                plain.push_str(&format!(" @{label} "));
-                let end = plain.len();
+                let start = out.plain.len();
+                out.plain.push_str(&format!(" @{label} "));
+                let end = out.plain.len();
                 let mut sp = Span::new(start, end).bg(mention_bg(), 2.0);
                 sp.color = Some(mention_fg());
                 sp.weight = Some(560.0);
-                spans.push(sp);
+                out.spans.push(sp);
                 i = i + 2 + close_rel;
                 continue;
             }
             if let Some(rid) = token.strip_prefix("@&")
                 && rid.chars().all(|c| c.is_ascii_digit())
             {
-                let start = plain.len();
-                plain.push_str(" @role ");
-                let end = plain.len();
+                let start = out.plain.len();
+                let label = cx
+                    .channels
+                    .get(&format!("&{rid}"))
+                    .filter(|name| !name.is_empty())
+                    .map(|name| format!(" @{} ", name.trim_start_matches('@')))
+                    .unwrap_or_else(|| " @role ".into());
+                out.plain.push_str(&label);
+                let end = out.plain.len();
                 let mut sp = Span::new(start, end).bg(mention_bg(), 2.0);
                 sp.color = Some(mention_fg());
                 sp.weight = Some(560.0);
-                spans.push(sp);
+                out.spans.push(sp);
                 i = i + 2 + close_rel;
                 continue;
             }
             if let Some(cid) = token.strip_prefix('#')
                 && cid.chars().all(|c| c.is_ascii_digit())
             {
-                let start = plain.len();
-                let label = channels
+                let start = out.plain.len();
+                let label = cx
+                    .channels
                     .get(cid)
                     .map(|name| format!(" #{name} "))
                     .unwrap_or_else(|| " #channel ".into());
-                plain.push_str(&label);
-                let end = plain.len();
+                out.plain.push_str(&label);
+                let end = out.plain.len();
                 let mut sp = Span::new(start, end).bg(subtle_fill(), 2.0);
                 sp.color = Some(FG);
                 sp.weight = Some(540.0);
-                spans.push(sp);
+                out.spans.push(sp);
                 i = i + 2 + close_rel;
                 continue;
             }
             if token.starts_with("https://") || token.starts_with("http://") {
-                let start = plain.len();
-                plain.push_str(token);
-                let end = plain.len();
-                let mut sp = Span::new(start, end);
-                sp.color = Some(link_fg());
-                spans.push(sp);
+                push_url(out, token);
                 i = i + 2 + close_rel;
                 continue;
             }
@@ -279,12 +310,12 @@ pub fn parse_inline_with_channels(
                 && let Some((ename, _)) = rest.split_once(':')
                 && !ename.is_empty()
             {
-                let start = plain.len();
-                plain.push_str(&format!(":{ename}:"));
-                let end = plain.len();
+                let start = out.plain.len();
+                out.plain.push_str(&format!(":{ename}:"));
+                let end = out.plain.len();
                 let mut sp = Span::new(start, end).bg(subtle_fill(), 2.0);
                 sp.color = Some(FG);
-                spans.push(sp);
+                out.spans.push(sp);
                 i = i + 2 + close_rel;
                 continue;
             }
@@ -294,12 +325,12 @@ pub fn parse_inline_with_channels(
                 let style = parts.next().unwrap_or("f");
                 if let Ok(unix) = ts_part.parse::<i64>() {
                     let formatted = format_discord_timestamp(unix, style);
-                    let start = plain.len();
-                    plain.push_str(&format!(" {formatted} "));
-                    let end = plain.len();
+                    let start = out.plain.len();
+                    out.plain.push_str(&format!(" {formatted} "));
+                    let end = out.plain.len();
                     let mut sp = Span::new(start, end).bg(subtle_fill(), 2.0);
                     sp.color = Some(fg_muted());
-                    spans.push(sp);
+                    out.spans.push(sp);
                     i = i + 2 + close_rel;
                     continue;
                 }
@@ -312,13 +343,13 @@ pub fn parse_inline_with_channels(
             } else {
                 "@here"
             };
-            let start = plain.len();
-            plain.push_str(&format!(" {word} "));
-            let end = plain.len();
+            let start = out.plain.len();
+            out.plain.push_str(&format!(" {word} "));
+            let end = out.plain.len();
             let mut sp = Span::new(start, end).bg(mention_bg(), 2.0);
             sp.color = Some(mention_fg());
             sp.weight = Some(600.0);
-            spans.push(sp);
+            out.spans.push(sp);
             i += word.len();
             continue;
         }
@@ -337,13 +368,11 @@ pub fn parse_inline_with_channels(
                     .trim_start_matches('<')
                     .trim_end_matches('>');
                 if raw_url.starts_with("https://") || raw_url.starts_with("http://") {
-                    let start = plain.len();
-                    plain.push_str(label);
-                    let end = plain.len();
-                    let mut sp = Span::new(start, end);
-                    sp.color = Some(FG);
-                    sp.underline = Some(FG);
-                    spans.push(sp);
+                    let (start, end) = parse_styled(label, cx, out, |sp| {
+                        sp.color = Some(FG);
+                        sp.underline = Some(FG);
+                    });
+                    out.links.push((start, end, raw_url.to_string()));
                     i = url_start + close_paren + 1;
                     continue;
                 }
@@ -354,28 +383,33 @@ pub fn parse_inline_with_channels(
             let end_rel = input[i..]
                 .find(|c: char| c.is_whitespace() || matches!(c, ')' | ']' | '>'))
                 .unwrap_or(len - i);
-            let url = &input[i..i + end_rel];
-            let start = plain.len();
-            plain.push_str(url);
-            let end = plain.len();
-            let mut sp = Span::new(start, end);
-            sp.color = Some(link_fg());
-            spans.push(sp);
+            push_url(out, &input[i..i + end_rel]);
             i += end_rel;
             continue;
         }
 
         let ch = input[i..].chars().next().unwrap_or(' ');
-        plain.push(ch);
+        out.plain.push(ch);
         i += ch.len_utf8();
     }
+}
 
-    ParsedInline {
-        plain,
-        spans,
-        strikes,
-        has_spoiler,
+pub fn lookalike_question(brand: &str) -> String {
+    if brand.is_empty() {
+        "This link hides where it goes. Press it again to open it anyway.".into()
+    } else {
+        format!("Fake {brand} link? Press it again to open it anyway.")
     }
+}
+
+fn push_url(out: &mut ParsedInline, url: &str) {
+    let start = out.plain.len();
+    out.plain.push_str(url);
+    let end = out.plain.len();
+    let mut sp = Span::new(start, end);
+    sp.color = Some(link_fg());
+    out.spans.push(sp);
+    out.links.push((start, end, url.to_string()));
 }
 
 fn render_inline_text(
@@ -393,6 +427,7 @@ fn render_inline_text(
         .color(color)
         .w_full()
         .wrap()
+        .selectable(true)
         .span_radius(4.0);
     if !parsed.spans.is_empty() {
         t = t.spans(parsed.spans);
@@ -400,9 +435,18 @@ fn render_inline_text(
     for (a, b) in parsed.strikes {
         t = t.strike(a, b, None);
     }
+    if !parsed.links.is_empty() {
+        for (a, b, url) in parsed.links {
+            t = t.link(Link::new(a..b, url).hover(LinkPaint::new().underline(link_fg())));
+        }
+        t = t.on_link(|s: &mut AppState, url: &str, _| s.open_message_link(url));
+    }
     if parsed.has_spoiler && !reveal_spoilers {
         let mid = msg_id.to_string();
         return el()
+            .role("button")
+            .label_static("Reveal spoiler")
+            .focusable(true)
             .w_full()
             .hit()
             .press_on_down()
@@ -473,7 +517,8 @@ pub fn render_markdown_with_channels(
                     .color(hex(0xe4e4eb, 1.0))
                     .spans(vec![mono_sp])
                     .w_full()
-                    .wrap(),
+                    .wrap()
+                    .selectable(true),
             );
             blocks = blocks.child(slab);
             continue;
@@ -625,6 +670,9 @@ mod tests {
 
         let mut ch_map = HashMap::new();
         ch_map.insert("12345".into(), "rules".into());
+        ch_map.insert("&999".into(), "Moderator".into());
+        let named = parse_inline_with_channels("Ping <@&999>", &mentions, &ch_map, false);
+        assert!(named.plain.contains("@Moderator"));
         let linked = parse_inline_with_channels(
             "[Download Exo Launcher](https://getexo.app/download/launcher) · See <#12345>",
             &mentions,
@@ -634,5 +682,116 @@ mod tests {
         assert!(linked.plain.contains("Download Exo Launcher"));
         assert!(!linked.plain.contains("https://"));
         assert!(linked.plain.contains("#rules"));
+    }
+
+    fn covers(p: &ParsedInline, start: usize, end: usize, test: fn(&Span) -> bool) -> bool {
+        p.spans
+            .iter()
+            .any(|s| s.start as usize == start && s.end as usize == end && test(s))
+    }
+
+    #[test]
+    fn masked_links_render_inside_bold_italic_and_underline() {
+        let p = parse_inline(
+            "**[Download Exo Launcher](https://getexo.app/download/launcher)** · [Changelog](https://getexo.app/changelog)",
+            &[],
+            false,
+        );
+        assert_eq!(p.plain, "Download Exo Launcher · Changelog");
+        let end = "Download Exo Launcher".len();
+        assert!(covers(&p, 0, end, |s| s.weight == Some(680.0)));
+        assert!(covers(&p, 0, end, |s| s.underline.is_some()));
+        let cl = p.plain.find("Changelog").unwrap();
+        assert!(covers(&p, cl, p.plain.len(), |s| s.underline.is_some()));
+
+        let cases: [(&str, fn(&Span) -> bool); 3] = [
+            ("*[Docs](https://getexo.app/help)*", |s| s.italic),
+            ("__[Docs](https://getexo.app/help)__", |s| {
+                s.underline.is_some() && s.color.is_none()
+            }),
+            ("~~[Docs](https://getexo.app/help)~~", |s| {
+                s.color == Some(fg_muted())
+            }),
+        ];
+        for (src, style) in cases {
+            let p = parse_inline(src, &[], false);
+            assert_eq!(p.plain, "Docs", "{src}");
+            assert!(covers(&p, 0, 4, style), "{src}");
+            assert!(covers(&p, 0, 4, |s| s.underline.is_some()), "{src}");
+        }
+    }
+
+    #[test]
+    fn link_text_keeps_bold_italic_and_underline() {
+        let p = parse_inline(
+            "[**Download** *now* __here__](https://getexo.app/download/launcher)",
+            &[],
+            false,
+        );
+        assert_eq!(p.plain, "Download now here");
+        assert!(covers(&p, 0, p.plain.len(), |s| s.underline.is_some()));
+        assert!(covers(&p, 0, 8, |s| s.weight == Some(680.0)));
+        assert!(covers(&p, 9, 12, |s| s.italic));
+        assert!(covers(&p, 13, 17, |s| s.underline.is_some() && s.color.is_none()));
+        assert_eq!(
+            p.links,
+            vec![(0, 17, "https://getexo.app/download/launcher".to_string())]
+        );
+    }
+
+    #[test]
+    fn triple_stars_are_bold_italic_and_double_underscores_underline() {
+        let p = parse_inline("***both*** and __under__", &[], false);
+        assert_eq!(p.plain, "both and under");
+        assert!(covers(&p, 0, 4, |s| s.italic && s.weight == Some(680.0)));
+        let u = p.plain.find("under").unwrap();
+        assert!(covers(&p, u, u + 5, |s| s.underline.is_some()
+            && s.weight.is_none()));
+    }
+
+    #[test]
+    fn a_lookalike_link_asks_before_it_opens() {
+        assert_eq!(
+            lookalike_question("Discord"),
+            "Fake Discord link? Press it again to open it anyway."
+        );
+        assert_eq!(
+            lookalike_question(""),
+            "This link hides where it goes. Press it again to open it anyway."
+        );
+        let mut s = AppState::default();
+        s.discord.link_confirm = Some("https://disc0rd.gift/x".into());
+        s.open_message_link("https://getexo.app/help");
+        assert_eq!(s.discord.link_confirm, None);
+    }
+
+    #[test]
+    fn masked_bare_and_angle_links_are_pressable() {
+        let p = parse_inline(
+            "[Help](https://getexo.app/help) https://getexo.app/a <https://getexo.app/b>",
+            &[],
+            false,
+        );
+        assert_eq!(p.plain, "Help https://getexo.app/a https://getexo.app/b");
+        let a = p.plain.find("https://getexo.app/a").unwrap();
+        let b = p.plain.find("https://getexo.app/b").unwrap();
+        assert_eq!(
+            p.links,
+            vec![
+                (0, 4, "https://getexo.app/help".to_string()),
+                (a, a + 20, "https://getexo.app/a".to_string()),
+                (b, b + 20, "https://getexo.app/b".to_string()),
+            ]
+        );
+        assert!(
+            parse_inline("[x](javascript:alert)", &[], false)
+                .links
+                .is_empty()
+        );
+        assert!(
+            parse_inline("||https://getexo.app/s||", &[], false)
+                .links
+                .is_empty()
+        );
     }
 }

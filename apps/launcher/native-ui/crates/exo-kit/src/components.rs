@@ -2,8 +2,8 @@ use crate::glass::{ExoGlass, apply_glass, apply_glass_opt};
 use crate::icons::{icon_close, icon_minimize, icon_win_maximize, icon_win_restore};
 use crate::tokens::{
     BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
-    SPRING_MOVE, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, bad, fg_muted, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, pressed_fill, subtle_fill,
+    SPRING_POPOVER, SPRING_QUICK, SPRING_SMOOTH, SPRING_SNAPPY, TITLEBAR_HEIGHT, TRANSPARENT, bad,
+    card_border, fg_muted, glass_rim, good, hover_fill, pressed_fill, subtle_fill, surface_card,
     track_fill, type_control, type_section, type_small, warn,
 };
 use rune::{
@@ -82,9 +82,12 @@ pub fn glass_enter(scale: f32, anchor: Vec2) -> Transition {
 }
 
 pub fn popover_transition_from(anchor: Vec2) -> Transition {
-    let enter = glass_enter(0.96, anchor);
-    Transition::asymmetric(enter, Transition::scale_anchor(0.96, anchor))
-        .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
+    let slide = Vec2::new((0.5 - anchor.x) * 4.0, (0.5 - anchor.y) * 8.0);
+    let mut enter = glass_enter(0.965, anchor);
+    enter.insertion.offset = slide;
+    let exit =
+        Transition::scale_anchor(0.965, anchor).combined(Transition::offset(slide.x, slide.y));
+    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_POPOVER, SPRING_QUICK))
 }
 
 pub fn modal_scrim_transition() -> Transition {
@@ -93,16 +96,13 @@ pub fn modal_scrim_transition() -> Transition {
 }
 
 pub fn modal_card_transition() -> Transition {
-    let enter = glass_enter(0.98, Vec2::new(0.5, 0.5));
-    Transition::asymmetric(enter, Transition::scale(0.98))
-        .springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
+    let mut enter = glass_enter(0.965, Vec2::new(0.5, 0.5));
+    enter.insertion.offset = Vec2::new(0.0, 10.0);
+    let exit = Transition::scale(0.965).combined(Transition::offset(0.0, 6.0));
+    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_SMOOTH, SPRING_QUICK))
 }
 
 pub fn glass_capsule(key: &'static str) -> El {
-    glass_capsule_opt(key, true)
-}
-
-pub fn glass_capsule_opt(key: &'static str, _blur: bool) -> El {
     let capsule = row()
         .key(key)
         .h(36.0)
@@ -110,14 +110,10 @@ pub fn glass_capsule_opt(key: &'static str, _blur: bool) -> El {
         .gap(2.0)
         .center_y()
         .radius(RADIUS_PILL);
-    apply_glass(capsule, ExoGlass::Bar, false)
+    apply_glass(capsule, ExoGlass::Bar)
 }
 
 pub fn glass_panel(key: impl Into<String>, width: f32) -> El {
-    glass_panel_opt(key, width, true).transition(popover_transition())
-}
-
-pub fn glass_panel_opt(key: impl Into<String>, width: f32, _blur: bool) -> El {
     let panel = rune::col()
         .key(key)
         .w(width)
@@ -126,50 +122,15 @@ pub fn glass_panel_opt(key: impl Into<String>, width: f32, _blur: bool) -> El {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default);
-    apply_glass(panel, ExoGlass::Panel, false)
-}
-
-pub fn glass_plate(key: impl Into<String>, _blur: bool) -> El {
-    let plate = row().key(key).center_y().radius(RADIUS_PILL);
-    apply_glass(plate, ExoGlass::ClearMedia, false)
-}
-
-pub fn glass_input(key: impl Into<String>) -> El {
-    let input = row()
-        .key(key)
-        .h(34.0)
-        .px(12.0)
-        .gap(8.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .cursor(Cursor::Text);
-    apply_glass(input, ExoGlass::Control, false)
-}
-
-pub fn glass_chip(key: impl Into<String>, label: impl Into<String>, icon: Option<El>) -> El {
-    let mut chip = apply_glass(
-        row()
-            .key(key)
-            .h(28.0)
-            .px(10.0)
-            .gap(6.0)
-            .center_y()
-            .radius(RADIUS_PILL),
-        ExoGlass::Control,
-        false,
-    );
-    if let Some(ic) = icon {
-        chip = chip.child(ic);
-    }
-    chip.child(text(label.into()).font(type_small()).color(FG))
+    apply_glass(panel, ExoGlass::Panel)
 }
 
 pub fn amoled_card(radius: f32) -> El {
     col()
         .radius(radius)
         .continuous_corners()
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .fill(surface_card())
+        .border(1.0, card_border())
 }
 
 pub fn exo_play_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
@@ -192,6 +153,8 @@ pub fn exo_play_button(key: &'static str, label: &'static str, icon: Option<El>)
         .fill(FG)
         .hover(FG.alpha(0.92))
         .press(FG.alpha(0.84))
+        .shadow(2.0, 10.0, BG.alpha(0.35))
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -218,14 +181,16 @@ pub fn glass_icon_circle_opt(
         .hit()
         .cursor(Cursor::Pointer)
         .press_on_down()
+        .press_scale(PRESS_SCALE)
         .size(size, size)
         .center()
         .radius(RADIUS_PILL)
         .hover(hover_fill())
         .press(pressed_fill())
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(icon);
-    apply_glass_opt(btn, ExoGlass::Control, true, blur)
+    apply_glass_opt(btn, ExoGlass::Control, blur)
 }
 
 pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
@@ -255,6 +220,7 @@ pub fn primary_button_dyn(
         .fill(FG)
         .hover(FG.alpha(0.92))
         .press(FG.alpha(0.84))
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -282,6 +248,7 @@ pub fn glass_button_dyn(
             .hit()
             .cursor(Cursor::Pointer)
             .press_on_down()
+            .press_scale(PRESS_SCALE)
             .h(32.0)
             .px(12.0)
             .gap(6.0)
@@ -289,9 +256,9 @@ pub fn glass_button_dyn(
             .radius(RADIUS_PILL)
             .hover(hover_fill())
             .press(pressed_fill())
+            .hover_motion(SPRING_QUICK, SPRING_BASE)
             .motion(SPRING_QUICK),
         ExoGlass::Control,
-        true,
         blur,
     );
     if let Some(ic) = icon {
@@ -320,6 +287,7 @@ pub fn danger_button_dyn(key: impl Into<String>, label: impl Into<String>, icon:
         .hover(bad().alpha(0.24))
         .press(bad().alpha(0.32))
         .border(1.0, bad().alpha(0.36))
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -342,6 +310,7 @@ pub fn glass_button_opt(
             .hit()
             .cursor(Cursor::Pointer)
             .press_on_down()
+            .press_scale(PRESS_SCALE)
             .h(32.0)
             .px(12.0)
             .gap(6.0)
@@ -349,9 +318,9 @@ pub fn glass_button_opt(
             .radius(RADIUS_PILL)
             .hover(hover_fill())
             .press(pressed_fill())
+            .hover_motion(SPRING_QUICK, SPRING_BASE)
             .motion(SPRING_QUICK),
         ExoGlass::Control,
-        true,
         blur,
     );
     if let Some(ic) = icon {
@@ -378,6 +347,7 @@ pub fn filter_pill(key: impl Into<String>, label: impl Into<String>, active: boo
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
         .border(if active { 0.0 } else { 1.0 }, glass_rim())
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(
             text(label)
@@ -435,6 +405,7 @@ pub fn danger_button(key: &'static str, label: &'static str, icon: Option<El>) -
         .fill(bad())
         .hover(bad().alpha(0.90))
         .press(bad().alpha(0.80))
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -471,16 +442,25 @@ pub fn switch_pill(key: &'static str, label: &'static str, on: bool) -> El {
     switch_pill_keyed(key, label, on)
 }
 
-pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: bool) -> El {
+pub fn switch_track(on: bool) -> El {
     let knob = el()
         .size(20.0, 20.0)
         .radius(10.0)
         .fill(FG)
         .shadow(1.0, 3.0, BG.alpha(0.35))
         .absolute(if on { 18.0 } else { 2.0 }, 2.0)
-        .motion(SPRING_MOVE);
+        .motion(SPRING_SNAPPY);
 
-    el().key(key)
+    el().size(40.0, 24.0)
+        .radius(RADIUS_PILL)
+        .fill(if on { good() } else { track_fill() })
+        .motion(SPRING_QUICK)
+        .child(knob)
+}
+
+pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: bool) -> El {
+    switch_track(on)
+        .key(key)
         .role("switch")
         .label(label)
         .checked(on)
@@ -488,11 +468,7 @@ pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: b
         .hit()
         .cursor(Cursor::Pointer)
         .press_on_down()
-        .size(40.0, 24.0)
-        .radius(RADIUS_PILL)
-        .fill(if on { good() } else { track_fill() })
-        .motion(SPRING_QUICK)
-        .child(knob)
+        .press_scale(PRESS_SCALE)
 }
 
 pub fn slider_track(
@@ -536,6 +512,31 @@ pub fn slider_track(
                 .fill(FG)
                 .shadow(1.0, 3.0, BG.alpha(0.35)),
         )
+}
+
+pub fn slider_range<S: 'static>(
+    track: El,
+    value: f64,
+    min: f64,
+    max: f64,
+    step: f64,
+    enabled: bool,
+    set: impl Fn(&mut S, f64) + Clone + 'static,
+) -> El {
+    let track = track.range_value(value, min, max).range_step(step);
+    if !enabled {
+        return track;
+    }
+    let stepped = set.clone();
+    track
+        .on_step(move |s: &mut S, delta, _| {
+            stepped(s, slider_stepped(value, min, max, step, delta));
+        })
+        .on_set_value(move |s: &mut S, target, _| set(s, target))
+}
+
+pub fn slider_stepped(value: f64, min: f64, max: f64, step: f64, delta: i32) -> f64 {
+    (value + f64::from(delta) * step).clamp(min, max.max(min))
 }
 
 pub fn progress_bar(width: f32, fraction: f32) -> El {
@@ -591,7 +592,6 @@ pub fn section_card(title: &'static str, subtitle: Option<String>) -> El {
         .gap(12.0)
         .radius(RADIUS_PANEL)
         .fill(subtle_fill())
-        .border(1.0, hairline())
         .child(header)
 }
 

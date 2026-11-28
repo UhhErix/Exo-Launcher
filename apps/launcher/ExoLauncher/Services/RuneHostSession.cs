@@ -14,6 +14,29 @@ internal sealed partial class RuneHostSession
     private const int SwRestore = 9;
     private static readonly object ActiveUiLock = new();
     private static Process? _activeUiProcess;
+    private static WebHostBridge? _activeBridge;
+
+    internal static IntPtr ActiveUiMainWindowHandle()
+    {
+        Process? ui;
+        lock (ActiveUiLock) ui = _activeUiProcess;
+        if (ui is null) return IntPtr.Zero;
+        try
+        {
+            if (ui.HasExited) return IntPtr.Zero;
+            ui.Refresh();
+            return ui.MainWindowHandle;
+        }
+        catch { return IntPtr.Zero; }
+    }
+
+    internal static void OpenLink(ExoLinks.Place place)
+    {
+        WebHostBridge? bridge;
+        lock (ActiveUiLock) bridge = _activeBridge;
+        if (bridge is not null) bridge.OpenLink(place);
+        else WebHostBridge.QueueOpen(place);
+    }
 
     internal static void RequestActivate()
     {
@@ -44,39 +67,29 @@ internal sealed partial class RuneHostSession
             UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = PathHelper.AppDataDir,
+            RedirectStandardError = true,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         psi.ArgumentList.Add("--pipe");
         psi.ArgumentList.Add(pipeName);
         return psi;
     }
 
-    internal static bool ReadUseClassicWebUiPreference()
-    {
-        try
-        {
-            var path = PathHelper.SettingsPath;
-            if (!File.Exists(path)) return false;
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            return doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("useClassicWebUi", out var prop)
-                && prop.ValueKind == JsonValueKind.True;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+#if DEBUG
+    internal const bool ClassicUiAllowed = true;
+#else
+    internal const bool ClassicUiAllowed = false;
+#endif
 
     internal static Options? TryParse(
         string[]? args,
         Func<string, string?>? readEnv = null,
         Func<string, bool>? fileExists = null,
         Action<string>? onWarning = null,
-        Func<bool>? readClassicPref = null)
+        bool allowClassic = ClassicUiAllowed)
     {
         readEnv ??= Environment.GetEnvironmentVariable;
         fileExists ??= File.Exists;
-        readClassicPref ??= ReadUseClassicWebUiPreference;
         try
         {
             string? explicitPipe = null;
@@ -140,9 +153,11 @@ internal sealed partial class RuneHostSession
                 return null;
 
             uiMode ??= SafeReadEnv(readEnv, "EXO_UI", onWarning);
-            if (string.Equals(uiMode, "web", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(uiMode, "webview", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(uiMode, "webview2", StringComparison.OrdinalIgnoreCase))
+            if (!allowClassic && uiMode is not null && uiMode.StartsWith("web", StringComparison.OrdinalIgnoreCase))
+                SafeWarn(onWarning, $"RuneHostSession: ui mode '{uiMode}' is only available in development builds; starting the native interface.");
+            if (allowClassic && string.Equals(uiMode, "web", StringComparison.OrdinalIgnoreCase)
+                || allowClassic && string.Equals(uiMode, "webview", StringComparison.OrdinalIgnoreCase)
+                || allowClassic && string.Equals(uiMode, "webview2", StringComparison.OrdinalIgnoreCase))
             {
                 return null;
             }
@@ -152,11 +167,9 @@ internal sealed partial class RuneHostSession
                 || string.Equals(uiMode, "native", StringComparison.OrdinalIgnoreCase);
             if (!explicitRune)
             {
-                if (SafeReadClassicPref(readClassicPref, onWarning))
-                    return null;
                 var bundledUi = Path.Combine(AppContext.BaseDirectory, "exo-ui.exe");
                 var hasOverride = !string.IsNullOrWhiteSpace(uiExe) && SafeFileExists(fileExists, uiExe, onWarning);
-                if (!hasOverride && !SafeFileExists(fileExists, bundledUi, onWarning))
+                if (allowClassic && !hasOverride && !SafeFileExists(fileExists, bundledUi, onWarning))
                     return null;
             }
 
@@ -195,19 +208,6 @@ internal sealed partial class RuneHostSession
         }
     }
 
-    private static bool SafeReadClassicPref(Func<bool> readClassicPref, Action<string>? onWarning)
-    {
-        try
-        {
-            return readClassicPref();
-        }
-        catch (Exception ex)
-        {
-            SafeWarn(onWarning, $"RuneHostSession: failed to read classic UI preference ({ex.GetType().Name}); ignoring.");
-            return false;
-        }
-    }
-
     private static void SafeWarn(Action<string>? onWarning, string message)
     {
         if (onWarning is null) return;
@@ -236,12 +236,50 @@ internal sealed partial class RuneHostSession
         return null;
     }
 
+    private static void StartGameServices()
+    {
+        GameSettings.StartKeeping();
+        DriveHeat.Start();
+        _ = Task.Run(ExoLinks.Register);
+        _ = Task.Run(GpuPreference.WindowedGamesOptimized);
+        Achievements.AchievementWatch.Start();
+        FpsCounter.Start();
+        Achievements.AchievementSource.Start();
+    }
+
+    internal const string MissingFileMessage = "Exo is missing a file. Reinstall Exo to repair it.";
+
     internal static int Run(Options options)
     {
+        var exe = options.SpawnUi ? ResolveUiExecutable(options.UiExecutableOverride, AppContext.BaseDirectory) : null;
+        if (options.SpawnUi && exe is null)
+        {
+            AppLog.Error("RuneHostSession: exo-ui.exe not found.");
+            MessageBoxW(IntPtr.Zero, MissingFileMessage, "Exo Launcher", 0x10);
+            return 2;
+        }
         SystemSpecs.WarmInBackground();
         WebViewRuntimeLocator.ClearStaleBrowserFolderPin();
         var services = App.Services;
         services.Initialize();
+        if (options.SpawnUi && !PackagedSmoke.Enabled && !HostMode.IsDisposable && !ForegroundWatcher.StartedQuiet &&
+            services.Updater.SettleKeptUpdate(services.AppVersion))
+        {
+            var started = false;
+            try { started = services.Updater.ApplyKeptAtStartAsync(services.AppVersion).GetAwaiter().GetResult(); }
+            catch (Exception ex) { AppLog.Warn("Update at start failed: " + ex.GetType().Name); }
+            if (started)
+            {
+                UpdateHandOff.Save(UpdateHandOff.FilePath, Program.LaunchArgs, DateTimeOffset.UtcNow);
+                services.Shutdown();
+                return 0;
+            }
+        }
+        if (options.SpawnUi)
+        {
+            AutoTuneService.CheckAtStart();
+            if (!PackagedSmoke.Enabled && !HostMode.IsDisposable) _ = services.Updater.OpenCheck(services.AppVersion);
+        }
         KeepAwake.SettingOn = () => true;
 
         var dispatcherController = DispatcherQueueController.CreateOnDedicatedThread();
@@ -259,12 +297,37 @@ internal sealed partial class RuneHostSession
         }
         using var transport = new NamedPipeHostTransport(options.PipeName);
         var bridge = new WebHostBridge(services, queue);
+        lock (ActiveUiLock) _activeBridge = bridge;
         using var stop = new ManualResetEventSlim(false);
-        bridge.RequestHostShutdown = () => stop.Set();
+        string? shutdownReason = null;
+        void TriggerStop(string reason)
+        {
+            Interlocked.CompareExchange(ref shutdownReason, reason, null);
+            stop.Set();
+        }
+        bridge.RequestHostShutdown = () => TriggerStop("host shutdown requested");
         bridge.Attach(transport);
         transport.Start();
         services.HdrHost.Start();
         bridge.StartBackgroundMonitors();
+        if (options.SpawnUi)
+        {
+            AchievementBanner.Start(queue);
+            services.StartDeferredServices();
+            StartGameServices();
+            if (!PackagedSmoke.Enabled)
+            {
+                Telemetry.Start();
+                Telemetry.Track("app.start", ("startup_ms", (long)(DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds));
+                PendingReports.SendOnLaunch(TimeSpan.FromSeconds(15));
+                _ = Task.Run(() =>
+                {
+                    try { Adapters.StoreWindowHider.CollapseOrphanSurfaces(); } catch { }
+                    InstalledAppsEntry.Refresh(AppServices.RunningVersion);
+                });
+                DlssSwapService.WatchUpscalerReleases();
+            }
+        }
         Action<int> onDiscordBadge = count => bridge.PostFriendsBadge(count);
         DiscordClient.DiscordSession.BadgeChanged += onDiscordBadge;
         _ = Task.Run(DiscordClient.DiscordSession.Start);
@@ -273,22 +336,18 @@ internal sealed partial class RuneHostSession
         ConsoleCancelEventHandler onCancel = (_, e) =>
         {
             e.Cancel = true;
-            stop.Set();
+            TriggerStop("console cancel");
         };
         Console.CancelKeyPress += onCancel;
 
         Process? uiProcess = null;
+        var stderrLines = new Queue<string>(40);
+        var stderrLock = new object();
         var jobHandle = IntPtr.Zero;
         try
         {
-            if (options.SpawnUi)
+            if (exe is not null)
             {
-                var exe = ResolveUiExecutable(options.UiExecutableOverride, AppContext.BaseDirectory);
-                if (exe is null)
-                {
-                    AppLog.Error("RuneHostSession: exo-ui.exe not found.");
-                    return 2;
-                }
                 var psi = BuildUiStartInfo(exe, options.PipeName);
                 uiProcess = Process.Start(psi);
                 if (uiProcess is null)
@@ -296,11 +355,21 @@ internal sealed partial class RuneHostSession
                     AppLog.Error("RuneHostSession: failed to start exo-ui.exe.");
                     return 3;
                 }
+                uiProcess.ErrorDataReceived += (_, e) =>
+                {
+                    if (string.IsNullOrWhiteSpace(e.Data)) return;
+                    lock (stderrLock)
+                    {
+                        if (stderrLines.Count >= 40) stderrLines.Dequeue();
+                        stderrLines.Enqueue(e.Data);
+                    }
+                };
+                uiProcess.BeginErrorReadLine();
                 jobHandle = BindChildToKillJob(uiProcess);
                 lock (ActiveUiLock) _activeUiProcess = uiProcess;
                 uiProcess.EnableRaisingEvents = true;
-                uiProcess.Exited += (_, _) => stop.Set();
-                if (uiProcess.HasExited) stop.Set();
+                uiProcess.Exited += (_, _) => TriggerStop("ui process exited");
+                if (uiProcess.HasExited) TriggerStop("ui already exited");
             }
 
             stop.Wait();
@@ -308,9 +377,11 @@ internal sealed partial class RuneHostSession
         }
         finally
         {
+            HostWindow.ClearNativeState();
             lock (ActiveUiLock)
             {
                 if (ReferenceEquals(_activeUiProcess, uiProcess)) _activeUiProcess = null;
+                if (ReferenceEquals(_activeBridge, bridge)) _activeBridge = null;
             }
             Console.CancelKeyPress -= onCancel;
             DiscordClient.DiscordSession.BadgeChanged -= onDiscordBadge;
@@ -323,9 +394,35 @@ internal sealed partial class RuneHostSession
                 try
                 {
                     if (!uiProcess.HasExited) uiProcess.WaitForExit(1500);
+                    if (uiProcess.HasExited) uiProcess.WaitForExit();
+                }
+                catch { }
+            }
+            string[] capturedStderr;
+            lock (stderrLock) capturedStderr = [.. stderrLines];
+            var reason = Volatile.Read(ref shutdownReason) ?? "stop";
+            var uiExited = false;
+            int? uiExitCode = null;
+            if (uiProcess is not null)
+            {
+                try
+                {
+                    uiExited = uiProcess.HasExited;
+                    if (uiExited) uiExitCode = uiProcess.ExitCode;
                 }
                 catch { }
                 uiProcess.Dispose();
+            }
+            var stderrSummary = capturedStderr.Length > 0
+                ? $" stderr=[{string.Join(" | ", capturedStderr)}]"
+                : string.Empty;
+            if (uiExitCode is int code && code != 0)
+            {
+                AppLog.WriteImmediate("ERROR", $"RuneHostSession: stopping ({reason}); exo-ui exited with code {code}.{stderrSummary}");
+            }
+            else
+            {
+                AppLog.WriteImmediate("INFO", $"RuneHostSession: stopping ({reason}); uiExited={uiExited}{(uiExitCode is int c ? $", uiExitCode={c}" : string.Empty)}.{stderrSummary}");
             }
             if (jobHandle != IntPtr.Zero) CloseHandle(jobHandle);
             try { services.Shutdown(); } catch { }
@@ -422,4 +519,7 @@ internal sealed partial class RuneHostSession
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW")]
+    private static extern int MessageBoxW(IntPtr owner, string text, string caption, uint type);
 }

@@ -4,10 +4,10 @@ use crate::state::{AppState, ContextMenuTarget, HostStatus};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, filter_pill,
-    glass_button, glass_still_control_fill, good, hairline, hover_fill, icon_check,
-    icon_chevron_right, icon_close, icon_plus, icon_search, icon_settings, modal_card_transition,
-    modal_scrim_transition, pressed_fill, primary_button, scrim_fill, selected_fill, type_body,
-    type_control, type_label, type_section, type_small, type_title,
+    glass_button, glass_button_opt, glass_still_control_fill, good, hairline, hover_fill,
+    icon_check, icon_chevron_right, icon_close, icon_plus, icon_search, icon_settings,
+    modal_card_transition, modal_scrim_transition, pressed_fill, primary_button, scrim_fill,
+    selected_fill, type_body, type_control, type_label, type_section, type_small, type_title,
 };
 use exo_rpc::{
     ActionResult, DiscordAdminReply, DiscordChannel, DiscordChannels, DiscordEventEntry,
@@ -1886,11 +1886,14 @@ impl AppState {
             |s, res: Result<DiscordReportReply, String>| {
                 if let Some(ref mut st) = s.discord.admin.report {
                     match res {
-                        Ok(rep) if rep.ok && rep.menu.is_some() => {
-                            let menu = rep.menu.unwrap();
-                            let root = menu.root_node_id;
-                            st.path = vec![(root, None)];
-                            st.menu = Some(menu);
+                        Ok(rep) if rep.ok => {
+                            if let Some(menu) = rep.menu {
+                                let root = menu.root_node_id;
+                                st.path = vec![(root, None)];
+                                st.menu = Some(menu);
+                            } else {
+                                st.error = Some("Discord didn't send its report questions.".into());
+                            }
                         }
                         Ok(rep) => {
                             st.error = rep.message.or_else(|| {
@@ -2232,6 +2235,7 @@ pub fn forum_view(s: &AppState, ch: &DiscordChannel, scale: f32) -> El {
                 .key(format!("dc-fpost-{}", th.id))
                 .role("button")
                 .label(th.name.clone())
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .w_full()
@@ -2397,6 +2401,7 @@ fn server_guide_body(
                         .key(format!("dc-guide-act-{}", act.channel_id))
                         .role("button")
                         .label(act.title.clone())
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .w_full()
@@ -2436,6 +2441,7 @@ fn server_guide_body(
                             .key(format!("dc-guide-res-{}", res.channel_id))
                             .role("button")
                             .label(title.clone())
+                            .focusable(true)
                             .cursor(Cursor::Pointer)
                             .hit()
                             .w_full()
@@ -2503,6 +2509,9 @@ fn server_guide_body(
                     .child(text(ch.name.clone()).font(type_control()).color(FG))
                     .child(
                         el().key("dc-guide-res-close")
+                            .role("button")
+                            .label_static("Close")
+                            .focusable(true)
                             .cursor(Cursor::Pointer)
                             .hit()
                             .size(26.0, 26.0)
@@ -2837,6 +2846,7 @@ pub fn shop_view(s: &AppState, scale: f32) -> El {
             .key(format!("dc-shop-card-{}", prod.sku_id))
             .role("button")
             .label(prod.name.clone())
+            .focusable(true)
             .cursor(Cursor::Pointer)
             .hit()
             .press_on_down()
@@ -2983,44 +2993,43 @@ pub fn shop_view(s: &AppState, scale: f32) -> El {
         )
 }
 
-pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn overlay_layers(s: &AppState) -> Vec<El> {
     let ad = &s.discord.admin;
     let mut out = Vec::new();
     if ad.events_open {
-        out.push(events_modal(s, blur));
+        out.push(events_modal(s));
     }
     if ad.create_channel.is_some() {
-        out.push(create_channel_modal(s, blur));
+        out.push(create_channel_modal(s));
     }
     if ad.invite_dialog.is_some() {
-        out.push(invite_modal(s, blur));
+        out.push(invite_modal(s));
     }
     if ad.server_privacy_guild.is_some() {
-        out.push(server_privacy_modal(s, blur));
+        out.push(server_privacy_modal(s));
     }
     if ad.voice_status_dialog.is_some() {
-        out.push(voice_status_modal(s, blur));
+        out.push(voice_status_modal(s));
     }
     if ad.member_dialog.is_some() {
-        out.push(member_dialog_modal(s, blur));
+        out.push(member_dialog_modal(s));
     }
     if ad.channel_settings_id.is_some() {
-        out.push(channel_settings_modal(s, blur));
+        out.push(channel_settings_modal(s));
     }
     if ad.server_settings_guild_id.is_some() {
-        out.push(server_settings_modal(s, blur));
+        out.push(server_settings_modal(s));
     }
     if ad.shop_selected.is_some() {
-        out.push(shop_product_modal(s, blur));
+        out.push(shop_product_modal(s));
     }
     if ad.report.is_some() {
-        out.push(report_modal(s, blur));
+        out.push(report_modal(s));
     }
     out
 }
 
-fn glass_dialog_frame(key: &str, w: f32, blur: bool) -> El {
-    let _ = blur;
+fn glass_dialog_frame(key: &str, w: f32) -> El {
     apply_glass(
         col()
             .key(key)
@@ -3031,7 +3040,6 @@ fn glass_dialog_frame(key: &str, w: f32, blur: bool) -> El {
             .transition(modal_card_transition())
             .hit(),
         ExoGlass::Sheet,
-        false,
     )
 }
 
@@ -3045,6 +3053,7 @@ fn modal_header(title: &str, close_key: &str, on_close: impl Fn(&mut AppState) +
             el().key(close_key)
                 .role("button")
                 .label("Close")
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .size(28.0, 28.0)
@@ -3056,7 +3065,7 @@ fn modal_header(title: &str, close_key: &str, on_close: impl Fn(&mut AppState) +
         )
 }
 
-fn events_modal(s: &AppState, blur: bool) -> El {
+fn events_modal(s: &AppState) -> El {
     let ad = &s.discord.admin;
     let gid = ad.events_guild_id.clone().unwrap_or_default();
     let can_manage = s
@@ -3065,7 +3074,7 @@ fn events_modal(s: &AppState, blur: bool) -> El {
         .get(&gid)
         .is_some_and(|c| c.can_manage_events);
 
-    let mut panel = glass_dialog_frame("dc-events-modal", 560.0, blur).child(modal_header(
+    let mut panel = glass_dialog_frame("dc-events-modal", 560.0).child(modal_header(
         "Events",
         "dc-events-x",
         |s: &mut AppState| s.discord.admin.events_open = false,
@@ -3130,11 +3139,13 @@ fn events_modal(s: &AppState, blur: bool) -> El {
                     .w_full()
                     .justify_end()
                     .gap(8.0)
-                    .child(glass_button("dc-ev-cancel", "Back", None).on_press(
-                        |s: &mut AppState| {
-                            s.discord.admin.events_create_open = false;
-                        },
-                    ))
+                    .child(
+                        glass_button_opt("dc-ev-cancel", "Back", None, false).on_press(
+                            |s: &mut AppState| {
+                                s.discord.admin.events_create_open = false;
+                            },
+                        ),
+                    )
                     .child(
                         primary_button("dc-ev-create-go", "Create event", None)
                             .on_press(|s: &mut AppState| s.create_discord_event()),
@@ -3216,17 +3227,18 @@ fn events_modal(s: &AppState, blur: bool) -> El {
                                     ),
                                 )
                                 .children((can_manage && !live).then(|| {
-                                    glass_button("dc-ev-start", "Start", None)
+                                    glass_button_opt("dc-ev-start", "Start", None, false)
                                         .key(format!("dc-ev-start-{}", ev.id))
                                         .on_press(move |s: &mut AppState| {
                                             s.set_discord_event_status(&eid_start, 2);
                                         })
                                 }))
                                 .children(can_manage.then(|| {
-                                    glass_button(
+                                    glass_button_opt(
                                         "dc-ev-end",
                                         if live { "End" } else { "Cancel" },
                                         None,
+                                        false,
                                     )
                                     .key(format!("dc-ev-end-{}", ev.id))
                                     .on_press(
@@ -3260,7 +3272,7 @@ fn events_modal(s: &AppState, blur: bool) -> El {
         .child(panel)
 }
 
-fn create_channel_modal(s: &AppState, blur: bool) -> El {
+fn create_channel_modal(s: &AppState) -> El {
     let Some(dlg) = s.discord.admin.create_channel.as_ref() else {
         return el();
     };
@@ -3269,7 +3281,7 @@ fn create_channel_modal(s: &AppState, blur: bool) -> El {
     } else {
         "Create channel"
     };
-    let mut panel = glass_dialog_frame("dc-create-ch-modal", 420.0, blur).child(modal_header(
+    let mut panel = glass_dialog_frame("dc-create-ch-modal", 420.0).child(modal_header(
         title,
         "dc-create-ch-x",
         |s: &mut AppState| s.discord.admin.create_channel = None,
@@ -3334,7 +3346,7 @@ fn create_channel_modal(s: &AppState, blur: bool) -> El {
                 .justify_end()
                 .gap(8.0)
                 .child(
-                    glass_button("dc-cch-cancel", "Cancel", None)
+                    glass_button_opt("dc-cch-cancel", "Cancel", None, false)
                         .on_press(|s: &mut AppState| s.discord.admin.create_channel = None),
                 )
                 .child(
@@ -3358,7 +3370,7 @@ fn create_channel_modal(s: &AppState, blur: bool) -> El {
         .child(panel)
 }
 
-fn invite_modal(s: &AppState, blur: bool) -> El {
+fn invite_modal(s: &AppState) -> El {
     let Some(dlg) = s.discord.admin.invite_dialog.as_ref() else {
         return el();
     };
@@ -3372,7 +3384,7 @@ fn invite_modal(s: &AppState, blur: bool) -> El {
         link.clone()
     };
 
-    let panel = glass_dialog_frame("dc-invite-modal", 440.0, blur)
+    let panel = glass_dialog_frame("dc-invite-modal", 440.0)
         .child(modal_header(
             &format!("Invite people to {}", dlg.guild_name),
             "dc-invite-x",
@@ -3414,11 +3426,11 @@ fn invite_modal(s: &AppState, blur: bool) -> El {
                 .justify_between()
                 .center_y()
                 .child(
-                    glass_button("dc-invite-new", "New link", None)
+                    glass_button_opt("dc-invite-new", "New link", None, false)
                         .on_press(|s: &mut AppState| s.generate_discord_invite()),
                 )
                 .child(
-                    glass_button("dc-invite-done", "Done", None)
+                    glass_button_opt("dc-invite-done", "Done", None, false)
                         .on_press(|s: &mut AppState| s.discord.admin.invite_dialog = None),
                 ),
         );
@@ -3438,7 +3450,7 @@ fn invite_modal(s: &AppState, blur: bool) -> El {
         .child(panel)
 }
 
-fn server_privacy_modal(s: &AppState, blur: bool) -> El {
+fn server_privacy_modal(s: &AppState) -> El {
     let Some(gid) = s.discord.admin.server_privacy_guild.clone() else {
         return el();
     };
@@ -3469,7 +3481,7 @@ fn server_privacy_modal(s: &AppState, blur: bool) -> El {
     let g3 = gid.clone();
     let g4 = gid.clone();
 
-    let panel = glass_dialog_frame("dc-srvpriv-modal", 460.0, blur)
+    let panel = glass_dialog_frame("dc-srvpriv-modal", 460.0)
         .child(modal_header(
             "Privacy settings",
             "dc-srvpriv-x",
@@ -3575,6 +3587,8 @@ fn simple_switch_row(
         .key(key)
         .role("switch")
         .label(label)
+        .focusable(true)
+        .checked(on)
         .cursor(Cursor::Pointer)
         .hit()
         .w_full()
@@ -3591,13 +3605,13 @@ fn simple_switch_row(
         )
 }
 
-fn voice_status_modal(s: &AppState, blur: bool) -> El {
+fn voice_status_modal(s: &AppState) -> El {
     let Some(dlg) = s.discord.admin.voice_status_dialog.as_ref() else {
         return el();
     };
     let cid = dlg.channel_id.clone();
     let cid_clear = dlg.channel_id.clone();
-    let panel = glass_dialog_frame("dc-vstatus-modal", 420.0, blur)
+    let panel = glass_dialog_frame("dc-vstatus-modal", 420.0)
         .child(modal_header(
             "Set channel status",
             "dc-vstatus-x",
@@ -3629,11 +3643,13 @@ fn voice_status_modal(s: &AppState, blur: bool) -> El {
                 .w_full()
                 .justify_end()
                 .gap(8.0)
-                .child(glass_button("dc-vstatus-clear", "Clear", None).on_press(
-                    move |s: &mut AppState| {
-                        s.save_discord_voice_status(&cid_clear, "");
-                    },
-                ))
+                .child(
+                    glass_button_opt("dc-vstatus-clear", "Clear", None, false).on_press(
+                        move |s: &mut AppState| {
+                            s.save_discord_voice_status(&cid_clear, "");
+                        },
+                    ),
+                )
                 .child(primary_button("dc-vstatus-save", "Save", None).on_press(
                     move |s: &mut AppState| {
                         let txt = s.discord.admin.voice_status_input.text.to_string();
@@ -3657,7 +3673,7 @@ fn voice_status_modal(s: &AppState, blur: bool) -> El {
         .child(panel)
 }
 
-fn member_dialog_modal(s: &AppState, blur: bool) -> El {
+fn member_dialog_modal(s: &AppState) -> El {
     let Some(dlg) = s.discord.admin.member_dialog.as_ref() else {
         return el();
     };
@@ -3668,7 +3684,7 @@ fn member_dialog_modal(s: &AppState, blur: bool) -> El {
         MemberDialogKind::Ban => format!("Ban {}", dlg.name),
         MemberDialogKind::Transfer => format!("Transfer ownership to {}", dlg.name),
     };
-    let mut panel = glass_dialog_frame("dc-memdlg-modal", 440.0, blur).child(modal_header(
+    let mut panel = glass_dialog_frame("dc-memdlg-modal", 440.0).child(modal_header(
         &title,
         "dc-memdlg-x",
         |s: &mut AppState| s.discord.admin.member_dialog = None,
@@ -3765,7 +3781,7 @@ fn member_dialog_modal(s: &AppState, blur: bool) -> El {
             .justify_end()
             .gap(8.0)
             .child(
-                glass_button("dc-memdlg-cancel", "Cancel", None)
+                glass_button_opt("dc-memdlg-cancel", "Cancel", None, false)
                     .on_press(|s: &mut AppState| s.discord.admin.member_dialog = None),
             )
             .child(
@@ -3789,7 +3805,7 @@ fn member_dialog_modal(s: &AppState, blur: bool) -> El {
         .child(panel)
 }
 
-fn channel_settings_modal(s: &AppState, blur: bool) -> El {
+fn channel_settings_modal(s: &AppState) -> El {
     let ad = &s.discord.admin;
     let cid = ad.channel_settings_id.clone().unwrap_or_default();
     let data = ad.channel_settings_data.as_ref();
@@ -3824,6 +3840,9 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
         nav = nav.child(
             row()
                 .key("dc-chset-tab-ov")
+                .role("tab")
+                .label_static("Overview")
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .w_full()
@@ -3844,6 +3863,9 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
         nav = nav.child(
             row()
                 .key("dc-chset-tab-perm")
+                .role("tab")
+                .label_static("Permissions")
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .w_full()
@@ -3954,20 +3976,22 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
                             .child(
                                 row()
                                     .gap(6.0)
-                                    .child(glass_button("dc-ch-br-dn", "−8k", None).on_press(
-                                        |s: &mut AppState| {
-                                            s.discord.admin.ch_bitrate =
-                                                (s.discord.admin.ch_bitrate - 8000).max(8000);
-                                            s.discord.admin.ch_dirty = true;
-                                        },
-                                    ))
-                                    .child(glass_button("dc-ch-br-up", "+8k", None).on_press(
-                                        move |s: &mut AppState| {
-                                            s.discord.admin.ch_bitrate =
-                                                (s.discord.admin.ch_bitrate + 8000).min(max_br);
-                                            s.discord.admin.ch_dirty = true;
-                                        },
-                                    )),
+                                    .child(
+                                        glass_button_opt("dc-ch-br-dn", "−8k", None, false)
+                                            .on_press(|s: &mut AppState| {
+                                                s.discord.admin.ch_bitrate =
+                                                    (s.discord.admin.ch_bitrate - 8000).max(8000);
+                                                s.discord.admin.ch_dirty = true;
+                                            }),
+                                    )
+                                    .child(
+                                        glass_button_opt("dc-ch-br-up", "+8k", None, false)
+                                            .on_press(move |s: &mut AppState| {
+                                                s.discord.admin.ch_bitrate =
+                                                    (s.discord.admin.ch_bitrate + 8000).min(max_br);
+                                                s.discord.admin.ch_dirty = true;
+                                            }),
+                                    ),
                             ),
                     )
                     .child(
@@ -3987,20 +4011,22 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
                             .child(
                                 row()
                                     .gap(6.0)
-                                    .child(glass_button("dc-ch-ul-dn", "−1", None).on_press(
-                                        |s: &mut AppState| {
-                                            s.discord.admin.ch_user_limit =
-                                                (s.discord.admin.ch_user_limit - 1).max(0);
-                                            s.discord.admin.ch_dirty = true;
-                                        },
-                                    ))
-                                    .child(glass_button("dc-ch-ul-up", "+1", None).on_press(
-                                        |s: &mut AppState| {
-                                            s.discord.admin.ch_user_limit =
-                                                (s.discord.admin.ch_user_limit + 1).min(99);
-                                            s.discord.admin.ch_dirty = true;
-                                        },
-                                    )),
+                                    .child(
+                                        glass_button_opt("dc-ch-ul-dn", "−1", None, false)
+                                            .on_press(|s: &mut AppState| {
+                                                s.discord.admin.ch_user_limit =
+                                                    (s.discord.admin.ch_user_limit - 1).max(0);
+                                                s.discord.admin.ch_dirty = true;
+                                            }),
+                                    )
+                                    .child(
+                                        glass_button_opt("dc-ch-ul-up", "+1", None, false)
+                                            .on_press(|s: &mut AppState| {
+                                                s.discord.admin.ch_user_limit =
+                                                    (s.discord.admin.ch_user_limit + 1).min(99);
+                                                s.discord.admin.ch_dirty = true;
+                                            }),
+                                    ),
                             ),
                     );
             }
@@ -4014,34 +4040,35 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
             );
         }
         let cid_del = cid.clone();
-        body =
-            body.child(
-                row()
-                    .pt(12.0)
-                    .w_full()
-                    .justify_between()
-                    .center_y()
-                    .border_sides([1.0, 0.0, 0.0, 0.0], hairline())
-                    .child(text("Delete channel").font(type_body()).color(bad()))
-                    .child(if ad.ch_delete_confirm {
-                        row()
-                            .gap(6.0)
-                            .child(glass_button("dc-chdel-no", "Cancel", None).on_press(
+        body = body.child(
+            row()
+                .pt(12.0)
+                .w_full()
+                .justify_between()
+                .center_y()
+                .border_sides([1.0, 0.0, 0.0, 0.0], hairline())
+                .child(text("Delete channel").font(type_body()).color(bad()))
+                .child(if ad.ch_delete_confirm {
+                    row()
+                        .gap(6.0)
+                        .child(
+                            glass_button_opt("dc-chdel-no", "Cancel", None, false).on_press(
                                 |s: &mut AppState| s.discord.admin.ch_delete_confirm = false,
-                            ))
-                            .child(
-                                primary_button("dc-chdel-yes", "Confirm delete", None).on_press(
-                                    move |s: &mut AppState| {
-                                        s.discord_channel_action(&cid_del, "delete");
-                                        s.discord.admin.channel_settings_id = None;
-                                    },
-                                ),
-                            )
-                    } else {
-                        glass_button("dc-chdel-ask", "Delete channel", None)
-                            .on_press(|s: &mut AppState| s.discord.admin.ch_delete_confirm = true)
-                    }),
-            );
+                            ),
+                        )
+                        .child(
+                            primary_button("dc-chdel-yes", "Confirm delete", None).on_press(
+                                move |s: &mut AppState| {
+                                    s.discord_channel_action(&cid_del, "delete");
+                                    s.discord.admin.channel_settings_id = None;
+                                },
+                            ),
+                        )
+                } else {
+                    glass_button_opt("dc-chdel-ask", "Delete channel", None, false)
+                        .on_press(|s: &mut AppState| s.discord.admin.ch_delete_confirm = true)
+                }),
+        );
     } else if let Some(d) = data {
         body = body.child(text("Permissions").font(type_title()).color(FG));
         let guild_id = d.get("guildId").and_then(|x| x.as_str()).unwrap_or("");
@@ -4195,6 +4222,9 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
                 )
                 .child(
                     el().key("dc-chset-x")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .pin(None, Some(14.0), Some(14.0), None)
@@ -4206,8 +4236,7 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
                         .child(icon_close(14.0, FG)),
                 ),
         );
-    let _ = blur;
-    sheet = apply_glass(sheet, ExoGlass::Sheet, false);
+    sheet = apply_glass(sheet, ExoGlass::Sheet);
 
     el().key("dc-chset-layer")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -4215,7 +4244,7 @@ fn channel_settings_modal(s: &AppState, blur: bool) -> El {
         .child(sheet)
 }
 
-fn server_settings_modal(s: &AppState, blur: bool) -> El {
+fn server_settings_modal(s: &AppState) -> El {
     let ad = &s.discord.admin;
     let gid = ad.server_settings_guild_id.clone().unwrap_or_default();
     let chans = s.discord.channels_by_guild.get(&gid);
@@ -4257,6 +4286,7 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
                 .key(format!("dc-srvset-nav-{}", sec.id()))
                 .role("tab")
                 .label(sec.label())
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .w_full()
@@ -4392,9 +4422,12 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
                         .child(if ad.srv_delete_confirm {
                             row()
                                 .gap(8.0)
-                                .child(glass_button("dc-srv-del-no", "Cancel", None).on_press(
-                                    |s: &mut AppState| s.discord.admin.srv_delete_confirm = false,
-                                ))
+                                .child(
+                                    glass_button_opt("dc-srv-del-no", "Cancel", None, false)
+                                        .on_press(|s: &mut AppState| {
+                                            s.discord.admin.srv_delete_confirm = false
+                                        }),
+                                )
                                 .child(
                                     primary_button("dc-srv-del-yes", "Confirm delete", None)
                                         .on_press(|s: &mut AppState| {
@@ -4403,9 +4436,10 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
                                         }),
                                 )
                         } else {
-                            glass_button("dc-srv-del-ask", "Delete server", None).on_press(
-                                |s: &mut AppState| s.discord.admin.srv_delete_confirm = true,
-                            )
+                            glass_button_opt("dc-srv-del-ask", "Delete server", None, false)
+                                .on_press(|s: &mut AppState| {
+                                    s.discord.admin.srv_delete_confirm = true
+                                })
                         }),
                 );
             }
@@ -4470,7 +4504,7 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
                             .border_sides([0.0, 0.0, 1.0, 0.0], hairline())
                             .child(text(rname).font(type_body()).color(FG))
                             .children((!is_ev).then(|| {
-                                glass_button("dc-role-del", "Delete", None)
+                                glass_button_opt("dc-role-del", "Delete", None, false)
                                     .key(format!("dc-role-del-{rid}"))
                                     .on_press(move |s: &mut AppState| {
                                         s.run_server_admin_action(
@@ -4532,7 +4566,7 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
                                     .border_sides([0.0, 0.0, 1.0, 0.0], hairline())
                                     .child(text(label).font(type_body()).color(FG))
                                     .children(del_action.zip(id).map(|((act, field), val_id)| {
-                                        glass_button(
+                                        glass_button_opt(
                                             "dc-sec-del",
                                             if sec == ServerSection::Bans {
                                                 "Unban"
@@ -4540,6 +4574,7 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
                                                 "Delete"
                                             },
                                             None,
+                                            false,
                                         )
                                         .key(format!("dc-sec-del-{idx}"))
                                         .on_press(
@@ -4594,6 +4629,9 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
                 )
                 .child(
                     el().key("dc-srvset-x")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .pin(None, Some(14.0), Some(14.0), None)
@@ -4607,8 +4645,7 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
                         .child(icon_close(14.0, FG)),
                 ),
         );
-    let _ = blur;
-    sheet = apply_glass(sheet, ExoGlass::Sheet, false);
+    sheet = apply_glass(sheet, ExoGlass::Sheet);
 
     el().key("dc-srvset-layer")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -4616,7 +4653,7 @@ fn server_settings_modal(s: &AppState, blur: bool) -> El {
         .child(sheet)
 }
 
-fn shop_product_modal(s: &AppState, blur: bool) -> El {
+fn shop_product_modal(s: &AppState) -> El {
     let ad = &s.discord.admin;
     let Some(prod) = ad.shop_selected.as_ref() else {
         return el();
@@ -4631,7 +4668,7 @@ fn shop_product_modal(s: &AppState, blur: bool) -> El {
     });
     let item_sku = first_item.map(|i| i.sku_id.clone());
 
-    let mut panel = glass_dialog_frame("dc-shop-dlg", 460.0, blur)
+    let mut panel = glass_dialog_frame("dc-shop-dlg", 460.0)
         .child(modal_header(
             &prod.name,
             "dc-shop-dlg-x",
@@ -4661,7 +4698,7 @@ fn shop_product_modal(s: &AppState, blur: bool) -> El {
                         }),
                     )
                     .child(
-                        glass_button("dc-shop-unequip", "Remove", None)
+                        glass_button_opt("dc-shop-unequip", "Remove", None, false)
                             .on_press(move |s: &mut AppState| s.equip_shop_item(k, None)),
                     ),
             );
@@ -4726,7 +4763,7 @@ fn shop_product_modal(s: &AppState, blur: bool) -> El {
         .child(panel)
 }
 
-fn report_modal(s: &AppState, blur: bool) -> El {
+fn report_modal(s: &AppState) -> El {
     let Some(st) = s.discord.admin.report.as_ref() else {
         return el();
     };
@@ -4738,7 +4775,7 @@ fn report_modal(s: &AppState, blur: bool) -> El {
 
     let header_title = current_node.map(|n| n.header.as_str()).unwrap_or("Report");
 
-    let mut panel = glass_dialog_frame("dc-report-modal", 480.0, blur).child(modal_header(
+    let mut panel = glass_dialog_frame("dc-report-modal", 480.0).child(modal_header(
         header_title,
         "dc-report-x",
         |s: &mut AppState| s.discord.admin.report = None,
@@ -4816,8 +4853,8 @@ fn report_modal(s: &AppState, blur: bool) -> El {
                 "block_users" => {
                     if let Some(uid) = st.target.user_id.clone() {
                         panel = panel.child(
-                            glass_button("dc-report-block", "Block user", None).on_press(
-                                move |s: &mut AppState| {
+                            glass_button_opt("dc-report-block", "Block user", None, false)
+                                .on_press(move |s: &mut AppState| {
                                     if s.status == HostStatus::Connected {
                                         #[cfg(windows)]
                                         s.call_host_async(
@@ -4826,19 +4863,17 @@ fn report_modal(s: &AppState, blur: bool) -> El {
                                             |_s, _r: Result<ActionResult, String>| {},
                                         );
                                     }
-                                },
-                            ),
+                                }),
                         );
                     }
                 }
                 "ignore_users" => {
                     if let Some(uid) = st.target.user_id.clone() {
                         panel = panel.child(
-                            glass_button("dc-report-ignore", "Ignore user", None).on_press(
-                                move |s: &mut AppState| {
+                            glass_button_opt("dc-report-ignore", "Ignore user", None, false)
+                                .on_press(move |s: &mut AppState| {
                                     s.toggle_ignore_user(&uid);
-                                },
-                            ),
+                                }),
                         );
                     }
                 }
@@ -4850,11 +4885,10 @@ fn report_modal(s: &AppState, blur: bool) -> El {
                         )
                     {
                         panel = panel.child(
-                            glass_button("dc-report-delmsg", "Delete message", None).on_press(
-                                move |s: &mut AppState| {
+                            glass_button_opt("dc-report-delmsg", "Delete message", None, false)
+                                .on_press(move |s: &mut AppState| {
                                     s.delete_discord_message(&cid, &mid);
-                                },
-                            ),
+                                }),
                         );
                     }
                 }
@@ -4872,6 +4906,7 @@ fn report_modal(s: &AppState, blur: bool) -> El {
                         .key(format!("dc-rep-opt-{idx}"))
                         .role("button")
                         .label(lbl.clone())
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .w_full()
@@ -4905,11 +4940,11 @@ fn report_modal(s: &AppState, blur: bool) -> El {
                 .justify_end()
                 .gap(8.0)
                 .children(can_back.then(|| {
-                    glass_button("dc-rep-back", "Back", None)
+                    glass_button_opt("dc-rep-back", "Back", None, false)
                         .on_press(|s: &mut AppState| s.report_go_back())
                 }))
                 .child(
-                    glass_button(
+                    glass_button_opt(
                         "dc-rep-close",
                         if ended || btn_kind == Some("done") {
                             "Done"
@@ -4917,15 +4952,18 @@ fn report_modal(s: &AppState, blur: bool) -> El {
                             "Cancel"
                         },
                         None,
+                        false,
                     )
                     .on_press(|s: &mut AppState| s.discord.admin.report = None),
                 )
                 .children(
-                    (!ended && btn_kind == Some("next") && btn_target.is_some()).then(|| {
-                        let to = btn_target.unwrap();
-                        primary_button("dc-rep-next", "Next", None)
-                            .on_press(move |s: &mut AppState| s.report_advance(to, None))
-                    }),
+                    (!ended && btn_kind == Some("next"))
+                        .then_some(btn_target)
+                        .flatten()
+                        .map(|to| {
+                            primary_button("dc-rep-next", "Next", None)
+                                .on_press(move |s: &mut AppState| s.report_advance(to, None))
+                        }),
                 )
                 .children((!ended && btn_kind == Some("submit")).then(|| {
                     primary_button(

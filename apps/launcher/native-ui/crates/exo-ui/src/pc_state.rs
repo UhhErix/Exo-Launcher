@@ -5,13 +5,13 @@ use exo_rpc::{
     DisplayState, DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown,
     DriveTemp, DriveVerdict, DriveVolume, DriverProgress, DriverState, DriverStep, DriversState,
     DrivesReply, EqHeadphone, ExoAccountState, ExoAiFans, ExoAiGaming, ExoAiState, FpsCounterReply,
-    GpuProcessUsage, GpuProcessesState, GpuProfile, GpuProfileScreen, HdrState, InstalledAppItem,
-    InstallerCacheReply, InterruptsState, JunkItem, KeepStatus, KeyboardBackupSummary,
-    KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample, LauncherSettings,
-    LeftoverSummary, OverlayAdvisorState, PcHealth, PcHealthItem, PeripheralCard, QosState,
-    RuntimeItem, RuntimeResult, RuntimesProgress, ShaderPrepareGame, ShaderRebuild, ShaderSnapGame,
-    ShadersAddonStatus, StartupItem, StartupListReply, SystemAbout, SystemTuningState, TunePart,
-    TuningItem, UpdateCheckReply, UpdateProgress, WebClientOptions, WindowsApp,
+    GpuProfile, GpuProfileScreen, HdrState, InstalledAppItem, InstallerCacheReply, InterruptsState,
+    JunkItem, KeepStatus, KeyboardBackupSummary, KeyboardProfileSlot, KeyboardReadReply,
+    LatencyReport, LatencySample, LauncherSettings, LeftoverSummary, OverlayAdvisorState, PcHealth,
+    PcHealthItem, PeripheralCard, QosState, RuntimeItem, RuntimeResult, RuntimesProgress,
+    ShaderPrepareGame, ShaderRebuild, ShaderSnapGame, ShadersAddonStatus, StartupItem,
+    StartupListReply, SystemAbout, SystemTuningState, TunePart, TuningItem, UpdateCheckReply,
+    UpdateProgress, WebClientOptions, WindowsApp,
 };
 use rune::TextEdit;
 use std::collections::{HashMap, HashSet};
@@ -19,30 +19,33 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSection {
     General,
+    Library,
+    Downloads,
+    InGame,
+    Capture,
     Account,
-    Appearance,
-    Graphics,
-    Updates,
     About,
 }
 
 impl SettingsSection {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::General,
+        Self::Library,
+        Self::Downloads,
+        Self::InGame,
+        Self::Capture,
         Self::Account,
-        Self::Appearance,
-        Self::Graphics,
-        Self::Updates,
         Self::About,
     ];
 
     pub fn key(self) -> &'static str {
         match self {
             Self::General => "set-sec-general",
+            Self::Library => "set-sec-library",
+            Self::Downloads => "set-sec-downloads",
+            Self::InGame => "set-sec-ingame",
+            Self::Capture => "set-sec-capture",
             Self::Account => "set-sec-account",
-            Self::Appearance => "set-sec-appearance",
-            Self::Graphics => "set-sec-graphics",
-            Self::Updates => "set-sec-updates",
             Self::About => "set-sec-about",
         }
     }
@@ -283,42 +286,6 @@ pub fn autopilot_active_summary(ap: &AutopilotState) -> String {
     parts.join(" ")
 }
 
-pub fn format_gpu_process_metrics(proc: &GpuProcessUsage) -> String {
-    const SHARED_NOTE_MIN: u64 = 64 * 1024 * 1024;
-    let mut parts = Vec::new();
-    if proc.total_percent >= 0.1 {
-        parts.push(format!("{}%", proc.total_percent.round() as i64));
-    }
-    if proc.local_bytes > 0 {
-        parts.push(format!("{} VRAM", format_bytes(proc.local_bytes)));
-    }
-    if proc.non_local_bytes >= SHARED_NOTE_MIN {
-        parts.push(format!("{} shared", format_bytes(proc.non_local_bytes)));
-    }
-    if parts.is_empty() {
-        "0%".into()
-    } else {
-        parts.join(" · ")
-    }
-}
-
-pub fn format_gpu_process_subtitle(proc: &GpuProcessUsage, multi_adapter: bool) -> Option<String> {
-    let mut parts = Vec::new();
-    if !proc.engines.is_empty() {
-        let eng: Vec<String> = proc
-            .engines
-            .iter()
-            .take(2)
-            .map(|e| format!("{} {}%", e.kind, e.percent.round() as i64))
-            .collect();
-        parts.push(eng.join(", "));
-    }
-    if multi_adapter && !proc.adapter_name.is_empty() {
-        parts.push(proc.adapter_name.clone());
-    }
-    (!parts.is_empty()).then(|| parts.join(" · "))
-}
-
 pub fn overview_health_items(health: Option<&PcHealth>) -> Vec<&PcHealthItem> {
     let Some(hp) = health else {
         return Vec::new();
@@ -427,14 +394,9 @@ pub struct SettingsAndPcState {
     pub tuning_busy: Option<String>,
     pub tuning_error: Option<(String, String)>,
     pub qos_state: Option<QosState>,
-    pub qos_busy: Option<String>,
     pub qos_error: Option<(String, String)>,
     pub overlays_state: Option<OverlayAdvisorState>,
-    pub overlays_busy: Option<String>,
     pub overlays_error: Option<(String, String)>,
-    pub gpu_processes: Option<GpuProcessesState>,
-    pub gpu_processes_busy: bool,
-    pub gpu_processes_last_poll: f64,
     pub runtimes: Option<Vec<RuntimeItem>>,
     pub runtimes_running: Option<String>,
     pub runtimes_canceling: bool,
@@ -501,6 +463,7 @@ pub struct SettingsAndPcState {
     pub keyboard_selected_key: Option<String>,
     pub keyboard_backups: Vec<KeyboardBackupSummary>,
     pub devices_loading: bool,
+    pub devices_error: Option<String>,
     pub device_images: HashMap<String, String>,
     pub eq_headphone: Option<EqHeadphone>,
     pub selected_device_id: Option<String>,
@@ -523,11 +486,6 @@ pub struct SettingsAndPcState {
     pub part_menu: Option<PcPartMenu>,
     pub armed_uninstall: Option<(String, u64)>,
     pub armed_uninstall_seq: u64,
-    pub macros_open: bool,
-    pub macros: exo_macros::MacroControlPlane,
-    pub controller_hub: exo_controller::ControllerHub,
-    pub macros_selected_profile: String,
-    pub macros_selected_binding: Option<String>,
     pub audio_ui: crate::devices_audio::AudioEqUiState,
     pub controller_ui: crate::devices_controller::ControllerLabState,
     pub mouse_ui: crate::devices_mouse::NativeMouseUiState,
@@ -535,6 +493,7 @@ pub struct SettingsAndPcState {
     pub hdr_ui: crate::pc_hdr::HdrCalibrationUiState,
     pub power_guard_ui: Box<crate::power_guard::PowerGuardUiState>,
     pub hw_sensors_ui: Box<crate::hw_sensors::HwSensorsUiState>,
+    pub gpu_activity_ui: crate::gpu_activity::GpuActivityUiState,
 }
 
 impl SettingsAndPcState {
@@ -863,14 +822,9 @@ impl SettingsAndPcState {
             tuning_busy: None,
             tuning_error: None,
             qos_state: None,
-            qos_busy: None,
             qos_error: None,
             overlays_state: None,
-            overlays_busy: None,
             overlays_error: None,
-            gpu_processes: None,
-            gpu_processes_busy: false,
-            gpu_processes_last_poll: 0.0,
             runtimes: None,
             runtimes_running: None,
             runtimes_canceling: false,
@@ -1254,6 +1208,7 @@ impl SettingsAndPcState {
                 profile_count: 4,
             }],
             devices_loading: false,
+            devices_error: None,
             device_images: HashMap::new(),
             eq_headphone: None,
             selected_device_id: None,
@@ -1301,11 +1256,6 @@ impl SettingsAndPcState {
             part_menu: None,
             armed_uninstall: None,
             armed_uninstall_seq: 0,
-            macros_open: false,
-            macros: exo_macros::MacroControlPlane::new(),
-            controller_hub: exo_controller::ControllerHub::new(),
-            macros_selected_profile: "desktop".into(),
-            macros_selected_binding: Some("onboard-ptt".into()),
             audio_ui: crate::devices_audio::AudioEqUiState::demo(),
             controller_ui: crate::devices_controller::ControllerLabState::demo(),
             mouse_ui: crate::devices_mouse::NativeMouseUiState::demo(),
@@ -1313,6 +1263,7 @@ impl SettingsAndPcState {
             hdr_ui: crate::pc_hdr::HdrCalibrationUiState::default(),
             power_guard_ui: Box::default(),
             hw_sensors_ui: Box::default(),
+            gpu_activity_ui: Default::default(),
         }
     }
 
@@ -1386,14 +1337,9 @@ impl SettingsAndPcState {
             tuning_busy: None,
             tuning_error: None,
             qos_state: None,
-            qos_busy: None,
             qos_error: None,
             overlays_state: None,
-            overlays_busy: None,
             overlays_error: None,
-            gpu_processes: None,
-            gpu_processes_busy: false,
-            gpu_processes_last_poll: 0.0,
             runtimes: None,
             runtimes_running: None,
             runtimes_canceling: false,
@@ -1456,6 +1402,7 @@ impl SettingsAndPcState {
             keyboard_selected_key: None,
             keyboard_backups: Vec::new(),
             devices_loading: false,
+            devices_error: None,
             device_images: HashMap::new(),
             eq_headphone: None,
             selected_device_id: None,
@@ -1478,11 +1425,6 @@ impl SettingsAndPcState {
             part_menu: None,
             armed_uninstall: None,
             armed_uninstall_seq: 0,
-            macros_open: false,
-            macros: exo_macros::MacroControlPlane::new(),
-            controller_hub: exo_controller::ControllerHub::new(),
-            macros_selected_profile: "desktop".into(),
-            macros_selected_binding: None,
             audio_ui: crate::devices_audio::AudioEqUiState::default(),
             controller_ui: crate::devices_controller::ControllerLabState::default(),
             mouse_ui: crate::devices_mouse::NativeMouseUiState::default(),
@@ -1490,6 +1432,7 @@ impl SettingsAndPcState {
             hdr_ui: crate::pc_hdr::HdrCalibrationUiState::default(),
             power_guard_ui: Box::default(),
             hw_sensors_ui: Box::default(),
+            gpu_activity_ui: Default::default(),
         }
     }
 }
@@ -1523,7 +1466,9 @@ pub fn trim_stop(raw: &str) -> String {
 }
 
 pub fn is_playbook_item(item: &TuningItem) -> bool {
-    item.key != "vrr" && item.key != "mouseAccel" && !item.off && !item.blocked.is_some()
+    !matches!(item.key.as_str(), "vrr" | "mouseAccel" | "integrity")
+        && item.blocked.is_none()
+        && (!item.opt_in || matches!(item.key.as_str(), "services" | "memCompression"))
 }
 
 pub fn has_interrupts_work(interrupts: Option<&InterruptsState>) -> bool {
@@ -2040,7 +1985,7 @@ mod wp9_tests {
         rt.frame(1.0 / 60.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
-        assert!(rt.find("exo-ai-tune-hw-wrap").is_some());
+        assert!(rt.find("exo-ai-tune-hw-wrap").is_none());
         assert!(rt.find("tune-pawnio-ryzen").is_none());
     }
 
@@ -2148,6 +2093,36 @@ mod wp9_tests {
                 .as_ref()
                 .and_then(|p| p.name.as_deref()),
             Some("Visual C++")
+        );
+
+        s.pc.runtimes_running = None;
+        s.pc.runtimes_progress = None;
+        assert!(
+            s.apply_host_event(HostEvent::RuntimesProgress(RuntimesProgress {
+                phase: "install".into(),
+                name: Some("DirectX".into()),
+                ..Default::default()
+            }))
+        );
+        assert_eq!(s.pc.runtimes_running.as_deref(), Some("update"));
+        assert!(
+            s.apply_host_event(HostEvent::RuntimesDone(exo_rpc::RuntimesInstallReply {
+                ok: true,
+                results: vec![exo_rpc::RuntimeResult {
+                    id: "directx".into(),
+                    outcome: "installed".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }))
+        );
+        assert!(s.pc.runtimes_running.is_none());
+        assert!(s.pc.runtimes_progress.is_none());
+        assert_eq!(
+            s.pc.runtimes_note
+                .as_ref()
+                .map(|(text, failed)| (text.as_str(), *failed)),
+            Some(("1 installed.", false))
         );
 
         assert!(s.apply_host_event(HostEvent::ShadersRebuild(ShaderRebuild {
@@ -2336,7 +2311,7 @@ mod wp9_tests {
             ..Default::default()
         });
         s.switch_room(Room::Settings);
-        s.pc.settings_section = SettingsSection::Graphics;
+        s.pc.settings_section = SettingsSection::InGame;
         let mut rt = Runtime::new(s, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
         rt.frame(0.0);
         rt.settle_all();
@@ -2344,7 +2319,7 @@ mod wp9_tests {
         assert!(rt.find("set-fps-position").is_some());
         assert!(rt.find("set-fps-low").is_some());
 
-        rt.state.pc.settings_section = SettingsSection::Updates;
+        rt.state.pc.settings_section = SettingsSection::General;
         rt.invalidate();
         rt.frame(1.0 / 60.0);
         rt.settle_all();
@@ -2450,48 +2425,14 @@ mod wp9_tests {
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
-        assert!(rt.find("pc-best-qos-steam:730").is_some());
-        assert!(rt.find("ov-off-gamebar").is_some());
+        assert!(rt.find("pc-best-qos-steam:730").is_none());
+        assert!(rt.find("ov-off-gamebar").is_none());
         assert!(rt.find("sys-tuning-migrate").is_some());
     }
 
     #[test]
-    fn perf_hw_phase1_gpu_processes_and_overview_health_rows_render() {
-        let proc = GpuProcessUsage {
-            pid: 4120,
-            name: "chrome".into(),
-            adapter_luid: "0x1".into(),
-            adapter_name: "RTX 3070".into(),
-            total_percent: 14.2,
-            engines: vec![exo_rpc::GpuEngineSlice {
-                kind: "3D".into(),
-                percent: 14.2,
-            }],
-            local_bytes: 640 * 1024 * 1024,
-            non_local_bytes: 128 * 1024 * 1024,
-            protected_reason: None,
-        };
-        let metrics = format_gpu_process_metrics(&proc);
-        assert!(metrics.contains("14%"));
-        assert!(metrics.contains("VRAM"));
-        assert!(metrics.contains("shared"));
-        let sub = format_gpu_process_subtitle(&proc, true).unwrap();
-        assert_eq!(sub, "3D 14% · RTX 3070");
-
+    fn overview_health_rows_render() {
         let mut s = AppState::default();
-        s.pc.gpu_processes = Some(GpuProcessesState {
-            ok: true,
-            adapters: vec![exo_rpc::GpuAdapterUsage {
-                luid: "0x1".into(),
-                name: "RTX 3070".into(),
-                ..Default::default()
-            }],
-            processes: vec![proc],
-            answer: exo_rpc::GpuUsageAnswer {
-                summary: "chrome is using 14% GPU (3D) and 640 MB VRAM.".into(),
-                ..Default::default()
-            },
-        });
         s.pc.health = Some(PcHealth {
             ok: true,
             items: vec![
@@ -2520,9 +2461,7 @@ mod wp9_tests {
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
-        assert!(rt.find("exo-ai-gpu-usage-card").is_some());
-        assert!(rt.find("gpu-proc-refresh").is_some());
-        assert!(rt.find("gpu-proc-4120-0x1").is_some());
+        assert!(rt.find("exo-ai-gpu-usage-card").is_none());
         assert!(rt.find("exo-ai-health-rows").is_some());
         assert!(rt.find("ov-hp-cpumicrocode").is_some());
         assert!(rt.find("ov-hp-winupdate").is_some());

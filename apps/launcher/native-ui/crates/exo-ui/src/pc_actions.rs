@@ -85,15 +85,12 @@ impl AppState {
 
     pub fn set_bool_setting(&mut self, key: &str, value: bool) {
         match key {
-            "reduceMotion" => self.settings.reduce_motion = value,
             "startWithWindows" => self.settings.start_with_windows = value,
             "startMaximized" => self.settings.start_maximized = value,
-            "useClassicWebUi" => self.settings.use_classic_web_ui = value,
             "showLibraryTools" => self.settings.show_library_tools = value,
             "pauseDownloadsWhilePlaying" => self.settings.pause_downloads_while_playing = value,
             "keepAwakeDownloads" => self.settings.keep_awake_downloads = value,
             "autoUpdateGames" => self.settings.auto_update_games = value,
-            "storeClientsQuiet" => self.settings.store_clients_quiet = value,
             "achievementBanners" => self.settings.achievement_banners = value,
             "fpsCounter" => self.settings.fps_counter = value,
             "hdrForGames" => self.settings.hdr_for_games = value,
@@ -106,21 +103,6 @@ impl AppState {
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let mut map = Map::new();
             map.insert(key.to_string(), Value::Bool(value));
-            rpc.call::<_, LauncherSettings>(METHOD_SETTINGS_SET, &Value::Object(map), move |res| {
-                if let Ok(set) = res {
-                    handle.update(move |s, _| s.settings = set);
-                }
-            });
-        }
-    }
-
-    pub fn relaunch_for_ui_switch(&mut self, use_classic: bool) {
-        self.settings.use_classic_web_ui = use_classic;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let mut map = Map::new();
-            map.insert("useClassicWebUi".to_string(), Value::Bool(use_classic));
-            map.insert("relaunchForUiSwitch".to_string(), Value::Bool(true));
             rpc.call::<_, LauncherSettings>(METHOD_SETTINGS_SET, &Value::Object(map), move |res| {
                 if let Ok(set) = res {
                     handle.update(move |s, _| s.settings = set);
@@ -441,9 +423,47 @@ impl AppState {
                 }
             });
             let h2 = handle.clone();
+            let rpc_startup_icons = rpc.clone();
             rpc.call::<_, StartupListReply>(METHOD_STARTUP_LIST, &json!({}), move |res| {
                 if let Ok(list) = res {
-                    h2.update(move |s, _| s.pc.startup_list = Some(list));
+                    let mut seen = std::collections::HashSet::new();
+                    let icon_keys: Vec<String> = list
+                        .items
+                        .iter()
+                        .filter_map(|item| item.icon.as_deref())
+                        .chain(list.removed.iter().filter_map(|item| item.icon.as_deref()))
+                        .filter(|k| !k.is_empty())
+                        .filter(|k| seen.insert((*k).to_string()))
+                        .map(str::to_string)
+                        .collect();
+                    let h_ic = h2.clone();
+                    let rpc_ic = rpc_startup_icons.clone();
+                    h2.update(move |s, _| {
+                        let missing: Vec<String> = icon_keys
+                            .into_iter()
+                            .filter(|k| !s.pc.app_icons.contains_key(k))
+                            .collect();
+                        s.pc.startup_list = Some(list);
+                        for chunk in missing.chunks(100) {
+                            let chunk_vec: Vec<String> = chunk.to_vec();
+                            let h_c = h_ic.clone();
+                            rpc_ic.call::<_, AppsIconsReply>(
+                                METHOD_APPS_ICONS,
+                                &json!({ "ids": chunk_vec }),
+                                move |ic_res| {
+                                    if let Ok(reply) = ic_res {
+                                        h_c.update(move |s, _| {
+                                            for (k, v) in reply.icons {
+                                                if let Some(data_url) = v {
+                                                    s.pc.app_icons.insert(k, data_url);
+                                                }
+                                            }
+                                        });
+                                    }
+                                },
+                            );
+                        }
+                    });
                 }
             });
             self.load_pc_apps_extras(false);
@@ -535,116 +555,127 @@ impl AppState {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.pc.devices_loading = true;
+            self.pc.devices_error = None;
             let h1 = handle.clone();
             let rpc_follow = rpc.clone();
-            rpc.call::<_, DevicesListReply>(METHOD_DEVICES_LIST, &json!({}), move |res| {
-                if let Ok(list) = res {
-                    let out_id = list
-                        .devices
-                        .iter()
-                        .find(|d| d.kind == "audio" && d.role.as_deref() == Some("output"))
-                        .or_else(|| {
-                            list.devices
-                                .iter()
-                                .find(|d| d.kind == "audio" && d.role.as_deref() != Some("input"))
-                        })
-                        .map(|d| d.id.clone());
-                    let mic_id = list
-                        .devices
-                        .iter()
-                        .find(|d| d.kind == "audio" && d.role.as_deref() == Some("input"))
-                        .map(|d| d.id.clone());
-                    let kb_id = list
-                        .devices
-                        .iter()
-                        .find(|d| d.kind == "keyboard" && d.lab)
-                        .or_else(|| list.devices.iter().find(|d| d.kind == "keyboard"))
-                        .map(|d| d.id.clone());
-                    let h_aud = h1.clone();
-                    let h_kb = h1.clone();
-                    let h_bak = h1.clone();
-                    let out_clone = out_id.clone();
-                    let mic_clone = mic_id.clone();
-                    let kb_clone = kb_id.clone();
-                    let photo_reqs: Vec<(String, serde_json::Value)> = list
-                        .devices
-                        .iter()
-                        .map(|d| {
-                            (
-                                d.id.clone(),
-                                json!({
-                                    "kind": d.kind,
-                                    "name": d.name,
-                                    "model": d.model,
-                                    "maker": d.maker.as_deref().or(d.brand.as_deref()),
-                                    "color": d.color,
-                                    "layout": d.layout,
-                                }),
-                            )
-                        })
-                        .collect();
-                    let rpc_img = rpc_follow.clone();
-                    let rpc_kb = rpc_follow.clone();
-                    let rpc_bak = rpc_follow.clone();
-                    let h_img_base = h1.clone();
-                    h1.update(move |s, _| {
-                        s.pc.devices_loading = false;
-                        s.pc.audio_output_id = out_id;
-                        s.pc.audio_mic_id = mic_id;
-                        s.pc.keyboard_id = kb_id;
-                        s.pc.devices = Some(list);
-                    });
-                    for (dev_id, payload) in photo_reqs {
-                        let h_i = h_img_base.clone();
-                        rpc_img.call::<_, DevicesImageReply>(
-                            METHOD_DEVICES_IMAGE,
-                            &payload,
-                            move |img_res| {
-                                if let Ok(reply) = img_res
-                                    && let Some(url) = reply.url
-                                {
-                                    h_i.update(move |s, _| {
-                                        s.pc.device_images.insert(dev_id, url);
-                                    });
+            rpc.call::<_, DevicesListReply>(
+                METHOD_DEVICES_LIST,
+                &json!({}),
+                move |res| match res {
+                    Ok(list) => {
+                        let out_id = list
+                            .devices
+                            .iter()
+                            .find(|d| d.kind == "audio" && d.role.as_deref() == Some("output"))
+                            .or_else(|| {
+                                list.devices.iter().find(|d| {
+                                    d.kind == "audio" && d.role.as_deref() != Some("input")
+                                })
+                            })
+                            .map(|d| d.id.clone());
+                        let mic_id = list
+                            .devices
+                            .iter()
+                            .find(|d| d.kind == "audio" && d.role.as_deref() == Some("input"))
+                            .map(|d| d.id.clone());
+                        let kb_id = list
+                            .devices
+                            .iter()
+                            .find(|d| d.kind == "keyboard" && d.lab)
+                            .or_else(|| list.devices.iter().find(|d| d.kind == "keyboard"))
+                            .map(|d| d.id.clone());
+                        let h_aud = h1.clone();
+                        let h_kb = h1.clone();
+                        let h_bak = h1.clone();
+                        let out_clone = out_id.clone();
+                        let mic_clone = mic_id.clone();
+                        let kb_clone = kb_id.clone();
+                        let photo_reqs: Vec<(String, serde_json::Value)> = list
+                            .devices
+                            .iter()
+                            .map(|d| {
+                                (
+                                    d.id.clone(),
+                                    json!({
+                                        "kind": d.kind,
+                                        "name": d.name,
+                                        "model": d.model,
+                                        "maker": d.maker.as_deref().or(d.brand.as_deref()),
+                                        "color": d.color,
+                                        "layout": d.layout,
+                                    }),
+                                )
+                            })
+                            .collect();
+                        let rpc_img = rpc_follow.clone();
+                        let rpc_kb = rpc_follow.clone();
+                        let rpc_bak = rpc_follow.clone();
+                        let h_img_base = h1.clone();
+                        h1.update(move |s, _| {
+                            s.pc.devices_loading = false;
+                            s.pc.devices_error = None;
+                            s.pc.audio_output_id = out_id;
+                            s.pc.audio_mic_id = mic_id;
+                            s.pc.keyboard_id = kb_id;
+                            s.pc.devices = Some(list);
+                        });
+                        for (dev_id, payload) in photo_reqs {
+                            let h_i = h_img_base.clone();
+                            rpc_img.call::<_, DevicesImageReply>(
+                                METHOD_DEVICES_IMAGE,
+                                &payload,
+                                move |img_res| {
+                                    if let Ok(reply) = img_res
+                                        && let Some(url) = reply.url
+                                    {
+                                        h_i.update(move |s, _| {
+                                            s.pc.device_images.insert(dev_id, url);
+                                        });
+                                    }
+                                },
+                            );
+                        }
+                        rpc_follow.call::<_, AudioReadReply>(
+                            METHOD_AUDIO_READ,
+                            &json!({ "output": out_clone, "mic": mic_clone }),
+                            move |aud_res| {
+                                if let Ok(aud) = aud_res {
+                                    h_aud.update(move |s, _| s.pc.audio = Some(aud));
+                                }
+                            },
+                        );
+                        let kb_payload = match kb_clone {
+                            Some(ref id) => json!({ "id": id }),
+                            None => json!({}),
+                        };
+                        rpc_kb.call::<_, KeyboardReadReply>(
+                            METHOD_KEYBOARD_READ,
+                            &kb_payload,
+                            move |kb_res| {
+                                h_kb.update(move |s, _| {
+                                    s.apply_keyboard_read_reply(kb_res.map_err(|e| e.to_string()));
+                                });
+                            },
+                        );
+                        rpc_bak.call::<_, KeyboardBackupsReply>(
+                            METHOD_KEYBOARD_BACKUPS,
+                            &kb_payload,
+                            move |bak_res| {
+                                if let Ok(b) = bak_res {
+                                    h_bak.update(move |s, _| s.pc.keyboard_backups = b.backups);
                                 }
                             },
                         );
                     }
-                    rpc_follow.call::<_, AudioReadReply>(
-                        METHOD_AUDIO_READ,
-                        &json!({ "output": out_clone, "mic": mic_clone }),
-                        move |aud_res| {
-                            if let Ok(aud) = aud_res {
-                                h_aud.update(move |s, _| s.pc.audio = Some(aud));
-                            }
-                        },
-                    );
-                    let kb_payload = match kb_clone {
-                        Some(ref id) => json!({ "id": id }),
-                        None => json!({}),
-                    };
-                    rpc_kb.call::<_, KeyboardReadReply>(
-                        METHOD_KEYBOARD_READ,
-                        &kb_payload,
-                        move |kb_res| {
-                            h_kb.update(move |s, _| {
-                                s.apply_keyboard_read_reply(kb_res.map_err(|e| e.to_string()));
-                            });
-                        },
-                    );
-                    rpc_bak.call::<_, KeyboardBackupsReply>(
-                        METHOD_KEYBOARD_BACKUPS,
-                        &kb_payload,
-                        move |bak_res| {
-                            if let Ok(b) = bak_res {
-                                h_bak.update(move |s, _| s.pc.keyboard_backups = b.backups);
-                            }
-                        },
-                    );
-                } else {
-                    h1.update(|s, _| s.pc.devices_loading = false);
-                }
-            });
+                    Err(e) => {
+                        let err = e.to_string();
+                        h1.update(move |s, _| {
+                            s.pc.devices_loading = false;
+                            s.pc.devices_error = Some(err);
+                        });
+                    }
+                },
+            );
             let h4 = handle.clone();
             let rpc_eq_img = rpc.clone();
             rpc.call::<_, EqStateReply>(METHOD_EQ, &json!({ "action": "state" }), move |res| {
@@ -1025,12 +1056,27 @@ impl AppState {
             return;
         }
         self.pc.owner_hwnd = hwnd;
+        self.notify_host_window_state();
         if self.pc.mouse_panel_open
             && let Some(rect) = self.pc.mouse_panel_rect
         {
             let visible = self.mouse_panel_should_be_visible();
             self.pc.mouse_panel_visible = visible;
             self.send_mouse_panel_open(rect, visible);
+        }
+    }
+
+    pub fn notify_host_window_state(&self) {
+        #[cfg(windows)]
+        if let Some(rpc) = self.rpc.clone() {
+            rpc.call_raw(
+                exo_rpc::METHOD_SHELL_WINDOW_FOCUS,
+                &json!({
+                    "hwnd": self.pc.owner_hwnd,
+                    "active": self.chrome.window_focused,
+                }),
+                |_| {},
+            );
         }
     }
 
@@ -1045,6 +1091,12 @@ impl AppState {
             && !self.media.captures_open
             && !self.props_open
             && !self.library_more_open
+            && !self.whats_new.sheet_open
+            && self.whats_new.mode.is_none()
+            && !self.downloads.open
+            && self.context_menu.is_none()
+            && !self.chrome.mini_volume_open
+            && self.island.person_menu.is_none()
     }
 
     pub fn retry_mouse_panel(&mut self) {

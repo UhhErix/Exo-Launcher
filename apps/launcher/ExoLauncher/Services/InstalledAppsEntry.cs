@@ -27,7 +27,7 @@ internal static class InstalledAppsEntry
             if (key?.GetValue("UninstallString") is not string) return;
             // A build run from anywhere but the installed folder leaves the installed Exo's entry alone.
             if (key.GetValue("InstallLocation") is not string where || !SameFolder(where, AppContext.BaseDirectory)) return;
-            Set(key, "DisplayVersion", version);
+            Set(key, "DisplayVersion", VersionLabel.Of(version));
             Set(key, "Publisher", Publisher);
             Set(key, "URLInfoAbout", Web);
             Set(key, "URLUpdateInfo", Web);

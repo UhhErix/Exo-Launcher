@@ -50,18 +50,15 @@ internal static class UpdateFlow
         (State.Checking, Step.Install, null, State.Downloading),
         // Pressed again once the installer runs: nothing more starts (InstallAsync answers at once); Exo is closing.
         (State.Restarting, Step.Install, null, State.Restarting),
-        (State.Downloading, Step.Verified, false, State.Ready),
-        (State.Downloading, Step.Verified, true, State.WaitingForGame),
+        (State.Downloading, Step.Verified, null, State.Ready),
         (State.Downloading, Step.DownloadFailed, null, State.Failed),
 
         (State.Ready, Step.GameStarted, null, State.WaitingForGame),
         (State.WaitingForGame, Step.GameEnded, null, State.Ready),
-        (State.Ready, Step.Install, false, State.Applying),
-        (State.Ready, Step.Install, true, State.WaitingForGame),
-        (State.Ready, Step.Apply, false, State.Applying),
-        (State.Ready, Step.Apply, true, State.WaitingForGame),
-        (State.WaitingForGame, Step.Install, false, State.Applying),
-        (State.WaitingForGame, Step.Apply, false, State.Applying),
+        (State.Ready, Step.Install, null, State.Applying),
+        (State.Ready, Step.Apply, null, State.Applying),
+        (State.WaitingForGame, Step.Install, null, State.Applying),
+        (State.WaitingForGame, Step.Apply, null, State.Applying),
         (State.Ready, Step.ApplyFailed, null, State.Failed),
         (State.WaitingForGame, Step.ApplyFailed, null, State.Failed),
 

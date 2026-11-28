@@ -4,13 +4,12 @@ use exo_rpc::{
     ActionResult, ArtworkMutationResponse, CompressProgressEvent, CompressState,
     CompressStateReply, DequeueReply, DlssNewerItem, DlssNewerReply, DlssRunResult, DlssStatus,
     DlssStatusItem, FrameGenMod, Game, GameAchievementsEvent, GameContent, GameExtras,
-    GameGetReply, GameGraphicsFeaturesState, GameOptimizeEvent, GameProperties,
-    GamePropertySetReply, GameSettingsState, GpuGame, HdrGame, HdrState, InstallProgress,
-    InstallResponse, KeepStatus, LauncherSettings, METHOD_ART_REFETCH, METHOD_ART_REPLACE,
-    METHOD_ART_RESET, METHOD_COMPRESS_ACT, METHOD_COMPRESS_STATE, METHOD_DLSS_CONSENT,
-    METHOD_DLSS_DOWNLOAD_NEWER, METHOD_DLSS_FRAME_GEN, METHOD_DLSS_NEWER, METHOD_DLSS_RESTORE,
-    METHOD_DLSS_STATUS, METHOD_GAME_DEQUEUE, METHOD_GAME_EXTRAS, METHOD_GAME_GET,
-    METHOD_GAME_GRAPHICS_FEATURES, METHOD_GAME_GRAPHICS_FEATURES_SET, METHOD_GAME_OPEN_FOLDER,
+    GameGetReply, GameOptimizeEvent, GameProperties, GamePropertySetReply, GameSettingsState,
+    GpuGame, HdrGame, HdrState, InstallProgress, InstallResponse, KeepStatus, LauncherSettings,
+    METHOD_ART_REFETCH, METHOD_ART_REPLACE, METHOD_ART_RESET, METHOD_COMPRESS_ACT,
+    METHOD_COMPRESS_STATE, METHOD_DLSS_CONSENT, METHOD_DLSS_DOWNLOAD_NEWER, METHOD_DLSS_FRAME_GEN,
+    METHOD_DLSS_NEWER, METHOD_DLSS_RESTORE, METHOD_DLSS_STATUS, METHOD_DLSS_UPDATE_ALL,
+    METHOD_GAME_DEQUEUE, METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_OPEN_FOLDER,
     METHOD_GAME_PROGRESS, METHOD_GAME_PROPERTIES, METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR,
     METHOD_GAME_RESUME_DOWNLOAD, METHOD_GAME_SETTINGS, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
     METHOD_GPU_GAME, METHOD_HDR_GAME, METHOD_HDR_STATE, METHOD_KEEP_STATUS, METHOD_SETTINGS_SET,
@@ -32,7 +31,6 @@ const DLSS_PRELOAD_MAX_GAMES: usize = 8;
 const DLSS_NEWER_DELAY_SECS: f64 = 20.0;
 const MOVE_POLL_BASE_SECS: f64 = 2.0;
 const MOVE_POLL_MAX_SECS: f64 = 8.0;
-pub const SHADERS_RELEASES_URL: &str = "https://getexo.app/source";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PrimaryActionKind {
@@ -127,15 +125,12 @@ pub struct GamePageState {
     pub settings_working: bool,
     pub settings_work_on: bool,
     pub settings_work_failed: bool,
-    pub graphics_features: Option<GameGraphicsFeaturesState>,
-    pub graphics_features_cache: HashMap<String, GameGraphicsFeaturesState>,
-    pub graphics_features_busy: Option<String>,
-    pub graphics_features_errors: HashMap<String, String>,
     pub keep_status: Option<KeepStatus>,
     pub dlss: Option<DlssStatus>,
     pub dlss_cache: HashMap<String, DlssStatus>,
     pub dlss_cached_at: HashMap<String, f64>,
     pub dlss_inflight: HashSet<String>,
+    pub dlss_auto_tried: HashSet<String>,
     pub dlss_preloaded: bool,
     pub dlss_preload_pending: bool,
     pub dlss_preload_due: Option<f64>,
@@ -329,9 +324,6 @@ impl GamePageState {
         self.settings_working = false;
         self.settings_work_on = false;
         self.settings_work_failed = false;
-        self.graphics_features = self.graphics_features_cache.get(id).cloned();
-        self.graphics_features_busy = None;
-        self.graphics_features_errors.clear();
         self.dlss = self.dlss_peek(id);
         self.dlss_loading = self.dlss.is_none();
         self.frame_gen = self.frame_gen_cache.get(id).cloned();
@@ -1261,7 +1253,7 @@ pub fn shader_word(status: &ShaderStatus) -> Option<LineWord> {
         )),
         "ready" | "record" => Some(LineWord::plain("Not compiled")),
         "unsupported" => Some(LineWord::plain("Not supported in this game")),
-        "noApp" => Some(LineWord::plain("Get Exo Shaders")),
+        "noApp" => Some(LineWord::plain("Missing from this install")),
         "error" => Some(LineWord::bad("Could not check")),
         _ => None,
     }
@@ -1594,7 +1586,6 @@ impl AppState {
 
         self.fetch_game_dlss_rpc(game_id, false, epoch);
         self.fetch_game_settings_rpc(game_id, epoch);
-        self.fetch_game_graphics_features_rpc(game_id, epoch);
         self.fetch_game_shaders_rpc(game_id, epoch);
 
         {
@@ -1719,6 +1710,7 @@ impl AppState {
                 if s.game_page.generation == epoch || matches_open {
                     s.game_page.dlss_loading = false;
                     s.game_page.dlss = Some(st);
+                    s.auto_update_upscalers(&gid);
                 }
             });
         });
@@ -1756,106 +1748,6 @@ impl AppState {
                 });
             }
         });
-    }
-
-    #[cfg(windows)]
-    pub fn fetch_game_graphics_features_rpc(&self, game_id: &str, epoch: u64) {
-        let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) else {
-            return;
-        };
-        let gid = game_id.to_string();
-        rpc.call::<_, GameGraphicsFeaturesState>(
-            METHOD_GAME_GRAPHICS_FEATURES,
-            &json!({ "id": gid }),
-            move |res| {
-                handle.update(move |s, _| {
-                    if s.game_page.generation != epoch {
-                        return;
-                    }
-                    let next = res.unwrap_or_else(|_| GameGraphicsFeaturesState {
-                        ok: false,
-                        message: Some("Could not check graphics features.".into()),
-                        ..Default::default()
-                    });
-                    if next.ok {
-                        GamePageState::cache_put(
-                            &mut s.game_page.graphics_features_cache,
-                            gid,
-                            next.clone(),
-                        );
-                    }
-                    s.game_page.graphics_features = Some(next);
-                });
-            },
-        );
-    }
-
-    pub fn toggle_game_graphics_feature(
-        &mut self,
-        game_id: &str,
-        feature: &str,
-        on: bool,
-        accept_risk: bool,
-    ) {
-        self.game_page.graphics_features_busy = Some(feature.to_string());
-        self.game_page.graphics_features_errors.remove(feature);
-        #[cfg(windows)]
-        {
-            let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) else {
-                self.game_page.graphics_features_busy = None;
-                return;
-            };
-            let gid = game_id.to_string();
-            let feat = feature.to_string();
-            let epoch = self.game_page.generation;
-            rpc.call::<_, GameGraphicsFeaturesState>(
-                METHOD_GAME_GRAPHICS_FEATURES_SET,
-                &json!({
-                    "id": gid,
-                    "feature": feat,
-                    "on": on,
-                    "acceptAntiCheatRisk": accept_risk,
-                }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        if s.game_page.generation != epoch {
-                            return;
-                        }
-                        s.game_page.graphics_features_busy = None;
-                        match res {
-                            Ok(next) if next.ok => {
-                                GamePageState::cache_put(
-                                    &mut s.game_page.graphics_features_cache,
-                                    gid,
-                                    next.clone(),
-                                );
-                                s.game_page.graphics_features = Some(next);
-                            }
-                            Ok(next) => {
-                                let msg = next
-                                    .message
-                                    .clone()
-                                    .unwrap_or_else(|| "Could not save. Try again.".into());
-                                s.game_page.graphics_features_errors.insert(feat, msg);
-                                if next.features.as_ref().is_some_and(|v| !v.is_empty()) {
-                                    s.game_page.graphics_features = Some(next);
-                                }
-                            }
-                            Err(_) => {
-                                s.game_page
-                                    .graphics_features_errors
-                                    .insert(feat, "Could not save. Try again.".into());
-                            }
-                        }
-                    });
-                },
-            );
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (game_id, on, accept_risk);
-            self.game_page.graphics_features_busy = None;
-        }
     }
 
     #[cfg(windows)]
@@ -2519,6 +2411,47 @@ impl AppState {
         let _ = (id, fallback, epoch);
     }
 
+    pub fn auto_update_upscalers(&mut self, game_id: &str) {
+        if !self.settings.auto_update_upscalers || self.status == HostStatus::Standalone {
+            return;
+        }
+        let view = upscaler_view(self.game_page.dlss.as_ref());
+        if view.locked || view.updatable == 0 {
+            return;
+        }
+        if self.games.iter().any(|g| g.id == game_id && g.is_running) {
+            return;
+        }
+        if !self.game_page.dlss_auto_tried.insert(game_id.to_string()) {
+            return;
+        }
+        let epoch = self.game_page.generation;
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let gid = game_id.to_string();
+            rpc.call::<_, DlssRunResult>(
+                METHOD_DLSS_UPDATE_ALL,
+                &json!({ "id": gid }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        s.game_page.dlss_invalidate(&gid);
+                        if s.game_page.generation == epoch {
+                            s.fetch_game_dlss_rpc(&gid, true, epoch);
+                            if let Ok(r) = res
+                                && !r.ok
+                                && let Some(msg) = r.message
+                            {
+                                s.game_page.set_note("restore", msg, true);
+                            }
+                        }
+                    });
+                },
+            );
+        }
+        #[cfg(not(windows))]
+        let _ = epoch;
+    }
+
     pub fn dlss_restore_game(&mut self, id: &str) {
         self.game_page.set_note("restore", "", false);
         if self.status == HostStatus::Standalone {
@@ -2944,6 +2877,43 @@ impl AppState {
         }
         #[cfg(not(windows))]
         let _ = url;
+    }
+
+    pub fn open_message_link(&mut self, url: &str) {
+        let confirmed = self.discord.link_confirm.as_deref() == Some(url);
+        self.discord.link_confirm = None;
+        if self.status == HostStatus::Standalone {
+            self.notice = Some(format!("Open {url}"));
+            return;
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let target = url.to_string();
+            rpc.call::<_, OpenUrlReply>(
+                METHOD_SHELL_OPEN_URL,
+                &json!({ "url": target, "guard": true, "confirmed": confirmed }),
+                move |res| match res {
+                    Ok(reply) if !reply.ok => handle.update(move |s, _| {
+                        if let Some(brand) = reply.lookalike {
+                            s.notice = Some(crate::discord_md::lookalike_question(&brand));
+                            s.discord.link_confirm = Some(target);
+                        } else {
+                            s.notice = Some(
+                                reply
+                                    .message
+                                    .unwrap_or_else(|| "Could not open that link.".into()),
+                            );
+                        }
+                    }),
+                    Ok(_) => {}
+                    Err(e) => handle.update(move |s, _| {
+                        s.notice = Some(format!("Could not open link: {e}"));
+                    }),
+                },
+            );
+        }
+        #[cfg(not(windows))]
+        let _ = confirmed;
     }
 
     pub fn select_game_source(&mut self, variant_id: &str) {

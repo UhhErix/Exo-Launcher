@@ -18,17 +18,14 @@ use exo_kit::SPRING_MOVE;
 use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
-    CapLabActionReply, CapLabStatus, CaptureLiveState, CaptureSavedEvent, CaptureStatusReply,
-    DiscordFriend, ExoAccountState, FrameCapBackend, FrameCapStutter, FrameCapSuggestion,
-    FrameCapTier, FrameGenRoute, Game, GameExtras, GameFrameCap, GameFrameGen, GameProperties,
-    GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
-    LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
-    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_CAP_LAB_CANCEL, METHOD_GAME_CAP_LAB_RUN,
-    METHOD_GAME_FRAME_CAP, METHOD_GAME_FRAME_GEN, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH,
-    METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH,
-    METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_HOME, MusicPlayback,
-    MusicVolumeEvent, ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame, StoreHome,
-    StoreOtherOffers, StoreShelf, StoreTile, remote_art,
+    CaptureLiveState, CaptureSavedEvent, CaptureStatusReply, DiscordFriend, ExoAccountState,
+    FrameGenRoute, Game, GameExtras, GameFrameGen, GameProperties, GameRunStateEvent, HostEvent,
+    InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
+    LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_FRAME_GEN,
+    METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL,
+    METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP,
+    METHOD_STORE_HOME, MusicPlayback, MusicVolumeEvent, ShellBootstrap, StoreArt,
+    StoreChangedEvent, StoreGame, StoreHome, StoreOtherOffers, StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -555,9 +552,6 @@ pub enum PaletteTarget {
     InstallSelected(String),
     OpenDownloads,
     OpenWhatsNew,
-    NoteNew,
-    NoteOpen,
-    NoteItem(String),
     DiscordDm(String),
     DiscordServer(String),
     DiscordChannel {
@@ -678,13 +672,8 @@ pub struct AppState {
     pub game_props: Option<GameProperties>,
     pub game_page: crate::game_actions::GamePageState,
     pub game_frame_gen: Option<GameFrameGen>,
-    pub frame_gen_menu_open: bool,
+    pub frame_gen_auto_tried: std::collections::HashSet<String>,
     pub frame_gen_busy: bool,
-    pub frame_gen_confirm: Option<(String, String, Option<String>)>,
-    pub game_frame_cap: Option<GameFrameCap>,
-    pub frame_cap_menu_open: bool,
-    pub frame_cap_busy: bool,
-    pub frame_cap_error: Option<String>,
     pub props_open: bool,
     pub game_props_tab: usize,
     pub props_launch_opts: TextEdit,
@@ -733,6 +722,7 @@ pub struct AppState {
     pub room_left_at: HashMap<CacheRoom, f64>,
     pub discord_dirty_while_closed: bool,
     remote_inflight: RefCell<HashSet<String>>,
+    pub(crate) startup_disk_art: Cell<bool>,
     pub video_router: VideoFrameRouter,
     pub events: Rc<EventRegistry>,
     pub chrome: ShellChromeState,
@@ -743,6 +733,8 @@ pub struct AppState {
     pub key_modal: KeyModalState,
     pub notice_runtime: NoticeRuntimeState,
     pub palette_extras: PaletteExtrasState,
+    pub ui_discard_edit: TextEdit,
+    pub ui_discard_canvas: rune::ImageCanvasState,
     pub web_host: Box<crate::web_host::LazyWebHostState>,
     #[cfg(windows)]
     pub rpc: Option<Arc<RpcClient>>,
@@ -832,90 +824,8 @@ impl AppState {
                 }],
                 ..Default::default()
             }),
-            frame_gen_menu_open: false,
+            frame_gen_auto_tried: std::collections::HashSet::new(),
             frame_gen_busy: false,
-            frame_gen_confirm: None,
-            game_frame_cap: Some(GameFrameCap {
-                ok: true,
-                game_id: "steam:1091500".into(),
-                refresh_hz: 144.0,
-                vrr: true,
-                in_vrr_range: true,
-                vrr_floor_hz: 48,
-                fg_multiplier: 1,
-                vendor: "nvidia".into(),
-                backend: "nvidia_drs".into(),
-                backend_label: "NVIDIA Driver (DRS)".into(),
-                backend_available: true,
-                backends: vec![FrameCapBackend {
-                    id: "nvidia_drs".into(),
-                    vendor: "nvidia".into(),
-                    label: "NVIDIA Driver (DRS)".into(),
-                    available: true,
-                    per_game_native: true,
-                    latency_note: "Low latency per-game DRS Max Frame Rate.".into(),
-                    anti_cheat_note: "External driver profile; safe on every anti-cheat class."
-                        .into(),
-                    reason: None,
-                }],
-                selected_tier: "off".into(),
-                tiers: vec![
-                    FrameCapTier {
-                        id: "smooth".into(),
-                        label: "Smooth".into(),
-                        cap_fps: Some(102),
-                        output_fps: Some(102),
-                        predicted_variance_ms2: 0.25,
-                        predicted_std_dev_ms: 0.5,
-                        summary: "1% low · 102 fps".into(),
-                        ..Default::default()
-                    },
-                    FrameCapTier {
-                        id: "balanced".into(),
-                        label: "Balanced".into(),
-                        cap_fps: Some(120),
-                        output_fps: Some(120),
-                        predicted_variance_ms2: 0.9,
-                        predicted_std_dev_ms: 0.95,
-                        summary: "5% low · 120 fps".into(),
-                        ..Default::default()
-                    },
-                    FrameCapTier {
-                        id: "max".into(),
-                        label: "Max (VRR)".into(),
-                        cap_fps: Some(138),
-                        output_fps: Some(138),
-                        predicted_variance_ms2: 2.25,
-                        predicted_std_dev_ms: 1.5,
-                        summary: "VRR ceiling · 138 fps".into(),
-                        ..Default::default()
-                    },
-                ],
-                suggestion: FrameCapSuggestion {
-                    tier: "max".into(),
-                    cap_fps: Some(138),
-                    reason: "VRR is active at 144 Hz; 138 fps stays below the V-Sync ceiling."
-                        .into(),
-                },
-                stutter: FrameCapStutter {
-                    top_cause: "none".into(),
-                    top_cause_label: "None".into(),
-                    summary: "No gameplay frame trace recorded yet.".into(),
-                    ..Default::default()
-                },
-                ab: CapLabStatus {
-                    game_id: "steam:1091500".into(),
-                    status: "idle".into(),
-                    total_seconds: 20,
-                    noise_threshold_percent: 3.0,
-                    ..Default::default()
-                },
-                word: "Off · 138 fps VRR cap available".into(),
-                ..Default::default()
-            }),
-            frame_cap_menu_open: false,
-            frame_cap_busy: false,
-            frame_cap_error: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -945,7 +855,6 @@ impl AppState {
                 show_library_tools: true,
                 pause_downloads_while_playing: true,
                 keep_awake_downloads: true,
-                store_clients_quiet: true,
                 achievement_banners: true,
                 fps_counter: true,
                 fps_counter_position: Some("top-right".into()),
@@ -976,6 +885,7 @@ impl AppState {
             room_left_at: HashMap::new(),
             discord_dirty_while_closed: false,
             remote_inflight: RefCell::new(HashSet::new()),
+            startup_disk_art: Cell::new(false),
             video_router: VideoFrameRouter::new(),
             events: Rc::new(EventRegistry::with_defaults()),
             chrome: ShellChromeState::default(),
@@ -986,6 +896,8 @@ impl AppState {
             key_modal: KeyModalState::default(),
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
+            ui_discard_edit: TextEdit::default(),
+            ui_discard_canvas: rune::ImageCanvasState::new(1, 1),
             web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,
@@ -997,7 +909,6 @@ impl AppState {
             inflight_discord_channel: None,
         };
         crate::library_state::register_library_wp2_events(&mut s);
-        crate::frame_cap_row::register_events(&mut s);
         crate::gpu_tuning::register_events(&mut s);
         crate::pc_hdr::register_events(&mut s);
         s.selected_game_id = s.home_deck_games().first().map(|g| g.id.clone());
@@ -1039,13 +950,8 @@ impl AppState {
             game_props: None,
             game_page: crate::game_actions::GamePageState::new(),
             game_frame_gen: None,
-            frame_gen_menu_open: false,
+            frame_gen_auto_tried: std::collections::HashSet::new(),
             frame_gen_busy: false,
-            frame_gen_confirm: None,
-            game_frame_cap: None,
-            frame_cap_menu_open: false,
-            frame_cap_busy: false,
-            frame_cap_error: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -1094,6 +1000,7 @@ impl AppState {
             room_left_at: HashMap::new(),
             discord_dirty_while_closed: false,
             remote_inflight: RefCell::new(HashSet::new()),
+            startup_disk_art: Cell::new(false),
             video_router: VideoFrameRouter::new(),
             events: Rc::new(EventRegistry::with_defaults()),
             chrome: ShellChromeState::default(),
@@ -1104,6 +1011,8 @@ impl AppState {
             key_modal: KeyModalState::default(),
             notice_runtime: NoticeRuntimeState::default(),
             palette_extras: PaletteExtrasState::default(),
+            ui_discard_edit: TextEdit::default(),
+            ui_discard_canvas: rune::ImageCanvasState::new(1, 1),
             web_host: Box::default(),
             #[cfg(windows)]
             rpc: None,
@@ -1115,7 +1024,6 @@ impl AppState {
             inflight_discord_channel: None,
         };
         crate::library_state::register_library_wp2_events(&mut s);
-        crate::frame_cap_row::register_events(&mut s);
         crate::gpu_tuning::register_events(&mut s);
         crate::pc_hdr::register_events(&mut s);
         s
@@ -1187,6 +1095,7 @@ impl AppState {
     }
 
     pub fn preload_visible_covers_sync(&self, scale: f32) {
+        self.startup_disk_art.set(true);
         let mut images: Vec<Image> = Vec::new();
         if self.room == Room::Library
             && self.art_base.covers_dir.is_some()
@@ -1352,6 +1261,7 @@ impl AppState {
                 }
             }
         }
+        self.startup_disk_art.set(false);
         for img in images {
             let _ = img.wait();
         }
@@ -1654,6 +1564,27 @@ impl AppState {
         }
     }
 
+    pub fn set_discord_layout(&mut self, layout: &str) {
+        let normalized = if layout.eq_ignore_ascii_case("classic") {
+            "classic"
+        } else {
+            "exo"
+        };
+        self.settings.discord_layout = Some(normalized.to_string());
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, LauncherSettings>(
+                METHOD_SETTINGS_SET,
+                &json!({ "discordLayout": normalized }),
+                move |res| {
+                    if let Ok(set) = res {
+                        handle.update(move |s, _| s.settings = set);
+                    }
+                },
+            );
+        }
+    }
+
     pub fn set_music_service(&mut self, id: &str) {
         let svc = crate::media_state::MusicService::from_pref(Some(id));
         self.media.music_service = svc;
@@ -1692,8 +1623,7 @@ impl AppState {
             self.switch_room(back);
         } else {
             self.pc.settings_section = match self.room {
-                Room::Library => crate::pc_state::SettingsSection::Account,
-                Room::Music => crate::pc_state::SettingsSection::Updates,
+                Room::Library => crate::pc_state::SettingsSection::Library,
                 _ => crate::pc_state::SettingsSection::General,
             };
             self.switch_room(Room::Settings);
@@ -1866,32 +1796,24 @@ impl AppState {
     }
 
     pub fn cover_image(&self, game: &Game, scale: f32) -> Option<Image> {
-        let cache = self.image_cache.as_ref()?;
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(384.0);
+        let dim = bucket_dim(480.0);
         let mut waiting_remote = false;
         for cand in game.portrait_art_candidates() {
             if cand.url.starts_with(COVER_CACHE_ORIGIN) {
-                let key = format!("cov-url:{}", cand.url);
-                let cached = self.images.borrow_mut().get(&key, Some(cache));
-                let img = match cached {
-                    Some(existing) => existing,
-                    None => {
-                        let loaded = self
-                            .art_base
-                            .resolve_local_cover(&cand.url)
-                            .map(|path| cache.file_capped(path, dim, scale));
-                        self.images.borrow_mut().insert(
-                            key,
-                            loaded.clone(),
-                            CacheRoom::Library,
-                            dim,
-                            scale,
-                        );
-                        loaded
-                    }
-                };
-                if let Some(ready) = img.filter(|i| i.error().is_none()) {
+                let paths: Vec<PathBuf> = self
+                    .art_base
+                    .local_cover_path(&cand.url)
+                    .into_iter()
+                    .collect();
+                if let Some(ready) = self.local_file_image(
+                    format!("cov-url:{}", cand.url),
+                    &paths,
+                    dim,
+                    scale,
+                    CacheRoom::Library,
+                ) {
                     return Some(ready);
                 }
             } else if cand.url.starts_with("https://") && !waiting_remote {
@@ -1909,51 +1831,62 @@ impl AppState {
                 waiting_remote = true;
             }
         }
-        let san_key = format!("cov-san:{}#{}", game.id, game.art_revision.unwrap_or(0));
-        let sanitized = if let Some(existing) = self.images.borrow_mut().get(&san_key, Some(cache))
-        {
-            existing
-        } else {
-            let loaded = self
-                .art_base
-                .resolve_local_sanitized_portrait(game)
-                .map(|path| cache.file_capped(path, dim, scale));
-            self.images.borrow_mut().insert(
-                san_key,
-                loaded.clone(),
-                CacheRoom::Library,
-                dim,
-                scale,
-            );
-            loaded
-        };
-        if let Some(ok_img) = sanitized.filter(|i| i.error().is_none()) {
+        if let Some(ok_img) = self.local_file_image(
+            format!("cov-san:{}#{}", game.id, game.art_revision.unwrap_or(0)),
+            &self.art_base.sanitized_portrait_paths(game),
+            dim,
+            scale,
+            CacheRoom::Library,
+        ) {
             return Some(ok_img);
         }
         self.hero_image_direct(game, scale)
             .filter(|i| i.error().is_none())
     }
 
-    fn hero_image_direct(&self, game: &Game, scale: f32) -> Option<Image> {
+    pub(crate) fn local_file_image(
+        &self,
+        key: String,
+        paths: &[PathBuf],
+        dim: f32,
+        scale: f32,
+        room: CacheRoom,
+    ) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
+        let mut images = self.images.borrow_mut();
+        let mut stage = match images.get(&key, Some(cache)) {
+            Some(Some(img)) if img.error().is_none() => return Some(img),
+            Some(Some(_)) => images.stage(&key) + 1,
+            Some(None) => return None,
+            None => 0,
+        };
+        let startup = self.startup_disk_art.get();
+        while let Some(path) = paths.get(stage) {
+            if !startup || path.is_file() {
+                let img = cache.file_capped(path, dim, scale);
+                if img.error().is_none() {
+                    images.insert_staged(key, Some(img.clone()), stage, room, dim, scale);
+                    return Some(img);
+                }
+            }
+            stage += 1;
+        }
+        images.insert_staged(key, None, stage, room, dim, scale);
+        None
+    }
+
+    fn hero_image_direct(&self, game: &Game, scale: f32) -> Option<Image> {
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(1440.0);
-        let key = format!("hero:{}#{}", game.id, game.art_revision.unwrap_or(0));
-        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            if let Some(ready) = existing.filter(|i| i.error().is_none()) {
-                return Some(ready);
-            }
-        } else {
-            let loaded = self
-                .art_base
-                .resolve_local_hero(game)
-                .map(|path| cache.file_capped(path, dim, scale));
-            self.images
-                .borrow_mut()
-                .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
-            if let Some(ready) = loaded.filter(|i| i.error().is_none()) {
-                return Some(ready);
-            }
+        let dim = bucket_dim(1920.0);
+        if let Some(ready) = self.local_file_image(
+            format!("hero:{}#{}", game.id, game.art_revision.unwrap_or(0)),
+            &self.art_base.hero_paths(game),
+            dim,
+            scale,
+            CacheRoom::Library,
+        ) {
+            return Some(ready);
         }
         if let Some(url) = game.hero_url.as_deref()
             && url.starts_with("https://")
@@ -1983,21 +1916,11 @@ impl AppState {
     }
 
     pub fn device_image(&self, url: &str, scale: f32) -> Option<Image> {
-        let cache = self.image_cache.as_ref()?;
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(640.0);
-        let key = format!("dev:{url}");
-        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            return existing;
-        }
-        let loaded = self
-            .art_base
-            .resolve_device_image(url)
-            .map(|path| cache.file_capped(path, dim, scale));
-        self.images
-            .borrow_mut()
-            .insert(key, loaded.clone(), CacheRoom::Pc, dim, scale);
-        loaded
+        let dim = bucket_dim(720.0);
+        let paths: Vec<PathBuf> = self.art_base.device_image_path(url).into_iter().collect();
+        self.local_file_image(format!("dev:{url}"), &paths, dim, scale, CacheRoom::Pc)
     }
 
     pub fn app_icon_image(&self, app_id: &str) -> Option<Image> {
@@ -2018,44 +1941,35 @@ impl AppState {
     }
 
     pub fn capture_thumb_image(&self, url: &str, scale: f32) -> Option<Image> {
-        let cache = self.image_cache.as_ref()?;
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
         let dim = bucket_dim(320.0);
-        let key = format!("cap:{url}");
-        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            return existing;
-        }
-        let loaded = self
-            .art_base
-            .resolve_capture_thumb(url)
-            .map(|path| cache.file_capped(path, dim, scale));
-        self.images
-            .borrow_mut()
-            .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
-        loaded
+        self.local_file_image(
+            format!("cap:{url}"),
+            &self.art_base.capture_thumb_paths(url),
+            dim,
+            scale,
+            CacheRoom::Library,
+        )
     }
 
     pub fn capture_full_image(&self, url: &str, scale: f32) -> Option<Image> {
-        let cache = self.image_cache.as_ref()?;
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
         let dim = bucket_dim(1280.0);
-        let key = format!("cap-full:{url}");
-        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            return existing;
+        let mut paths = self.art_base.capture_file_paths(url);
+        for thumb in self.art_base.capture_thumb_paths(url) {
+            if !paths.contains(&thumb) {
+                paths.push(thumb);
+            }
         }
-        let loaded = self
-            .art_base
-            .resolve_capture_file(url)
-            .or_else(|| self.art_base.resolve_capture_thumb(url))
-            .map(|path| cache.file_capped(path, dim, scale));
-        self.images
-            .borrow_mut()
-            .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
-        loaded
-    }
-
-    pub fn remote_image(&self, url: &str, scale: f32) -> Option<Image> {
-        self.remote_image_sized(url, 360.0, scale)
+        self.local_file_image(
+            format!("cap-full:{url}"),
+            &paths,
+            dim,
+            scale,
+            CacheRoom::Library,
+        )
     }
 
     pub fn remote_image_sized(&self, url: &str, max_dim: f32, scale: f32) -> Option<Image> {
@@ -2079,13 +1993,11 @@ impl AppState {
         }
         let dir = self.remote_cache_dir.as_ref()?;
         remote_art::parse_allowed_https(url)?;
-        let path = remote_art::cache_path_for(dir, url);
-        if path.is_file() {
-            let img = cache.file_capped(path, dim, scale);
-            self.images
-                .borrow_mut()
-                .insert(cache_key, Some(img.clone()), room, dim, scale);
-            return Some(img);
+        if self.startup_disk_art.get() {
+            let path = remote_art::cache_path_for(dir, url);
+            if path.is_file() {
+                return self.land_remote_image(url, dim, scale, room, path);
+            }
         }
         #[cfg(windows)]
         if let Some(handle) = self.handle.clone() {
@@ -2103,19 +2015,12 @@ impl AppState {
                             s.remote_inflight.borrow_mut().remove(&inflight_key);
                             let room_active =
                                 room == CacheRoom::Global || s.current_cache_room() == room;
-                            if let (Some(p), Some(ic)) = (fetched, s.image_cache.as_ref()) {
-                                if room_active {
-                                    let img = ic.file_capped(p, dim, scale);
-                                    s.images.borrow_mut().insert(
-                                        key_owned,
-                                        Some(img),
-                                        room,
-                                        dim,
-                                        scale,
-                                    );
-                                    return true;
-                                }
-                                return false;
+                            if let Some(p) = fetched
+                                && s.image_cache.is_some()
+                            {
+                                return room_active
+                                    && s.land_remote_image(&url_owned, dim, scale, room, p)
+                                        .is_some();
                             }
                             s.images
                                 .borrow_mut()
@@ -2127,6 +2032,24 @@ impl AppState {
             }
         }
         None
+    }
+
+    pub(crate) fn land_remote_image(
+        &self,
+        url: &str,
+        max_dim: f32,
+        scale: f32,
+        room: CacheRoom,
+        path: PathBuf,
+    ) -> Option<Image> {
+        let cache = self.image_cache.as_ref()?;
+        let dim = bucket_dim(max_dim);
+        let cache_key = format!("rem:{}@{dim:.0}", remote_art::canonical_cache_key(url));
+        let img = cache.file_capped(path, dim, scale);
+        self.images
+            .borrow_mut()
+            .insert(cache_key, Some(img.clone()), room, dim, scale);
+        Some(img)
     }
 
     pub fn current_playback_art(&self, scale: f32) -> Option<Image> {
@@ -2220,12 +2143,19 @@ impl AppState {
     }
 
     pub fn prune_inactive_rooms(&mut self, now: f64, rest: bool) -> bool {
-        let ttl = if rest { 10.0 } else { 30.0 };
+        let base_ttl = if rest { 10.0 } else { 30.0 };
         let active = self.current_cache_room();
         let due: Vec<CacheRoom> = self
             .room_left_at
             .iter()
-            .filter(|&(&room, &left_at)| room != active && now - left_at >= ttl)
+            .filter(|&(&room, &left_at)| {
+                let ttl = match room {
+                    CacheRoom::Library => f64::INFINITY,
+                    CacheRoom::Store => base_ttl * 6.0,
+                    _ => base_ttl,
+                };
+                room != active && now - left_at >= ttl
+            })
             .map(|(&room, _)| room)
             .collect();
         if due.is_empty() {
@@ -2295,12 +2225,7 @@ impl AppState {
         self.selected_game_id = Some(id.to_string());
         self.open_game_id = Some(id.to_string());
         self.props_open = false;
-        self.frame_gen_menu_open = false;
-        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
-        self.frame_cap_menu_open = false;
-        self.frame_cap_busy = false;
-        self.frame_cap_error = None;
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
@@ -2308,7 +2233,6 @@ impl AppState {
         self.game_page.selected_variant_id = None;
         if self.status != HostStatus::Standalone {
             self.game_frame_gen = None;
-            self.game_frame_cap = None;
         }
         self.load_game_page_data(id);
         #[cfg(windows)]
@@ -2331,27 +2255,7 @@ impl AppState {
                     h3.update(move |s, _| {
                         if s.open_game_id.as_deref() == Some(gid3.as_str()) {
                             s.game_frame_gen = Some(fg);
-                        }
-                    });
-                },
-            );
-
-            let gid4 = id.to_string();
-            let h4 = handle.clone();
-            rpc.call::<_, GameFrameCap>(
-                METHOD_GAME_FRAME_CAP,
-                &json!({ "id": gid4 }),
-                move |res| {
-                    let fc = res.unwrap_or_else(|_| GameFrameCap {
-                        ok: false,
-                        game_id: gid4.clone(),
-                        word: "Could not check".into(),
-                        bad: true,
-                        ..Default::default()
-                    });
-                    h4.update(move |s, _| {
-                        if s.open_game_id.as_deref() == Some(gid4.as_str()) {
-                            s.game_frame_cap = Some(fc);
+                            s.apply_best_frame_gen(&gid3);
                         }
                     });
                 },
@@ -2359,243 +2263,48 @@ impl AppState {
         }
     }
 
-    pub fn set_game_frame_gen(
-        &mut self,
-        id: &str,
-        route: Option<&str>,
-        xess_override: Option<&str>,
-    ) {
-        self.set_game_frame_gen_with_risk(id, route, xess_override, false, None);
+    pub fn apply_best_frame_gen(&mut self, id: &str) {
+        let Some(route) = self
+            .game_frame_gen
+            .as_ref()
+            .and_then(crate::frame_gen_row::auto_route)
+            .map(|r| r.id.clone())
+        else {
+            return;
+        };
+        if self.frame_gen_busy || !self.frame_gen_auto_tried.insert(format!("{id}:{route}")) {
+            return;
+        }
+        self.set_game_frame_gen(id, &route);
     }
 
-    pub fn set_game_frame_gen_with_risk(
-        &mut self,
-        id: &str,
-        route: Option<&str>,
-        xess_override: Option<&str>,
-        accept_risk: bool,
-        anti_cheat: Option<&str>,
-    ) {
-        self.frame_gen_confirm = None;
+    pub fn set_game_frame_gen(&mut self, id: &str, route: &str) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.frame_gen_busy = true;
             let gid = id.to_string();
-            let mut body = serde_json::Map::new();
-            body.insert("id".into(), json!(gid));
-            if let Some(r) = route {
-                body.insert("route".into(), json!(r));
-            }
-            if let Some(x) = xess_override {
-                body.insert("xessOverride".into(), json!(x));
-            }
-            if accept_risk {
-                body.insert("acceptRisk".into(), json!(true));
-                if let Some(ac) = anti_cheat {
-                    body.insert("antiCheat".into(), json!(ac));
-                }
-            }
             rpc.call::<_, GameFrameGen>(
                 METHOD_GAME_FRAME_GEN,
-                &serde_json::Value::Object(body),
+                &json!({ "id": gid, "route": route }),
                 move |res| {
                     handle.update(move |s, _| {
                         s.frame_gen_busy = false;
-                        if s.open_game_id.as_deref() == Some(gid.as_str()) {
-                            if let Ok(fg) = res {
-                                if !fg.routes.is_empty() {
-                                    s.game_frame_gen = Some(fg);
-                                } else if let Some(msg) = fg.message {
-                                    s.notice = Some(msg);
-                                }
-                            } else {
-                                s.notice = Some("Could not save frame generation route.".into());
-                            }
+                        if s.open_game_id.as_deref() == Some(gid.as_str())
+                            && let Ok(fg) = res
+                            && !fg.routes.is_empty()
+                        {
+                            s.game_frame_gen = Some(fg);
                         }
                     });
                 },
             );
             return;
         }
-        if let Some(ref mut fg) = self.game_frame_gen {
-            if let Some(r) = route
-                && let Some(found) = fg.routes.iter().find(|rt| rt.id == r)
-            {
-                fg.selected_route_id = found.id.clone();
-                fg.word = found.summary.clone();
-            }
-            if let Some(x) = xess_override
-                && let Some(rt) = fg
-                    .routes
-                    .iter_mut()
-                    .find(|rt| rt.kind == "driver_xess_override")
-            {
-                rt.choice_value = Some(x.to_string());
-                rt.active = x != "game";
-            }
-        }
-    }
-
-    pub fn set_game_frame_cap(
-        &mut self,
-        id: &str,
-        tier: Option<&str>,
-        cap_fps: Option<i32>,
-        backend: Option<&str>,
-    ) {
-        self.frame_cap_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.frame_cap_busy = true;
-            let gid = id.to_string();
-            let mut body = serde_json::Map::new();
-            body.insert("id".into(), json!(gid));
-            if let Some(t) = tier {
-                body.insert("tier".into(), json!(t));
-            }
-            if let Some(fps) = cap_fps {
-                body.insert("capFps".into(), json!(fps));
-            }
-            if let Some(b) = backend {
-                body.insert("backend".into(), json!(b));
-            }
-            rpc.call::<_, GameFrameCap>(
-                METHOD_GAME_FRAME_CAP,
-                &serde_json::Value::Object(body),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.frame_cap_busy = false;
-                        if s.open_game_id.as_deref() == Some(gid.as_str()) {
-                            if let Ok(fc) = res {
-                                let ok = fc.ok;
-                                let msg = fc.message.clone();
-                                if !fc.tiers.is_empty() {
-                                    s.game_frame_cap = Some(fc);
-                                }
-                                if !ok {
-                                    s.frame_cap_error = Some(
-                                        msg.unwrap_or_else(|| "Could not save frame cap.".into()),
-                                    );
-                                }
-                            } else {
-                                s.frame_cap_error = Some("Could not save frame cap.".into());
-                            }
-                        }
-                    });
-                },
-            );
-            return;
-        }
-        if let Some(ref mut fc) = self.game_frame_cap {
-            if let Some(t) = tier {
-                fc.selected_tier = t.to_string();
-                if t == "off" || t == "uncapped" {
-                    fc.active_cap_fps = None;
-                    fc.word = if t == "uncapped" {
-                        "Uncapped".into()
-                    } else {
-                        "Off".into()
-                    };
-                    fc.good = t == "uncapped";
-                } else if t == "refresh" {
-                    fc.active_cap_fps = cap_fps;
-                    fc.word = format!("{} fps · {}", cap_fps.unwrap_or(0), fc.backend_label);
-                    fc.good = true;
-                } else if let Some(found) = fc.tiers.iter().find(|ti| ti.id == t) {
-                    fc.active_cap_fps = found.cap_fps;
-                    fc.word = format!("{} fps · {}", found.cap_fps.unwrap_or(0), fc.backend_label);
-                    fc.good = true;
-                }
-            }
-            if let Some(fps) = cap_fps {
-                fc.active_cap_fps = Some(fps);
-            }
-            if let Some(b) = backend {
-                fc.backend = b.to_string();
-                if let Some(found) = fc.backends.iter().find(|bk| bk.id == b) {
-                    fc.backend_label = found.label.clone();
-                }
-            }
-        }
-    }
-
-    pub fn run_cap_lab(&mut self, id: &str, cap_a_fps: i32, cap_b_fps: i32) {
-        self.frame_cap_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.frame_cap_busy = true;
-            let gid = id.to_string();
-            rpc.call::<_, CapLabActionReply>(
-                METHOD_GAME_CAP_LAB_RUN,
-                &json!({ "id": gid, "capAFps": cap_a_fps, "capBFps": cap_b_fps }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.frame_cap_busy = false;
-                        if let Ok(reply) = res {
-                            if let Some(ref mut fc) = s.game_frame_cap {
-                                fc.ab = reply.ab;
-                            }
-                            if !reply.ok {
-                                s.frame_cap_error = Some(
-                                    reply
-                                        .message
-                                        .unwrap_or_else(|| "Could not start A/B test.".into()),
-                                );
-                            }
-                        } else {
-                            s.frame_cap_error = Some("Could not start A/B test.".into());
-                        }
-                    });
-                },
-            );
-            return;
-        }
-        if let Some(ref mut fc) = self.game_frame_cap {
-            fc.ab.status = "running".into();
-            fc.ab.cap_a_fps = cap_a_fps;
-            fc.ab.cap_b_fps = cap_b_fps;
-            fc.ab.current_arm = Some("A".into());
-            fc.ab.elapsed_seconds = 0;
-            fc.ab.total_seconds = 20;
-        }
-    }
-
-    pub fn cancel_cap_lab(&mut self, id: &str) {
-        self.frame_cap_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.frame_cap_busy = true;
-            let gid = id.to_string();
-            rpc.call::<_, CapLabActionReply>(
-                METHOD_GAME_CAP_LAB_CANCEL,
-                &json!({ "id": gid }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.frame_cap_busy = false;
-                        match res {
-                            Ok(reply) => {
-                                if let Some(ref mut fc) = s.game_frame_cap {
-                                    fc.ab = reply.ab;
-                                }
-                                if !reply.ok {
-                                    s.frame_cap_error =
-                                        Some(reply.message.unwrap_or_else(|| {
-                                            "Could not cancel A/B test.".into()
-                                        }));
-                                }
-                            }
-                            Err(_) => {
-                                s.frame_cap_error = Some("Could not cancel A/B test.".into());
-                            }
-                        }
-                    });
-                },
-            );
-            return;
-        }
-        if let Some(ref mut fc) = self.game_frame_cap {
-            fc.ab.status = "cancelled".into();
-            fc.ab.reason = Some("Cancelled by user.".into());
+        if let Some(ref mut fg) = self.game_frame_gen
+            && let Some(found) = fg.routes.iter().find(|rt| rt.id == route)
+        {
+            fg.selected_route_id = found.id.clone();
+            fg.word = found.summary.clone();
         }
     }
 
@@ -2607,12 +2316,7 @@ impl AppState {
     pub fn close_game_page(&mut self) {
         self.open_game_id = None;
         self.props_open = false;
-        self.frame_gen_menu_open = false;
-        self.frame_gen_confirm = None;
         self.frame_gen_busy = false;
-        self.frame_cap_menu_open = false;
-        self.frame_cap_busy = false;
-        self.frame_cap_error = None;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
         self.game_page.pending_choice = None;
@@ -2623,6 +2327,7 @@ impl AppState {
     pub fn close_store_game_tx(&mut self, tx: &mut Tx) {
         tx.unclipped_flights();
         self.store_close_game_full();
+        tx.scroll_to("room-store-scroll", 0.0, 0.0);
     }
 
     pub fn is_confirm_armed(&self, key: &str) -> bool {
@@ -2831,8 +2536,12 @@ impl AppState {
     }
 
     pub fn set_window_focused(&mut self, focused: bool) {
+        let changed = self.chrome.window_focused != focused;
         self.chrome.window_focused = focused;
         crate::gamepad::set_window_focused(focused);
+        if changed {
+            self.notify_host_window_state();
+        }
     }
 
     pub fn apply_gamepad_action(&mut self, action: GamepadAction, tx: &mut Tx) {
@@ -3188,10 +2897,6 @@ impl AppState {
             self.media.clip_editor_open = false;
             return true;
         }
-        if self.media.notes.open {
-            self.close_notes_to_captures();
-            return true;
-        }
         if self.media.open_capture_id.is_some() {
             self.close_capture_item();
             return true;
@@ -3202,6 +2907,10 @@ impl AppState {
         }
         if self.open_game_id.is_some() {
             self.close_game_page();
+            return true;
+        }
+        if self.room == Room::Library && self.library_all_games {
+            self.close_all_games();
             return true;
         }
         if self.store_ext.lightbox_index.is_some() {
@@ -3230,7 +2939,6 @@ impl AppState {
         if self.notice.is_some() {
             self.notice = None;
             self.notice_last_synced = None;
-            return true;
         }
         false
     }
@@ -3284,6 +2992,11 @@ impl AppState {
         action_label: Option<String>,
         action: Option<NoticeAction>,
     ) -> u64 {
+        if (tone != NoticeTone::Bad && action.is_none()) || self.notice_is_repeat(text.clone()) {
+            self.notice = Some(text.clone());
+            self.notice_last_synced = Some(text);
+            return 0;
+        }
         let id = self.next_notice_id;
         self.next_notice_id = self.next_notice_id.saturating_add(1);
         self.notices.push_back(NoticeItem {
@@ -3542,8 +3255,8 @@ impl AppState {
         self.palette_query.text.clear();
         self.palette_query.sync_invariants();
         self.load_palette_extras();
-        self.load_notes_list(None);
         self.sync_chrome_layout();
+        self.sync_mouse_panel_visibility();
         tx.focus("palette-input", false);
     }
 
@@ -3552,6 +3265,7 @@ impl AppState {
         self.palette_needs_focus = false;
         self.palette_index = 0;
         self.sync_chrome_layout();
+        self.sync_mouse_panel_visibility();
     }
 
     pub fn palette_results(&self) -> Vec<PaletteItem> {
@@ -3568,6 +3282,7 @@ impl AppState {
                 ],
             ),
             (Room::Music, &[]),
+            (Room::Devices, &[]),
             (
                 Room::ExoAi,
                 &[
@@ -3584,7 +3299,6 @@ impl AppState {
                 ],
             ),
             (Room::Apps, &["uninstall", "programs", "bloat", "startup"]),
-            (Room::Devices, &[]),
             (Room::Settings, &[]),
         ];
 
@@ -3839,120 +3553,7 @@ impl AppState {
                 }
             }
 
-            use crate::pc_state::SettingsSection;
-            const SETTINGS_PAGES: [(SettingsSection, &str, &[&str]); 6] = [
-                (
-                    SettingsSection::General,
-                    "General",
-                    &[
-                        "dark mode",
-                        "amoled",
-                        "pure black",
-                        "text size",
-                        "reduce motion",
-                        "animation",
-                        "startup",
-                        "start with windows",
-                        "window",
-                    ],
-                ),
-                (
-                    SettingsSection::Account,
-                    "Library",
-                    &[
-                        "game stores",
-                        "sign in",
-                        "account",
-                        "steam",
-                        "epic",
-                        "gog",
-                        "amazon",
-                        "riot",
-                        "ea",
-                        "ubisoft",
-                        "battle.net",
-                        "xbox",
-                        "offline mode",
-                        "soundtracks",
-                        "shaders",
-                    ],
-                ),
-                (
-                    SettingsSection::Appearance,
-                    "Downloads",
-                    &[
-                        "downloads",
-                        "install folder",
-                        "download hours",
-                        "automatic updates",
-                        "anti-cheat",
-                        "dlss",
-                        "fsr",
-                        "xess",
-                    ],
-                ),
-                (
-                    SettingsSection::Graphics,
-                    "In game",
-                    &[
-                        "in game",
-                        "achievements",
-                        "pop-ups",
-                        "obs overlay url",
-                        "fps counter",
-                        "frame rate",
-                        "overlay",
-                        "gpu use",
-                        "vram",
-                        "ram",
-                        "battery",
-                    ],
-                ),
-                (
-                    SettingsSection::Updates,
-                    "Music",
-                    &[
-                        "music",
-                        "music service",
-                        "spotify",
-                        "apple music",
-                        "youtube music",
-                        "lossless",
-                        "jam",
-                    ],
-                ),
-                (
-                    SettingsSection::About,
-                    "About",
-                    &[
-                        "about",
-                        "version",
-                        "updates",
-                        "caches",
-                        "what's new",
-                        "changelog",
-                        "account",
-                        "privacy",
-                        "app data",
-                        "telemetry",
-                        "crash reports",
-                    ],
-                ),
-            ];
-            for (sec, title, keywords) in SETTINGS_PAGES {
-                if title.to_lowercase().contains(&query)
-                    || "settings".contains(&query)
-                    || keywords.iter().any(|k| k.contains(&query))
-                {
-                    items.push(PaletteItem {
-                        id: format!("pal-set-{}", sec.key()),
-                        group: "Go to",
-                        title: title.into(),
-                        detail: Some("Settings".into()),
-                        target: PaletteTarget::SettingsSection(sec),
-                    });
-                }
-            }
+            crate::palette::append_settings_pages(&query, &mut items);
         }
 
         let (library_shelf, _, hidden_shelf) = self.shelf_shelves();
@@ -4267,7 +3868,7 @@ impl AppState {
     pub fn apply_capture_saved(&mut self, ev: CaptureSavedEvent) {
         let id = ev.item.id.clone();
         let name = ev.item.name.clone();
-        let edit = ev.edit;
+        let edit = ev.edit || ev.item.kind == "image";
         self.media.capture_items.retain(|it| it.id != id);
         self.media.capture_items.insert(0, ev.item);
         if edit {
@@ -4390,7 +3991,6 @@ impl AppState {
                     s.apply_bootstrap(boot);
                     s.warm_discord();
                     s.load_capture_status();
-                    s.check_pending_notes_on_startup();
                     s.warm_store_on_startup();
                     s.wp4_warm_startup();
                     s.check_system_eq_health_on_launch();
@@ -5033,6 +4633,38 @@ mod library_sort_and_confirm_tests {
     }
 
     #[test]
+    fn disk_cached_remote_art_loads_off_thread_after_startup() {
+        const TINY_PNG_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2dIAAAAASUVORK5CYII=";
+        let tiny_png = exo_rpc::base64::decode(TINY_PNG_B64).expect("valid png");
+        let cache_dir =
+            std::env::temp_dir().join(format!("exo-ui-disk-art-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        std::fs::create_dir_all(&cache_dir).expect("cache dir");
+
+        let mut s = AppState::with_demo_games();
+        s.remote_cache_dir = Some(cache_dir.clone());
+        s.install_waker(Arc::new(|| {}));
+        let url = "https://cdn.discordapp.com/avatars/7/a.png?ex=1&is=1&hm=a";
+        let path = remote_art::cache_path_for(&cache_dir, url);
+        std::fs::write(&path, &tiny_png).expect("write cached art");
+
+        assert!(s.remote_image_sized(url, 128.0, 1.0).is_none());
+        let room = s.current_cache_room();
+        assert!(s.land_remote_image(url, 128.0, 1.0, room, path).is_some());
+        let resigned = "https://cdn.discordapp.com/avatars/7/a.png?ex=2&is=2&hm=b";
+        assert!(s.remote_image_sized(resigned, 128.0, 1.0).is_some());
+
+        let other = "https://cdn.discordapp.com/avatars/8/b.png";
+        std::fs::write(remote_art::cache_path_for(&cache_dir, other), &tiny_png)
+            .expect("write cached art");
+        s.startup_disk_art.set(true);
+        assert!(s.remote_image_sized(other, 128.0, 1.0).is_some());
+        s.startup_disk_art.set(false);
+
+        let _ = std::fs::remove_dir_all(&cache_dir);
+    }
+
+    #[test]
     fn memory_leak_regression_10k_music_and_discord_pushes_stay_bounded() {
         use exo_rpc::{
             DiscordMessage, DiscordMessageEvent, DiscordPresenceEvent, DiscordTypingEvent,
@@ -5139,7 +4771,9 @@ mod library_sort_and_confirm_tests {
             if !p.is_file() {
                 std::fs::write(&p, &tiny_png).expect("write avatar");
             }
+            s.startup_disk_art.set(true);
             let img_a = s.remote_image_sized(&url_a, 128.0, 1.0);
+            s.startup_disk_art.set(false);
             let img_b = s.remote_image_sized(&url_b, 128.0, 1.0);
             assert!(img_a.is_some());
             assert!(img_b.is_some());
@@ -5213,5 +4847,95 @@ mod library_sort_and_confirm_tests {
         assert_eq!(after_rest_retained, 0);
 
         let _ = std::fs::remove_dir_all(&cache_dir);
+    }
+
+    fn local_art_dir(label: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("exo-ui-local-art-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("art dir");
+        dir
+    }
+
+    fn tiny_png() -> Vec<u8> {
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(4, 4, image::Rgba([10, 20, 30, 255]))
+            .write_to(&mut out, image::ImageFormat::Png)
+            .expect("encode png");
+        out.into_inner()
+    }
+
+    #[test]
+    fn local_art_steps_past_missing_candidates_as_the_decoder_reports_them() {
+        let dir = local_art_dir("steps");
+        let present = dir.join("c.png");
+        std::fs::write(&present, tiny_png()).expect("write");
+        let paths = vec![dir.join("a.png"), dir.join("b.png"), present];
+        let mut s = AppState::default();
+        s.install_waker(Arc::new(|| {}));
+        let key = "test-art:steps".to_string();
+
+        let mut asks = 0;
+        let found = loop {
+            asks += 1;
+            assert!(asks <= paths.len(), "each ask moves past a candidate");
+            let candidate = s
+                .local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
+                .expect("a candidate while the file that exists is ahead");
+            if candidate.wait().is_ok() {
+                break candidate;
+            }
+            assert!(s.images.borrow().stage(&key) < 2);
+        };
+        assert_eq!(s.images.borrow().stage(&key), 2);
+        let again = s
+            .local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
+            .expect("cached");
+        assert_eq!(again.id(), found.id());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn local_art_with_no_file_on_disk_ends_as_a_cached_miss() {
+        let dir = local_art_dir("miss");
+        let paths = vec![dir.join("a.png"), dir.join("b.png")];
+        let mut s = AppState::default();
+        s.install_waker(Arc::new(|| {}));
+        let key = "test-art:miss".to_string();
+        while let Some(img) =
+            s.local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
+        {
+            assert!(img.wait().is_err());
+        }
+        assert!(s.images.borrow().is_failed(&key));
+        assert!(
+            s.local_file_image(key, &paths, 128.0, 1.0, CacheRoom::Library)
+                .is_none()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn local_art_before_the_first_frame_picks_the_existing_file_at_once() {
+        let dir = local_art_dir("startup");
+        let present = dir.join("c.png");
+        std::fs::write(&present, tiny_png()).expect("write");
+        let paths = vec![dir.join("a.png"), dir.join("b.png"), present];
+        let mut s = AppState::default();
+        s.install_waker(Arc::new(|| {}));
+        s.startup_disk_art.set(true);
+        let img = s
+            .local_file_image(
+                "test-art:startup".into(),
+                &paths,
+                128.0,
+                1.0,
+                CacheRoom::Library,
+            )
+            .expect("existing file");
+        s.startup_disk_art.set(false);
+        img.wait().expect("decodes");
+        assert_eq!(s.images.borrow().stage("test-art:startup"), 2);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

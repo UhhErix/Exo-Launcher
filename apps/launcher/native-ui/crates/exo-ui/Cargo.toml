@@ -6,11 +6,9 @@ license.workspace = true
 
 [dependencies]
 exo-autopilot = { path = "../exo-autopilot" }
-exo-controller = { path = "../exo-controller" }
 exo-gpu = { path = "../exo-gpu" }
 exo-hid-devices = { path = "../exo-hid-devices" }
 exo-kit = { path = "../exo-kit" }
-exo-macros = { path = "../exo-macros" }
 exo-power-guard = { path = "../exo-power-guard" }
 exo-present = { path = "../exo-present" }
 exo-rpc = { path = "../exo-rpc" }
@@ -38,6 +36,7 @@ windows = { version = "0.62", features = [
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
     "Win32_System_ProcessStatus",
     "Win32_System_Threading",
     "Win32_System_Variant",

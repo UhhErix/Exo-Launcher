@@ -726,7 +726,7 @@ public sealed partial class WebHostBridge
     {
         InstalledPrograms.Cares.Runtime => " Games and apps that need it stop working until it's installed again.",
         InstalledPrograms.Cares.Hardware => " The hardware it drives may stop working until it's installed again.",
-        InstalledPrograms.Cares.Store => " Your games from it need it to start.",
+        InstalledPrograms.Cares.Store => " Its games need it to start.",
         _ => "",
     };
 

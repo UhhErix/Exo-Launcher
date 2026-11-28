@@ -1,6 +1,6 @@
 # Skill sources
 
-Where each project skill came from. Third-party folders carry their licenses; the local skill uses the repository license. Every installed third-party file was read in full first; anything that fetched or ran remote code was left out or replaced with a local copy. The source pins below were already recorded when these files entered this repository and have now been checked against GitHub's commit-addressed raw files.
+A provenance record, not a gate: where each project skill came from, its pin, its license and what Exo changed. Add or refresh a skill freely and record it here. Third-party folders carry their licenses; local skills use the repository license. When these were vendored, parts that fetched or ran remote code were left out or replaced with a local copy. User-wide skills live in `~/.config/opencode/skills/` with their own `SOURCES.md`.
 
 **Vendored date:** all five skill directories first appear in the available Git history on **2026-11-18**, in [`2901fc7c747867648f6f843570262d7fb6ce6eff`](https://github.com/UhhErix/Exo-Launcher/commit/2901fc7c747867648f6f843570262d7fb6ce6eff) ("Import scrubbed Exo Launcher 3.26.0 source"). This is the recorded import date, not a proven original download date; the pre-import vendoring history is unavailable. Content matches verify reproducible source pins, not which download event occurred. For modified skills, the recorded SHA is a verified upstream base, not an exact match of the entire local directory.
 
@@ -26,4 +26,4 @@ Compared committed local blobs (`git show HEAD:apps/launcher/.agents/skills/<pat
 
 ## How to update
 
-Re-vendor from an explicit full upstream commit SHA, read the diff, retain licenses/notices, and re-apply the Exo adaptations listed above. Compare every retained file against that commit (review intentional differences), then bump the SHA, recorded vendoring date and verification notes in this table/document in the same change. Pin the guideline rules separately from their skill wrapper. For the original local skill, update the attributed upstream SHA only if refreshing those adapted principles; do not label it an unmodified third-party skill.
+Re-vendor from a full upstream commit SHA, keep licenses and notices, re-apply the Exo adaptations above, and update the SHA, date and changes in this table in the same change. Pin the guideline rules separately from their skill wrapper. A local skill is never labelled an unmodified third-party skill.

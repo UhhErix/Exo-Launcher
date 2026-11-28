@@ -1188,6 +1188,8 @@ pub struct StartupItem {
     #[serde(default)]
     pub locked: bool,
     #[serde(default)]
+    pub lock_kind: Option<String>,
+    #[serde(default)]
     pub read_only: bool,
     #[serde(default)]
     pub status: Option<String>,

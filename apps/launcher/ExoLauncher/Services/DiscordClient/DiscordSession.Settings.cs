@@ -63,7 +63,7 @@ internal sealed partial class DiscordSession
         finally { _settingsGate.Release(); }
     }
 
-    private void RememberSettings(JsonObject values)
+    private void RememberSettings(JsonObject values, bool announcePresence = true)
     {
         var customBefore = _userSettings?["customStatus"]?.ToJsonString();
         // A person's volume or mute changed here and not saved yet stays as chosen over what Discord had.
@@ -82,7 +82,7 @@ internal sealed partial class DiscordSession
         _userSettings = (JsonObject)values.DeepClone();
         Event?.Invoke("discord.userSettings", values.DeepClone());
         // The custom status changed here or in another Discord app: this session's presence says so.
-        if (customBefore != _userSettings["customStatus"]?.ToJsonString())
+        if (announcePresence && customBefore != _userSettings["customStatus"]?.ToJsonString())
             _ = SendPresenceAsync();
     }
 
@@ -176,6 +176,16 @@ internal sealed partial class DiscordSession
             case "READY":
                 AuthSessionIdHash = d.TryGetProperty("auth_session_id_hash", out var hash) ? hash.GetString() : null;
                 Rest.ForgetFrecency();
+                if (d.TryGetProperty("user_settings_proto", out var readyProtoEl) && readyProtoEl.ValueKind == JsonValueKind.String
+                    && readyProtoEl.GetString() is { Length: > 0 } readyProtoStr)
+                {
+                    try
+                    {
+                        var decoded = DiscordUserSettings.Decode(Convert.FromBase64String(readyProtoStr));
+                        RememberSettings(decoded, announcePresence: false);
+                    }
+                    catch (Exception ex) when (ex is FormatException or InvalidDataException) { }
+                }
                 break;
             case "USER_SETTINGS_UPDATE" or "USER_SETTINGS_PROTO_UPDATE" when _userSettings is not null:
                 RefreshSettingsSoon();
@@ -229,7 +239,7 @@ internal sealed partial class DiscordSession
         if (Viewing is not { } viewing || !d.TryGetProperty("channel_id", out var c) || c.GetString() != viewing) return;
         if (!d.TryGetProperty("author", out var author) || author.ValueKind != JsonValueKind.Object) return;
         if (author.TryGetProperty("id", out var id) && id.GetString() == Cache.Me?.Id) return;
-        if (App.MainAppWindow?.WindowIsActive == true) Sound("message3");
+        if (HostWindow.IsActive) Sound("message3");
         if (d.TryGetProperty("tts", out var tts) && tts.ValueKind == JsonValueKind.True && d.TryGetProperty("content", out var content))
         {
             var name = author.TryGetProperty("global_name", out var gn) && gn.ValueKind == JsonValueKind.String ? gn.GetString()

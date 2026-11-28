@@ -31,9 +31,7 @@ namespace ExoLauncher
 
         internal sealed class CaptureSettings
         {
-            public int Quality { get; set; } = 50;
             public int ReplaySeconds { get; set; } = 60;
-            public int MaxFps { get; set; } = 60;
             public string ReplayMode { get; set; } = "games";
             public bool Cursor { get; set; } = true;
             public string SaveReplayKeys { get; set; } = "Ctrl+Alt+F10";

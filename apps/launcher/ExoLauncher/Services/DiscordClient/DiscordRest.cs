@@ -21,48 +21,50 @@ internal sealed partial class DiscordRest : IDisposable
     internal const string Api = "https://discord.com/api/v9/";
     // Discord's web client build when this was written (November 2026); replaced by the live one
     // read from discord.com's own scripts at start.
-    private const int FallbackBuild = 678976;
+    private const int FallbackBuild = 681034;
+    private const int FallbackCapabilities = 1767421;
     private static int? _build;
+    private static int? _capabilities;
     private static int _buildRefreshing;
     private static readonly string LaunchId = Guid.NewGuid().ToString();
     private static readonly string HeartbeatSessionId = Guid.NewGuid().ToString();
-    private static (int Build, string Encoded) _superPropertiesCache;
+    private static readonly int CachedChromeMajor = ResolveChromeMajor();
+    private static (int Build, bool Focused, string Encoded) _superPropertiesCache;
 
-    // As Chrome talks to Discord: HTTP/2 on one warm connection (no new TLS handshake per call or after a minute idle)
-    // and compressed answers (a page of messages is several times smaller). The connection is pinged while in use, so
-    // one that died quietly (a network change, a sleep) is dropped within seconds instead of holding every call until
-    // its 30 s timeout (profiles, channels and messages all hung together for up to 30 s, then landed at once).
-    private readonly HttpClient _http = ExoHttp.Create(TimeSpan.FromSeconds(30), new SocketsHttpHandler
-    {
-        AutomaticDecompression = DecompressionMethods.All,
-        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
-        EnableMultipleHttp2Connections = true,
-        ConnectTimeout = TimeSpan.FromSeconds(10),
-        KeepAlivePingDelay = TimeSpan.FromSeconds(5),
-        KeepAlivePingTimeout = TimeSpan.FromSeconds(2),
-        KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
-    });
-    private readonly string? _token;
+    internal CookieContainer Cookies { get; } = new();
+    private readonly HttpClient _http;
+    private string? _token;
 
     internal DiscordRest(string? token)
     {
         _token = token;
+        _http = ExoHttp.Create(TimeSpan.FromSeconds(30), new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+            EnableMultipleHttp2Connections = true,
+            ConnectTimeout = TimeSpan.FromSeconds(10),
+            KeepAlivePingDelay = TimeSpan.FromSeconds(5),
+            KeepAlivePingTimeout = TimeSpan.FromSeconds(2),
+            KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
+            CookieContainer = Cookies,
+            UseCookies = true,
+        });
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
-        _http.DefaultRequestHeaders.Add("Origin", "https://discord.com");
-        _http.DefaultRequestHeaders.Referrer = new Uri("https://discord.com/channels/@me");
-        _http.DefaultRequestHeaders.Add("X-Discord-Locale", "en-US");
-        _http.DefaultRequestHeaders.Add("X-Discord-Timezone", TimeZoneName());
-        _http.DefaultRequestHeaders.Add("X-Debug-Options", "bugReporterEnabled");
         _http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
     }
+
+    internal void UpdateToken(string token) => _token = token;
 
     internal static string UserAgent { get; } =
         $"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{ChromeMajor()}.0.0.0 Safari/537.36";
 
     internal static int Build => _build ?? FallbackBuild;
 
+    internal static int Capabilities => _capabilities ?? FallbackCapabilities;
+
     /// <summary>The properties Discord's web client identifies with, on the gateway and (base64) on every request.</summary>
-    internal static JsonObject Properties() => new()
+    internal static JsonObject Properties(bool? focused = null) => new()
     {
         ["os"] = "Windows",
         ["browser"] = "Chrome",
@@ -82,16 +84,17 @@ internal sealed partial class DiscordRest : IDisposable
         ["client_event_source"] = null,
         ["client_launch_id"] = LaunchId,
         ["client_heartbeat_session_id"] = HeartbeatSessionId,
-        ["client_app_state"] = "focused",
+        ["client_app_state"] = (focused ?? (App.MainAppWindow is not null || HostWindow.HasNativeState ? HostWindow.IsActive : true)) ? "focused" : "unfocused",
     };
 
     internal static string SuperProperties()
     {
         var build = Build;
+        var focused = App.MainAppWindow is not null || HostWindow.HasNativeState ? HostWindow.IsActive : true;
         var cached = _superPropertiesCache;
-        if (cached.Build == build && cached.Encoded is not null) return cached.Encoded;
-        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(Properties().ToJsonString()));
-        _superPropertiesCache = (build, encoded);
+        if (cached.Build == build && cached.Focused == focused && cached.Encoded is not null) return cached.Encoded;
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(Properties(focused).ToJsonString()));
+        _superPropertiesCache = (build, focused, encoded);
         return encoded;
     }
 
@@ -148,18 +151,26 @@ internal sealed partial class DiscordRest : IDisposable
         {
             var http = BuildHttp.Value;
             var page = await http.GetStringAsync("https://discord.com/login", ct).ConfigureAwait(false);
-            foreach (var script in ScriptRegex().Matches(page).Select(m => m.Groups[1].Value).Reverse().Take(8))
+            int? foundBuild = null;
+            int? foundCaps = null;
+            foreach (var script in ScriptRegex().Matches(page).Select(m => m.Groups[1].Value).Reverse().Take(10))
             {
                 using var response = await http.GetAsync("https://discord.com" + script, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > 24_000_000) continue;
                 var text = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                if (BuildRegex().Match(text) is { Success: true } m && int.TryParse(m.Groups[1].Value, out var build))
-                {
-                    _build = build;
-                    KeepBuild(build);
-                    AppLog.Info($"Discord client: web build {build}.");
-                    return;
-                }
+                if (foundBuild is null && BuildRegex().Match(text) is { Success: true } m && int.TryParse(m.Groups[1].Value, out var build))
+                    foundBuild = build;
+                if (foundCaps is null && CapabilitiesRegex().Match(text) is { Success: true } cm && int.TryParse(cm.Groups[1].Value, out var caps) && caps > 0)
+                    foundCaps = caps;
+                if (foundBuild is not null && foundCaps is not null) break;
+            }
+            if (foundBuild is { } resolvedBuild)
+            {
+                _build = resolvedBuild;
+                if (foundCaps is { } resolvedCaps) _capabilities = resolvedCaps;
+                KeepBuild(resolvedBuild, _capabilities ?? FallbackCapabilities);
+                AppLog.Info($"Discord client: web build {resolvedBuild} (capabilities {_capabilities ?? FallbackCapabilities}).");
+                return;
             }
             AppLog.Info("Discord client: web build not found; using " + FallbackBuild + ".");
         }
@@ -174,11 +185,20 @@ internal sealed partial class DiscordRest : IDisposable
 
     internal static (int? Build, bool Stale) EvaluateKeptBuild(string? text, TimeSpan age)
     {
+        var (build, _, stale) = EvaluateKeptMeta(text, age);
+        return (build, stale);
+    }
+
+    internal static (int? Build, int? Capabilities, bool Stale) EvaluateKeptMeta(string? text, TimeSpan age)
+    {
         if (string.IsNullOrWhiteSpace(text) || age < TimeSpan.Zero || age > TimeSpan.FromDays(14))
-            return (null, false);
-        if (!int.TryParse(text.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var build) || build <= 0)
-            return (null, false);
-        return (build, age > TimeSpan.FromDays(1));
+            return (null, null, false);
+        var parts = text.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || !int.TryParse(parts[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var build) || build <= 0)
+            return (null, null, false);
+        int? caps = parts.Length >= 2 && int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsedCaps) && parsedCaps > 0
+            ? parsedCaps : null;
+        return (build, caps, age > TimeSpan.FromDays(1));
     }
 
     // The build kept within the last day, or stale up to 14 days for background refresh.
@@ -190,17 +210,19 @@ internal sealed partial class DiscordRest : IDisposable
             if (!file.Exists) return (null, false);
             var age = DateTime.UtcNow - file.LastWriteTimeUtc;
             if (age < TimeSpan.Zero) age = TimeSpan.Zero;
-            return EvaluateKeptBuild(File.ReadAllText(file.FullName), age);
+            var (build, caps, stale) = EvaluateKeptMeta(File.ReadAllText(file.FullName), age);
+            if (caps is { } keptCaps) _capabilities = keptCaps;
+            return (build, stale);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return (null, false); }
     }
 
-    private static void KeepBuild(int build)
+    private static void KeepBuild(int build, int capabilities)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(BuildFile)!);
-            File.WriteAllText(BuildFile, build.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            File.WriteAllText(BuildFile, string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} {1}", build, capabilities));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
@@ -209,6 +231,7 @@ internal sealed partial class DiscordRest : IDisposable
     internal static void ForgetBuild()
     {
         _build = null;
+        _capabilities = null;
         try { DeletionGate.DeleteFile(BuildFile); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
@@ -227,7 +250,7 @@ internal sealed partial class DiscordRest : IDisposable
     /// <summary>A message forwarded from another conversation: Discord's forward is a reference of type 1, plus an optional note after it.</summary>
     internal sealed record Forward(string ChannelId, string MessageId, string? GuildId);
 
-    internal Task<Reply> PostMessageAsync(string channelId, string content, string? replyTo, string? guildId, CancellationToken ct, IReadOnlyList<Upload>? files = null,
+    internal async Task<Reply> PostMessageAsync(string channelId, string content, string? replyTo, string? guildId, CancellationToken ct, IReadOnlyList<Upload>? files = null,
         bool replyPing = true, Forward? forward = null, bool quiet = false)
     {
         // Discord's @silent: a message starting with it goes without notifications (SUPPRESS_NOTIFICATIONS, 4096), the word left out.
@@ -237,8 +260,10 @@ internal sealed partial class DiscordRest : IDisposable
         {
             ["content"] = text,
             ["nonce"] = Nonce(),
+            ["enforce_nonce"] = true,
             ["tts"] = false,
             ["flags"] = silent ? 4096 : 0,
+            ["mobile_network_type"] = "unknown",
         };
         if (replyTo is not null)
         {
@@ -250,15 +275,12 @@ internal sealed partial class DiscordRest : IDisposable
             body["message_reference"] = new JsonObject { ["type"] = 1, ["message_id"] = Id(forward.MessageId), ["channel_id"] = Id(forward.ChannelId), ["guild_id"] = forward.GuildId };
         if (files is { Count: > 0 })
         {
-            body["attachments"] = new JsonArray([.. files.Select((f, i) =>
-            {
-                var attachment = new JsonObject { ["id"] = i, ["filename"] = f.Name };
-                if (f.Description is { Length: > 0 } alt) attachment["description"] = alt;
-                return (JsonNode)attachment;
-            })]);
-            return SendAsync(HttpMethod.Post, $"channels/{Id(channelId)}/messages", body, ct, files);
+            var (staged, error) = await StageAsync(channelId, files, ct).ConfigureAwait(false);
+            if (staged is null) return new Reply(null, error ?? "The file didn't upload. Try again.");
+            body["attachments"] = new JsonArray([.. staged.Select(a => (JsonNode)a)]);
+            return await SendAsync(HttpMethod.Post, $"channels/{Id(channelId)}/messages", body, ct).ConfigureAwait(false);
         }
-        return SendAsync(HttpMethod.Post, $"channels/{Id(channelId)}/messages", body, ct);
+        return await SendAsync(HttpMethod.Post, $"channels/{Id(channelId)}/messages", body, ct).ConfigureAwait(false);
     }
 
     /// <summary>A message starting with @silent (then a space, or nothing): Discord sends it silently, without the word.</summary>
@@ -380,9 +402,6 @@ internal sealed partial class DiscordRest : IDisposable
             ["read_states"] = new JsonArray([.. reads.Select(r => (JsonNode)new JsonObject { ["channel_id"] = Id(r.Channel), ["message_id"] = Id(r.Message), ["read_state_type"] = 0 })]),
         }, ct);
 
-    internal Task<Reply> SetStatusAsync(string status, CancellationToken ct) =>
-        SendAsync(HttpMethod.Patch, "users/@me/settings", new JsonObject { ["status"] = status }, ct);
-
     /// <summary>The newest 50 pins, as Discord's client asks for them: items of the message and when it was pinned.</summary>
     internal Task<Reply> PinsAsync(string channelId, CancellationToken ct) =>
         SendAsync(HttpMethod.Get, $"channels/{Id(channelId)}/messages/pins?limit=50", null, ct);
@@ -447,8 +466,12 @@ internal sealed partial class DiscordRest : IDisposable
     internal Task<Reply> InviteInfoAsync(string code, CancellationToken ct) =>
         SendAsync(HttpMethod.Get, $"invites/{Uri.EscapeDataString(code)}?with_counts=true&with_expiration=true", null, ct);
 
-    internal Task<Reply> JoinInviteAsync(string code, CancellationToken ct) =>
-        SendAsync(HttpMethod.Post, $"invites/{Uri.EscapeDataString(code)}", new JsonObject(), ct);
+    internal Task<Reply> JoinInviteAsync(string code, CancellationToken ct, string? sessionId = null)
+    {
+        var body = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(sessionId)) body["session_id"] = sessionId;
+        return SendAsync(HttpMethod.Post, $"invites/{Uri.EscapeDataString(code)}", body, ct, contextLocation: "Invite Button Embed");
+    }
 
     /// <summary>Reads a Discord gift code's plan, application, uses, and gifter for its message card.</summary>
     internal Task<Reply> GiftInfoAsync(string code, CancellationToken ct) =>
@@ -654,7 +677,7 @@ internal sealed partial class DiscordRest : IDisposable
         SendAsync(HttpMethod.Get, $"channels/{Id(channelId)}/threads/search?archived={(archived ? "true" : "false")}&sort_by=last_message_time&sort_order=desc&limit=25&tag_setting=match_some&offset={offset}", null, ct);
 
     internal Task<Reply> PostStickerAsync(string channelId, string stickerId, CancellationToken ct) =>
-        SendAsync(HttpMethod.Post, $"channels/{Id(channelId)}/messages", new JsonObject { ["sticker_ids"] = new JsonArray(Id(stickerId)), ["nonce"] = Nonce(), ["tts"] = false, ["flags"] = 0 }, ct);
+        SendAsync(HttpMethod.Post, $"channels/{Id(channelId)}/messages", new JsonObject { ["sticker_ids"] = new JsonArray(Id(stickerId)), ["nonce"] = Nonce(), ["enforce_nonce"] = true, ["tts"] = false, ["flags"] = 0, ["mobile_network_type"] = "unknown" }, ct);
 
     /// <summary>Mute a channel (for a while when until is set, as Discord's 15 minutes to 24 hours), or unmute it.</summary>
     internal Task<Reply> MuteChannelAsync(string guildId, string channelId, bool mute, CancellationToken ct, DateTimeOffset? until = null)
@@ -698,6 +721,18 @@ internal sealed partial class DiscordRest : IDisposable
         string? mfaToken = null, string? contextLocation = null)
     {
         var request = new HttpRequestMessage(method, Api + path) { Version = HttpVersion.Version20, VersionPolicy = HttpVersionPolicy.RequestVersionOrLower };
+        request.Headers.TryAddWithoutValidation("Origin", "https://discord.com");
+        request.Headers.Referrer = new Uri("https://discord.com/channels/@me");
+        request.Headers.TryAddWithoutValidation("X-Discord-Locale", "en-US");
+        request.Headers.TryAddWithoutValidation("X-Discord-Timezone", TimeZoneName());
+        request.Headers.TryAddWithoutValidation("X-Debug-Options", "bugReporterEnabled");
+        request.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "empty");
+        request.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "cors");
+        request.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "same-origin");
+        var major = ChromeMajor();
+        request.Headers.TryAddWithoutValidation("sec-ch-ua", $"\"Chromium\";v=\"{major}\", \"Google Chrome\";v=\"{major}\", \"Not_A Brand\";v=\"99\"");
+        request.Headers.TryAddWithoutValidation("sec-ch-ua-mobile", "?0");
+        request.Headers.TryAddWithoutValidation("sec-ch-ua-platform", "\"Windows\"");
         if (token is not null) request.Headers.TryAddWithoutValidation("Authorization", token);
         request.Headers.TryAddWithoutValidation("X-Super-Properties", SuperProperties());
         if (!string.IsNullOrWhiteSpace(contextLocation))
@@ -858,7 +893,9 @@ internal sealed partial class DiscordRest : IDisposable
         catch { return "UTC"; }
     }
 
-    private static int ChromeMajor()
+    private static int ChromeMajor() => CachedChromeMajor;
+
+    private static int ResolveChromeMajor()
     {
         try
         {
@@ -866,7 +903,7 @@ internal sealed partial class DiscordRest : IDisposable
             if (version is not null && int.TryParse(version.Split('.')[0], out var major) && major > 100) return major;
         }
         catch { }
-        return 156;
+        return 142;
     }
 
     public void Dispose() => _http.Dispose();
@@ -876,6 +913,9 @@ internal sealed partial class DiscordRest : IDisposable
 
     [GeneratedRegex("build_?[Nn]umber\\D{1,12}(\\d{6,7})")]
     private static partial Regex BuildRegex();
+
+    [GeneratedRegex("\\bcapabilities:(\\d{5,9})\\b")]
+    private static partial Regex CapabilitiesRegex();
 
     [GeneratedRegex("\\d{5,20}")]
     private static partial Regex IdRegex();

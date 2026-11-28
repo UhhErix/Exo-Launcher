@@ -5,7 +5,7 @@
 #   pwsh -File tools\Build-Release.ps1 [-Release vX.Y.Z]
 # Steps: a clean Release publish (self-contained, ReadyToRun), the UI and Exo Mouse
 # builds, Exo Shaders' engine (from shaders\) under addons\shaders, Exo Capture under
-# addons\capture in the app folder,
+# addons\capture and Exo Voice's models under voice\models in the app folder,
 # then the NSIS installer and the SHA-256 file the in-app updater checks.
 [CmdletBinding()]
 param(
@@ -16,6 +16,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
 $version = (Get-Content VERSION -Raw).Trim()
+$label = if ($version -match '^4\.(\d+)\.(\d+)') { if ([int]$Matches[2]) { "0.$([int]$Matches[1] + 1).$([int]$Matches[2]) beta" } else { "0.$([int]$Matches[1] + 1) beta" } } else { $version }
 # This release's What's New, uploaded beside the installer as whats-new.json: the build before it shows these items
 # while it offers the update (AppUpdateService.ParseWhatsNew checks the file).
 $whatsNew = @(Get-Content ui\src\lib\whatsNew.json -Raw | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.version -eq $version } | Select-Object -First 1
@@ -176,6 +177,8 @@ Copy-Item (Join-Path $repo 'capture\out\ExoCapture.exe'), (Join-Path $repo 'capt
 # OBS Studio's signed game capture files (GPL-2.0-or-later, see capture\third_party\obs\README.md).
 Copy-Item (Join-Path $repo 'capture\out\obs') $captureAddon -Recurse -Force
 
+$voiceModels = @(& (Join-Path $repo 'tools\Fetch-VoiceModels.ps1') -Destination $publish.FullName)
+
 # What every release must hold. The voice libraries are only copied once they're built, and releases have gone out
 # without them, so a missing part stops the build, and the voice libraries must also load here.
 $voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'exo_voice_ml.dll', 'onnxruntime.dll'
@@ -183,6 +186,7 @@ $nativeAudio = $voice + 'exo_apo.dll'
 if (Test-Path (Join-Path $publish.FullName 'sherpa-onnx-c-api.dll')) { throw 'sherpa-onnx-c-api.dll must not ship; exo_voice_ml.dll replaces it.' }
 $parts = $nativeAudio + 'ExoLauncher.exe', 'exo-ui.exe', 'exo-apo-helper.exe', 'wwwroot\mouse\index.html', 'wwwroot\changelog.gz', 'steam-ipc\ExoLauncher.SteamIpc.exe',
     'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe'
+$parts += $voiceModels
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($missing) { throw "The app folder lacks $($missing -join ', ')." }
 $leakedPdbs = @(Get-ChildItem -Recurse -File -Filter '*.pdb' $publish.FullName)
@@ -249,7 +253,7 @@ $installerRevision = & {
 # The install engine (NSIS): the payload, its checks, the atomic swap, shortcuts and registry. Its icon and helper paths are relative to tools\.
 $engine = Join-Path $artifacts 'ExoLauncher-Engine.exe'
 Push-Location (Join-Path $repo 'tools')
-& $MakeNsis /V2 "/DPAYLOAD_DIR=$($publish.FullName)" "/DOUTFILE=$engine" "/DPRODUCT_VERSION=$version" "/DSETUP_SHELL=$shell" "/DINSTALLER_REVISION=$installerRevision" ExoLauncher.nsi
+& $MakeNsis /V2 "/DPAYLOAD_DIR=$($publish.FullName)" "/DOUTFILE=$engine" "/DPRODUCT_VERSION=$version" "/DPRODUCT_LABEL=$label" "/DSETUP_SHELL=$shell" "/DINSTALLER_REVISION=$installerRevision" ExoLauncher.nsi
 $nsis = $LASTEXITCODE
 Pop-Location
 if ($nsis) { throw "makensis failed ($nsis)." }

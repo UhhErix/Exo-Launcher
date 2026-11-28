@@ -120,8 +120,8 @@ export function useSections() {
       : Math.round(Math.min(COLUMN_MAX * k, Math.max(COLUMN_MIN * k, (width - HERO_WANT * k - count * gap) / count)))
     let most = 1
     while (most < MAX_COLUMNS && (most + 1) * (columnFor(most + 1) + gap) <= width - (rail || HERO_MIN * k)) most++
-    // On a wide room, start at the column count that keeps the mouse within HERO_MAX; on a rail, at the most it holds.
-    let start = rail ? most : 1
+    // On a wide room, start at the column count that keeps the mouse within HERO_MAX; on a rail, at two, as Exo's other device pages.
+    let start = rail ? Math.min(most, 2) : 1
     while (!rail && start < most && width - start * (columnFor(start) + gap) > HERO_MAX) start++
     const height = b.clientHeight
 

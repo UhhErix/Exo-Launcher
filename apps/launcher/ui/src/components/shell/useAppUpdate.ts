@@ -129,7 +129,7 @@ export function useAppUpdate(): AppUpdate {
   const dismiss = useCallback(() => setDismissed(true), [])
 
   const install = useCallback(async () => {
-    if (installing.current || busy || (!latest && phase !== 'available' && phase !== 'failed')) return
+    if (installing.current || busy || (!latest && phase !== 'available' && phase !== 'failed' && phase !== 'waiting')) return
     installing.current = true
     checkGeneration.current = Symbol()
     setAsking(true)

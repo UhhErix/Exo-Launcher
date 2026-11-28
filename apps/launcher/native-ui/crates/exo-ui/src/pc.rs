@@ -12,6 +12,6 @@ pub fn view(s: &AppState, scale: f32) -> El {
     }
 }
 
-pub fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
-    pc_ai::part_menu_layers(s, blur)
+pub fn part_menu_layers(s: &AppState) -> Vec<El> {
+    pc_ai::part_menu_layers(s)
 }

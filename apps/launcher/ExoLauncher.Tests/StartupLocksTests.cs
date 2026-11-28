@@ -1,3 +1,4 @@
+using ExoLauncher.Helpers;
 using ExoLauncher.Services;
 
 namespace ExoLauncher.Tests;
@@ -6,7 +7,7 @@ namespace ExoLauncher.Tests;
 /// Ways Exo could turn off what Windows, security software, anti-cheat, a driver, input or audio, or Exo itself needs:
 /// - an item is judged by its name alone (a lookalike name is locked; the real thing under another name is not);
 /// - a shortcut or task that only runs PowerShell is called Windows' own because PowerShell is;
-/// - a group is locked in the list but Remove goes ahead anyway;
+/// - a group is locked in the list but Remove goes ahead anyway, or turning an off updater back on lets other locked kinds on too;
 /// - the catalog says "keep" where it must say "locked", or a real switch names something Exo does not know.
 /// </summary>
 public sealed class StartupLocksTests
@@ -130,6 +131,37 @@ public sealed class StartupLocksTests
         }
         Assert.Empty(host.Applied);
         Assert.Empty(StartupEntries.Kept(host));
+    }
+
+    [Fact]
+    public void AnOffUpdaterCanBeTurnedBackOnButNoOtherLockedKind()
+    {
+        var host = Host();
+        host.SetRun(Hive.User, StartupKeys.Run, "EdgeUpdate", "\"C:\\Program Files (x86)\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe\" /c");
+        host.Set(Hive.User, StartupKeys.Approved + "Run", "EdgeUpdate", RegValue.Bin(StartupApps.Approved(false, host.UtcNow)));
+        host.SetRun(Hive.User, StartupKeys.Run, "NVIDIA", "\"C:\\Program Files\\NVIDIA Corporation\\NvContainer\\nvcontainer.exe\"");
+        host.Set(Hive.User, StartupKeys.Approved + "Run", "NVIDIA", RegValue.Bin(StartupApps.Approved(false, host.UtcNow)));
+        host.SetRun(Hive.User, StartupKeys.Run, "AcmeAV", "\"C:\\Program Files\\Acme AV\\avtray.exe\"");
+        host.Set(Hive.User, StartupKeys.Approved + "Run", "AcmeAV", RegValue.Bin(StartupApps.Approved(false, host.UtcNow)));
+        host.Security.Add(@"C:\Program Files\Acme AV\avtray.exe");
+        using var _ = StartupEntries.UseHost(host);
+
+        var entries = StartupEntries.ReadAll(host).ToDictionary(entry => entry.Id);
+        Assert.Equal(LockKind.Updater, entries["run:cu:EdgeUpdate"].Lock);
+        Assert.Equal(LockKind.Driver, entries["run:cu:NVIDIA"].Lock);
+        Assert.Equal(LockKind.Security, entries["run:cu:AcmeAV"].Lock);
+        Assert.All(entries.Values, entry => Assert.False(entry.Enabled));
+
+        Assert.Equal("Exo can't change this startup entry.", StartupEntries.Restore(host, "run:cu:NVIDIA"));
+        Assert.Equal("Exo can't change this startup entry.", StartupEntries.Restore(host, "run:cu:AcmeAV"));
+        Assert.Empty(host.Applied);
+        Assert.False(StartupApps.IsEnabled(host.Get(Hive.User, StartupKeys.Approved + "Run", "NVIDIA")?.Bytes));
+        Assert.False(StartupApps.IsEnabled(host.Get(Hive.User, StartupKeys.Approved + "Run", "AcmeAV")?.Bytes));
+
+        Assert.Null(StartupEntries.Restore(host, "run:cu:EdgeUpdate"));
+        Assert.True(StartupApps.IsEnabled(host.Get(Hive.User, StartupKeys.Approved + "Run", "EdgeUpdate")?.Bytes));
+        Assert.True(StartupEntries.ReadAll(host).Single(entry => entry.Id == "run:cu:EdgeUpdate").Enabled);
+        Assert.Equal(StartupLocks.Sentence(LockKind.Updater), StartupEntries.Remove(host, "run:cu:EdgeUpdate"));
     }
 
     [Fact]

@@ -84,8 +84,8 @@ pub use discord_types::{
 pub use events::{
     AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
     CaptureShrunkEvent, GameRunStateEvent, GpuDriverInstallEvent, InstallQueueEvent,
-    LaunchStatusEvent, MusicVolumeEvent, NotesOpenEvent, PausedDownloadItem, RequestId,
-    ShellBootstrap, StoreChangedEvent, StoreSaleEvent,
+    LaunchStatusEvent, MusicVolumeEvent, PausedDownloadItem, RequestId, ShellBootstrap,
+    StoreChangedEvent, StoreSaleEvent,
 };
 pub use game_types::{
     AntiCheatLaunch, ArtworkMutationResponse, CompressProgressEvent, CompressState,
@@ -102,9 +102,7 @@ pub use media_types::{
     CaptureSendReply, CaptureSettingsDto, CaptureStatusReply, CaptureTextReply, Concert,
     CreditGroup, CreditPerson, JamMember, JamSession, LyricsLine, LyricsWord, MusicControlReply,
     MusicMatchReply, MusicMatchSong, MusicPlayback, MusicPlaybackReply, MusicStatusEvent,
-    MusicVolumeReply, NoteInfo, NotesActReply, NotesListReply, NotesOpenReply, NotesPendingReply,
-    NotesPhotoReply, NotesReadReply, NotesSaveAsReply, NotesSaveReply, NotesSpellReply,
-    NotesTextFilesReply, PlayerActReply, PlayerAlbumRef, PlayerArtist, PlayerCard, PlayerDevice,
+    MusicVolumeReply, PlayerActReply, PlayerAlbumRef, PlayerArtist, PlayerCard, PlayerDevice,
     PlayerFolderRef, PlayerFriend, PlayerFriendContext, PlayerFriendTrack, PlayerFriendUser,
     PlayerHeader, PlayerLink, PlayerOption, PlayerRating, PlayerSection, PlayerStartReply,
     PlayerStateData, PlayerStateReply, PlayerTrack, PlayerViewData, PlayerViewReply, SpotifyAudio,
@@ -219,6 +217,7 @@ pub const METHOD_DLSS_DOWNLOAD_NEWER: &str = "dlss.downloadNewer";
 pub const METHOD_DLSS_FRAME_GEN: &str = "dlss.frameGen";
 pub const METHOD_DLSS_NEWER: &str = "dlss.newer";
 pub const METHOD_DLSS_RESTORE: &str = "dlss.restore";
+pub const METHOD_DLSS_UPDATE_ALL: &str = "dlss.updateAll";
 pub const METHOD_DLSS_STATUS: &str = "dlss.status";
 pub const METHOD_GPU_GAME: &str = "gpu.game";
 pub const METHOD_HDR_GAME: &str = "hdr.game";
@@ -325,28 +324,9 @@ pub const METHOD_DISCORD_VOICE: &str = "discord.voice";
 pub const METHOD_FRIENDS_BADGE: &str = "friends.badge";
 pub const METHOD_EQ: &str = "eq";
 pub const METHOD_EQ_HEADPHONES: &str = "eq.headphones";
-pub const METHOD_HID_CLOSE: &str = "hid.close";
-pub const METHOD_HID_LIST: &str = "hid.list";
-pub const METHOD_HID_OPEN: &str = "hid.open";
-pub const METHOD_HID_RECEIVE_FEATURE_REPORT: &str = "hid.receiveFeatureReport";
-pub const METHOD_HID_RECEIVE_INPUT_REPORT: &str = "hid.receiveInputReport";
-pub const METHOD_HID_SEND_FEATURE_REPORT: &str = "hid.sendFeatureReport";
 pub const METHOD_HID_SEND_REPORT: &str = "hid.sendReport";
-pub const METHOD_MOUSE_PRESETS_GET: &str = "mouse.presets.get";
-pub const METHOD_MOUSE_PRESETS_SET: &str = "mouse.presets.set";
 pub const METHOD_MOUSE_PROFILES_GET: &str = "mouse.profiles.get";
 pub const METHOD_MOUSE_PROFILES_SET: &str = "mouse.profiles.set";
-pub const METHOD_NOTES_ACT: &str = "notes.act";
-pub const METHOD_NOTES_LIST: &str = "notes.list";
-pub const METHOD_NOTES_OPEN: &str = "notes.open";
-pub const METHOD_NOTES_PENDING: &str = "notes.pending";
-pub const METHOD_NOTES_PHOTO: &str = "notes.photo";
-pub const METHOD_NOTES_READ: &str = "notes.read";
-pub const METHOD_NOTES_SAVE: &str = "notes.save";
-pub const METHOD_NOTES_SAVE_AS: &str = "notes.saveAs";
-pub const METHOD_NOTES_SESSION: &str = "notes.session";
-pub const METHOD_NOTES_SPELL: &str = "notes.spell";
-pub const METHOD_NOTES_TEXT_FILES: &str = "notes.textFiles";
 pub const METHOD_STEAM_INPUT_STATE: &str = "steamInput.state";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
 pub const METHOD_BACKUP_STATUS: &str = "backup.status";
@@ -360,7 +340,6 @@ pub const METHOD_GPU_AFMF3: &str = "gpu.afmf3";
 pub const METHOD_GPU_CONTROL_PANEL: &str = "gpu.controlPanel";
 pub const METHOD_GPU_DISPLAY: &str = "gpu.display";
 pub const METHOD_GPU_DRIVER: &str = "gpu.driver";
-pub const METHOD_GPU_PROCESSES: &str = "gpu.processes";
 pub const METHOD_GPU_PROFILE: &str = "gpu.profile";
 pub const METHOD_GPU_TUNING_APPLY: &str = "gpu.tuning.apply";
 pub const METHOD_GPU_TUNING_RESET: &str = "gpu.tuning.reset";
@@ -406,12 +385,7 @@ pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_GAME_RESUME_DOWNLOAD: &str = "game.resumeDownload";
 pub const METHOD_GAME_SETTINGS: &str = "game.settings";
-pub const METHOD_GAME_GRAPHICS_FEATURES: &str = "game.graphicsFeatures";
-pub const METHOD_GAME_GRAPHICS_FEATURES_SET: &str = "game.graphicsFeatures.set";
 pub const METHOD_GAME_FRAME_GEN: &str = "game.frameGen";
-pub const METHOD_GAME_FRAME_CAP: &str = "game.frameCap";
-pub const METHOD_GAME_CAP_LAB_RUN: &str = "game.capLab.run";
-pub const METHOD_GAME_CAP_LAB_CANCEL: &str = "game.capLab.cancel";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
 pub const METHOD_MOUSE_PANEL_BOUNDS: &str = "mouse.panel.bounds";
@@ -442,6 +416,7 @@ pub const METHOD_RPC_CANCEL: &str = "rpc.cancel";
 pub const METHOD_SHELL_BOOTSTRAP: &str = "shell.bootstrap";
 pub const METHOD_SHELL_OPEN_URL: &str = "shell.openUrl";
 pub const METHOD_SHELL_READY: &str = "shell.ready";
+pub const METHOD_SHELL_WINDOW_FOCUS: &str = "shell.windowFocus";
 pub const METHOD_SPOTIFY_ACT: &str = "spotify.act";
 pub const METHOD_SPOTIFY_LINK: &str = "spotify.link";
 pub const METHOD_SPOTIFY_START: &str = "spotify.start";
@@ -564,6 +539,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DLSS_NEWER,
     METHOD_DLSS_RESTORE,
     METHOD_DLSS_STATUS,
+    METHOD_DLSS_UPDATE_ALL,
     METHOD_GPU_GAME,
     METHOD_HDR_GAME,
     METHOD_KEEP_STATUS,
@@ -670,28 +646,9 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_FRIENDS_BADGE,
     METHOD_EQ,
     METHOD_EQ_HEADPHONES,
-    METHOD_HID_CLOSE,
-    METHOD_HID_LIST,
-    METHOD_HID_OPEN,
-    METHOD_HID_RECEIVE_FEATURE_REPORT,
-    METHOD_HID_RECEIVE_INPUT_REPORT,
-    METHOD_HID_SEND_FEATURE_REPORT,
     METHOD_HID_SEND_REPORT,
-    METHOD_MOUSE_PRESETS_GET,
-    METHOD_MOUSE_PRESETS_SET,
     METHOD_MOUSE_PROFILES_GET,
     METHOD_MOUSE_PROFILES_SET,
-    METHOD_NOTES_ACT,
-    METHOD_NOTES_LIST,
-    METHOD_NOTES_OPEN,
-    METHOD_NOTES_PENDING,
-    METHOD_NOTES_PHOTO,
-    METHOD_NOTES_READ,
-    METHOD_NOTES_SAVE,
-    METHOD_NOTES_SAVE_AS,
-    METHOD_NOTES_SESSION,
-    METHOD_NOTES_SPELL,
-    METHOD_NOTES_TEXT_FILES,
     METHOD_STEAM_INPUT_STATE,
     METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_STATE,
@@ -703,7 +660,6 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GPU_CONTROL_PANEL,
     METHOD_GPU_DISPLAY,
     METHOD_GPU_DRIVER,
-    METHOD_GPU_PROCESSES,
     METHOD_GPU_PROFILE,
     METHOD_GPU_TUNING_APPLY,
     METHOD_GPU_TUNING_RESET,
@@ -750,12 +706,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_PROPERTIES_SET,
     METHOD_GAME_RESUME_DOWNLOAD,
     METHOD_GAME_SETTINGS,
-    METHOD_GAME_GRAPHICS_FEATURES,
-    METHOD_GAME_GRAPHICS_FEATURES_SET,
     METHOD_GAME_FRAME_GEN,
-    METHOD_GAME_FRAME_CAP,
-    METHOD_GAME_CAP_LAB_RUN,
-    METHOD_GAME_CAP_LAB_CANCEL,
     METHOD_KEYS_PREVIEW,
     METHOD_KEYS_ACTIVATE,
     METHOD_MOUSE_PANEL_BOUNDS,
@@ -2155,9 +2106,6 @@ fn parse_event(
                     .unwrap_or_else(|_| raw_fallback(name, data_raw)))
             }
         }
-        "game.capLab" => Ok(serde_json::from_str::<CapLabStatus>(data_raw)
-            .map(|status| HostEvent::GameCapLab(Box::new(status)))
-            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "shaders.changed" => Ok(HostEvent::ShadersChanged),
         "shaders.event" => Ok(serde_json::from_str::<ShadersEventPayload>(data_raw)
             .map(HostEvent::ShadersEvent)
@@ -2234,9 +2182,6 @@ fn parse_event(
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "capture.shrunk" => Ok(serde_json::from_str::<CaptureShrunkEvent>(data_raw)
             .map(|ev| HostEvent::CaptureShrunk(Box::new(ev)))
-            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
-        "notes.open" => Ok(serde_json::from_str::<NotesOpenEvent>(data_raw)
-            .map(HostEvent::NotesOpen)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "controller.state" => Ok(serde_json::from_str::<ControllerStateEvent>(data_raw)
             .map(HostEvent::ControllerState)
@@ -2460,6 +2405,9 @@ fn parse_event(
         "runtimes.progress" => Ok(serde_json::from_str::<RuntimesProgress>(data_raw)
             .map(HostEvent::RuntimesProgress)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "runtimes.done" => Ok(serde_json::from_str::<RuntimesInstallReply>(data_raw)
+            .map(HostEvent::RuntimesDone)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "shaders.rebuild" => Ok(serde_json::from_str::<ShaderRebuild>(data_raw)
             .map(HostEvent::ShadersRebuild)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
@@ -2544,16 +2492,20 @@ mod tests {
             ..Default::default()
         };
         assert!(
-            base.resolve_local_cover("https://covers.exo-launcher.local/tok/..%2Fsecret.png")
+            base.local_cover_path("https://covers.exo-launcher.local/tok/..%2Fsecret.png")
                 .is_none()
         );
         assert!(
-            base.resolve_local_cover("https://evil.example/tok/a.png")
+            base.local_cover_path("https://evil.example/tok/a.png")
                 .is_none()
         );
         assert!(
-            base.resolve_capture_file("https://captures.exo-launcher.local/..%2F..%2Fwin.ini")
-                .is_none()
+            base.capture_file_paths("https://captures.exo-launcher.local/..%2F..%2Fwin.ini")
+                .is_empty()
+        );
+        assert!(
+            base.folder_art_paths("..\\secret.png").is_empty(),
+            "a folder art leaf with a separator never becomes a path"
         );
     }
 
@@ -2659,10 +2611,6 @@ mod tests {
             (
                 br#"{"event":"capture.shrunk","data":{"id":"c1","before":50000000,"after":12000000,"item":{"id":"c1","kind":"video","size":12000000}}}"#,
                 |ev| matches!(ev, HostEvent::CaptureShrunk(s) if s.id == "c1" && s.before == 50_000_000 && s.after == 12_000_000 && s.item.is_some()),
-            ),
-            (
-                br#"{"event":"notes.open","data":{"id":"note-1","message":null}}"#,
-                |ev| matches!(ev, HostEvent::NotesOpen(n) if n.id.as_deref() == Some("note-1")),
             ),
             (
                 br#"{"event":"controller.state","data":{"id":"pad-1","lx":128,"ly":127,"rx":200,"ry":50,"l2":10,"r2":255,"profile":2,"stopL":1,"stopR":2,"battery":80,"charging":true,"extras":64}}"#,
@@ -2964,6 +2912,10 @@ mod tests {
         assert!(matches!(
             parse_event("runtimes.progress", r#"{"phase":"download","name":"Visual C++"}"#, None),
             Ok(HostEvent::RuntimesProgress(p)) if p.name.as_deref() == Some("Visual C++")
+        ));
+        assert!(matches!(
+            parse_event("runtimes.done", r#"{"ok":true,"results":[{"id":"vcredist","name":"Visual C++","outcome":"installed"}]}"#, None),
+            Ok(HostEvent::RuntimesDone(r)) if r.ok && r.results.len() == 1
         ));
         assert!(matches!(
             parse_event("shaders.event", r#"{"name":"progress","data":{"rev":2}}"#, None),

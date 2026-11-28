@@ -60,13 +60,6 @@ pub struct CaptureShrunkEvent {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
-pub struct NotesOpenEvent {
-    pub id: Option<String>,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
 pub struct PausedDownloadItem {
     pub game_id: String,
     pub title: String,

@@ -72,7 +72,7 @@ test('every row keeps a Ctrl+K keyword, so search still finds it', () => {
     const text = read(`components/settings/${name}`)
     return [...text.matchAll(/<(?:Row|SwitchRow|ChoiceRow|SliderRow|CopyRow)[^>]*?label="([^"]+)"/g)].map(match => match[1])
   })
-  assert.ok(labels.length > 15, 'the label scan found the rows: ' + labels.length)
+  assert.ok(labels.length > 14, 'the label scan found the rows: ' + labels.length)
   for (const label of labels) {
     const lower = label.toLowerCase()
     assert.ok(keywords.some(word => lower.includes(word)), `no Ctrl+K keyword covers the row "${label}"`)

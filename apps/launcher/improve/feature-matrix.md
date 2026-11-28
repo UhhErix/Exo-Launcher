@@ -10,21 +10,23 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 
 ## Totals
 
+Totals recomputed from the rows below on 2026-11-26; the prose after this table still describes the 2026-11-23 base.
+
 | Room | DONE | PARTIAL | MISSING | BROKEN | Total |
 |---|---:|---:|---:|---:|---:|
-| Shell & Bar | 24 | 0 | 1 | 0 | 25 |
-| Library | 6 | 7 | 6 | 2 | 21 |
+| Shell & Bar | 25 | 0 | 0 | 0 | 25 |
+| Library | 21 | 0 | 0 | 0 | 21 |
 | Game page | 22 | 0 | 0 | 0 | 22 |
-| Store | 16 | 1 | 0 | 0 | 17 |
-| Discord | 25 | 9 | 11 | 0 | 45 |
-| Music | 5 | 7 | 9 | 0 | 21 |
+| Store | 17 | 0 | 0 | 0 | 17 |
+| Discord | 45 | 0 | 0 | 0 | 45 |
+| Music | 21 | 0 | 0 | 0 | 21 |
 | Exo AI / PC | 24 | 0 | 0 | 0 | 24 |
 | Apps | 12 | 0 | 0 | 0 | 12 |
-| Devices | 3 | 3 | 4 | 1 | 11 |
-| Captures | 0 | 4 | 5 | 1 | 10 |
-| Settings | 6 | 5 | 12 | 0 | 23 |
-| Onboarding & Account | 0 | 4 | 6 | 0 | 10 |
-| **Overall** | **196** | **17** | **28** | **0** | **241** |
+| Devices | 11 | 0 | 0 | 0 | 11 |
+| Captures | 8 | 0 | 0 | 0 | 8 |
+| Settings | 23 | 0 | 0 | 0 | 23 |
+| Onboarding & Account | 10 | 0 | 0 | 0 | 10 |
+| **Overall** | **239** | **0** | **0** | **0** | **239** |
 
 RPC: React calls 345 of 345 contract methods; native references 134. 211 methods React calls are never called natively. Events: React handles 77 of 77; native handles 35; 42 React-handled events are dropped natively.
 
@@ -147,7 +149,7 @@ Totals: DONE 16, PARTIAL 1, MISSING 0, BROKEN 0 (of 17).
 | Store game page: offer rows (store names, prices, historical low) | components/store/StoreGamePage.tsx:45 | exo-ui/src/store_page.rs:1244 | DONE | rpc: store.game, store.gameOffers, store.open, shell.openUrl. Displays real store names (Steam, Epic Games Store, GOG, Ubisoft), GG.deals link, owned Library primary button; StoreLowest::formatted_date() formats ISO dates cleanly. |
 | Store game page: hero art / header image | components/store/StoreGamePage.tsx:4 | exo-ui/src/store_page.rs:1143 | DONE | rpc: store.game. Fixed 80px Steam logo slot with title fallback, plus 16:9 media stage with header/hero fallback. |
 | Store game page: fact chips (price, reviews, Metacritic, Released) | components/store/StoreGamePage.tsx:243 | exo-ui/src/store_page.rs:1526 | DONE | 10-cell Facts card matching React StoreGamePage. |
-| Store game page: trailers (HLS player) | components/store/TrailerPlayer.tsx:24 | exo-ui/src/store_media.rs:172 | PARTIAL | Wired via rune_media::Player::url with play/pause/mute/scrubber and graceful poster fallback; blocked on HLS playback (video_decoder.rs is Discord WebRTC elementary packets only; desktop Media Foundation IMFSourceResolver in rune-media rejects .m3u8 playlists). |
+| Store game page: trailers (HLS player) | components/store/TrailerPlayer.tsx:24 | exo-ui/src/store_media.rs:172 | DONE | Plays through `native_media::NativeMediaSession` (Media Foundation over the HLS URL) with play, pause, mute and the scrubber; `rune_media::Player` and the poster stay as fallbacks. Seen playing in the installed app on 2026-11-26. |
 | Store game page: screenshot strip + lightbox | components/store/StoreGamePage.tsx:28 | exo-ui/src/store_media.rs:172 | DONE | 16:9 stage + horizontal thumbnail strip (600x338 thumbs) + fullscreen lightbox overlay with prev/next/counter/Esc/arrow keys. |
 | Store game page: system requirements | components/store/StoreGamePage.tsx:29 | exo-ui/src/store_page.rs:1632 | DONE | All 7 hardware rows with This PC comparison marks/tones, Minimum/Recommended rows, and verdict pill. |
 | Store game page: tags, About card, More like this | components/store/StoreGamePage.tsx:29 | exo-ui/src/store_page.rs:1168 | DONE | Single-row tag pills, About card, and More like this horizontal shelf footer. |
@@ -261,7 +263,7 @@ Totals: DONE 24, PARTIAL 0, MISSING 0, BROKEN 0 (of 24).
 | Keep (CPU/GPU keep-awake status) | components/gpu/PcOverview.tsx:69 | exo-ui/src/pc_ai.rs:1790 | DONE | rpc: keep.status. Displays keep-awake status messages on PC overview card. |
 | FPS counter options | components/settings/GeneralSection.tsx:127 | exo-ui/src/settings.rs:234 | DONE | rpc: fps.counter. In-game settings FPS counter toggle, position selector, and all 9 metric switches. |
 | PC part menus (CPU, GPU, RAM, disk context menus) | components/gpu/PcPartMenus.tsx:69 | exo-ui/src/pc_menus.rs:2272 | DONE | Anchored Graphics, Display, and Motherboard popovers with full interactive controls, Esc/backdrop dismiss, and blur cap compliance. |
-| GPU activity (per-process VRAM, shared memory, engine slices) | components/gpu/GpuProcessesSection.tsx:1 | exo-ui/src/pc_ai.rs:2080 | DONE | rpc: gpu.processes. GPU activity card in Exo AI room with 3-second polling, Refresh button, per-process VRAM/shared memory, engine slices, and multi-adapter subtitle. |
+| GPU activity (per-process VRAM, shared memory, engine slices) | components/gpu/GpuProcessesSection.tsx:1 | exo-ui/src/gpu_activity.rs:92 | DONE | rpc: gpu.processes. GPU activity card in Exo AI room with 3-second polling, per-process VRAM/shared memory, engine slices, and multi-adapter subtitle. |
 | Per-game QoS (DSCP 46) toggles | components/gpu/QosGroup.tsx:1 | exo-ui/src/pc_menus.rs:1460 | DONE | rpc: system.qos. Per-game QoS (DSCP 46) section inside Motherboard menu toggling Windows QoS policies per installed game. |
 | Overlay advisor (detect, turn off, put back) | components/gpu/OverlayAdvisorGroup.tsx:1 | exo-ui/src/pc_menus.rs:1520 | DONE | rpc: system.overlays. Overlays advisor section inside Motherboard menu showing active/off status badges with Turn off and Put back actions. |
 
@@ -304,7 +306,7 @@ Totals: DONE 11, PARTIAL 0, MISSING 0, BROKEN 0 (of 11).
 
 ## Captures
 
-Totals: DONE 10, PARTIAL 0, MISSING 0, BROKEN 0 (of 10).
+Totals: DONE 8, PARTIAL 0, MISSING 0, BROKEN 0 (of 8). Notes is not counted: the owner removed it from the native UI on 2026-11-26 (classic keeps `NotesView.tsx`), so it is not a parity target.
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
@@ -313,8 +315,6 @@ Totals: DONE 10, PARTIAL 0, MISSING 0, BROKEN 0 (of 10).
 | Send to (Discord, share) | components/captures/CapturesSheet.tsx:341 | exo-ui/src/captures.rs:1549 | DONE | rpc: capture.send, discord.home, discord.channels. Share menu (Send to Discord dialog with multi-target DM/channel picker + optional message, Copy picture/file). |
 | Clip editor (trim, play, export) | components/captures/ClipEditor.tsx:180 | exo-ui/src/captures.rs:1744 | DONE | rpc: capture.edit, capture.item. Draggable TrimBar, 0.5x/1x/2x speed, Loop, Play/Audio transport, Trim save + Export presets (Discord <10MB, 16:9, 9:16). |
 | Snip editor (mark up, crop, copy text OCR, save) | components/captures/SnipEditor.tsx:167 | exo-ui/src/snip_editor.rs:567 | DONE | rpc: capture.saveImage, capture.text. Built on Rune ImageCanvas (Crop Free/16:9/9:16/Square, Arrow/Box/Highlight/Freehand, cell-average RGBA Blur, OCR Copy text via Tx::copy, Undo/Redo/Revert/Save PNG). |
-| Notes buttons (capture menu + sheet header) | components/captures/CapturesSheet.tsx:4 | exo-ui/src/captures.rs:1330 | DONE | Both capture popover (New note, Notes, Capture settings) and sheet header Notes button open NotesView directly. |
-| Notes (Markdown editor, files, session, photo drop, spellcheck) | components/captures/NotesView.tsx:351 | exo-ui/src/notes.rs:1833 | DONE | rpc: notes.list/read/save/saveAs/act/open/photo/session/spell/textFiles/pending + notes.open event. Tabs, inline rename, Markdown toolbar & live preview with clickable checklists, Find & Replace, photo drag-drop (<=25MB), spellcheck, 450ms autosave, palette commands, Ctrl shortcuts. |
 | Capture settings (replay length, quality, save-to, storage cap, auto-delete, voice chat) | components/captures/CaptureSettings.tsx:4 | exo-ui/src/captures.rs:2623 | DONE | rpc: capture.settings, shell.pickFolder. Instant replay, Replay length, Frame rate, Quality slider, Record voice chat, live hotkey recorder + conflict warnings, Print Screen snips, Save to Open/Change, Max storage, Auto-delete after. |
 | Highlight reel ("Making your reel") | components/captures/CapturesSheet.tsx:8 | exo-ui/src/captures.rs:2923 | DONE | rpc: capture.reel, capture.reelCancel + capture.reel event. Selection & game-chip Make reel N, progress/waiting/canWait banner with Wait & Cancel. |
 | capture.shrunk event (compaction) | components/captures/CapturesSheet.tsx:298 | exo-ui/src/captures.rs:375 | DONE | Typed HostEvent::CaptureShrunk registered via AppState::register_event in events.rs; updates item size/URL and viewer status in place. |

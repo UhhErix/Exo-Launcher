@@ -1,3 +1,8 @@
+> **Correction (2026-11-26):** the gains in this report are not trustworthy. Training used the DNS 2020 test set's own
+> clean speech (Graz speakers, mislabelled "LibriVox CC0"; actually ODbL/DbCL), 17 of 20 test "competing voices" were
+> training targets, and the gaming test shares its noise/reverb generator with training. All data and scoring are 16 kHz
+> (not 48 kHz). On outside test sets the fine-tunes lose PESQ and DNSMOS OVRL to upstream DPDFNet.
+
 # Exo Lab: State-of-the-Art Voice Noise Suppression (`lab-voice-ns`)
 
 **Date:** 2026-11-24  

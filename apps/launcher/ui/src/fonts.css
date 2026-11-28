@@ -1,31 +1,31 @@
 /*
- * Exo's type (owner, 2026-11-19): Goeist, Shadcn Labs' rounded Geist (SIL OFL 1.1, github.com/shadcn-labs/goeist-font,
- * npm goeist 0.1.0): Geist's proportions, spacing and OpenType features with every corner and stroke end softened, and
- * Goeist Mono beside it. Variable, upright and italic, local and preloaded (index.html), font-display: block. It draws
- * Latin, Cyrillic, Greek and Vietnamese; other scripts fall back to Windows' own fonts. What draws outside the page takes it
- * too: the FPS counter, the capture add-on and the native dialogs from ExoLauncher/Assets/Fonts/Goeist-Variable.ttf (the
- * release's variable TTF, since GDI can't read WOFF2), the achievement banner and Setup's screens from this folder.
+ * Exo's type (owner, 2026-11-26): Geist everywhere, by Vercel and basement.studio (SIL OFL 1.1, github.com/vercel/geist-font
+ * v1.8.1), with Geist Mono beside it: the build native-ui embeds. Variable, upright and italic, local and preloaded
+ * (index.html), font-display: block. It draws Latin, Cyrillic, Greek and Vietnamese; other scripts fall back to Windows' own
+ * fonts. What draws outside the page takes it too: the FPS counter, the capture add-on and the native dialogs from
+ * native-ui/crates/exo-kit/assets/fonts/Geist-Variable.ttf (GDI can't read WOFF2), the achievement banner and Setup's
+ * screens from this folder.
  */
 @font-face {
-  font-family: "Goeist";
+  font-family: "Geist";
   font-style: normal;
   font-display: block;
   font-weight: 100 900;
-  src: url("/fonts/Goeist-Variable.woff2") format("woff2");
+  src: url("/fonts/Geist-Variable.woff2") format("woff2");
 }
 
 @font-face {
-  font-family: "Goeist";
+  font-family: "Geist";
   font-style: italic;
   font-display: block;
   font-weight: 100 900;
-  src: url("/fonts/Goeist-Italic-Variable.woff2") format("woff2");
+  src: url("/fonts/Geist-Italic-Variable.woff2") format("woff2");
 }
 
 @font-face {
-  font-family: "Goeist Mono";
+  font-family: "Geist Mono";
   font-style: normal;
   font-display: swap;
   font-weight: 100 900;
-  src: url("/fonts/GoeistMono-Variable.woff2") format("woff2");
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2");
 }

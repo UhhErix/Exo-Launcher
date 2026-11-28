@@ -1,6 +1,6 @@
 // Exo Setup: Exo's own window for installing, updating and uninstalling Exo Launcher.
 //
-// The screens are Exo's (its tokens, Goeist, icons and motion) drawn by WebView2, the engine
+// The screens are Exo's (its tokens, Geist, icons and motion) drawn by WebView2, the engine
 // Exo itself runs on, from a page packed into this exe. The work is the proven NSIS engine appended
 // to this exe, run silently: it writes each step to a status file this window shows, and the
 // staging folder it fills gives the real progress. Then the installed Exo fetches its parts (FetchParts).
@@ -28,6 +28,9 @@ using Microsoft::WRL::ComPtr;
 
 #ifndef PRODUCT_VERSION
 #define PRODUCT_VERSION L"0.0.0"
+#endif
+#ifndef PRODUCT_LABEL
+#define PRODUCT_LABEL PRODUCT_VERSION
 #endif
 
 namespace {
@@ -320,7 +323,7 @@ void SendState() {
     bool desktop = updating ? Exists(DesktopLink()) : true;
     std::string json = std::string(R"({"type":"state","mode":)") + (g_uninstall ? "\"uninstall\"" : g_update ? "\"update\"" : "\"install\"") +
         R"(,"updating":)" + (updating ? "true" : "false") + R"(,"desktop":)" + (desktop ? "true" : "false") +
-        R"(,"version":)" + Json(PRODUCT_VERSION) + R"(,"path":)" + Json(g_app) + R"(,"reduceMotion":)" + ReduceMotion() + "}";
+        R"(,"version":)" + Json(PRODUCT_LABEL) + R"(,"path":)" + Json(g_app) + R"(,"reduceMotion":)" + ReduceMotion() + "}";
     g_view->PostWebMessageAsJson(Wide(json).c_str());
 }
 

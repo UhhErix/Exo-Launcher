@@ -7,12 +7,11 @@ use crate::music::{
 };
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, GAP, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
-    RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, bad, fg_faint, fg_muted,
-    filter_pill, glass_button, glass_control_fill, glass_panel, glass_rim, glass_rim_bottom,
-    glass_rim_top, good, hairline, hover_fill, icon_chevron_down, icon_close, icon_download,
-    icon_external, icon_more_horiz, icon_play, icon_search, pressed_fill, primary_button,
-    store_logo,
+    BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, bad, fg_faint, fg_muted, filter_pill, glass_button,
+    glass_button_opt, glass_control_fill, glass_panel, glass_rim, glass_rim_bottom, glass_rim_top,
+    good, hairline, hover_fill, icon_chevron_down, icon_close, icon_download, icon_external,
+    icon_more_horiz, icon_play, icon_search, pressed_fill, primary_button, scrim_fill, store_logo,
 };
 use exo_rpc::{
     ArtistAbout, Concert, PlayerCard, PlayerHeader, PlayerLink, PlayerSection, PlayerTrack,
@@ -166,9 +165,9 @@ pub(crate) fn wait_view(s: &AppState) -> El {
             .child(bone().w(160.0).h(18.0))
             .child(
                 el().w_full()
-                    .equal_columns(8)
-                    .gap(24.0)
-                    .children((0..8).map(move |j| {
+                    .equal_columns(5)
+                    .gap(20.0)
+                    .children((0..5).map(move |j| {
                         col()
                             .key(format!("music-wait-card-{idx}-{j}"))
                             .w_full()
@@ -1903,13 +1902,44 @@ pub(crate) fn track_row_full(s: &AppState, a: TrackRowArgs<'_>) -> El {
     };
 
     let lead = if a.numbered {
-        el().w(32.0).center().child(
-            text(format!("{}", a.idx + 1))
-                .font(scaled_small(s))
-                .color(if active { good() } else { fg_muted() }),
-        )
+        el().size(32.0, 32.0)
+            .center()
+            .child(
+                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .center()
+                    .group_opacity(1.0, 0.0)
+                    .child(
+                        text(format!("{}", a.idx + 1))
+                            .font(scaled_small(s))
+                            .color(if active { good() } else { fg_muted() }),
+                    ),
+            )
+            .child(
+                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .center()
+                    .group_opacity(0.0, 1.0)
+                    .child(icon_play(13.0, if active { good() } else { FG })),
+            )
     } else {
-        render_art(s, &a.track.image, Some(40.0), RADIUS_SMALL, false, a.scale)
+        el().size(40.0, 40.0)
+            .radius(RADIUS_SMALL)
+            .clip_rounded(RADIUS_SMALL)
+            .child(render_art(
+                s,
+                &a.track.image,
+                Some(40.0),
+                RADIUS_SMALL,
+                false,
+                a.scale,
+            ))
+            .child(
+                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .radius(RADIUS_SMALL)
+                    .fill(rune::Color::BLACK.alpha(0.62))
+                    .center()
+                    .group_opacity(0.0, 1.0)
+                    .child(icon_play(14.0, FG)),
+            )
     };
 
     let mut title_row = row().w_full().gap(6.0).center_y().child(
@@ -2007,10 +2037,12 @@ pub(crate) fn track_row_full(s: &AppState, a: TrackRowArgs<'_>) -> El {
 
     let mut r = row()
         .key(format!("{}-{}", a.key_prefix, a.idx))
+        .hover_group()
         .role("button")
         .label(a.track.title.clone())
         .focusable(true)
         .hit()
+        .cursor(rune::Cursor::Pointer)
         .press_on_down()
         .w_full()
         .min_h(52.0)
@@ -2161,15 +2193,24 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
             render_art(s, &sheet.image_url, Some(140.0), RADIUS_CARD, false, scale)
         };
         form = form.child(row().w_full().gap(14.0).center_y().child(preview).child(
-            glass_button("music-sheet-pick-cover", "Choose picture", None).on_press_tx(
+            glass_button_opt("music-sheet-pick-cover", "Choose picture", None, false).on_press_tx(
                 |_: &mut AppState, tx| {
                     let opts =
                         FileDialogOptions::default().filter("Pictures", &["jpg", "jpeg", "png"]);
                     tx.open_file(opts, |s: &mut AppState, res, _| {
                         if let Ok(Some(path)) = res
-                            && let Ok(bytes) = std::fs::read(path)
+                            && let Some(handle) = s.handle.clone()
                         {
-                            s.music_playlist_sheet_pick_file(bytes);
+                            std::thread::Builder::new()
+                                .name("exo-music-cover-read".into())
+                                .spawn(move || {
+                                    if let Ok(bytes) = std::fs::read(path) {
+                                        handle.update(move |s, _| {
+                                            s.music_playlist_sheet_pick_file(bytes)
+                                        });
+                                    }
+                                })
+                                .ok();
                         }
                     });
                 },
@@ -2193,12 +2234,10 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
                 .color(FG)
                 .placeholder("Playlist name", fg_faint())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s
-                        .media
-                        .music_playlist_sheet
-                        .as_mut()
-                        .expect("sheet")
-                        .name_edit
+                    match s.media.music_playlist_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.name_edit,
+                        None => &mut s.ui_discard_edit,
+                    }
                 }))
                 .on_submit(|s: &mut AppState, _| s.music_playlist_sheet_save()),
         );
@@ -2218,12 +2257,10 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
                 .color(FG)
                 .placeholder("Add an optional description", fg_faint())
                 .on_edit(edit_access(|s: &mut AppState| {
-                    &mut s
-                        .media
-                        .music_playlist_sheet
-                        .as_mut()
-                        .expect("sheet")
-                        .desc_edit
+                    match s.media.music_playlist_sheet.as_mut() {
+                        Some(sheet) => &mut sheet.desc_edit,
+                        None => &mut s.ui_discard_edit,
+                    }
                 })),
         );
 
@@ -2280,7 +2317,7 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
         .justify_end()
         .gap(8.0)
         .child(
-            glass_button("music-sheet-cancel", "Cancel", None)
+            glass_button_opt("music-sheet-cancel", "Cancel", None, false)
                 .on_press(|s: &mut AppState| s.media.music_playlist_sheet = None),
         )
         .child(
@@ -2302,11 +2339,11 @@ pub(crate) fn playlist_sheet_overlay(s: &AppState, sheet: &PlaylistSheetState, s
 
     el().key("music-playlist-sheet-backdrop")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.68))
+        .fill(scrim_fill())
         .center()
         .child(
-            glass_panel("music-playlist-sheet", GLASS_PANEL_SIGMA)
-                .w(440.0)
+            glass_panel("music-playlist-sheet", 440.0)
+                .transition(exo_kit::popover_transition())
                 .px(20.0)
                 .py(20.0)
                 .child(

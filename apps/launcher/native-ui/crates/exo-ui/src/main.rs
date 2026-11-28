@@ -21,7 +21,6 @@ mod discord_voice_state;
 mod downloads;
 mod events;
 mod folders;
-mod frame_cap_row;
 mod frame_gen_row;
 mod game_actions;
 mod game_page;
@@ -29,6 +28,7 @@ mod game_perf;
 mod game_props;
 mod gamepad;
 mod gifts;
+mod gpu_activity;
 mod gpu_tuning;
 mod hud_overlay;
 mod hw_sensors;
@@ -37,7 +37,6 @@ mod island;
 mod key_modal;
 mod library;
 mod library_state;
-mod macros;
 mod media_state;
 mod menus;
 mod music;
@@ -45,7 +44,6 @@ mod music_pages;
 mod music_sound;
 mod native_autopilot;
 mod native_media;
-mod notes;
 mod notice;
 mod palette;
 mod pc;
@@ -67,6 +65,7 @@ mod settings_privacy;
 mod settings_state;
 mod settings_stores;
 mod setup;
+mod setup_runtimes;
 mod shell;
 mod snip_editor;
 mod state;
@@ -458,14 +457,13 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let lib = s.tick_library(now);
     s.tick_audio_eq_polling(now);
     s.tick_controller_watch(now);
-    s.tick_notes_autosave(now);
     let store = s.store_tick(now);
     let wp4 = s.wp4_tick(now);
     let hb = s.tick_shell_heartbeat(now, tx);
-    let wp9 = s.pc_wp9_tick(now);
-    let music = s.music_tick(now);
+    let music = s.music_tick_with_tx(now, Some(tx));
     let pg = s.tick_power_guard(now);
     let hw = s.tick_hw_sensors(now);
+    s.tick_gpu_activity(now);
     let web = s.poll_web_host();
     let bench = s.tick_web_lifecycle_bench(now, tx);
     focus_changed
@@ -476,7 +474,6 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
         || store
         || wp4
         || hb
-        || wp9
         || music
         || pg
         || hw
@@ -967,20 +964,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 ) {
                     state.game_frame_gen = Some(fg);
                 }
-                if let Ok(fc) = client.call_blocking::<_, exo_rpc::GameFrameCap>(
-                    exo_rpc::METHOD_GAME_FRAME_CAP,
-                    &serde_json::json!({ "id": gid }),
-                    Duration::from_secs(6),
-                ) {
-                    state.game_frame_cap = Some(fc);
-                }
-                if let Ok(gf) = client.call_blocking::<_, exo_rpc::GameGraphicsFeaturesState>(
-                    exo_rpc::METHOD_GAME_GRAPHICS_FEATURES,
-                    &serde_json::json!({ "id": gid }),
-                    Duration::from_secs(6),
-                ) {
-                    state.game_page.graphics_features = Some(gf);
-                }
                 if let Ok(gs) = client.call_blocking::<_, exo_rpc::GameSettingsState>(
                     exo_rpc::METHOD_GAME_SETTINGS,
                     &serde_json::json!({ "id": gid }),
@@ -1396,13 +1379,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 Duration::from_secs(8),
             ) {
                 state.pc.drives = Some(drv);
-            }
-            if let Ok(gp) = client.call_blocking::<_, exo_rpc::GpuProcessesState>(
-                exo_rpc::METHOD_GPU_PROCESSES,
-                &serde_json::json!({ "limit": 8 }),
-                Duration::from_secs(6),
-            ) {
-                state.pc.gpu_processes = Some(gp);
             }
             if let Ok(qos) = client.call_blocking::<_, exo_rpc::QosState>(
                 exo_rpc::METHOD_SYSTEM_QOS,
@@ -2117,34 +2093,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.media.capture_items = list.items;
             }
-            if let Ok(nl) = client.call_blocking::<_, exo_rpc::NotesListReply>(
-                exo_rpc::METHOD_NOTES_LIST,
-                &serde_json::json!({}),
-                Duration::from_secs(5),
-            ) {
-                state.hydrate_notes_list_reply(nl);
-                if let Some(active_id) = state.media.notes.active.clone()
-                    && let Ok(reply) = client.call_blocking::<_, exo_rpc::NotesReadReply>(
-                        exo_rpc::METHOD_NOTES_READ,
-                        &serde_json::json!({ "id": active_id }),
-                        Duration::from_secs(5),
-                    )
-                    && reply.ok
-                    && let Some(doc) = state.media.notes.docs.get_mut(&active_id)
-                {
-                    if let Some(txt) = reply.text {
-                        doc.edit.text = txt.clone();
-                        doc.edit.sync_invariants();
-                        doc.sent = txt;
-                    }
-                    if let Some(info) = reply.note {
-                        doc.info = info;
-                    }
-                    doc.reading = false;
-                    doc.loaded = true;
-                    doc.problem = None;
-                }
-            }
             if let Some(ref cache_dir) = state.remote_cache_dir {
                 let urls: Vec<String> = state
                     .home_deck_games()
@@ -2523,6 +2471,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         if s.whats_new.current_version.is_none() {
             s.whats_new.current_version = Some("3.29.0".into());
         }
+        whats_new::load_changelog_md();
         s.whats_new.mode = Some(whats_new::WhatsNewMode::All);
     }),
     ("update-sheet", |s: &mut AppState| {
@@ -2760,21 +2709,21 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.switch_room(state::Room::Settings);
         s.pc.settings_section = pc_state::SettingsSection::General;
     }),
+    ("settings-library", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Library;
+    }),
+    ("settings-downloads", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Downloads;
+    }),
+    ("settings-ingame", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::InGame;
+    }),
     ("settings-account", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
         s.pc.settings_section = pc_state::SettingsSection::Account;
-    }),
-    ("settings-appearance", |s: &mut AppState| {
-        s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Appearance;
-    }),
-    ("settings-graphics", |s: &mut AppState| {
-        s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Graphics;
-    }),
-    ("settings-updates", |s: &mut AppState| {
-        s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Updates;
     }),
     ("settings-about", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
@@ -2787,7 +2736,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("settings-steam-signin", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Account;
+        s.pc.settings_section = pc_state::SettingsSection::Library;
         if s.wp4.stores.is_empty() {
             s.wp4.stores.push(exo_rpc::StoreStatus {
                 store: "steam".into(),
@@ -2808,7 +2757,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("settings-steam-password", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Account;
+        s.pc.settings_section = pc_state::SettingsSection::Library;
         if s.wp4.stores.is_empty() {
             s.wp4.stores.push(exo_rpc::StoreStatus {
                 store: "steam".into(),
@@ -2827,7 +2776,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("settings-steam-guard", |s: &mut AppState| {
         s.switch_room(state::Room::Settings);
-        s.pc.settings_section = pc_state::SettingsSection::Account;
+        s.pc.settings_section = pc_state::SettingsSection::Library;
         if s.wp4.stores.is_empty() {
             s.wp4.stores.push(exo_rpc::StoreStatus {
                 store: "steam".into(),
@@ -2948,6 +2897,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.discord.settings_ext.client.only_my_voice = true;
         s.discord.settings_ext.client.voice_isolation = true;
         s.discord.settings_ext.client.voice_isolation_ready = Some(true);
+        s.discord.settings_ext.client.my_voice_model_ready = Some(true);
         s.discord.settings_ext.client.my_voice_learned = Some(true);
         s.discord.settings_ext.client.my_voice_seconds = Some(14.0);
         s.discord.settings_ext.mic_level = Some(exo_rpc::DiscordMicLevel {
@@ -3070,9 +3020,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.open_captures(None);
     }),
     ("captures-settings", |s: &mut AppState| {
-        s.switch_room(state::Room::Library);
-        s.open_captures(None);
-        s.media.captures_settings_open = true;
+        s.open_capture_settings();
     }),
     ("capture-clip", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
@@ -3080,10 +3028,6 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         if let Some(first) = s.media.capture_items.first().map(|c| c.id.clone()) {
             s.open_capture_item(&first);
         }
-    }),
-    ("captures-notes", |s: &mut AppState| {
-        s.switch_room(state::Room::Library);
-        s.open_notes(None, false);
     }),
     ("captures-clip-edit", |s: &mut AppState| {
         s.open_captures(None);
@@ -3442,14 +3386,13 @@ fn replay_probe_script(rt: &mut rune::Runtime<AppState>, script_path: &str) {
                     "up" | "arrowup" => Some(Key::Up),
                     "down" | "arrowdown" => Some(Key::Down),
                     "backspace" => Some(Key::Backspace),
-                    s if s.len() == 1 => {
-                        let ch = s.chars().next().unwrap();
+                    s if s.chars().count() == 1 => s.chars().next().map(|ch| {
                         if cmd {
-                            Some(Key::Command(ch))
+                            Key::Command(ch)
                         } else {
-                            Some(Key::Text(s.to_string()))
+                            Key::Text(s.to_string())
                         }
-                    }
+                    }),
                     _ => None,
                 };
                 if let Some(k) = key {
@@ -3677,7 +3620,6 @@ fn run_parity_probe(
         "paletteOpen": rt.state.palette_open,
         "captureMenuOpen": rt.state.capture_menu_open,
         "capturesOpen": rt.state.media.captures_open,
-        "capturesSettingsOpen": rt.state.media.captures_settings_open,
         "keyModalOpen": rt.state.key_modal_open,
         "downloadsOpen": rt.state.downloads.open,
         "whatsNewOpen": rt.state.whats_new.mode.is_some(),
@@ -3763,7 +3705,52 @@ fn run_parity_probe(
     );
 }
 
+pub(crate) fn app_data_dir() -> std::path::PathBuf {
+    if let Ok(overridden) = std::env::var("EXO_LAUNCHER_DATA_DIR")
+        && !overridden.trim().is_empty()
+    {
+        return std::path::PathBuf::from(overridden);
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA")
+        && !local.trim().is_empty()
+    {
+        return std::path::PathBuf::from(local).join("ExoLauncher");
+    }
+    std::env::temp_dir().join("ExoLauncher")
+}
+
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("unknown panic");
+        let loc = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown".into());
+        let bt = std::backtrace::Backtrace::force_capture();
+        let summary = format!("exo-ui panic at {loc}: {payload}");
+        eprintln!("{summary}\n{bt}");
+        let logs = app_data_dir().join("logs");
+        if std::fs::create_dir_all(&logs).is_ok()
+            && let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(logs.join("exo-ui-panic.log"))
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "{summary}\n{bt}\n---");
+        }
+        default_hook(info);
+    }));
+}
+
 fn main() {
+    install_panic_hook();
     let cli = split_cli_args();
     let pipe_name = cli.pipe;
     let rune_args = cli.passthrough;
@@ -4055,7 +4042,7 @@ mod tests {
     use crate::state::{LibraryChip, LibrarySort, Room};
     use rune::{
         Cursor, Env, Mods, Runtime,
-        render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END, KIND_LIQUID_GLASS, KIND_SEGMENT},
+        render::{KIND_BACKDROP_BLUR, KIND_GLYPH, KIND_LAYER, KIND_LAYER_END, KIND_LIQUID_GLASS},
     };
 
     #[test]
@@ -4082,12 +4069,15 @@ mod tests {
             "expected 2..={} floating glass surfaces within EXO_MAX_BACKDROP_BLURS, got {glass_shapes}",
             exo_kit::EXO_MAX_BACKDROP_BLURS
         );
-        let strokes = rt
+        let glyphs = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_SEGMENT)
+            .filter(|i| i.params[1] == KIND_GLYPH)
             .count();
-        assert!(strokes >= 10, "expected vector icons, got {strokes}");
+        assert!(
+            glyphs >= 10,
+            "expected rasterized glyph/icon instances, got {glyphs}"
+        );
 
         let (tx, ty) = rt.find("tile-demo:cyberpunk").expect("Cyberpunk tile");
         rt.pointer_down(tx, ty);
@@ -4184,15 +4174,14 @@ mod tests {
         rt.update(|s, _| s.switch_room(Room::ExoAi));
         rt.frame(2.0 / 60.0);
         assert_eq!(rt.state.pc.pc_tab, pc_state::PcTab::ExoAi);
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "PC room exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
-            exo_kit::EXO_MAX_BACKDROP_BLURS
+            glass_draws <= 3,
+            "Exo AI room: {glass_draws} Liquid Glass draws, bound 3"
         );
 
         let (sx, sy) = rt.find("pc-tab-storage").expect("Storage button");
@@ -4417,15 +4406,14 @@ mod tests {
         rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
         rt.frame(0.0);
         assert!(rt.find("music-mini-player").is_some());
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "mini-player exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
-            exo_kit::EXO_MAX_BACKDROP_BLURS
+            glass_draws <= 9,
+            "mini-player: {glass_draws} Liquid Glass draws, bound 9"
         );
 
         let (mx, my) = rt.find("mini-open-music").expect("Mini player open Music");
@@ -4469,12 +4457,15 @@ mod tests {
         rt.frame(0.0);
         assert_eq!(rt.state.room, Room::Discord);
         assert_eq!(rt.state.discord.place, discord_state::DiscordPlace::Home);
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
-        assert!(blurs <= 4, "Discord exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            glass_draws <= 3,
+            "Discord home: {glass_draws} Liquid Glass draws, bound 3"
+        );
 
         let (mx, my) = rt.find("dc-dm-dm-ada").expect("DM row");
         rt.pointer_down(mx, my);
@@ -4547,14 +4538,14 @@ mod tests {
         });
         rt.frame(0.0);
         assert!(rt.find("dc-composer").is_some());
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= 4,
-            "Discord chat exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+            glass_draws <= 3,
+            "Discord chat: {glass_draws} Liquid Glass draws, bound 3"
         );
 
         let before_count = rt
@@ -4621,15 +4612,14 @@ mod tests {
         rt.frame(0.0);
         assert!(rt.find("dc-voice-stage").is_some());
         assert!(rt.find("dc-stream-theater").is_some());
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "Discord voice exceeded EXO_MAX_BACKDROP_BLURS={}: {blurs}",
-            exo_kit::EXO_MAX_BACKDROP_BLURS
+            glass_draws <= 7,
+            "Discord voice: {glass_draws} Liquid Glass draws, bound 7"
         );
 
         let (gx, gy) = rt.find("dc-dock-share").expect("Share screen button");
@@ -4883,27 +4873,30 @@ mod tests {
             },
             None,
         );
-        let settings_blur_rects: Vec<[f32; 4]> = rt_settings
+        let glass_draws = rt_settings
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
-            .map(|i| i.rect)
-            .collect();
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
+            .count();
         assert!(
-            settings_blur_rects.len() <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "void-top Settings room emitted {} backdrop blurs (cap {}): {settings_blur_rects:?}",
-            settings_blur_rects.len(),
-            exo_kit::EXO_MAX_BACKDROP_BLURS
+            glass_draws <= 3,
+            "void-top Settings room: {glass_draws} Liquid Glass draws, bound 3"
         );
     }
 
     #[test]
     fn notice_stack_queue_caps_at_three_and_escape_dismisses_newest() {
         let mut s = AppState::default();
-        let id1 = s.push_notice("First notice", state::NoticeTone::Neutral);
-        let id2 = s.push_notice("Second notice", state::NoticeTone::Good);
+        assert_eq!(s.push_notice("Saved", state::NoticeTone::Good), 0);
+        assert!(s.notices.is_empty());
+        assert_eq!(s.notice.as_deref(), Some("Saved"));
+        assert!(!s.dismiss_top_layer());
+        assert!(s.notice.is_none());
+
+        let id1 = s.push_notice("First notice", state::NoticeTone::Bad);
+        let id2 = s.push_notice("Second notice", state::NoticeTone::Bad);
         let id3 = s.push_notice("Third notice", state::NoticeTone::Bad);
-        let id4 = s.push_notice("Fourth notice", state::NoticeTone::Neutral);
+        let id4 = s.push_notice("Fourth notice", state::NoticeTone::Bad);
 
         assert_eq!(s.notices.len(), state::MAX_NOTICES);
         assert_eq!(
@@ -4928,7 +4921,7 @@ mod tests {
     }
 
     #[test]
-    fn notice_stack_syncs_legacy_notice_and_auto_dismisses_with_hover_pause() {
+    fn notice_stack_keeps_legacy_confirmations_quiet_and_pauses_errors_on_hover() {
         let mut rt = Runtime::new(
             AppState::default(),
             shell::view,
@@ -4942,10 +4935,16 @@ mod tests {
         rt.update(|s, _| {
             s.notice = Some("Clip saved".into());
         });
+        rt.frame(0.008);
+        assert!(rt.state.notices.is_empty());
+
+        rt.update(|s, _| {
+            s.notice = Some("Clip failed to save".into());
+        });
         rt.frame(0.016);
         assert_eq!(rt.state.notices.len(), 1);
         let id = rt.state.notices[0].id;
-        assert_eq!(rt.state.notices[0].tone, state::NoticeTone::Good);
+        assert_eq!(rt.state.notices[0].tone, state::NoticeTone::Bad);
         assert!(rt.presented(&format!("notice-{id}")).is_some());
 
         rt.frame(1.5);
@@ -4980,7 +4979,7 @@ mod tests {
 
         let id_partial = rt
             .state
-            .push_notice("Partial swipe", state::NoticeTone::Neutral);
+            .push_notice("Partial swipe", state::NoticeTone::Bad);
         rt.frame(0.016);
         rt.update(|s, tx| {
             s.begin_notice_drag(id_partial, tx.clock());
@@ -5009,9 +5008,7 @@ mod tests {
         });
         assert!(rt.state.notices.is_empty());
 
-        let id_flick = rt
-            .state
-            .push_notice("Fast flick", state::NoticeTone::Neutral);
+        let id_flick = rt.state.push_notice("Fast flick", state::NoticeTone::Bad);
         rt.frame(0.016);
         rt.update(|s, tx| {
             let t0 = tx.clock();
@@ -5024,7 +5021,7 @@ mod tests {
     }
 
     #[test]
-    fn notice_stack_respects_blur_budget_with_mini_player_and_music() {
+    fn notice_stack_respects_glass_bound_with_mini_player_and_music() {
         for (label, setup) in [
             (
                 "library+mini+3-toasts",
@@ -5062,15 +5059,14 @@ mod tests {
             rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
             rt.poll = Some(poll_state);
             rt.frame(0.0);
-            let blur_count = rt
+            let glass_draws = rt
                 .instances
                 .iter()
-                .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+                .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
                 .count();
             assert!(
-                blur_count <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-                "{label}: emitted {blur_count} backdrop blurs (cap {})",
-                exo_kit::EXO_MAX_BACKDROP_BLURS
+                glass_draws <= 11,
+                "{label}: {glass_draws} Liquid Glass draws, bound 11"
             );
         }
     }
@@ -5330,7 +5326,7 @@ mod tests {
         rt.update(|s, _| s.close_key_modal());
         let mut notice_id = 0_u64;
         rt.update(|s, _| {
-            notice_id = s.push_notice("Saved clip", state::NoticeTone::Good);
+            notice_id = s.push_notice("Clip failed to save", state::NoticeTone::Bad);
         });
         for _ in 0..30 {
             rt.frame(1.0 / 60.0);
@@ -5570,7 +5566,7 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert!(rt.state.open_dropdown.is_none());
 
-        rt.update(|s, _| s.pc.settings_section = pc_state::SettingsSection::Updates);
+        rt.update(|s, _| s.pc.settings_section = pc_state::SettingsSection::General);
         for _ in 0..20 {
             rt.frame(1.0 / 60.0);
         }
@@ -6145,14 +6141,14 @@ mod motion_audit {
             -4
         );
 
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == rune::render::KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == rune::render::KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= 4,
-            "blur cap exceeded on native mouse view: {blurs}"
+            glass_draws <= 3,
+            "native mouse view: {glass_draws} Liquid Glass draws, bound 3"
         );
 
         let (bx, by) = rt.find("dev-back").expect("back button");
@@ -6582,9 +6578,9 @@ mod motion_audit {
             .iter()
             .find(|sh| sh.rect[0] < 30.0 && sh.rect[1] < 20.0)
             .expect("search-capsule liquid glass shape");
-        assert!(
-            search_shape_live.glow[3] > 0.0,
-            "interactive search-capsule must emit touch glow on press"
+        assert_eq!(
+            search_shape_live.glow[3], 0.0,
+            "glass never draws a cursor-follow touch glow"
         );
         rt.pointer_up(sx, sy);
         rt.frame(7.0 / 60.0);
@@ -6615,25 +6611,26 @@ mod motion_audit {
         rt.set_system_reduced_motion(false);
         rt.set_system_reduced_transparency(true);
         rt.frame(15.0 / 60.0);
-        assert!(!rt.glass_on());
-        assert!(
-            rt.liquid_glass_frame()
-                .shapes
-                .iter()
-                .all(|sh| ((sh.light[1] as u32) & 16) != 0)
-        );
+        assert!(rt.glass_on());
+        assert!(!rt.liquid_glass_frame().shapes.is_empty());
 
+        let black = rune::Color::BLACK;
         rt.set_system_reduced_transparency(false);
+        rt.set_system_contrast(Some(rune::SystemContrast {
+            window: black,
+            text: black,
+            highlight: black,
+            highlight_text: black,
+            disabled: black,
+            button: black,
+            button_text: black,
+            link: black,
+        }));
         rt.set_system_increased_contrast(true);
         rt.frame(16.0 / 60.0);
         assert!(!rt.glass_on());
-        assert!(
-            rt.liquid_glass_frame()
-                .shapes
-                .iter()
-                .all(|sh| ((sh.light[1] as u32) & 32) != 0)
-        );
 
+        rt.set_system_contrast(None);
         rt.set_system_increased_contrast(false);
         rt.set_glass_tier_override(Some(rune::GlassTier::Solid));
         rt.frame(17.0 / 60.0);
@@ -6658,5 +6655,244 @@ mod motion_audit {
             exo_kit::EXO_MAX_BACKDROP_BLURS
         );
         assert!(rt.liquid_glass_frame().shapes.len() >= 6);
+    }
+
+    #[test]
+    fn onboarding_reduced_motion_layers_are_balanced() {
+        use rune::render::{KIND_LAYER, KIND_LAYER_END};
+        let check_balance = |rt: &Runtime<AppState>, label: &str| {
+            let mut depth = 0isize;
+            for (idx, inst) in rt.instances.iter().enumerate() {
+                let k = inst.params[1];
+                if k == KIND_LAYER {
+                    depth += 1;
+                } else if k == KIND_LAYER_END {
+                    depth -= 1;
+                    assert!(
+                        depth >= 0,
+                        "{label}: unbalanced KIND_LAYER_END at instance {idx}"
+                    );
+                }
+            }
+            assert_eq!(depth, 0, "{label}: unclosed KIND_LAYER depth={depth}");
+        };
+
+        for scale in [1.0f32, 1.25, 1.5] {
+            for whats_new_seen in [None, Some("3.31.1")] {
+                let state = AppState::for_host_pipe();
+                let mut rt =
+                    Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, scale));
+                rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+                rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+                rt.set_system_reduced_motion(true);
+                rt.frame(0.0);
+                check_balance(&rt, &format!("pipe-boot-s{scale}"));
+
+                let wn = whats_new_seen.map(str::to_string);
+                rt.update(move |s, _| {
+                    s.status = state::HostStatus::Connected;
+                    s.whats_new.current_version = Some("3.31.1".to_string());
+                    s.whats_new.seen_version = wn;
+                    s.whats_new.answered = true;
+                    s.whats_new.boot_hold_active = false;
+                    let set = exo_rpc::LauncherSettings {
+                        onboarding_complete: Some(false),
+                        reduce_motion: true,
+                        ..Default::default()
+                    };
+                    s.apply_settings(set);
+                    s.maybe_auto_open_whats_new();
+                });
+                for step in 1..=10 {
+                    rt.frame(step as f64 / 60.0);
+                    check_balance(&rt, &format!("pipe-onboard-s{scale}-f{step}"));
+                }
+                for stage in 0..setup::STAGES {
+                    rt.update(|s, _| s.setup_go(stage));
+                    rt.frame(1.0 + stage as f64 * 0.05);
+                    check_balance(&rt, &format!("pipe-stage-{stage}-s{scale}-a"));
+                    rt.frame(1.02 + stage as f64 * 0.05);
+                    check_balance(&rt, &format!("pipe-stage-{stage}-s{scale}-b"));
+                }
+                rt.update(|s, _| s.start_tour());
+                for beat in 0..9 {
+                    rt.frame(2.0 + beat as f64 * 0.05);
+                    check_balance(&rt, &format!("pipe-tour-{beat}-s{scale}"));
+                    rt.update(|s, _| s.tour_next());
+                }
+            }
+        }
+    }
+
+    fn assert_layers_balanced(rt: &Runtime<AppState>, label: &str) {
+        use rune::render::{KIND_LAYER, KIND_LAYER_END};
+        let mut depth = 0isize;
+        for (idx, inst) in rt.instances.iter().enumerate() {
+            let k = inst.params[1];
+            if k == KIND_LAYER {
+                depth += 1;
+            } else if k == KIND_LAYER_END {
+                depth -= 1;
+                assert!(
+                    depth >= 0,
+                    "{label}: unbalanced KIND_LAYER_END at instance {idx}"
+                );
+            }
+        }
+        assert_eq!(depth, 0, "{label}: unclosed KIND_LAYER depth={depth}");
+    }
+
+    #[test]
+    fn click_everything_all_rooms_settings_setup_overlays_balanced() {
+        for reduce_motion in [false, true] {
+            let mut state = AppState::with_demo_games();
+            state.settings.reduce_motion = reduce_motion;
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+            rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+            rt.set_system_reduced_motion(reduce_motion);
+
+            let mut t = 0.0f64;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "init");
+
+            let rooms = [
+                Room::Library,
+                Room::Store,
+                Room::Discord,
+                Room::Music,
+                Room::ExoAi,
+                Room::Devices,
+                Room::Settings,
+            ];
+            for room in rooms {
+                rt.update(|s, _| s.switch_room(room));
+                for _ in 0..4 {
+                    t += 1.0 / 60.0;
+                    rt.frame(t);
+                    assert_layers_balanced(&rt, &format!("room-{room:?}-rm-{reduce_motion}"));
+                }
+                t += 0.5;
+                rt.frame(t);
+                assert_layers_balanced(&rt, &format!("room-settled-{room:?}-rm-{reduce_motion}"));
+            }
+
+            rt.update(|s, _| s.switch_room(Room::Library));
+            t += 0.05;
+            rt.frame(t);
+            if let Some(first_id) = rt.state.games.first().map(|g| g.id.clone()) {
+                rt.update(move |s, _| s.open_game_page(&first_id));
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, "game-page");
+                assert!(rt.state.dismiss_top_layer());
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, "game-page-closed");
+            }
+
+            rt.update(|s, _| s.open_captures(None));
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "captures-open");
+            assert!(rt.state.dismiss_top_layer());
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "captures-closed");
+
+            rt.update(|s, tx| s.open_palette(tx));
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "palette-open");
+            assert!(rt.state.dismiss_top_layer());
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "palette-closed");
+
+            rt.update(|s, _| s.switch_room(Room::Settings));
+            t += 0.1;
+            rt.frame(t);
+            for sec in pc_state::SettingsSection::ALL {
+                let (sx, sy) = rt
+                    .find(sec.key())
+                    .unwrap_or_else(|| panic!("missing settings tab {}", sec.key()));
+                rt.pointer_down(sx, sy);
+                rt.pointer_up(sx, sy);
+                t += 0.05;
+                rt.frame(t);
+                assert_eq!(rt.state.pc.settings_section, sec);
+                assert_layers_balanced(&rt, &format!("settings-{}-rm-{reduce_motion}", sec.key()));
+            }
+
+            for stage in 0..setup::STAGES {
+                rt.update(|s, _| s.setup_go(stage));
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, &format!("setup-{stage}-rm-{reduce_motion}"));
+            }
+            rt.update(|s, _| s.setup_go_complete());
+            t += 0.05;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "setup-complete");
+
+            rt.update(|s, _| s.start_tour());
+            for beat in 0..9 {
+                t += 0.1;
+                rt.frame(t);
+                assert_layers_balanced(&rt, &format!("tour-{beat}-rm-{reduce_motion}"));
+                rt.update(|s, _| s.tour_next());
+            }
+            rt.update(|s, _| s.finish_tour());
+            t += 0.1;
+            rt.frame(t);
+            assert_layers_balanced(&rt, "tour-finished");
+        }
+    }
+
+    #[test]
+    fn connected_open_mouse_page_and_devices_error_states() {
+        let mut state = AppState::with_demo_games();
+        state.status = state::HostStatus::Connected;
+        state.switch_room(Room::Devices);
+        let mut rt = Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+        rt.set_glass_policy(exo_kit::EXO_GLASS_POLICY);
+        rt.frame(0.0);
+
+        let (mx, my) = rt.find("dev-card-dev:mouse").expect("mouse card");
+        rt.pointer_down(mx, my);
+        rt.pointer_up(mx, my);
+        rt.frame(1.0 / 60.0);
+
+        assert!(rt.state.pc.mouse_panel_open);
+        assert!(rt.state.pc.mouse_panel_loading);
+        assert_eq!(rt.state.pc.selected_device_id.as_deref(), Some("dev:mouse"));
+        assert!(rt.find("room-devices-mouse").is_some());
+        assert!(rt.find("mouse-panel-slot").is_some());
+        assert!(rt.state.mouse_panel_should_be_visible());
+
+        rt.update(|s, tx| s.open_palette(tx));
+        rt.frame(2.0 / 60.0);
+        assert!(!rt.state.mouse_panel_should_be_visible());
+        assert!(rt.state.dismiss_top_layer());
+        rt.frame(3.0 / 60.0);
+        assert!(rt.state.mouse_panel_should_be_visible());
+
+        assert!(rt.state.dismiss_top_layer());
+        rt.frame(4.0 / 60.0);
+        assert!(!rt.state.pc.mouse_panel_open);
+        assert!(rt.state.pc.selected_device_id.is_none());
+
+        rt.update(|s, _| {
+            s.pc.devices_loading = false;
+            s.pc.devices_error = Some("pipe timeout".into());
+        });
+        rt.frame(5.0 / 60.0);
+        assert!(rt.find("devices-error-banner").is_some());
+        assert!(rt.find("devices-retry").is_some());
+
+        rt.update(|s, _| s.pc.devices = None);
+        rt.frame(6.0 / 60.0);
+        assert!(rt.find("devices-retry").is_some());
     }
 }

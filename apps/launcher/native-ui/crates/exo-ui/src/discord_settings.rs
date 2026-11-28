@@ -4,10 +4,10 @@ use crate::state::{AppState, HostStatus};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted, filter_pill,
-    glass_button, glass_still_control_fill, good, hairline, hover_fill, icon_check, icon_close,
+    glass_button_opt, glass_still_control_fill, good, hairline, hover_fill, icon_check, icon_close,
     icon_mic, icon_mic_off, icon_settings, icon_volume, modal_card_transition, pressed_fill,
-    primary_button, scrim_fill, selected_fill, type_body, type_control, type_label, type_section,
-    type_small, type_title, warn,
+    primary_button, scrim_fill, selected_fill, switch_track, type_body, type_control, type_label,
+    type_section, type_small, type_title, warn,
 };
 use exo_rpc::{
     ActionResult, DiscordAccount, DiscordAccountConnection, DiscordAccountReply,
@@ -18,9 +18,7 @@ use exo_rpc::{
     METHOD_DISCORD_MIC_MONITOR, METHOD_DISCORD_MIC_TEST, METHOD_DISCORD_MY_VOICE,
     METHOD_DISCORD_SET_STATUS, METHOD_DISCORD_SOUND, METHOD_DISCORD_USER_SETTINGS,
 };
-use rune::{
-    Cursor, El, LiquidGlass, ScrollSpec, TextEdit, col, edit_access, el, row, text, text_input,
-};
+use rune::{Cursor, El, ScrollSpec, TextEdit, col, edit_access, el, row, text, text_input};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
@@ -1049,29 +1047,12 @@ fn toggle_row(
     if let Some(d) = detail {
         left = left.child(text(d).font(type_label()).color(fg_muted()));
     }
-    let pill = el()
-        .w(40.0)
-        .h(22.0)
-        .radius(RADIUS_PILL)
-        .fill(if on { FG } else { selected_fill() })
-        .border(1.0, if on { FG } else { hairline() })
-        .motion(SPRING_QUICK)
-        .child(
-            el().pin(
-                if on { Some(20.0) } else { Some(2.0) },
-                Some(2.0),
-                None,
-                None,
-            )
-            .size(16.0, 16.0)
-            .radius(RADIUS_PILL)
-            .fill(if on { PRIMARY_FG } else { fg_muted() })
-            .motion(SPRING_QUICK),
-        );
+    let pill = switch_track(on);
     row()
         .key(key)
         .role("switch")
         .label(label)
+        .checked(on)
         .focusable(true)
         .hit()
         .cursor(Cursor::Pointer)
@@ -1158,6 +1139,7 @@ fn step_row(
         .key(format!("{prefix}-dec"))
         .role("button")
         .label(format!("Decrease {label}"))
+        .focusable(can_dec)
         .cursor(Cursor::Pointer)
         .hit()
         .size(28.0, 26.0)
@@ -1176,6 +1158,7 @@ fn step_row(
         .key(format!("{prefix}-inc"))
         .role("button")
         .label(format!("Increase {label}"))
+        .focusable(can_inc)
         .cursor(Cursor::Pointer)
         .hit()
         .size(28.0, 26.0)
@@ -1511,6 +1494,7 @@ fn account_page(s: &AppState) -> El {
                                 .key("dc-set-logout-yes")
                                 .role("button")
                                 .label("Confirm log out")
+                                .focusable(true)
                                 .cursor(Cursor::Pointer)
                                 .hit()
                                 .h(30.0)
@@ -1544,7 +1528,7 @@ fn devices_subpage(s: &AppState) -> El {
             .pb(6.0)
             .child(text("Logged-in devices").font(type_title()).color(FG))
             .child(
-                glass_button("dc-dev-back", "Back", None)
+                glass_button_opt("dc-dev-back", "Back", None, false)
                     .on_press(|s: &mut AppState| s.discord.settings_ext.devices_view = false),
             ),
     );
@@ -1596,7 +1580,7 @@ fn devices_subpage(s: &AppState) -> El {
                 )
                 .children((!sess.current && hash.is_some()).then(|| {
                     let h = hash.unwrap();
-                    glass_button("dc-dev-out", "Log out", None)
+                    glass_button_opt("dc-dev-out", "Log out", None, false)
                         .key(format!("dc-dev-out-{idx}"))
                         .on_press(move |s: &mut AppState| {
                             s.logout_discord_sessions(vec![h.clone()])
@@ -1608,7 +1592,7 @@ fn devices_subpage(s: &AppState) -> El {
     if !others.is_empty() {
         page = page.child(
             row().pt(8.0).justify_end().child(
-                glass_button("dc-dev-out-all", "Log out all other devices", None)
+                glass_button_opt("dc-dev-out-all", "Log out all other devices", None, false)
                     .on_press(move |s: &mut AppState| s.logout_discord_sessions(others.clone())),
             ),
         );
@@ -1767,6 +1751,12 @@ fn profiles_page(s: &AppState) -> El {
                 .on_press(|s: &mut AppState| s.save_discord_profile()),
         ),
     )
+}
+
+const MISSING_FROM_INSTALL: &str = "Missing from this install. Reinstall Exo to repair it.";
+
+fn missing_detail(ready: Option<bool>) -> Option<&'static str> {
+    (ready == Some(false)).then_some(MISSING_FROM_INSTALL)
 }
 
 fn voice_page(s: &AppState) -> El {
@@ -1991,16 +1981,14 @@ fn voice_page(s: &AppState) -> El {
         .child(choice_row(
             "dc-set-ns",
             "Voice cleanup",
-            ext.mic_level
-                .as_ref()
-                .and_then(|l| suppression_detail(&l.stages.suppression))
-                .or(
-                    if sup_val == "exo" && client.voice_model_ready == Some(false) {
-                        Some("Downloading voice add-on; DeepFilterNet 3 standing in")
-                    } else {
-                        None
-                    },
-                ),
+            (sup_val == "exo")
+                .then(|| missing_detail(client.voice_model_ready))
+                .flatten()
+                .or_else(|| {
+                    ext.mic_level
+                        .as_ref()
+                        .and_then(|l| suppression_detail(&l.stages.suppression))
+                }),
             sup_val,
             vec![
                 ("exo", "Exo AI"),
@@ -2023,11 +2011,14 @@ fn voice_page(s: &AppState) -> El {
         page = page.child(choice_row(
             "dc-set-voice-tier",
             "Processing tier",
-            Some(match tier_val {
-                "cpu" => "Pinned off game cores, under 20% of one core",
-                "hq" => "48 kHz Studio; steps down if a game needs the GPU",
-                _ => "48 kHz Studio when idle, low CPU in games",
-            }),
+            (tier_val != "cpu")
+                .then(|| missing_detail(client.voice_hq_model_ready))
+                .flatten()
+                .or(Some(match tier_val {
+                    "cpu" => "Pinned off game cores, under 20% of one core",
+                    "hq" => "48 kHz Studio; steps down if a game needs the GPU",
+                    _ => "48 kHz Studio when idle, low CPU in games",
+                })),
             tier_val,
             vec![
                 ("auto", "Auto"),
@@ -2041,7 +2032,6 @@ fn voice_page(s: &AppState) -> El {
     }
 
     let only_my = client.only_my_voice;
-    let voice_iso = client.voice_isolation;
     let loopback_ec = client.loopback_echo_cancellation;
     let learned = client
         .my_voice_learned
@@ -2050,27 +2040,14 @@ fn voice_page(s: &AppState) -> El {
     page = page.child(toggle_row(
         "dc-set-only-my-voice",
         "Only my voice",
-        Some("Uses your TitaNet voiceprint to block other voices in the room"),
+        missing_detail(client.my_voice_model_ready).or(Some(
+            "Uses your TitaNet voiceprint to block other voices in the room",
+        )),
         only_my,
         move |s: &mut AppState| {
             s.save_discord_client_settings(json!({ "onlyMyVoice": !only_my }));
         },
     ));
-    if only_my {
-        page = page.child(toggle_row(
-            "dc-set-voice-isolation",
-            "Separate overlapping voices",
-            Some(if client.voice_isolation_ready == Some(false) {
-                "VoxLock INT8 add-on downloads lazily when enabled"
-            } else {
-                "VoxLock INT8 target-speaker isolation"
-            }),
-            voice_iso,
-            move |s: &mut AppState| {
-                s.save_discord_client_settings(json!({ "voiceIsolation": !voice_iso }));
-            },
-        ));
-    }
     if only_my || learned {
         page = page.child(value_row(
             "Your voice",
@@ -2080,10 +2057,11 @@ fn voice_page(s: &AppState) -> El {
                 "Learning".into()
             },
             learned.then(|| {
-                glass_button(
+                glass_button_opt(
                     "dc-set-myvoice-reset",
                     if only_my { "Start over" } else { "Forget" },
                     None,
+                    false,
                 )
                 .on_press(|s: &mut AppState| s.forget_discord_my_voice())
             }),
@@ -2216,10 +2194,11 @@ fn voice_page(s: &AppState) -> El {
                     keybind_label(ptt_keys)
                 },
                 Some(
-                    glass_button(
+                    glass_button_opt(
                         "dc-set-ptt-rec",
                         if recording_ptt { "Stop" } else { "Record" },
                         None,
+                        false,
                     )
                     .on_press(move |s: &mut AppState| {
                         s.discord.settings_ext.recording_keybind = if recording_ptt {
@@ -2358,10 +2337,26 @@ fn chat_page(s: &AppState) -> El {
     let streamer = ext.streamer_mode;
     let reduce_motion = ext.reduce_motion;
 
+    let layout_val = s
+        .settings
+        .discord_layout
+        .as_deref()
+        .unwrap_or("exo")
+        .to_string();
+
     col()
         .w_full()
         .gap(4.0)
         .child(text("Chat").font(type_title()).color(FG).pb(6.0))
+        .child(section_head("Layout"))
+        .child(choice_row(
+            "dc-set-layout",
+            "Discord layout",
+            Some("Switch between Exo's top server bar and classic Discord's left server rail."),
+            layout_val,
+            vec![("exo".into(), "Exo"), ("classic".into(), "Classic Discord")],
+            |s, v| s.set_discord_layout(&v),
+        ))
         .child(section_head("Messages"))
         .child(toggle_row(
             "dc-set-inline-embed",
@@ -2684,9 +2679,10 @@ fn notifications_page(s: &AppState) -> El {
                         .gap(8.0)
                         .center_y()
                         .child(
-                            glass_button("dc-snd-prev-message3", "Preview", None).on_press(
-                                |s: &mut AppState| s.play_discord_ui_sound("message3", true),
-                            ),
+                            glass_button_opt("dc-snd-prev-message3", "Preview", None, false)
+                                .on_press(|s: &mut AppState| {
+                                    s.play_discord_ui_sound("message3", true)
+                                }),
                         )
                         .child(
                             filter_pill(
@@ -2726,7 +2722,7 @@ fn sound_toggle_row(sound: &'static str, label: &'static str, c: &DiscordClientS
                 .gap(8.0)
                 .center_y()
                 .child(
-                    glass_button("dc-snd-prev", "Preview", None)
+                    glass_button_opt("dc-snd-prev", "Preview", None, false)
                         .key(format!("dc-snd-prev-{sound}"))
                         .on_press(move |s: &mut AppState| s.play_discord_ui_sound(sound, true)),
                 )
@@ -2970,10 +2966,11 @@ fn keybinds_page(s: &AppState) -> El {
                         .gap(6.0)
                         .center_y()
                         .child(
-                            glass_button(
+                            glass_button_opt(
                                 "dc-kb-rec",
                                 if recording { "Stop" } else { "Edit" },
                                 None,
+                                false,
                             )
                             .key(format!("dc-kb-rec-{idx}"))
                             .on_press(move |s: &mut AppState| {
@@ -2985,7 +2982,7 @@ fn keybinds_page(s: &AppState) -> El {
                             }),
                         )
                         .child(
-                            glass_button("dc-kb-del", "Delete", None)
+                            glass_button_opt("dc-kb-del", "Delete", None, false)
                                 .key(format!("dc-kb-del-{idx}"))
                                 .on_press(move |s: &mut AppState| {
                                     let mut next = s.discord.settings_ext.client.keybinds.clone();
@@ -3041,19 +3038,23 @@ fn keybinds_page(s: &AppState) -> El {
                                     Some(KeybindRecordTarget::New);
                             }),
                         )
-                        .child(glass_button("dc-kb-new-cancel", "Cancel", None).on_press(
-                            |s: &mut AppState| {
-                                s.discord.settings_ext.new_keybind_action = None;
-                                s.discord.settings_ext.recording_keybind = None;
-                            },
-                        )),
+                        .child(
+                            glass_button_opt("dc-kb-new-cancel", "Cancel", None, false).on_press(
+                                |s: &mut AppState| {
+                                    s.discord.settings_ext.new_keybind_action = None;
+                                    s.discord.settings_ext.recording_keybind = None;
+                                },
+                            ),
+                        ),
                 ),
         );
     } else {
         page = page.child(row().pt(6.0).child(
-            glass_button("dc-kb-add", "Add keybind", None).on_press(|s: &mut AppState| {
-                s.discord.settings_ext.new_keybind_action = Some("PUSH_TO_TALK".into());
-            }),
+            glass_button_opt("dc-kb-add", "Add keybind", None, false).on_press(
+                |s: &mut AppState| {
+                    s.discord.settings_ext.new_keybind_action = Some("PUSH_TO_TALK".into());
+                },
+            ),
         ));
     }
     page
@@ -3132,7 +3133,7 @@ fn connected_apps_page(s: &AppState) -> El {
                             )),
                     )
                     .child(
-                        glass_button("dc-app-deauth", "Deauthorize", None)
+                        glass_button_opt("dc-app-deauth", "Deauthorize", None, false)
                             .key(format!("dc-app-deauth-{}", app.id))
                             .on_press(move |s: &mut AppState| s.deauthorize_discord_app(&id)),
                     ),
@@ -3142,7 +3143,7 @@ fn connected_apps_page(s: &AppState) -> El {
     page
 }
 
-pub fn settings_modal(s: &AppState, blur: bool) -> El {
+pub fn settings_modal(s: &AppState) -> El {
     let page = s.discord.settings_page;
     let mut nav = col().w(212.0).h_full().py(24.0).px(12.0).gap(5.0).child(
         row()
@@ -3156,34 +3157,36 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
 
     for p in DiscordSettingsPage::ALL {
         let active = p == page;
-        nav = nav.child(
-            row()
-                .key(p.key())
-                .role("tab")
-                .label(p.label())
-                .focusable(true)
-                .hit()
-                .cursor(Cursor::Pointer)
-                .w_full()
-                .h(34.0)
-                .px(12.0)
-                .center_y()
-                .radius(RADIUS_SMALL)
-                .fill(if active { selected_fill() } else { TRANSPARENT })
-                .hover(if active {
-                    selected_fill()
-                } else {
-                    hover_fill()
-                })
-                .press(pressed_fill())
-                .motion(SPRING_QUICK)
-                .on_press(move |s: &mut AppState| s.select_discord_settings_page(p))
-                .child(text(p.label()).font(type_control()).color(if active {
-                    FG
-                } else {
-                    fg_muted()
-                })),
-        );
+        let mut item = row()
+            .key(p.key())
+            .role("tab")
+            .label(p.label())
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .w_full()
+            .h(34.0)
+            .px(12.0)
+            .center_y()
+            .radius(RADIUS_SMALL)
+            .fill(if active { selected_fill() } else { TRANSPARENT })
+            .hover(if active {
+                selected_fill()
+            } else {
+                hover_fill()
+            })
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press(move |s: &mut AppState| s.select_discord_settings_page(p))
+            .child(text(p.label()).font(type_control()).color(if active {
+                FG
+            } else {
+                fg_muted()
+            }));
+        if active {
+            item = item.autofocus();
+        }
+        nav = nav.child(item);
     }
 
     let body_content = match page {
@@ -3211,6 +3214,9 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
                 .child(text(err.clone()).font(type_small()).color(FG))
                 .child(
                     el().key("dc-set-err-x")
+                        .role("button")
+                        .label_static("Dismiss error")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .size(22.0, 22.0)
@@ -3252,7 +3258,7 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
         .modal(true, |s: &mut AppState| s.close_discord_settings_clean())
         .modal_live(["top-bar"])
         .modal_scrim(scrim_fill())
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
         .hit()
         .child(nav)
         .child(
@@ -3274,7 +3280,6 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
                 )
                 .child(close_btn),
         );
-    let _ = blur;
 
     el().key("dc-settings-layer")
         .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
@@ -3282,7 +3287,7 @@ pub fn settings_modal(s: &AppState, blur: bool) -> El {
         .child(sheet)
 }
 
-pub fn custom_status_modal(s: &AppState, blur: bool) -> El {
+pub fn custom_status_modal(s: &AppState) -> El {
     let cur_clear = s.discord.settings_ext.custom_status_clear_ms;
     let mut clear_pills = row().gap(6.0).wrap();
     for (idx, (ms, lbl)) in CLEAR_AFTER_OPTIONS.into_iter().enumerate() {
@@ -3314,6 +3319,9 @@ pub fn custom_status_modal(s: &AppState, blur: bool) -> El {
                 .child(text("Set your status").font(type_section()).color(FG))
                 .child(
                     el().key("dc-cstatus-x")
+                        .role("button")
+                        .label_static("Close")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .size(28.0, 28.0)
@@ -3353,11 +3361,11 @@ pub fn custom_status_modal(s: &AppState, blur: bool) -> El {
                 .justify_end()
                 .gap(8.0)
                 .children(s.discord.custom_status.is_some().then(|| {
-                    glass_button("dc-cstatus-clear", "Clear", None)
+                    glass_button_opt("dc-cstatus-clear", "Clear", None, false)
                         .on_press(|s: &mut AppState| s.save_discord_custom_status_ext(true))
                 }))
                 .child(
-                    glass_button("dc-cstatus-cancel", "Cancel", None)
+                    glass_button_opt("dc-cstatus-cancel", "Cancel", None, false)
                         .on_press(|s: &mut AppState| s.discord.custom_status_open = false),
                 )
                 .child(
@@ -3369,8 +3377,7 @@ pub fn custom_status_modal(s: &AppState, blur: bool) -> El {
                     .on_press(|s: &mut AppState| s.save_discord_custom_status_ext(false)),
                 ),
         );
-    let _ = blur;
-    let panel = apply_glass(panel, ExoGlass::Sheet, false);
+    let panel = apply_glass(panel, ExoGlass::Sheet);
 
     el().key("dc-cstatus-layer")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -3390,6 +3397,17 @@ fn _unused_icons_anchor() -> (El, El, El) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_voice_model_says_the_install_needs_repair() {
+        assert_eq!(missing_detail(Some(false)), Some(MISSING_FROM_INSTALL));
+        assert_eq!(missing_detail(Some(true)), None);
+        assert_eq!(missing_detail(None), None);
+        assert_eq!(
+            MISSING_FROM_INSTALL,
+            "Missing from this install. Reinstall Exo to repair it."
+        );
+    }
 
     #[test]
     fn keybind_label_orders_modifiers_first() {

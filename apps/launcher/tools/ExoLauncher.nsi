@@ -4,6 +4,9 @@
 !ifndef PRODUCT_VERSION
   !searchparse /file "..\VERSION" "" PRODUCT_VERSION
 !endif
+!ifndef PRODUCT_LABEL
+  !define PRODUCT_LABEL "${PRODUCT_VERSION}"
+!endif
 !ifndef PAYLOAD_DIR
   !error "PAYLOAD_DIR required"
 !endif
@@ -213,14 +216,14 @@ Function ${UN}ExoGuiInit
     StrCpy $S 300
     !insertmacro Pictures 300
   ${EndIf}
-  ; Goeist, Exo's type, private to setup: GDI names its instances "Goeist <weight>".
-  File "/oname=$PLUGINSDIR\Goeist.ttf" "${__FILEDIR__}\..\ExoLauncher\Assets\Fonts\Goeist-Variable.ttf"
-  System::Call 'gdi32::AddFontResourceExW(w "$PLUGINSDIR\Goeist.ttf", i 0x10, p 0)'
-  !insertmacro Font $FontTitle 26 600 "Goeist SemiBold"
-  !insertmacro Font $FontButton 13 600 "Goeist SemiBold"
-  !insertmacro Font $FontBody 13 400 "Goeist"
-  !insertmacro Font $FontSmall 12 400 "Goeist"
-  !insertmacro Font $FontClose 16 400 "Goeist"
+  ; Geist, Exo's type, private to setup: GDI names its instances "Geist <weight>".
+  File "/oname=$PLUGINSDIR\Geist.ttf" "${__FILEDIR__}\..\native-ui\crates\exo-kit\assets\fonts\Geist-Variable.ttf"
+  System::Call 'gdi32::AddFontResourceExW(w "$PLUGINSDIR\Geist.ttf", i 0x10, p 0)'
+  !insertmacro Font $FontTitle 26 600 "Geist SemiBold"
+  !insertmacro Font $FontButton 13 600 "Geist SemiBold"
+  !insertmacro Font $FontBody 13 400 "Geist"
+  !insertmacro Font $FontSmall 12 400 "Geist"
+  !insertmacro Font $FontClose 16 400 "Geist"
   !insertmacro Bitmap $BmpMark mark
   !insertmacro Bitmap $BmpButton button
   !insertmacro Bitmap $BmpButtonHover button-hover
@@ -270,7 +273,7 @@ Function ${UN}ExoGuiInit
 FunctionEnd
 
 Function ${UN}ExoGuiEnd
-  System::Call 'gdi32::RemoveFontResourceExW(w "$PLUGINSDIR\Goeist.ttf", i 0x10, p 0)'
+  System::Call 'gdi32::RemoveFontResourceExW(w "$PLUGINSDIR\Geist.ttf", i 0x10, p 0)'
 FunctionEnd
 
 ; NSIS shows its Back and Next again on every page.
@@ -475,7 +478,7 @@ Function WelcomeShow
   StrCpy $Updating 0
   IfFileExists "$INSTDIR\ExoLauncher.exe" 0 +2
     StrCpy $Updating 1
-  StrCpy $5 "Version ${PRODUCT_VERSION}"
+  StrCpy $5 "Version ${PRODUCT_LABEL}"
   StrCpy $6 "Install"
   StrCmp $Updating 1 0 +2
     StrCpy $6 "Update"
@@ -549,9 +552,9 @@ FunctionEnd
 
 Function InstShow
   ${If} $Updating == 1
-    StrCpy $5 "Updating to ${PRODUCT_VERSION}"
+    StrCpy $5 "Updating to ${PRODUCT_LABEL}"
   ${Else}
-    StrCpy $5 "Installing ${PRODUCT_VERSION}"
+    StrCpy $5 "Installing ${PRODUCT_LABEL}"
   ${EndIf}
   Call ExoProgress
 FunctionEnd
@@ -568,7 +571,7 @@ Function FinishShow
   ${Else}
     StrCpy $5 "Installed"
     StrCmp $Updating 1 0 +2
-      StrCpy $5 "Updated to ${PRODUCT_VERSION}"
+      StrCpy $5 "Updated to ${PRODUCT_LABEL}"
     StrCpy $6 "Launch Exo"
     StrCpy $7 "Close"
   ${EndIf}
@@ -893,7 +896,7 @@ Section "Exo Launcher" SecApp
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayName" "${PRODUCT_NAME}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\ExoLauncher.exe"
-  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_LABEL}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "URLUpdateInfo" "${PRODUCT_WEB}"

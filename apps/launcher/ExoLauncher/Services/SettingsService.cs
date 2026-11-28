@@ -118,7 +118,6 @@ public sealed class SettingsService
                 else
                 {
                     newFile = true;
-                    // A first start takes Reduce motion from Windows' animation effects; from then on Exo's own switch decides.
                     loaded.ReduceMotion = !WindowsAnimates();
                 }
             }
@@ -152,7 +151,7 @@ public sealed class SettingsService
     }
 
     /// <summary>Windows' "Animation effects" (SPI_GETCLIENTAREAANIMATION); animating when it can't be read.</summary>
-    private static bool WindowsAnimates()
+    internal static bool WindowsAnimates()
     {
         try { return !SystemParametersInfo(0x1042, 0, out var on, 0) || on; }
         catch { return true; }
@@ -502,14 +501,11 @@ public sealed class SettingsService
         if (afterUpdates is { } again) settings.RecompressAfterUpdates = again;
     });
 
-    /// <summary>Settings: the store clients stay quiet (on) or are put back as they were (off).</summary>
-    public void ApplyStoreQuiet(bool quiet) => CommitMutation(settings => settings.StoreClientsQuiet = quiet);
 
     public void ApplyPatch(
         string? sortMode = null,
         string? defaultInstallRoot = null,
         bool? onboardingComplete = null,
-        bool? reduceMotion = null,
         bool? startMaximized = null,
         string? textColour = null,
         string? textSize = null,
@@ -522,10 +518,10 @@ public sealed class SettingsService
         bool? hdrSdrGamma = null,
         bool? discordNoiseSuppression = null,
         bool? discordQuietWhilePlaying = null,
+        string? discordLayout = null,
         string? whatsNewSeen = null,
         bool? frameGenEverywhere = null,
-        bool? graphicsFeaturesBestSettings = null,
-        bool? useClassicWebUi = null)
+        bool? graphicsFeaturesBestSettings = null)
     {
         if (whatsNewSeen is not null && (whatsNewSeen.Length is 0 or > 32 || !whatsNewSeen.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-')))
             throw new InvalidDataException("Invalid What's New version.");
@@ -537,12 +533,9 @@ public sealed class SettingsService
             if (defaultInstallRoot is not null)
                 settings.DefaultInstallRoot = string.IsNullOrWhiteSpace(defaultInstallRoot) ? null : defaultInstallRoot;
             if (onboardingComplete is not null) settings.OnboardingComplete = onboardingComplete.Value;
-            if (reduceMotion is not null)
-                settings.ReduceMotion = reduceMotion.Value;
+
             if (startMaximized is not null)
                 settings.StartMaximized = startMaximized.Value;
-            if (useClassicWebUi is not null)
-                settings.UseClassicWebUi = useClassicWebUi.Value;
             if (textColour is not null)
                 settings.TextColour = NormalizeTextColour(textColour);
             if (textSize is not null)
@@ -567,6 +560,8 @@ public sealed class SettingsService
                 settings.DiscordNoiseSuppression = discordNoiseSuppression.Value;
             if (discordQuietWhilePlaying is not null)
                 settings.DiscordQuietWhilePlaying = discordQuietWhilePlaying.Value;
+            if (discordLayout is not null)
+                settings.DiscordLayout = string.Equals(discordLayout, "classic", StringComparison.OrdinalIgnoreCase) ? "classic" : "exo";
             if (preferredGameSources is not null)
             {
                 foreach (var pair in preferredGameSources)
@@ -1048,6 +1043,8 @@ public sealed class SettingsService
         settings.CopyPortableIntoLibrary = false;
         settings.AllowResize = false;
         settings.CheckForUpdates = true;
+        settings.StoreClientsQuiet = true;
+        settings.ReduceMotion = !WindowsAnimates();
         settings.TextColour = NormalizeTextColour(settings.TextColour);
         settings.TextSize = NormalizeTextSize(settings.TextSize);
         settings.Background = NormalizeBackground(settings.Background);
@@ -1083,7 +1080,6 @@ public sealed class SettingsService
         ReduceMotion = source.ReduceMotion,
         StartMaximized = source.StartMaximized,
         FramelessMode = source.FramelessMode,
-        UseClassicWebUi = source.UseClassicWebUi,
         FramelessPinTop = source.FramelessPinTop,
         FramelessPinSide = source.FramelessPinSide,
         TextColour = source.TextColour,
@@ -1144,6 +1140,7 @@ public sealed class SettingsService
         DiscordVoiceTargetLufs = Math.Clamp(source.DiscordVoiceTargetLufs, (int)DiscordClient.Voice.VoiceLeveling.MinTargetLufs, (int)DiscordClient.Voice.VoiceLeveling.MaxTargetLufs),
         DiscordMicAutoGain = source.DiscordMicAutoGain,
         DiscordQuietWhilePlaying = source.DiscordQuietWhilePlaying,
+        DiscordLayout = string.Equals(source.DiscordLayout, "classic", StringComparison.OrdinalIgnoreCase) ? "classic" : "exo",
         DiscordInputDevice = source.DiscordInputDevice is { Length: > 0 and <= 512 } input ? input : null,
         DiscordOutputDevice = source.DiscordOutputDevice is { Length: > 0 and <= 512 } output ? output : null,
         DiscordInputVolume = Math.Clamp(source.DiscordInputVolume, 0, 200),

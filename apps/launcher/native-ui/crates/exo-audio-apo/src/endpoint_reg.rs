@@ -1135,6 +1135,9 @@ impl RegistryStore for Win32RegistryStore {
         };
         use windows_core::PCWSTR;
 
+        if self.key_exists(path) {
+            return Ok(());
+        }
         let wide = Self::to_wide(path);
         let mut hkey = HKEY::default();
         let status = unsafe {

@@ -200,7 +200,7 @@ public sealed partial class NetworkDestinationsTests
     /// GitHub is contacted only for the vendors' upscaler files and the frame generation mods (UpstreamSource), each with
     /// Exo's cache behind it, and for Exo EQ's AutoEq list and corrections (kept on the PC once fetched), and no code line
     /// writes a GitHub URL out (UpstreamSource's host names build them). Ways it could fail: a GitHub host listed for
-    /// another row (store tools, the voice model), or a request string
+    /// another row (store tools), or a request string
     /// naming api.github.com, github.com, a raw or release file host, or GitHub Pages. Comment lines are skipped: they name
     /// upstream pages as credits.
     /// </summary>

@@ -231,7 +231,7 @@ public sealed partial class WebHostBridge
         var product = await rest.CollectiblesProductAsync(skuId, ct).ConfigureAwait(false);
         var item = product.Body is { ValueKind: JsonValueKind.Object } pb && Text(pb, "name") is { Length: > 0 } name ? name : "this item";
         var charge = $"Buy {(item.Length > 80 ? item[..80] : item)} on Discord for {DiscordRest.PriceText(amount, currency)}, charged to {card.Label}?";
-        if (App.MainAppWindow is not { } window || !await window.ConfirmNativeAsync("Buy on Discord?", charge, "Buy").ConfigureAwait(false))
+        if (!await HostWindow.ConfirmNativeAsync("Buy on Discord?", charge, "Buy").ConfigureAwait(false))
             return new { ok = false, confirm = false, declined = true, message = (string?)"Nothing was charged.", paymentId = (string?)null };
         var bought = await rest.PurchaseAsync(skuId, sourceId, amount, currency, ct).ConfigureAwait(false);
         Helpers.AppLog.Info($"Discord client: Shop purchase {(bought.Error is null ? "completed" : "not completed")}.");
@@ -444,14 +444,7 @@ public sealed partial class WebHostBridge
         if (keybinds is not null) DiscordSession.Current?.KeybindsChanged();
         if (settings.DiscordUnreadBadge != badgeBefore) App.MainAppWindow?.RefreshTaskbarBadge();
         if (VoiceProcessing.From(settings).NoiseSuppression || settings.DiscordOthersNoiseSuppression)
-        {
             _ = NoiseSuppressorDownload.EnsureAsync(CancellationToken.None);
-            _ = VoiceModels.EnsureBaselineAsync(CancellationToken.None);
-            if (VoiceTierPolicy.NormalizeTier(settings.DiscordVoiceTier) != "cpu")
-                _ = VoiceModels.EnsureHighQualityAsync(CancellationToken.None);
-        }
-        if (settings.DiscordOnlyMyVoice && settings.DiscordVoiceIsolation)
-            _ = VoiceModels.EnsureVoxLockAsync(CancellationToken.None);
         var (captureMode, serviceDisabled) = CaptureServiceHealth.CurrentStatus();
         return new
         {
@@ -464,6 +457,7 @@ public sealed partial class WebHostBridge
             voiceModelReady = VoiceModels.BaselineReady(),
             voiceHqModelReady = VoiceModels.HighQualityReady(),
             voiceIsolationReady = VoiceModels.VoxLockReady(),
+            myVoiceModelReady = SpeakerModel.Ready(),
             othersNoiseSuppression = settings.DiscordOthersNoiseSuppression,
             onlyMyVoice = settings.DiscordOnlyMyVoice,
             myVoiceLearned = Voiceprint.Learned,

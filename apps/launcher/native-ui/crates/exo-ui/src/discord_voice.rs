@@ -6,20 +6,20 @@ use crate::state::{AppState, ContextMenuTarget, Room};
 use exo_kit::{
     BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted, filter_pill,
-    glass_button, glass_control_fill, glass_rim_bottom, glass_rim_top, glass_still_control_fill,
-    good, hairline, hover_fill, icon_app_window, icon_chat, icon_chevron_left, icon_close,
-    icon_hand, icon_headphones, icon_headphones_off, icon_lock, icon_maximize, icon_mic,
-    icon_mic_off, icon_monitor, icon_music, icon_phone, icon_phone_off, icon_screen_share,
-    icon_search, icon_settings, icon_video, icon_volume, icon_volume_off, pressed_fill,
-    primary_button, subtle_fill, type_body, type_control, type_label, type_section, type_small,
-    type_title, warn,
+    glass_button, glass_button_opt, glass_control_fill, glass_rim_bottom, glass_rim_top,
+    glass_still_control_fill, good, hairline, hover_fill, icon_app_window, icon_chat,
+    icon_chevron_left, icon_close, icon_hand, icon_headphones, icon_headphones_off, icon_lock,
+    icon_maximize, icon_mic, icon_mic_off, icon_monitor, icon_music, icon_phone, icon_phone_off,
+    icon_screen_share, icon_search, icon_settings, icon_video, icon_volume, icon_volume_off,
+    pressed_fill, primary_button, subtle_fill, type_body, type_control, type_label, type_section,
+    type_small, type_title, warn,
 };
 use exo_rpc::{
     DiscordChannel, DiscordGoLiveStatsEvent, DiscordSoundItem, DiscordVoiceMember, GoLiveSource,
 };
 use rune::{
-    Color, Cursor, El, LiquidGlass, ScrollSpec, SpringPair, SurfaceFit, TextEdit, Transition, col,
-    edit_access, el, row, text, text_input,
+    Color, Cursor, El, ScrollSpec, SpringPair, SurfaceFit, TextEdit, Transition, col, edit_access,
+    el, row, text, text_input,
 };
 use serde_json::json;
 
@@ -654,7 +654,7 @@ fn my_stream_tile(s: &AppState, members: &[DiscordVoiceMember], tile_w: f32, sca
     tile
 }
 
-fn golive_modal(s: &AppState, blur: bool) -> El {
+fn golive_modal(s: &AppState) -> El {
     let modal = col()
         .key("dc-golive-panel")
         .role("menu")
@@ -667,9 +667,8 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         .radius(22.0)
         .continuous_corners()
         .transition(overlay_transition())
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel))
         .hit();
-    let _ = blur;
 
     let close = el()
         .key("dc-gl-close")
@@ -734,6 +733,7 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
                 el().key("dc-gl-back")
                     .role("button")
                     .label("Pick something else")
+                    .focusable(true)
                     .cursor(Cursor::Pointer)
                     .hit()
                     .size(30.0, 30.0)
@@ -941,6 +941,7 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
                 .key("dc-gl-game-banner")
                 .role("button")
                 .label(format!("Stream {g_name}"))
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .w_full()
@@ -1117,7 +1118,7 @@ fn soundboard_section(heading: &str, items: &[&DiscordSoundItem]) -> El {
         .child(grid)
 }
 
-fn soundboard_popover(s: &AppState, blur: bool) -> El {
+fn soundboard_popover(s: &AppState) -> El {
     let card = col()
         .key("dc-soundboard-panel")
         .w(420.0)
@@ -1127,8 +1128,7 @@ fn soundboard_popover(s: &AppState, blur: bool) -> El {
         .radius(20.0)
         .transition(overlay_transition())
         .hit();
-    let _ = blur;
-    let card = apply_glass(card, ExoGlass::Popover, false);
+    let card = apply_glass(card, ExoGlass::Popover);
 
     let sb_muted = s
         .discord
@@ -1186,6 +1186,7 @@ fn soundboard_popover(s: &AppState, blur: bool) -> El {
                         } else {
                             "Mute soundboard"
                         })
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .size(28.0, 28.0)
@@ -1203,6 +1204,9 @@ fn soundboard_popover(s: &AppState, blur: bool) -> El {
                 )
                 .child(
                     el().key("dc-sb-vol-dn")
+                        .role("button")
+                        .label_static("Lower soundboard volume")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .size(22.0, 22.0)
@@ -1228,6 +1232,9 @@ fn soundboard_popover(s: &AppState, blur: bool) -> El {
                 )
                 .child(
                     el().key("dc-sb-vol-up")
+                        .role("button")
+                        .label_static("Raise soundboard volume")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .size(22.0, 22.0)
@@ -1346,7 +1353,7 @@ fn soundboard_popover(s: &AppState, blur: bool) -> El {
     )
 }
 
-fn audio_diag_popover(s: &AppState, blur: bool) -> El {
+fn audio_diag_popover(s: &AppState) -> El {
     let card = col()
         .key("dc-audio-panel")
         .w(380.0)
@@ -1356,8 +1363,7 @@ fn audio_diag_popover(s: &AppState, blur: bool) -> El {
         .radius(20.0)
         .transition(overlay_transition())
         .hit();
-    let _ = blur;
-    let card = apply_glass(card, ExoGlass::Popover, false);
+    let card = apply_glass(card, ExoGlass::Popover);
 
     let connected = s.discord.voice.state == "connected";
     let header = row()
@@ -1483,10 +1489,11 @@ fn audio_diag_popover(s: &AppState, blur: bool) -> El {
 
     body = body.child(el().w_full().h(1.0).fill(hairline())).child(
         row().w_full().justify_end().child(
-            glass_button(
+            glass_button_opt(
                 "dc-aud-open-settings",
                 "Voice & video settings",
                 Some(icon_settings(13.0, FG)),
+                false,
             )
             .on_press(|s: &mut AppState| {
                 s.discord.voice_ui.panel = VoicePanel::None;
@@ -1506,7 +1513,7 @@ fn audio_diag_popover(s: &AppState, blur: bool) -> El {
     )
 }
 
-pub fn voice_overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn voice_overlay_layers(s: &AppState) -> Vec<El> {
     match s.discord.voice_ui.panel {
         VoicePanel::None => Vec::new(),
         VoicePanel::GoLive => vec![
@@ -1516,7 +1523,7 @@ pub fn voice_overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
                 .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::None)),
             el().key("dc-golive-wrap")
                 .pin(Some(707.0), None, None, Some(76.0))
-                .child(golive_modal(s, blur)),
+                .child(golive_modal(s)),
         ],
         VoicePanel::Soundboard => vec![
             el().key("dc-sb-dismiss")
@@ -1526,7 +1533,7 @@ pub fn voice_overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
             el().key("dc-sb-wrap")
                 .pin(Some(0.0), None, Some(0.0), Some(90.0))
                 .center()
-                .child(soundboard_popover(s, blur)),
+                .child(soundboard_popover(s)),
         ],
         VoicePanel::Audio => vec![
             el().key("dc-aud-dismiss")
@@ -1536,7 +1543,7 @@ pub fn voice_overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
             el().key("dc-aud-wrap")
                 .pin(Some(0.0), None, Some(0.0), Some(90.0))
                 .center()
-                .child(audio_diag_popover(s, blur)),
+                .child(audio_diag_popover(s)),
         ],
     }
 }
@@ -1578,6 +1585,7 @@ pub fn call_dock(s: &AppState) -> Option<El> {
                                 .key("dc-dock-status")
                                 .role("button")
                                 .label("Voice connection details")
+                                .focusable(true)
                                 .cursor(Cursor::Pointer)
                                 .hit()
                                 .press_on_down()
@@ -1608,6 +1616,7 @@ pub fn call_dock(s: &AppState) -> Option<El> {
                                 .key("dc-dock-channel")
                                 .role("button")
                                 .label("Open voice channel")
+                                .focusable(true)
                                 .cursor(Cursor::Pointer)
                                 .hit()
                                 .press_on_down()
@@ -1683,7 +1692,6 @@ pub fn voice_stage_view(
     guild_id: Option<&str>,
     ch: &DiscordChannel,
     scale: f32,
-    voice_bar_blur: bool,
 ) -> El {
     let in_this_voice = s.discord.voice.channel_id.as_deref() == Some(ch.id.as_str())
         && s.discord.voice.state != "off";
@@ -1741,6 +1749,7 @@ pub fn voice_stage_view(
                 .key("dc-voice-head-diag")
                 .role("button")
                 .label("Voice diagnostics")
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .press_on_down()
@@ -2297,6 +2306,9 @@ pub fn voice_stage_view(
                 .child(text(err.clone()).font(type_small()).color(FG))
                 .child(
                     el().key("dc-voice-err-x")
+                        .role("button")
+                        .label_static("Dismiss error")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .size(22.0, 22.0)
@@ -2330,11 +2342,7 @@ pub fn voice_stage_view(
             .px(28.0)
             .center()
             .radius(RADIUS_PILL)
-            .fill(if voice_bar_blur {
-                glass_control_fill()
-            } else {
-                glass_still_control_fill()
-            })
+            .fill(glass_control_fill())
             .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .hover(hover_fill())
             .press(pressed_fill())
@@ -2433,7 +2441,7 @@ pub fn voice_stage_view(
                 )
                 .on_press(move |s: &mut AppState| {
                     if is_golive {
-                        s.open_context_menu(ContextMenuTarget::DiscordGoLiveMenu, 952.0, 940.0);
+                        s.open_context_menu(ContextMenuTarget::DiscordGoLiveMenu, 0.0, 0.0);
                     } else {
                         s.open_voice_panel(VoicePanel::GoLive);
                     }
@@ -2487,8 +2495,7 @@ pub fn voice_stage_view(
             )
     };
 
-    let _ = voice_bar_blur;
-    voice_bar = apply_glass(voice_bar, ExoGlass::Bar, false);
+    voice_bar = apply_glass(voice_bar, ExoGlass::Bar);
 
     let voice_pane = el()
         .key("dc-voice-stage")
@@ -2584,7 +2591,7 @@ pub fn voice_stage_view(
         .child(chat_pane)
 }
 
-pub fn island_call_capsule(s: &AppState, blur: bool) -> Option<El> {
+pub fn island_call_capsule(s: &AppState) -> Option<El> {
     if s.room == Room::Discord || s.discord.voice.state == "off" {
         return None;
     }
@@ -2655,6 +2662,7 @@ pub fn island_call_capsule(s: &AppState, blur: bool) -> Option<El> {
                 .key("exo-island-call-open")
                 .role("button")
                 .label("Open Discord call")
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .gap(6.0)
@@ -2694,6 +2702,7 @@ pub fn island_call_capsule(s: &AppState, blur: bool) -> Option<El> {
             el().key("exo-island-mute")
                 .role("button")
                 .label(if muted { "Unmute" } else { "Mute" })
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .size(26.0, 26.0)
@@ -2716,6 +2725,7 @@ pub fn island_call_capsule(s: &AppState, blur: bool) -> Option<El> {
             el().key("exo-island-deaf")
                 .role("button")
                 .label(if deaf { "Undeafen" } else { "Deafen" })
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .size(26.0, 26.0)
@@ -2738,6 +2748,7 @@ pub fn island_call_capsule(s: &AppState, blur: bool) -> Option<El> {
             el().key("exo-island-leave")
                 .role("button")
                 .label("Leave call")
+                .focusable(true)
                 .cursor(Cursor::Pointer)
                 .hit()
                 .size(26.0, 26.0)
@@ -2749,17 +2760,16 @@ pub fn island_call_capsule(s: &AppState, blur: bool) -> Option<El> {
                 .child(icon_phone_off(14.0, FG)),
         );
 
-    let _ = blur;
     let surface = if !s.discord.speaking.is_empty() {
         ExoGlass::Tinted(good().alpha(0.32))
     } else {
         ExoGlass::Bar
     };
-    pill = apply_glass(pill, surface, false);
+    pill = apply_glass(pill, surface);
     Some(pill)
 }
 
-pub fn incoming_call_overlay(s: &AppState, blur: bool) -> Option<El> {
+pub fn incoming_call_overlay(s: &AppState) -> Option<El> {
     let cid = s.discord.voice_ui.ringing_channel_id.clone()?;
     let dm = s.discord.home.dms.iter().find(|d| d.id == cid);
     let caller = dm
@@ -2795,6 +2805,7 @@ pub fn incoming_call_overlay(s: &AppState, blur: bool) -> Option<El> {
                     el().key("dc-ring-answer")
                         .role("button")
                         .label("Join call")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .size(34.0, 34.0)
@@ -2812,6 +2823,7 @@ pub fn incoming_call_overlay(s: &AppState, blur: bool) -> Option<El> {
                     el().key("dc-ring-video")
                         .role("button")
                         .label("Join with video")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .size(34.0, 34.0)
@@ -2832,6 +2844,7 @@ pub fn incoming_call_overlay(s: &AppState, blur: bool) -> Option<El> {
                     el().key("dc-ring-decline")
                         .role("button")
                         .label("Decline")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .size(34.0, 34.0)
@@ -2842,8 +2855,7 @@ pub fn incoming_call_overlay(s: &AppState, blur: bool) -> Option<El> {
                         .child(icon_phone_off(15.0, FG)),
                 ),
         );
-    let _ = blur;
-    card = apply_glass(card, ExoGlass::Tinted(good().alpha(0.32)), false);
+    card = apply_glass(card, ExoGlass::Tinted(good().alpha(0.32)));
     Some(card)
 }
 

@@ -19,7 +19,7 @@ import { errorText, type PlainError } from '../../lib/errorWords'
 import { report } from '../../lib/report'
 import { Switch } from '../Switch'
 import { Wait, sample, times } from '../ui/Wait'
-import { Row, Section, State, SwitchRow } from './parts'
+import { Row, Section, State } from './parts'
 import { SteamLibraryPanel, useSteamLibrary, type SteamLibrary } from './SteamSignInRow'
 import { riotIdShown } from '../../lib/canUse'
 import { ErrorNote } from '../ui/ErrorNote'
@@ -502,16 +502,7 @@ export const StoresSection = memo(function StoresSection({
         <div className="exo-set-item"><ErrorNote className="exo-set-error" message={storeCheckCopy} /></div>
       ) : null}
       {hasAccounts ? <AccountHours accounts={accounts} onChanged={changed} /> : null}
-      {hasAccounts && settings ? (
-        <SwitchRow label="Keep store apps quiet" checked={settings.storeClientsQuiet !== false}
-          onChange={quiet => {
-            onSettings({ ...settings, storeClientsQuiet: quiet })
-            return saveSettingsPatch({ storeClientsQuiet: quiet }).then(() => null, () => {
-              onSettings({ ...settings, storeClientsQuiet: !quiet })
-              return 'Not saved. Try again.'
-            })
-          }} />
-      ) : null}
+
       {riotIdShown(installed.map(store => store.store), settings?.riotId) ? (
         <>
           <RiotIdRow riotId={settings?.riotId?.trim() || ''} onSettings={onSettings} />

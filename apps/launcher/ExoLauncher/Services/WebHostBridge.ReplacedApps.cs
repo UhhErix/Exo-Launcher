@@ -33,8 +33,12 @@ public sealed partial class WebHostBridge
                 return new { ok = true, message = (string?)null, removed = 0, left = 0, apps = (await ScanReplacedAsync(ct).ConfigureAwait(true)) };
             var result = await Task.Run(() => ReplacedApps.ForThisPc().RemoveAsync(id, ct), ct).ConfigureAwait(true);
             // Print Screen opened Windows' snip; with it gone, Exo's snip takes the key.
-            if (result.Ok && id == "snipping" && App.MainAppWindow is { } window)
-                await window.CaptureSetSettingsAsync(System.Text.Json.JsonDocument.Parse("""{"printScreen":true}""").RootElement).ConfigureAwait(true);
+            if (result.Ok && id == "snipping")
+            {
+                using var patch = System.Text.Json.JsonDocument.Parse("""{"printScreen":true}""");
+                if (App.MainAppWindow is { } window) await window.CaptureSetSettingsAsync(patch.RootElement).ConfigureAwait(true);
+                else await _services.HeadlessCapture.UpdateSettingsAsync(patch.RootElement).ConfigureAwait(true);
+            }
             if (result.Cleared is { Count: > 0 } summary)
             {
                 ClearedLog.Add(id, summary);

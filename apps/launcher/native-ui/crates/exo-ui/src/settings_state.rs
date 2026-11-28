@@ -113,32 +113,11 @@ pub const SETTINGS_INDEX: &[SettingsIndexEntry] = &[
         keywords: &["small", "normal", "large", "scale", "font"],
     },
     SettingsIndexEntry {
-        id: "general-reduce-motion",
-        label: "Reduce motion",
-        section: SettingsSection::General,
-        page_label: "General",
-        keywords: &["animation", "animations", "transitions", "motion"],
-    },
-    SettingsIndexEntry {
         id: "general-startup",
         label: "Open Exo when Windows starts",
         section: SettingsSection::General,
         page_label: "General",
         keywords: &["startup", "windows", "autostart", "boot"],
-    },
-    SettingsIndexEntry {
-        id: "general-classic-ui",
-        label: "Use classic interface",
-        section: SettingsSection::General,
-        page_label: "General",
-        keywords: &[
-            "classic",
-            "webview",
-            "webview2",
-            "interface",
-            "ui",
-            "fallback",
-        ],
     },
     SettingsIndexEntry {
         id: "general-last-backup",
@@ -157,7 +136,7 @@ pub const SETTINGS_INDEX: &[SettingsIndexEntry] = &[
     SettingsIndexEntry {
         id: "library-stores",
         label: "Game stores",
-        section: SettingsSection::Account,
+        section: SettingsSection::Library,
         page_label: "Library",
         keywords: &[
             "steam",
@@ -175,28 +154,21 @@ pub const SETTINGS_INDEX: &[SettingsIndexEntry] = &[
     SettingsIndexEntry {
         id: "library-steam-offline",
         label: "Offline mode",
-        section: SettingsSection::Account,
+        section: SettingsSection::Library,
         page_label: "Library",
         keywords: &["steam offline", "go offline", "go online"],
     },
     SettingsIndexEntry {
-        id: "library-quiet-stores",
-        label: "Keep store apps quiet",
-        section: SettingsSection::Account,
-        page_label: "Library",
-        keywords: &["store clients", "minimize", "close", "background"],
-    },
-    SettingsIndexEntry {
         id: "library-riot-id",
         label: "Riot ID",
-        section: SettingsSection::Account,
+        section: SettingsSection::Library,
         page_label: "Library",
         keywords: &["valorant", "league", "tft", "riot", "name"],
     },
     SettingsIndexEntry {
         id: "library-riot-hours",
         label: "Riot hours",
-        section: SettingsSection::Account,
+        section: SettingsSection::Library,
         page_label: "Library",
         keywords: &[
             "valorant",
@@ -210,7 +182,7 @@ pub const SETTINGS_INDEX: &[SettingsIndexEntry] = &[
     SettingsIndexEntry {
         id: "library-get-store",
         label: "Get another store",
-        section: SettingsSection::Account,
+        section: SettingsSection::Library,
         page_label: "Library",
         keywords: &[
             "install store",
@@ -224,162 +196,162 @@ pub const SETTINGS_INDEX: &[SettingsIndexEntry] = &[
     SettingsIndexEntry {
         id: "library-tools",
         label: "Show tools and soundtracks",
-        section: SettingsSection::Account,
+        section: SettingsSection::Library,
         page_label: "Library",
         keywords: &["tools", "soundtracks", "sdks", "servers"],
     },
     SettingsIndexEntry {
         id: "library-shaders",
         label: "Improve shader pre-compiling",
-        section: SettingsSection::Account,
+        section: SettingsSection::Library,
         page_label: "Library",
         keywords: &["shaders", "d3d12", "stutter", "cache", "precompile"],
     },
     SettingsIndexEntry {
         id: "downloads-folder",
         label: "Install folder",
-        section: SettingsSection::Appearance,
+        section: SettingsSection::Downloads,
         page_label: "Downloads",
         keywords: &["default", "games folder", "directory", "location", "path"],
     },
     SettingsIndexEntry {
         id: "downloads-hours",
         label: "Download hours",
-        section: SettingsSection::Appearance,
+        section: SettingsSection::Downloads,
         page_label: "Downloads",
         keywords: &["schedule", "window", "overnight", "any time"],
     },
     SettingsIndexEntry {
         id: "downloads-auto-update",
         label: "Update games automatically",
-        section: SettingsSection::Appearance,
+        section: SettingsSection::Downloads,
         page_label: "Downloads",
         keywords: &["automatic updates", "auto update"],
     },
     SettingsIndexEntry {
         id: "downloads-upscalers",
         label: "Update DLSS, FSR and XeSS in anti-cheat games",
-        section: SettingsSection::Appearance,
+        section: SettingsSection::Downloads,
         page_label: "Downloads",
         keywords: &["dlss", "fsr", "xess", "upscalers", "anti-cheat"],
     },
     SettingsIndexEntry {
         id: "ingame-achievements",
         label: "Show achievement pop-ups",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["achievements", "banners", "unlock", "trophy", "popups"],
     },
     SettingsIndexEntry {
         id: "ingame-sound",
         label: "Pop-up sound",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["volume", "achievement sound", "audio"],
     },
     SettingsIndexEntry {
         id: "ingame-test",
         label: "Test pop-up",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["preview", "banner", "achievement"],
     },
     SettingsIndexEntry {
         id: "ingame-obs",
         label: "OBS overlay URL",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["obs", "browser source", "stream"],
     },
     SettingsIndexEntry {
         id: "ingame-fps",
         label: "Show FPS counter",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "frame rate", "frames per second", "overlay"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-position",
         label: "Position",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "top left", "top middle", "top right", "corner"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-low",
         label: "1% low",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "frametime", "metrics"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-frametime",
         label: "Frame time",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "ms", "metrics"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-gpu",
         label: "GPU use",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "graphics", "utilization"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-gputemp",
         label: "GPU temperature",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "temp", "thermals"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-cpu",
         label: "CPU use",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "processor", "utilization"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-vram",
         label: "VRAM",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "video memory"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-ram",
         label: "RAM",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "memory"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-battery",
         label: "Lowest battery",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "mouse", "headset", "wireless"],
     },
     SettingsIndexEntry {
         id: "ingame-fps-clock",
         label: "Time of day",
-        section: SettingsSection::Graphics,
+        section: SettingsSection::InGame,
         page_label: "In game",
         keywords: &["fps", "clock", "time"],
     },
     SettingsIndexEntry {
         id: "music-service",
         label: "Music service",
-        section: SettingsSection::Updates,
-        page_label: "Music",
+        section: SettingsSection::General,
+        page_label: "General",
         keywords: &["spotify", "apple music", "youtube music", "player"],
     },
     SettingsIndexEntry {
         id: "music-yt-notifications",
         label: "YouTube Music notifications",
-        section: SettingsSection::Updates,
-        page_label: "Music",
+        section: SettingsSection::General,
+        page_label: "General",
         keywords: &["youtube music", "permissions", "alerts"],
     },
     SettingsIndexEntry {
@@ -408,43 +380,43 @@ pub const SETTINGS_INDEX: &[SettingsIndexEntry] = &[
     SettingsIndexEntry {
         id: "about-account-sync",
         label: "Sync",
-        section: SettingsSection::About,
-        page_label: "About",
+        section: SettingsSection::Account,
+        page_label: "Account",
         keywords: &["exo account", "cloud sync", "sign in", "sign out"],
     },
     SettingsIndexEntry {
         id: "about-account-password",
         label: "Change password",
-        section: SettingsSection::About,
-        page_label: "About",
+        section: SettingsSection::Account,
+        page_label: "Account",
         keywords: &["security", "password", "exo account"],
     },
     SettingsIndexEntry {
         id: "about-account-recovery",
         label: "Replace recovery code",
-        section: SettingsSection::About,
-        page_label: "About",
+        section: SettingsSection::Account,
+        page_label: "Account",
         keywords: &["recovery code", "backup code", "security"],
     },
     SettingsIndexEntry {
         id: "about-account-sessions",
         label: "Signed-in PCs",
-        section: SettingsSection::About,
-        page_label: "About",
+        section: SettingsSection::Account,
+        page_label: "Account",
         keywords: &["sessions", "devices", "exo account"],
     },
     SettingsIndexEntry {
         id: "about-account-export",
         label: "Export my data",
-        section: SettingsSection::About,
-        page_label: "About",
+        section: SettingsSection::Account,
+        page_label: "Account",
         keywords: &["your data", "download data", "exo account"],
     },
     SettingsIndexEntry {
         id: "about-account-delete",
         label: "Delete account",
-        section: SettingsSection::About,
-        page_label: "About",
+        section: SettingsSection::Account,
+        page_label: "Account",
         keywords: &["remove account", "your data", "exo account"],
     },
     SettingsIndexEntry {
@@ -3070,6 +3042,12 @@ impl AppState {
         self.wp4.caches_busy = true;
         self.wp4.caches_done = false;
         self.wp4.caches_error = None;
+        std::thread::Builder::new()
+            .name("exo-art-cache-clear".into())
+            .spawn(|| {
+                exo_rpc::remote_art::clear_default_cache();
+            })
+            .ok();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let rpc2 = rpc.clone();
@@ -4418,7 +4396,7 @@ mod tests {
         assert!(SETTINGS_INDEX.len() >= 38);
         let hits = search_settings("obs");
         assert_eq!(hits[0].id, "ingame-obs");
-        assert_eq!(hits[0].section, SettingsSection::Graphics);
+        assert_eq!(hits[0].section, SettingsSection::InGame);
         let steam = search_settings("steam offline");
         assert_eq!(steam[0].id, "library-steam-offline");
         let empty = search_settings("   ");

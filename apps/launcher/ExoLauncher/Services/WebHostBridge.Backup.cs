@@ -55,15 +55,23 @@ public sealed partial class WebHostBridge
 
     private async Task<object> BackupExportAsync()
     {
-        var picked = await OnUiThread(async () =>
-        {
-            var picker = new Windows.Storage.Pickers.FileSavePicker();
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow!));
-            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            picker.FileTypeChoices.Add("Exo Launcher backup", [".json"]);
-            picker.SuggestedFileName = $"exo-launcher-export-{DateTime.Now:yyyyMMdd-HHmm}";
-            return (await picker.PickSaveFileAsync())?.Path;
-        }).ConfigureAwait(true);
+        var suggested = $"exo-launcher-export-{DateTime.Now:yyyyMMdd-HHmm}";
+        var picked = App.MainAppWindow is not null
+            ? await OnUiThread(async () =>
+            {
+                var picker = new Windows.Storage.Pickers.FileSavePicker();
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow!));
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+                picker.FileTypeChoices.Add("Exo Launcher backup", [".json"]);
+                picker.SuggestedFileName = suggested;
+                return (await picker.PickSaveFileAsync())?.Path;
+            }).ConfigureAwait(true)
+            : await HostWindow.PickSaveFileAsync(
+                "Export Exo Launcher backup",
+                [("Exo Launcher backup", "*.json")],
+                suggested,
+                "json",
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)).ConfigureAwait(true);
         if (picked.Failed) return new { ok = false, message = "The file picker could not open." };
         if (picked.Path is null) return new { ok = false, cancelled = true };
         var path = picked.Path;
@@ -73,14 +81,19 @@ public sealed partial class WebHostBridge
 
     private async Task<object> BackupImportAsync()
     {
-        var picked = await OnUiThread(async () =>
-        {
-            var picker = new Windows.Storage.Pickers.FileOpenPicker();
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow!));
-            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            picker.FileTypeFilter.Add(".json");
-            return (await picker.PickSingleFileAsync())?.Path;
-        }).ConfigureAwait(true);
+        var picked = App.MainAppWindow is not null
+            ? await OnUiThread(async () =>
+            {
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow!));
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+                picker.FileTypeFilter.Add(".json");
+                return (await picker.PickSingleFileAsync())?.Path;
+            }).ConfigureAwait(true)
+            : await HostWindow.PickOpenFileAsync(
+                "Import Exo Launcher backup",
+                [("Exo Launcher backup", "*.json")],
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)).ConfigureAwait(true);
         if (picked.Failed) return new { ok = false, message = "The file picker could not open." };
         if (picked.Path is null) return new { ok = false, cancelled = true };
         return await RestoreFileAsync(picked.Path).ConfigureAwait(true);

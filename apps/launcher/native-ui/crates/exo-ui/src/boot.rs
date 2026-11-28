@@ -1,12 +1,13 @@
 use crate::events::{EventRegistry, HostEventKind};
 use crate::state::{AppState, HostStatus, NoticeTone};
 use exo_kit::{
-    BG, FG, RADIUS_PANEL, RADIUS_PILL, bad, exo_mark, fg_muted, glass_button, glass_panel_opt,
-    good, icon_alert, icon_check, icon_cpu, icon_monitor, primary_button, progress_bar, scaled,
-    track_fill, type_body, type_small, type_title,
+    BG, FG, RADIUS_PANEL, RADIUS_PILL, SPRING_FLIGHT, SPRING_INTRO, SPRING_MOVE, bad, exo_app_icon,
+    fg_muted, glass_button, glass_button_opt, glass_panel, good, icon_alert, icon_check, icon_cpu,
+    icon_monitor, primary_button, progress_bar, scaled, track_fill, type_body, type_small,
+    type_title,
 };
 use exo_rpc::HostEvent;
-use rune::{El, col, el, row, text};
+use rune::{Color, El, SpringPair, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -525,13 +526,13 @@ impl AppState {
     }
 }
 
-pub fn boot_splash_if_needed(s: &AppState, blur: bool) -> Option<El> {
+pub fn boot_splash_if_needed(s: &AppState) -> Option<El> {
     if !s.should_show_boot_gate() {
         return None;
     }
     if let HostStatus::Error(ref err) = s.status {
         let err_copy = err.clone();
-        let card = glass_panel_opt("boot-error-card", scaled(448.0), blur)
+        let card = glass_panel("boot-error-card", scaled(448.0))
             .role("alert")
             .label("Settings could not be loaded")
             .radius(RADIUS_PANEL)
@@ -563,14 +564,15 @@ pub fn boot_splash_if_needed(s: &AppState, blur: bool) -> Option<El> {
                                     .on_press(|s: &mut AppState| s.retry_boot_bootstrap()),
                             )
                             .child(
-                                glass_button("boot-open-logs", "Open logs", None)
+                                glass_button_opt("boot-open-logs", "Open logs", None, false)
                                     .on_press(|s: &mut AppState| s.open_app_logs()),
                             )
-                            .child(glass_button("boot-copy-logs", "Copy logs", None).on_press(
-                                move |s: &mut AppState| {
-                                    s.copy_error_logs(err_copy.clone(), "Boot".into());
-                                },
-                            )),
+                            .child(
+                                glass_button_opt("boot-copy-logs", "Copy logs", None, false)
+                                    .on_press(move |s: &mut AppState| {
+                                        s.copy_error_logs(err_copy.clone(), "Boot".into());
+                                    }),
+                            ),
                     ),
             );
         return Some(
@@ -591,16 +593,51 @@ pub fn boot_splash_if_needed(s: &AppState, blur: bool) -> Option<El> {
         } else {
             "Preparing library and game tools"
         };
+        let (root_t, glow_t, mark_t) = if s.settings.reduce_motion {
+            (Transition::none(), Transition::none(), Transition::none())
+        } else {
+            (
+                Transition::asymmetric(Transition::none(), Transition::opacity())
+                    .springs(SpringPair::new(SPRING_FLIGHT, SPRING_FLIGHT)),
+                Transition::asymmetric(Transition::opacity(), Transition::opacity())
+                    .springs(SpringPair::new(SPRING_FLIGHT, SPRING_MOVE)),
+                Transition::asymmetric(
+                    Transition::offset(0.0, 8.0)
+                        .combined(Transition::scale(0.94))
+                        .combined(Transition::opacity()),
+                    Transition::offset(0.0, -6.0)
+                        .combined(Transition::scale(0.86))
+                        .combined(Transition::opacity()),
+                )
+                .springs(SpringPair::new(SPRING_INTRO, SPRING_FLIGHT)),
+            )
+        };
         return Some(
             col()
                 .key("boot-splash")
                 .role("status")
                 .label(aria)
-                .w_full()
-                .h_full()
+                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                 .fill(BG)
+                .hit()
                 .center()
-                .child(exo_mark(128.0, FG)),
+                .transition(root_t)
+                .child(
+                    el().key("boot-splash-glow")
+                        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                        .radial_gradient(
+                            [0.5, 0.5],
+                            320.0,
+                            [(0.0, FG.alpha(0.086)), (1.0, Color::TRANSPARENT)],
+                        )
+                        .enter_delay(0.12)
+                        .transition(glow_t),
+                )
+                .child(
+                    el().key("boot-splash-mark")
+                        .transition(mark_t)
+                        .child(exo_app_icon(128.0)),
+                ),
         );
     }
     None
@@ -969,11 +1006,13 @@ mod tests {
     #[test]
     fn boot_gate_shows_splash_while_connecting_and_error_card_on_failure() {
         let mut s = AppState::for_host_pipe();
-        assert!(boot_splash_if_needed(&s, true).is_some());
+        assert!(boot_splash_if_needed(&s).is_some());
+        s.settings.reduce_motion = true;
+        assert!(boot_splash_if_needed(&s).is_some());
         s.status = HostStatus::Error("pipe timeout".into());
-        assert!(boot_splash_if_needed(&s, true).is_some());
+        assert!(boot_splash_if_needed(&s).is_some());
         s.status = HostStatus::Connected;
         s.whats_new.boot_hold_active = false;
-        assert!(boot_splash_if_needed(&s, true).is_none());
+        assert!(boot_splash_if_needed(&s).is_none());
     }
 }

@@ -162,14 +162,13 @@ internal sealed unsafe class UiThread
         return ok;
     });
 
-    /// <summary>Exo's own typeface (Goeist, or Exoline on older hosts) for the toast and the snip's words.</summary>
+    /// <summary>Exo's own typeface (Geist) for the toast and the snip's words.</summary>
     internal void UseFont(string? path)
     {
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
-        var face = Path.GetFileName(path).Contains("Goeist", StringComparison.OrdinalIgnoreCase) ? "Goeist" : "Exoline";
         Invoke(() =>
         {
-            if (Win32.AddFontResourceEx(path, 0x10 /* FR_PRIVATE */, 0) > 0) FontFace = face;
+            if (Win32.AddFontResourceEx(path, 0x10 /* FR_PRIVATE */, 0) > 0) FontFace = "Geist";
         });
     }
 

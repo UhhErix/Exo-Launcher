@@ -16,6 +16,11 @@ enabled = false
 binding = "MIRROR"
 bucket_name = "replace-with-bucket-name"
 
+# Error counters (src/signal.js): one Analytics Engine data point per counted request (Worker, route, status class), no logs and no identifier. README.md in cloud/updates, "Error counters".
+[[analytics_engine_datasets]]
+binding = "SIGNAL"
+dataset = "exo_signal"
+
 # Secrets, set with `wrangler secret put` and never kept here: DISCORD_WEBHOOK_<APP> (the release card's channel) and
 # DISCORD_ROLE_<APP> (optional role id), for LAUNCHER and CINEMA. README.md, "At each release".
 

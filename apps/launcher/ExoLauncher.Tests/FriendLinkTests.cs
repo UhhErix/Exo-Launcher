@@ -255,73 +255,102 @@ public sealed class FriendLinkTests
         Assert.Equal(new string('x', 127), cut);
     }
 
-    // ---- the carrier ----
-
     internal const string Key = "A7Sx1n" + "Q2oXJ0" + "m3yV5f" + "G8hK2d" + "L4sP6t" + "U9wE1r" + "T3yU5i" + "O7";
 
     [Fact]
-    public void TheKeyGoesOnARealCustomStatusAndChangesNothingElseOfIt()
+    public void CustomStatusCarriesNoFriendLinkKeyOrFabricatedActivity()
     {
+        Assert.Null(DiscordSession.CustomActivity(null, 0));
         var custom = DiscordSession.CustomActivity(JsonNode.Parse("{\"text\":\"brb\",\"emojiName\":\"\U0001F600\"}"), 0)!;
-        var before = custom.DeepClone().AsObject();
-        var sent = FriendKeyCarrier.Put(custom, Key);
-        Assert.Equal(Key, sent["party"]!["id"]!.GetValue<string>());
-        sent.Remove("party");
-        Assert.True(JsonNode.DeepEquals(before, sent));
+        Assert.Equal(4, custom["type"]!.GetValue<int>());
+        Assert.False(custom.ContainsKey("party"));
     }
 
     [Fact]
-    public void WithNoStatusTheKeyGoesOnACustomStatusThatSaysNothing()
+    public void DiscordApiHeadersStayOnDiscordApiRequests()
     {
-        var sent = FriendKeyCarrier.Put(null, Key);
-        Assert.Equal(4, sent["type"]!.GetValue<int>());
-        Assert.False(sent.ContainsKey("state"));
-        Assert.False(sent.ContainsKey("emoji"));
-        Assert.Equal(Key, sent["party"]!["id"]!.GetValue<string>());
-    }
-
-    [Theory]
-    [InlineData($"{{\"activities\":[{{\"type\":4,\"party\":{{\"id\":\"{Key}\"}}}}]}}", true)]
-    [InlineData($"{{\"hidden_activities\":[{{\"type\":4,\"party\":{{\"id\":\"{Key}\"}}}}]}}", true)]
-    [InlineData($"{{\"activities\":[{{\"type\":0,\"party\":{{\"id\":\"{Key}\"}}}}]}}", false)] // a game's party, whatever it says
-    [InlineData("{\"activities\":[{\"type\":4,\"party\":{\"id\":\"spotify:1\"}}]}", false)]
-    [InlineData("{\"activities\":[{\"type\":4,\"party\":{\"id\":42}}]}", false)]
-    [InlineData("{\"activities\":[{\"type\":4,\"party\":\"x\"}]}", false)]
-    [InlineData("{\"activities\":[{\"type\":\"4\"}]}", false)]
-    [InlineData("{\"activities\":[1,null,\"x\"]}", false)]
-    [InlineData("{\"activities\":{}}", false)]
-    [InlineData("{}", false)]
-    [InlineData("[]", false)]
-    public void AKeyIsReadOnlyFromWhereItGoes(string presence, bool found)
-    {
-        using var document = JsonDocument.Parse(presence);
-        Assert.Equal(found ? Key : null, FriendKeyCarrier.Read(document.RootElement));
+        using var req = DiscordRest.BuildRequest(HttpMethod.Get, "users/@me", null);
+        Assert.True(req.Headers.Contains("Origin"));
+        Assert.NotNull(req.Headers.Referrer);
+        Assert.True(req.Headers.Contains("X-Discord-Locale"));
+        Assert.True(req.Headers.Contains("X-Discord-Timezone"));
+        Assert.True(req.Headers.Contains("X-Debug-Options"));
+        Assert.True(req.Headers.Contains("X-Super-Properties"));
+        Assert.Equal("empty", req.Headers.GetValues("Sec-Fetch-Dest").Single());
+        Assert.Equal("cors", req.Headers.GetValues("Sec-Fetch-Mode").Single());
+        Assert.Equal("same-origin", req.Headers.GetValues("Sec-Fetch-Site").Single());
+        Assert.Equal("?0", req.Headers.GetValues("sec-ch-ua-mobile").Single());
+        Assert.Equal("\"Windows\"", req.Headers.GetValues("sec-ch-ua-platform").Single());
+        Assert.Contains("Google Chrome", req.Headers.GetValues("sec-ch-ua").Single(), StringComparison.Ordinal);
+        Assert.Equal("focused", DiscordRest.Properties(focused: true)["client_app_state"]!.GetValue<string>());
+        Assert.Equal("unfocused", DiscordRest.Properties(focused: false)["client_app_state"]!.GetValue<string>());
     }
 
     [Fact]
-    public void TheEchoSaysWhetherTheKeyCameBackAndWhichFieldsDid()
+    public void DiscordStatusRoundTripsThroughPreloadedUserSettingsProto()
     {
-        JsonElement Sessions(string json) { using var d = JsonDocument.Parse(json); return d.RootElement.Clone(); }
-        var kept = Sessions($"[{{\"session_id\":\"all\",\"activities\":[{{\"type\":4,\"name\":\"Custom Status\",\"party\":{{\"id\":\"{Key}\"}}}}]}}]");
-        Assert.Equal(FriendKeyCarrier.Echo.Shown, FriendKeyCarrier.Find(kept, Key));
-        Assert.Equal("name, party, type", FriendKeyCarrier.FieldsKept(kept));
-        var stripped = Sessions("[{\"session_id\":\"all\",\"activities\":[{\"type\":4,\"name\":\"Custom Status\"}]}]");
-        Assert.Equal(FriendKeyCarrier.Echo.Absent, FriendKeyCarrier.Find(stripped, Key));
-        Assert.Equal("name, type", FriendKeyCarrier.FieldsKept(stripped));
-        Assert.Equal(FriendKeyCarrier.Echo.Hidden, FriendKeyCarrier.Find(Sessions($"[{{\"hidden_activities\":[{{\"type\":4,\"party\":{{\"id\":\"{Key}\"}}}}]}}]"), Key));
-        Assert.Equal(FriendKeyCarrier.Echo.Absent, FriendKeyCarrier.Find(Sessions("[]"), Key));
-        Assert.Equal("none", FriendKeyCarrier.FieldsKept(Sessions("{}")));
+        var patch = new Dictionary<string, JsonElement> { ["status"] = JsonSerializer.SerializeToElement("dnd") };
+        var encoded = DiscordUserSettings.Patch([], patch);
+        Assert.NotNull(encoded);
+        var decoded = DiscordUserSettings.Decode(encoded!);
+        Assert.Equal("dnd", decoded["status"]?.GetValue<string>());
     }
 
-    [Theory]
-    [InlineData(4002, 100, true)]
-    [InlineData(4000, 4999, true)]
-    [InlineData(4002, 5000, false)] // long after: not the key's doing
-    [InlineData(1000, 100, false)]
-    [InlineData(4004, 100, false)]
-    [InlineData(null, 100, false)]
-    public void OnlyACloseRightAfterTheKeyBlamesIt(int? code, long ms, bool blamed) =>
-        Assert.Equal(blamed, DiscordSession.KeyRefused(code, ms));
+    [Fact]
+    public void CacheHandlesSupplementalVoicePassiveUpdateV2ReactionManyAndObfuscatedChannels()
+    {
+        var cache = new DiscordCache();
+        using var ready = JsonDocument.Parse("""
+            {
+              "user": { "id": "1", "username": "me" },
+              "users": [{ "id": "2", "username": "friend" }],
+              "guilds": [{
+                "id": "10",
+                "properties": { "name": "Srv", "owner_id": "99" },
+                "roles": [{ "id": "10", "permissions": "1024", "position": 0, "color": 0, "name": "@everyone" }],
+                "channels": [
+                  { "id": "100", "type": 0, "name": "general", "flags": 0 },
+                  { "id": "101", "type": 0, "name": "___hidden___", "flags": 131072 },
+                  { "id": "102", "type": 2, "name": "Voice", "flags": 0 }
+                ]
+              }]
+            }
+            """);
+        cache.LoadReady(ready.RootElement);
+        Assert.True(cache.CanSee("100"));
+        Assert.False(cache.CanSee("101"));
+
+        using var supp = JsonDocument.Parse("""
+            {
+              "guilds": [{
+                "id": "10",
+                "voice_states": [{ "user_id": "2", "channel_id": "102", "self_mute": false, "self_deaf": false }]
+              }]
+            }
+            """);
+        var suppEvents = cache.Apply("READY_SUPPLEMENTAL", supp.RootElement);
+        Assert.Contains(suppEvents, e => e.Name == "discord.changed");
+
+        using var passive = JsonDocument.Parse("""
+            {
+              "guild_id": "10",
+              "removed_voice_states": ["2"],
+              "updated_voice_states": []
+            }
+            """);
+        var passiveEvents = cache.Apply("PASSIVE_UPDATE_V2", passive.RootElement);
+        Assert.Contains(passiveEvents, e => e.Name == "discord.changed");
+
+        using var many = JsonDocument.Parse("""
+            {
+              "channel_id": "100",
+              "message_id": "500",
+              "reactions": [{ "emoji": { "name": "🔥" }, "users": ["1", "2"] }]
+            }
+            """);
+        var reactEvents = cache.Apply("MESSAGE_REACTION_ADD_MANY", many.RootElement);
+        Assert.Equal(2, reactEvents.Count(e => e.Name == "discord.reaction"));
+    }
 
     // ---- no switch (3.26.0) ----
 
@@ -400,16 +429,10 @@ public sealed class FriendLinkTests
     }
 
     [Fact]
-    public void OnlyAnActualFriendWhoIsOnlineWithAKeyIsLinked()
+    public void PresencePartyIdKeysAreIgnoredByLinkPeers()
     {
         var cache = CacheWithFriends();
-        Assert.Equal((B, Key), Assert.Single(cache.LinkPeers()));
-        Assert.True(cache.TakeLinkPeersChanged());
-        Assert.False(cache.TakeLinkPeersChanged());
-        using var offline = JsonDocument.Parse($"{{\"user\":{{\"id\":\"{B}\"}},\"status\":\"offline\",\"activities\":[]}}");
-        cache.Apply("PRESENCE_UPDATE", offline.RootElement);
         Assert.Empty(cache.LinkPeers());
-        Assert.True(cache.TakeLinkPeersChanged());
     }
 
     [Fact]
@@ -426,5 +449,106 @@ public sealed class FriendLinkTests
         Assert.Contains("Hades II", text);
         Assert.NotEmpty(cache.ClearExoGames());
         Assert.DoesNotContain("Hades II", JsonSerializer.Serialize(cache.Friends()));
+    }
+
+    [Fact]
+    public void EvaluateKeptMetaParsesBuildAndCapabilities()
+    {
+        var both = DiscordRest.EvaluateKeptMeta("681034 1767421", TimeSpan.FromHours(2));
+        Assert.Equal(681034, both.Build);
+        Assert.Equal(1767421, both.Capabilities);
+        Assert.False(both.Stale);
+
+        var legacy = DiscordRest.EvaluateKeptMeta("681034", TimeSpan.FromDays(2));
+        Assert.Equal(681034, legacy.Build);
+        Assert.Null(legacy.Capabilities);
+        Assert.True(legacy.Stale);
+    }
+
+    [Fact]
+    public void QosHeartbeatMatchesWebClientShape()
+    {
+        var active = DiscordSession.BuildQosHeartbeat(42, foregrounded: true, rtcConnected: true);
+        Assert.Equal(42, active["seq"]!.GetValue<long>());
+        Assert.Equal(31, active["qos"]!["ver"]!.GetValue<int>());
+        Assert.True(active["qos"]!["active"]!.GetValue<bool>());
+        Assert.Equal(["foregrounded", "rtc_connected"], active["qos"]!["reasons"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray());
+
+        var idle = DiscordSession.BuildQosHeartbeat(null, foregrounded: false, rtcConnected: false);
+        Assert.Equal(0, idle["seq"]!.GetValue<long>());
+        Assert.False(idle["qos"]!["active"]!.GetValue<bool>());
+        Assert.Empty(idle["qos"]!["reasons"]!.AsArray());
+    }
+
+    [Fact]
+    public void ReadyAndProtoUpdateDecodeStatusAndGuildFolders()
+    {
+        var changes = new Dictionary<string, JsonElement>
+        {
+            ["status"] = JsonDocument.Parse("\"dnd\"").RootElement.Clone(),
+            ["guildFolders"] = JsonDocument.Parse("""[{"id":"99","name":"Squad","color":16711680,"guildIds":["200","100"]}]""").RootElement.Clone(),
+        };
+        var proto = DiscordUserSettings.Patch([], changes);
+        Assert.NotNull(proto);
+        Assert.Equal("dnd", DiscordUserSettings.DecodeStatus(proto!));
+        var decodedFolders = DiscordUserSettings.DecodeFolders(proto!);
+        Assert.NotNull(decodedFolders);
+        Assert.Single(decodedFolders!);
+        Assert.Equal("99", decodedFolders[0].Id);
+        Assert.Equal("Squad", decodedFolders[0].Name);
+        Assert.Equal(16711680, decodedFolders[0].Color);
+        Assert.Equal(["200", "100"], decodedFolders[0].Guilds);
+
+        var b64 = Convert.ToBase64String(proto!);
+        var cache = new DiscordCache();
+        using var ready = JsonDocument.Parse($$"""
+            {
+              "user": { "id": "{{A}}", "username": "me" },
+              "guilds": [
+                { "id": "100", "name": "One", "roles": [], "channels": [] },
+                { "id": "200", "name": "Two", "roles": [], "channels": [] }
+              ],
+              "private_channels": [],
+              "user_settings_proto": "{{b64}}"
+            }
+            """);
+        cache.LoadReady(ready.RootElement);
+        Assert.Equal("dnd", cache.MyStatus);
+
+        var proto2 = DiscordUserSettings.Patch(proto!, new Dictionary<string, JsonElement>
+        {
+            ["status"] = JsonDocument.Parse("\"idle\"").RootElement.Clone(),
+        });
+        using var upd = JsonDocument.Parse($$$"""{"settings":{"type":1,"proto":"{{{Convert.ToBase64String(proto2!)}}}"}}""");
+        var evs = cache.Apply("USER_SETTINGS_PROTO_UPDATE", upd.RootElement);
+        Assert.Equal("idle", cache.MyStatus);
+        Assert.Contains(evs, e => e.Name == "discord.presence");
+    }
+
+    [Fact]
+    public void ChannelUnreadAndPinsDispatchesUpdateCache()
+    {
+        var cache = new DiscordCache();
+        using var ready = JsonDocument.Parse($$"""
+            {
+              "user": { "id": "{{A}}", "username": "me" },
+              "guilds": [
+                { "id": "100", "owner_id": "{{A}}", "name": "One", "roles": [], "channels": [
+                  { "id": "500", "type": 0, "name": "general", "last_message_id": "10" }
+                ]}
+              ],
+              "private_channels": [],
+              "read_state": { "version": 1, "entries": [{ "id": "500", "last_message_id": "10", "mention_count": 0 }] }
+            }
+            """);
+        cache.LoadReady(ready.RootElement);
+
+        using var unread = JsonDocument.Parse("""{"guild_id":"100","channel_unread_updates":[{"id":"500","last_message_id":"20"}]}""");
+        var uEvents = cache.Apply("CHANNEL_UNREAD_UPDATE", unread.RootElement);
+        Assert.Contains(uEvents, e => e.Name == "discord.unread");
+
+        using var pins = JsonDocument.Parse("""{"guild_id":"100","channel_id":"500"}""");
+        var pEvents = cache.Apply("CHANNEL_PINS_UPDATE", pins.RootElement);
+        Assert.Contains(pEvents, e => e.Name == "discord.changed");
     }
 }

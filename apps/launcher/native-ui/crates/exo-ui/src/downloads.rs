@@ -3,12 +3,12 @@ use crate::settings::set_btn;
 use crate::state::AppState;
 use exo_kit::{
     FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, SPRING_QUICK,
-    TRANSPARENT, bad, fg_muted, glass_button, hover_fill, icon_chevron_down, icon_chevron_up,
+    TRANSPARENT, bad, fg_muted, glass_button_opt, hover_fill, icon_chevron_down, icon_chevron_up,
     icon_close, icon_pause, icon_play, modal_card_transition, pressed_fill, primary_button, scaled,
     scrim_fill, switch_pill_keyed, track_fill, type_body, type_section, type_small, type_title,
 };
 use exo_rpc::{ActionResult, HostEvent, InstallProgress};
-use rune::{Cursor, El, LiquidGlass, ScrollSpec, Transition, col, el, row, text};
+use rune::{Cursor, El, ScrollSpec, Transition, col, el, row, text};
 use serde_json::{Value, json};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -132,11 +132,52 @@ pub fn register_events(reg: &mut EventRegistry) {
         if state.downloads.open && !p.is_active {
             state.load_downloads();
         }
-        state.downloads.open
+        let noticed = state.apply_transfer_notice(&p);
+        state.downloads.open || noticed
     });
 }
 
 impl AppState {
+    fn apply_transfer_notice(&mut self, p: &InstallProgress) -> bool {
+        let Some(game_id) = p.game_id.as_deref().filter(|id| !id.is_empty()) else {
+            return false;
+        };
+        let key = format!("transfer:{game_id}");
+        if p.phase != "failed" {
+            return (p.is_active || p.phase == "completed" || p.phase == "cancelled")
+                && self.dismiss_notice_by_key(&key);
+        }
+        let title = self
+            .games
+            .iter()
+            .find(|g| g.id == game_id)
+            .map(|g| g.title.clone());
+        let text = p
+            .status
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "Install failed.".into());
+        let action = game_id
+            .starts_with("steam:")
+            .then(|| crate::notice::NoticeActionSpec {
+                label: "Open Steam".into(),
+                primary: false,
+                danger: false,
+                busy: false,
+                confirm: None,
+                kind: crate::notice::NoticeActionKind::OpenSteamDownloads,
+            });
+        self.push_rich_notice(crate::notice::RichNoticeSpec {
+            key_id: Some(key),
+            title,
+            text,
+            tone: crate::state::NoticeTone::Bad,
+            action,
+            ..Default::default()
+        });
+        true
+    }
+
     pub fn open_downloads(&mut self) {
         self.close_context_menu();
         self.close_dropdown();
@@ -409,7 +450,7 @@ fn group_section(title: &'static str, rows: Vec<El>) -> El {
         .child(col().w_full().gap(2.0).children(rows))
 }
 
-pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn layers(s: &AppState) -> Vec<El> {
     let list = s.downloads.list.as_ref();
     let lines = list.map(|l| l.lines.as_slice()).unwrap_or(&[]);
     let busy_all = s.downloads.busy_key.as_deref() == Some("all");
@@ -463,7 +504,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         );
         if list.is_none() {
             err_row = err_row.child(
-                glass_button("dl-retry", "Try again", None)
+                glass_button_opt("dl-retry", "Try again", None, false)
                     .on_press(|s: &mut AppState| s.load_downloads()),
             );
         }
@@ -506,17 +547,18 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
                 let mut acts = Vec::new();
                 if line.can_pause {
                     let gid = line.game_id.clone();
-                    let mut pb = glass_button("dl-pause", "Pause", Some(icon_pause(14.0, FG)))
-                        .key(format!("dl-pause-{}", line.game_id))
-                        .disabled(busy)
-                        .opacity(if busy { 0.45 } else { 1.0 });
+                    let mut pb =
+                        glass_button_opt("dl-pause", "Pause", Some(icon_pause(14.0, FG)), false)
+                            .key(format!("dl-pause-{}", line.game_id))
+                            .disabled(busy)
+                            .opacity(if busy { 0.45 } else { 1.0 });
                     if !busy {
                         pb = pb.on_press(move |s: &mut AppState| s.downloads_pause(gid.clone()));
                     }
                     acts.push(pb);
                 }
                 let gid_stop = line.game_id.clone();
-                let mut sb = glass_button("dl-stop", "Stop", None)
+                let mut sb = glass_button_opt("dl-stop", "Stop", None, false)
                     .key(format!("dl-stop-{}", line.game_id))
                     .disabled(busy)
                     .opacity(if busy { 0.45 } else { 1.0 });
@@ -576,10 +618,11 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
                 let busy = s.downloads.busy_key.as_deref() == Some(line.game_id.as_str());
                 let gid_res = line.game_id.clone();
                 let gid_rm = line.game_id.clone();
-                let mut rb = glass_button("dl-resume", "Resume", Some(icon_play(14.0, FG)))
-                    .key(format!("dl-resume-{}", line.game_id))
-                    .disabled(busy)
-                    .opacity(if busy { 0.45 } else { 1.0 });
+                let mut rb =
+                    glass_button_opt("dl-resume", "Resume", Some(icon_play(14.0, FG)), false)
+                        .key(format!("dl-resume-{}", line.game_id))
+                        .disabled(busy)
+                        .opacity(if busy { 0.45 } else { 1.0 });
                 if !busy {
                     rb = rb.on_press(move |s: &mut AppState| s.downloads_resume(gid_res.clone()));
                 }
@@ -599,7 +642,6 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         body = body.child(group_section("Paused", rows));
     }
 
-    let _ = blur;
     let card = col()
         .key("downloads-sheet")
         .w(scaled(880.0))
@@ -611,7 +653,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(true, |s: &mut AppState| s.close_downloads())
@@ -641,6 +683,41 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stopped_steam_download_offers_steam_and_clears_when_it_resumes() {
+        let mut s = AppState::default();
+        let failed = |id: &str, status: &str| {
+            HostEvent::InstallProgress(InstallProgress {
+                game_id: Some(id.into()),
+                phase: "failed".into(),
+                status: Some(status.into()),
+                ..Default::default()
+            })
+        };
+        assert!(s.apply_host_event(failed("steam:730", "Steam stopped the download.")));
+        let n = s.notices.back().expect("failure notice");
+        assert_eq!(n.text, "Steam stopped the download.");
+        assert_eq!(
+            n.action.as_ref().map(|a| a.label.as_str()),
+            Some("Open Steam")
+        );
+
+        assert!(s.apply_host_event(failed("epic:abc", "The install didn't finish.")));
+        assert!(s.notices.back().expect("epic notice").action.is_none());
+
+        s.apply_host_event(HostEvent::InstallProgress(InstallProgress {
+            game_id: Some("steam:730".into()),
+            phase: "downloading".into(),
+            is_active: true,
+            ..Default::default()
+        }));
+        assert!(
+            s.notices
+                .iter()
+                .all(|n| n.key_id.as_deref() != Some("transfer:steam:730"))
+        );
+    }
 
     #[test]
     fn speed_formatting_matches_react_thresholds() {
@@ -688,7 +765,7 @@ mod tests {
             paused_by_player: false,
             held: None,
         });
-        let els = layers(&s, true);
+        let els = layers(&s);
         assert_eq!(els.len(), 1);
         s.close_downloads();
         assert!(!s.downloads.open);

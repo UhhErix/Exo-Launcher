@@ -85,16 +85,28 @@ public static partial class AppLog
 #endif
     }
 
+    internal static void WriteImmediate(string level, string message)
+    {
+        try
+        {
+            WriteLine(LogPath.Value, FormatLine(level, message));
+        }
+        catch { }
+    }
+
+    private static string FormatLine(string level, string message)
+    {
+        var bounded = message.Length > 32768 ? message[..32768] + " [truncated]" : message;
+        var redacted = Redact(bounded);
+        if (redacted.Length > 32768) redacted = redacted[..32768] + " [truncated]";
+        return $"[{DateTime.UtcNow:O}] {level} {redacted}{Environment.NewLine}";
+    }
+
     private static void Write(string level, string message)
     {
         try
         {
-            var path = LogPath.Value;
-            var bounded = message.Length > 32768 ? message[..32768] + " [truncated]" : message;
-            var redacted = Redact(bounded);
-            if (redacted.Length > 32768) redacted = redacted[..32768] + " [truncated]";
-            var line = $"[{DateTime.UtcNow:O}] {level} {redacted}{Environment.NewLine}";
-            Pending.Writer.TryWrite((path, line));
+            Pending.Writer.TryWrite((LogPath.Value, FormatLine(level, message)));
         }
         catch { /* best-effort */ }
     }

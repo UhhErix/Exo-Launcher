@@ -280,7 +280,8 @@ jobs:
             apps/launcher/mouse/node_modules
           key: ${{ runner.os }}-node24-web-nm-${{ hashFiles('apps/launcher/ui/package-lock.json', 'apps/launcher/mouse/package-lock.json') }}
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('apps/launcher/**/*.csproj', 'apps/launcher/global.json') }}
@@ -295,3 +296,12 @@ jobs:
 
       - name: .NET tests
         run: dotnet test ExoLauncher.Tests/ExoLauncher.Tests.csproj -p:Platform=x64 -nologo
+
+      - name: Save cache (main only)
+        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('apps/launcher/**/*.csproj', 'apps/launcher/global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-

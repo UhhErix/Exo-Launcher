@@ -4,8 +4,8 @@ use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE,
     SPRING_QUICK, amoled_card, bad, fg_faint, fg_muted, glass_control_fill, glass_rim, good,
     hairline, hover_fill, icon_chevron_down, icon_chevron_left, icon_heart, icon_search,
-    primary_button, scaled, slider_track, status_badge, track_fill, type_body, type_control,
-    type_section, type_small, type_title,
+    primary_button, scaled, slider_range, slider_track, status_badge, track_fill, type_body,
+    type_control, type_section, type_small, type_title,
 };
 use exo_rpc::{
     ActionResult, AudioFormatOption, AudioFormatsReply, AudioReadReply, DevicesImageReply,
@@ -434,7 +434,7 @@ pub fn device_page_shell(
     let mut iter = panels.into_iter();
     let col_a: Vec<El> = iter.by_ref().take(cut).collect();
     let col_b: Vec<El> = iter.collect();
-    device_page_shell_inner(header, col_a, col_b, false, on_back)
+    device_page_shell_inner(header, col_a, col_b, on_back)
 }
 
 pub fn device_page_shell_columns_no_rescan(
@@ -443,23 +443,13 @@ pub fn device_page_shell_columns_no_rescan(
     col_b: Vec<El>,
     on_back: impl Fn(&mut AppState) + 'static,
 ) -> El {
-    device_page_shell_inner(header, col_a, col_b, false, on_back)
-}
-
-pub fn device_page_shell_band(
-    header: DevicePageHeader,
-    col_a: Vec<El>,
-    col_b: Vec<El>,
-    on_back: impl Fn(&mut AppState) + 'static,
-) -> El {
-    device_page_shell_inner(header, col_a, col_b, true, on_back)
+    device_page_shell_inner(header, col_a, col_b, on_back)
 }
 
 fn device_page_shell_inner(
     header: DevicePageHeader,
     col_a: Vec<El>,
     col_b: Vec<El>,
-    stretch_band: bool,
     on_back: impl Fn(&mut AppState) + 'static,
 ) -> El {
     let DevicePageHeader {
@@ -541,39 +531,8 @@ fn device_page_shell_inner(
         );
     }
 
-    let stretch_last = |mut list: Vec<El>| -> Vec<El> {
-        if stretch_band && let Some(last) = list.pop() {
-            list.push(last.grow(1.0));
-        }
-        list
-    };
-    let col_a = stretch_last(col_a);
-    let col_b = stretch_last(col_b);
-
     let right = if col_b.is_empty() {
-        let c = col().w_full().gap(12.0).children(col_a);
-        if stretch_band { c.h_full() } else { c }
-    } else if stretch_band {
-        row()
-            .w_full()
-            .h_full()
-            .gap(12.0)
-            .child(
-                col()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .h_full()
-                    .gap(12.0)
-                    .children(col_a),
-            )
-            .child(
-                col()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .h_full()
-                    .gap(12.0)
-                    .children(col_b),
-            )
+        col().w_full().gap(12.0).children(col_a)
     } else {
         row()
             .w_full()
@@ -1333,21 +1292,18 @@ fn reenable_reason_detail(reason: Option<&str>) -> &'static str {
     }
 }
 
-fn apo_panel(s: &AppState) -> Option<El> {
+fn apo_rows(s: &AppState) -> Option<Vec<El>> {
     let Some(eq) = s.pc.audio_ui.eq.as_ref() else {
         let err = s.pc.audio_ui.eq_load_error.clone()?;
-        return Some(device_panel(
-            "Exo EQ",
-            vec![device_row(
-                "Exo EQ couldn't load",
-                None,
-                Some(err),
-                Some(
-                    device_btn("eq-retry", "Try again", false)
-                        .on_press(|s: &mut AppState| s.refresh_eq_state()),
-                ),
-            )],
-        ));
+        return Some(vec![device_row(
+            "Exo EQ couldn't load",
+            None,
+            Some(err),
+            Some(
+                device_btn("eq-retry", "Try again", false)
+                    .on_press(|s: &mut AppState| s.refresh_eq_state()),
+            ),
+        )]);
     };
 
     let busy = s.pc.audio_ui.eq_busy_row.is_some();
@@ -1458,15 +1414,12 @@ fn apo_panel(s: &AppState) -> Option<El> {
             primary_button("eq-install", "Install", None)
                 .on_press(|s: &mut AppState| s.eq_act("install", "install", json!({})))
         };
-        return Some(device_panel(
-            "Exo EQ",
-            vec![device_row(
-                label,
-                Some(detail.into()),
-                eq_error_for(s, "install"),
-                Some(btn),
-            )],
-        ));
+        return Some(vec![device_row(
+            label,
+            Some(detail.into()),
+            eq_error_for(s, "install"),
+            Some(btn),
+        )]);
     }
 
     if apo.installed && !apo.system_eq_enabled {
@@ -1518,14 +1471,10 @@ fn apo_panel(s: &AppState) -> Option<El> {
             ),
         ));
     }
-    if rows.is_empty() {
-        None
-    } else {
-        Some(device_panel("Exo EQ", rows))
-    }
+    if rows.is_empty() { None } else { Some(rows) }
 }
 
-fn headphone_panel(s: &AppState) -> Option<El> {
+fn headphone_rows(s: &AppState) -> Option<Vec<El>> {
     let eq = s.pc.audio_ui.eq.as_ref()?;
     let busy_all = s.pc.audio_ui.eq_busy_row.is_some();
     let busy_hp = s.pc.audio_ui.eq_busy_row.as_deref() == Some("headphone");
@@ -1670,10 +1619,10 @@ fn headphone_panel(s: &AppState) -> Option<El> {
         rows.push(results);
     }
 
-    Some(device_panel("Headphones", rows))
+    Some(rows)
 }
 
-fn sound_panel(s: &AppState) -> Option<El> {
+fn sound_rows(s: &AppState) -> Option<Vec<El>> {
     let eq = s.pc.audio_ui.eq.as_ref()?;
     if !eq.apo.installed && !eq.apo.system_eq_enabled {
         return None;
@@ -1707,49 +1656,38 @@ fn sound_panel(s: &AppState) -> Option<El> {
 
     let comparing = eq.comparing;
     let busy_compare = s.pc.audio_ui.eq_busy_row.as_deref() == Some("compare");
-    let mut rows = vec![
-        device_row(
-            "Exo EQ",
-            Some(detail),
-            eq_error_for(s, "compare"),
-            Some(
-                row()
-                    .gap(8.0)
-                    .center_y()
-                    .child(status_badge(
-                        if comparing {
-                            "Bypassed".into()
-                        } else {
-                            active_label.into()
-                        },
-                        if comparing {
-                            BadgeTone::Neutral
-                        } else {
-                            BadgeTone::Good
-                        },
-                    ))
-                    .child(
-                        device_btn(
-                            "eq-compare",
-                            if comparing { "Back to EQ" } else { "Compare" },
-                            busy_compare,
-                        )
-                        .on_press(move |s: &mut AppState| {
-                            s.eq_act("compare", "compare", json!({ "on": !comparing }));
-                        }),
-                    ),
-            ),
+    let mut rows = vec![device_row(
+        "Game profiles",
+        Some(detail),
+        eq_error_for(s, "compare"),
+        Some(
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(status_badge(
+                    if comparing {
+                        "Bypassed".into()
+                    } else {
+                        active_label.into()
+                    },
+                    if comparing {
+                        BadgeTone::Neutral
+                    } else {
+                        BadgeTone::Good
+                    },
+                ))
+                .child(
+                    device_btn(
+                        "eq-compare",
+                        if comparing { "Back to EQ" } else { "Compare" },
+                        busy_compare,
+                    )
+                    .on_press(move |s: &mut AppState| {
+                        s.eq_act("compare", "compare", json!({ "on": !comparing }));
+                    }),
+                ),
         ),
-        device_row(
-            "Game profiles",
-            Some(
-                "Shooters → Footsteps · Story & RPG → Vocal · Action & Racing → Immersion · Rhythm & desktop → Reference."
-                    .into(),
-            ),
-            None,
-            Some(status_badge("Auto".into(), BadgeTone::Good)),
-        ),
-    ];
+    )];
 
     if eq.preamp < 0.0 {
         rows.push(device_row(
@@ -1789,10 +1727,10 @@ fn sound_panel(s: &AppState) -> Option<El> {
         ));
     }
 
-    Some(device_panel("Sound", rows))
+    Some(rows)
 }
 
-fn night_panel(s: &AppState) -> Option<El> {
+fn night_rows(s: &AppState) -> Option<Vec<El>> {
     let eq = s.pc.audio_ui.eq.as_ref()?;
     if !eq.apo.installed && !eq.apo.system_eq_enabled {
         return None;
@@ -1801,7 +1739,7 @@ fn night_panel(s: &AppState) -> Option<El> {
     let on = night.on;
     let sync = night.sync;
     let mut rows = vec![device_row(
-        "Night Shift",
+        "Softer highs at night",
         (night.on && night.now).then(|| "On now".into()),
         eq_error_for(s, "night"),
         Some(
@@ -1910,7 +1848,7 @@ fn night_panel(s: &AppState) -> Option<El> {
             }
         }
     }
-    Some(device_panel("Night Shift", rows))
+    Some(rows)
 }
 
 fn endpoint_panel(
@@ -2057,6 +1995,15 @@ fn endpoint_panel(
                 }
             }
         });
+        let slider = slider_range(
+            slider,
+            f64::from(shown),
+            0.0,
+            100.0,
+            1.0,
+            true,
+            move |s: &mut AppState, v| s.commit_audio_volume(is_output, v.round() as i32),
+        );
         rows.push(device_row(
             "Volume",
             None,
@@ -2204,17 +2151,21 @@ pub fn audio_page(
 
     let mut col_a = Vec::new();
     let mut col_b = Vec::new();
-    if let Some(p) = apo_panel(s) {
-        col_a.push(p);
+    let mut sound = Vec::new();
+    if let Some(rows) = apo_rows(s) {
+        sound.extend(rows);
     }
-    if worn && let Some(p) = headphone_panel(s) {
-        col_a.push(p);
+    if worn && let Some(rows) = headphone_rows(s) {
+        sound.extend(rows);
     }
-    if let Some(p) = sound_panel(s) {
-        col_a.push(p);
+    if let Some(rows) = sound_rows(s) {
+        sound.extend(rows);
     }
-    if let Some(p) = night_panel(s) {
-        col_a.push(p);
+    if let Some(rows) = night_rows(s) {
+        sound.extend(rows);
+    }
+    if !sound.is_empty() {
+        col_a.push(device_panel("Sound", sound));
     }
     if let (Some(_), Some(ep)) = (output, s.pc.audio.as_ref().and_then(|a| a.output.as_ref())) {
         col_a.push(endpoint_panel(s, "Output", true, ep));
@@ -2226,7 +2177,7 @@ pub fn audio_page(
         col_b.push(p);
     }
 
-    device_page_shell_band(
+    device_page_shell_columns_no_rescan(
         DevicePageHeader {
             key: "room-devices-audio",
             name: display_name,
@@ -2307,7 +2258,7 @@ mod tests {
         s.open_system_eq_disclosure();
         assert!(s.pc.audio_ui.system_eq_disclosure_open);
         assert!(!s.pc.audio_ui.eq.as_ref().unwrap().apo.system_eq_enabled);
-        assert!(apo_panel(&s).is_some());
+        assert!(apo_rows(&s).is_some());
 
         s.cancel_system_eq_disclosure();
         assert!(!s.pc.audio_ui.system_eq_disclosure_open);
@@ -2342,7 +2293,7 @@ mod tests {
             action.kind,
             NoticeActionKind::ReenableSystemEq { .. }
         ));
-        assert!(apo_panel(&s).is_some());
+        assert!(apo_rows(&s).is_some());
 
         let mut healthy = s.pc.audio_ui.eq.clone().unwrap();
         healthy.apo.needs_reenable = false;

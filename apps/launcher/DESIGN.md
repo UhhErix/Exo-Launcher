@@ -1,9 +1,11 @@
 # Design
 
 <!-- impeccable:design-map -->
+Map: native-ui/crates/exo-kit/src/tokens.rs
+Map: native-ui/crates/exo-kit/src/glass.rs
+Map: native-ui/crates/exo-kit/assets/fonts
 Map: ui/src/tokens.css
 Map: ui/public/fonts
-Map: ExoLauncher/Assets/Fonts/Goeist-Variable.ttf
 Map: ui/src/styles/chrome.css
 Map: ui/css-design.config.mjs
 Map: ui/src/styles/system.css

@@ -6,6 +6,24 @@ How Exo's glass works and why: what Apple's Liquid Glass is, what Exo takes from
 
 The material is Glassy UI's (github.com/alexburlis/glassyui, MIT, `styles/liquid.css`): a frosted backdrop (blur, dim, contrast 0.9, saturation) under a thin neutral slab, a sheen at the top, a rim lit from the top left with a softer counter light bottom right, shade just inside it, a faint blue and pink split and a specular ring (`--glassy-rim`, `--glassy-ring`, `--glassy-sheen`), and a soft two-layer shadow. Light, Dark and Void share it; only the slab, the dim, the ink and the shadows change.
 
+## Native glass (Rune)
+
+Everything below this section describes classic glass (CSS in WebView2). The native UI draws glass with Rune's `El::liquid_glass`, one shader pass per glass shape over a shared capture of what the window has already drawn (`docs/exo/liquid-glass.md` in the Rune fork). Exo's tiers are `ExoGlass` in `native-ui/crates/exo-kit/src/glass.rs`; nothing in `exo-ui` builds a `LiquidGlass` of its own.
+
+| Tier | Used for | Frost | Black tint | Refraction, bevel |
+| --- | --- | --- | --- | --- |
+| `Bar` | the Bar's capsules, the player and voice bars | 4.5 | 0.44 | 2.0, 14 |
+| `Control` | buttons, fields, chips on the page | 4 | 0.46 | 2.0, 13 |
+| `ClearMedia` | a label over art | 2.5 | 0.38 | 2.2, 13 |
+| `Menu`, `Popover` | menus, selects, popovers | 14 | 0.76 | 1.8, 16 |
+| `Panel`, `Sheet`, `Notice` | sheets, dialogs, Ctrl+K, toasts | 16 | 0.82 | 1.8, 18 |
+| `Tinted(color)` | a call or recording pill | 5 | the color | 2.0, 13 |
+
+- **The lens.** The bevel bends the backdrop inward (Rune caps the bend at 68% of the shape's half height, so a 36 pt capsule bends up to 12 pt at its rim), splits it slightly by color (`dispersion`), and is nearly unfrosted at the rim. Across the bevel the black tint and the bright-backdrop dimming thin out (Rune's crystal lip, up to 70% at the edge), so the bent backdrop shows through the edge of dark glass while the flat middle keeps its tone.
+- **Legibility.** Words sit in the flat middle, where the lip is zero. Over a pure white backdrop the middle of `Bar` is 5.7:1 against white words, `Control` 6.0:1, `ClearMedia` 4.8:1 (sRGB arithmetic: Rune's 28% dimming over bright backdrops, then the tint).
+- **Policy.** `EXO_GLASS_POLICY` is `GlassPolicy::Glass`: glass stays on whatever Windows' Transparency effects switch says, and there is no Material setting in the native UI. Rune turns glass into a solid fill by itself in two cases: a Windows contrast theme (the theme's window color with a text-color edge) and a software or too-slow GPU (the tier's `still` fill).
+- **Where it goes.** Only on what floats and on page-level controls. A control inside a sheet, menu or popover is flat (`glass_button_opt(.., false)` and the other `_opt` helpers), because glass inside glass frosts its parent; rows repeated down a scrolling list are flat too. An element with glass carries no fill and no border of its own: Rune paints an element's fill over its glass.
+- **Seeing it.** `cargo run -p exo-kit --example glass_lab -- --snap out.png --size 1280x720 --scale 1` (a debug build; headless snapshots are compiled out of release) draws every tier over stripes, a grid, text and black.
 ## Apple's rules, and Exo's answer to each
 
 From Apple's own sources (developer.apple.com/documentation/technologyoverviews/liquid-glass and its pages, HIG Materials, Color, Toolbars, Scroll views and Accessibility, WWDC25 sessions 219, 356, 323, 284 and 310, WWDC26's 2026 refinements). Apple publishes no blur radii, curves, spring constants or tint amounts; the numbers below are Exo's.

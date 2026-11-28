@@ -47,7 +47,7 @@ internal sealed partial class InterruptMode
     private static Task<string?> QuietAsync() => Task.FromResult<string?>(
         App.Services.Launcher.AnyGameRunning || GameRunningSignal.Running ? "a game"
         : DiscordClient.DiscordSession.Current?.InCall == true ? "a call"
-        : App.MainAppWindow?.WindowIsActive == true ? "Exo in front"
+        : HostWindow.IsActive ? "Exo in front"
         : null);
 
     internal sealed class NativeDevices : IDevices

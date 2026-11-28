@@ -5,10 +5,10 @@ use crate::pc_state::{
 use crate::pc_wp9_actions::UndoTarget;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK,
-    TRANSPARENT, bad, fg_muted, float_line, glass_rim_bottom, glass_rim_top, good, hex, hover_fill,
-    icon_check, icon_chevron_down, icon_chevron_up, icon_search, pressed_fill, scaled,
-    switch_pill_keyed, type_body, type_control, type_section, type_small, warn,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_BASE,
+    SPRING_QUICK, TRANSPARENT, bad, fg_muted, float_line, glass_rim_bottom, glass_rim_top, good,
+    hex, hover_fill, icon_check, icon_chevron_down, icon_chevron_up, icon_search, pressed_fill,
+    scaled, switch_pill_keyed, type_body, type_control, type_section, type_small, warn,
 };
 use exo_rpc::{
     AppFind, AppLeftover, InstalledAppItem, LeftoverSummary, StartupItem, StartupRemovedItem,
@@ -45,6 +45,7 @@ fn apps_pill(key: &'static str, label: &'static str, active: bool) -> El {
         .fill(if active { FG } else { TRANSPARENT })
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(text(label).font(type_control()).color(if active {
             PRIMARY_FG
@@ -94,6 +95,7 @@ fn flat_btn(
         .fill(fill)
         .hover(hover_bg)
         .press(press_bg)
+        .hover_motion(SPRING_QUICK, SPRING_BASE)
         .motion(SPRING_QUICK)
         .child(text(lbl).font(type_control()).color(fg));
     if primary {
@@ -616,85 +618,6 @@ fn ready_section(s: &AppState, programs: &[InstalledAppItem]) -> El {
         ));
     }
 
-    let bloat: Vec<&InstalledAppItem> = programs
-        .iter()
-        .filter(|a| a.bloat.is_some() && is_pickable(a))
-        .collect();
-    if !bloat.is_empty() {
-        let b_names: Vec<String> = bloat.iter().map(|a| a.name.clone()).collect();
-        let b_ids: Vec<String> = bloat.iter().map(|a| a.id.clone()).collect();
-        let is_armed = armed == Some("apps-bloat");
-        let btn_lbl = if is_armed {
-            format!("Uninstall {}?", bloat.len())
-        } else {
-            format!("Remove {}", bloat.len())
-        };
-        sec = sec.child(ready_row(
-            format!(
-                "{} {}",
-                bloat.len(),
-                if bloat.len() == 1 {
-                    "app you didn’t ask for"
-                } else {
-                    "apps you didn’t ask for"
-                }
-            ),
-            Some(names_summary(&b_names)),
-            false,
-            None,
-            flat_btn("apps-remove-bloat".into(), btn_lbl, false, true, busy).on_press(
-                move |s: &mut AppState| {
-                    if s.pc.armed_confirm.as_deref() == Some("apps-bloat") {
-                        s.uninstall_many_apps(b_ids.clone());
-                    } else {
-                        s.pc.armed_confirm = Some("apps-bloat".into());
-                    }
-                },
-            ),
-        ));
-    }
-
-    let unneeded_items: Vec<String> =
-        s.pc.startup_list
-            .as_ref()
-            .map(|st| {
-                st.items
-                    .iter()
-                    .filter(|i| i.unneeded)
-                    .map(|i| i.name.clone())
-                    .collect()
-            })
-            .unwrap_or_default();
-    let unneeded_count = unneeded_items.len()
-        + s.pc
-            .startup_list
-            .as_ref()
-            .map(|st| st.extras.max(0) as usize)
-            .unwrap_or(0);
-    if unneeded_count > 0 {
-        sec = sec.child(ready_row(
-            format!(
-                "{unneeded_count} {} starting with Windows can go",
-                if unneeded_count == 1 {
-                    "thing"
-                } else {
-                    "things"
-                }
-            ),
-            (!unneeded_items.is_empty()).then(|| names_summary(&unneeded_items)),
-            false,
-            s.pc.startup_errors.get("clean").cloned(),
-            flat_btn(
-                "apps-startup-clean".into(),
-                format!("Turn off {unneeded_count}"),
-                false,
-                false,
-                busy,
-            )
-            .on_press(|s: &mut AppState| s.startup_clean_unneeded()),
-        ));
-    }
-
     if let Some(ref junk) = s.pc.junk_items {
         let total: u64 = junk.iter().map(|i| i.bytes).sum();
         if let Some((Some(ref done_line), ref err)) = s.pc.junk_cleaned
@@ -726,7 +649,7 @@ fn ready_section(s: &AppState, programs: &[InstalledAppItem]) -> El {
                 junk_detail,
                 false,
                 s.pc.junk_cleaned.as_ref().and_then(|(_, e)| e.clone()),
-                flat_btn("apps-junk-clean".into(), lbl, false, true, busy).on_press(
+                flat_btn("apps-junk-clean".into(), lbl, false, is_armed, busy).on_press(
                     |s: &mut AppState| {
                         if s.pc.armed_confirm.as_deref() == Some("junk-clean") {
                             s.clean_apps_junk();
@@ -828,6 +751,18 @@ fn ready_section(s: &AppState, programs: &[InstalledAppItem]) -> El {
     sec
 }
 
+fn last_used_label(app: &InstalledAppItem) -> Option<String> {
+    let filled = |v: &Option<String>| {
+        v.as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+    };
+    filled(&app.quiet_since)
+        .map(|q| format!("Before {q}"))
+        .or_else(|| filled(&app.last_opened))
+}
+
 fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> El {
     let id = app.id.clone();
     let is_armed =
@@ -900,12 +835,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
         .unwrap_or("")
         .to_string();
     let size_txt = app.bytes.map(format_bytes).unwrap_or_else(|| "—".into());
-    let last_used = app
-        .quiet_since
-        .as_deref()
-        .map(|q| format!("Before {q}"))
-        .or_else(|| app.last_opened.clone())
-        .unwrap_or_default();
+    let last_used = last_used_label(app).unwrap_or_default();
 
     let action_word = if app.replaces.is_some() {
         "Remove"
@@ -990,11 +920,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             .hover(hover_fill())
             .press(pressed_fill())
             .on_press(move |s: &mut AppState| s.arm_or_confirm_uninstall(&id))
-            .child(
-                text(action_word)
-                    .font(type_control())
-                    .color(apps_danger_fg()),
-            );
+            .child(text(action_word).font(type_control()).color(FG));
         row()
             .key(format!("app-uninst-slot-{}", app.id))
             .absolute(0.0, 0.0)
@@ -1040,6 +966,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
         content_row = content_row.child(
             el().w(scaled(112.0)).child(
                 text(last_used)
+                    .key(format!("app-used-{}", app.id))
                     .font(type_small())
                     .color(apps_secondary())
                     .truncate(),
@@ -1093,6 +1020,17 @@ fn sort_head_btn(key: &'static str, label: &'static str, by: AppsSortBy, s: &App
             }
         })
         .child(inner)
+}
+
+fn startup_off_locked(item: &StartupItem) -> bool {
+    item.read_only || (item.locked && item.lock_kind.as_deref() != Some("updater"))
+}
+
+fn startup_off_detail(item: &StartupItem) -> String {
+    if item.read_only && item.status.as_deref().is_none_or(|st| st.trim().is_empty()) {
+        return "Exo can't turn this one on".into();
+    }
+    startup_detail(item)
 }
 
 fn startup_detail(item: &StartupItem) -> String {
@@ -1297,7 +1235,7 @@ fn startup_line_row(
                 .color(FG)
                 .truncate(),
         )
-        .child(startup_tag_pill(tag_label, tag_tone));
+        .children((!tag_label.is_empty()).then(|| startup_tag_pill(tag_label, tag_tone)));
     let copy = col()
         .grow(1.0)
         .min_w(0.0)
@@ -1403,13 +1341,13 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
                     ids: g.ids.clone(),
                     name: g.item.name.clone(),
                     icon: g.item.icon.clone(),
-                    detail: startup_detail(g.item),
+                    detail: startup_off_detail(g.item),
                     amount: if g.item.memory > 0 {
                         format_bytes(g.item.memory)
                     } else {
                         String::new()
                     },
-                    locked: g.item.locked || g.item.read_only,
+                    locked: startup_off_locked(g.item),
                 });
             }
         } else if g.item.enabled {
@@ -1420,13 +1358,13 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
                 ids: g.ids.clone(),
                 name: g.item.name.clone(),
                 icon: g.item.icon.clone(),
-                detail: startup_detail(g.item),
+                detail: startup_off_detail(g.item),
                 amount: if g.item.memory > 0 {
                     format_bytes(g.item.memory)
                 } else {
                     String::new()
                 },
-                locked: g.item.locked || g.item.read_only,
+                locked: startup_off_locked(g.item),
             });
         }
     }
@@ -1439,7 +1377,7 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             icon: g.item.icon.clone(),
             detail: format_turned_off_day(&g.item.at),
             amount: String::new(),
-            locked: g.item.locked,
+            locked: false,
         };
         if is_windows_startup_id(&g.item.id) {
             off_rows.push(row);
@@ -1462,7 +1400,8 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
         .pb(20.0)
         .scroll(ScrollSpec {
             stick_bottom: false,
-        });
+        })
+        .chain_scroll_offset(crate::shell::bar_scroll_watch);
 
     if broken.is_empty() && on_items.is_empty() && off_rows.is_empty() && bg_count == 0 {
         let empty = if searching {
@@ -1510,8 +1449,8 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             format!("startup-row-{}", g.item.id),
             &g.item.name,
             g.item.icon.as_deref(),
-            if required { "Required" } else { "On" },
-            if required { None } else { Some("good") },
+            "",
+            None,
             startup_detail(g.item),
             amount,
             err,
@@ -1526,7 +1465,7 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             .iter()
             .find_map(|id| s.pc.startup_errors.get(id).cloned());
         let ctrl = if r.locked {
-            startup_tag_pill("Required", None)
+            row()
         } else {
             switch_pill_keyed(
                 format!("startup-sw-{}", r.id),
@@ -1540,7 +1479,7 @@ fn startup_tab_body(s: &AppState, q: &str) -> El {
             format!("startup-row-{}", r.id),
             &r.name,
             r.icon.as_deref(),
-            "Off",
+            "",
             None,
             r.detail.clone(),
             r.amount.clone(),
@@ -1821,12 +1760,12 @@ pub(crate) fn apps_room(s: &AppState) -> El {
 
         let visible_main = &main_apps[..main_apps.len().min(120)];
         let visible_parts = &parts[..parts.len().min(60)];
-        let show_last_used = programs.iter().any(|a| {
-            a.last_opened
-                .as_deref()
-                .is_some_and(|t| !t.trim().is_empty())
-                || a.quiet_since.is_some()
-        });
+        let show_parts = searching || s.pc.apps_parts_open;
+        let shown_parts: &[&InstalledAppItem] = if show_parts { visible_parts } else { &[] };
+        let show_last_used = visible_main
+            .iter()
+            .chain(shown_parts)
+            .any(|a| last_used_label(a).is_some());
         let wide_select = s.pc.apps_run.is_some() || !s.pc.apps_picked.is_empty();
 
         let mut select_controls = row().gap(8.0).center_y().justify_end();
@@ -1930,15 +1869,12 @@ pub(crate) fn apps_room(s: &AppState) -> El {
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .gap(18.0)
+            .gap(14.0)
             .pb(20.0)
             .scroll(ScrollSpec {
                 stick_bottom: false,
-            });
-
-        if !searching && !s.pc.apps_only_unused {
-            list_col = list_col.child(ready_section(s, programs));
-        }
+            })
+            .chain_scroll_offset(crate::shell::bar_scroll_watch);
 
         if s.pc.apps_only_unused {
             list_col = list_col.child(
@@ -1973,7 +1909,6 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         }
         list_col = list_col.child(rows_col);
         if !visible_parts.is_empty() || s.pc.apps_list.as_ref().is_some_and(|l| l.edge_removed) {
-            let show_parts = searching || s.pc.apps_parts_open;
             let mut parts_sec = col().w_full().child(
                 row()
                     .key("apps-parts-toggle")
@@ -2037,11 +1972,11 @@ pub(crate) fn apps_room(s: &AppState) -> El {
             list_col = list_col.child(parts_sec);
         }
 
-        col()
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .gap(12.0)
+        let mut table_block = col().w_full().grow(1.0).min_h(0.0).gap(12.0);
+        if !searching && !s.pc.apps_only_unused {
+            table_block = table_block.child(ready_section(s, programs));
+        }
+        table_block
             .child(table_head)
             .children(s.pc.apps_errors.get("many").map(|err| {
                 el().w_full()
@@ -2059,11 +1994,11 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         .pt(20.0)
         .px(24.0)
         .pb(8.0)
-        .gap(12.0)
+        .gap(14.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
-        .fill(BG)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .fill(exo_kit::surface_card())
+        .border(1.0, exo_kit::card_border())
         .child(header)
         .child(body);
 
@@ -2072,7 +2007,7 @@ pub(crate) fn apps_room(s: &AppState) -> El {
         .w_full()
         .h_full()
         .pt(64.0)
-        .px(10.0)
+        .px(24.0)
         .pb(20.0)
         .fill(BG)
         .on_key(|s: &mut AppState, ev, _| {
@@ -2096,7 +2031,7 @@ mod tests {
     use crate::shell;
     use crate::state::{AppState, Room};
     use rune::motion_gate::Run;
-    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::render::KIND_LIQUID_GLASS;
     use rune::{Env, Key, KeyEvent, Mods, Runtime};
 
     #[test]
@@ -2118,14 +2053,14 @@ mod tests {
             rt.find("apps-head-last-used").is_none(),
             "Last used column should hide when no app has last_opened"
         );
-        let blurs = rt
+        let glass_draws = rt
             .instances
             .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .filter(|i| i.params[1] == KIND_LIQUID_GLASS)
             .count();
         assert!(
-            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
-            "Apps exceeded blur cap: {blurs}"
+            glass_draws <= 3,
+            "Apps: {glass_draws} Liquid Glass draws, bound 3"
         );
 
         let (_, rest_op) = rt
@@ -2209,6 +2144,33 @@ mod tests {
             rt.find("apps-head-last-used").is_some(),
             "Last used column should render when at least one app has last_opened"
         );
+        let (rect, _) = rt
+            .presented("app-used-app:obs")
+            .expect("OBS last used cell");
+        assert!(rect[2] > 1.0, "Last used value must be drawn, got {rect:?}");
+    }
+
+    #[test]
+    fn apps_hides_last_used_column_when_no_shown_app_has_a_value() {
+        let mut state = AppState::default();
+        if let Some(ref mut list) = state.pc.apps_list {
+            for p in &mut list.programs {
+                p.last_opened = if p.id == "app:vcredist" {
+                    Some("2026-11-20".into())
+                } else {
+                    Some("  ".into())
+                };
+                p.quiet_since = None;
+            }
+        }
+        state.pc.apps_parts_open = false;
+        state.switch_room(Room::Apps);
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        assert!(rt.find("apps-head-last-used").is_none());
+        assert!(rt.find("app-used-app:obs").is_none());
     }
 
     #[test]
@@ -2284,6 +2246,78 @@ mod tests {
         );
         item.status = Some("Blocked by policy".into());
         assert_eq!(super::startup_detail(&item), "Blocked by policy");
+    }
+
+    #[test]
+    fn startup_off_rows_keep_a_switch_or_say_why_not() {
+        let mut state = AppState::default();
+        state.switch_room(Room::Apps);
+        state.pc.apps_sub_tab = crate::pc_state::AppsSubTab::Startup;
+        state.pc.startup_list = Some(exo_rpc::StartupListReply {
+            ok: true,
+            message: None,
+            items: vec![
+                exo_rpc::StartupItem {
+                    id: "run:edge-update".into(),
+                    name: "Microsoft Edge Update".into(),
+                    command: "MicrosoftEdgeUpdate.exe /c".into(),
+                    source: "run".into(),
+                    enabled: false,
+                    locked: true,
+                    lock_kind: Some("updater".into()),
+                    status: Some("Exo needs this one to keep WebView2 up to date.".into()),
+                    ..Default::default()
+                },
+                exo_rpc::StartupItem {
+                    id: "run:security".into(),
+                    name: "Windows Security notification icon".into(),
+                    command: "SecurityHealthSystray.exe".into(),
+                    source: "run".into(),
+                    enabled: false,
+                    locked: true,
+                    lock_kind: Some("security".into()),
+                    status: Some("Your security software needs this one.".into()),
+                    ..Default::default()
+                },
+                exo_rpc::StartupItem {
+                    id: "run:policy".into(),
+                    name: "Policy App".into(),
+                    command: "policy.exe".into(),
+                    source: "run".into(),
+                    enabled: false,
+                    read_only: true,
+                    ..Default::default()
+                },
+            ],
+            removed: vec![],
+            extras: 0,
+        });
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        assert!(rt.find("startup-row-run:edge-update").is_some());
+        assert!(
+            rt.find("startup-sw-run:edge-update").is_some(),
+            "A locked updater that is off can still be turned back on"
+        );
+        assert!(rt.find("startup-row-run:security").is_some());
+        assert!(
+            rt.find("startup-sw-run:security").is_none(),
+            "Only an updater lock unlocks the switch"
+        );
+        assert!(rt.find("startup-row-run:policy").is_some());
+        assert!(rt.find("startup-sw-run:policy").is_none());
+        let policy = exo_rpc::StartupItem {
+            read_only: true,
+            command: "policy.exe".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::startup_off_detail(&policy),
+            "Exo can't turn this one on"
+        );
     }
 
     #[test]
@@ -2363,5 +2397,22 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert!(rt.state.pc.startup_bg_open);
         assert!(rt.find("startup-row-task:bg-1").is_some());
+    }
+
+    #[test]
+    fn startup_icon_box_resolves_cached_app_icon_entry() {
+        let mut state = AppState::default();
+        state.install_waker(std::sync::Arc::new(|| {}));
+        let tiny_png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2dIAAAAASUVORK5CYII=";
+        state
+            .pc
+            .app_icons
+            .insert("startup:demo".to_string(), tiny_png.to_string());
+        let resolved = state.app_icon_image("startup:demo");
+        assert!(
+            resolved.is_some(),
+            "startup icon key present in pc.app_icons should decode to an Image"
+        );
+        let _el = super::startup_icon_box(&state, "Demo App", Some("startup:demo"));
     }
 }

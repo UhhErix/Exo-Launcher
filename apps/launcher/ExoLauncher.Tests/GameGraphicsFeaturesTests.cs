@@ -301,4 +301,63 @@ public sealed class GameGraphicsFeaturesTests : IDisposable
         Assert.Contains("<SSAO>MAX</SSAO>", patchedText);
         Assert.Contains("<QualitySetting>CUSTOM</QualitySetting>", patchedText);
     }
+
+    [Fact]
+    public void ReflexFeatureNeverWritesNvidiaFrameRateLimitAndRetireClearsLegacyCap()
+    {
+        var install = Path.Combine(_root, "rl-nocap");
+        var win64 = Path.Combine(install, "Binaries", "Win64");
+        Directory.CreateDirectory(win64);
+        var exe = Path.Combine(win64, "RocketLeague.exe");
+        File.WriteAllBytes(exe, [0x4D, 0x5A]);
+
+        var game = new GameEntry { Id = "epic:Sugar", Title = "Rocket League", Store = StoreKind.Epic, Installed = true, Path = install };
+        var stateRoot = Path.Combine(_root, "state-rl-nocap");
+        var ctx = new GameGraphicsFeatures.RuntimeContext(Rtx3070, NoAntiCheat, null, false, stateRoot);
+
+        var writtenIds = new List<uint>();
+        var retiredWrites = new Dictionary<uint, uint?>();
+        var prevSeam = NvidiaProfiles.ForGameSeam;
+        NvidiaProfiles.ForGameSeam = (_, ids, writes) =>
+        {
+            if (writes is not null)
+            {
+                writtenIds.AddRange(writes.Keys);
+                foreach (var kv in writes) retiredWrites[kv.Key] = kv.Value;
+            }
+            var before = ids.ToDictionary(id => id, _ => (uint?)null);
+            var after = writes is null ? before : ids.ToDictionary(id => id, id => writes.GetValueOrDefault(id));
+            return new NvidiaProfiles.GameState(true, null, "Rocket League", before, after, []);
+        };
+        try
+        {
+            var err = GameGraphicsFeatures.ApplyOptimizeFeatures(game, on: true, ctx, driverOnly: true);
+            Assert.Null(err);
+            Assert.DoesNotContain(GraphicsCatalog.FrameRateLimit, writtenIds);
+
+            var group = GameGraphicsFeatures.OptimizeGroupState(game, ctx, driverOnly: true);
+            Assert.NotNull(group);
+            Assert.True(group.On);
+
+            var persisted = GameGraphicsFeatures.LoadState(stateRoot);
+            persisted.Games[game.Id].NvidiaSet[GraphicsCatalog.FrameRateLimit] = 162u;
+            persisted.Games[game.Id].NvidiaBefore[GraphicsCatalog.FrameRateLimit] = null;
+            GameGraphicsFeatures.SaveState(stateRoot, persisted);
+
+            retiredWrites.Clear();
+            var retired = GameGraphicsFeatures.RetireFrameCapOverrides(stateRoot);
+            Assert.Equal(1, retired);
+            Assert.True(retiredWrites.ContainsKey(GraphicsCatalog.FrameRateLimit));
+            Assert.Null(retiredWrites[GraphicsCatalog.FrameRateLimit]);
+            Assert.False(GameGraphicsFeatures.LoadState(stateRoot).Games[game.Id].NvidiaSet.ContainsKey(GraphicsCatalog.FrameRateLimit));
+
+            var undoErr = GameGraphicsFeatures.ApplyOptimizeFeatures(game, on: false, ctx, driverOnly: true);
+            Assert.Null(undoErr);
+            Assert.False(GameGraphicsFeatures.OptimizeGroupState(game, ctx, driverOnly: true)!.On);
+        }
+        finally
+        {
+            NvidiaProfiles.ForGameSeam = prevSeam;
+        }
+    }
 }

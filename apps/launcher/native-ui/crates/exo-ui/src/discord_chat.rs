@@ -10,14 +10,14 @@ use crate::discord_search;
 use crate::discord_threads;
 use crate::state::{AppState, ContextMenuTarget};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_BASE, SPRING_FLIGHT, SPRING_QUICK, bad, fg_faint, fg_muted, glass_button, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_arrow_up, icon_bell_off,
-    icon_bookmark, icon_check, icon_close, icon_copy, icon_download, icon_edit, icon_external,
-    icon_hash, icon_more_horiz, icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply,
-    icon_search, icon_smile, icon_sparkles, icon_trash, popover_transition_from, pressed_fill,
-    primary_button, scrim_fill, subtle_fill, type_body, type_control, type_label, type_page,
-    type_section, type_small,
+    BG, ExoGlass, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_BASE, SPRING_FLIGHT, SPRING_QUICK, apply_glass, bad, fg_faint, fg_muted,
+    glass_button, glass_button_opt, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline,
+    hex, hover_fill, icon_arrow_up, icon_bell_off, icon_bookmark, icon_bookmark_filled, icon_check,
+    icon_close, icon_copy, icon_download, icon_edit, icon_external, icon_hash, icon_more_horiz,
+    icon_paperclip, icon_phone, icon_pin, icon_plus, icon_reply, icon_search, icon_smile,
+    icon_sparkles, icon_trash, popover_transition_from, pressed_fill, primary_button, scrim_fill,
+    subtle_fill, type_body, type_control, type_label, type_page, type_section, type_small,
 };
 use exo_rpc::{DiscordAppComponent, DiscordAttachment, DiscordEmbed, DiscordMessage};
 use rune::{
@@ -42,11 +42,11 @@ fn send_with_launch(s: &mut AppState, tx: &mut Tx) {
 }
 
 fn pane_surface() -> Color {
-    BG
+    exo_kit::surface_elevated()
 }
 
 fn card_surface() -> Color {
-    BG
+    exo_kit::surface_elevated_hi()
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -95,6 +95,9 @@ fn channel_name_map(s: &AppState) -> std::collections::HashMap<String, String> {
         for ch in &chans.channels {
             map.insert(ch.id.clone(), ch.name.clone());
         }
+        for (id, role) in &chans.roles {
+            map.insert(format!("&{id}"), role.name.clone());
+        }
     }
     map
 }
@@ -131,12 +134,19 @@ fn embed_card(
     {
         let mut title_el = text(title.clone())
             .font(type_section())
-            .color(if embed.url.is_some() { good() } else { FG })
+            .color(if embed.url.is_some() {
+                crate::discord_md::link_fg()
+            } else {
+                FG
+            })
             .w_full()
             .wrap();
         if let Some(ref url) = embed.url {
             let u = url.clone();
             title_el = el()
+                .role("link")
+                .label(title.clone())
+                .focusable(true)
                 .w_full()
                 .cursor(Cursor::Pointer)
                 .hit()
@@ -179,23 +189,176 @@ fn embed_card(
         }
         inner = inner.child(frow);
     }
+    let is_gifv = embed.kind.as_deref() == Some("gifv");
+    if is_gifv {
+        let video_gif = embed
+            .video
+            .as_ref()
+            .and_then(|v| v.url.as_deref().or(v.proxy_url.as_deref()))
+            .map(exo_rpc::remote_art::normalize_gif_image_url)
+            .filter(|u| {
+                let lower = u.split('?').next().unwrap_or(u).to_ascii_lowercase();
+                !lower.ends_with(".mp4") && !lower.ends_with(".webm")
+            });
+        let img_gif = embed
+            .image
+            .as_ref()
+            .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
+            .map(exo_rpc::remote_art::normalize_gif_image_url);
+        let thumb_gif = embed
+            .thumbnail
+            .as_ref()
+            .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
+            .map(exo_rpc::remote_art::normalize_gif_image_url);
+        let gif_url = video_gif.or(img_gif).or(thumb_gif);
+        let (gw, gh) = embed
+            .video
+            .as_ref()
+            .or(embed.thumbnail.as_ref())
+            .or(embed.image.as_ref())
+            .and_then(|m| match (m.width, m.height) {
+                (Some(w), Some(h)) if w > 0 && h > 0 => {
+                    let aspect = (h as f32 / w as f32).clamp(0.42, 1.45);
+                    let dw = (w as f32).clamp(180.0, 340.0);
+                    Some((dw, (dw * aspect).clamp(110.0, 280.0)))
+                }
+                _ => None,
+            })
+            .unwrap_or((300.0, 200.0));
+        if let Some(url) = gif_url {
+            let orig_c = embed
+                .url
+                .clone()
+                .or_else(|| embed.thumbnail.as_ref().and_then(|m| m.url.clone()))
+                .unwrap_or_else(|| url.clone());
+            let lb_src = url.clone();
+            let lb_orig = orig_c.clone();
+            let lb_cap = embed.title.clone().unwrap_or_else(|| "GIF".into());
+            let mut tile = el()
+                .role("button")
+                .label(format!("Open {lb_cap}"))
+                .focusable(true)
+                .w(gw)
+                .h(gh)
+                .radius(RADIUS_SMALL)
+                .continuous_corners()
+                .clip_rounded(RADIUS_SMALL)
+                .fill(Color::WHITE.alpha(0.03))
+                .border(1.0, Color::WHITE.alpha(0.06))
+                .cursor(Cursor::Pointer)
+                .hit()
+                .on_press(move |s: &mut AppState| {
+                    if let Some(cid) = s.active_chat_channel_id() {
+                        s.open_channel_image_lightbox(&cid, &lb_src, &lb_orig, &lb_cap, &lb_cap);
+                    } else {
+                        s.open_discord_lightbox(
+                            vec![LightboxSlide {
+                                src: lb_src.clone(),
+                                original_url: lb_orig.clone(),
+                                caption: lb_cap.clone(),
+                                alt: lb_cap.clone(),
+                            }],
+                            0,
+                        );
+                    }
+                })
+                .on_secondary_press(move |s: &mut AppState, p, _| {
+                    s.discord.chat.links.image_menu = Some(ImageMenuState {
+                        original_url: orig_c.clone(),
+                        x: p.x,
+                        y: p.y,
+                    });
+                });
+            if let Some(img) = s.remote_image_sized(&url, gw.max(320.0), scale) {
+                tile = tile.pixels_fit(img.pixels(), SurfaceFit::Fill);
+            } else if let Some(thumb) = embed
+                .thumbnail
+                .as_ref()
+                .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
+                .and_then(|u| s.remote_image_sized(u, gw.max(320.0), scale))
+            {
+                tile = tile.pixels_fit(thumb.pixels(), SurfaceFit::Fill);
+            }
+            return tile;
+        }
+    }
+
     if let Some(url) = embed
         .image
         .as_ref()
         .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
-        && let Some(img) = s.remote_image_sized(url, 360.0, scale)
+        .map(exo_rpc::remote_art::normalize_gif_image_url)
+        && let Some(img) = s.remote_image_sized(&url, 360.0, scale)
     {
         let orig_c = embed
             .image
             .as_ref()
             .and_then(|m| m.url.clone())
-            .unwrap_or_else(|| url.to_string());
-        let lb_src = url.to_string();
+            .unwrap_or_else(|| url.clone());
+        let lb_src = url.clone();
         let lb_orig = orig_c.clone();
         let lb_cap = embed.title.clone().unwrap_or_default();
         inner = inner.child(
-            el().w(360.0)
+            el().role("button")
+                .label("Open image")
+                .focusable(true)
+                .w(360.0)
                 .h(202.0)
+                .radius(RADIUS_SMALL)
+                .clip_rounded(RADIUS_SMALL)
+                .cursor(Cursor::Pointer)
+                .hit()
+                .on_press(move |s: &mut AppState| {
+                    if let Some(cid) = s.active_chat_channel_id() {
+                        s.open_channel_image_lightbox(&cid, &lb_src, &lb_orig, &lb_cap, &lb_cap);
+                    } else {
+                        s.open_discord_lightbox(
+                            vec![LightboxSlide {
+                                src: lb_src.clone(),
+                                original_url: lb_orig.clone(),
+                                caption: lb_cap.clone(),
+                                alt: lb_cap.clone(),
+                            }],
+                            0,
+                        );
+                    }
+                })
+                .on_secondary_press(move |s: &mut AppState, p, _| {
+                    s.discord.chat.links.image_menu = Some(ImageMenuState {
+                        original_url: orig_c.clone(),
+                        x: p.x,
+                        y: p.y,
+                    });
+                })
+                .pixels_fit(img.pixels(), SurfaceFit::Fit),
+        );
+    } else if let Some(url) = embed
+        .thumbnail
+        .as_ref()
+        .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
+        .map(exo_rpc::remote_art::normalize_gif_image_url)
+        && let Some(img) = s.remote_image_sized(&url, 240.0, scale)
+    {
+        let orig_c = embed
+            .thumbnail
+            .as_ref()
+            .and_then(|m| m.url.clone())
+            .unwrap_or_else(|| url.clone());
+        let lb_src = url.clone();
+        let lb_orig = orig_c.clone();
+        let lb_cap = embed.title.clone().unwrap_or_default();
+        let has_copy = embed.title.is_some() || embed.description.is_some();
+        let (tw, th) = if has_copy {
+            (112.0, 112.0)
+        } else {
+            (300.0, 190.0)
+        };
+        inner = inner.child(
+            el().role("button")
+                .label("Open image")
+                .focusable(true)
+                .w(tw)
+                .h(th)
                 .radius(RADIUS_SMALL)
                 .clip_rounded(RADIUS_SMALL)
                 .cursor(Cursor::Pointer)
@@ -283,6 +446,9 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
             let reveal_id = att.id.clone();
             return el()
                 .key(format!("dc-att-sp-{}", att.id))
+                .role("button")
+                .label_static("Show spoiler")
+                .focusable(true)
                 .w(box_w)
                 .h(box_h)
                 .radius(RADIUS_CARD)
@@ -316,6 +482,9 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
         let lb_alt = att.description.clone().unwrap_or_default();
         let mut frame = el()
             .key(format!("dc-att-img-{}", att.id))
+            .role("button")
+            .label(format!("Open image {}", att.filename))
+            .focusable(true)
             .w(box_w)
             .h(box_h)
             .radius(RADIUS_CARD)
@@ -361,6 +530,10 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
             let aid_alt = att_id.clone();
             frame = frame.child(
                 el().key(format!("dc-att-alt-{}", att.id))
+                    .role("button")
+                    .label_static("Toggle image description")
+                    .focusable(true)
+                    .expanded(alt_open)
                     .pin(Some(8.0), None, None, Some(8.0))
                     .px(6.0)
                     .py(2.0)
@@ -440,6 +613,14 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
                     let u = att.url.clone();
                     card = card.child(
                         el().key(format!("dc-att-exp-{}", att.id))
+                            .role("button")
+                            .label(if *expanded {
+                                "Collapse file text"
+                            } else {
+                                "Expand file text"
+                            })
+                            .focusable(true)
+                            .expanded(*expanded)
                             .w_full()
                             .px(12.0)
                             .py(6.0)
@@ -515,6 +696,9 @@ fn render_attachment(s: &AppState, att: &DiscordAttachment, scale: f32) -> El {
     let open_u = att.url.clone();
     row()
         .key(format!("dc-att-file-{}", att.id))
+        .role("link")
+        .label(format!("Open file {}", att.filename))
+        .focusable(true)
         .px(12.0)
         .py(8.0)
         .gap(8.0)
@@ -590,6 +774,14 @@ fn render_component_node(
             };
             let mut btn = row()
                 .key(format!("dc-comp-btn-{}-{idx}", msg.id))
+                .role(if is_link { "link" } else { "button" })
+                .label(if label.is_empty() {
+                    "Button".to_string()
+                } else {
+                    label.clone()
+                })
+                .focusable(!comp.disabled)
+                .disabled(comp.disabled)
                 .h(30.0)
                 .px(12.0)
                 .gap(5.0)
@@ -657,6 +849,10 @@ fn render_component_node(
             let mut box_col = col().w(300.0).gap(4.0).child(
                 row()
                     .key(format!("dc-comp-sel-{select_id}"))
+                    .role("button")
+                    .label(placeholder.clone())
+                    .focusable(true)
+                    .expanded(is_open)
                     .w_full()
                     .h(34.0)
                     .px(10.0)
@@ -707,6 +903,9 @@ fn render_component_node(
                     opts = opts.child(
                         col()
                             .key(format!("dc-comp-sopt-{select_id}-{oi}"))
+                            .role("option")
+                            .label(opt.label.clone())
+                            .focusable(true)
                             .w_full()
                             .px(8.0)
                             .py(6.0)
@@ -883,7 +1082,7 @@ fn render_link_cards(s: &AppState, msg: &DiscordMessage, is_mine: bool, scale: f
                                         .child(text(subtitle).font(type_label()).color(fg_muted())),
                                 )
                                 .child(if joined {
-                                    glass_button("dc-inv-go", "Joined", None)
+                                    glass_button_opt("dc-inv-go", "Joined", None, false)
                                         .key(format!("dc-inv-go-{code}"))
                                         .on_press(move |s: &mut AppState| {
                                             if let Some(ref g) = gid_c {
@@ -983,7 +1182,7 @@ fn render_link_cards(s: &AppState, msg: &DiscordMessage, is_mine: bool, scale: f
                                         ),
                                 )
                                 .child(if claimed {
-                                    glass_button("dc-gift-done", "Claimed", None)
+                                    glass_button_opt("dc-gift-done", "Claimed", None, false)
                                         .key(format!("dc-gift-done-{code}"))
                                 } else {
                                     primary_button("dc-gift-claim", "Accept", None)
@@ -1083,6 +1282,9 @@ fn system_message_row(s: &AppState, msg: &DiscordMessage) -> Option<El> {
             if let Some(ref th) = msg.thread {
                 let tid = th.id.clone();
                 r = r
+                    .role("button")
+                    .label(format!("Open thread {thread_name}"))
+                    .focusable(true)
                     .cursor(Cursor::Pointer)
                     .hit()
                     .press_on_down()
@@ -1252,6 +1454,10 @@ fn message_row(
         let jump_mid = r.id.clone();
         body = body.child(
             row()
+                .key(format!("dc-reply-jump-{}", msg.id))
+                .role("link")
+                .label(format!("Jump to reply from {}", r.display_name()))
+                .focusable(true)
                 .w_full()
                 .gap(6.0)
                 .center_y()
@@ -1364,7 +1570,11 @@ fn message_row(
                     "Bookmark"
                 },
                 false,
-                icon_bookmark(13.0, if bookmarked { good() } else { fg_faint() }),
+                if bookmarked {
+                    icon_bookmark_filled(13.0, good())
+                } else {
+                    icon_bookmark(13.0, fg_faint())
+                },
             )
             .on_press(move |s: &mut AppState| {
                 if bookmarked {
@@ -1422,7 +1632,11 @@ fn message_row(
         let pf_uname = msg.author.username.clone();
         let pf_av = msg.author.avatar_url();
         let mut header_left = row().gap(7.0).center_y().child(
-            el().cursor(Cursor::Pointer)
+            el().key(format!("dc-msg-author-{}", msg.id))
+                .role("button")
+                .label(format!("Open profile of {author_name}"))
+                .focusable(true)
+                .cursor(Cursor::Pointer)
                 .hit()
                 .press_on_down()
                 .on_press(move |s: &mut AppState| {
@@ -1502,7 +1716,10 @@ fn message_row(
                             .w_full()
                             .color(FG)
                             .on_edit(edit_access(|s: &mut AppState| {
-                                &mut s.discord.chat.editing.as_mut().unwrap().1
+                                match s.discord.chat.editing.as_mut() {
+                                    Some(editing) => &mut editing.1,
+                                    None => &mut s.ui_discard_edit,
+                                }
                             }))
                             .on_submit(|s: &mut AppState, _| s.save_discord_edit()),
                         1,
@@ -1693,6 +1910,9 @@ fn message_row(
         body = body.child(
             row()
                 .key(format!("dc-thbox-{}", th.id))
+                .role("button")
+                .label(format!("Open thread {}", th.name))
+                .focusable(true)
                 .px(10.0)
                 .py(6.0)
                 .gap(8.0)
@@ -1731,7 +1951,11 @@ fn message_row(
                         .color(fg_faint()),
                 )
                 .child(
-                    el().cursor(Cursor::Pointer)
+                    el().key(format!("dc-ephemeral-dismiss-{mid_dis}"))
+                        .role("button")
+                        .label_static("Dismiss message")
+                        .focusable(true)
+                        .cursor(Cursor::Pointer)
                         .hit()
                         .press_on_down()
                         .on_press(move |s: &mut AppState| {
@@ -1763,6 +1987,10 @@ fn message_row(
                 rrow = rrow.child(
                     row()
                         .key(format!("dc-rx-{}-{}-{is_burst}", msg.id, key_rx))
+                        .role("button")
+                        .label(format!("{}, {cnt}", r.emoji.display()))
+                        .focusable(true)
+                        .checked(mine)
                         .h(26.0)
                         .px(8.0)
                         .gap(5.0)
@@ -1787,7 +2015,7 @@ fn message_row(
                         .on_secondary_press(move |s: &mut AppState, _, _| {
                             s.open_reactors_dialog(&cid_view, &mid_view, &key_view, is_burst)
                         })
-                        .child(text(r.emoji.display()).font(type_small()).color(FG))
+                        .child(discord_pickers::reaction_emoji_el(s, &r.emoji, scale))
                         .child(text(cnt.to_string()).font(type_label()).color(if mine {
                             good()
                         } else {
@@ -1813,6 +2041,10 @@ fn message_row(
                 let already = msg.reactions.iter().any(|r| r.emoji.key() == em && r.me);
                 bar = bar.child(
                     el().key(format!("dc-qrx-{}-{em}", msg.id))
+                        .role("button")
+                        .label(format!("React with {em}"))
+                        .focusable(true)
+                        .checked(already)
                         .size(24.0, 24.0)
                         .radius(12.0)
                         .hover(hover_fill())
@@ -1894,7 +2126,11 @@ fn message_row(
                 s.open_context_menu(msg_ctx_target.clone(), p.x, p.y);
             })
             .child(
-                el().cursor(Cursor::Pointer)
+                el().key(format!("dc-msg-avatar-{}", msg.id))
+                    .role("button")
+                    .label(format!("Open profile of {}", msg.display_name()))
+                    .focusable(true)
+                    .cursor(Cursor::Pointer)
                     .hit()
                     .on_press(move |s: &mut AppState| {
                         s.open_user_profile_dialog(ProfileOpenRequest {
@@ -2017,6 +2253,7 @@ pub fn timeline_and_composer(
                 .key(format!("dc-vrows-{channel_id}"))
                 .w_full()
                 .growth(GrowthSpec::default())
+                .selection_group(true)
                 .virtual_rows(
                     msgs.len(),
                     68.0,
@@ -2099,6 +2336,10 @@ pub fn timeline_and_composer(
                         .center_y()
                         .child(
                             el().key("dc-reply-ping")
+                                .role("checkbox")
+                                .label_static("Mention author")
+                                .focusable(true)
+                                .checked(ping_on)
                                 .px(8.0)
                                 .h(22.0)
                                 .radius(RADIUS_PILL)
@@ -2289,6 +2530,9 @@ pub fn timeline_and_composer(
             if s.discord.chat.too_long_prompt || left < 0 {
                 right_foot = right_foot.child(
                     el().key("dc-upload-as-file-prompt")
+                        .role("button")
+                        .label_static("Upload as file")
+                        .focusable(true)
                         .cursor(Cursor::Pointer)
                         .hit()
                         .press_on_down()
@@ -2343,42 +2587,49 @@ pub fn timeline_and_composer(
 
     if s.discord.chat.plus_menu_open {
         let has_text = !s.discord.chat.composer.text.trim().is_empty();
-        let mut pmenu = col()
-            .key("dc-plus-menu")
-            .role("menu")
-            .focus_group()
-            .pin(Some(14.0), None, None, Some(64.0))
-            .w(230.0)
-            .padding(6.0)
-            .gap(2.0)
-            .radius(RADIUS_CARD)
-            .fill(BG)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-            .transition(popover_transition_from(rune::Vec2::new(0.0, 1.0)))
-            .child(
-                row()
-                    .key("dc-pm-drop-hint")
-                    .w_full()
-                    .h(34.0)
-                    .px(10.0)
-                    .gap(8.0)
-                    .center_y()
-                    .radius(RADIUS_SMALL)
-                    .hover(hover_fill())
-                    .cursor(Cursor::Pointer)
-                    .hit()
-                    .press_on_down()
-                    .on_press(|s: &mut AppState| {
-                        s.discord.chat.plus_menu_open = false;
-                        s.notice = Some("Drop files onto the chat to upload".into());
-                    })
-                    .child(icon_paperclip(14.0, FG))
-                    .child(text("Upload a file").font(type_small()).color(FG)),
-            );
+        let mut pmenu = apply_glass(
+            col()
+                .key("dc-plus-menu")
+                .role("menu")
+                .focus_group()
+                .pin(Some(14.0), None, None, Some(64.0))
+                .w(230.0)
+                .padding(6.0)
+                .gap(2.0)
+                .radius(RADIUS_CARD)
+                .transition(popover_transition_from(rune::Vec2::new(0.0, 1.0))),
+            ExoGlass::Menu,
+        )
+        .child(
+            row()
+                .key("dc-pm-drop-hint")
+                .role("menuitem")
+                .label_static("Upload a file")
+                .focusable(true)
+                .w_full()
+                .h(34.0)
+                .px(10.0)
+                .gap(8.0)
+                .center_y()
+                .radius(RADIUS_SMALL)
+                .hover(hover_fill())
+                .cursor(Cursor::Pointer)
+                .hit()
+                .press_on_down()
+                .on_press(|s: &mut AppState| {
+                    s.discord.chat.plus_menu_open = false;
+                    s.notice = Some("Drop files onto the chat to upload".into());
+                })
+                .child(icon_paperclip(14.0, FG))
+                .child(text("Upload a file").font(type_small()).color(FG)),
+        );
         if has_text {
             pmenu = pmenu.child(
                 row()
                     .key("dc-pm-as-file")
+                    .role("menuitem")
+                    .label_static("Upload message as file")
+                    .focusable(true)
                     .w_full()
                     .h(34.0)
                     .px(10.0)
@@ -2397,6 +2648,9 @@ pub fn timeline_and_composer(
         pmenu = pmenu.child(
             row()
                 .key("dc-pm-poll")
+                .role("menuitem")
+                .label_static("Create poll")
+                .focusable(true)
                 .w_full()
                 .h(34.0)
                 .px(10.0)
@@ -2466,6 +2720,10 @@ fn pending_upload_chip(u: &PendingAttachment) -> El {
         )
         .child(
             el().key(format!("dc-up-sp-{}", u.local_id))
+                .role("checkbox")
+                .label_static("Mark as spoiler")
+                .focusable(true)
+                .checked(u.spoiler)
                 .px(5.0)
                 .h(20.0)
                 .radius(4.0)
@@ -2504,36 +2762,36 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
     }
 }
 
-pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
+pub fn chat_overlay_layers(s: &AppState, scale: f32) -> Vec<El> {
     let mut out = Vec::new();
-    if let Some(el) = discord_threads::create_dm_overlay(s, blur, scale) {
+    if let Some(el) = discord_threads::create_dm_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::poll_creator_overlay(s, blur) {
+    if let Some(el) = discord_threads::poll_creator_overlay(s) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::invite_dialog_overlay(s, blur, scale) {
+    if let Some(el) = discord_threads::invite_dialog_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::forward_dialog_overlay(s, blur, scale) {
+    if let Some(el) = discord_threads::forward_dialog_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::new_thread_dialog_overlay(s, blur) {
+    if let Some(el) = discord_threads::new_thread_dialog_overlay(s) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::report_dialog_overlay(s, blur) {
+    if let Some(el) = discord_threads::report_dialog_overlay(s) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::modify_attachment_overlay(s, blur) {
+    if let Some(el) = discord_threads::modify_attachment_overlay(s) {
         out.push(el);
     }
-    if let Some(el) = discord_threads::profile_dialog_overlay(s, blur, scale) {
+    if let Some(el) = discord_threads::profile_dialog_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_pickers::reactions_dialog_overlay(s, blur, scale) {
+    if let Some(el) = discord_pickers::reactions_dialog_overlay(s, scale) {
         out.push(el);
     }
-    if let Some(el) = discord_pickers::app_modal_overlay(s, blur) {
+    if let Some(el) = discord_pickers::app_modal_overlay(s) {
         out.push(el);
     }
     if s.discord.chat.links.lightbox.is_open() && !s.discord.chat.links.lightbox_slides.is_empty() {
@@ -2586,45 +2844,49 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
                     let orig_save = active_orig.clone();
                     let orig_open = active_orig;
                     out.push(
-                        row()
-                            .key("dc-lightbox-actions")
-                            .pin(Some(20.0), None, None, Some(20.0))
-                            .padding(6.0)
-                            .gap(6.0)
-                            .center_y()
-                            .radius(RADIUS_PILL)
-                            .fill(BG)
-                            .border(1.0, glass_rim())
-                            .child(
-                                glass_button("dc-lb-copy", "Copy image", Some(icon_copy(12.0, FG)))
-                                    .on_press(move |st: &mut AppState| {
-                                        st.discord_image_action("copy", &orig_copy);
-                                    }),
+                        apply_glass(
+                            row()
+                                .key("dc-lightbox-actions")
+                                .pin(Some(20.0), None, None, Some(20.0))
+                                .padding(6.0)
+                                .gap(6.0)
+                                .center_y()
+                                .radius(RADIUS_PILL),
+                            ExoGlass::Menu,
+                        )
+                        .child(
+                            glass_button_opt(
+                                "dc-lb-copy",
+                                "Copy image",
+                                Some(icon_copy(12.0, FG)),
+                                false,
                             )
-                            .child(
-                                glass_button(
-                                    "dc-lb-save",
-                                    "Save image",
-                                    Some(icon_download(12.0, FG)),
-                                )
-                                .on_press(
-                                    move |st: &mut AppState| {
-                                        st.discord_image_action("save", &orig_save);
-                                    },
-                                ),
+                            .on_press(move |st: &mut AppState| {
+                                st.discord_image_action("copy", &orig_copy);
+                            }),
+                        )
+                        .child(
+                            glass_button_opt(
+                                "dc-lb-save",
+                                "Save image",
+                                Some(icon_download(12.0, FG)),
+                                false,
                             )
-                            .child(
-                                glass_button(
-                                    "dc-lb-open",
-                                    "Open original",
-                                    Some(icon_external(12.0, FG)),
-                                )
-                                .on_press(
-                                    move |st: &mut AppState| {
-                                        st.open_external_url(&orig_open);
-                                    },
-                                ),
-                            ),
+                            .on_press(move |st: &mut AppState| {
+                                st.discord_image_action("save", &orig_save);
+                            }),
+                        )
+                        .child(
+                            glass_button_opt(
+                                "dc-lb-open",
+                                "Open original",
+                                Some(icon_external(12.0, FG)),
+                                false,
+                            )
+                            .on_press(move |st: &mut AppState| {
+                                st.open_external_url(&orig_open);
+                            }),
+                        ),
                     );
                 }
             }
@@ -2645,37 +2907,39 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
                     .hit()
                     .on_press(|st: &mut AppState| st.close_discord_lightbox())
                     .child(
-                        col()
-                            .padding(20.0)
-                            .gap(12.0)
-                            .center()
-                            .radius(RADIUS_PANEL)
-                            .fill(BG)
-                            .border(1.0, glass_rim())
-                            .hit()
-                            .child(text("Loading image…").font(type_body()).color(FG))
-                            .child(
-                                row()
-                                    .gap(8.0)
-                                    .child(
-                                        glass_button(
-                                            "dc-lb-loading-open",
-                                            "Open original",
-                                            Some(icon_external(12.0, FG)),
-                                        )
-                                        .on_press(
-                                            move |st: &mut AppState| {
-                                                st.open_external_url(&orig_open);
-                                            },
-                                        ),
+                        apply_glass(
+                            col()
+                                .padding(20.0)
+                                .gap(12.0)
+                                .center()
+                                .radius(RADIUS_PANEL)
+                                .hit(),
+                            ExoGlass::Menu,
+                        )
+                        .child(text("Loading image…").font(type_body()).color(FG))
+                        .child(
+                            row()
+                                .gap(8.0)
+                                .child(
+                                    glass_button_opt(
+                                        "dc-lb-loading-open",
+                                        "Open original",
+                                        Some(icon_external(12.0, FG)),
+                                        false,
                                     )
-                                    .child(
-                                        glass_button("dc-lb-loading-close", "Close", None)
-                                            .on_press(|st: &mut AppState| {
-                                                st.close_discord_lightbox();
-                                            }),
+                                    .on_press(
+                                        move |st: &mut AppState| {
+                                            st.open_external_url(&orig_open);
+                                        },
                                     ),
-                            ),
+                                )
+                                .child(
+                                    glass_button_opt("dc-lb-loading-close", "Close", None, false)
+                                        .on_press(|st: &mut AppState| {
+                                            st.close_discord_lightbox();
+                                        }),
+                                ),
+                        ),
                     ),
             );
         }
@@ -2685,20 +2949,30 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
         let save_src = im.original_url.clone();
         let copy_link = im.original_url.clone();
         let open_link = im.original_url.clone();
+        let pt_key = format!(
+            "dc-image-menu-pt-{}-{}",
+            im.x.round() as i32,
+            im.y.round() as i32
+        );
         let menu = col()
             .key("dc-image-menu")
             .role("menu")
             .focus_group()
-            .pin(Some(im.x), Some(im.y), None, None)
+            .anchored_fit(pt_key.clone(), rune::Side::Bottom, rune::Align::Start, 1.0)
             .w(196.0)
             .padding(6.0)
             .gap(2.0)
             .radius(RADIUS_CARD)
-            .fill(BG)
-            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+            .continuous_corners()
+            .clip_rounded(RADIUS_CARD)
+            .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu))
             .transition(popover_transition_from(rune::Vec2::new(0.0, 0.0)))
             .child(
                 row()
+                    .key("dc-image-menu-copy")
+                    .role("menuitem")
+                    .label_static("Copy image")
+                    .focusable(true)
                     .w_full()
                     .h(32.0)
                     .px(10.0)
@@ -2715,6 +2989,10 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
             )
             .child(
                 row()
+                    .key("dc-image-menu-save")
+                    .role("menuitem")
+                    .label_static("Save image")
+                    .focusable(true)
                     .w_full()
                     .h(32.0)
                     .px(10.0)
@@ -2732,6 +3010,10 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
             .child(el().w_full().h(1.0).fill(hairline()))
             .child(
                 row()
+                    .key("dc-image-menu-copy-link")
+                    .role("menuitem")
+                    .label_static("Copy link")
+                    .focusable(true)
                     .w_full()
                     .h(32.0)
                     .px(10.0)
@@ -2752,6 +3034,10 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
             )
             .child(
                 row()
+                    .key("dc-image-menu-open-link")
+                    .role("menuitem")
+                    .label_static("Open link")
+                    .focusable(true)
                     .w_full()
                     .h(32.0)
                     .px(10.0)
@@ -2774,6 +3060,7 @@ pub fn chat_overlay_layers(s: &AppState, blur: bool, scale: f32) -> Vec<El> {
                 .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                 .hit()
                 .on_press(|s: &mut AppState| s.discord.chat.links.image_menu = None)
+                .child(el().key(pt_key).absolute(im.x, im.y).size(0.0, 0.0))
                 .child(menu.hit().on_press(|_: &mut AppState| {})),
         );
     }
@@ -2835,4 +3122,106 @@ pub fn header_tools(s: &AppState) -> El {
                     if pins_open { FG } else { fg_muted() },
                 )),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::shell;
+    use crate::state::{AppState, Room};
+    use exo_rpc::{DiscordMessage, DiscordUser};
+    use rune::render::KIND_GLYPH;
+    use rune::{Env, Key, KeyEvent, Mods, Runtime};
+
+    #[test]
+    fn discord_messages_are_selectable_and_copyable() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        let clipboard = rune::clipboard::memory();
+        rt.use_clipboard(&clipboard);
+
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_guild("g-exo");
+            if let Some(list) = s.discord.chat.messages_by_channel.get_mut("ch-general") {
+                list.push(DiscordMessage {
+                    id: "msg-copy-test".into(),
+                    channel_id: "ch-general".into(),
+                    author: DiscordUser {
+                        id: "u-copy".into(),
+                        username: "copier".into(),
+                        global_name: Some("Copier".into()),
+                        ..Default::default()
+                    },
+                    content: "SelectableDiscordPhrase".into(),
+                    timestamp: "2026-11-25T12:00:00.000Z".into(),
+                    ..Default::default()
+                });
+            }
+        });
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let (row_rect, _) = rt
+            .presented("dc-msg-row-msg-copy-test")
+            .expect("message row presented");
+
+        // Locate glyphs rendered inside the bottom half (message body) of the row.
+        let body_y_min = row_rect[1] + row_rect[3] * 0.45;
+        let mut glyphs: Vec<(f32, f32)> = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_GLYPH)
+            .map(|i| (i.rect[0] + i.rect[2] * 0.5, i.rect[1] + i.rect[3] * 0.5))
+            .filter(|&(x, y)| {
+                x >= row_rect[0]
+                    && x <= row_rect[0] + row_rect[2]
+                    && y >= body_y_min
+                    && y <= row_rect[1] + row_rect[3]
+            })
+            .collect();
+        glyphs.sort_by(|a, b| a.0.total_cmp(&b.0));
+        assert!(
+            glyphs.len() >= 6,
+            "expected rendered glyphs for selectable message body, found {}",
+            glyphs.len()
+        );
+        let first = glyphs[0];
+        let last = *glyphs.last().unwrap();
+
+        rt.pointer_move(first.0 - 4.0, first.1);
+        rt.pointer_down(first.0 - 4.0, first.1);
+        rt.frame(2.0 / 60.0);
+        rt.pointer_move(last.0 + 6.0, last.1);
+        rt.frame(3.0 / 60.0);
+        rt.pointer_up(last.0 + 6.0, last.1);
+        rt.frame(4.0 / 60.0);
+
+        assert!(
+            rt.selected_text()
+                .as_deref()
+                .is_some_and(|t| t.contains("SelectableDiscordPhrase")),
+            "expected drag across Discord message to highlight text, got {:?}",
+            rt.selected_text()
+        );
+
+        rt.key(KeyEvent {
+            key: Key::Command('c'),
+            mods: Mods {
+                cmd: true,
+                ..Mods::default()
+            },
+        });
+        rt.frame(5.0 / 60.0);
+
+        let copied = clipboard.text().unwrap_or_default();
+        assert!(
+            copied.contains("SelectableDiscordPhrase"),
+            "expected Ctrl+C after dragging across Discord message to copy text, got {copied:?}"
+        );
+    }
 }

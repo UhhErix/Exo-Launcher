@@ -21,7 +21,7 @@ Press **Ctrl+K**, or the Exo mark at the top left, to reach any room, game, acti
 ## Look and feel
 
 **Settings > General**:
-- **Text size** and **Reduce motion**. **Settings > Library** has **Show tools and soundtracks** (servers, SDKs and soundtracks in the Library).
+- **Text size**. Motion follows Windows' own **Animation effects** setting. **Settings > Library** has **Show tools and soundtracks** (servers, SDKs and soundtracks in the Library).
 
 Every screen gets the same layout: on a 1440p or 4K screen Exo draws the 1080p layout larger, so it looks the same, only sharper.
 
@@ -99,7 +99,7 @@ If your account is locked: reset your password at discord.com first, then appeal
 
 ## Music
 
-Pick Spotify, Apple Music or YouTube Music in **Settings > Music**, then press **Sign in** in the Music room and sign in on the service's own page. Each service needs its paid plan: Spotify Premium, YouTube Music Premium or an Apple Music subscription. If the Spotify app is running when Exo starts Spotify's player, Exo closes it, because a running app keeps the player from loading. **Songs**, under Home, lists every song you saved. A Spotify link someone sends you in Discord opens here, and pasting a Jam link into **Jam** joins it. The mini player in the top bar controls playback from every room.
+Pick Spotify, Apple Music or YouTube Music in **Settings > General**, then press **Sign in** in the Music room and sign in on the service's own page. Each service needs its paid plan: Spotify Premium, YouTube Music Premium or an Apple Music subscription. If the Spotify app is running when Exo starts Spotify's player, Exo closes it, because a running app keeps the player from loading. **Songs**, under Home, lists every song you saved. A Spotify link someone sends you in Discord opens here, and pasting a Jam link into **Jam** joins it. The mini player in the top bar controls playback from every room.
 
 If the Music room stays empty or signed out, check that the service works in your browser, then sign in again from the Music room.
 

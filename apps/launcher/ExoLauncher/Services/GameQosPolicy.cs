@@ -143,6 +143,44 @@ internal sealed partial class GameQosPolicy(GameQosPolicy.ISystem system, string
         }
     }
 
+    internal async Task<string?> EnableAllAsync(IEnumerable<GameEntry> library, CancellationToken ct)
+    {
+        if (!await _gate.WaitAsync(0, ct).ConfigureAwait(false))
+            return "Exo is still updating QoS policies. Try again when it's done.";
+        try
+        {
+            var missing = Read(library).Games.Where(g => !g.Enabled && IsSafePolicyName(g.PolicyName) && IsSafeExeName(g.ExeName)).ToList();
+            if (missing.Count == 0) return null;
+
+            var saved = Load();
+            var priorNla = saved.Policies.Count == 0 ? system.ReadDoNotUseNla() : saved.PriorDoNotUseNla;
+            var nextPolicies = new Dictionary<string, string>(saved.Policies, StringComparer.OrdinalIgnoreCase);
+            foreach (var g in missing) nextPolicies[g.PolicyName] = g.ExeName;
+            if (!Save(new Saved(priorNla, nextPolicies)))
+                return "Exo couldn't save the QoS record, so nothing changed.";
+
+            var lines = missing.SelectMany(g => BuildEnableLines(g.PolicyName, g.ExeName)).ToList();
+            if (!await system.RunElevatedAsync(lines, ct).ConfigureAwait(false))
+            {
+                Save(saved);
+                return "Windows' permission was declined, so nothing changed.";
+            }
+            var verified = system.ReadPolicies();
+            var failed = missing.Where(g => !verified.TryGetValue(g.PolicyName, out var after) || after.Dscp != DscpExpeditedForwarding).ToList();
+            if (failed.Count > 0)
+            {
+                foreach (var g in failed) nextPolicies.Remove(g.PolicyName);
+                Save(new Saved(nextPolicies.Count == 0 ? null : priorNla, nextPolicies));
+            }
+            AppLog.Info($"QoS DSCP 46 enabled for {missing.Count - failed.Count} of {missing.Count} games.");
+            return failed.Count == 0 ? null : $"Windows didn't create the QoS policy for {failed.Count} game{(failed.Count == 1 ? "" : "s")}.";
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     internal static IReadOnlyList<string> BuildEnableLines(string policyName, string exeName)
     {
         if (!IsSafePolicyName(policyName) || !IsSafeExeName(exeName)) return [];

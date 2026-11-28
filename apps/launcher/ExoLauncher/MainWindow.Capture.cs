@@ -47,10 +47,7 @@ public sealed partial class MainWindow
 
     internal sealed class CaptureSettings
     {
-        public int Quality { get; set; } = 50;
         public int ReplaySeconds { get; set; } = 60;
-        /// <summary>60, or 120 (up to the screen's refresh rate).</summary>
-        public int MaxFps { get; set; } = 60;
         /// <summary>games (while a game runs), always, or off.</summary>
         public string ReplayMode { get; set; } = "games";
         public bool Cursor { get; set; } = true;
@@ -261,9 +258,7 @@ public sealed partial class MainWindow
             var replay = Services.CaptureReplayBudget.For(s.ReplaySeconds, CapturePhysicalMemory.Value, supportsReplayBudget);
             var parameters = new JsonObject
             {
-                ["quality"] = s.Quality,
                 ["replaySeconds"] = replay.Seconds,
-                ["maxFps"] = s.MaxFps,
                 ["replayMode"] = s.ReplayMode,
                 ["cursor"] = s.Cursor,
                 ["folder"] = folder,
@@ -352,10 +347,10 @@ public sealed partial class MainWindow
                 .ToDictionary(row => row.Key, row => row.Value, StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Exo's own type (Goeist), so the add-on's toast and windows read like Exo.</summary>
-    private static string CaptureFont()
+    /// <summary>Exo's own type (Geist), so the add-on's toast and windows read like Exo.</summary>
+    internal static string CaptureFont()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Goeist-Variable.ttf");
+        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Geist-Variable.ttf");
         return File.Exists(path) ? path : "";
     }
 
@@ -471,9 +466,7 @@ public sealed partial class MainWindow
         var s = CaptureConfig;
         return new
         {
-            s.Quality,
             s.ReplaySeconds,
-            s.MaxFps,
             s.ReplayMode,
             s.Cursor,
             s.SaveReplayKeys,
@@ -512,9 +505,7 @@ public sealed partial class MainWindow
                 int? n = v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) ? i : null;
                 switch (prop.Name)
                 {
-                    case "quality" when n is { } quality: s.Quality = Math.Clamp(quality, 0, 100); break;
                     case "replaySeconds" when n is { } seconds: s.ReplaySeconds = Math.Clamp(seconds, 30, 600); break;
-                    case "maxFps" when n is { } fps: s.MaxFps = fps >= 120 ? 120 : 60; break;
                     case "replayMode" when v.ValueKind == JsonValueKind.String && v.GetString() is "games" or "always" or "off": s.ReplayMode = v.GetString()!; break;
                     case "cursor" when v.ValueKind is JsonValueKind.True or JsonValueKind.False: s.Cursor = v.GetBoolean(); break;
                     case "printScreen" when v.ValueKind is JsonValueKind.True or JsonValueKind.False: s.PrintScreen = v.GetBoolean(); break;
@@ -555,7 +546,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>Keys Exo will not take: ones ShadowPlay or Game Bar use, or a bare key that would stop typing it.</summary>
-    private static string? CaptureHotkeyProblem(string keys)
+    internal static string? CaptureHotkeyProblem(string keys)
     {
         if (keys.Length is 0 or > 40) return "Pick a key combination.";
         var parts = keys.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -571,7 +562,7 @@ public sealed partial class MainWindow
         return null;
     }
 
-    private static string? CaptureFolderProblem(string folder)
+    internal static string? CaptureFolderProblem(string folder)
     {
         try
         {

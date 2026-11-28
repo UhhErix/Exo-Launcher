@@ -750,7 +750,7 @@ impl DiscordChatState {
                             },
                         ],
                         footer: Some(DiscordEmbedFooter {
-                            text: Some("wgpu DX12 · Goeist Variable".into()),
+                            text: Some("wgpu DX12 · Geist Variable".into()),
                             ..Default::default()
                         }),
                         ..Default::default()
@@ -1797,8 +1797,13 @@ impl AppState {
                 json!({ "action": "invite", "invite": c }),
                 move |s, res: Result<DiscordServerCardReply, String>| {
                     let entry = match res {
-                        Ok(rep) if rep.ok && rep.invite.is_some() => {
-                            InviteCardEntry::Loaded(rep.invite.unwrap())
+                        Ok(rep) if rep.ok => {
+                            if let Some(invite) = rep.invite {
+                                InviteCardEntry::Loaded(invite)
+                            } else {
+                                s.discord.chat.links.invites.remove(&c);
+                                return;
+                            }
                         }
                         Ok(rep) if rep.invalid => InviteCardEntry::Invalid,
                         _ => {
@@ -1857,8 +1862,13 @@ impl AppState {
                 json!({ "action": "gift", "code": c }),
                 move |s, res: Result<DiscordServerCardReply, String>| {
                     let entry = match res {
-                        Ok(rep) if rep.ok && rep.gift.is_some() => {
-                            GiftCardEntry::Loaded(rep.gift.unwrap())
+                        Ok(rep) if rep.ok => {
+                            if let Some(gift) = rep.gift {
+                                GiftCardEntry::Loaded(gift)
+                            } else {
+                                s.discord.chat.links.gifts.remove(&c);
+                                return;
+                            }
                         }
                         Ok(rep) if rep.invalid => GiftCardEntry::Invalid,
                         _ => {
@@ -3701,11 +3711,15 @@ impl AppState {
                 METHOD_DISCORD_FRIEND,
                 params,
                 |s, res: Result<DiscordFriendActionReply, String>| match res {
-                    Ok(rep) if rep.ok && rep.channel_id.is_some() => {
-                        let cid = rep.channel_id.unwrap();
-                        s.discord.chat.create_dm = None;
-                        s.refresh_discord_home();
-                        s.open_discord_dm(&cid);
+                    Ok(rep) if rep.ok => {
+                        if let Some(cid) = rep.channel_id {
+                            s.discord.chat.create_dm = None;
+                            s.refresh_discord_home();
+                            s.open_discord_dm(&cid);
+                        } else if let Some(ref mut dlg) = s.discord.chat.create_dm {
+                            dlg.busy = false;
+                            dlg.error = Some("Discord didn't make that DM.".into());
+                        }
                     }
                     Ok(rep) => {
                         if let Some(ref mut dlg) = s.discord.chat.create_dm {
@@ -4000,11 +4014,15 @@ impl AppState {
             METHOD_DISCORD_THREAD,
             json!({ "channelId": cid, "name": name, "messageId": mid }),
             |s, res: Result<DiscordThreadCreateReply, String>| match res {
-                Ok(rep) if rep.ok && rep.thread.is_some() => {
-                    let thread = rep.thread.unwrap();
-                    s.discord.chat.new_thread_dialog = None;
-                    s.notice = Some(format!("Created thread {}", thread.name));
-                    s.open_discord_channel(&thread.id);
+                Ok(rep) if rep.ok => {
+                    if let Some(thread) = rep.thread {
+                        s.discord.chat.new_thread_dialog = None;
+                        s.notice = Some(format!("Created thread {}", thread.name));
+                        s.open_discord_channel(&thread.id);
+                    } else if let Some(ref mut dlg) = s.discord.chat.new_thread_dialog {
+                        dlg.busy = false;
+                        dlg.error = Some("Discord didn't start the thread.".into());
+                    }
                 }
                 Ok(rep) => {
                     if let Some(ref mut dlg) = s.discord.chat.new_thread_dialog {
@@ -5138,18 +5156,39 @@ impl AppState {
     pub fn attach_discord_files(&mut self, paths: &[PathBuf]) {
         self.discord.chat.drop_hover = false;
         let room = 10usize.saturating_sub(self.discord.chat.pending_uploads.len());
-        for path in paths.iter().take(room) {
-            let Ok(bytes) = std::fs::read(path) else {
-                continue;
-            };
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("attachment.bin")
-                .to_string();
-            let mime = guess_mime(&name);
-            self.attach_raw_bytes(name, mime, bytes);
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        let paths: Vec<PathBuf> = paths.iter().take(room).cloned().collect();
+        if paths.is_empty() {
+            return;
         }
+        std::thread::Builder::new()
+            .name("exo-dc-attach-read".into())
+            .spawn(move || {
+                let files: Vec<(String, Vec<u8>)> = paths
+                    .iter()
+                    .filter_map(|path| {
+                        let bytes = std::fs::read(path).ok()?;
+                        let name = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("attachment.bin")
+                            .to_string();
+                        Some((name, bytes))
+                    })
+                    .collect();
+                if files.is_empty() {
+                    return;
+                }
+                handle.update(move |s, _| {
+                    for (name, bytes) in files {
+                        let mime = guess_mime(&name);
+                        s.attach_raw_bytes(name, mime, bytes);
+                    }
+                });
+            })
+            .ok();
     }
 
     pub fn remove_pending_upload(&mut self, local_id: &str) {
@@ -5497,7 +5536,10 @@ impl AppState {
     }
 
     pub fn handle_discord_open(&mut self, ev: DiscordOpenEvent) -> bool {
-        self.room = Room::Discord;
+        self.switch_room(Room::Discord);
+        if ev.channel_id.is_empty() {
+            return true;
+        }
         if let Some(gid) = ev.guild_id {
             self.open_discord_guild(&gid);
             self.open_discord_channel(&ev.channel_id);
@@ -5568,8 +5610,10 @@ impl AppState {
     }
 
     pub fn handle_friends_badge(&mut self, count: u32) -> bool {
-        if self.discord.chat.friends_badge_count != count {
-            self.discord.chat.friends_badge_count = count;
+        self.discord.chat.friends_badge_count = count;
+        self.chrome.discord_badge_revision = self.chrome.discord_badge_revision.saturating_add(1);
+        if self.chrome.discord_badge_count != count {
+            self.chrome.discord_badge_count = count;
             true
         } else {
             false

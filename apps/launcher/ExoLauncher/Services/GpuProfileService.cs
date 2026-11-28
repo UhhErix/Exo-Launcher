@@ -65,8 +65,13 @@ internal static class GpuProfileService
         {
             lock (Gate)
             {
-                if (!File.Exists(BackupPath) || !WasGsync(File.ReadAllText(BackupPath)) || GraphicsService.Vendor() != "nvidia") return;
-                AppLog.Info($"GPU profile: the G-SYNC profile and its cap are gone: {Apply().Status}.");
+                if (!File.Exists(BackupPath) || GraphicsService.Vendor() != "nvidia") return;
+                var wasLegacyGsync = WasGsync(File.ReadAllText(BackupPath));
+                var liveGsyncOn = NvidiaProfiles.Available
+                    && NvidiaProfiles.Read([GpuProfile.GsyncFeature]) is { Ok: true } state
+                    && state.Values.GetValueOrDefault(GpuProfile.GsyncFeature) == 1u;
+                if (!wasLegacyGsync && !liveGsyncOn) return;
+                AppLog.Info($"GPU profile: G-SYNC turned off ({(wasLegacyGsync ? "legacy backup" : "live profile")}): {Apply().Status}.");
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Warn("GPU profile, leaving G-SYNC: " + ex.GetType().Name); }
@@ -101,8 +106,7 @@ internal static class GpuProfileService
             if (vendor != "nvidia") return ReadLocked() with { Ok = false, Message = "Exo changes only NVIDIA, AMD and Intel driver settings." };
             if (lowLatency is not null && GpuProfile.IsNvidiaLowLatencyChoice(lowLatency))
                 App.Services.Settings.UpdateProfile(s => s.NvidiaLowLatency = lowLatency);
-            if (vrr is { } chosenVrr)
-                App.Services.Settings.UpdateProfile(s => s.NvidiaGsync = chosenVrr);
+            App.Services.Settings.UpdateProfile(s => s.NvidiaGsync = false);
             var variant = NvidiaVariant(MainScreen("nvidia"));
             var (ok, message, writes, values, skipped, _) = Nvidia(variant);
             if (!ok) return ReadLocked() with { Ok = false, Message = message };
@@ -203,8 +207,7 @@ internal static class GpuProfileService
     {
         var s = App.Services.Settings.Current;
         var latency = GpuProfile.IsNvidiaLowLatencyChoice(s.NvidiaLowLatency) ? s.NvidiaLowLatency! : GpuProfile.LowLatencyOn;
-        var vrr = screen.Vrr && (s.NvidiaGsync ?? true);
-        return new GpuProfile.Variant(Series(), Vrr: vrr, LowLatency: latency);
+        return new GpuProfile.Variant(Series(), Vrr: false, LowLatency: latency);
     }
 
     /// <summary>

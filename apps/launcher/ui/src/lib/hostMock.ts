@@ -684,7 +684,6 @@ const mockSettings: LauncherSettings = {
   autoUpdateUpscalers: true,
   upscalerAntiCheatEverywhere: false,
   keepAwakeDownloads: true,
-  storeClientsQuiet: true,
   chipset: mockIntelCpu ? 'intel' : 'amd',
   uiPrefs: mockTour ? {} : { tourSeen: 1 },
   ...(mockFolders ? {
@@ -1064,7 +1063,7 @@ const MOCK_APP = { publisher: null, version: null, installedOn: null, bytes: nul
 let MOCK_PROGRAMS = [
   { ...MOCK_APP, id: 'HKLM:7-Zip', name: '7-Zip 26.01 (x64)', publisher: 'Igor Pavlov', version: '26.01', bytes: 5_200_000 },
   { ...MOCK_APP, id: 'HKCU:Discord', name: 'Discord', publisher: 'Discord Inc.', bytes: 412_000_000, replaces: 'discord' },
-  { ...MOCK_APP, id: 'HKLM:Steam', name: 'Steam', publisher: 'Valve Corporation', bytes: 1_200_000_000, care: 'store', caution: 'Your games from it need it to start.' },
+  { ...MOCK_APP, id: 'HKLM:Steam', name: 'Steam', publisher: 'Valve Corporation', bytes: 1_200_000_000, care: 'store', caution: 'Its games need it to start.' },
   { ...MOCK_APP, id: 'HKLM:Vanguard', name: 'Riot Vanguard', publisher: 'Riot Games, Inc.', bytes: 273_000_000, care: 'anticheat', removable: false },
   { ...MOCK_APP, id: 'HKLM:VC14', name: 'Microsoft Visual C++ v14 Redistributable (x64)', publisher: 'Microsoft Corporation', bytes: 21_000_000, care: 'runtime', caution: 'Games and apps that need it stop working until it’s installed again.' },
   { ...MOCK_APP, id: 'store:Clipchamp.Clipchamp_yxz26nhyzhsrt', name: 'Clipchamp', publisher: 'Microsoft Corp.', store: true, installedOn: '2026-10-12', bytes: 160_000_000, replaces: 'clipchamp' },
@@ -1369,7 +1368,7 @@ const mockCaptureState = {
   encoder: 'NVIDIA HEVC Encoder MFT', hdr: false, hotkeys: { saveReplay: true, record: true, snip: true, printScreen: true },
 }
 const mockCaptureSettings: Record<string, unknown> = {
-  quality: 50, replaySeconds: 60, maxFps: 60, replayMode: 'games',
+  replaySeconds: 60, replayMode: 'games',
   cursor: true, saveReplayKeys: 'Ctrl+Alt+F10', recordKeys: 'Ctrl+Alt+F9', snipKeys: 'Ctrl+Alt+F8', printScreen: false, afterSnip: 'edit',
   folder: 'C:\\Users\\Player\\Videos\\Exo Captures', keepGb: 0, keepDays: 0, autoShrink: true, callVoices: false,
 }
@@ -2183,9 +2182,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'game.frameGen': (p) => mockGameFrameGen(p),
-  'game.frameCap': (p) => mockGameFrameCap(p),
-  'game.capLab.run': (p) => mockCapLabRun(p),
-  'game.capLab.cancel': (p) => mockCapLabCancel(p),
   'shaders.status': mockShadersStatus,
   'shaders.prepare.games': () => ({ ok: true, games: MOCK_GAMES.filter(game => game.installed).slice(0, 2).map((game, at) => ({ id: game.id, title: at ? game.title : 'A Very Long Unreal Game Name: The Definitive Remastered Edition', state: mockPrepareRunning && !at ? 'running' : 'ready', message: null })) }),
   'shaders.prepare.start': () => { mockPrepareRunning = true; emitHostEvent('shaders.changed', {}); return { ok: true, message: null } },
@@ -2819,158 +2815,6 @@ function mockGameFrameGen(p?: Record<string, unknown>) {
     'safe',
     'No anti-cheat block.',
   )
-}
-
-const mockFrameCaps: Record<string, { tier: string; capFps: number | null; backend: string }> = {}
-const mockCapLabState: Record<string, Record<string, unknown>> = {}
-
-const MOCK_CAP_VENDORS: Record<string, { backend: string; label: string; adapter: string }> = {
-  amd: { backend: 'amd_chill', label: 'AMD Radeon Chill', adapter: 'Radeon RX 9070 XT' },
-  intel: { backend: 'intel_igcl', label: 'Intel IGCL (per-app)', adapter: 'Intel Arc B580' },
-  nvidia: { backend: 'nvidia_drs', label: 'NVIDIA Driver (DRS)', adapter: 'NVIDIA GeForce RTX 3070' },
-}
-
-const MOCK_TIER_DEFAULTS: Record<string, number> = { smooth: 102, balanced: 120, max: 138 }
-
-function applyMockFrameCapUpdate(id: string, defaultBackend: string, p?: Record<string, unknown>) {
-  if (!p) return
-  const hasChange = typeof p.tier === 'string' || typeof p.capFps === 'number' || typeof p.backend === 'string'
-  if (!hasChange) return
-  const tier = typeof p.tier === 'string' ? p.tier : 'custom'
-  if (tier === 'off') {
-    delete mockFrameCaps[id]
-    return
-  }
-  if (tier === 'uncapped') {
-    mockFrameCaps[id] = { tier: 'uncapped', capFps: null, backend: defaultBackend }
-    return
-  }
-  const capFps = typeof p.capFps === 'number' ? p.capFps : (MOCK_TIER_DEFAULTS[tier] ?? 138)
-  const chosenBackend = typeof p.backend === 'string' ? p.backend : defaultBackend
-  mockFrameCaps[id] = { tier, capFps, backend: chosenBackend }
-}
-
-function defaultMockCapLab(id: string) {
-  return {
-    gameId: id,
-    status: 'idle',
-    capAFps: 0,
-    capBFps: 0,
-    currentArm: null,
-    elapsedSeconds: 0,
-    totalSeconds: 20,
-    verdict: null,
-    winner: null,
-    deltaPercent: 0,
-    noiseThresholdPercent: 3,
-    reason: null,
-    armA: null,
-    armB: null,
-  }
-}
-
-function mockGameFrameCap(p?: Record<string, unknown>) {
-  const id = String(p?.id ?? '')
-  const vendor = mockGpu ?? 'nvidia'
-  const info = MOCK_CAP_VENDORS[vendor] ?? MOCK_CAP_VENDORS.nvidia
-  applyMockFrameCapUpdate(id, info.backend, p)
-  const saved = mockFrameCaps[id]
-  const selectedTier = saved?.tier ?? 'off'
-  const activeCapFps = saved?.capFps ?? null
-  return {
-    ok: true,
-    message: null,
-    gameId: id,
-    refreshHz: 144,
-    vrr: true,
-    inVrrRange: true,
-    vrrFloorHz: 48,
-    fgMultiplier: 1,
-    fgRouteLabel: null,
-    vendor,
-    adapter: info.adapter,
-    isHybrid: false,
-    backend: saved?.backend ?? info.backend,
-    backendLabel: info.label,
-    backendAvailable: true,
-    backendNote: info.label,
-    backends: [
-      {
-        id: info.backend,
-        vendor,
-        label: info.label,
-        available: true,
-        perGameNative: vendor !== 'amd',
-        latencyNote: 'Low latency driver frame cap.',
-        antiCheatNote: 'External driver profile; safe on every anti-cheat class.',
-        reason: null,
-      },
-    ],
-    selectedTier,
-    activeCapFps,
-    targetOutputFps: activeCapFps,
-    tiers: [
-      { id: 'smooth', label: 'Smooth', capFps: 102, outputFps: 102, predictedVarianceMs2: 0.25, predictedStdDevMs: 0.5, predictedDipsPerMinute: 0.2, measured: false, summary: '1% low target · 102 fps · ~±0.5 ms est.' },
-      { id: 'balanced', label: 'Balanced', capFps: 120, outputFps: 120, predictedVarianceMs2: 0.9, predictedStdDevMs: 0.95, predictedDipsPerMinute: 2.5, measured: false, summary: '5% low target · 120 fps · ~±1.0 ms est.' },
-      { id: 'max', label: 'Max (VRR)', capFps: 138, outputFps: 138, predictedVarianceMs2: 2.25, predictedStdDevMs: 1.5, predictedDipsPerMinute: 10, measured: false, summary: 'VRR ceiling · 138 fps · ~±1.5 ms est.' },
-    ],
-    refreshLockedCaps: [],
-    uncappedOption: null,
-    suggestion: { tier: 'max', capFps: 138, reason: 'VRR is active at 144 Hz; 138 fps keeps frames below the V-Sync ceiling.' },
-    stutter: { totalSpikes: 0, topCause: 'none', topCauseLabel: 'None', summary: 'No gameplay frame trace recorded yet.', perProcessVramAvailable: false, breakdown: [] },
-    ab: mockCapLabState[id] ?? defaultMockCapLab(id),
-    word: activeCapFps ? `${activeCapFps} fps · ${info.label}` : 'Off · 138 fps VRR cap available',
-    good: activeCapFps !== null,
-    bad: false,
-  }
-}
-
-function mockCapLabRun(p?: Record<string, unknown>) {
-  const id = String(p?.id ?? '')
-  const capAFps = typeof p?.capAFps === 'number' ? p.capAFps : 138
-  const capBFps = typeof p?.capBFps === 'number' ? p.capBFps : 120
-  const ab = {
-    gameId: id,
-    status: 'completed',
-    capAFps,
-    capBFps,
-    currentArm: null,
-    elapsedSeconds: 20,
-    totalSeconds: 20,
-    verdict: 'B is smoother by 12.4%',
-    winner: 'b',
-    deltaPercent: 12.4,
-    noiseThresholdPercent: 3,
-    reason: null,
-    armA: { capFps: capAFps, frames: 1200, averageFps: 134.2, low1Fps: 98.1, low01Fps: 76.4, averageMs: 7.45, frameTimeVarianceMs2: 3.1, frameTimeStdDevMs: 1.76 },
-    armB: { capFps: capBFps, frames: 1180, averageFps: 119.5, low1Fps: 114.2, low01Fps: 103.8, averageMs: 8.37, frameTimeVarianceMs2: 0.72, frameTimeStdDevMs: 0.85 },
-  }
-  mockCapLabState[id] = ab
-  emitHostEvent('game.capLab', ab as never)
-  return { ok: true, message: null, ab }
-}
-
-function mockCapLabCancel(p?: Record<string, unknown>) {
-  const id = String(p?.id ?? '')
-  const ab = {
-    gameId: id,
-    status: 'cancelled',
-    capAFps: 0,
-    capBFps: 0,
-    currentArm: null,
-    elapsedSeconds: 0,
-    totalSeconds: 20,
-    verdict: null,
-    winner: null,
-    deltaPercent: 0,
-    noiseThresholdPercent: 3,
-    reason: 'Cancelled by user.',
-    armA: null,
-    armB: null,
-  }
-  mockCapLabState[id] = ab
-  emitHostEvent('game.capLab', ab as never)
-  return { ok: true, message: null, ab }
 }
 
 // ?hold=store.,discord.chat holds every call whose method starts so, for looking at a wait.

@@ -3,8 +3,8 @@ use crate::pc_menus::{menu_btn, menu_row, menu_switch};
 use crate::state::{AppState, HostStatus};
 use exo_kit::{
     BG, BadgeTone, FG, RADIUS_CARD, RADIUS_PILL, SPRING_QUICK, bad, fg_faint, fg_muted,
-    filter_pill, float_line, good, progress_bar, slider_track, status_badge, subtle_fill,
-    type_control, type_small, warn,
+    filter_pill, float_line, good, progress_bar, slider_range, slider_track, status_badge,
+    subtle_fill, type_control, type_small, warn,
 };
 use exo_rpc::{
     GpuFanChannelCurve, GpuFanPoint, GpuManualProfile, GpuManualTuningState, GpuStabilityProgress,
@@ -476,7 +476,7 @@ pub fn register_events(state: &mut AppState) {
 impl AppState {
     pub fn load_gpu_manual_tuning(&mut self) {
         if self.status != HostStatus::Connected {
-            if self.pc.gpu_tuning_ui.state.is_none() {
+            if self.status == HostStatus::Standalone && self.pc.gpu_tuning_ui.state.is_none() {
                 self.pc.gpu_tuning_ui = GpuManualTuningUiState::demo();
             }
             return;
@@ -842,6 +842,16 @@ fn range_slider_row(
             }
         }
     });
+    let r_keys = range.clone();
+    let slider = slider_range(
+        slider,
+        f64::from(current),
+        f64::from(range.min),
+        f64::from(range.max),
+        f64::from(range.step.max(1)),
+        !disabled,
+        move |s: &mut AppState, v| on_change(s, clamp_to_range(v.round() as i32, &r_keys)),
+    );
 
     Some(menu_row(
         label,

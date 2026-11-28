@@ -8,9 +8,7 @@ use exo_kit::{
     subtle_fill, type_body, type_control, type_section, type_small,
 };
 use exo_rpc::{ActionResult, KeyPreview, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW};
-use rune::{
-    Cursor, El, Key, LiquidGlass, Transition, Tx, col, edit_access, el, row, text, text_input,
-};
+use rune::{Cursor, El, Key, Transition, Tx, col, edit_access, el, row, text, text_input};
 use serde_json::json;
 
 const KEY_STORES: [(&str, &str); 3] = [("steam", "Steam"), ("epic", "Epic"), ("gog", "GOG")];
@@ -57,11 +55,11 @@ pub fn register_events(reg: &mut EventRegistry) {
             .map(|s| s.to_string());
         if ok && let Some(gid) = game_id {
             state.close_key_modal();
+            state.refresh_library();
             state.push_notice(
                 message.unwrap_or_else(|| "Key activated.".into()),
                 NoticeTone::Good,
             );
-            state.refresh_library();
             state.open_game_page(&gid);
         } else {
             state.push_notice(
@@ -181,7 +179,7 @@ impl AppState {
     }
 }
 
-pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn layers(s: &AppState) -> Vec<El> {
     let preview_note = if let Some(ref preview) = s.key_preview {
         if let Some(ref store) = preview.store {
             Some((
@@ -356,7 +354,6 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 
     content = content.child(footer);
 
-    let _ = blur;
     let card = col()
         .key("activate-key-modal")
         .w(420.0)
@@ -367,7 +364,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(true, |s: &mut AppState| s.close_key_modal())
@@ -404,10 +401,8 @@ mod tests {
         }));
         assert!(!s.key_modal_open);
         assert_eq!(s.open_game_id.as_deref(), Some(first_id.as_str()));
-        assert_eq!(
-            s.notices.back().map(|n| n.text.as_str()),
-            Some("Added to library")
-        );
+        assert!(s.notices.is_empty());
+        assert_eq!(s.notice.as_deref(), Some("Added to library"));
     }
 
     #[test]

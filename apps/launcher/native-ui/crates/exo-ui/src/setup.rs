@@ -9,17 +9,14 @@ use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_QUICK, TRANSPARENT, amoled_card, bad, exo_mark, fg_faint, fg_muted, glass_control_fill,
-    glass_panel_opt, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chat,
+    glass_panel, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chat,
     icon_check, icon_chevron_left, icon_chevron_right, icon_close, icon_gamepad, icon_headphones,
     icon_keyboard, icon_library, icon_microphone, icon_mouse, icon_music, icon_search,
     icon_settings, icon_shield, icon_sparkles, icon_store, modal_card_transition, pressed_fill,
     scaled, scrim_fill, store_logo_or_fallback, subtle_fill, type_body, type_control, type_page,
     type_small, type_title,
 };
-use rune::{
-    Align, Color, Cursor, El, LiquidGlass, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row,
-    text,
-};
+use rune::{Align, Color, Cursor, El, ScrollSpec, Side, SurfaceFit, TextStyle, col, el, row, text};
 use serde_json::json;
 use std::collections::VecDeque;
 
@@ -38,6 +35,7 @@ pub const STAGE_TITLES: [&str; STAGES] = [
     "Live tour",
     "Done",
 ];
+const ACCOUNT_STAGE: usize = 1;
 const TOUR_STAGE: usize = 4;
 const DONE_STAGE: usize = 5;
 const TRACK_H: f32 = 64.0;
@@ -209,6 +207,7 @@ pub struct SetupFlow {
     pub return_to: Option<usize>,
     pub picks: Option<Vec<String>>,
     pub applying: bool,
+    pub runtimes: crate::setup_runtimes::SetupRuntimes,
 }
 
 impl SetupFlow {
@@ -263,6 +262,7 @@ impl AppState {
                 self.load_backup_and_clients();
                 self.wp4_load_settings_all();
                 self.wp4_load_cleanup();
+                self.setup_load_runtimes();
             }
             0 => {
                 self.load_pc_devices();
@@ -283,6 +283,14 @@ impl AppState {
     }
 
     fn setup_go_stage(&mut self, stage: usize) {
+        if self.setup.stage == ACCOUNT_STAGE && stage > ACCOUNT_STAGE {
+            #[cfg(windows)]
+            self.call_host_async(
+                "exoAccount.markAsked",
+                json!({}),
+                |_, _: Result<serde_json::Value, String>| {},
+            );
+        }
         self.setup.stage = stage.min(DONE_STAGE);
         self.setup_enter_stage();
         self.setup_persist(false);
@@ -1056,7 +1064,7 @@ fn welcome(s: &AppState, scale: f32) -> El {
                 .child(text(dev.name.clone()).font(type_small()).color(FG).wrap()),
         );
     }
-    let found = glass_panel_opt("setup-found", 470.0, true)
+    let found = glass_panel("setup-found", 470.0)
         .pin(None, None, Some(24.0), Some(24.0))
         .padding(20.0)
         .gap(14.0)
@@ -1098,7 +1106,14 @@ fn welcome(s: &AppState, scale: f32) -> El {
 fn store_row(s: &AppState, id: &str) -> El {
     let count = store_count(s, id);
     let state = if count > 0 {
-        pill(format!("Found · {count} games"), good().alpha(0.16), good())
+        pill(
+            format!(
+                "Found · {count} {}",
+                if count == 1 { "game" } else { "games" }
+            ),
+            good().alpha(0.16),
+            good(),
+        )
     } else {
         pill("Not found on this PC", fg_faint().alpha(0.2), fg_muted())
     };
@@ -1421,6 +1436,10 @@ fn accounts(s: &AppState) -> El {
         );
     }
 
+    if let Some(runtimes) = crate::setup_runtimes::card_view(s) {
+        side = side.child(runtimes);
+    }
+
     side = side.child(setup_apps_card(s));
 
     if let Some(cleanup) = setup_cleanup_card(s) {
@@ -1701,32 +1720,36 @@ fn pc_cards(s: &AppState) -> El {
         .radius(3.0)
         .fill(fg_faint().alpha(0.18))
         .child(el().w(0.0).h(6.0).radius(3.0).fill(FG).grow(used_frac));
-    let disk = amoled_card(RADIUS_CARD)
+    let mut disk_head = row()
+        .w_full()
+        .justify_between()
+        .center_y()
+        .child(text("Storage").font(type_body()).color(FG));
+    if !disk_tag.is_empty() {
+        disk_head = disk_head.child(pill(disk_tag, fg_faint().alpha(0.2), fg_muted()));
+    }
+    let mut disk = amoled_card(RADIUS_CARD)
         .key("setup-card-disk")
         .grow(1.0)
         .min_w(0.0)
         .padding(18.0)
         .gap(12.0)
-        .child(
-            row()
-                .w_full()
-                .justify_between()
-                .center_y()
-                .child(text("Storage").font(type_body()).color(FG))
-                .child(pill(disk_tag, fg_faint().alpha(0.2), fg_muted())),
-        )
+        .child(disk_head)
         .child(
             text(disk_name)
                 .font(TextStyle::new(scaled(20.0), 650.0))
                 .color(FG)
                 .wrap(),
         )
-        .child(disk_bar)
-        .child(
+        .child(disk_bar);
+    if total > 0.0 {
+        disk = disk.child(
             text(format!("{free:.0} GB free of {total:.0} GB"))
+                .key("setup-disk-free")
                 .font(type_small())
                 .color(fg_muted()),
         );
+    }
     let net_name = about
         .network
         .clone()
@@ -1745,11 +1768,12 @@ fn pc_cards(s: &AppState) -> El {
                 about.windows.clone().unwrap_or_else(|| "Checking".into()),
             ),
             fact(
-                "Version",
+                "Exo",
                 about
                     .version
                     .clone()
                     .or_else(|| s.pc.update_check.as_ref().and_then(|u| u.current.clone()))
+                    .map(|v| crate::whats_new::version_label(&v))
                     .unwrap_or_else(|| "Checking".into()),
             ),
         ],
@@ -1809,7 +1833,7 @@ fn pc_defaults(s: &AppState) -> El {
     }
     let count = picks.len();
     let total = tuning_items.len();
-    let panel = glass_panel_opt("setup-picks", 560.0, true)
+    let panel = glass_panel("setup-picks", 560.0)
         .padding(22.0)
         .gap(12.0)
         .child(
@@ -1966,7 +1990,7 @@ fn tour_stage(s: &AppState, scale: f32) -> El {
                 .child(grid),
         );
     let first = TOUR_STEPS[0];
-    let card = glass_panel_opt("setup-tour-coach", 408.0, true)
+    let card = glass_panel("setup-tour-coach", 408.0)
         .pin(None, Some(20.0), Some(24.0), None)
         .padding(20.0)
         .gap(14.0)
@@ -2087,7 +2111,7 @@ fn done(s: &AppState, scale: f32) -> El {
                 .child(text(sub).font(type_small()).color(fg_muted()).wrap()),
         );
     }
-    let facts = glass_panel_opt("setup-done-facts", 470.0, true)
+    let facts = glass_panel("setup-done-facts", 470.0)
         .padding(20.0)
         .gap(18.0)
         .child(
@@ -2365,7 +2389,7 @@ fn tour_step_icon(icon: TourIcon) -> El {
     }
 }
 
-pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn tour_layers(s: &AppState) -> Vec<El> {
     let Some(raw_step) = s.setup.beat else {
         return Vec::new();
     };
@@ -2574,7 +2598,6 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
         .child(skip_btn)
         .child(actions);
 
-    let _ = blur;
     let mut card = col()
         .key("exo-tour-card")
         .w(scaled(408.0))
@@ -2585,7 +2608,7 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Panel))
         .padding(20.0)
         .gap(14.0)
         .transition(modal_card_transition())
@@ -2612,7 +2635,7 @@ pub fn tour_layers(s: &AppState, blur: bool) -> Vec<El> {
 
 pub fn return_bar(s: &AppState) -> El {
     let stage = s.setup.return_to.unwrap_or(2).min(STAGES - 1);
-    glass_panel_opt("setup-return", 300.0, true)
+    glass_panel("setup-return", 300.0)
         .pin(None, Some(76.0), Some(24.0), None)
         .h(48.0)
         .px(16.0)

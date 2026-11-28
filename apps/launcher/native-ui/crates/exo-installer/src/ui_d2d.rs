@@ -105,7 +105,7 @@ pub fn bench_d2d_first_paint() -> Result<D2dBenchResult, InstallError> {
             .map_err(|e| InstallError::Win32(format!("DWriteCreateFactory: {e}")))?;
         let text_fmt = unsafe {
             dwrite.CreateTextFormat(
-                w!("Goeist"),
+                w!("Geist"),
                 None,
                 DWRITE_FONT_WEIGHT_SEMI_BOLD,
                 DWRITE_FONT_STYLE_NORMAL,

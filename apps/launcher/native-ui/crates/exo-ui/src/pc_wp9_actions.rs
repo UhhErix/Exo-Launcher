@@ -2,7 +2,7 @@ use crate::pc_actions::parse_shader_snap_games;
 use crate::pc_state::{
     AutoClearedEntry, AutoTuneStageId, AutoTuneStageStatus, BloatAppInfo,
     DriverInstallOverlayState, RemovedAppEntry, best_steps_list, compute_initial_auto_tune_stages,
-    format_bytes, has_interrupts_work, is_playbook_item, leftover_cleared_line, trim_stop,
+    format_bytes, has_interrupts_work, leftover_cleared_line, trim_stop,
 };
 use crate::state::{AppState, HostStatus, Room};
 use exo_rpc::{
@@ -11,9 +11,9 @@ use exo_rpc::{
     AutopilotSetReply, AutopilotState, BiosUpdateReply, CompressActReply, CompressAllReply,
     CompressList, CompressSettingsReply, CompressState, DevicesListReply, DisplayState,
     DriverProgress, DriverState, DriverStep, DriversState, DrivesReply, ExoAiState,
-    FpsCounterReply, GpuDriverInstallEvent, GpuProcessesState, GpuProfile,
-    InstallerCacheCleanReply, InstallerCacheReply, InterruptsState, JunkCleanReply, JunkScanReply,
-    KeepStatus, LauncherSettings, METHOD_APPS_ALLOW_EDGE, METHOD_APPS_CLEAN, METHOD_APPS_CONFIRM,
+    FpsCounterReply, GpuDriverInstallEvent, GpuProfile, InstallerCacheCleanReply,
+    InstallerCacheReply, InterruptsState, JunkCleanReply, JunkScanReply, KeepStatus,
+    LauncherSettings, METHOD_APPS_ALLOW_EDGE, METHOD_APPS_CLEAN, METHOD_APPS_CONFIRM,
     METHOD_APPS_INSTALLER_CACHE, METHOD_APPS_INSTALLER_CACHE_CLEAN, METHOD_APPS_LEAVE,
     METHOD_APPS_LIST, METHOD_APPS_OPEN_DEFAULTS, METHOD_APPS_PACKAGE_ADD_BACK,
     METHOD_APPS_PACKAGES, METHOD_APPS_PACKAGES_PLAN, METHOD_APPS_PACKAGES_REMOVE,
@@ -22,9 +22,9 @@ use exo_rpc::{
     METHOD_COMPRESS_ACT, METHOD_COMPRESS_ALL, METHOD_COMPRESS_LIST, METHOD_COMPRESS_SETTINGS,
     METHOD_CONTROLLER_READ, METHOD_DEVICES_LIST, METHOD_EXO_AI_SET, METHOD_FPS_COUNTER,
     METHOD_GPU_AFMF3, METHOD_GPU_CONTROL_PANEL, METHOD_GPU_DISPLAY, METHOD_GPU_DRIVER,
-    METHOD_GPU_PROCESSES, METHOD_GPU_PROFILE, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN,
-    METHOD_KEEP_STATUS, METHOD_REPLACED_REMOVE, METHOD_RUNTIMES_CANCEL, METHOD_RUNTIMES_INSTALL,
-    METHOD_RUNTIMES_LIST, METHOD_SETTINGS_SET, METHOD_SHADERS_CALL, METHOD_SHADERS_PREPARE_CANCEL,
+    METHOD_GPU_PROFILE, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN, METHOD_KEEP_STATUS,
+    METHOD_REPLACED_REMOVE, METHOD_RUNTIMES_CANCEL, METHOD_RUNTIMES_INSTALL, METHOD_RUNTIMES_LIST,
+    METHOD_SETTINGS_SET, METHOD_SHADERS_CALL, METHOD_SHADERS_PREPARE_CANCEL,
     METHOD_SHADERS_REBUILD, METHOD_STARTUP_CLEAN, METHOD_STARTUP_RESTORE, METHOD_SYSTEM_DRIVERS,
     METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_HEALTH, METHOD_SYSTEM_INTERRUPTS, METHOD_SYSTEM_OVERLAYS,
     METHOD_SYSTEM_QOS, METHOD_SYSTEM_TUNE, METHOD_SYSTEM_TUNING, METHOD_WEB_PREFERENCES_GET,
@@ -294,32 +294,8 @@ impl AppState {
                     }
                 }
             });
-            self.load_gpu_processes();
             self.load_system_qos();
             self.load_system_overlays();
-        }
-    }
-
-    pub fn load_gpu_processes(&mut self) {
-        if self.pc.gpu_processes_busy {
-            return;
-        }
-        self.pc.gpu_processes_last_poll = self.clock_now();
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.pc.gpu_processes_busy = true;
-            rpc.call::<_, GpuProcessesState>(
-                METHOD_GPU_PROCESSES,
-                &json!({ "limit": 8 }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.pc.gpu_processes_busy = false;
-                        if let Ok(next) = res {
-                            s.pc.gpu_processes = Some(next);
-                        }
-                    });
-                },
-            );
         }
     }
 
@@ -334,55 +310,6 @@ impl AppState {
         }
     }
 
-    pub fn toggle_system_qos(&mut self, game_id: &str, on: bool) {
-        if self.pc.qos_busy.is_some() {
-            return;
-        }
-        self.pc.qos_busy = Some(game_id.to_string());
-        self.pc.qos_error = None;
-        let gid = game_id.to_string();
-        let action = if on { "on" } else { "off" };
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let gid_err = gid.clone();
-            rpc.call::<_, QosState>(
-                METHOD_SYSTEM_QOS,
-                &json!({ "action": action, "gameId": gid }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.pc.qos_busy = None;
-                        match res {
-                            Ok(next) => {
-                                if !next.ok {
-                                    let msg = trim_stop(next.message.as_deref().unwrap_or(""));
-                                    s.pc.qos_error = Some((
-                                        gid_err,
-                                        if msg.is_empty() {
-                                            "Not changed. Try again.".into()
-                                        } else {
-                                            msg
-                                        },
-                                    ));
-                                }
-                                s.pc.qos_state = Some(next);
-                            }
-                            Err(_) => {
-                                s.pc.qos_error = Some((gid_err, "Not changed. Try again.".into()));
-                            }
-                        }
-                    });
-                },
-            );
-        } else {
-            self.pc.qos_busy = None;
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (gid, action);
-            self.pc.qos_busy = None;
-        }
-    }
-
     pub fn load_system_overlays(&mut self) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
@@ -391,56 +318,6 @@ impl AppState {
                     handle.update(move |s, _| s.pc.overlays_state = Some(next));
                 }
             });
-        }
-    }
-
-    pub fn run_system_overlay_action(&mut self, id: &str, action: &str) {
-        if self.pc.overlays_busy.is_some() {
-            return;
-        }
-        self.pc.overlays_busy = Some(id.to_string());
-        self.pc.overlays_error = None;
-        let oid = id.to_string();
-        let act = action.to_string();
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let oid_err = oid.clone();
-            rpc.call::<_, OverlayAdvisorState>(
-                METHOD_SYSTEM_OVERLAYS,
-                &json!({ "action": act, "id": oid }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.pc.overlays_busy = None;
-                        match res {
-                            Ok(next) => {
-                                if !next.ok {
-                                    let msg = trim_stop(next.message.as_deref().unwrap_or(""));
-                                    s.pc.overlays_error = Some((
-                                        oid_err,
-                                        if msg.is_empty() {
-                                            "Not changed. Try again.".into()
-                                        } else {
-                                            msg
-                                        },
-                                    ));
-                                }
-                                s.pc.overlays_state = Some(next);
-                            }
-                            Err(_) => {
-                                s.pc.overlays_error =
-                                    Some((oid_err, "Not changed. Try again.".into()));
-                            }
-                        }
-                    });
-                },
-            );
-        } else {
-            self.pc.overlays_busy = None;
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (oid, act);
-            self.pc.overlays_busy = None;
         }
     }
 
@@ -489,18 +366,6 @@ impl AppState {
         {
             self.pc.tuning_busy = None;
         }
-    }
-
-    pub fn pc_wp9_tick(&mut self, now: f64) -> bool {
-        if self.room == Room::ExoAi
-            && !self.pc.exo_ai_storage_open
-            && self.status != HostStatus::Standalone
-            && !self.pc.gpu_processes_busy
-            && now - self.pc.gpu_processes_last_poll >= 3.0
-        {
-            self.load_gpu_processes();
-        }
-        false
     }
 
     pub fn run_auto_tune_pipeline(&mut self) {
@@ -561,11 +426,6 @@ impl AppState {
                 && !self.settings.hdr_for_games;
             let fg_todo =
                 self.settings.frame_gen_everywhere_card && !self.settings.frame_gen_everywhere;
-            let sys_todo = self
-                .pc
-                .tuning
-                .as_ref()
-                .is_some_and(|t| t.items.iter().any(|i| is_playbook_item(i) && !i.on));
             let interrupts_action = if has_interrupts_work(self.pc.interrupts.as_ref()) {
                 Some(if self.pc.interrupts.as_ref().is_some_and(|i| i.reset) {
                     "reapply"
@@ -575,18 +435,34 @@ impl AppState {
             } else {
                 None
             };
-            let net_todo = self
-                .pc
-                .health
-                .as_ref()
-                .and_then(|h| h.items.iter().find(|i| i.key == "network"))
-                .is_some_and(|i| !i.applied);
             let drives_todo = self
                 .pc
                 .drives
                 .as_ref()
                 .is_some_and(|d| d.fixes.iter().any(|f| !f.applied));
             let bloat_ids: Vec<String> = self.pc.bloat_apps.iter().map(|b| b.id.clone()).collect();
+            let app_bloat_ids: Vec<String> = self
+                .pc
+                .apps_list
+                .as_ref()
+                .map(|l| {
+                    l.programs
+                        .iter()
+                        .filter(|a| {
+                            a.bloat.is_some()
+                                && a.removable
+                                && a.uninstaller
+                                && a.replaces.is_none()
+                        })
+                        .map(|a| a.id.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let startup_can_go = self
+                .pc
+                .startup_list
+                .as_ref()
+                .is_some_and(|st| st.extras > 0 || st.items.iter().any(|i| i.unneeded));
             let branch = self.pc.gpu_driver_branch.clone();
 
             std::thread::spawn(move || {
@@ -649,12 +525,12 @@ impl AppState {
                                         } else if fan_ok {
                                             (
                                                 AutoTuneStageStatus::Done,
-                                                "Exo power plan, Autopilot & automatic GPU fans active".into(),
+                                                "Exo power plan, Autopilot, Power guard & automatic GPU fans on".into(),
                                             )
                                         } else {
                                             (
                                                 AutoTuneStageStatus::Done,
-                                                "Exo power plan & Autopilot active".into(),
+                                                "Exo power plan, Autopilot & Power guard on".into(),
                                             )
                                         }
                                     }
@@ -736,7 +612,7 @@ impl AppState {
                         AutoTuneStageId::System => {
                             let mut problems: Vec<String> = Vec::new();
                             let mut needs_restart = false;
-                            if sys_todo {
+                            {
                                 match call_sync::<SystemTuningState>(
                                     &rpc,
                                     METHOD_SYSTEM_TUNING,
@@ -774,7 +650,39 @@ impl AppState {
                                     Err(_) => problems.push("Interrupts could not finish".into()),
                                 }
                             }
-                            if net_todo {
+                            match call_sync::<QosState>(
+                                &rpc,
+                                METHOD_SYSTEM_QOS,
+                                &json!({ "action": "all" }),
+                            ) {
+                                Ok(q) => {
+                                    if !q.ok
+                                        && let Some(ref m) = q.message
+                                    {
+                                        problems.push(trim_stop(m));
+                                    }
+                                    handle.update(move |s, _| s.pc.qos_state = Some(q));
+                                }
+                                Err(_) => {
+                                    problems.push("Game network priority could not finish".into())
+                                }
+                            }
+                            match call_sync::<OverlayAdvisorState>(
+                                &rpc,
+                                METHOD_SYSTEM_OVERLAYS,
+                                &json!({ "action": "auto" }),
+                            ) {
+                                Ok(o) => {
+                                    if !o.ok
+                                        && let Some(ref m) = o.message
+                                    {
+                                        problems.push(trim_stop(m));
+                                    }
+                                    handle.update(move |s, _| s.pc.overlays_state = Some(o));
+                                }
+                                Err(_) => problems.push("Overlays could not finish".into()),
+                            }
+                            {
                                 match call_sync::<PcHealth>(
                                     &rpc,
                                     METHOD_SYSTEM_HEALTH,
@@ -816,17 +724,18 @@ impl AppState {
                             } else if needs_restart {
                                 (
                                     AutoTuneStageStatus::Done,
-                                    "Full deep Windows 11 playbook, interrupts & network applied (restart to finish)".into(),
+                                    "Windows, interrupts, network, game priority & overlays tuned (restart to finish)".into(),
                                 )
                             } else {
                                 (
                                     AutoTuneStageStatus::Done,
-                                    "Full deep Windows 11 playbook, interrupts, services & network optimal".into(),
+                                    "Windows, interrupts, network, game priority & overlays tuned"
+                                        .into(),
                                 )
                             }
                         }
                         AutoTuneStageId::Bloat => {
-                            if bloat_ids.is_empty() {
+                            let (bloat_status, mut bloat_detail) = if bloat_ids.is_empty() {
                                 (
                                     AutoTuneStageStatus::Done,
                                     "No bloat Store apps installed".into(),
@@ -888,7 +797,21 @@ impl AppState {
                                         "Bloat removal could not finish".into(),
                                     ),
                                 }
+                            };
+                            if !app_bloat_ids.is_empty() {
+                                let n = app_bloat_ids.len();
+                                let ids = app_bloat_ids.clone();
+                                handle.update(move |s, _| s.uninstall_many_apps(ids));
+                                bloat_detail = format!(
+                                    "{bloat_detail} · removing {n} app{} you didn’t ask for",
+                                    if n == 1 { "" } else { "s" }
+                                );
                             }
+                            if startup_can_go {
+                                handle.update(|s, _| s.startup_clean_unneeded());
+                                bloat_detail = format!("{bloat_detail} · startup cleaned");
+                            }
+                            (bloat_status, bloat_detail)
                         }
                         AutoTuneStageId::Cleanup => {
                             match call_sync::<JunkScanReply>(&rpc, METHOD_JUNK_SCAN, &json!({})) {
@@ -1172,47 +1095,6 @@ impl AppState {
         }
     }
 
-    pub fn run_network_item_toggle(&mut self, key: &str, item: &str, on: bool) {
-        if self.pc.network_busy.is_some() {
-            return;
-        }
-        self.pc.network_busy = Some(key.to_string());
-        self.pc.network_error = None;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let key_s = key.to_string();
-            let act = if on { "network-on" } else { "network-off" };
-            rpc.call::<_, PcHealth>(
-                METHOD_SYSTEM_HEALTH,
-                &json!({ "action": act, "item": item }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.pc.network_busy = None;
-                        match res {
-                            Ok(hp) => {
-                                if !hp.ok {
-                                    let msg = hp
-                                        .message
-                                        .as_deref()
-                                        .map(trim_stop)
-                                        .filter(|m| !m.is_empty())
-                                        .unwrap_or_else(|| "Not changed. Try again.".into());
-                                    s.pc.network_error = Some((key_s, msg));
-                                }
-                                s.pc.health = Some(hp);
-                                s.refresh_auto_tune_stages_if_idle();
-                            }
-                            Err(_) => {
-                                s.pc.network_error =
-                                    Some((key_s, "Not changed. Try again.".into()));
-                            }
-                        }
-                    });
-                },
-            );
-        }
-    }
-
     pub fn run_system_tuning_item(&mut self, key: &str, on: bool) {
         if self.pc.tuning_busy.is_some() {
             return;
@@ -1380,7 +1262,6 @@ impl AppState {
     pub fn run_gpu_profile_action(&mut self, action: &str) {
         self.pc.gpu_profile_error = None;
         let vendor = self.pc.gpu_profile.as_ref().and_then(|p| p.vendor.clone());
-        let vrr = self.pc.gpu_profile.as_ref().is_some_and(|p| p.screen.vrr);
         let chosen_ll = self.pc.gpu_low_latency_choice.take();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
@@ -1390,9 +1271,6 @@ impl AppState {
                 match vendor.as_deref() {
                     Some("nvidia") => {
                         body.insert("lowLatency".into(), json!("on"));
-                        if vrr {
-                            body.insert("vrr".into(), json!(true));
-                        }
                     }
                     Some("intel") => {
                         let ll = chosen_ll
@@ -1756,6 +1634,62 @@ impl AppState {
         }
     }
 
+    pub fn apply_runtimes_reply(&mut self, reply: RuntimesInstallReply) {
+        self.pc.runtimes_running = None;
+        self.pc.runtimes_canceling = false;
+        self.pc.runtimes_progress = None;
+        if let Some(items) = reply.items {
+            self.pc.runtimes = Some(items);
+        }
+        let mut installed = 0usize;
+        let mut newer = 0usize;
+        let mut restart = 0usize;
+        let mut failed = 0usize;
+        for r in &reply.results {
+            match r.outcome.as_str() {
+                "installed" => installed += 1,
+                "newer" => newer += 1,
+                "restart" => restart += 1,
+                "failed" => failed += 1,
+                _ => {}
+            }
+            self.pc.runtimes_results.insert(r.id.clone(), r.clone());
+        }
+        if reply.declined || reply.canceled || reply.results.is_empty() {
+            if let Some(m) = reply.message {
+                self.pc.runtimes_note = Some((m, !reply.ok && !reply.canceled));
+            }
+        } else {
+            let mut parts = Vec::new();
+            if installed > 0 {
+                parts.push(format!("{installed} installed"));
+            }
+            if newer > 0 {
+                parts.push(format!("{newer} already newer"));
+            }
+            if restart > 0 {
+                parts.push(format!(
+                    "{restart} {} a restart",
+                    if restart == 1 { "needs" } else { "need" }
+                ));
+            }
+            if failed > 0 {
+                parts.push(format!("{failed} failed"));
+            }
+            let text = if parts.is_empty() {
+                "Nothing needed installing.".into()
+            } else {
+                format!("{}.", parts.join(", "))
+            };
+            self.pc.runtimes_note = Some((text, failed > 0));
+        }
+    }
+
+    pub fn handle_runtimes_done_event(&mut self, reply: RuntimesInstallReply) -> bool {
+        self.apply_runtimes_reply(reply);
+        self.room == Room::ExoAi
+    }
+
     pub fn run_runtimes_install(&mut self, mode: &str) {
         if self.pc.runtimes_running.is_some() {
             return;
@@ -1777,54 +1711,7 @@ impl AppState {
                         s.pc.runtimes_canceling = false;
                         s.pc.runtimes_progress = None;
                         match res {
-                            Ok(reply) => {
-                                if let Some(items) = reply.items {
-                                    s.pc.runtimes = Some(items);
-                                }
-                                let mut installed = 0usize;
-                                let mut newer = 0usize;
-                                let mut restart = 0usize;
-                                let mut failed = 0usize;
-                                for r in &reply.results {
-                                    match r.outcome.as_str() {
-                                        "installed" => installed += 1,
-                                        "newer" => newer += 1,
-                                        "restart" => restart += 1,
-                                        "failed" => failed += 1,
-                                        _ => {}
-                                    }
-                                    s.pc.runtimes_results.insert(r.id.clone(), r.clone());
-                                }
-                                if reply.declined || reply.canceled || reply.results.is_empty() {
-                                    if let Some(m) = reply.message {
-                                        s.pc.runtimes_note =
-                                            Some((m, !reply.ok && !reply.canceled));
-                                    }
-                                } else {
-                                    let mut parts = Vec::new();
-                                    if installed > 0 {
-                                        parts.push(format!("{installed} installed"));
-                                    }
-                                    if newer > 0 {
-                                        parts.push(format!("{newer} already newer"));
-                                    }
-                                    if restart > 0 {
-                                        parts.push(format!(
-                                            "{restart} {} a restart",
-                                            if restart == 1 { "needs" } else { "need" }
-                                        ));
-                                    }
-                                    if failed > 0 {
-                                        parts.push(format!("{failed} failed"));
-                                    }
-                                    let text = if parts.is_empty() {
-                                        "Nothing needed installing.".into()
-                                    } else {
-                                        format!("{}.", parts.join(", "))
-                                    };
-                                    s.pc.runtimes_note = Some((text, failed > 0));
-                                }
-                            }
+                            Ok(reply) => s.apply_runtimes_reply(reply),
                             Err(_) => {
                                 s.pc.runtimes_note = Some((
                                     "The runtimes couldn’t be installed. Try again.".into(),
@@ -3120,11 +3007,11 @@ impl AppState {
     }
 
     pub fn handle_runtimes_progress_event(&mut self, prog: RuntimesProgress) -> bool {
-        if self.pc.runtimes_running.is_some() {
-            self.pc.runtimes_progress = Some(prog);
-            return self.room == Room::ExoAi;
+        if self.pc.runtimes_running.is_none() {
+            self.pc.runtimes_running = Some("update".into());
         }
-        false
+        self.pc.runtimes_progress = Some(prog);
+        self.room == Room::ExoAi
     }
 
     pub fn handle_shaders_event(&mut self, name: &str, data: &Value) -> bool {

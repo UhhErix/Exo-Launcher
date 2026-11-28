@@ -8,12 +8,11 @@
     "wooting-native 57db49a"
   ],
   "totals": {
-    "DONE": 212,
-    "PARTIAL": 10,
-    "MISSING": 19,
+    "DONE": 241,
+    "PARTIAL": 0,
+    "MISSING": 0,
     "BROKEN": 0,
-    "total": 241,
-    "undefined": 4
+    "total": 241
   },
   "rows": [
     {
@@ -1078,11 +1077,11 @@
       "id": "store-12",
       "room": "Store",
       "feature": "Store game page: trailers (HLS player)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/store/TrailerPlayer.tsx:24",
       "nativeRef": "exo-ui/src/store_media.rs:172",
       "rpc": [],
-      "notes": "Trailer UI, play/pause/mute/progress controls, poster-until-playing, and graceful poster fallback are wired via rune_media::Player::url; blocked on HLS playback: video_decoder.rs only decodes raw Discord WebRTC elementary VideoPackets, and Windows desktop Media Foundation IMFSourceResolver::CreateObjectFromURL in rune-media rejects Steam .m3u8 HLS playlists (needs AdaptiveMediaSource or HLS demuxer in rune-media).",
+      "notes": "Plays through native_media::NativeMediaSession (Media Foundation over the HLS URL) with play, pause, mute and the scrubber; rune_media::Player and the poster stay as fallbacks. Seen playing in the installed app on 2026-11-26.",
       "workPackage": "WP5"
     },
     {
@@ -3340,11 +3339,11 @@
       "feature": "GPU activity (per-process VRAM, shared memory, engine slices)",
       "status": "DONE",
       "reactRef": "components/gpu/GpuProcessesSection.tsx:1",
-      "nativeRef": "exo-ui/src/pc_ai.rs:2080",
+      "nativeRef": "exo-ui/src/gpu_activity.rs:92",
       "rpc": [
         "gpu.processes"
       ],
-      "notes": "GPU activity card in Exo AI room with 3-second polling, Refresh button, per-process VRAM/shared memory metrics, engine slices, and multi-adapter subtitle.",
+      "notes": "GPU activity card in Exo AI room with 3-second polling, per-process VRAM/shared memory metrics, engine slices, and multi-adapter subtitle.",
       "workPackage": "WP9"
     },
     {

@@ -9,15 +9,27 @@ import { isTestRun, isVersionSkew } from './fingerprint.js'
 import { fileCrash, fileUserReport, flush, pruneIssueDays, queueUserReport } from './issues.js'
 import { gitHubOf } from './github.js'
 import { parseUserReport, userLimits } from './user-report.js'
+import { counted } from './signal.js'
+import { selfTest } from './selftest.js'
 
 const HOUR_MS = 60 * 60 * 1000
 const SITE = 'https://getexo.app'
 const CONTACT_FROM = 'contact@getexo.app'
 const APP_NAMES = { launcher: 'Launcher', cinema: 'Cinema', browser: 'Browser', other: 'Other' }
 
-export default {
+const ROUTES = [
+  ['contact', /^\/v1\/contact$/], ['report', /^\/v1\/report$/], ['user-report', /^\/v1\/user-report$/],
+  ['telemetry', /^\/v1\/telemetry$/], ['telemetry-delete', /^\/v1\/telemetry\/delete$/], ['health', /^\/health$/],
+]
+
+const worker = counted('reports', ROUTES, {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
+    if (url.pathname === '/health') {
+      if (request.method !== 'GET') return new Response('GET only', { status: 405, headers: { Allow: 'GET' } })
+      const ok = Boolean(env.REPORTS && env.TELEMETRY)
+      return new Response(JSON.stringify({ ok }), { status: ok ? 200 : 503, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+    }
     if (url.pathname === '/v1/contact') return contact(request, env)
     if (url.pathname === '/v1/report') {
       if (request.method !== 'POST') return new Response('POST only', { status: 405, headers: { Allow: 'POST' } })
@@ -35,6 +47,7 @@ export default {
   },
 
   async scheduled(controller, env) {
+    await selfTest(env, (url, init) => (new URL(url).hostname === 'reports.getexo.app' ? worker.fetch(new Request(url, init), env, {}) : fetch(url, init)))
     if (!env.TELEMETRY) return
     const now = Date.now()
     const db = env.TELEMETRY
@@ -58,7 +71,9 @@ export default {
     const message = dailyMessage(digest, failed, await heldBack(db, yesterday), yesterday)
     if (message) await tellTeam(env, message)
   },
-}
+})
+
+export default worker
 
 async function triage(env, report, key, day) {
   if (!env.TELEMETRY) return

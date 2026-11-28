@@ -1,6 +1,5 @@
-use crate::devices_audio::{device_btn, device_icon_btn, device_panel, device_row, device_switch};
+use crate::devices_audio::{device_btn, device_icon_btn, device_row};
 use crate::media_state::CaptureFilter;
-use crate::notes;
 use crate::pc_state::format_bytes;
 use crate::snip_editor;
 use crate::state::{AppState, HostStatus, InputMode};
@@ -9,11 +8,11 @@ use exo_kit::{
     RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, danger_button, exo_glass, fg_faint,
     fg_muted, filter_pill, glass_control_fill, glass_panel_fill, glass_rim, good, hairline,
     hover_fill, icon_back, icon_camera, icon_check, icon_close, icon_external, icon_film,
-    icon_folder, icon_gallery, icon_more_horiz, icon_notes, icon_pause, icon_play, icon_plus,
-    icon_record_dot, icon_replay, icon_scissors, icon_settings, icon_sparkles, icon_star,
+    icon_folder, icon_gallery, icon_more_horiz, icon_pause, icon_play, icon_record_dot,
+    icon_replay, icon_scissors, icon_settings, icon_sparkles, icon_star, icon_star_filled,
     icon_trash, icon_volume, icon_volume_off, popover_transition_for, pressed_fill, primary_button,
-    progress_bar, scaled, scrim_fill, slider_track, status_badge, type_body, type_control,
-    type_page, type_section, type_small, type_title, warn,
+    progress_bar, scaled, scrim_fill, status_badge, type_body, type_control, type_page,
+    type_section, type_small, type_title, warn,
 };
 use exo_rpc::{
     ActionResult, CaptureEditReply, CaptureItem, CaptureItemReply, CaptureListReply,
@@ -25,9 +24,8 @@ use exo_rpc::{
 };
 use rune::color::oklch;
 use rune::{
-    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, LiquidGlass, Phase, ScrollSpec, Side,
-    Spring, SurfaceFit, TextEdit, TextStyle, Tx, col, edit_access, el, lightbox, row, text,
-    text_input,
+    Align, Color, Cursor, El, Key, KeyEvent, LightboxItem, Phase, ScrollSpec, Side, Spring,
+    SurfaceFit, TextEdit, TextStyle, Tx, col, edit_access, el, lightbox, row, text, text_input,
 };
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -100,7 +98,6 @@ pub struct CapturesUiState {
     pub clip_note: Option<(String, bool)>,
     pub settings_open_choice: Option<String>,
     pub settings_row_error: Option<(String, String)>,
-    pub settings_quality_drag: Option<i32>,
     pub listening_hotkey: Option<String>,
     pub picking_folder: bool,
 }
@@ -158,6 +155,30 @@ fn days_from_civil(y: i32, m: u32, d: u32) -> i64 {
     let doy = (153 * mp + 2) / 5 + d as i64 - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     era * 146_097 + doe - 719_468
+}
+
+fn format_capture_day(raw: &str) -> String {
+    let Some((y, m, d)) = parse_iso_ymd(raw) else {
+        return raw.to_string();
+    };
+    const MONTHS: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    match MONTHS.get(m.saturating_sub(1) as usize) {
+        Some(month) => format!("{month} {d}, {y}"),
+        None => raw.to_string(),
+    }
 }
 
 pub fn on_this_day_items(
@@ -258,30 +279,6 @@ fn current_ymd() -> (i32, u32, u32) {
     (year as i32, m as u32, d as u32)
 }
 
-fn encoder_line(state: Option<&exo_rpc::CaptureLiveState>) -> Option<String> {
-    let st = state?;
-    let codec = st.codec.as_deref().filter(|s| !s.is_empty())?;
-    let gpu = st.encoder.as_deref().map(|enc| {
-        let mut s = enc.to_string();
-        for suffix in [
-            " HEVC Encoder MFT",
-            " H.264 Encoder MFT",
-            " H264 Encoder MFT",
-            " AV1 Encoder MFT",
-        ] {
-            if let Some(trimmed) = s.strip_suffix(suffix) {
-                s = trimmed.to_string();
-                break;
-            }
-        }
-        s
-    });
-    match gpu.filter(|g| !g.is_empty()) {
-        Some(g) => Some(format!("{codec} on {g}")),
-        None => Some(codec.to_string()),
-    }
-}
-
 fn combo_from_key_event(ev: &KeyEvent) -> Option<String> {
     let name = match &ev.key {
         Key::Text(t) if t == " " => "Space".to_string(),
@@ -367,7 +364,7 @@ impl AppState {
                     let name = item.name.clone();
                     self.media.capture_items.retain(|it| it.id != id);
                     self.media.capture_items.insert(0, item);
-                    if self.media.captures_open && !self.media.notes.open {
+                    if self.media.captures_open {
                         self.open_capture_item(&id);
                     } else if !name.is_empty() {
                         self.notice = Some(format!("{name} is ready."));
@@ -806,12 +803,7 @@ impl AppState {
             if let Some(v) = patch.get("replaySeconds").and_then(|v| v.as_i64()) {
                 cfg.replay_seconds = v as i32;
             }
-            if let Some(v) = patch.get("maxFps").and_then(|v| v.as_i64()) {
-                cfg.max_fps = v as i32;
-            }
-            if let Some(v) = patch.get("quality").and_then(|v| v.as_i64()) {
-                cfg.quality = v as i32;
-            }
+
             if let Some(v) = patch.get("callVoices").and_then(|v| v.as_bool()) {
                 cfg.call_voices = v;
             }
@@ -883,11 +875,13 @@ impl AppState {
                     handle.update(move |s, _| {
                         s.media.captures_ui.picking_folder = false;
                         match res {
-                            Ok(r) if r.ok && r.path.is_some() => {
-                                s.capture_save_settings_patch(
-                                    "folder",
-                                    json!({ "folder": r.path.unwrap() }),
-                                );
+                            Ok(r) if r.ok => {
+                                if let Some(path) = r.path {
+                                    s.capture_save_settings_patch(
+                                        "folder",
+                                        json!({ "folder": path }),
+                                    );
+                                }
                             }
                             Ok(r) if r.cancelled => {}
                             Ok(r) => {
@@ -1017,9 +1011,6 @@ impl AppState {
     pub fn handle_captures_key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
         if !self.media.captures_open {
             return false;
-        }
-        if self.media.notes.open {
-            return self.handle_notes_key(ev, tx);
         }
         if self.media.snip_editor.is_some() {
             return self.handle_snip_editor_key(ev, tx);
@@ -1160,7 +1151,7 @@ fn popover_row(
     r
 }
 
-pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn popover_layers(s: &AppState) -> Vec<El> {
     let status = s.media.capture_status.as_ref();
     let live = status.and_then(|st| st.state.as_ref());
     let cfg = status.and_then(|st| st.settings.as_ref());
@@ -1188,7 +1179,6 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
         "top-capture-btn"
     };
 
-    let _ = blur;
     let mut menu = col()
         .key("capture-popover-menu")
         .w(240.0)
@@ -1197,7 +1187,7 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_CARD)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Menu))
         .transition(popover_transition_for(Side::Bottom, Align::End))
         .role("menu")
         .label("Capture")
@@ -1264,34 +1254,6 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
             .child(divider)
             .child(
                 popover_row(
-                    "cap-menu-note",
-                    "New note",
-                    icon_plus(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_notes(None, true);
-                }),
-            )
-            .child(
-                popover_row(
-                    "cap-menu-notes",
-                    "Notes",
-                    icon_notes(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_notes(None, false);
-                }),
-            )
-            .child(
-                popover_row(
                     "cap-menu-captures",
                     "Captures",
                     icon_gallery(16.0, FG),
@@ -1301,56 +1263,24 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
                 )
                 .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
-                    s.media.notes.open = false;
                     s.open_captures(None);
-                }),
-            )
-            .child(
-                popover_row(
-                    "cap-menu-settings",
-                    "Capture settings",
-                    icon_settings(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.media.notes.open = false;
-                    s.open_captures(None);
-                    s.media.captures_settings_open = true;
                 }),
             );
     } else {
-        menu = menu
-            .child(
-                popover_row(
-                    "cap-menu-note",
-                    "New note",
-                    icon_plus(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_notes(None, true);
-                }),
+        menu = menu.child(
+            popover_row(
+                "cap-menu-captures",
+                "Captures",
+                icon_gallery(16.0, FG),
+                None,
+                false,
+                gamepad_focus,
             )
-            .child(
-                popover_row(
-                    "cap-menu-notes",
-                    "Notes",
-                    icon_notes(16.0, FG),
-                    None,
-                    false,
-                    gamepad_focus,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_notes(None, false);
-                }),
-            );
+            .on_press(|s: &mut AppState| {
+                s.capture_menu_open = false;
+                s.open_captures(None);
+            }),
+        );
     }
 
     vec![menu]
@@ -1427,7 +1357,7 @@ fn clip_card(item: &CaptureItem, s: &AppState, scale: f32, badge: Option<String>
                     .on_press(move |s: &mut AppState| {
                         s.capture_viewer_action(&id_fav, "unfavourite");
                     })
-                    .child(icon_star(12.0, warn())),
+                    .child(icon_star_filled(12.0, warn())),
             ),
         );
     }
@@ -1588,7 +1518,7 @@ fn send_to_dialog_overlay(s: &AppState) -> Option<El> {
         .padding(20.0)
         .gap(12.0)
         .radius(RADIUS_SHEET)
-        .liquid_glass(exo_glass(ExoGlass::Sheet, false))
+        .liquid_glass(exo_glass(ExoGlass::Sheet))
         .child(text("Send to").font(type_title()).color(FG))
         .child(
             row()
@@ -2064,7 +1994,11 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                         if is_fav { "unfavourite" } else { "favourite" },
                     );
                 })
-                .child(icon_star(14.0, if is_fav { warn() } else { FG })),
+                .child(if is_fav {
+                    icon_star_filled(14.0, warn())
+                } else {
+                    icon_star(14.0, FG)
+                }),
         )
         .child(
             el().key("cap-viewer-info")
@@ -2296,7 +2230,7 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                 .padding(6.0)
                 .gap(2.0)
                 .radius(RADIUS_PANEL)
-                .liquid_glass(exo_glass(ExoGlass::Menu, false))
+                .liquid_glass(exo_glass(ExoGlass::Menu))
                 .child(
                     row()
                         .key("cap-share-discord")
@@ -2347,7 +2281,7 @@ fn viewer_view(s: &AppState, item: &CaptureItem, scale: f32) -> El {
                 .padding(6.0)
                 .gap(2.0)
                 .radius(RADIUS_PANEL)
-                .liquid_glass(exo_glass(ExoGlass::Menu, false))
+                .liquid_glass(exo_glass(ExoGlass::Menu))
                 .child(if is_img {
                     row()
                         .key("cap-more-ocr")
@@ -2445,9 +2379,10 @@ fn empty_state(s: &AppState) -> El {
 
     if !present {
         return el().w_full().grow(1.0).center().child(
-            text("Exo Capture isn't installed")
+            text("Exo Capture is missing from this install. Reinstall Exo to repair it.")
                 .font(type_title())
-                .color(FG),
+                .color(FG)
+                .wrap(),
         );
     }
 
@@ -2528,7 +2463,7 @@ fn empty_state(s: &AppState) -> El {
                     Some(icon_settings(14.0, FG)),
                     false,
                 )
-                .on_press(|s: &mut AppState| s.media.captures_settings_open = true)
+                .on_press(|s: &mut AppState| s.open_capture_settings())
             }),
         )
         .child(
@@ -2596,64 +2531,65 @@ fn settings_choice_rows(
         .find(|(v, _)| *v == spec.current)
         .map(|(_, l)| *l)
         .unwrap_or(spec.current);
-    let mut out = vec![device_row(
+    let err = settings_err_for(s, row_key);
+    let mut out = vec![crate::settings::set_row(
         spec.label,
-        spec.detail,
-        settings_err_for(s, row_key),
-        Some(
-            device_btn(format!("cap-set-ch-{row_key}"), cur_lbl, spec.disabled).on_press(
-                move |s: &mut AppState| {
-                    s.media.captures_ui.settings_open_choice =
-                        if is_open { None } else { Some(row_key.into()) };
-                },
-            ),
-        ),
+        spec.detail.as_deref(),
+        err.as_deref(),
+        false,
+        crate::settings::set_btn(format!("cap-set-ch-{row_key}"), cur_lbl, None)
+            .child(if is_open {
+                exo_kit::icon_chevron_up(12.0, exo_kit::fg_muted())
+            } else {
+                exo_kit::icon_chevron_down(12.0, exo_kit::fg_muted())
+            })
+            .disabled(spec.disabled)
+            .on_press(move |s: &mut AppState| {
+                s.media.captures_ui.settings_open_choice =
+                    if is_open { None } else { Some(row_key.into()) };
+            }),
     )];
     if is_open {
-        let mut pills = row().w_full().flex_wrap().gap(6.0).py(4.0);
+        let mut pills = row().w_full().px(18.0).pb(12.0).flex_wrap().gap(8.0);
         for (val, lbl) in spec.choices {
             let v = *val;
             let f = on_pick.clone();
-            pills = pills.child(
-                filter_pill(
-                    format!("cap-set-opt-{row_key}-{val}"),
-                    *lbl,
-                    *val == spec.current,
-                )
-                .on_press(move |s: &mut AppState| f(s, v)),
-            );
+            let active = *val == spec.current;
+            let btn = if active {
+                crate::settings::set_primary_btn(format!("cap-set-opt-{row_key}-{val}"), *lbl, None)
+            } else {
+                crate::settings::set_btn(format!("cap-set-opt-{row_key}-{val}"), *lbl, None)
+            };
+            pills = pills.child(btn.on_press(move |s: &mut AppState| f(s, v)));
         }
         out.push(pills);
     }
     out
 }
 
-fn settings_body(s: &AppState) -> El {
+pub(crate) fn settings_body(s: &AppState) -> El {
     let status = s.media.capture_status.as_ref();
     let live = status.and_then(|st| st.state.as_ref());
     let cfg = status.and_then(|st| st.settings.as_ref());
-    if live.is_some_and(|l| !l.present) {
-        return col().w_full().max_w(760.0).child(device_panel(
-            "Exo Capture",
-            vec![device_row(
-                "Exo Capture",
-                None,
-                None,
-                Some(status_badge("Not installed".into(), BadgeTone::Neutral)),
-            )],
-        ));
+    if !live.map_or(status.is_none_or(|st| st.present), |l| l.present) {
+        return col()
+            .w_full()
+            .gap(24.0)
+            .child(
+                crate::settings::settings_card().child(crate::settings::set_row(
+                    "Exo Capture",
+                    Some("Missing from this install. Reinstall Exo to repair it."),
+                    None,
+                    false,
+                    el(),
+                )),
+            );
     }
 
     let disabled = cfg.is_none();
     let mode = cfg.map(|c| c.replay_mode.as_str()).unwrap_or("games");
     let replay_secs = cfg.map(|c| c.replay_seconds).unwrap_or(60).to_string();
-    let fps = cfg.map(|c| c.max_fps).unwrap_or(60).to_string();
-    let quality = s
-        .media
-        .captures_ui
-        .settings_quality_drag
-        .unwrap_or_else(|| cfg.map(|c| c.quality).unwrap_or(50))
-        .clamp(0, 100);
+
     let call_voices = cfg.is_some_and(|c| c.call_voices);
     let print_screen = cfg.is_some_and(|c| c.print_screen);
     let keep_gb = cfg.map(|c| c.keep_gb).unwrap_or(0).to_string();
@@ -2720,71 +2656,17 @@ fn settings_body(s: &AppState) -> El {
         ));
     }
 
-    rec_rows.extend(settings_choice_rows(
-        s,
-        SettingsChoiceSpec {
-            row_key: "fps",
-            label: "Frame rate",
-            detail: None,
-            current: &fps,
-            choices: &[("60", "60 fps"), ("120", "120 fps")],
-            disabled,
-        },
-        |s, v| {
-            let n = v.parse::<i32>().unwrap_or(60);
-            s.capture_save_settings_patch("fps", json!({ "maxFps": n }));
-        },
-    ));
-
-    let quality_slider = slider_track(
-        "cap-quality-slider",
-        "Quality",
-        160.0,
-        quality as f32 / 100.0,
-        s.media.captures_ui.settings_quality_drag.is_some(),
-        disabled,
-    )
-    .on_drag(|s: &mut AppState, d, _| {
-        let ratio = (d.x / d.w.max(1.0)).clamp(0.0, 1.0);
-        let stepped = ((ratio * 20.0).round() as i32 * 5).clamp(0, 100);
-        match d.phase {
-            Phase::Down | Phase::Move => s.media.captures_ui.settings_quality_drag = Some(stepped),
-            Phase::Up => {
-                s.media.captures_ui.settings_quality_drag = None;
-                if !d.cancelled() {
-                    s.capture_save_settings_patch("quality", json!({ "quality": stepped }));
-                }
-            }
-        }
-    });
-    rec_rows.push(device_row(
-        "Quality",
-        encoder_line(live),
-        settings_err_for(s, "quality"),
-        Some(
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(text("Smaller files").font(type_small()).color(fg_muted()))
-                .child(quality_slider)
-                .child(text("Best quality").font(type_small()).color(fg_muted())),
-        ),
-    ));
-
-    rec_rows.push(device_row(
+    let call_err = settings_err_for(s, "callVoices");
+    rec_rows.push(crate::settings::set_row(
         "Record voice chat",
         None,
-        settings_err_for(s, "callVoices"),
-        Some(
-            device_switch("cap-set-call", "Record voice chat", call_voices, disabled).on_press(
-                move |s: &mut AppState| {
-                    s.capture_save_settings_patch(
-                        "callVoices",
-                        json!({ "callVoices": !call_voices }),
-                    );
-                },
-            ),
-        ),
+        call_err.as_deref(),
+        false,
+        exo_kit::switch_pill("cap-set-call", "Record voice chat", call_voices)
+            .disabled(disabled)
+            .on_press(move |s: &mut AppState| {
+                s.capture_save_settings_patch("callVoices", json!({ "callVoices": !call_voices }));
+            }),
     ));
 
     for (label, field, keys, ok) in [
@@ -2814,68 +2696,67 @@ fn settings_body(s: &AppState) -> El {
             let k = keys_label(keys);
             if k.is_empty() { "Set".into() } else { k }
         };
-        let err = (!ok).then(|| "Another app already uses these keys. Pick others.".into());
-        rec_rows.push(device_row(
+        let err: Option<String> =
+            (!ok).then(|| "Another app already uses these keys. Pick others.".into());
+        rec_rows.push(crate::settings::set_row(
             label,
             None,
-            err,
-            Some(
-                device_btn(format!("cap-hk-{field}"), btn_lbl, disabled).on_press(
-                    move |s: &mut AppState| {
-                        s.media.captures_ui.listening_hotkey =
-                            if listening { None } else { Some(field.into()) };
-                    },
-                ),
-            ),
+            err.as_deref(),
+            false,
+            crate::settings::set_btn(format!("cap-hk-{field}"), btn_lbl, None)
+                .disabled(disabled)
+                .on_press(move |s: &mut AppState| {
+                    s.media.captures_ui.listening_hotkey =
+                        if listening { None } else { Some(field.into()) };
+                }),
         ));
     }
 
     let print_blocked = live.is_some_and(|l| !l.hotkeys.print_screen) && print_screen;
-    rec_rows.push(device_row(
+    let prt_err = settings_err_for(s, "printScreen").or_else(|| {
+        print_blocked.then(|| {
+            "Windows keeps Print Screen for Snipping Tool. Turn that off in Windows Settings > Accessibility > Keyboard."
+                .into()
+        })
+    });
+    rec_rows.push(crate::settings::set_row(
         "Print Screen snips",
         None,
-        settings_err_for(s, "printScreen").or_else(|| {
-            print_blocked.then(|| {
-                "Windows keeps Print Screen for Snipping Tool. Turn that off in Windows Settings > Accessibility > Keyboard."
-                    .into()
-            })
-        }),
-        Some(
-            device_switch("cap-set-prtsc", "Print Screen snips", print_screen, disabled).on_press(
-                move |s: &mut AppState| {
-                    s.capture_save_settings_patch(
-                        "printScreen",
-                        json!({ "printScreen": !print_screen }),
-                    );
-                },
-            ),
-        ),
+        prt_err.as_deref(),
+        false,
+        exo_kit::switch_pill("cap-set-prtsc", "Print Screen snips", print_screen)
+            .disabled(disabled)
+            .on_press(move |s: &mut AppState| {
+                s.capture_save_settings_patch(
+                    "printScreen",
+                    json!({ "printScreen": !print_screen }),
+                );
+            }),
     ));
 
     let folder_detail = cfg
         .map(|c| c.folder.clone())
         .filter(|f| !f.is_empty())
         .or_else(|| status.and_then(|st| st.folder.clone()));
-    let mut storage_rows = vec![device_row(
+    let folder_err = settings_err_for(s, "folder");
+    let mut storage_rows = vec![crate::settings::set_row(
         "Save to",
-        folder_detail,
-        settings_err_for(s, "folder"),
-        Some(
-            row()
-                .gap(8.0)
-                .child(
-                    device_btn("cap-set-folder-open", "Open", disabled)
-                        .on_press(|s: &mut AppState| s.capture_open_folder()),
-                )
-                .child(
-                    device_btn(
-                        "cap-set-folder-change",
-                        "Change",
-                        disabled || s.media.captures_ui.picking_folder,
-                    )
+        folder_detail.as_deref(),
+        folder_err.as_deref(),
+        false,
+        row()
+            .gap(8.0)
+            .center_y()
+            .child(
+                crate::settings::set_btn("cap-set-folder-open", "Open", None)
+                    .disabled(disabled)
+                    .on_press(|s: &mut AppState| s.capture_open_folder()),
+            )
+            .child(
+                crate::settings::set_btn("cap-set-folder-change", "Change", None)
+                    .disabled(disabled || s.media.captures_ui.picking_folder)
                     .on_press(|s: &mut AppState| s.capture_pick_folder()),
-                ),
-        ),
+            ),
     )];
 
     storage_rows.extend(settings_choice_rows(
@@ -2922,10 +2803,9 @@ fn settings_body(s: &AppState) -> El {
 
     col()
         .w_full()
-        .max_w(760.0)
-        .gap(16.0)
-        .child(device_panel("Recording", rec_rows))
-        .child(device_panel("Storage", storage_rows))
+        .gap(24.0)
+        .child(crate::settings::settings_group("Recording", rec_rows))
+        .child(crate::settings::settings_group("Storage", storage_rows))
 }
 
 fn reel_banner(s: &AppState) -> Option<El> {
@@ -3007,18 +2887,14 @@ fn reel_banner(s: &AppState) -> Option<El> {
 }
 
 pub fn view(s: &AppState, scale: f32) -> El {
-    let sheet_inner = if s.media.notes.open {
-        notes::view(s, scale)
-    } else if let Some(item) = s
+    let sheet_inner = if let Some(item) = s
         .media
         .open_capture_id
         .as_deref()
         .and_then(|id| s.media.capture_items.iter().find(|c| c.id == id))
-        && !s.media.captures_settings_open
     {
         viewer_view(s, item, scale)
     } else {
-        let setting = s.media.captures_settings_open;
         let ui = &s.media.captures_ui;
         let present = s
             .media
@@ -3037,17 +2913,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
             .map(month_title);
 
         let mut head_actions = row().gap(8.0).center_y();
-        if setting {
-            head_actions = head_actions.child(
-                device_icon_btn(
-                    "cap-settings-back",
-                    "All captures",
-                    Some(icon_back(14.0, FG)),
-                    false,
-                )
-                .on_press(|s: &mut AppState| s.media.captures_settings_open = false),
-            );
-        } else if let Some(sel) = selecting {
+        if let Some(sel) = selecting {
             let picked_videos = reel_of_picked(&s.media.capture_items, sel);
             let reel_n = picked_videos.len();
             let reel_disabled = reel_n < 2 || ui.bulk_deleting || ui.reel.phase != ReelPhase::Idle;
@@ -3106,13 +2972,9 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         Some(icon_settings(14.0, FG)),
                         false,
                     )
-                    .on_press(|s: &mut AppState| s.media.captures_settings_open = true),
+                    .on_press(|s: &mut AppState| s.open_capture_settings()),
                 );
             }
-            head_actions = head_actions.child(
-                device_icon_btn("cap-open-notes", "Notes", Some(icon_notes(14.0, FG)), false)
-                    .on_press(|s: &mut AppState| s.open_notes(None, false)),
-            );
             if present {
                 head_actions = head_actions.child(
                     primary_button(
@@ -3137,7 +2999,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .press_on_down()
                 .size(32.0, 32.0)
                 .radius(RADIUS_PILL)
-                .liquid_glass(LiquidGlass::control())
+                .fill(exo_kit::ExoGlass::Control.still_fill())
                 .hover(hover_fill())
                 .center()
                 .on_press(|s: &mut AppState| s.close_captures())
@@ -3155,36 +3017,16 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 row()
                     .gap(10.0)
                     .center_y()
-                    .child(
-                        text(if setting {
-                            "Capture settings"
-                        } else {
-                            "Captures"
-                        })
-                        .font(type_page())
-                        .color(FG),
-                    )
+                    .child(text("Captures").font(type_page()).color(FG))
                     .children(
-                        (!setting && any_items)
+                        any_items
                             .then(|| top_month.map(|m| status_badge(m, BadgeTone::Neutral)))
                             .flatten(),
                     ),
             )
             .child(head_actions);
 
-        let body = if setting {
-            col()
-                .key("cap-settings-scroll")
-                .grow(1.0)
-                .w_full()
-                .min_h(0.0)
-                .px(20.0)
-                .pb(20.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(settings_body(s))
-        } else if s.media.capture_items.is_empty() && !ui.list_failed {
+        let body = if s.media.capture_items.is_empty() && !ui.list_failed {
             empty_state(s)
         } else {
             let mut game_groups: Vec<(String, String)> = Vec::new();
@@ -3406,10 +3248,11 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 );
             } else {
                 for (day, list) in days {
-                    let mut day_col = col()
-                        .w_full()
-                        .gap(8.0)
-                        .child(text(day).font(type_section()).color(fg_muted()));
+                    let mut day_col = col().w_full().gap(8.0).child(
+                        text(format_capture_day(&day))
+                            .font(type_section())
+                            .color(fg_muted()),
+                    );
                     for chunk in list.chunks(5) {
                         let mut r = row().w_full().gap(6.0);
                         for it in chunk {
@@ -3483,8 +3326,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .radius(RADIUS_SHEET)
                 .continuous_corners()
                 .clip_rounded(RADIUS_SHEET)
-                .border(1.0, hairline())
-                .liquid_glass(LiquidGlass::panel())
+                .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
                 .child(sheet_inner),
         )
         .children(lb_overlay)

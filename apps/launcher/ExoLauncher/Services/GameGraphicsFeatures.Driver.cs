@@ -10,8 +10,7 @@ internal static partial class GameGraphicsFeatures
 
     private static bool HasNvidiaLowLatencyOverride(GameRecord? record) =>
         record is not null && (record.NvidiaSet.ContainsKey(GraphicsCatalog.LowLatencyState)
-            || record.NvidiaSet.ContainsKey(GraphicsCatalog.PreRenderedFrames)
-            || record.NvidiaSet.ContainsKey(GraphicsCatalog.FrameRateLimit));
+            || record.NvidiaSet.ContainsKey(GraphicsCatalog.PreRenderedFrames));
 
     private static bool HasNvidiaHiddenOverride(GameRecord? record) =>
         record is not null && (record.NvidiaSet.ContainsKey(GraphicsCatalog.AnisotropicFilteringMode)
@@ -84,8 +83,6 @@ internal static partial class GameGraphicsFeatures
             wanted[GraphicsCatalog.LowLatencyState] = 2u;
             wanted[GraphicsCatalog.UltraLowLatency] = 1u;
             wanted[GraphicsCatalog.PreRenderedFrames] = 1u;
-            if (!d.HasReflex && ctx.Pc.TopRefresh >= 60)
-                wanted[GraphicsCatalog.FrameRateLimit] = (uint)(ctx.Pc.TopRefresh - 3);
         }
 
         if (targetFeatures.Contains(FeatureHiddenSettings) && d.Engine is EngineKind.Generic or EngineKind.Unreal3)

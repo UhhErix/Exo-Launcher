@@ -13,7 +13,7 @@ public sealed class AccountSyncHoldTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 9, 12, 0, 0, TimeSpan.Zero);
 
-    private static (AccountSyncEngine Engine, List<SyncItem> Batch) Pushing(string value = "{\"ReduceMotion\":true}")
+    private static (AccountSyncEngine Engine, List<SyncItem> Batch) Pushing(string value = "{\"ShowLibraryTools\":true}")
     {
         var engine = new AccountSyncEngine(new SyncState { AccountId = "acc-1" });
         engine.Write("settings", "app", value, 1, Now);

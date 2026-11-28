@@ -261,8 +261,18 @@ internal sealed partial class DiscordCache
             foreach (var p in Array(d, "presences")) ApplyPresence(p);
             // DEDUPE_USER_OBJECTS: presences arrive in READY's merged_presences, friends' and each server's.
             if (d.TryGetProperty("merged_presences", out var mergedPresences)) ApplyMergedPresences(mergedPresences);
-            if (d.TryGetProperty("user_settings", out var us) && Str(us, "status") is { } status) _myStatus = status;
-            SetRail(d.TryGetProperty("user_settings", out var settings) ? ReadRail(settings) : []);
+            byte[]? readySettingsProto = null;
+            if (Str(d, "user_settings_proto") is { Length: > 0 } rawProto)
+            {
+                try { readySettingsProto = Convert.FromBase64String(rawProto); }
+                catch (FormatException) { }
+            }
+            if (readySettingsProto is not null && DiscordUserSettings.DecodeStatus(readySettingsProto) is { } protoStatus)
+                _myStatus = protoStatus;
+            else if (d.TryGetProperty("user_settings", out var us) && Str(us, "status") is { } status)
+                _myStatus = status;
+            var protoRail = readySettingsProto is not null ? DiscordUserSettings.DecodeFolders(readySettingsProto) : null;
+            SetRail(protoRail ?? (d.TryGetProperty("user_settings", out var settings) ? ReadRail(settings) : []));
             _usersTrimAt = Math.Max(UserCap, _users.Count * 2);
         }
     }
@@ -458,20 +468,72 @@ internal sealed partial class DiscordCache
                     if (Str(d, "guild_id") is { } eg && _guilds.TryGetValue(eg, out var eguild))
                         eguild.Emojis = ReadEmojis(d);
                     break;
+                case "MESSAGE_REACTION_ADD_MANY":
+                    if (Str(d, "channel_id") is { } rmc && Visible(rmc))
+                    {
+                        var rmsg = Str(d, "message_id");
+                        foreach (var item in Array(d, "reactions"))
+                        {
+                            if (!item.TryGetProperty("emoji", out var remoji)) continue;
+                            foreach (var uidEl in Array(item, "users"))
+                            {
+                                if (uidEl.ValueKind != JsonValueKind.String || uidEl.GetString() is not { } ruid) continue;
+                                events.Add(("discord.reaction", new
+                                {
+                                    channelId = rmc,
+                                    messageId = rmsg,
+                                    add = true,
+                                    me = ruid == Me?.Id,
+                                    userId = ruid,
+                                    emoji = new { id = Str(remoji, "id"), name = Str(remoji, "name"), animated = Bool(remoji, "animated") },
+                                    burst = false,
+                                    burstColors = System.Array.Empty<string>(),
+                                }));
+                            }
+                        }
+                    }
+                    break;
+                case "PASSIVE_UPDATE_V2":
+                    if (Str(d, "guild_id") is { } pg && _guilds.TryGetValue(pg, out var pguild))
+                    {
+                        var voiceChanged = false;
+                        foreach (var uidEl in Array(d, "removed_voice_states"))
+                            if (uidEl.ValueKind == JsonValueKind.String && uidEl.GetString() is { } remId && pguild.Voice.Remove(remId)) voiceChanged = true;
+                        foreach (var vs in Array(d, "updated_voice_states"))
+                        {
+                            if (Str(vs, "user_id") is not { } vsUid) continue;
+                            if (ReadVoice(vs) is { } vm) { pguild.Voice[vsUid] = vm; voiceChanged = true; }
+                            else if (pguild.Voice.Remove(vsUid)) voiceChanged = true;
+                        }
+                        if (voiceChanged) events.Add(("discord.changed", new { guildId = pg, voice = true }));
+                    }
+                    break;
                 case "READY_SUPPLEMENTAL":
                     {
                         if (d.TryGetProperty("merged_presences", out var mp)) ApplyMergedPresences(mp);
                         foreach (var suppGuild in Array(d, "guilds"))
                         {
                             if (Str(suppGuild, "id") is not { } suppGuildId || !_guilds.TryGetValue(suppGuildId, out var suppGuildObj)) continue;
-                            if (!suppGuild.TryGetProperty("embedded_activities", out _)) continue;
-                            var suppPrev = suppGuildObj.VoiceActivities.Count > 0 ? new Dictionary<string, string>(suppGuildObj.VoiceActivities) : null;
-                            suppGuildObj.VoiceActivities.Clear();
-                            foreach (var suppAct in Array(suppGuild, "embedded_activities")) ApplyEmbeddedActivity(suppGuildObj, suppAct);
-                            var suppChanged = suppPrev is null
-                                ? suppGuildObj.VoiceActivities.Count > 0
-                                : suppPrev.Count != suppGuildObj.VoiceActivities.Count || suppPrev.Any(kv => !suppGuildObj.VoiceActivities.TryGetValue(kv.Key, out var cur) || cur != kv.Value);
-                            if (suppChanged) events.Add(("discord.changed", new { guildId = suppGuildId, voice = true }));
+                            var suppVoiceChanged = false;
+                            if (suppGuild.TryGetProperty("voice_states", out _))
+                            {
+                                suppGuildObj.Voice = Array(suppGuild, "voice_states")
+                                    .Select(v => (Id: Str(v, "user_id"), Member: ReadVoice(v)))
+                                    .Where(v => v.Id is not null && v.Member is not null)
+                                    .ToDictionary(v => v.Id!, v => v.Member!);
+                                suppVoiceChanged = suppGuildObj.Voice.Count > 0;
+                            }
+                            if (suppGuild.TryGetProperty("embedded_activities", out _))
+                            {
+                                var suppPrev = suppGuildObj.VoiceActivities.Count > 0 ? new Dictionary<string, string>(suppGuildObj.VoiceActivities) : null;
+                                suppGuildObj.VoiceActivities.Clear();
+                                foreach (var suppAct in Array(suppGuild, "embedded_activities")) ApplyEmbeddedActivity(suppGuildObj, suppAct);
+                                var actChanged = suppPrev is null
+                                    ? suppGuildObj.VoiceActivities.Count > 0
+                                    : suppPrev.Count != suppGuildObj.VoiceActivities.Count || suppPrev.Any(kv => !suppGuildObj.VoiceActivities.TryGetValue(kv.Key, out var cur) || cur != kv.Value);
+                                suppVoiceChanged |= actChanged;
+                            }
+                            if (suppVoiceChanged) events.Add(("discord.changed", new { guildId = suppGuildId, voice = true }));
                         }
                         events.Add(("discord.changed", new { guildId = (string?)null, friends = true }));
                         break;
@@ -526,6 +588,60 @@ internal sealed partial class DiscordCache
                 case "USER_NOTE_UPDATE":
                     if (Str(d, "id") is { } noteUser)
                         StoreNote(noteUser, Str(d, "note") is { Length: > 0 } nv ? nv : null);
+                    break;
+                case "CHANNEL_UNREAD_UPDATE":
+                    foreach (var cu in Array(d, "channel_unread_updates"))
+                    {
+                        if (Str(cu, "id") is not { } ucid || Find(ucid) is not { } uchan) continue;
+                        if (Str(cu, "last_message_id") is { } ulast) uchan.LastMessageId = ulast;
+                        events.Add(("discord.unread", UnreadNow(ucid)));
+                    }
+                    break;
+                case "CHANNEL_PINS_UPDATE":
+                    if (Str(d, "channel_id") is { } pinnedChan && Visible(pinnedChan))
+                        events.Add(("discord.changed", new { guildId = Str(d, "guild_id") }));
+                    break;
+                case "GUILD_MEMBER_ADD":
+                    if (Str(d, "guild_id") is { } addMg && _guilds.TryGetValue(addMg, out var addMguild))
+                    {
+                        RememberMember(addMguild, d);
+                        events.Add(("discord.colors", new GuildChanged(addMg)));
+                    }
+                    break;
+                case "GUILD_MEMBER_REMOVE":
+                case "GUILD_BAN_ADD":
+                case "GUILD_BAN_REMOVE":
+                    if (Str(d, "guild_id") is { } remMg && _guilds.TryGetValue(remMg, out var remMguild))
+                    {
+                        if (d.TryGetProperty("user", out var remUser) && Str(remUser, "id") is { } remUid)
+                        {
+                            remMguild.Members.Remove(remUid);
+                            remMguild.Voice.Remove(remUid);
+                        }
+                        events.Add(("discord.changed", new { guildId = remMg }));
+                    }
+                    break;
+                case "USER_SETTINGS_PROTO_UPDATE":
+                    if (d.TryGetProperty("settings", out var protoWrap) && protoWrap.ValueKind == JsonValueKind.Object
+                        && Int(protoWrap, "type") == 1 && Str(protoWrap, "proto") is { Length: > 0 } protoB64)
+                    {
+                        try
+                        {
+                            var protoBytes = Convert.FromBase64String(protoB64);
+                            if (DiscordUserSettings.DecodeFolders(protoBytes) is { } updatedRail)
+                            {
+                                SetRail(updatedRail);
+                                events.Add(("discord.changed", new { guildId = (string?)null }));
+                            }
+                            if (DiscordUserSettings.DecodeStatus(protoBytes) is { } updatedStatus && updatedStatus != _myStatus)
+                            {
+                                _myStatus = updatedStatus;
+                                _linkPeersChanged = true;
+                                events.Add(("discord.presence", new { userId = Me?.Id, status = updatedStatus, activity = (string?)null }));
+                            }
+                        }
+                        catch (FormatException) { }
+                    }
                     break;
                 case "USER_SETTINGS_UPDATE":
                     // The server list changed here or in another Discord app.
@@ -1550,7 +1666,7 @@ internal sealed partial class DiscordCache
         var rich = all.FirstOrDefault();
         // Discord's line: the custom status, else Spotify's artist, else the activity's name.
         var line = custom ?? (rich is null ? null : rich.Type == 2 && rich.State is { Length: > 0 } artist ? artist : rich.Name);
-        return new Presence(Str(p, "status") ?? "offline", line, custom is not null ? 4 : rich?.Type, rich, all, FriendKeyCarrier.Read(p));
+        return new Presence(Str(p, "status") ?? "offline", line, custom is not null ? 4 : rich?.Type, rich, all, null);
     }
 
     /// <summary>A game a friend's Exo said they play.</summary>
@@ -2170,6 +2286,7 @@ internal sealed partial class DiscordCache
 
     private ulong Perms(Channel channel)
     {
+        if ((channel.Flags & (1 << 17)) != 0) return 0;
         if (channel.GuildId is null || !_guilds.TryGetValue(channel.GuildId, out var guild) || Me is null) return All;
         if (guild.OwnerId == Me.Id) return All;
         var perms = guild.Roles.GetValueOrDefault(guild.Id);

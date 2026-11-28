@@ -3,7 +3,7 @@ use crate::notice::{NoticeActionKind, NoticeActionSpec, RichNoticeSpec};
 use crate::settings::set_btn;
 use crate::state::{AppState, NoticeTone, Room};
 use exo_kit::{
-    BG, FG, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, bad, fg_muted, glass_button, glass_panel_opt,
+    FG, RADIUS_PILL, RADIUS_SHEET, SPRING_BASE, bad, fg_muted, glass_button_opt, glass_panel,
     icon_app_window, icon_chat, icon_download, icon_folder, icon_gamepad, icon_hard_drive,
     icon_key, icon_library, icon_mic, icon_monitor, icon_mouse, icon_music, icon_notes, icon_play,
     icon_refresh, icon_scissors, icon_search, icon_server, icon_settings, icon_shield,
@@ -12,9 +12,10 @@ use exo_kit::{
     type_small, type_title,
 };
 use exo_rpc::{HostEvent, UpdateProgress};
-use rune::{Cursor, El, LiquidGlass, ScrollSpec, TextStyle, Transition, col, el, row, text};
+use rune::{Cursor, El, ScrollSpec, TextStyle, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const WHATS_NEW_JSON: &str = include_str!("../../../../ui/src/lib/whatsNew.json");
 
@@ -27,9 +28,15 @@ fn read_gzip_changelog(path: &std::path::Path) -> Option<String> {
     Some(out)
 }
 
-fn load_changelog_md() -> &'static str {
-    static CACHE: OnceLock<String> = OnceLock::new();
-    CACHE.get_or_init(|| {
+static CHANGELOG_MD: OnceLock<String> = OnceLock::new();
+static CHANGELOG_WARMING: AtomicBool = AtomicBool::new(false);
+
+fn loaded_changelog_md() -> Option<&'static str> {
+    CHANGELOG_MD.get().map(String::as_str)
+}
+
+pub fn load_changelog_md() -> &'static str {
+    CHANGELOG_MD.get_or_init(|| {
         if let Ok(exe) = std::env::current_exe()
             && let Some(dir) = exe.parent()
         {
@@ -372,6 +379,19 @@ pub fn update_words(status: &str, percent: Option<f64>) -> (String, Option<f32>)
     ("Downloading".into(), None)
 }
 
+pub fn version_label(version: &str) -> String {
+    let shown = version.trim().trim_start_matches('v');
+    let core = shown.split(['+', '-']).next().unwrap_or(shown);
+    let mut parts = core.split('.').map(|part| part.parse::<u32>().ok());
+    match (parts.next().flatten(), parts.next().flatten()) {
+        (Some(4), Some(minor)) => match parts.next().flatten().unwrap_or(0) {
+            0 => format!("0.{} beta", minor + 1),
+            patch => format!("0.{}.{patch} beta", minor + 1),
+        },
+        _ => shown.to_string(),
+    }
+}
+
 pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     let parse = |v: &str| -> Vec<u32> {
         let head = v
@@ -523,6 +543,10 @@ pub fn missed_releases(version: &str, seen: Option<&str>) -> Vec<WhatsNewRelease
 }
 
 pub fn full_changelog(version: &str) -> Vec<WhatsNewRelease> {
+    full_changelog_with(version, loaded_changelog_md())
+}
+
+fn full_changelog_with(version: &str, changelog_md: Option<&str>) -> Vec<WhatsNewRelease> {
     let mut told: Vec<WhatsNewRelease> = bundled_releases()
         .iter()
         .filter(|r| compare_versions(&r.version, version) != std::cmp::Ordering::Greater)
@@ -532,7 +556,7 @@ pub fn full_changelog(version: &str) -> Vec<WhatsNewRelease> {
         told = bundled_releases().to_vec();
     }
     let known: std::collections::HashSet<String> = told.iter().map(|r| r.version.clone()).collect();
-    let older = parse_changelog_md(load_changelog_md())
+    let older = parse_changelog_md(changelog_md.unwrap_or(""))
         .into_iter()
         .filter(|r| {
             !known.contains(&r.version)
@@ -730,7 +754,8 @@ impl AppState {
             || self.whats_new.busy()
             || (self.whats_new.latest.is_none()
                 && phase != UpdatePhase::Available
-                && phase != UpdatePhase::Failed)
+                && phase != UpdatePhase::Failed
+                && phase != UpdatePhase::Waiting)
         {
             return;
         }
@@ -822,7 +847,7 @@ impl AppState {
                 .whats_new
                 .latest
                 .as_deref()
-                .map(|v| format!("Exo {v}"))
+                .map(|v| format!("Exo {}", version_label(v)))
                 .unwrap_or_else(|| "Updating Exo".into());
             self.push_rich_notice(RichNoticeSpec {
                 key_id: Some("app-update".into()),
@@ -864,7 +889,7 @@ impl AppState {
         {
             self.push_rich_notice(RichNoticeSpec {
                 key_id: Some("app-update".into()),
-                title: Some(format!("Exo {latest}")),
+                title: Some(format!("Exo {}", version_label(latest))),
                 text: "Update available.".into(),
                 sticky: Some(true),
                 action: Some(NoticeActionSpec {
@@ -885,6 +910,28 @@ impl AppState {
     pub fn open_whats_new_all(&mut self) {
         self.whats_new.auto_shown = true;
         self.whats_new.mode = Some(WhatsNewMode::All);
+        self.warm_changelog();
+        self.sync_mouse_panel_visibility();
+    }
+
+    pub(crate) fn warm_changelog(&self) {
+        if loaded_changelog_md().is_some() || CHANGELOG_WARMING.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        #[cfg(windows)]
+        let handle = self.handle.clone();
+        let spawned = std::thread::Builder::new()
+            .name("exo-changelog-read".into())
+            .spawn(move || {
+                load_changelog_md();
+                #[cfg(windows)]
+                if let Some(handle) = handle {
+                    handle.update_if(|s, _| s.whats_new.mode == Some(WhatsNewMode::All));
+                }
+            });
+        if spawned.is_err() {
+            CHANGELOG_WARMING.store(false, Ordering::Release);
+        }
     }
 
     pub fn maybe_auto_open_whats_new(&mut self) {
@@ -907,11 +954,13 @@ impl AppState {
         if !missed_releases(&ver, seen).is_empty() {
             self.whats_new.auto_shown = true;
             self.whats_new.mode = Some(WhatsNewMode::Missed);
+            self.sync_mouse_panel_visibility();
         }
     }
 
     pub fn close_whats_new(&mut self) {
         self.whats_new.mode = None;
+        self.sync_mouse_panel_visibility();
         if let Some(ver) = self.whats_new.current_version.clone()
             && self.whats_new.seen_version.as_deref() != Some(ver.as_str())
         {
@@ -993,7 +1042,7 @@ fn whats_new_icon(name: &str) -> El {
     }
 }
 
-pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn whats_new_layers(s: &AppState) -> Vec<El> {
     if s.whats_new.mode.is_none() {
         return Vec::new();
     }
@@ -1008,7 +1057,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
     }
 
     let heading = match upcoming.as_ref() {
-        Some(up) => format!("Coming in Exo {}", up.version),
+        Some(up) => format!("Coming in Exo {}", version_label(&up.version)),
         None => "Changelog".into(),
     };
 
@@ -1024,7 +1073,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
         let mut sec = col().w_full().gap(14.0);
         if idx > 0 || upcoming.is_none() {
             sec = sec.child(
-                text(release.version.clone())
+                text(version_label(&release.version))
                     .font(TextStyle::new(scaled(13.0), 600.0).lh(line_h))
                     .color(fg_muted()),
             );
@@ -1131,7 +1180,6 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
 
     card_inner = card_inner.child(foot);
 
-    let _ = blur;
     let card = col()
         .key("whats-new-sheet")
         .w(scaled(540.0))
@@ -1143,7 +1191,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
         .clip_rounded(RADIUS_SHEET)
         .hit()
         .cursor(Cursor::Default)
-        .liquid_glass(LiquidGlass::panel())
+        .liquid_glass(exo_kit::exo_glass(exo_kit::ExoGlass::Sheet))
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(false, |s: &mut AppState| s.close_whats_new())
@@ -1161,7 +1209,7 @@ pub fn whats_new_layers(s: &AppState, blur: bool) -> Vec<El> {
     vec![host]
 }
 
-pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
+pub fn update_sheet_layers(s: &AppState) -> Vec<El> {
     if !s.whats_new.sheet_open {
         return Vec::new();
     }
@@ -1169,7 +1217,7 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         .whats_new
         .latest
         .as_deref()
-        .map(|v| format!("Exo Launcher {v}"))
+        .map(|v| format!("Exo Launcher {}", version_label(v)))
         .unwrap_or_else(|| "Exo Launcher".into());
     let busy = s.whats_new.busy();
     let failed_err = (!busy).then(|| s.whats_new.error_text()).flatten();
@@ -1213,7 +1261,7 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         let mut foot = row().w_full().gap(10.0);
         if s.whats_new.not_now {
             foot = foot.child(
-                glass_button("update-not-now", "Not now", None)
+                glass_button_opt("update-not-now", "Not now", None, false)
                     .grow(1.0)
                     .justify_center()
                     .on_press(|s: &mut AppState| s.set_aside_update_sheet()),
@@ -1236,7 +1284,7 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         inner = inner.child(foot);
     }
 
-    let card = glass_panel_opt("update-sheet", scaled(420.0), blur)
+    let card = glass_panel("update-sheet", scaled(420.0))
         .role("alertdialog")
         .label("Update available")
         .radius(RADIUS_SHEET)
@@ -1244,7 +1292,7 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .modal(false, |s: &mut AppState| s.set_aside_update_sheet())
-        .modal_scrim(BG.alpha(0.56))
+        .modal_scrim(scrim_fill())
         .child(inner);
 
     let host = col()
@@ -1260,6 +1308,17 @@ pub fn update_sheet_layers(s: &AppState, blur: bool) -> Vec<El> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn version_label_names_the_4_line_as_the_beta_and_leaves_older_releases_alone() {
+        assert_eq!(version_label("4.0.0"), "0.1 beta");
+        assert_eq!(version_label("v4.0.0+16da8f0b"), "0.1 beta");
+        assert_eq!(version_label("4.0.2"), "0.1.2 beta");
+        assert_eq!(version_label("4.1.0-dev"), "0.2 beta");
+        assert_eq!(version_label("3.31.4"), "3.31.4");
+        assert_eq!(version_label("5.0.0"), "5.0.0");
+        assert_eq!(version_label(""), "");
+    }
 
     #[test]
     fn compare_versions_orders_semver_and_ignores_suffixes() {
@@ -1338,7 +1397,35 @@ mod tests {
     }
 
     #[test]
+    fn full_changelog_shows_bundled_releases_until_the_older_changelog_lands() {
+        let bundled_only = full_changelog_with("3.30.2", None);
+        assert!(!bundled_only.is_empty());
+        assert!(!bundled_only.iter().any(|r| r.version == "1.0.0"));
+        let older = "# Changelog\n\n## 1.0.0 — 2025-01-01\n\n### Added\n- First release\n";
+        let with_older = full_changelog_with("3.30.2", Some(older));
+        assert_eq!(with_older.len(), bundled_only.len() + 1);
+        assert_eq!(with_older.last().map(|r| r.version.as_str()), Some("1.0.0"));
+    }
+
+    #[test]
+    fn opening_all_releases_warms_the_changelog_off_the_calling_thread() {
+        let mut s = AppState::default();
+        s.open_whats_new_all();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while loaded_changelog_md().is_none() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(loaded_changelog_md().is_some_and(|md| !md.is_empty()));
+        assert!(
+            full_changelog("3.30.2")
+                .iter()
+                .any(|r| r.version == "1.0.0")
+        );
+    }
+
+    #[test]
     fn lazy_changelog_loads_from_repo_and_gzip() {
+        load_changelog_md();
         let releases = full_changelog("3.30.2");
         assert!(releases.len() >= 10);
         assert!(releases.iter().any(|r| r.version == "1.0.0"));

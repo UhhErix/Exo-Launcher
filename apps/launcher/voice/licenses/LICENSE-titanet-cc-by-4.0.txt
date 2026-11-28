@@ -1,0 +1,18 @@
+TitaNet-small Speaker Embedding Model Attribution
+Model: TitaNet-small (titanet_small), NVIDIA NeMo
+https://catalog.ngc.nvidia.com/orgs/nvidia/teams/nemo/models/titanet_small
+Authors: Nithin Rao Koluguri, Taejin Park, and Boris Ginsburg,
+"TitaNet: Neural Model for speaker representation with 1D Depth-wise
+separable convolutions and global context," Proc. IEEE ICASSP 2022.
+Copyright (c) NVIDIA Corporation.
+
+ONNX export: nemo_en_titanet_small.onnx, as published by the sherpa-onnx
+project (https://github.com/k2-fsa/sherpa-onnx, release
+speaker-recongition-models). Exo ships the file unmodified.
+
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
+
+Usage in Exo Launcher:
+Only My Voice in Discord calls computes a speaker embedding of the user's
+voice with this model, on the user's PC only.

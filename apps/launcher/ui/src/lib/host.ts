@@ -162,113 +162,6 @@ export type GameFrameGen = {
   legacyMod?: FrameGenMod | null
 }
 
-export type FrameCapTier = {
-  id: string
-  label: string
-  capFps: number | null
-  outputFps: number | null
-  predictedVarianceMs2: number
-  predictedStdDevMs: number
-  predictedDipsPerMinute: number
-  measured: boolean
-  summary: string
-}
-
-export type FrameCapBackend = {
-  id: string
-  vendor: string
-  label: string
-  available: boolean
-  perGameNative: boolean
-  latencyNote: string
-  antiCheatNote: string
-  reason?: string | null
-}
-
-export type FrameCapSuggestion = {
-  tier: string
-  capFps: number | null
-  reason: string
-}
-
-export type FrameCapStutterBreakdown = {
-  cause: string
-  label: string
-  spikes: number
-  sharePercent: number
-  detail: string
-  hint: string
-}
-
-export type FrameCapStutter = {
-  totalSpikes: number
-  topCause: string
-  topCauseLabel: string
-  summary: string
-  perProcessVramAvailable: boolean
-  breakdown: FrameCapStutterBreakdown[]
-}
-
-export type CapLabArmMetrics = {
-  capFps: number
-  frames: number
-  averageFps: number
-  low1Fps: number
-  low01Fps: number
-  averageMs: number
-  frameTimeVarianceMs2: number
-  frameTimeStdDevMs: number
-}
-
-export type CapLabStatus = {
-  gameId: string
-  status: 'idle' | 'running' | 'completed' | 'cancelled' | 'error'
-  capAFps: number
-  capBFps: number
-  currentArm: string | null
-  elapsedSeconds: number
-  totalSeconds: number
-  verdict: string | null
-  winner: string | null
-  deltaPercent: number
-  noiseThresholdPercent: number
-  reason: string | null
-  armA: CapLabArmMetrics | null
-  armB: CapLabArmMetrics | null
-}
-
-export type GameFrameCap = {
-  ok: boolean
-  message?: string | null
-  gameId: string
-  refreshHz: number
-  vrr: boolean
-  inVrrRange: boolean
-  vrrFloorHz: number
-  fgMultiplier: number
-  fgRouteLabel?: string | null
-  vendor: string
-  adapter?: string | null
-  isHybrid: boolean
-  backend: string
-  backendLabel: string
-  backendAvailable: boolean
-  backendNote?: string | null
-  backends: FrameCapBackend[]
-  selectedTier: string
-  activeCapFps: number | null
-  targetOutputFps: number | null
-  tiers: FrameCapTier[]
-  refreshLockedCaps: number[]
-  uncappedOption?: FrameCapTier | null
-  suggestion: FrameCapSuggestion
-  stutter: FrameCapStutter
-  ab: CapLabStatus
-  word: string
-  good: boolean
-  bad: boolean
-}
-
 /**
  * A game's line from the Exo Shaders engine (Library > Shaders).
  * noApp: Exo Shaders is not installed. warmed: compiled for this driver. stale:
@@ -1716,6 +1609,7 @@ export interface StartupItem {
   verdict: 'remove' | 'optional' | 'keep' | 'locked' | null
   missing: boolean
   locked: boolean
+  lockKind?: 'windows' | 'security' | 'anticheat' | 'driver' | 'inputaudio' | 'exo' | 'updater' | null
   /** Listed so the player sees it; Exo never turns it off. */
   readOnly: boolean
   status?: string | null
@@ -1958,8 +1852,6 @@ export interface LauncherSettings {
   reduceMotion?: boolean
   /** The window always opens maximized; off, it opens as it was when it closed. */
   startMaximized?: boolean
-  useClassicWebUi?: boolean
-  relaunchForUiSwitch?: boolean
   /** Settings › General › Open Exo when Windows starts. */
   startWithWindows?: boolean
   textColour?: 'white' | 'grey' | string
@@ -2026,7 +1918,6 @@ export interface LauncherSettings {
   /** Whose chipset driver this PC has and Exo updates: AMD's on a Ryzen, Intel's on an Intel processor (read-only: shows Keep the AMD or Intel chipset driver up to date). */
   chipset?: 'amd' | 'intel' | null
   /** Store clients (Steam, Epic) stay quiet: their pop-ups and sounds off and kept off; off puts them back as they were (default on). */
-  storeClientsQuiet?: boolean
   /** The Library's folders, in their order on the grid. */
   libraryFolders?: LibraryFolder[]
   /** Games hidden from the Library (card ids); its Hidden view lists them. */
@@ -2442,7 +2333,6 @@ export interface HostEventMap {
   /** Exo wrote a game's Optimize again after its update reset it (title: the game's name). */
   'game.optimizedAgain': { title: string }
   'game.optimizeHeld': { title: string }
-  'game.capLab': CapLabStatus
   /** Autopilot kept a session's report (shown in PC › Autopilot afterwards; nothing is said during play). */
   'autopilot.report': { game: string; title: string }
   'autopilot.live': AutopilotLive | null
@@ -2480,6 +2370,7 @@ export interface HostEventMap {
   'controller.state': ControllerState
   /** Exo Capture's state changed: buffering, recording, hotkeys, or it stopped. */
   'capture.state': CaptureState
+  'achievement.unlocked': { game: string; name: string; description: string; icon?: string | null; tier: string; percent?: number | null; unlocked: number; total: number }
   /** A clip, recording, snip, trim or export was saved; edit: a snip to open in the editor, Exo in front (not one taken over a game). */
   'capture.saved': { item: CaptureItem; edit?: boolean }
   /** A recording Exo was asked to make smaller (or found smaller by itself) finished: the new item and the sizes, or message when it was left as it was. */
@@ -3330,12 +3221,6 @@ export const host = {
     rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled, ...(consent?.acceptRisk ? { acceptRisk: true, ...(consent.antiCheat ? { antiCheat: consent.antiCheat } : {}) } : {}) }, 10 * 60_000),
   gameFrameGen: (id: string, change?: { route?: string; xessOverride?: IntelFrameGen; acceptRisk?: boolean; antiCheat?: string | null }) =>
     rawCall<GameFrameGen>('game.frameGen', { id, ...change }, 60_000),
-  gameFrameCap: (id: string, change?: { tier?: string; capFps?: number; backend?: string }) =>
-    rawCall<GameFrameCap>('game.frameCap', { id, ...change }, 30_000),
-  capLabRun: (id: string, capAFps?: number, capBFps?: number) =>
-    rawCall<{ ok: boolean; message?: string | null; ab: CapLabStatus }>('game.capLab.run', { id, ...(capAFps ? { capAFps } : {}), ...(capBFps ? { capBFps } : {}) }, 30_000),
-  capLabCancel: (id?: string) =>
-    rawCall<{ ok: boolean; message?: string | null; ab: CapLabStatus }>('game.capLab.cancel', id ? { id } : {}, 15_000),
   dlssNewer: () => rawCall<{ ok: boolean; items: { family: string; version: string }[] }>('dlss.newer', {}, 15_000),
   dlssDownloadNewer: () => rawCall<{ ok: boolean; message?: string | null }>('dlss.downloadNewer', {}, 10 * 60_000),
   shadersStatus: (id: string) => rawCall<ShaderStatus>('shaders.status', { id }),
