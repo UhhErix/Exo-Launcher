@@ -1776,9 +1776,6 @@ fn buy_panel(
     }
 
     let mut panel = col().w(360.0).gap(8.0);
-    for off in &steam_offers {
-        panel = panel.child(offer_row_button(s, off, true, free, soon, gamepad));
-    }
     let others: Vec<&StoreOffer> = s
         .store_offers
         .as_ref()
@@ -1790,11 +1787,18 @@ fn buy_panel(
         })
         .unwrap_or_default();
     if !others.is_empty() {
-        let mut others_row = row().w_full().gap(8.0);
+        let mut others_row = row()
+            .key("sg-other-offers")
+            .w_full()
+            .gap(8.0)
+            .transition(Transition::opacity());
         for off in others {
             others_row = others_row.child(offer_row_button(s, off, false, false, soon, gamepad));
         }
         panel = panel.child(others_row);
+    }
+    for off in &steam_offers {
+        panel = panel.child(offer_row_button(s, off, true, free, soon, gamepad));
     }
     panel.child(
         row()

@@ -1343,21 +1343,15 @@ impl AppState {
     }
 
     pub fn folder_art_image(&self, art: &str, scale: f32) -> Option<Image> {
-        let cache = self.image_cache.as_ref()?;
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
-        let dim = bucket_dim(480.0);
-        let key = format!("folder-art:{art}");
-        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            return existing;
-        }
-        let loaded = self
-            .art_base
-            .resolve_folder_art(art)
-            .map(|path| cache.file_capped(path, dim, scale));
-        self.images
-            .borrow_mut()
-            .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
-        loaded
+        self.local_file_image(
+            format!("folder-art:{art}"),
+            &self.art_base.folder_art_paths(art),
+            bucket_dim(480.0),
+            scale,
+            CacheRoom::Library,
+        )
     }
 
     pub fn save_library_folders(&mut self, next: Vec<LibraryFolder>) {

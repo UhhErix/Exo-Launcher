@@ -65,6 +65,7 @@ mod settings_privacy;
 mod settings_state;
 mod settings_stores;
 mod setup;
+mod setup_runtimes;
 mod shell;
 mod snip_editor;
 mod state;
@@ -2470,6 +2471,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         if s.whats_new.current_version.is_none() {
             s.whats_new.current_version = Some("3.29.0".into());
         }
+        whats_new::load_changelog_md();
         s.whats_new.mode = Some(whats_new::WhatsNewMode::All);
     }),
     ("update-sheet", |s: &mut AppState| {

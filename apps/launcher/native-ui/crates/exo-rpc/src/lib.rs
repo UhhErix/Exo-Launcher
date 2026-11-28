@@ -2492,16 +2492,20 @@ mod tests {
             ..Default::default()
         };
         assert!(
-            base.resolve_local_cover("https://covers.exo-launcher.local/tok/..%2Fsecret.png")
+            base.local_cover_path("https://covers.exo-launcher.local/tok/..%2Fsecret.png")
                 .is_none()
         );
         assert!(
-            base.resolve_local_cover("https://evil.example/tok/a.png")
+            base.local_cover_path("https://evil.example/tok/a.png")
                 .is_none()
         );
         assert!(
-            base.resolve_capture_file("https://captures.exo-launcher.local/..%2F..%2Fwin.ini")
-                .is_none()
+            base.capture_file_paths("https://captures.exo-launcher.local/..%2F..%2Fwin.ini")
+                .is_empty()
+        );
+        assert!(
+            base.folder_art_paths("..\\secret.png").is_empty(),
+            "a folder art leaf with a separator never becomes a path"
         );
     }
 

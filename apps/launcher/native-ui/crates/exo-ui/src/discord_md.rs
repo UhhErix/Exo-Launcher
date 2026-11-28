@@ -28,7 +28,7 @@ fn mention_fg() -> Color {
     hex(0x7dd3fc, 1.0)
 }
 
-fn link_fg() -> Color {
+pub(crate) fn link_fg() -> Color {
     hex(0x64d2ff, 1.0)
 }
 
@@ -268,7 +268,13 @@ fn parse_into(input: &str, cx: &InlineCx, out: &mut ParsedInline) {
                 && rid.chars().all(|c| c.is_ascii_digit())
             {
                 let start = out.plain.len();
-                out.plain.push_str(" @role ");
+                let label = cx
+                    .channels
+                    .get(&format!("&{rid}"))
+                    .filter(|name| !name.is_empty())
+                    .map(|name| format!(" @{} ", name.trim_start_matches('@')))
+                    .unwrap_or_else(|| " @role ".into());
+                out.plain.push_str(&label);
                 let end = out.plain.len();
                 let mut sp = Span::new(start, end).bg(mention_bg(), 2.0);
                 sp.color = Some(mention_fg());
@@ -664,6 +670,9 @@ mod tests {
 
         let mut ch_map = HashMap::new();
         ch_map.insert("12345".into(), "rules".into());
+        ch_map.insert("&999".into(), "Moderator".into());
+        let named = parse_inline_with_channels("Ping <@&999>", &mentions, &ch_map, false);
+        assert!(named.plain.contains("@Moderator"));
         let linked = parse_inline_with_channels(
             "[Download Exo Launcher](https://getexo.app/download/launcher) · See <#12345>",
             &mentions,

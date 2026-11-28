@@ -748,6 +748,7 @@ pub struct MediaStateInner {
     pub music_sign_in_message: Option<String>,
     pub music_sign_in_status: Option<String>,
     pub music_home_loading: bool,
+    pub music_snapshot_reading: Option<MusicService>,
     pub music_warmed_at_s: f64,
     pub music_restarts_s: Vec<f64>,
     pub music_signed_in_services: [bool; 3],
@@ -918,6 +919,7 @@ impl MediaState {
                 music_sign_in_message: None,
                 music_sign_in_status: None,
                 music_home_loading: false,
+                music_snapshot_reading: None,
                 music_warmed_at_s: -10.0,
                 music_restarts_s: Vec::new(),
                 music_signed_in_services: [false; 3],
@@ -1705,38 +1707,75 @@ impl AppState {
             .map(|p| p.join(MUSIC_SNAPSHOT_FILENAME))
     }
 
-    pub(crate) fn hydrate_music_snapshot(&mut self) -> bool {
-        if !self.media.music_home_sections.is_empty()
+    fn music_lists_filled(&self) -> bool {
+        !self.media.music_home_sections.is_empty()
             || !self.media.music_library.is_empty()
             || !self.media.music_recent.is_empty()
+    }
+
+    pub(crate) fn hydrate_music_snapshot(&mut self) {
+        let service = self.media.music_service;
+        if self.music_lists_filled() || self.media.music_snapshot_reading == Some(service) {
+            return;
+        }
+        let Some(path) = self.music_snapshot_path() else {
+            return;
+        };
+        #[cfg(windows)]
+        if let Some(handle) = self.handle.clone() {
+            let started = Instant::now();
+            self.media.music_snapshot_reading = Some(service);
+            let spawned = std::thread::Builder::new()
+                .name("exo-music-snap-read".into())
+                .spawn(move || {
+                    let entry = read_music_snapshot(&path)
+                        .and_then(|mut snap| snap.services.remove(service.id()));
+                    handle.update_if(move |s, _| s.apply_music_snapshot(service, entry, started));
+                });
+            if spawned.is_err() {
+                self.media.music_snapshot_reading = None;
+            }
+        }
+        #[cfg(not(windows))]
+        let _ = path;
+    }
+
+    pub(crate) fn apply_music_snapshot(
+        &mut self,
+        service: MusicService,
+        entry: Option<MusicServiceSnapshot>,
+        started: Instant,
+    ) -> bool {
+        if self.media.music_snapshot_reading == Some(service) {
+            self.media.music_snapshot_reading = None;
+        }
+        let Some(entry) = entry else {
+            return false;
+        };
+        if self.media.music_service != service
+            || self.music_lists_filled()
+            || matches!(
+                self.media.music_room_state,
+                MusicRoomState::SignedOut | MusicRoomState::NotPremium
+            )
+            || (entry.home_sections.is_empty()
+                && entry.library.is_empty()
+                && entry.recent.is_empty())
         {
             return false;
         }
-        let started = Instant::now();
-        let Some(path) = self.music_snapshot_path() else {
-            return false;
-        };
-        let Some(snap) = read_music_snapshot(&path) else {
-            return false;
-        };
-        let service_id = self.media.music_service.id();
-        let Some(entry) = snap.services.get(service_id) else {
-            return false;
-        };
-        if entry.home_sections.is_empty() && entry.library.is_empty() && entry.recent.is_empty() {
-            return false;
-        }
-        self.media.music_home_sections = entry.home_sections.clone();
-        self.media.music_recent = entry.recent.clone();
-        self.media.music_library = entry.library.clone();
-        self.media.music_library_filters = entry.library_filters.clone();
-        self.media.music_library_top_filters = entry.library_top_filters.clone();
-        self.media.music_library_sorts = entry.library_sorts.clone();
+        self.media.music_home_sections = entry.home_sections;
+        self.media.music_recent = entry.recent;
+        self.media.music_library = entry.library;
+        self.media.music_library_filters = entry.library_filters;
+        self.media.music_library_top_filters = entry.library_top_filters;
+        self.media.music_library_sorts = entry.library_sorts;
         self.media.music_library_loaded = !self.media.music_library.is_empty();
         self.media.music_home_loading = false;
         let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
         eprintln!(
-            "music_first_paint_ms={elapsed_ms:.2} service={service_id} source=snapshot sections={} library={}",
+            "music_first_paint_ms={elapsed_ms:.2} service={} source=snapshot sections={} library={}",
+            service.id(),
             self.media.music_home_sections.len(),
             self.media.music_library.len()
         );
@@ -4791,17 +4830,45 @@ impl AppState {
         self.media.clip_player = None;
         self.media.clip_playing = false;
 
-        if let Some(item) = self.media.capture_items.iter().find(|c| c.id == id)
-            && item.kind == "video"
-            && let Some(path) = self.art_base.resolve_capture_file(&item.url)
-        {
-            let player = Player::file(path);
-            player.set_muted(self.media.clip_muted);
-            player.set_looping(true);
-            player.play();
-            self.media.clip_player = Some(player);
-            self.media.clip_playing = true;
+        let Some(url) = self
+            .media
+            .capture_items
+            .iter()
+            .find(|c| c.id == id && c.kind == "video")
+            .map(|c| c.url.clone())
+        else {
+            return;
+        };
+        let art = self.art_base.clone();
+        #[cfg(windows)]
+        if let Some(handle) = self.handle.clone() {
+            let id = id.to_string();
+            std::thread::Builder::new()
+                .name("exo-clip-resolve".into())
+                .spawn(move || {
+                    if let Some(path) = art.resolve_capture_file(&url) {
+                        handle.update_if(move |s, _| s.land_clip_player(&id, path));
+                    }
+                })
+                .ok();
+            return;
         }
+        if let Some(path) = art.resolve_capture_file(&url) {
+            self.land_clip_player(id, path);
+        }
+    }
+
+    pub(crate) fn land_clip_player(&mut self, id: &str, path: PathBuf) -> bool {
+        if self.media.open_capture_id.as_deref() != Some(id) || self.media.clip_player.is_some() {
+            return false;
+        }
+        let player = Player::file(path);
+        player.set_muted(self.media.clip_muted);
+        player.set_looping(true);
+        player.play();
+        self.media.clip_player = Some(player);
+        self.media.clip_playing = true;
+        true
     }
 
     pub fn close_capture_item(&mut self) {
@@ -5369,7 +5436,8 @@ mod tests {
         s.media.music_service = MusicService::Spotify;
         s.media.music_room_state = MusicRoomState::Loading;
         s.room = Room::Music;
-        assert!(s.hydrate_music_snapshot());
+        let entry = read_music_snapshot(&snap_path).and_then(|mut d| d.services.remove("spotify"));
+        assert!(s.apply_music_snapshot(MusicService::Spotify, entry, started));
         assert_eq!(s.media.music_home_sections.len(), 1);
         assert_eq!(s.media.music_library.len(), 12);
         assert!(s.media.music_library_loaded);
@@ -5392,6 +5460,118 @@ mod tests {
             "cached music first paint exceeded 300ms budget: {elapsed_ms:.2}ms"
         );
 
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    fn snapshot_entry(title: &str) -> MusicServiceSnapshot {
+        let card = PlayerCard {
+            uri: "spotify:playlist:snap".into(),
+            kind: "playlist".into(),
+            title: title.into(),
+            subtitle: String::new(),
+            image: String::new(),
+            url: None,
+            pinned: false,
+            owned: true,
+        };
+        MusicServiceSnapshot {
+            home_sections: vec![PlayerSection {
+                title: "From disk".into(),
+                more: None,
+                items: vec![card.clone()],
+            }],
+            recent: vec![card.clone()],
+            library: vec![card],
+            library_filters: Vec::new(),
+            library_top_filters: Vec::new(),
+            library_sorts: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn music_snapshot_read_off_thread_never_overwrites_live_lists_that_landed_first() {
+        let mut s = AppState::for_host_pipe();
+        s.media.music_service = MusicService::Spotify;
+        s.media.music_snapshot_reading = Some(MusicService::Spotify);
+        s.media.music_library = vec![snapshot_entry("Live").library[0].clone()];
+        assert!(!s.apply_music_snapshot(
+            MusicService::Spotify,
+            Some(snapshot_entry("Stale")),
+            Instant::now()
+        ));
+        assert_eq!(s.media.music_library[0].title, "Live");
+        assert!(s.media.music_home_sections.is_empty());
+        assert_eq!(s.media.music_snapshot_reading, None);
+    }
+
+    #[test]
+    fn music_snapshot_for_a_service_the_user_left_or_signed_out_of_is_dropped() {
+        let mut s = AppState::for_host_pipe();
+        s.media.music_service = MusicService::Spotify;
+        s.media.music_snapshot_reading = Some(MusicService::Apple);
+        assert!(!s.apply_music_snapshot(
+            MusicService::Apple,
+            Some(snapshot_entry("Apple")),
+            Instant::now()
+        ));
+        assert!(s.media.music_home_sections.is_empty());
+        assert_eq!(s.media.music_snapshot_reading, None);
+
+        s.media.music_room_state = MusicRoomState::SignedOut;
+        assert!(!s.apply_music_snapshot(
+            MusicService::Spotify,
+            Some(snapshot_entry("Signed out")),
+            Instant::now()
+        ));
+        assert!(s.media.music_library.is_empty());
+
+        s.media.music_room_state = MusicRoomState::Loading;
+        s.media.music_home_loading = true;
+        assert!(s.apply_music_snapshot(
+            MusicService::Spotify,
+            Some(snapshot_entry("Fresh")),
+            Instant::now()
+        ));
+        assert_eq!(s.media.music_library[0].title, "Fresh");
+        assert!(s.media.music_library_loaded);
+        assert!(!s.media.music_home_loading);
+    }
+
+    #[test]
+    fn a_clip_resolved_off_thread_for_a_capture_the_user_left_is_not_played() {
+        let mut s = AppState::for_host_pipe();
+        s.media.open_capture_id = Some("clip-b".into());
+        assert!(!s.land_clip_player("clip-a", PathBuf::from("clip-a.mp4")));
+        assert!(s.media.clip_player.is_none());
+        s.media.open_capture_id = None;
+        assert!(!s.land_clip_player("clip-b", PathBuf::from("clip-b.mp4")));
+        assert!(s.media.clip_player.is_none());
+        assert!(!s.media.clip_playing);
+    }
+
+    #[test]
+    fn hydrating_the_music_snapshot_without_a_window_reads_nothing_on_the_calling_thread() {
+        let base = std::env::temp_dir().join(format!(
+            "exo-music-snap-sync-{}-{}",
+            std::process::id(),
+            now_epoch_ms()
+        ));
+        let cache_dir = base.join("rune-art");
+        std::fs::create_dir_all(&cache_dir).expect("create temp cache dir");
+        let mut s = AppState::for_host_pipe();
+        s.remote_cache_dir = Some(cache_dir);
+        s.media.music_service = MusicService::Spotify;
+        let mut disk = MusicDiskSnapshot {
+            version: MUSIC_SNAPSHOT_VERSION,
+            services: HashMap::new(),
+        };
+        disk.services
+            .insert("spotify".into(), snapshot_entry("On disk"));
+        write_music_snapshot(&disk, &s.music_snapshot_path().expect("path"))
+            .expect("write music snapshot");
+        s.hydrate_music_snapshot();
+        assert!(s.media.music_library.is_empty());
+        assert_eq!(s.media.music_snapshot_reading, None);
         let _ = std::fs::remove_dir_all(&base);
     }
 }

@@ -15,6 +15,7 @@ use exo_rpc::{HostEvent, UpdateProgress};
 use rune::{Cursor, El, ScrollSpec, TextStyle, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const WHATS_NEW_JSON: &str = include_str!("../../../../ui/src/lib/whatsNew.json");
 
@@ -27,9 +28,15 @@ fn read_gzip_changelog(path: &std::path::Path) -> Option<String> {
     Some(out)
 }
 
-fn load_changelog_md() -> &'static str {
-    static CACHE: OnceLock<String> = OnceLock::new();
-    CACHE.get_or_init(|| {
+static CHANGELOG_MD: OnceLock<String> = OnceLock::new();
+static CHANGELOG_WARMING: AtomicBool = AtomicBool::new(false);
+
+fn loaded_changelog_md() -> Option<&'static str> {
+    CHANGELOG_MD.get().map(String::as_str)
+}
+
+pub fn load_changelog_md() -> &'static str {
+    CHANGELOG_MD.get_or_init(|| {
         if let Ok(exe) = std::env::current_exe()
             && let Some(dir) = exe.parent()
         {
@@ -523,6 +530,10 @@ pub fn missed_releases(version: &str, seen: Option<&str>) -> Vec<WhatsNewRelease
 }
 
 pub fn full_changelog(version: &str) -> Vec<WhatsNewRelease> {
+    full_changelog_with(version, loaded_changelog_md())
+}
+
+fn full_changelog_with(version: &str, changelog_md: Option<&str>) -> Vec<WhatsNewRelease> {
     let mut told: Vec<WhatsNewRelease> = bundled_releases()
         .iter()
         .filter(|r| compare_versions(&r.version, version) != std::cmp::Ordering::Greater)
@@ -532,7 +543,7 @@ pub fn full_changelog(version: &str) -> Vec<WhatsNewRelease> {
         told = bundled_releases().to_vec();
     }
     let known: std::collections::HashSet<String> = told.iter().map(|r| r.version.clone()).collect();
-    let older = parse_changelog_md(load_changelog_md())
+    let older = parse_changelog_md(changelog_md.unwrap_or(""))
         .into_iter()
         .filter(|r| {
             !known.contains(&r.version)
@@ -886,7 +897,28 @@ impl AppState {
     pub fn open_whats_new_all(&mut self) {
         self.whats_new.auto_shown = true;
         self.whats_new.mode = Some(WhatsNewMode::All);
+        self.warm_changelog();
         self.sync_mouse_panel_visibility();
+    }
+
+    pub(crate) fn warm_changelog(&self) {
+        if loaded_changelog_md().is_some() || CHANGELOG_WARMING.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        #[cfg(windows)]
+        let handle = self.handle.clone();
+        let spawned = std::thread::Builder::new()
+            .name("exo-changelog-read".into())
+            .spawn(move || {
+                load_changelog_md();
+                #[cfg(windows)]
+                if let Some(handle) = handle {
+                    handle.update_if(|s, _| s.whats_new.mode == Some(WhatsNewMode::All));
+                }
+            });
+        if spawned.is_err() {
+            CHANGELOG_WARMING.store(false, Ordering::Release);
+        }
     }
 
     pub fn maybe_auto_open_whats_new(&mut self) {
@@ -1341,7 +1373,35 @@ mod tests {
     }
 
     #[test]
+    fn full_changelog_shows_bundled_releases_until_the_older_changelog_lands() {
+        let bundled_only = full_changelog_with("3.30.2", None);
+        assert!(!bundled_only.is_empty());
+        assert!(!bundled_only.iter().any(|r| r.version == "1.0.0"));
+        let older = "# Changelog\n\n## 1.0.0 — 2025-01-01\n\n### Added\n- First release\n";
+        let with_older = full_changelog_with("3.30.2", Some(older));
+        assert_eq!(with_older.len(), bundled_only.len() + 1);
+        assert_eq!(with_older.last().map(|r| r.version.as_str()), Some("1.0.0"));
+    }
+
+    #[test]
+    fn opening_all_releases_warms_the_changelog_off_the_calling_thread() {
+        let mut s = AppState::default();
+        s.open_whats_new_all();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while loaded_changelog_md().is_none() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(loaded_changelog_md().is_some_and(|md| !md.is_empty()));
+        assert!(
+            full_changelog("3.30.2")
+                .iter()
+                .any(|r| r.version == "1.0.0")
+        );
+    }
+
+    #[test]
     fn lazy_changelog_loads_from_repo_and_gzip() {
+        load_changelog_md();
         let releases = full_changelog("3.30.2");
         assert!(releases.len() >= 10);
         assert!(releases.iter().any(|r| r.version == "1.0.0"));

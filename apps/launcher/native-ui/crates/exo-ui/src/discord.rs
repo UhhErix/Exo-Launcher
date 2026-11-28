@@ -2454,7 +2454,7 @@ fn guild_channel_row(
     } else if ch.kind == "forum" {
         icon_chat(14.0, icon_color)
     } else if ch.channel_type == 5 {
-        icon_sparkles(14.0, icon_color)
+        exo_kit::icon_megaphone(15.0, icon_color)
     } else if ch.locked {
         icon_lock(14.0, if active { FG } else { fg_muted() })
     } else {

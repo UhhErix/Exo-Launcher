@@ -846,6 +846,26 @@ pub fn icon_hash(size: f32, color: Color) -> El {
     icon(glyph, size).color(color)
 }
 
+const ICON_MEGAPHONE_SM: Icon = Icon {
+    name: "kl-megaphone-165",
+    view: 24.0,
+    body: r#"<g fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5H7L16 5V19L7 14.5H4C3.44772 14.5 3 14.0523 3 13.5V10.5C3 9.94772 3.44772 9.5 4 9.5ZM7.5 14.75L9 19.5H11.5L10.3 16.15M19 9.5C19.9 10.2 20.5 11 20.5 12C20.5 13 19.9 13.8 19 14.5"/></g>"#,
+};
+const ICON_MEGAPHONE_LG: Icon = Icon {
+    name: "kl-megaphone-185",
+    view: 24.0,
+    body: r#"<g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5H7L16 5V19L7 14.5H4C3.44772 14.5 3 14.0523 3 13.5V10.5C3 9.94772 3.44772 9.5 4 9.5ZM7.5 14.75L9 19.5H11.5L10.3 16.15M19 9.5C19.9 10.2 20.5 11 20.5 12C20.5 13 19.9 13.8 19 14.5"/></g>"#,
+};
+
+pub fn icon_megaphone(size: f32, color: Color) -> El {
+    let glyph = if size < 24.0 {
+        &ICON_MEGAPHONE_SM
+    } else {
+        &ICON_MEGAPHONE_LG
+    };
+    icon(glyph, size).color(color)
+}
+
 const ICON_MIC_SM: Icon = Icon {
     name: "kl-mic-165",
     view: 24.0,
@@ -2373,6 +2393,8 @@ mod tests {
             &ICON_SCISSORS_LG,
             &ICON_HASH_SM,
             &ICON_HASH_LG,
+            &ICON_MEGAPHONE_SM,
+            &ICON_MEGAPHONE_LG,
             &ICON_MIC_SM,
             &ICON_MIC_LG,
             &ICON_MIC_OFF_SM,

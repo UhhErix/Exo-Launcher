@@ -1344,7 +1344,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         root = root.children(crate::web_host::overlay_layers(s));
     }
     if s.palette_open {
-        root = root.children(palette::layers(s));
+        root = root.children(palette::layers(s, scale));
     }
     if s.whats_new.mode.is_some() {
         root = root.children(whats_new::whats_new_layers(s));

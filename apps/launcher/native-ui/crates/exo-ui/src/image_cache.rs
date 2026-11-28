@@ -54,6 +54,7 @@ struct CacheEntry {
     last_used: u64,
     bytes: usize,
     pending_est: usize,
+    stage: usize,
 }
 
 pub struct ImageLruCache {
@@ -162,10 +163,26 @@ impl ImageLruCache {
         Some(out)
     }
 
+    pub fn stage(&self, key: &str) -> usize {
+        self.entries.get(key).map_or(0, |e| e.stage)
+    }
+
     pub fn insert(
         &mut self,
         key: String,
         image: Option<Image>,
+        room: CacheRoom,
+        dim_pt: f32,
+        scale: f32,
+    ) {
+        self.insert_staged(key, image, 0, room, dim_pt, scale);
+    }
+
+    pub fn insert_staged(
+        &mut self,
+        key: String,
+        image: Option<Image>,
+        stage: usize,
         room: CacheRoom,
         dim_pt: f32,
         scale: f32,
@@ -197,6 +214,7 @@ impl ImageLruCache {
                 last_used: tick,
                 bytes,
                 pending_est,
+                stage,
             },
         ) {
             self.total_bytes = self.total_bytes.saturating_sub(old.bytes);

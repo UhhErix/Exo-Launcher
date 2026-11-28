@@ -323,6 +323,7 @@ impl LazyWebHostState {
             let ev_slot = Arc::clone(&self.events);
             let waker_cb = self.waker.clone();
             let initial_url = next_url;
+            let profile_dir = Mutex::new(win_wv2::prepare_user_data_dir(next_profile));
             self.surface
                 .set_external_host(Some(Arc::new(move |ev: ExternalHostEvent| {
                     *rect_slot.lock().unwrap() = ev.rect;
@@ -331,12 +332,19 @@ impl LazyWebHostState {
                         rt.sync_bounds(ev.dcomp_device, ev.slot_visual, ev.rect);
                         return;
                     }
+                    let udf_path = profile_dir
+                        .lock()
+                        .unwrap()
+                        .take()
+                        .and_then(|dir| dir.join().ok())
+                        .unwrap_or_else(|| win_wv2::user_data_dir(next_profile));
                     let rt = win_wv2::RuntimeHost::start(
                         ev.hwnd,
                         ev.dcomp_device,
                         ev.slot_visual,
                         ev.rect,
                         next_profile,
+                        udf_path,
                         initial_url.clone(),
                         Arc::clone(&ev_slot),
                         waker_cb.clone(),
@@ -833,14 +841,25 @@ mod win_wv2 {
     unsafe impl Send for RuntimeHost {}
     unsafe impl Sync for RuntimeHost {}
 
-    fn user_data_dir(profile: WebProfile) -> PathBuf {
+    pub(super) fn user_data_dir(profile: WebProfile) -> PathBuf {
         let leaf = match profile {
             WebProfile::MediaDrm => "web-media",
             WebProfile::AuthSignIn => "web-auth",
         };
-        let dir = crate::app_data_dir().join("native-web-host").join(leaf);
-        let _ = std::fs::create_dir_all(&dir);
-        dir
+        crate::app_data_dir().join("native-web-host").join(leaf)
+    }
+
+    pub(super) fn prepare_user_data_dir(
+        profile: WebProfile,
+    ) -> Option<std::thread::JoinHandle<PathBuf>> {
+        std::thread::Builder::new()
+            .name("exo-web-profile-dir".into())
+            .spawn(move || {
+                let dir = user_data_dir(profile);
+                let _ = std::fs::create_dir_all(&dir);
+                dir
+            })
+            .ok()
     }
 
     impl RuntimeHost {
@@ -851,6 +870,7 @@ mod win_wv2 {
             slot_visual_raw: usize,
             rect: [i32; 4],
             profile: WebProfile,
+            udf_path: PathBuf,
             url: String,
             events: Arc<Mutex<VecDeque<WebEvent>>>,
             waker: Option<Waker>,
@@ -882,7 +902,6 @@ mod win_wv2 {
                 opts.set_additional_browser_arguments(profile.browser_args().to_string());
             }
             let opts_iface: ICoreWebView2EnvironmentOptions = opts.into();
-            let udf_path = user_data_dir(profile);
             let udf = HSTRING::from(udf_path.to_string_lossy().as_ref());
 
             let pending_cb = Arc::clone(&pending);

@@ -12,7 +12,10 @@
 - **See what is using your graphics card.** Exo AI now lists the apps using the GPU, with each one's share and video memory, and keeps the list fresh while the room is open. _Verified: on screen._
 - **Sliders and Discord work from the keyboard and with a screen reader.** Every slider (volume, seek, brightness, GPU tuning, equalizer, keyboard) steps with the arrow keys and tells Narrator its value, and Discord's members, reactions, pickers, polls and close buttons are named and reachable with Tab. _Checked in code only._
 - **A stopped Steam download points you to Steam.** When an install or update fails, Exo says so in a notice, and for a Steam game offers Open Steam to resume it in Steam's Downloads. _Checked in code only._
-- **Snips, dropped files and pictures open without a hitch.** Exo reads snips, files dropped into Discord, folder pictures, playlist covers and saved art in the background, so the window keeps moving while they load. _Checked in code only._
+- **Snips, dropped files and pictures open without a hitch.** Exo reads snips, files dropped into Discord, folder pictures, playlist covers, game and device art, your saved music library and the full release notes in the background, so the window keeps moving while they load. _Checked in code only._
+- **Setup offers the game runtimes your PC is missing.** The Accounts & stores step of Setup lists any missing Visual C++, DirectX or .NET runtime and installs them with one press. _Checked in code only._
+- **Less empty space, steadier pages.** The Game page's art now grows with the window, Exo AI's two columns are evened out, Ctrl+K shows each game's cover and no longer offers Install for a game you already have, and a Store page's main button stays put while other stores' prices arrive. _Verified: on screen._
+- **Discord reads more like Discord.** Role mentions show the role's name, announcement channels get their own megaphone icon, and linked embed titles use the link color. _Checked in code only._
 - **Includes all 3.31.x fixes and stability improvements.** Carries forward every 3.30.x and 3.31.x fix—including smaller installs, faster startup, Reduce motion sync, smoother controls during heavy background work, crash protection, and safer helper timeouts and report scrubbing. _Verified: end-to-end._
 
 ## 3.31.1 — November 25, 2026

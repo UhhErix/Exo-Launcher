@@ -1796,32 +1796,24 @@ impl AppState {
     }
 
     pub fn cover_image(&self, game: &Game, scale: f32) -> Option<Image> {
-        let cache = self.image_cache.as_ref()?;
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
         let dim = bucket_dim(480.0);
         let mut waiting_remote = false;
         for cand in game.portrait_art_candidates() {
             if cand.url.starts_with(COVER_CACHE_ORIGIN) {
-                let key = format!("cov-url:{}", cand.url);
-                let cached = self.images.borrow_mut().get(&key, Some(cache));
-                let img = match cached {
-                    Some(existing) => existing,
-                    None => {
-                        let loaded = self
-                            .art_base
-                            .resolve_local_cover(&cand.url)
-                            .map(|path| cache.file_capped(path, dim, scale));
-                        self.images.borrow_mut().insert(
-                            key,
-                            loaded.clone(),
-                            CacheRoom::Library,
-                            dim,
-                            scale,
-                        );
-                        loaded
-                    }
-                };
-                if let Some(ready) = img.filter(|i| i.error().is_none()) {
+                let paths: Vec<PathBuf> = self
+                    .art_base
+                    .local_cover_path(&cand.url)
+                    .into_iter()
+                    .collect();
+                if let Some(ready) = self.local_file_image(
+                    format!("cov-url:{}", cand.url),
+                    &paths,
+                    dim,
+                    scale,
+                    CacheRoom::Library,
+                ) {
                     return Some(ready);
                 }
             } else if cand.url.starts_with("https://") && !waiting_remote {
@@ -1839,51 +1831,62 @@ impl AppState {
                 waiting_remote = true;
             }
         }
-        let san_key = format!("cov-san:{}#{}", game.id, game.art_revision.unwrap_or(0));
-        let sanitized = if let Some(existing) = self.images.borrow_mut().get(&san_key, Some(cache))
-        {
-            existing
-        } else {
-            let loaded = self
-                .art_base
-                .resolve_local_sanitized_portrait(game)
-                .map(|path| cache.file_capped(path, dim, scale));
-            self.images.borrow_mut().insert(
-                san_key,
-                loaded.clone(),
-                CacheRoom::Library,
-                dim,
-                scale,
-            );
-            loaded
-        };
-        if let Some(ok_img) = sanitized.filter(|i| i.error().is_none()) {
+        if let Some(ok_img) = self.local_file_image(
+            format!("cov-san:{}#{}", game.id, game.art_revision.unwrap_or(0)),
+            &self.art_base.sanitized_portrait_paths(game),
+            dim,
+            scale,
+            CacheRoom::Library,
+        ) {
             return Some(ok_img);
         }
         self.hero_image_direct(game, scale)
             .filter(|i| i.error().is_none())
     }
 
-    fn hero_image_direct(&self, game: &Game, scale: f32) -> Option<Image> {
+    pub(crate) fn local_file_image(
+        &self,
+        key: String,
+        paths: &[PathBuf],
+        dim: f32,
+        scale: f32,
+        room: CacheRoom,
+    ) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
+        let mut images = self.images.borrow_mut();
+        let mut stage = match images.get(&key, Some(cache)) {
+            Some(Some(img)) if img.error().is_none() => return Some(img),
+            Some(Some(_)) => images.stage(&key) + 1,
+            Some(None) => return None,
+            None => 0,
+        };
+        let startup = self.startup_disk_art.get();
+        while let Some(path) = paths.get(stage) {
+            if !startup || path.is_file() {
+                let img = cache.file_capped(path, dim, scale);
+                if img.error().is_none() {
+                    images.insert_staged(key, Some(img.clone()), stage, room, dim, scale);
+                    return Some(img);
+                }
+            }
+            stage += 1;
+        }
+        images.insert_staged(key, None, stage, room, dim, scale);
+        None
+    }
+
+    fn hero_image_direct(&self, game: &Game, scale: f32) -> Option<Image> {
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
         let dim = bucket_dim(1920.0);
-        let key = format!("hero:{}#{}", game.id, game.art_revision.unwrap_or(0));
-        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            if let Some(ready) = existing.filter(|i| i.error().is_none()) {
-                return Some(ready);
-            }
-        } else {
-            let loaded = self
-                .art_base
-                .resolve_local_hero(game)
-                .map(|path| cache.file_capped(path, dim, scale));
-            self.images
-                .borrow_mut()
-                .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
-            if let Some(ready) = loaded.filter(|i| i.error().is_none()) {
-                return Some(ready);
-            }
+        if let Some(ready) = self.local_file_image(
+            format!("hero:{}#{}", game.id, game.art_revision.unwrap_or(0)),
+            &self.art_base.hero_paths(game),
+            dim,
+            scale,
+            CacheRoom::Library,
+        ) {
+            return Some(ready);
         }
         if let Some(url) = game.hero_url.as_deref()
             && url.starts_with("https://")
@@ -1913,21 +1916,11 @@ impl AppState {
     }
 
     pub fn device_image(&self, url: &str, scale: f32) -> Option<Image> {
-        let cache = self.image_cache.as_ref()?;
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
         let dim = bucket_dim(720.0);
-        let key = format!("dev:{url}");
-        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            return existing;
-        }
-        let loaded = self
-            .art_base
-            .resolve_device_image(url)
-            .map(|path| cache.file_capped(path, dim, scale));
-        self.images
-            .borrow_mut()
-            .insert(key, loaded.clone(), CacheRoom::Pc, dim, scale);
-        loaded
+        let paths: Vec<PathBuf> = self.art_base.device_image_path(url).into_iter().collect();
+        self.local_file_image(format!("dev:{url}"), &paths, dim, scale, CacheRoom::Pc)
     }
 
     pub fn app_icon_image(&self, app_id: &str) -> Option<Image> {
@@ -1948,40 +1941,35 @@ impl AppState {
     }
 
     pub fn capture_thumb_image(&self, url: &str, scale: f32) -> Option<Image> {
-        let cache = self.image_cache.as_ref()?;
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
         let dim = bucket_dim(320.0);
-        let key = format!("cap:{url}");
-        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            return existing;
-        }
-        let loaded = self
-            .art_base
-            .resolve_capture_thumb(url)
-            .map(|path| cache.file_capped(path, dim, scale));
-        self.images
-            .borrow_mut()
-            .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
-        loaded
+        self.local_file_image(
+            format!("cap:{url}"),
+            &self.art_base.capture_thumb_paths(url),
+            dim,
+            scale,
+            CacheRoom::Library,
+        )
     }
 
     pub fn capture_full_image(&self, url: &str, scale: f32) -> Option<Image> {
-        let cache = self.image_cache.as_ref()?;
+        self.image_cache.as_ref()?;
         self.sync_budget_for_scale(scale);
         let dim = bucket_dim(1280.0);
-        let key = format!("cap-full:{url}");
-        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
-            return existing;
+        let mut paths = self.art_base.capture_file_paths(url);
+        for thumb in self.art_base.capture_thumb_paths(url) {
+            if !paths.contains(&thumb) {
+                paths.push(thumb);
+            }
         }
-        let loaded = self
-            .art_base
-            .resolve_capture_file(url)
-            .or_else(|| self.art_base.resolve_capture_thumb(url))
-            .map(|path| cache.file_capped(path, dim, scale));
-        self.images
-            .borrow_mut()
-            .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
-        loaded
+        self.local_file_image(
+            format!("cap-full:{url}"),
+            &paths,
+            dim,
+            scale,
+            CacheRoom::Library,
+        )
     }
 
     pub fn remote_image_sized(&self, url: &str, max_dim: f32, scale: f32) -> Option<Image> {
@@ -4859,5 +4847,97 @@ mod library_sort_and_confirm_tests {
         assert_eq!(after_rest_retained, 0);
 
         let _ = std::fs::remove_dir_all(&cache_dir);
+    }
+
+    fn local_art_dir(label: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("exo-ui-local-art-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("art dir");
+        dir
+    }
+
+    fn tiny_png() -> Vec<u8> {
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(4, 4, image::Rgba([10, 20, 30, 255]))
+            .write_to(&mut out, image::ImageFormat::Png)
+            .expect("encode png");
+        out.into_inner()
+    }
+
+    #[test]
+    fn local_art_steps_past_missing_candidates_as_the_decoder_reports_them() {
+        let dir = local_art_dir("steps");
+        let present = dir.join("c.png");
+        std::fs::write(&present, tiny_png()).expect("write");
+        let paths = vec![dir.join("a.png"), dir.join("b.png"), present];
+        let mut s = AppState::default();
+        s.install_waker(Arc::new(|| {}));
+        let key = "test-art:steps".to_string();
+
+        for expect_stage in 0..2 {
+            let pending = s
+                .local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
+                .expect("a pending candidate");
+            assert!(
+                pending.wait().is_err(),
+                "missing candidate fails on the decoder"
+            );
+            assert_eq!(s.images.borrow().stage(&key), expect_stage);
+        }
+        let found = s
+            .local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
+            .expect("the file that exists");
+        found.wait().expect("decodes");
+        assert_eq!(s.images.borrow().stage(&key), 2);
+        let again = s
+            .local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
+            .expect("cached");
+        assert_eq!(again.id(), found.id());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn local_art_with_no_file_on_disk_ends_as_a_cached_miss() {
+        let dir = local_art_dir("miss");
+        let paths = vec![dir.join("a.png"), dir.join("b.png")];
+        let mut s = AppState::default();
+        s.install_waker(Arc::new(|| {}));
+        let key = "test-art:miss".to_string();
+        while let Some(img) =
+            s.local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
+        {
+            assert!(img.wait().is_err());
+        }
+        assert!(s.images.borrow().is_failed(&key));
+        assert!(
+            s.local_file_image(key, &paths, 128.0, 1.0, CacheRoom::Library)
+                .is_none()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn local_art_before_the_first_frame_picks_the_existing_file_at_once() {
+        let dir = local_art_dir("startup");
+        let present = dir.join("c.png");
+        std::fs::write(&present, tiny_png()).expect("write");
+        let paths = vec![dir.join("a.png"), dir.join("b.png"), present];
+        let mut s = AppState::default();
+        s.install_waker(Arc::new(|| {}));
+        s.startup_disk_art.set(true);
+        let img = s
+            .local_file_image(
+                "test-art:startup".into(),
+                &paths,
+                128.0,
+                1.0,
+                CacheRoom::Library,
+            )
+            .expect("existing file");
+        s.startup_disk_art.set(false);
+        img.wait().expect("decodes");
+        assert_eq!(s.images.borrow().stage("test-art:startup"), 2);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

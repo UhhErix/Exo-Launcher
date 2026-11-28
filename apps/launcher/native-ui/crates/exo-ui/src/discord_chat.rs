@@ -95,6 +95,9 @@ fn channel_name_map(s: &AppState) -> std::collections::HashMap<String, String> {
         for ch in &chans.channels {
             map.insert(ch.id.clone(), ch.name.clone());
         }
+        for (id, role) in &chans.roles {
+            map.insert(format!("&{id}"), role.name.clone());
+        }
     }
     map
 }
@@ -131,7 +134,11 @@ fn embed_card(
     {
         let mut title_el = text(title.clone())
             .font(type_section())
-            .color(if embed.url.is_some() { good() } else { FG })
+            .color(if embed.url.is_some() {
+                crate::discord_md::link_fg()
+            } else {
+                FG
+            })
             .w_full()
             .wrap();
         if let Some(ref url) = embed.url {

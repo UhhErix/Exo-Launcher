@@ -207,6 +207,7 @@ pub struct SetupFlow {
     pub return_to: Option<usize>,
     pub picks: Option<Vec<String>>,
     pub applying: bool,
+    pub runtimes: crate::setup_runtimes::SetupRuntimes,
 }
 
 impl SetupFlow {
@@ -261,6 +262,7 @@ impl AppState {
                 self.load_backup_and_clients();
                 self.wp4_load_settings_all();
                 self.wp4_load_cleanup();
+                self.setup_load_runtimes();
             }
             0 => {
                 self.load_pc_devices();
@@ -1425,6 +1427,10 @@ fn accounts(s: &AppState) -> El {
                 .child(text("Game clients").font(type_body()).color(FG))
                 .child(clients_step_view(s)),
         );
+    }
+
+    if let Some(runtimes) = crate::setup_runtimes::card_view(s) {
+        side = side.child(runtimes);
     }
 
     side = side.child(setup_apps_card(s));

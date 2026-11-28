@@ -1642,7 +1642,7 @@ pub struct ArtBase {
 }
 
 impl ArtBase {
-    pub fn resolve_local_cover(&self, cover_url: &str) -> Option<PathBuf> {
+    pub fn local_cover_path(&self, cover_url: &str) -> Option<PathBuf> {
         let root = self.covers_dir.as_deref()?;
         let rest = cover_url
             .strip_prefix("https://covers.exo-launcher.local/")
@@ -1656,74 +1656,54 @@ impl ArtBase {
         if !is_safe_leaf(&decoded) {
             return None;
         }
-        let candidate = Path::new(root).join(&decoded);
-        if candidate.is_file() {
-            Some(candidate)
-        } else {
-            None
-        }
+        Some(Path::new(root).join(&decoded))
     }
 
-    pub fn resolve_folder_art(&self, value: &str) -> Option<PathBuf> {
-        if let Some(p) = self.resolve_local_cover(value) {
-            return Some(p);
-        }
-        let root = self.covers_dir.as_deref()?;
+    pub fn folder_art_paths(&self, value: &str) -> Vec<PathBuf> {
+        let mut out: Vec<PathBuf> = self.local_cover_path(value).into_iter().collect();
         let leaf = value.trim().split('?').next().unwrap_or("");
-        if !is_safe_leaf(leaf) {
-            return None;
+        if let Some(root) = self.covers_dir.as_deref()
+            && is_safe_leaf(leaf)
+        {
+            out.push(Path::new(root).join(leaf));
         }
-        let candidate = Path::new(root).join(leaf);
-        if candidate.is_file() {
-            Some(candidate)
-        } else {
-            None
-        }
+        out
     }
 
-    pub fn resolve_local_sanitized_portrait(&self, game: &Game) -> Option<PathBuf> {
-        let root = self.covers_dir.as_deref()?;
+    pub fn sanitized_portrait_paths(&self, game: &Game) -> Vec<PathBuf> {
+        let Some(root) = self.covers_dir.as_deref() else {
+            return Vec::new();
+        };
         let sanitized = sanitize_cache_id(&game.id);
-        for ext in ["jpg", "png", "webp"] {
-            let p = Path::new(root).join(format!("{sanitized}.{ext}"));
-            if p.is_file() {
-                return Some(p);
-            }
-        }
-        None
+        ["jpg", "png", "webp"]
+            .iter()
+            .map(|ext| Path::new(root).join(format!("{sanitized}.{ext}")))
+            .collect()
     }
 
     pub fn resolve_local_portrait(&self, game: &Game) -> Option<PathBuf> {
-        for cand in game.portrait_art_candidates() {
-            if let Some(p) = self.resolve_local_cover(&cand.url) {
-                return Some(p);
-            }
-        }
-        self.resolve_local_sanitized_portrait(game)
+        first_file(
+            game.portrait_art_candidates()
+                .iter()
+                .filter_map(|cand| self.local_cover_path(&cand.url))
+                .chain(self.sanitized_portrait_paths(game)),
+        )
     }
 
-    pub fn resolve_local_hero(&self, game: &Game) -> Option<PathBuf> {
-        let root = self.covers_dir.as_deref()?;
+    pub fn hero_paths(&self, game: &Game) -> Vec<PathBuf> {
+        let Some(root) = self.covers_dir.as_deref() else {
+            return Vec::new();
+        };
         let target = sanitize_cache_id(&game.hero_cache_target());
-        let direct = Path::new(root).join(format!("hero_{target}.jpg"));
-        if direct.is_file() {
-            return Some(direct);
-        }
+        let mut out = vec![Path::new(root).join(format!("hero_{target}.jpg"))];
         if let Some(app_id) = game.art_steam_app_id() {
-            for name in [
-                format!("hero_steam_{app_id}.jpg"),
-                format!("{app_id}_hero.jpg"),
-            ] {
-                let p = Path::new(root).join(&name);
-                if p.is_file() {
-                    return Some(p);
-                }
-            }
+            out.push(Path::new(root).join(format!("hero_steam_{app_id}.jpg")));
+            out.push(Path::new(root).join(format!("{app_id}_hero.jpg")));
         }
-        None
+        out
     }
 
-    pub fn resolve_device_image(&self, url: &str) -> Option<PathBuf> {
+    pub fn device_image_path(&self, url: &str) -> Option<PathBuf> {
         let root = self.devices_dir.as_deref()?;
         let rest = url.strip_prefix("https://devices.exo-launcher.local/")?;
         let leaf = rest.split('?').next().unwrap_or(rest).rsplit('/').next()?;
@@ -1731,58 +1711,72 @@ impl ArtBase {
         if !is_safe_leaf(&decoded) {
             return None;
         }
-        let p = Path::new(root).join(decoded);
-        p.is_file().then_some(p)
+        Some(Path::new(root).join(decoded))
+    }
+
+    pub fn capture_thumb_paths(&self, thumb_url: &str) -> Vec<PathBuf> {
+        let Some(rest) = thumb_url.strip_prefix("https://capture-thumbs.exo-launcher.local/")
+        else {
+            return self.capture_file_paths(thumb_url);
+        };
+        let Some(root) = self.capture_thumbs_dir.as_deref() else {
+            return Vec::new();
+        };
+        rest.split('?')
+            .next()
+            .unwrap_or(rest)
+            .rsplit('/')
+            .next()
+            .and_then(percent_decode_simple)
+            .filter(|decoded| is_safe_leaf(decoded))
+            .map(|decoded| Path::new(root).join(decoded))
+            .into_iter()
+            .collect()
     }
 
     pub fn resolve_capture_thumb(&self, thumb_url: &str) -> Option<PathBuf> {
-        if let Some(rest) = thumb_url.strip_prefix("https://capture-thumbs.exo-launcher.local/") {
-            let root = self.capture_thumbs_dir.as_deref()?;
-            let leaf = rest.split('?').next().unwrap_or(rest).rsplit('/').next()?;
-            let decoded = percent_decode_simple(leaf)?;
-            if !is_safe_leaf(&decoded) {
-                return None;
-            }
-            let p = Path::new(root).join(decoded);
-            return p.is_file().then_some(p);
-        }
-        self.resolve_capture_file(thumb_url)
+        first_file(self.capture_thumb_paths(thumb_url))
     }
 
-    pub fn resolve_capture_file(&self, media_url: &str) -> Option<PathBuf> {
-        let root = self.captures_dir.as_deref()?;
-        let rest = media_url.strip_prefix("https://captures.exo-launcher.local/")?;
+    pub fn capture_file_paths(&self, media_url: &str) -> Vec<PathBuf> {
+        let Some(root) = self.captures_dir.as_deref() else {
+            return Vec::new();
+        };
+        let Some(rest) = media_url.strip_prefix("https://captures.exo-launcher.local/") else {
+            return Vec::new();
+        };
         let without_query = rest.split('?').next().unwrap_or(rest);
         let mut segments: Vec<String> = Vec::new();
         for seg in without_query.split('/') {
             if seg.is_empty() {
                 continue;
             }
-            let decoded = percent_decode_simple(seg)?;
-            if !is_safe_leaf(&decoded) {
-                return None;
-            }
+            let Some(decoded) = percent_decode_simple(seg).filter(|d| is_safe_leaf(d)) else {
+                return Vec::new();
+            };
             segments.push(decoded);
         }
         if segments.is_empty() {
-            return None;
+            return Vec::new();
         }
-        let direct = segments
-            .iter()
-            .fold(PathBuf::from(root), |acc, seg| acc.join(seg));
-        if direct.is_file() {
-            return Some(direct);
-        }
+        let join = |segs: &[String]| {
+            segs.iter()
+                .fold(PathBuf::from(root), |acc, seg| acc.join(seg))
+        };
+        let mut out = vec![join(&segments)];
         if segments.len() >= 2 {
-            let without_token = segments[1..]
-                .iter()
-                .fold(PathBuf::from(root), |acc, seg| acc.join(seg));
-            if without_token.is_file() {
-                return Some(without_token);
-            }
+            out.push(join(&segments[1..]));
         }
-        None
+        out
     }
+
+    pub fn resolve_capture_file(&self, media_url: &str) -> Option<PathBuf> {
+        first_file(self.capture_file_paths(media_url))
+    }
+}
+
+fn first_file(paths: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+    paths.into_iter().find(|p| p.is_file())
 }
 
 fn is_safe_leaf(name: &str) -> bool {
@@ -2022,6 +2016,70 @@ mod cover_policy_tests {
             "https://cdn1.epicgames.com/offer/sugar/portrait.jpg",
             false
         ));
+    }
+
+    #[test]
+    fn art_paths_list_every_local_candidate_in_fallback_order_without_the_files_existing() {
+        let game = rocket_league_game();
+        let root = std::env::temp_dir().join(format!("exo-rpc-no-such-dir-{}", std::process::id()));
+        let base = ArtBase {
+            covers_dir: Some(root.to_string_lossy().into_owned()),
+            devices_dir: Some(root.to_string_lossy().into_owned()),
+            captures_dir: Some(root.to_string_lossy().into_owned()),
+            capture_thumbs_dir: Some(root.join("thumbs").to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+        let sanitized = sanitize_cache_id(&game.id);
+        assert_eq!(
+            base.sanitized_portrait_paths(&game),
+            vec![
+                root.join(format!("{sanitized}.jpg")),
+                root.join(format!("{sanitized}.png")),
+                root.join(format!("{sanitized}.webp")),
+            ]
+        );
+        let app_id = game.art_steam_app_id().expect("steam app id");
+        let target = sanitize_cache_id(&game.hero_cache_target());
+        assert_eq!(
+            base.hero_paths(&game),
+            vec![
+                root.join(format!("hero_{target}.jpg")),
+                root.join(format!("hero_steam_{app_id}.jpg")),
+                root.join(format!("{app_id}_hero.jpg")),
+            ]
+        );
+        assert_eq!(
+            base.local_cover_path("https://covers.exo-launcher.local/tok/252950_2x.jpg?rev=7"),
+            Some(root.join("252950_2x.jpg"))
+        );
+        assert_eq!(
+            base.folder_art_paths("folder.png"),
+            vec![root.join("folder.png")]
+        );
+        assert_eq!(
+            base.device_image_path("https://devices.exo-launcher.local/mouse%20pro.png"),
+            Some(root.join("mouse pro.png"))
+        );
+        assert_eq!(
+            base.capture_file_paths("https://captures.exo-launcher.local/tok/Desktop/a.png"),
+            vec![
+                root.join("tok").join("Desktop").join("a.png"),
+                root.join("Desktop").join("a.png"),
+            ]
+        );
+        assert_eq!(
+            base.capture_thumb_paths("https://capture-thumbs.exo-launcher.local/tok/a.jpg"),
+            vec![root.join("thumbs").join("a.jpg")]
+        );
+        assert_eq!(
+            base.capture_thumb_paths("https://captures.exo-launcher.local/tok/Desktop/a.png"),
+            base.capture_file_paths("https://captures.exo-launcher.local/tok/Desktop/a.png")
+        );
+        assert!(base.resolve_local_portrait(&game).is_none());
+        assert!(
+            base.resolve_capture_file("https://captures.exo-launcher.local/tok/Desktop/a.png")
+                .is_none()
+        );
     }
 
     #[test]

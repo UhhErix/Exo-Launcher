@@ -10,8 +10,8 @@ use exo_kit::{
 };
 use exo_rpc::{DiscordChannels, DiscordHome};
 use rune::{
-    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, Transition, Tx, col, edit_access, el, row, text,
-    text_input,
+    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, SurfaceFit, Transition, Tx, col, edit_access,
+    el, row, text, text_input,
 };
 use serde_json::json;
 
@@ -250,9 +250,10 @@ impl AppState {
                 });
             }
             let install_title = format!("Install {}", sel.title);
-            if query.is_empty()
-                || install_title.to_lowercase().contains(query)
-                || "install".contains(query)
+            if !sel.installed
+                && (query.is_empty()
+                    || install_title.to_lowercase().contains(query)
+                    || "install".contains(query))
             {
                 items.push(PaletteItem {
                     id: "pal-action-install-selected".into(),
@@ -446,9 +447,23 @@ fn palette_icon(target: &PaletteTarget) -> El {
     }
 }
 
-fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
+fn game_cover_icon(s: &AppState, target: &PaletteTarget, scale: f32) -> Option<El> {
+    let PaletteTarget::OpenGame(id) = target else {
+        return None;
+    };
+    let game = s.games.iter().find(|g| &g.id == id)?;
+    let cover = s.cover_image(game, scale)?;
+    Some(
+        el().size(scaled(20.0), scaled(28.0))
+            .radius(4.0)
+            .clip_rounded(4.0)
+            .pixels_fit(cover.pixels(), SurfaceFit::Fill),
+    )
+}
+
+fn palette_row(item: PaletteItem, index: usize, selected: bool, cover: Option<El>) -> El {
     let target = item.target.clone();
-    let icon = palette_icon(&target);
+    let icon = cover.unwrap_or_else(|| palette_icon(&target));
     let label = match item.detail {
         Some(ref detail) => format!("{}{}", item.title, detail),
         None => item.title.clone(),
@@ -562,7 +577,7 @@ pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
     }
 }
 
-pub fn layers(s: &AppState) -> Vec<El> {
+pub fn layers(s: &AppState, scale: f32) -> Vec<El> {
     let items = s.palette_results();
     let clamped = if items.is_empty() {
         0
@@ -625,7 +640,8 @@ pub fn layers(s: &AppState) -> Vec<El> {
                 );
                 last_group = Some(item.group);
             }
-            rows.push(palette_row(item, i, i == clamped));
+            let cover = game_cover_icon(s, &item.target, scale);
+            rows.push(palette_row(item, i, i == clamped, cover));
         }
         col()
             .key("command-palette-list")
@@ -728,7 +744,21 @@ mod tests {
         assert!(all.iter().any(|i| i.title == "Minimize window"));
         assert!(all.iter().any(|i| i.title == "Close window"));
         assert!(all.iter().any(|i| i.title.starts_with("Play ")));
-        assert!(all.iter().any(|i| i.title.starts_with("Install ")));
+        let selected_installed = s.selected_game().is_some_and(|g| g.installed);
+        assert_eq!(
+            all.iter().any(|i| i.title.starts_with("Install ")),
+            !selected_installed
+        );
+        let selected_id = s.selected_game().map(|g| g.id.clone()).expect("selected");
+        if let Some(game) = s.games.iter_mut().find(|g| g.id == selected_id) {
+            game.installed = !selected_installed;
+        }
+        assert_eq!(
+            s.palette_results()
+                .iter()
+                .any(|i| i.title.starts_with("Install ")),
+            selected_installed
+        );
         assert!(!all.iter().any(|i| i.title == "New note"));
         assert!(
             all.iter()

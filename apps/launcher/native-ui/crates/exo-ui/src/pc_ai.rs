@@ -2046,7 +2046,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .min_w(0.0)
         .gap(10.0)
         .child(auto_tune_card)
-        .child(hw_card);
+        .child(hw_card)
+        .child(crate::power_guard::card_view(s));
 
     let shaders_working = s.pc.shaders_queue_running
         || s.pc.shaders_queue_current_id.is_some()
@@ -2511,11 +2512,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .grow(1.0)
         .min_w(0.0)
         .gap(10.0)
-        .child(updates_card);
-
-    right_col = right_col.child(crate::power_guard::card_view(s));
-
-    right_col = right_col.child(crate::gpu_activity::card_view(s));
+        .child(updates_card)
+        .child(crate::gpu_activity::card_view(s));
 
     right_col = right_col.child(shaders_card);
 
@@ -2656,8 +2654,8 @@ mod tests {
             .presented("exo-ai-power-guard-card")
             .expect("exo-ai-power-guard-card");
         assert!(
-            guard_rect[0] > hw_rect[0],
-            "Power guard should sit in the right column"
+            (guard_rect[0] - hw_rect[0]).abs() < 1.0 && guard_rect[1] > hw_rect[1],
+            "Power guard should sit under the hardware card in the left column"
         );
         assert!(
             rt.presented("exo-ai-health").is_some()

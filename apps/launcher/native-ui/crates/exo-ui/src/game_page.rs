@@ -422,6 +422,9 @@ fn primary_action_view(
     stack
 }
 
+const HERO_MIN_H: f32 = 420.0;
+const HERO_MAX_H: f32 = 680.0;
+
 pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
     let game = s.active_game_view(base_game);
     let hue = title_hue(&game.title);
@@ -719,8 +722,11 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .children(stats_area);
 
     let stage = el()
+        .key("gp-stage")
         .w_full()
-        .min_h(420.0)
+        .grow(1.0)
+        .min_h(HERO_MIN_H)
+        .max_h(HERO_MAX_H)
         .clip_rounded(0.0)
         .fill(BG)
         .child(hero_bg)
@@ -729,7 +735,8 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
         .child(
             col()
                 .w_full()
-                .min_h(420.0)
+                .h_full()
+                .min_h(HERO_MIN_H)
                 .pt(56.0)
                 .px(GAME_EDGE)
                 .pb(20.0)
@@ -742,6 +749,7 @@ pub fn view(s: &AppState, base_game: &Game, scale: f32) -> El {
     let mut page = col()
         .key(format!("game-page-{}", base_game.id))
         .w_full()
+        .min_h(s.chrome.window_height)
         .gap(12.0)
         .pb(20.0)
         .fill(BG)
@@ -815,6 +823,23 @@ mod tests {
     use rune::motion_gate::Run;
     use rune::render::KIND_BACKDROP_BLUR;
     use rune::{Env, Runtime};
+
+    #[test]
+    fn hero_fills_spare_window_height_so_short_pages_leave_no_empty_band() {
+        let mut state = AppState::with_demo_games();
+        state.open_game_page("demo:cyberpunk");
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1400.0), Env::new(true, 1.0));
+        for i in 0..4 {
+            rt.frame(i as f64 / 60.0);
+            rt.settle_all();
+        }
+        let (stage, _) = rt.presented("gp-stage").expect("gp-stage");
+        assert!(
+            stage[3] > super::HERO_MIN_H + 1.0 && stage[3] <= super::HERO_MAX_H + 1.0,
+            "hero height {}",
+            stage[3]
+        );
+    }
 
     #[test]
     fn game_page_equal_cards_stat_baselines_and_blur_cap() {
