@@ -1106,7 +1106,14 @@ fn welcome(s: &AppState, scale: f32) -> El {
 fn store_row(s: &AppState, id: &str) -> El {
     let count = store_count(s, id);
     let state = if count > 0 {
-        pill(format!("Found · {count} games"), good().alpha(0.16), good())
+        pill(
+            format!(
+                "Found · {count} {}",
+                if count == 1 { "game" } else { "games" }
+            ),
+            good().alpha(0.16),
+            good(),
+        )
     } else {
         pill("Not found on this PC", fg_faint().alpha(0.2), fg_muted())
     };
@@ -1713,32 +1720,36 @@ fn pc_cards(s: &AppState) -> El {
         .radius(3.0)
         .fill(fg_faint().alpha(0.18))
         .child(el().w(0.0).h(6.0).radius(3.0).fill(FG).grow(used_frac));
-    let disk = amoled_card(RADIUS_CARD)
+    let mut disk_head = row()
+        .w_full()
+        .justify_between()
+        .center_y()
+        .child(text("Storage").font(type_body()).color(FG));
+    if !disk_tag.is_empty() {
+        disk_head = disk_head.child(pill(disk_tag, fg_faint().alpha(0.2), fg_muted()));
+    }
+    let mut disk = amoled_card(RADIUS_CARD)
         .key("setup-card-disk")
         .grow(1.0)
         .min_w(0.0)
         .padding(18.0)
         .gap(12.0)
-        .child(
-            row()
-                .w_full()
-                .justify_between()
-                .center_y()
-                .child(text("Storage").font(type_body()).color(FG))
-                .child(pill(disk_tag, fg_faint().alpha(0.2), fg_muted())),
-        )
+        .child(disk_head)
         .child(
             text(disk_name)
                 .font(TextStyle::new(scaled(20.0), 650.0))
                 .color(FG)
                 .wrap(),
         )
-        .child(disk_bar)
-        .child(
+        .child(disk_bar);
+    if total > 0.0 {
+        disk = disk.child(
             text(format!("{free:.0} GB free of {total:.0} GB"))
+                .key("setup-disk-free")
                 .font(type_small())
                 .color(fg_muted()),
         );
+    }
     let net_name = about
         .network
         .clone()
@@ -1757,11 +1768,12 @@ fn pc_cards(s: &AppState) -> El {
                 about.windows.clone().unwrap_or_else(|| "Checking".into()),
             ),
             fact(
-                "Version",
+                "Exo",
                 about
                     .version
                     .clone()
                     .or_else(|| s.pc.update_check.as_ref().and_then(|u| u.current.clone()))
+                    .map(|v| crate::whats_new::version_label(&v))
                     .unwrap_or_else(|| "Checking".into()),
             ),
         ],

@@ -379,6 +379,19 @@ pub fn update_words(status: &str, percent: Option<f64>) -> (String, Option<f32>)
     ("Downloading".into(), None)
 }
 
+pub fn version_label(version: &str) -> String {
+    let shown = version.trim().trim_start_matches('v');
+    let core = shown.split(['+', '-']).next().unwrap_or(shown);
+    let mut parts = core.split('.').map(|part| part.parse::<u32>().ok());
+    match (parts.next().flatten(), parts.next().flatten()) {
+        (Some(4), Some(minor)) => match parts.next().flatten().unwrap_or(0) {
+            0 => format!("0.{} beta", minor + 1),
+            patch => format!("0.{}.{patch} beta", minor + 1),
+        },
+        _ => shown.to_string(),
+    }
+}
+
 pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     let parse = |v: &str| -> Vec<u32> {
         let head = v
@@ -834,7 +847,7 @@ impl AppState {
                 .whats_new
                 .latest
                 .as_deref()
-                .map(|v| format!("Exo {v}"))
+                .map(|v| format!("Exo {}", version_label(v)))
                 .unwrap_or_else(|| "Updating Exo".into());
             self.push_rich_notice(RichNoticeSpec {
                 key_id: Some("app-update".into()),
@@ -876,7 +889,7 @@ impl AppState {
         {
             self.push_rich_notice(RichNoticeSpec {
                 key_id: Some("app-update".into()),
-                title: Some(format!("Exo {latest}")),
+                title: Some(format!("Exo {}", version_label(latest))),
                 text: "Update available.".into(),
                 sticky: Some(true),
                 action: Some(NoticeActionSpec {
@@ -1044,7 +1057,7 @@ pub fn whats_new_layers(s: &AppState) -> Vec<El> {
     }
 
     let heading = match upcoming.as_ref() {
-        Some(up) => format!("Coming in Exo {}", up.version),
+        Some(up) => format!("Coming in Exo {}", version_label(&up.version)),
         None => "Changelog".into(),
     };
 
@@ -1060,7 +1073,7 @@ pub fn whats_new_layers(s: &AppState) -> Vec<El> {
         let mut sec = col().w_full().gap(14.0);
         if idx > 0 || upcoming.is_none() {
             sec = sec.child(
-                text(release.version.clone())
+                text(version_label(&release.version))
                     .font(TextStyle::new(scaled(13.0), 600.0).lh(line_h))
                     .color(fg_muted()),
             );
@@ -1204,7 +1217,7 @@ pub fn update_sheet_layers(s: &AppState) -> Vec<El> {
         .whats_new
         .latest
         .as_deref()
-        .map(|v| format!("Exo Launcher {v}"))
+        .map(|v| format!("Exo Launcher {}", version_label(v)))
         .unwrap_or_else(|| "Exo Launcher".into());
     let busy = s.whats_new.busy();
     let failed_err = (!busy).then(|| s.whats_new.error_text()).flatten();
@@ -1295,6 +1308,17 @@ pub fn update_sheet_layers(s: &AppState) -> Vec<El> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn version_label_names_the_4_line_as_the_beta_and_leaves_older_releases_alone() {
+        assert_eq!(version_label("4.0.0"), "0.1 beta");
+        assert_eq!(version_label("v4.0.0+16da8f0b"), "0.1 beta");
+        assert_eq!(version_label("4.0.2"), "0.1.2 beta");
+        assert_eq!(version_label("4.1.0-dev"), "0.2 beta");
+        assert_eq!(version_label("3.31.4"), "3.31.4");
+        assert_eq!(version_label("5.0.0"), "5.0.0");
+        assert_eq!(version_label(""), "");
+    }
 
     #[test]
     fn compare_versions_orders_semver_and_ignores_suffixes() {

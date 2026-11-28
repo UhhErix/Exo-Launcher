@@ -29,6 +29,9 @@ using Microsoft::WRL::ComPtr;
 #ifndef PRODUCT_VERSION
 #define PRODUCT_VERSION L"0.0.0"
 #endif
+#ifndef PRODUCT_LABEL
+#define PRODUCT_LABEL PRODUCT_VERSION
+#endif
 
 namespace {
 constexpr wchar_t kHost[] = L"setup.exo-launcher.local";
@@ -320,7 +323,7 @@ void SendState() {
     bool desktop = updating ? Exists(DesktopLink()) : true;
     std::string json = std::string(R"({"type":"state","mode":)") + (g_uninstall ? "\"uninstall\"" : g_update ? "\"update\"" : "\"install\"") +
         R"(,"updating":)" + (updating ? "true" : "false") + R"(,"desktop":)" + (desktop ? "true" : "false") +
-        R"(,"version":)" + Json(PRODUCT_VERSION) + R"(,"path":)" + Json(g_app) + R"(,"reduceMotion":)" + ReduceMotion() + "}";
+        R"(,"version":)" + Json(PRODUCT_LABEL) + R"(,"path":)" + Json(g_app) + R"(,"reduceMotion":)" + ReduceMotion() + "}";
     g_view->PostWebMessageAsJson(Wide(json).c_str());
 }
 

@@ -3,6 +3,11 @@
     "version": "4.0.0",
     "items": [
       {
+        "icon": "Live",
+        "title": "Exo is now 0.1 beta",
+        "detail": "The new native app starts its own version line at 0.1 beta. Expect some bugs, and report anything odd from Settings › About › Report a problem."
+      },
+      {
         "icon": "Library",
         "title": "All-new native desktop interface",
         "detail": "Faster startup, smoother scrolling, and lower memory use across Library, Store, Discord, Music, and Exo AI, keeping all your existing settings, games, and accounts."

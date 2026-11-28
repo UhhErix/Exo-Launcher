@@ -734,7 +734,9 @@ fn section_about(s: &AppState) -> El {
             .as_ref()
             .is_some_and(|u| u.update_available);
     let upd_title = match ver {
-        Some(v) if !v.is_empty() => format!("Exo Launcher {v}"),
+        Some(v) if !v.is_empty() => {
+            format!("Exo Launcher {}", crate::whats_new::version_label(v))
+        }
         _ => "Exo Launcher".to_string(),
     };
     let upd_status_note = s

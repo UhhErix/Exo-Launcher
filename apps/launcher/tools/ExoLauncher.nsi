@@ -4,6 +4,9 @@
 !ifndef PRODUCT_VERSION
   !searchparse /file "..\VERSION" "" PRODUCT_VERSION
 !endif
+!ifndef PRODUCT_LABEL
+  !define PRODUCT_LABEL "${PRODUCT_VERSION}"
+!endif
 !ifndef PAYLOAD_DIR
   !error "PAYLOAD_DIR required"
 !endif
@@ -475,7 +478,7 @@ Function WelcomeShow
   StrCpy $Updating 0
   IfFileExists "$INSTDIR\ExoLauncher.exe" 0 +2
     StrCpy $Updating 1
-  StrCpy $5 "Version ${PRODUCT_VERSION}"
+  StrCpy $5 "Version ${PRODUCT_LABEL}"
   StrCpy $6 "Install"
   StrCmp $Updating 1 0 +2
     StrCpy $6 "Update"
@@ -549,9 +552,9 @@ FunctionEnd
 
 Function InstShow
   ${If} $Updating == 1
-    StrCpy $5 "Updating to ${PRODUCT_VERSION}"
+    StrCpy $5 "Updating to ${PRODUCT_LABEL}"
   ${Else}
-    StrCpy $5 "Installing ${PRODUCT_VERSION}"
+    StrCpy $5 "Installing ${PRODUCT_LABEL}"
   ${EndIf}
   Call ExoProgress
 FunctionEnd
@@ -568,7 +571,7 @@ Function FinishShow
   ${Else}
     StrCpy $5 "Installed"
     StrCmp $Updating 1 0 +2
-      StrCpy $5 "Updated to ${PRODUCT_VERSION}"
+      StrCpy $5 "Updated to ${PRODUCT_LABEL}"
     StrCpy $6 "Launch Exo"
     StrCpy $7 "Close"
   ${EndIf}
@@ -893,7 +896,7 @@ Section "Exo Launcher" SecApp
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayName" "${PRODUCT_NAME}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\ExoLauncher.exe"
-  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_LABEL}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "URLUpdateInfo" "${PRODUCT_WEB}"

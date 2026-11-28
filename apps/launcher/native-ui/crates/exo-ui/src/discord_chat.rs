@@ -2015,7 +2015,7 @@ fn message_row(
                         .on_secondary_press(move |s: &mut AppState, _, _| {
                             s.open_reactors_dialog(&cid_view, &mid_view, &key_view, is_burst)
                         })
-                        .child(text(r.emoji.display()).font(type_small()).color(FG))
+                        .child(discord_pickers::reaction_emoji_el(s, &r.emoji, scale))
                         .child(text(cnt.to_string()).font(type_label()).color(if mine {
                             good()
                         } else {

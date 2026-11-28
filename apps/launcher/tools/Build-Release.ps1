@@ -16,6 +16,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
 $version = (Get-Content VERSION -Raw).Trim()
+$label = if ($version -match '^4\.(\d+)\.(\d+)') { if ([int]$Matches[2]) { "0.$([int]$Matches[1] + 1).$([int]$Matches[2]) beta" } else { "0.$([int]$Matches[1] + 1) beta" } } else { $version }
 # This release's What's New, uploaded beside the installer as whats-new.json: the build before it shows these items
 # while it offers the update (AppUpdateService.ParseWhatsNew checks the file).
 $whatsNew = @(Get-Content ui\src\lib\whatsNew.json -Raw | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.version -eq $version } | Select-Object -First 1
@@ -252,7 +253,7 @@ $installerRevision = & {
 # The install engine (NSIS): the payload, its checks, the atomic swap, shortcuts and registry. Its icon and helper paths are relative to tools\.
 $engine = Join-Path $artifacts 'ExoLauncher-Engine.exe'
 Push-Location (Join-Path $repo 'tools')
-& $MakeNsis /V2 "/DPAYLOAD_DIR=$($publish.FullName)" "/DOUTFILE=$engine" "/DPRODUCT_VERSION=$version" "/DSETUP_SHELL=$shell" "/DINSTALLER_REVISION=$installerRevision" ExoLauncher.nsi
+& $MakeNsis /V2 "/DPAYLOAD_DIR=$($publish.FullName)" "/DOUTFILE=$engine" "/DPRODUCT_VERSION=$version" "/DPRODUCT_LABEL=$label" "/DSETUP_SHELL=$shell" "/DINSTALLER_REVISION=$installerRevision" ExoLauncher.nsi
 $nsis = $LASTEXITCODE
 Pop-Location
 if ($nsis) { throw "makensis failed ($nsis)." }

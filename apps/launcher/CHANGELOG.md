@@ -1,6 +1,7 @@
 # Changelog
 
-## 4.0.0 — November 25, 2026
+## 4.0.0 — November 28, 2026
+- **Exo is now 0.1 beta.** The new native app starts its own version line: this release shows as 0.1 beta in Settings › About, What's New, Setup and Windows' Installed apps. It is a beta, so expect some bugs; report anything odd from Settings › About › Report a problem. _Verified: on screen._
 - **All-new native desktop interface.** Exo Launcher now runs on a hardware-accelerated native desktop interface by default for faster startup, smoother scrolling, and lower idle memory across Library, Store, Game pages, Discord, Music, Devices, Exo AI, Apps, Captures, and Settings, with your existing settings, games, and accounts carried over automatically. _Verified: on screen._
 - **Upgraded Exo Voice and system-wide audio controls.** Introduces a faster native voice cleanup engine with automatic gaming tuning, voice isolation, echo cancellation, and optional system-wide equalizer support in Settings › Voice and Devices › Audio. _Checked in code only._
 - **Built-in frame generation and live performance overlay.** Adds frame generation controls for supported games alongside an in-game frame-time and sensor overlay, power protection, and automatic fan-curve safety limits in Exo AI. _Checked in code only._
@@ -15,7 +16,7 @@
 - **Snips, dropped files and pictures open without a hitch.** Exo reads snips, files dropped into Discord, folder pictures, playlist covers, game and device art, your saved music library and the full release notes in the background, so the window keeps moving while they load. _Checked in code only._
 - **Setup offers the game runtimes your PC is missing.** The Accounts & stores step of Setup lists any missing Visual C++, DirectX or .NET runtime and installs them with one press. _Checked in code only._
 - **Less empty space, steadier pages.** The Game page's art now grows with the window, Exo AI's two columns are evened out, Ctrl+K shows each game's cover and no longer offers Install for a game you already have, and a Store page's main button stays put while other stores' prices arrive. _Verified: on screen._
-- **Discord reads more like Discord.** Role mentions show the role's name, announcement channels get their own megaphone icon, and linked embed titles use the link color. _Checked in code only._
+- **Discord reads more like Discord.** Role mentions show the role's name, announcement channels get their own megaphone icon, linked embed titles use the link color, and reactions with a server's own emoji show the emoji instead of its name. _Verified: on screen._
 - **Includes all 3.31.x fixes and stability improvements.** Carries forward every 3.30.x and 3.31.x fix—including smaller installs, faster startup, Reduce motion sync, smoother controls during heavy background work, crash protection, and safer helper timeouts and report scrubbing. _Verified: end-to-end._
 
 ## 3.31.1 — November 25, 2026

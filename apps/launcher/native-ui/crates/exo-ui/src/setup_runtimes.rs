@@ -352,4 +352,97 @@ mod tests {
         assert!(rt.find("setup-runtimes-install").is_some());
         assert!(rt.find("setup-runtimes-note").is_none());
     }
+
+    #[test]
+    #[ignore = "writes a real GPU proof PNG to EXO_PROOF_DIR when requested"]
+    fn render_setup_runtimes_proof() {
+        use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer};
+        let out_dir = std::path::PathBuf::from(
+            std::env::var("EXO_PROOF_DIR")
+                .unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into_owned()),
+        );
+        std::fs::create_dir_all(&out_dir).expect("create EXO_PROOF_DIR");
+        let gpu = Gpu::headless();
+        let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
+        let (w, h) = (1600u32, 960u32);
+        let mut capture = |name: &str, runtimes: SetupRuntimes| {
+            let mut s = AppState::default();
+            s.setup = crate::setup::SetupFlow::first_run();
+            s.setup.stage = 1;
+            s.setup.runtimes = runtimes;
+            let mut rt = rune::Runtime::new(
+                s,
+                crate::shell::view,
+                (w as f32, h as f32),
+                rune::Env::new(true, 1.0),
+            );
+            rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
+            rt.set_glass_policy(rune::GlassPolicy::Glass);
+            rt.frame(0.0);
+            rt.frame(1.0 / 60.0);
+            rt.settle_all();
+            rt.frame(2.0 / 60.0);
+            renderer.set_srgb_blend(rt.srgb_blend());
+            renderer.set_fade_stops(rt.fade_stops());
+            renderer.set_max_backdrop_blurs(rt.max_backdrop_blurs());
+            renderer.set_liquid_glass(rt.liquid_glass_frame());
+            renderer.prepare(
+                &gpu.device,
+                &gpu.queue,
+                &mut rt.text.atlas,
+                &rt.instances,
+                (w, h),
+            );
+            let target = Offscreen::with_format(&gpu.device, w, h, renderer.format());
+            let mut enc = gpu.device.create_command_encoder(&Default::default());
+            renderer.draw(&mut enc, &target.view, rt.clear_color());
+            target.copy(&mut enc);
+            gpu.queue.submit([enc.finish()]);
+            let pixels = target.read(&gpu.device);
+            image::save_buffer(out_dir.join(name), &pixels, w, h, image::ColorType::Rgba8)
+                .expect("save proof png");
+        };
+        let missing = vec![
+            MissingRuntime {
+                id: "vcredist-x64".into(),
+                name: "Visual C++ 2015-2022 (x64)".into(),
+            },
+            MissingRuntime {
+                id: "directx-june2010".into(),
+                name: "DirectX (June 2010)".into(),
+            },
+        ];
+        capture(
+            "proof-setup-runtimes-missing.png",
+            SetupRuntimes {
+                missing: missing.clone(),
+                busy: false,
+                note: None,
+            },
+        );
+        capture(
+            "proof-setup-runtimes-installing.png",
+            SetupRuntimes {
+                missing: missing.clone(),
+                busy: true,
+                note: None,
+            },
+        );
+        capture(
+            "proof-setup-runtimes-failed.png",
+            SetupRuntimes {
+                missing,
+                busy: false,
+                note: Some(("DirectX (June 2010): Download failed.".into(), true)),
+            },
+        );
+        capture(
+            "proof-setup-runtimes-done.png",
+            SetupRuntimes {
+                missing: Vec::new(),
+                busy: false,
+                note: Some(("Runtimes installed.".into(), false)),
+            },
+        );
+    }
 }

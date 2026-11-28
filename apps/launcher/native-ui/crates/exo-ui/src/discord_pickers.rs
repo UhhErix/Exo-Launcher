@@ -149,6 +149,18 @@ pub fn emoji_cdn_url(id: &str, animated: bool, size: u32) -> String {
     format!("https://cdn.discordapp.com/emojis/{id}.webp?size={size}&quality=lossless{anim}")
 }
 
+pub fn reaction_emoji_el(s: &AppState, emoji: &exo_rpc::DiscordReactionEmoji, scale: f32) -> El {
+    let custom = emoji.id.as_deref().filter(|id| !id.is_empty());
+    if let Some(id) = custom
+        && let Some(img) = s.remote_image_sized(&emoji_cdn_url(id, false, 48), 18.0, scale)
+    {
+        return el()
+            .size(18.0, 18.0)
+            .pixels_fit(img.pixels(), SurfaceFit::Fit);
+    }
+    text(emoji.display()).font(type_small()).color(FG)
+}
+
 pub fn sticker_cdn_url(id: &str, format: i32, size: u32) -> String {
     let ext = if format == 4 { "gif" } else { "png" };
     format!("https://media.discordapp.net/stickers/{id}.{ext}?size={size}")
@@ -1646,7 +1658,7 @@ pub fn reactions_dialog_overlay(s: &AppState, scale: f32) -> Option<El> {
                 .hit()
                 .press_on_down()
                 .on_press(move |s: &mut AppState| s.select_reactors_tab(&k_click, burst))
-                .child(text(r.emoji.display()).font(type_small()).color(FG))
+                .child(reaction_emoji_el(s, &r.emoji, scale))
                 .child(text(count.to_string()).font(type_label()).color(fg_muted())),
         );
     }
