@@ -148,3 +148,23 @@ test('other methods are refused as before', async () => {
   const res = await get(`/v1/cache/NVIDIA/DLSS/${COMMIT}/${FOLDER}/nvngx_dlss.dll`, { method: 'POST' })
   assert.equal(res.status, 405)
 })
+
+test('the third-party frame generation mods are never served, even when R2 still holds them', async () => {
+  const keys = [
+    'cache/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z',
+    'cache/optiscaler/OptiScaler/releases/download/v0.9.4/LICENSE',
+    'cache/dashdogy/MFG-Unlocker/releases/download/v1.7.0/MFGUnlocker-v1.7.0.zip',
+    'cache/dashdogy/MFG-Unlocker/releases/download/v1.7.0/LICENSE',
+    'cache/sdli1995/dlssg_for_sm86/releases/download/0.4.2/dlssg-release-0.4.2-x64.zip',
+  ]
+  for (const key of keys) {
+    await bucket.put(key, 'mod bytes')
+    assert.notEqual(await bucket.head(key), null, key)
+    for (const method of ['GET', 'HEAD']) assert.equal((await get('/v1/' + key, { method })).status, 404, `${method} ${key}`)
+    assert.equal((await get('/v1/' + key, { headers: { range: 'bytes=0-3' } })).status, 404, `range ${key}`)
+  }
+  assert.equal((await get('/v1/cache/%6Fptiscaler/OptiScaler/releases/download/v0.9.4/LICENSE')).status, 404)
+  assert.equal((await get('/v1/cache/OPTISCALER/optiscaler/releases/download/v0.9.4/LICENSE')).status, 404)
+  assert.equal((await get(`/v1/cache/dashdogy/MFG-Unlocker/contents/bin?ref=${COMMIT}`)).status, 404)
+  assert.equal((await get(`/v1/cache/NVIDIA/DLSS/${COMMIT}/${FOLDER}/nvngx_dlss.dll`)).status, 200)
+})

@@ -107,3 +107,8 @@ migrations_dir = "migrations"
 # The daily job: every day at 04:20 UTC (src/worker.js scheduled: retention, pruning, and what GitHub was not told yet).
 [triggers]
 crons = ["20 4 * * *"]
+
+# Error counters (src/signal.js): one Analytics Engine data point per counted request (Worker, route, status class), no logs and no identifier. README.md in cloud/updates, "Error counters".
+[[analytics_engine_datasets]]
+binding = "SIGNAL"
+dataset = "exo_signal"

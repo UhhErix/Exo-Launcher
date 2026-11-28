@@ -15,6 +15,7 @@
 import { announce } from './announce.js'
 import { LARGE, NAMES, PENDING_CARD, assetsOf, fill, materialize, promote, reconcileChangelog, releaseForTag, stream } from './github.js'
 import { r2Store, runWatch } from './watch.js'
+import { counted } from './signal.js'
 const APPS = {
   launcher: { setup: 'ExoLauncher-Setup.exe' },
   cinema: { setup: 'ExoCinema-Setup.exe' },
@@ -46,6 +47,7 @@ const CACHE_PREFIX = '/v1/cache/'
 const CACHE_SEGMENT = /^[A-Za-z0-9._-]{1,200}$/
 const CACHE_REF = /^[0-9a-f]{40}$/
 const CACHE_IMMUTABLE_SECONDS = 31536000
+const WITHHELD_REPOS = new Set(['optiscaler/optiscaler', 'dashdogy/mfg-unlocker', 'sdli1995/dlssg_for_sm86'])
 // A releases/latest pointer moves when a vendor ships, so it is kept at the edge only briefly.
 const CACHE_POINTER_SECONDS = 300
 /** The keys that move: a vendor's releases/latest, and the DLSS Swapper catalog the cache watch rewrites. */
@@ -61,7 +63,11 @@ const EXOPACK_DELTA = { deltaPack: NAMES.deltaPack, deltaSig: NAMES.deltaSig }
 const EXOPACK_FULL = { fullPack: NAMES.fullPack, fullSig: NAMES.fullSig }
 /** Every file an app's release can serve; nothing else under a tag is ever served. */
 const servedOf = (app) => (app === 'launcher' ? { ...filesOf(app), ...DELTA, ...EXOPACK_DELTA, ...EXOPACK_FULL } : filesOf(app))
-export default {
+const ROUTES = [
+  ['latest', LATEST], ['download', DOWNLOAD], ['changelog', CHANGELOG], ['payload', PAYLOAD], ['file', FILE],
+  ['announce', ANNOUNCE], ['advisories', /^\/v1\/advisories\.json$/], ['cache', /^\/v1\/cache\//], ['health', /^\/health$/],
+]
+export default counted('updates', ROUTES, {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
     let match
@@ -75,6 +81,7 @@ export default {
     else if ((match = FILE.exec(url.pathname))) response = await file(match[1], match[2], request, env)
     else if (url.pathname === ADVISORIES) response = await advisories(request, env)
     else if (url.pathname.startsWith(CACHE_PREFIX)) response = await cached(url, request, env)
+    else if (url.pathname === '/health') response = health(env)
     else response = new Response('Not found', { status: 404 })
     // A HEAD gets the same status and headers as its GET, and no body.
     return request.method === 'HEAD' ? new Response(null, response) : response
@@ -88,6 +95,11 @@ export default {
     ctx.waitUntil(runWatch({ store: r2Store(env.MIRROR), fetch: (...args) => fetch(...args), log: (line) => console.log(line) }))
     ctx.waitUntil(syncLauncher(env, ctx).catch(() => {}))
   },
+})
+
+function health(env) {
+  const ok = Boolean(env.MIRROR)
+  return new Response(JSON.stringify({ ok }), { status: ok ? 200 : 503, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
 }
 
 /**
@@ -311,7 +323,7 @@ async function advisories(request, env) {
  */
 async function cached(url, request, env) {
   const key = cacheKey(url)
-  if (!key) return new Response('Not found', { status: 404 })
+  if (!key || WITHHELD_REPOS.has(key.split('/').slice(1, 3).join('/').toLowerCase())) return new Response('Not found', { status: 404 })
   const pointer = MUTABLE.test(key)
   return fromMirror(key, request, env, {
     seconds: pointer ? CACHE_POINTER_SECONDS : CACHE_IMMUTABLE_SECONDS,
@@ -370,7 +382,7 @@ async function fromMirror(key, request, env, { seconds = TAG_SECONDS, type, immu
   if (type) headers.set('content-type', type)
   if (!headers.has('content-type')) headers.set('content-type', 'application/octet-stream')
   // Set after writeHttpMetadata: cache metadata stored on the object itself can never stretch a release file's
-  // cache past its hour (the files never change under their tag).
+  // cache past a day (the files never change under their tag).
   headers.set('cache-control', `public, max-age=${seconds}${immutable ? ', immutable' : ''}`)
   headers.set('cdn-cache-control', `max-age=${seconds}`)
   if (!heading && !object.body) return new Response(null, { status: 304, headers })

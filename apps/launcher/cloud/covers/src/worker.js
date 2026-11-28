@@ -19,6 +19,7 @@
  */
 import { acceptScore, isJunkName, normalizeTitle, scoreTitleMatch } from './match.js'
 import limits from './limits.json'
+import { counted } from './signal.js'
 
 const HIT_TTL_SECONDS = 30 * 86400
 const MISS_TTL_SECONDS = 3600
@@ -76,7 +77,9 @@ export function backoffSeconds(status, retryAfter) {
   return FAILURE_BACKOFF_SECONDS
 }
 
-export default {
+const ROUTES = [['cover', /^\/v1\/cover$/], ['health', /^\/health$/]]
+
+export default counted('covers', ROUTES, {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
     if (request.method !== 'GET' || (url.pathname !== '/v1/cover' && url.pathname !== '/health')) return json({ ok: false, message: 'Not found.' }, 404)
@@ -106,7 +109,7 @@ export default {
       return json({ ok: false, message: 'The cover cache had a problem. Try again.' }, 500)
     }
   },
-}
+})
 
 /**
  * Is KV working, how many KV reads or writes failed in the last hour here, how many stores are backed off (a count, not which:

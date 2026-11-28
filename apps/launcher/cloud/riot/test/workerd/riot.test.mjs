@@ -132,3 +132,42 @@ describe('exo-riot worker', () => {
     expect(timeLeft(Date.now())).toBeLessThanOrEqual(limits.upstreamTimeoutMs)
   })
 })
+
+describe('error counters', () => {
+  const sink = () => {
+    const sent = []
+    return { sent, SIGNAL: { writeDataPoint: (point) => sent.push(point) } }
+  }
+  const withRandom = async (value, run) => {
+    const real = Math.random
+    Math.random = () => value
+    try {
+      return await run()
+    } finally {
+      Math.random = real
+    }
+  }
+
+  it('counts each answer by route and status class, and nothing else', async () => {
+    const counter = sink()
+    await withRandom(0, async () => {
+      await askWorker('/health', counter)
+      await askWorker('/v1/hours', counter)
+      await askWorker('/wp-login.php?user=erix', counter)
+    })
+    expect(counter.sent.map((point) => point.blobs)).toEqual([
+      ['riot', 'health', '2xx'],
+      ['riot', 'hours', '4xx'],
+      ['riot', 'other', '4xx'],
+    ])
+    expect(JSON.stringify(counter.sent)).not.toMatch(/erix|198\./)
+  })
+
+  it('writes a success only one time in a hundred', async () => {
+    const counter = sink()
+    await withRandom(0.5, async () => {
+      await askWorker('/health', counter)
+    })
+    expect(counter.sent).toEqual([])
+  })
+})

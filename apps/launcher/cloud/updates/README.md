@@ -18,6 +18,7 @@ from" below). Exo Cinema's reach it through `publish-release.ps1`.
 | `GET /v1/<app>/changelog` | The app's `CHANGELOG.md` as `text/markdown; charset=utf-8` (R2 object `<app>/CHANGELOG.md`), the source of getexo.app's Changelog pages; kept at the edge a minute; 404 until uploaded |
 | `GET /v1/<app>/payload/<tag>` | The release's file list (R2 object `<app>/<tag>/payload-manifest.json`): every file of the installed app with its path, size and SHA-256. Kept at the edge an hour; a 404 nothing keeps for a release that has none, and the app then updates through Setup |
 | `GET /v1/<app>/file/<sha256>` | One app file, gzipped, by the SHA-256 of its bytes (R2 object `<app>/files/<sha256>.gz`), with byte ranges; `immutable` for a year, since the name says what the bytes are; a 404 nothing keeps until uploaded |
+| `GET /health` | `{ ok }`: 200 when the R2 binding is there, else 503; no storage is read, never kept (`no-store`). Exo's reports Worker asks it once a day ("Error counters") |
 | `GET /v1/advisories.json` | Exo Launcher's signed driver advisories (R2 object `advisories.json`), kept at the edge an hour; 404 until uploaded |
 | `GET /v1/cache/<github path>` | Exo's copy of a GitHub path the Launcher pins, read-only, by exact key (R2 object `cache/<same path>`), never a redirect; pinned content is `immutable` for a year. A folder listing is `GET /v1/cache/<owner>/<repo>/contents/<folder>?ref=<40-hex commit>` (R2 `cache/<owner>/<repo>/contents/<folder>@<commit>`); a folder has no listing of its own. 404 for anything not stored |
 
@@ -36,6 +37,8 @@ hash (`_mirror/manifest.json` in the bucket, outside the served prefix, records 
 present. Folder listings and tag commits come from the GitHub API and must agree with the pinned bytes before upload.
 `cache-licences.json` records each licence file's first hash; a later change is refused. Tests: `node --test test`.
 
+**Withheld (2026-11-26):** Exo does not re-host third-party frame generation mods. `cache-mirror.mjs` skips OptiScaler, MFG Unlocker and DLSSG SM86 (`EXCLUDED_REPOS`), and the Worker answers 404 for any `cache/optiscaler/OptiScaler/`, `cache/dashdogy/MFG-Unlocker/` or `cache/sdli1995/dlssg_for_sm86/` key (`WITHHELD_REPOS` in `src/worker.js`), so copies already in R2 are not served; nothing was deleted from R2. The Launcher asks GitHub first and takes the mods from there; when GitHub fails it asks the cache, gets 404, and the frame generation fetch logs "didn't arrive" and tries again later.
+
 **What is not mirrored, and why:** the dynamic "latest" lookups for FrameGen's three mods have
 no pin in the Launcher, so nothing is stored for them and they answer 404; the Launcher's fallbacks apply. The vendor
 repos' newest releases and DLSS Swapper's newer archives are stored by the cache watch (below). The pinned DLSS Swapper
@@ -53,7 +56,7 @@ like the tools: `cache-mirror.mjs` reads it from `SpeakerModel.cs` (the same fil
 `cache/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx`, where the Launcher asks.
 Without it Only My Voice would get a 404, so the mirror must have run for 3.25.0 before the release is published.
 
-**GPL tools (Legendary, gogdl, Nile, OptiScaler):** their binaries are mirrored as pinned. Their corresponding source for each
+**GPL tools (Legendary, gogdl, Nile; OptiScaler until 2026-11-26):** the binaries of the first three are mirrored as pinned. Their corresponding source for each
 pinned tag (`codeload.github.com/<owner>/<repo>/tar.gz/refs/tags/<tag>`) goes to R2 bucket `exo-source` for getexo.app/source,
 with `node source-mirror.mjs --launcher <checkout> --rev <rev>`. Exo's own copyleft add-ons and the bundled OBS hook source go
 there with `node addon-source.mjs` (below). Whether the bucket exists now is for `wrangler r2 bucket list` to say: this page
@@ -339,3 +342,13 @@ floor and the vendor file names checked against the Launcher's sources).
 
 **Deploy (not done; the owner approves):** `npx wrangler@4.165.0 deploy` from this folder, on the free plan. Check the first runs through
 `_watch/state.json` in the bucket: the Worker's logs are off (`[observability]`).
+
+## Error counters
+
+Four Workers (updates, reports, covers, riot; `src/signal.js` is the same file in each, and `test/signal.test.mjs` fails when the copies differ) count what they answer, so a Worker that starts failing shows up without any log. Logs stay off.
+
+- **What is counted:** one Analytics Engine data point (binding `SIGNAL`, dataset `exo_signal`) per counted request: `blob1` the Worker, `blob2` the route from the Worker's fixed list (updates: `latest`, `download`, `changelog`, `payload`, `file`, `announce`, `advisories`, `cache`, `health`, else `other`), `blob3` the status class (`2xx`, `3xx`, `4xx`, `5xx`; a Worker that threw is `5xx`), `double1` the weight, and the Worker's name as the index. Nothing else: no address, user agent, path, query, tag or install ID.
+- **Sampling:** the free plan takes 100,000 data points a day for the whole account. A 2xx or 3xx is written one time in 100 (weight 100), a 4xx one in 5 (weight 5), every 5xx (weight 1). Read counts as `SUM(_sample_interval * double1)` (Analytics Engine samples too, by its own `_sample_interval`), never `COUNT()`.
+- **Daily self-test:** the reports Worker's 04:20 UTC cron asks `/health` on updates, reports, covers and riot (`src/selftest.js`) and writes one data point per target under Worker `selftest` (route = target, class = the answer's status class, or `err` when it did not answer in 10 s). The reports Worker probes its own address in-process, and the other three over their custom domains. A Worker killed before it can answer (a CPU-limit or startup failure) is not counted by its own counters; only this self-test sees it. exo-account is not counted yet (its deployed source is not in git).
+- **Reading it:** the SQL API (`POST /accounts/<id>/analytics_engine/sql`, token with Account Analytics Read), for example `SELECT blob1 AS worker, blob2 AS route, blob3 AS class, SUM(_sample_interval * double1) AS n FROM exo_signal WHERE timestamp > NOW() - INTERVAL '1' DAY GROUP BY worker, route, class ORDER BY n DESC`. Counts are kept three months.
+- **Deploy:** the dataset is created by the first write. Deploy from a local copy of `wrangler.toml` that carries the live settings (bucket, KV and D1 ids, crons), as above; the repository's file has placeholders.

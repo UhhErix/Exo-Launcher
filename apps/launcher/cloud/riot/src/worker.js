@@ -10,6 +10,7 @@ import {
   valorantModeFromName,
 } from './aggregate.js'
 import limits from './limits.json'
+import { counted } from './signal.js'
 
 const RESULT_TTL_SECONDS = 6 * 3600
 const MATCH_TTL_SECONDS = 30 * 86400
@@ -93,7 +94,9 @@ function tooMany() {
   return json({ ok: false, message: 'Slow down, then try again in a minute.' }, 429, { 'Retry-After': '60' })
 }
 
-export default {
+const ROUTES = [['hours', /^\/v1\/hours$/], ['health', /^\/health$/]]
+
+export default counted('riot', ROUTES, {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
     if (request.method !== 'GET' || (url.pathname !== '/v1/hours' && url.pathname !== '/health')) {
@@ -125,7 +128,7 @@ export default {
       return json({ ok: false, message: 'Riot hours lookup failed. Try again.' }, 500)
     }
   },
-}
+})
 
 async function health(env) {
   let state = await flagGet('health:kv')

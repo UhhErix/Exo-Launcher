@@ -45,3 +45,8 @@ simple = { limit = 300, period = 60 }
 name = "COVER_STORE_ADDRESS_LIMIT"
 namespace_id = "2104"
 simple = { limit = 50, period = 60 }
+
+# Error counters (src/signal.js): one Analytics Engine data point per counted request (Worker, route, status class), no logs and no identifier. README.md in cloud/updates, "Error counters".
+[[analytics_engine_datasets]]
+binding = "SIGNAL"
+dataset = "exo_signal"
