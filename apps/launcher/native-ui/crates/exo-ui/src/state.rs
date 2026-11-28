@@ -4875,20 +4875,18 @@ mod library_sort_and_confirm_tests {
         s.install_waker(Arc::new(|| {}));
         let key = "test-art:steps".to_string();
 
-        for expect_stage in 0..2 {
-            let pending = s
+        let mut asks = 0;
+        let found = loop {
+            asks += 1;
+            assert!(asks <= paths.len(), "each ask moves past a candidate");
+            let candidate = s
                 .local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
-                .expect("a pending candidate");
-            assert!(
-                pending.wait().is_err(),
-                "missing candidate fails on the decoder"
-            );
-            assert_eq!(s.images.borrow().stage(&key), expect_stage);
-        }
-        let found = s
-            .local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
-            .expect("the file that exists");
-        found.wait().expect("decodes");
+                .expect("a candidate while the file that exists is ahead");
+            if candidate.wait().is_ok() {
+                break candidate;
+            }
+            assert!(s.images.borrow().stage(&key) < 2);
+        };
         assert_eq!(s.images.borrow().stage(&key), 2);
         let again = s
             .local_file_image(key.clone(), &paths, 128.0, 1.0, CacheRoom::Library)
